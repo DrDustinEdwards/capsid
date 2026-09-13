@@ -74,6 +74,36 @@ test("every guarded mutation reads its opt-in from the caller, except the one th
   }
 });
 
+test("PLANT: every mutation that accepts the opt-in scopes it to can_touch_protected", () => {
+  // AUDIT 2026-09-13, FINDING C1, and the same class as the test above it. The
+  // override shipped on write, then restore; delete and move accepted
+  // allow_improve_paths and honoured it without ever asking ctx.scope for the flag
+  // that is supposed to bound it. The opt-in is the CALLER's to pass, so a boolean
+  // the caller sets is not a permission: the flag is.
+  //
+  // Derived, not listed: any tool that grows an opt-in has to scope it the day it
+  // is added, whether or not anyone remembers this file.
+  const unscoped = mutationTools()
+    .filter((t) => t.body.includes("allow_improve_paths: z.boolean().optional()"))
+    .filter((t) => !t.body.includes("flags: IMPROVE_OVERRIDE_FLAGS"))
+    .map((t) => t.name);
+  assert.deepEqual(
+    unscoped,
+    [],
+    "a tool honours allow_improve_paths without asking for can_touch_protected. " +
+      "That is how a driver holding write and not one flag could delete or move the loop's own run prompt."
+  );
+});
+
+test("the opt-in scan sees the tools it claims to, so it cannot pass by reading nothing", () => {
+  const withOptIn = mutationTools()
+    .filter((t) => t.body.includes("allow_improve_paths: z.boolean().optional()"))
+    .map((t) => t.name)
+    .sort();
+  // lint is absent on purpose: finalize has no opt-in and must never grow one.
+  assert.deepEqual(withOptIn, ["delete", "move", "restore", "write"]);
+});
+
 // ---- the guard itself, at both ends of a move ------------------------------
 
 test("PLANT: a move INTO the improve control surface is refused", async () => {
