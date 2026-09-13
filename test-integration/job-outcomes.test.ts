@@ -210,8 +210,14 @@ describe("job outcomes", () => {
   });
 
   it("improve_status carries a record per credential, and it is counts and rates only", async () => {
+    // No scope argument, so this is the unrestricted internal caller and the inventory
+    // is attached. The ?? [] is the optional type falling in line with the SCOPED case,
+    // where improve_status omits the inventory entirely (audit 2026-09-13, finding 7),
+    // not a branch this test can take: the assertion below would read nothing.
     const status = await improveStatus(jobsEnv() as never, "capsid");
-    for (const agent of status.agents) {
+    const agents = status.agents ?? [];
+    expect(agents.length).toBeGreaterThan(0);
+    for (const agent of agents) {
       expect(agent.record).toBeDefined();
       expect(agent.record.actor).toBe(`agent:${agent.name}`);
       // A rate with no denominator is null, never a zero that would read as a bad
