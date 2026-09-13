@@ -63,7 +63,10 @@ export async function consoleData(
     // The inventory improve_status already resolved, with what each credential did
     // counted against it. Passed in rather than re-read, so the panel cannot list an
     // agent the rest of the page does not.
-    agents: await loadReputation(env.DB, improve.agents),
+    // The console runs as the admin, so improveStatus always attaches the inventory
+    // here; the ?? [] is the type falling in line with the scoped case rather than a
+    // real branch.
+    agents: await loadReputation(env.DB, improve.agents ?? []),
     activity: await loadActivity(env.DB, filter),
     activity_filter: filter,
   };

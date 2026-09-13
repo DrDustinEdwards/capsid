@@ -204,7 +204,10 @@ export interface StatusReport {
   // What is NOT here: the key (it exists nowhere), the stored verifier, and a row of
   // six booleans per agent. A reader wants the exception, so only the flags an agent
   // HOLDS are listed.
-  agents: AgentSummary[];
+  // ABSENT for a scoped caller, rather than empty. An empty inventory would read as
+  // "no agents exist", which is a different and false fact; omitting the key says the
+  // question was not answered for this caller.
+  agents?: AgentSummary[];
   namespaces: NamespaceStatus[];
 }
 
@@ -247,10 +250,26 @@ async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   return inventory.map((agent) => ({ ...agent, record: records[agent.name] }));
 }
 
-export async function improveStatus(env: Env, only?: string, taskPath?: string): Promise<StatusReport> {
+export async function improveStatus(
+  env: Env,
+  only?: string,
+  taskPath?: string,
+  // THE CALLER'S OWN NAMESPACES, and whether it is the admin. Passed in rather than
+  // read here so this function keeps taking an Env and nothing else that knows about
+  // credentials; the tool supplies it from the agent the request resolved to.
+  //
+  // Omitted means unrestricted, which is what every internal caller is (the cron, the
+  // console). A scoped caller sees its own namespaces and no credential inventory: the
+  // roster and the agents list are both a map of the boundary this caller sits behind,
+  // and `namespaces` was filtered for the same reason on the same day (audit
+  // 2026-09-13, finding 7).
+  scope?: { namespaces: "*" | string[]; admin: boolean }
+): Promise<StatusReport> {
   const { mode, reason } = await readMode(env.APP_KV);
   const budget = await checkBudget(env, new Date());
-  const namespaces = only ? [only] : [...ROSTER];
+  const allowed = scope?.namespaces ?? "*";
+  const requested = only ? [only] : [...ROSTER];
+  const namespaces = allowed === "*" ? requested : requested.filter((n) => allowed.includes(n));
   const out: NamespaceStatus[] = [];
 
   // ONE READ FOR EVERY NAMESPACE. An unreadable or malformed key reports an empty set
@@ -330,7 +349,11 @@ export async function improveStatus(env: Env, only?: string, taskPath?: string):
       "cost_usd is an ESTIMATE computed from token counts and published rates, including cache read and write multipliers. It is for sanity-checking, not accounting.",
     budget,
     protected_paths: servedProtectedPaths(),
-    agents: await agentSummaries(env.DB),
+    // THE CREDENTIAL INVENTORY IS FOR THE SEAT. It names every agent, its namespaces,
+    // its grants and the blast-radius flags it holds, which is precisely the map an
+    // agent looking to widen itself would want, and it was attached even when the
+    // caller named one namespace.
+    ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,
   };
 }
