@@ -795,3 +795,63 @@ test("an empty mapping still reports as unconfigured, not as corrupt", async () 
   } as never;
   await assert.rejects(() => resolveRepo(env, "ns"), /has no repo mapping/);
 });
+
+// ---- F14: comment must never reach the branch cleanup -----------------------------
+//
+// Audit 2026-09-13, finding F14. tools-axis and blast-radius drive callTool with
+// action "comment" and assert the SCOPE lets it through; both use empty fetch routes
+// and assert nothing about which GitHub call was made. No test called
+// managePr(..., "comment") at all.
+//
+// So the early return at src/github/refs.ts:164 had no test. Delete it and a comment
+// falls through to the close branch: it PATCHes the pull request shut and then deletes
+// the head branch, on a call whose entire contract is that it changes nothing. Every
+// scope plant stays green, because the registrar already allows manage_pr.comment.
+//
+// The routes below are the assertion: close and delete are wired to throw, so a
+// fallthrough fails loudly rather than being caught by a missing expectation.
+
+test("PLANT: manage_pr comment POSTs a comment and touches neither the PR state nor the branch", async () => {
+  await withFetch(
+    {
+      "POST /repos/o/r/issues/5/comments": { body: { id: 99, html_url: "https://pr#issuecomment-99" } },
+    },
+    async (calls) => {
+      const result = (await managePr(
+        makeEnv([{ repo: "o/r", label: "primary" }]),
+        "ns",
+        5,
+        "comment",
+        "squash",
+        undefined,
+        "REVIEW: looks right. APPROVE"
+      )) as { action: string; comment_id: number; head_branch_deleted?: boolean };
+
+      assert.equal(result.action, "comment");
+      assert.equal(result.comment_id, 99);
+      // A comment ENDS no pull request, so the cleanup must not have run at all.
+      assert.equal(result.head_branch_deleted, undefined, "a comment reported a branch cleanup");
+
+      const posted = calls.filter((c) => c.method === "POST" && c.path === "/repos/o/r/issues/5/comments");
+      assert.equal(posted.length, 1, "the comment was not posted");
+      assert.equal((posted[0].body as { body: string }).body, "REVIEW: looks right. APPROVE");
+
+      // The two calls that must NOT happen. Any route other than the comment one is
+      // unrouted and would 500, but asserting the METHODS names the defect: a comment
+      // that fell through to close would PATCH, then DELETE the head ref.
+      assert.equal(calls.some((c) => c.method === "PATCH"), false, "a comment closed the pull request");
+      assert.equal(calls.some((c) => c.method === "DELETE"), false, "a comment deleted the head branch");
+      assert.equal(calls.length, 1, `a comment made ${calls.length} GitHub calls: ${JSON.stringify(calls.map((c) => c.method + " " + c.path))}`);
+    }
+  );
+});
+
+test("manage_pr comment with nothing to say is refused before any GitHub call", async () => {
+  await withFetch({}, async (calls) => {
+    await assert.rejects(
+      () => managePr(makeEnv([{ repo: "o/r", label: "primary" }]), "ns", 5, "comment"),
+      /comment needs a body/
+    );
+    assert.equal(calls.length, 0, "an empty comment still reached GitHub");
+  });
+});

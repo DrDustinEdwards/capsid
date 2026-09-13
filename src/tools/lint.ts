@@ -47,6 +47,15 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ namespace, mode, consumed, confirm }) => {
       if ((mode ?? "gather") === "gather") {
+        // GATHER HAS A GRANT TOO (audit 2026-09-13, finding C2). lint is an "action"
+        // tool, so the registrar deliberately names no grant and leaves it to the
+        // handler, where the mode is known. The handler then checked one: the write
+        // grant, below, which gather returns before ever reaching. So gather was the
+        // one branch of one tool that asked for no grant at all, and the in-Worker
+        // watcher holds grants ["write"] with no read. jobs.list was planted for
+        // exactly this registrar hole; gather is its twin and had nothing.
+        const gatherRefusal = ctx.scope({ tool: "lint", action: "gather", grant: "read", namespace });
+        if (gatherRefusal) return fail(gatherRefusal);
         const core = await db
           .prepare("SELECT namespace, path, title, type, status, body, updated_at FROM documents WHERE namespace = ?1 AND path = 'core.md'")
           .bind(namespace)
