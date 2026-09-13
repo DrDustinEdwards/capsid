@@ -160,3 +160,79 @@ describe("the token endpoint", () => {
     expect(body).toMatch(/invalid|grant|client/i);
   });
 });
+
+// ---- F9 and F10: two guards that had only ever been called as functions ------------
+//
+// Audit 2026-09-13. Both were tested by calling the helper directly and then grepping
+// src/index.ts for the identifier. A source scan cannot see whether the RESULT is used:
+// a callback that computes the refusal and returns the client anyway keeps the name in
+// the file and both tests green. These are the same cases through real HTTP.
+
+describe("F9: dynamic client registration refuses more than one non-loopback redirect", () => {
+  it("PLANT: two https redirect_uris are refused at POST /register", async () => {
+    const response = await SELF.fetch("https://capsid.test/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "two-redirects",
+        redirect_uris: ["https://client.example.com/callback", "https://evil.example.com/callback"],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error?: string };
+    expect(body.error).toBe("invalid_redirect_uri");
+
+    // Nothing was registered. A refusal that still writes the client record is a
+    // description of the past.
+    const keys = await env.OAUTH_KV.list({ prefix: "client:" });
+    const names = keys.keys.map((k: { name: string }) => k.name).join(" ");
+    expect(names).not.toContain("evil.example.com");
+  });
+
+  it("THE INNOCENT DIRECTION: several LOOPBACK redirects still register", async () => {
+    // Native clients legitimately declare more than one loopback port, which is why
+    // the guard counts non-loopback URIs rather than URIs.
+    const response = await SELF.fetch("https://capsid.test/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "native-client",
+        redirect_uris: ["http://127.0.0.1:8976/callback", "http://127.0.0.1:49152/callback"],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+    expect(response.status).toBe(201);
+  });
+});
+
+describe("F10: the Origin allowlist on /mcp", () => {
+  it("PLANT: a foreign Origin is refused 403 at POST /mcp", async () => {
+    const response = await SELF.fetch("https://capsid.test/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.text()).toContain("is not allowed on /mcp");
+  });
+
+  it("THE INNOCENT DIRECTION: no Origin and claude.ai are not refused by THIS guard", async () => {
+    // Both still fail auth, which is a different guard and a different status. What
+    // this asserts is that the origin check is not what stopped them: a guard that
+    // refuses every browser would take the whole MCP surface down.
+    const noOrigin = await SELF.fetch("https://capsid.test/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(noOrigin.status).not.toBe(403);
+
+    const claude = await SELF.fetch("https://capsid.test/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://claude.ai" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(claude.status).not.toBe(403);
+  });
+});
