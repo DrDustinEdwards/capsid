@@ -40,8 +40,13 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
           .array(nsName)
           .optional()
           .describe('For mint (required) and update_scopes: the namespaces this agent may reach, or the single entry "*" for every one.'),
-        repos: z.array(bounded(128)).optional().describe('Repo selectors this agent may target, or the single entry "*". Defaults to every repo of the namespaces it is scoped to.'),
-        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows.'),
+        repos: z
+          .array(bounded(128))
+          .optional()
+          .describe(
+            'The repos this agent may reach, as "owner/name" entries, or the single entry "*". Omit it and the mint DERIVES the list from the live mapping of the namespaces it is scoped to, so the axis names real repos rather than the wildcard; a namespace that maps none refuses the mint instead of widening it. A namespace scope of "*" derives "*".'
+          ),
+        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry may be qualified as "tool.action" (for example "manage_pr.comment"), which narrows that tool to the actions named and refuses its others.'),
         grants: z.array(z.enum(AGENT_GRANTS)).optional().describe(`read, or read and write. A new agent gets read.`),
         flags: z
           .object(Object.fromEntries(SCOPE_FLAGS.map((flag) => [flag, z.boolean().optional()])))

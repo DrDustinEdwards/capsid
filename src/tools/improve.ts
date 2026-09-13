@@ -68,6 +68,24 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           return signed.ok ? ok(signed) : fail(signed.error);
         }
         if (action && action !== "run") {
+          // THE CONTROL SURFACE IS ADMIN, and it was a plain write that every driver
+          // holds (audit 2026-09-13, finding 5). `mode` switches the whole loop off,
+          // `pause` stops a namespace, `budget` moves the spend ceiling and
+          // `mint_operator_key` issues a credential: none of those is work a driver
+          // does, and all four were reachable by any agent with the write grant
+          // because TOOL_GRANTS.improve_run is "write" and nothing asked again.
+          //
+          // `claim` is deliberately NOT in this set. Taking and releasing the driver
+          // lease is exactly what a driver does, every run, and it is the key that
+          // stops two of them working one namespace.
+          if (action !== "claim" && !ctx.agent.admin) {
+            return fail(
+              `unauthorized: improve_run action '${action}' is admin only, and ${ctx.actor} is a minted agent. ` +
+                `It controls the loop rather than doing its work: mode switches the loop off, pause stops a namespace, budget moves the spend ceiling ` +
+                `and mint_operator_key issues a credential. A driver takes and releases its lease with action 'claim' and runs with action 'run'. ` +
+                `Call this as the OAuth admin session, or with a write-grant operator key.`
+            );
+          }
           return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release }));
         }
         if (namespace && !onRoster(namespace)) {
@@ -99,7 +117,7 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ namespace, task_path }) => {
       try {
-        return ok(await improveStatus(env, namespace, task_path));
+        return ok(await improveStatus(env, namespace, task_path, { namespaces: ctx.agent.scopes.namespaces, admin: ctx.agent.admin }));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

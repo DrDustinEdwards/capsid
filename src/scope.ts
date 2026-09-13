@@ -121,7 +121,14 @@ export interface ScopeNeed {
   // does not name one; see namespaceRequired below for why that is not the same as
   // "allowed".
   namespace?: string;
-  // The repo selector as the caller passed it (a label, or "owner/name").
+  // THE RESOLVED REPO, "owner/name", never the selector the caller passed.
+  //
+  // The `repo` tool argument is a SELECTOR: a label ("primary", "legacy") or a full
+  // owner/name that the namespace maps. The repos axis holds owner/name entries, so
+  // comparing the selector to the axis got both directions wrong at once: the
+  // legitimate label "primary" was refused, and OMITTING the argument (the default,
+  // and therefore almost every call) skipped the axis entirely while resolveRepo
+  // picked the namespace primary. Resolve first, then ask.
   repo?: string;
   grant?: AgentGrant;
   // The caller must be the admin identity, not merely hold the write grant. Set by
@@ -240,6 +247,47 @@ type ToolHandler = (...args: unknown[]) => unknown;
 // enforcement point lands without blinding the scanners that check the surface it
 // enforces over. This module must never spell that call itself, for the same reason:
 // a scanner counting registrations would count this one.
+// WHICH ARGUMENT NAMES WHAT A TOOL IS BEING ASKED TO DO.
+//
+// Almost every action tool spells it `action`; lint spells it `mode`, because its
+// modes are what separate a read (gather) from two writes (report, finalize). Named
+// here, in the enforcement point, for the same reason TOOL_GRANTS is: the registrar
+// has to know it to populate need.action, and a per-tool answer scattered across the
+// handlers is how the qualifier ended up unwired everywhere but jobs.
+//
+// A tool absent from this table has no action, and the tools axis cannot narrow it
+// below the tool name. `mode` on write, write_repo_file and delete_repo_file is
+// deliberately NOT an action: those modes already decide a FLAG (can_direct_write),
+// which is the stronger check, and promoting them here would give one setting two
+// different authorities to disagree about.
+const ACTION_ARG: Record<string, string> = {
+  agents: "action",
+  improve_run: "action",
+  jobs: "action",
+  lint: "mode",
+  manage_pr: "action",
+};
+
+// The action a tool falls back to when the caller omits an optional one, so a
+// narrowed list does not refuse the tool's own default. Only improve_run has one.
+const DEFAULT_ACTION: Record<string, string> = { improve_run: "run" };
+
+export function actionArgFor(tool: string): string | undefined {
+  return Object.hasOwn(ACTION_ARG, tool) ? ACTION_ARG[tool] : undefined;
+}
+
+// The action this call is asking for, or undefined when the tool has none. Read off
+// the tool's OWN declared argument rather than off any property spelled "action", so
+// a tool that happens to take an unrelated one cannot be narrowed by accident.
+function actionOf(tool: string, config: RegisteredConfig, args: Record<string, unknown>): string | undefined {
+  const key = actionArgFor(tool);
+  if (!key) return undefined;
+  if (!config?.inputSchema || !Object.hasOwn(config.inputSchema, key)) return undefined;
+  const value = args[key];
+  if (typeof value === "string") return value;
+  return Object.hasOwn(DEFAULT_ACTION, tool) ? DEFAULT_ACTION[tool] : undefined;
+}
+
 export function guardRegistrations(server: McpServer, agent: Agent): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
@@ -248,11 +296,17 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
     const guarded: ToolHandler = (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
-      const repo = typeof args.repo === "string" ? args.repo : undefined;
+      // A SELECTOR IS NOT A SCOPE VALUE. Only a fully qualified owner/name can be
+      // compared to the axis here; a label is resolved against the namespace mapping
+      // by the repo tools, which then ask this same function about the result. See
+      // scopedRepo in src/tools/repo.ts.
+      const selector = typeof args.repo === "string" ? args.repo : undefined;
+      const repo = selector?.includes("/") ? selector : undefined;
       const refusal = checkScope(agent, {
         tool: name,
         namespace,
         repo,
+        action: actionOf(name, config, args),
         // An "action" tool is checked by its handler, where the action is known, so
         // the registrar names no grant for it. An "admin" tool needs the write grant
         // AND the admin identity.

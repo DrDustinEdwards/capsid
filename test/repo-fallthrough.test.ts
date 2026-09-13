@@ -368,13 +368,43 @@ test("ci_dispatch requires both workflow and ref to start a run", async () => {
 });
 
 test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () => {
+  // THE RUN LOOKUP IS STUBBED NOW, and it was not before: the harness had no route for
+  // it, so the GET 500ed, the scorer-identification check was skipped, and this test
+  // passed through the fail-open branch rather than the one it describes. That branch
+  // is closed (audit 2026-09-13, finding 12), which is what turned this red.
   await withFetch(
-    { "GET /repos/o/r": REPO_META, "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" } },
+    {
+      "GET /repos/o/r": REPO_META,
+      "GET /repos/o/r/actions/runs/42": { body: { path: ".github/workflows/ci.yml", name: "CI" } },
+      "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" },
+    },
     async () => {
       const out = (await ciDispatch(makeEnv(), "ns", { run_id: 42 })) as { mode: string; run_id: number; rerun_requested: boolean };
       assert.equal(out.mode, "rerun");
       assert.equal(out.run_id, 42);
       assert.equal(out.rerun_requested, true);
+    }
+  );
+});
+
+test("PLANT: a rerun whose run cannot be IDENTIFIED is refused, not rerun anyway", async () => {
+  // The identification lived inside `if (runResp.ok)` and a failed GET fell straight
+  // through to the POST, so the one lookup deciding whether this is the scorer could be
+  // skipped by whatever made the GET fail. A rerun re-executes the signing step with
+  // the repo's secrets in scope, so an unidentified run waits.
+  await withFetch(
+    {
+      "GET /repos/o/r": REPO_META,
+      "GET /repos/o/r/actions/runs/42": { status: 500, text: "upstream is unwell" },
+      "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" },
+    },
+    async (calls) => {
+      await assert.rejects(() => ciDispatch(makeEnv(), "ns", { run_id: 42 }), /could not be read/);
+      assert.equal(
+        calls.filter((c) => c.path.includes("rerun-failed-jobs")).length,
+        0,
+        "the rerun was POSTed despite the run being unidentifiable"
+      );
     }
   );
 });

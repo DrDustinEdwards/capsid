@@ -93,6 +93,28 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   registerJobTools(server, ctx);
   registerAgentTools(server, ctx);
 
+  // ---- SCOPES FOR RESOURCES AND PROMPTS ------------------------------------------
+  //
+  // guardRegistrations wraps registerTool and nothing else, so the four protocol
+  // handlers below sat outside the one enforcement point entirely: an agent bearer on
+  // /ops/mcp could read every document in every namespace by URI, and list every
+  // prompt in the store, while the `read` tool refused it (audit 2026-09-13,
+  // finding 6). Spelled here rather than in the registrar because a raw request
+  // handler is not a registration and the registrar cannot see one.
+  //
+  // Checked as the `read` tool, because that is what these are: the resource comment
+  // above has said "same visibility as the read tool" since they were added, and this
+  // makes the sentence true. An agent narrowed away from `read` loses both, which is
+  // the answer that keeps the two surfaces from disagreeing.
+  const resourceRefusal = (namespace: string): string | null => checkScope(agent, { tool: "read", grant: "read", namespace });
+
+  // The namespaces a listing may show. A listing FILTERS rather than refusing: a
+  // caller asking what it can see should be told what it can see, and refusing the
+  // whole call would leak that there is more.
+  const visibleNamespaces = agent.scopes.namespaces;
+  const namespaceFilter = <T extends { namespace: string }>(rows: T[]): T[] =>
+    visibleNamespaces === "*" ? rows : rows.filter((row) => visibleNamespaces.includes(row.namespace));
+
   // Template metadata spreads onto every listed resource, so it is stated ONCE and
   // applied by both the read registration and the list handler below.
   const RESOURCE_METADATA = { title: "Capsid documents", mimeType: "text/markdown" };
@@ -116,6 +138,8 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     async (uri, variables) => {
       const namespace = String(variables.namespace);
       const path = String(variables.path);
+      const refusal = resourceRefusal(namespace);
+      if (refusal) throw new McpError(ErrorCode.InvalidParams, refusal);
       const row = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
@@ -139,6 +163,12 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   // resource is served by the one template below; a statically registered resource
   // would be silently dropped. test/bounded-reads.test.ts pins that.
   server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+    // The grant, before the query. A caller with no read grant lists nothing rather
+    // than listing everything.
+    if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
+    if (!agent.scopes.grants.includes("read")) {
+      throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
+    }
     const cursor = request.params?.cursor;
     let afterNs = "";
     let afterPath = "";
@@ -160,8 +190,12 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
       )
       .bind(afterNs, afterPath, MAX_ROWS + 1)
       .all<{ namespace: string; path: string; title: string | null }>();
-    const more = results.length > MAX_ROWS;
-    const kept = more ? results.slice(0, MAX_ROWS) : results;
+    // FILTERED BEFORE THE PAGE IS CUT, so the bound is a bound on what this caller can
+    // see rather than on what the store holds. The cursor still names the last row
+    // returned, which is what keeps the keyset walk correct across a filtered page.
+    const scoped = namespaceFilter(results);
+    const more = scoped.length > MAX_ROWS;
+    const kept = more ? scoped.slice(0, MAX_ROWS) : scoped;
     const last = kept[kept.length - 1];
     return {
       resources: kept.map((row) => ({
@@ -201,11 +235,14 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   };
   server.server.registerCapabilities({ prompts: { listChanged: false } });
   server.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    if (!agent.scopes.grants.includes("read")) {
+      throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no prompts.`);
+    }
     const { results } = await db
       .prepare("SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path")
       .all<{ namespace: string; path: string; title: string | null; body: string | null }>();
     return {
-      prompts: results.map((row) => ({
+      prompts: namespaceFilter(results).map((row) => ({
         name: `${row.namespace}/${row.path.replace(/\.md$/, "")}`,
         description: promptSafeTitle(row.title),
         arguments: promptVariables(row.body ?? "").map((name) => ({ name, required: true })),
@@ -226,6 +263,8 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     }
     const promptNs = name.slice(0, slash);
     const promptPath = name.slice(slash + 1);
+    const refusal = resourceRefusal(promptNs);
+    if (refusal) throw new McpError(ErrorCode.InvalidParams, refusal);
     const row = await db
       .prepare(
         "SELECT title, body FROM documents WHERE type = 'prompt' AND namespace = ?1 AND (path = ?2 OR path = ?2 || '.md')"

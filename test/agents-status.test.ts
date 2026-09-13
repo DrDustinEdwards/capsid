@@ -54,11 +54,11 @@ test("the report names the flags an agent HOLDS, not all six with a boolean besi
   scopes.flags.can_merge = true;
   const env = await statusEnv([await row("seat", { kind: "seat", scopes: serializeScopes(scopes) })]);
   const status = await improveStatus(env);
-  const seat = status.agents.find((a) => a.name === "seat");
+  const seat = (status.agents ?? []).find((a) => a.name === "seat");
   assert.ok(seat);
   assert.deepEqual(seat.flags, ["can_merge"]);
   const drivers = await improveStatus(await statusEnv([await row("capsid-driver")]));
-  assert.deepEqual(drivers.agents[0].flags, [], "a driver holding nothing should report nothing rather than six falses");
+  assert.deepEqual((drivers.agents ?? [])[0].flags, [], "a driver holding nothing should report nothing rather than six falses");
 });
 
 test("a revoked agent is reported as revoked rather than dropped", async () => {
@@ -66,8 +66,8 @@ test("a revoked agent is reported as revoked rather than dropped", async () => {
   // reading the inventory to decide what is still live.
   const env = await statusEnv([await row("old-laptop", { revoked_at: "2026-09-10 12:00:00" })]);
   const status = await improveStatus(env);
-  assert.equal(status.agents.length, 1);
-  assert.equal(status.agents[0].revoked_at, "2026-09-10 12:00:00");
+  assert.equal((status.agents ?? []).length, 1);
+  assert.equal((status.agents ?? [])[0].revoked_at, "2026-09-10 12:00:00");
 });
 
 test("the report never carries a key or the stored verifier", async () => {
