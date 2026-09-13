@@ -175,6 +175,28 @@ test("THE INNOCENT DIRECTION: an agent scoped to jobs.list may list", async () =
   assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a list-scoped agent was refused list: ${result.content[0].text}`);
 });
 
+test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", async () => {
+  // The registrar checks no grant for `jobs`, because TOOL_GRANTS calls it an "action"
+  // tool: one tool with a read action and seven write ones, and only the handler knows
+  // which this is. So the handler's own check is the ONLY thing standing here, and it
+  // did not exist for list. The in-Worker watcher is exactly this shape: grants
+  // ["write"] and nothing else (src/watcher.ts).
+  //
+  // Recorded because the first plant of this line did not redden anything: removing it
+  // left the suite green, since the qualified-tools refusal above fires first for a
+  // post-only caller. A caller that CLEARS the registrar is what proves this line.
+  const caller = driver();
+  caller.scopes.grants = ["write"];
+  const { client, close } = await connect(caller);
+  const result = (await client.callTool({ name: "jobs", arguments: { action: "list", namespace: "capsid" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+  await close();
+  assert.equal(result.isError, true, "an agent with no read grant listed the queue");
+  assert.match(result.content[0].text, /requires the read grant/, result.content[0].text);
+});
+
 test("PLANT: a driver is REFUSED improve_run action pause", async () => {
   // TOOL_GRANTS.improve_run is "write", which every driver holds, and nothing asked
   // again. pause stops a namespace, mode switches the whole loop off.
