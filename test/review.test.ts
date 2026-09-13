@@ -158,14 +158,18 @@ test("readReviewComments asks the ISSUE comments endpoint, which is where the re
   globalThis.fetch = (async (url: string) => {
     asked = String(url);
     return new Response(
-      JSON.stringify([{ user: { login: "reviewer" }, body: "REVIEW: fine. APPROVE", created_at: "2026-09-12T10:00:00Z" }]),
+      JSON.stringify([{ id: 4242, user: { login: "reviewer" }, body: "REVIEW: fine. APPROVE", created_at: "2026-09-12T10:00:00Z" }]),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   }) as never;
   try {
     const comments = await readReviewComments(env, "capsid", { owner: "DrDustinEdwards", repo: "capsid-mcp", number: 27 });
     assert.match(asked, /\/repos\/DrDustinEdwards\/capsid-mcp\/issues\/27\/comments/);
-    assert.deepEqual(comments, [{ user: "reviewer", body: "REVIEW: fine. APPROVE", created_at: "2026-09-12T10:00:00Z" }]);
+    // The comment ID IS CARRIED, because it is what the gate matches against the
+    // audit rows naming which comments Capsid posted for a reviewer. A reader that
+    // dropped it would leave the gate with nothing but the author login, which is the
+    // App installation on every comment Capsid writes.
+    assert.deepEqual(comments, [{ id: 4242, user: "reviewer", body: "REVIEW: fine. APPROVE", created_at: "2026-09-12T10:00:00Z" }]);
     assert.equal(decidingReview(comments)?.verdict, "APPROVE");
   } finally {
     globalThis.fetch = original;
@@ -182,8 +186,8 @@ test("a comment with no author or no body does not crash the parser", async () =
   try {
     const comments = await readReviewComments(env, "capsid", { owner: "o", repo: "r", number: 1 });
     assert.deepEqual(comments, [
-      { user: "(unknown)", body: "", created_at: "" },
-      { user: "(unknown)", body: "", created_at: "" },
+      { id: undefined, user: "(unknown)", body: "", created_at: "" },
+      { id: undefined, user: "(unknown)", body: "", created_at: "" },
     ]);
     assert.equal(decidingReview(comments), null);
   } finally {
