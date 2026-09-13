@@ -4,6 +4,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { improveWriteRefusal } from "../src/improve-scores.ts";
+import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
+import { type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
 
@@ -138,4 +140,122 @@ test("brief surfaces last_actor on core and on every task", async () => {
   assert.equal(out.core.last_actor, "github:dustin");
   const task = out.open_tasks.find((t: { path: string }) => t.path === "TASK-x.md");
   assert.equal(task.last_actor, "some-other-client", "brief did not surface who wrote a task");
+});
+
+// ---- C1: the override is itself scoped, on delete and move ------------------
+//
+// Audit 2026-09-13, finding C1. write and restore asked ctx.scope for
+// can_touch_protected before honouring allow_improve_paths; delete and move did not,
+// so the opt-in alone was enough and the opt-in is the CALLER's to pass. A driver
+// minted as docs/bootstrap.md says to mint one (write on its own namespace, not one
+// flag) could delete or move improve/prompts/run.md, the loop's own instruction file.
+//
+// These go through callTool against a real MCP connection, because the defect was
+// never in improveWriteRefusal: that function was asked and answered "allowed",
+// correctly, since the opt-in was true. The missing call is the one above it.
+
+function driverAgent(namespace = "capsid", flags: ScopeFlag[] = []): Agent {
+  const scopes = defaultScopes([namespace]);
+  scopes.grants = ["read", "write"];
+  for (const flag of flags) scopes.flags[flag] = true;
+  return {
+    id: "agent_0123456789ab",
+    name: `${namespace}-driver`,
+    kind: "driver",
+    actor: `agent:${namespace}-driver`,
+    scopes,
+    admin: false,
+    row: null,
+  };
+}
+
+async function connectAs(caller: Agent, opts: FakeD1Options = {}) {
+  const { db, recorded } = fakeD1(opts);
+  const server = buildServer(fakeEnv({ DB: db }), caller);
+  const client = new Client({ name: "protected-c1", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { client, recorded, close: () => client.close() };
+}
+
+const RUN_PROMPT: FakeD1Options = {
+  namespaces: [{ namespace: "capsid", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }],
+  documents: [
+    { namespace: "capsid", path: "improve/prompts/run.md", title: "run", body: "SYSTEM PROMPT", type: "prompt" },
+    { namespace: "capsid", path: "notes.md", title: "notes", body: "ordinary", type: "note" },
+  ],
+};
+
+test("delete of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
+  const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
+  const out = await call(client, "delete", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "a driver with no flags deleted the loop's run prompt");
+  assert.match(out.content[0].text, /needs the can_touch_protected flag/);
+  assert.equal(recorded.length, 0, "a refused delete still touched the store");
+});
+
+test("move of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
+  const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
+  const out = await call(client, "move", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    new_path: "parked/run.md",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "a driver with no flags moved the loop's run prompt out of the way");
+  assert.match(out.content[0].text, /needs the can_touch_protected flag/);
+  assert.equal(recorded.length, 0, "a refused move still touched the store");
+});
+
+// THE INNOCENT DIRECTION, both halves. A guard that fires on a correct call gets
+// deleted rather than fixed, and there are two correct calls to keep alive here: the
+// same driver holding the flag, and any driver on a path the override does not reach.
+
+test("a driver holding can_touch_protected may delete and move the run prompt", async () => {
+  const holder = driverAgent("capsid", ["can_touch_protected"]);
+  const del = await connectAs(holder, RUN_PROMPT);
+  const deleted = await call(del.client, "delete", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await del.close();
+  assert.equal(deleted.isError ?? false, false, deleted.content[0]?.text);
+
+  const mv = await connectAs(holder, RUN_PROMPT);
+  const moved = await call(mv.client, "move", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    new_path: "parked/run.md",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await mv.close();
+  assert.equal(moved.isError ?? false, false, moved.content[0]?.text);
+});
+
+test("the flag is asked for only when the opt-in is passed, on delete and move", async () => {
+  const del = await connectAs(driverAgent(), RUN_PROMPT);
+  const deleted = await call(del.client, "delete", { namespace: "capsid", path: "notes.md", confirm: true });
+  await del.close();
+  assert.equal(deleted.isError ?? false, false, deleted.content[0]?.text);
+
+  const mv = await connectAs(driverAgent(), RUN_PROMPT);
+  const moved = await call(mv.client, "move", {
+    namespace: "capsid",
+    path: "notes.md",
+    new_path: "renamed.md",
+    confirm: true,
+  });
+  await mv.close();
+  assert.equal(moved.isError ?? false, false, moved.content[0]?.text);
 });
