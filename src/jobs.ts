@@ -532,6 +532,41 @@ export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string
 // same function answers for both, and the answer is turned into a JobResult here so
 // the two cannot describe the same verdict differently.
 //
+// THE BUDGET IS A PROPERTY OF THE WORK, NOT OF THE ROW.
+//
+// corrections_count lives on a row, and the unique open-title index only covers
+// `queued` and `claimed`, so a job that was failed, or one still sitting `blocked`,
+// leaves (namespace, title) free to be posted again. The new row starts at 0 and the
+// ceiling resets, which made the cap a property of how many times a row existed
+// rather than of how many times the work had been sent back (audit 2026-09-13,
+// finding 9).
+//
+// Ruled 2026-09-13: count per (namespace, title) and leave the index alone. The
+// alternative was widening the unique index to include `blocked`, which needs a
+// migration and would also refuse a legitimate re-post of work that stopped at a gate.
+//
+// Summed across every row for that work, whatever its status, and the current row is
+// one of them. Unindexed on purpose: jobs is a single-user queue of a few hundred rows
+// at most, and the only index that could serve this is the partial one this ruling
+// declined to widen.
+//
+// FAILS CLOSED. A read that throws, or a SUM that comes back as anything but a finite
+// number, returns NaN, and atCorrectionCap treats a budget it cannot read as a budget
+// already spent.
+async function correctionsForWork(db: D1Database, namespace: string, title: string): Promise<number> {
+  try {
+    const row = await db
+      .prepare("SELECT COALESCE(SUM(corrections_count), 0) AS spent FROM jobs WHERE namespace = ?1 AND title = ?2")
+      .bind(namespace, title)
+      .first<{ spent: number }>();
+    const spent = row?.spent;
+    return typeof spent === "number" && Number.isFinite(spent) ? spent : Number.NaN;
+  } catch (err) {
+    console.error(`CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`);
+    return Number.NaN;
+  }
+}
+
 // Returns null when the gate does not apply: no review_required, or no pull request on
 // a transition that does not demand one. That is the normal path for almost every job.
 async function reviewRefusal(
@@ -591,10 +626,11 @@ async function reviewRefusal(
     // it carries the reviewer's objection and the gate counter behaves as it does for
     // any other block. fromReview stops blockJob consulting the review that produced
     // it and recursing.
-    if (atCorrectionCap(current.corrections_count)) {
+    const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
+    if (atCorrectionCap(spentOnWork)) {
       return blockJob(env, agent, now, id, {
         reason:
-          `review by ${review.by}: CHANGES.${said} This is correction ${current.corrections_count + 1}, past the cap of ${CORRECTION_CAP}: ` +
+          `review by ${review.by}: CHANGES.${said} This is correction ${spentOnWork + 1} against this work, past the cap of ${CORRECTION_CAP}: ` +
           `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
         fromReview: true,
       });
@@ -771,7 +807,7 @@ export async function blockJob(
   // is read before the transition, because the transition is what makes this block
   // the third one.
   const current = await readJob(env.DB, id);
-  const capped = current !== null && atCorrectionCap(current.corrections_count);
+  const capped = current !== null && atCorrectionCap(await correctionsForWork(env.DB, current.namespace, current.title));
   return holderTransition(env, agent, now, "block", id, {
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
@@ -862,10 +898,12 @@ export async function resumeJob(
   // is one where each further correction has stopped being progress, and what to do
   // next belongs to a person. An ADMIN is that person arriving, so an admin resume
   // passes and does not spend the budget.
-  if (!agent.admin && atCorrectionCap(current.corrections_count)) {
+  const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
+  if (!agent.admin && atCorrectionCap(spentOnWork)) {
     return refuse(
       "resume",
-      `${id} has been corrected ${current.corrections_count} times, which is the cap of ${CORRECTION_CAP}: ${RETRY_CAP_REASON}. ` +
+      `the work titled '${current.title}' has been corrected ${spentOnWork} times across every job posted for it, which is the cap of ${CORRECTION_CAP}: ${RETRY_CAP_REASON}. ` +
+        `The count is per (namespace, title) rather than per row, so failing this job and posting it again does not reset it. ` +
         `Every resume so far was defensible on its own, which is why the ceiling is counted rather than argued. ` +
         `An admin caller may resume it; a driver or the seat may not.`
     );
