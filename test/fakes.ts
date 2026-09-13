@@ -220,6 +220,10 @@ export interface FakeD1Options {
   // pre-existing test resolves through the OPERATOR_KEY_HASH fallback exactly as it
   // did before the table existed.
   agents?: Array<Record<string, unknown>>;
+  // Queue rows, for the readers that look a job up rather than transition it.
+  // Absent by default; the queue's own transitions are driven against the real
+  // table in test-integration.
+  jobs?: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1Rows {
@@ -239,6 +243,7 @@ export interface FakeD1Rows {
   skill_failures: Array<Record<string, unknown>>;
   audit_log: Array<{ namespace: string; path: string; actor: string | null }>;
   agents: Array<Record<string, unknown>>;
+  jobs: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1 {
@@ -331,6 +336,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     skill_failures: [],
     audit_log: opts.auditLog ?? [],
     agents: opts.agents ?? [],
+    jobs: opts.jobs ?? [],
   };
   const recorded: Recorded[] = [];
   // READS are logged SEPARATELY from writes. `recorded` means "what this handler
@@ -382,6 +388,19 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     }
     // THE AGENTS TABLE (migrations/0008). The resolver's lookup is an indexed
     // equality on key_hash plus `revoked_at IS NULL`, and a revoked row has to answer
+    // Queue rows for the readers that LOOK a job up rather than transition it.
+    // auto-merge asks which agent claimed the job a pull request closes, and that read
+    // had no answer here, so the tick could never reach its merging path in a test.
+    if (/FROM jobs/i.test(flat)) {
+      const byId = flat.includes("WHERE id = ?1");
+      const byNs = flat.includes("namespace = ?2");
+      const match = rows.jobs.find((j) => {
+        if (byId && j.id !== params[0]) return false;
+        if (byNs && j.namespace !== params[1]) return false;
+        return true;
+      });
+      return match ? project(flat, { ...match }) : null;
+    }
     // null here or the fake would grant what the database refuses.
     if (/FROM agents/i.test(flat)) {
       const live = /revoked_at IS NULL/i.test(flat);
@@ -454,6 +473,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       if (table === "namespaces") return rows.namespaces;
       if (table === "document_links") return rows.links;
       if (table === "agents") return rows.agents;
+      if (table === "jobs") return rows.jobs;
       return [];
     }
     // The `namespaces` tool's listing: aliased, with an unconsolidated subselect. Not

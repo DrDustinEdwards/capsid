@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
+import { watcherAgent } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // THE SURFACES THE REGISTRAR CANNOT SEE.
@@ -253,4 +254,74 @@ test("THE INNOCENT DIRECTION: a driver may still CLAIM its own lease", async () 
   await close();
   assert.doesNotMatch(result.content[0].text, /admin only/, `a driver was refused its own lease: ${result.content[0].text}`);
   assert.doesNotMatch(result.content[0].text, /unauthorized:/, result.content[0].text);
+});
+
+// ---- audit 2026-09-13, finding C2: lint gather is jobs.list's twin -----------------
+
+test("PLANT: a WRITE-ONLY agent is refused lint gather, which is the grant half", async () => {
+  // The exact shape of the jobs.list plant above, on the one branch that still had
+  // nothing. lint is an "action" tool too, so the registrar names no grant and leaves
+  // it to the handler; the handler checked the WRITE grant, and gather returns before
+  // reaching that line. So gather asked for no grant at all.
+  //
+  // The caller CLEARS the registrar on purpose, for the reason recorded on the
+  // jobs.list plant: a caller narrowed on the tools axis is refused there first, and
+  // the plant would then stay green with this line deleted. Full tools axis, one
+  // grant, and the grant is the wrong one.
+  //
+  // The in-Worker watcher is this shape: grants ["write"] and no read (src/watcher.ts).
+  const caller = driver();
+  caller.scopes.grants = ["write"];
+  const { client, close } = await connect(caller);
+  const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+  await close();
+  assert.equal(result.isError, true, "an agent with no read grant gathered the whole namespace");
+  assert.match(result.content[0].text, /requires the read grant/, result.content[0].text);
+});
+
+test("THE INNOCENT DIRECTION: a read-grant agent may still gather", async () => {
+  // gather is the read half of the loop and the driving client runs it every pass. A
+  // guard that fires here gets deleted rather than fixed.
+  const caller = driver();
+  caller.scopes.grants = ["read"];
+  const { client, close } = await connect(caller);
+  const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid" } })) as {
+    content: Array<{ text: string }>;
+  };
+  await close();
+  assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a read agent was refused gather: ${result.content[0].text}`);
+});
+
+test("THE OTHER INNOCENT DIRECTION: the write branches still take the write grant", async () => {
+  // gather now names its own action, and report/finalize must not have been narrowed
+  // by that: a read-only caller is still refused report, from the line below gather.
+  const caller = driver();
+  caller.scopes.grants = ["read"];
+  const { client, close } = await connect(caller);
+  const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid", mode: "report" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+  await close();
+  assert.equal(result.isError, true, "a read-only agent ran lint report, which writes a document");
+  assert.match(result.content[0].text, /requires the write grant/, result.content[0].text);
+});
+
+test("the in-Worker watcher is NOT the write-only caller that reaches gather", async () => {
+  // The audit named the watcher as the live instance of the shape above. It is not:
+  // its tools axis is ["jobs", "jobs.post"], so the registrar refuses it lint before
+  // any grant is considered. The SHAPE is real and the plant above is the one that
+  // proves the line; this asserts the named example is not an instance, so nobody
+  // re-derives a severity from it.
+  const { client, close } = await connect(watcherAgent());
+  const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+  await close();
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /not scoped to the 'lint' tool/, result.content[0].text);
 });

@@ -971,3 +971,75 @@ test("write_repo_file reports success with a warning when the audit insert fails
     await client.close();
   }
 });
+
+// ---- F6: patch uniqueness, through the write TOOL ---------------------------------
+//
+// Audit 2026-09-13, finding F6. test/write-modes.test.ts drives `assembleBody` and
+// `narrowWrite` directly and proves the rule: a `find` that occurs zero times or twice
+// is refused. Nothing drove `mode: "patch"` through callTool, so nothing proved the
+// HANDLER calls assembly at all. A write handler that skipped assembleBody and treated
+// patch as replace would keep every helper test green while an ambiguous `find`
+// silently overwrote the whole body.
+//
+// The assertion that matters is the second one: refused AND nothing written.
+
+test("PLANT: a patch whose find occurs ZERO times is refused by the tool and writes nothing", async () => {
+  const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
+  const out = await call(client, "write", {
+    ...DOC,
+    mode: "patch",
+    find: "no such text",
+    replace_with: "x",
+    confirm: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "a patch with no match was applied");
+  assert.match(out.content[0].text, /occurs 0 times|not found|exactly once/i, out.content[0].text);
+  assert.equal(
+    recorded.filter((r) => /INSERT INTO documents/i.test(r.sql)).length,
+    0,
+    "a refused patch still wrote the document"
+  );
+});
+
+test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes nothing", async () => {
+  // The ambiguous case, which is the dangerous one: replace would have kept the last
+  // occurrence's edit and thrown the rest of the body away.
+  const { client, recorded, close } = await connect("write", { body: "repeat once, repeat twice" });
+  const out = await call(client, "write", {
+    ...DOC,
+    mode: "patch",
+    find: "repeat",
+    replace_with: "x",
+    confirm: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "an ambiguous patch was applied");
+  assert.match(out.content[0].text, /occurs 2 times|exactly once/i, out.content[0].text);
+  assert.equal(
+    recorded.filter((r) => /INSERT INTO documents/i.test(r.sql)).length,
+    0,
+    "a refused patch still wrote the document"
+  );
+});
+
+test("THE INNOCENT DIRECTION: a patch matching exactly once lands through the tool", async () => {
+  // Without this, the two plants above pass just as well against a handler that
+  // refuses every patch, which is an outage rather than a guard.
+  const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
+  const out = await call(client, "write", {
+    ...DOC,
+    mode: "patch",
+    find: "beta",
+    replace_with: "DELTA",
+    confirm: true,
+  });
+  await close();
+  assert.equal(out.isError ?? false, false, out.content[0].text);
+  const insert = recorded.find((r) => /INSERT INTO documents/i.test(r.sql));
+  assert.ok(insert, "an accepted patch wrote nothing");
+  assert.ok(
+    insert.params.some((p) => typeof p === "string" && p === "alpha DELTA gamma"),
+    `the stored body was not the patched one: ${JSON.stringify(insert.params)}`
+  );
+});
