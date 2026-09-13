@@ -871,6 +871,26 @@ export async function resumeJob(
   // hold.
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
+    // APPROVING IS THE SEAT'S ACT, and nothing checked who was doing it. `resume` takes
+    // the write grant every driver holds, so any driver could pass the policy version
+    // and approve its own blocked command (audit 2026-09-13, finding 12). The classes
+    // exclude deploys, secrets and merges, so the reachable worst case was a driver
+    // pushing its own branch and opening its own pull request, which is what it was
+    // going to ask for anyway. It is still wrong: the policy's whole shape is "what the
+    // SEAT may approve alone", and a check nobody performs makes the noun decorative.
+    //
+    // THE SEAT IS IDENTIFIED BY can_merge, NOT BY kind. src/agents-schema.ts says kind
+    // is descriptive and not authorizing, and the auto-merge tick using it that way is
+    // recorded as a defect rather than a precedent. can_merge is the flag the seat
+    // holds and no driver does, so it is the credential fact that separates them.
+    if (!agent.admin && !agent.scopes.flags.can_merge) {
+      return refuse(
+        "resume",
+        `${id} cannot be approved by ${agent.actor} on the gate policy alone. Approving a blocked command is the seat's act, ` +
+          `and this caller holds neither the admin identity nor can_merge. Resume it without approved_by_policy once a human has said yes, ` +
+          `or ask the seat to approve it.`
+      );
+    }
     const command = commandFromSummary(current.result_summary);
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       try {
