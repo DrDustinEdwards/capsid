@@ -209,7 +209,10 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
   narrow.scopes.tools = ["read", "search", "write"];
   const result = await callAs(narrow, "manage_pr", { namespace: "capsid", number: 7, action: "close" });
   assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /not scoped to the 'manage_pr' tool/);
+  // THE REFUSAL NAMES THE ACTION, which is the evidence that the registrar now
+  // populates need.action. Before 2026-09-13 it said "the 'manage_pr' tool" here,
+  // because the registrar passed no action at all and the qualifier could not fire.
+  assert.match(result.content[0].text, /not scoped to the 'manage_pr\.close' tool/);
 });
 
 // ---- the derived half --------------------------------------------------------
