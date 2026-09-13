@@ -92,10 +92,54 @@ test("a new agent is born with read on its named namespaces and no flags", async
   const { call, close } = await connect(adminAgent("DrDustinEdwards"));
   const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
   await close();
-  const scopes = body.scopes as { namespaces: string[]; grants: string[]; flags: Record<string, boolean> };
+  const scopes = body.scopes as { namespaces: string[]; repos: string[] | "*"; grants: string[]; flags: Record<string, boolean> };
   assert.deepEqual(scopes.namespaces, ["capsid"]);
   assert.deepEqual(scopes.grants, ["read"]);
   for (const flag of SCOPE_FLAGS) assert.equal(scopes.flags[flag], false);
+});
+
+test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
+  // Audit 2026-09-13, finding 3. scripts/mint-agents.mjs derived this for a driver on
+  // its --apply path and the tool's own description promised it; the handler started
+  // from defaultScopes, whose repos is "*", so every agent minted through MCP was born
+  // reaching every repo in the portfolio. Two mint paths disagreeing about the default
+  // is the same defect class as a guard with no caller: the narrow one is the one
+  // nobody uses in a hurry. Driven through a real MCP `agents` call.
+  const { call, close } = await connect(adminAgent("DrDustinEdwards"));
+  const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
+  await close();
+  const scopes = body.scopes as { repos: string[] | "*" };
+  assert.notEqual(scopes.repos, "*", "an agent minted through the tool was born reaching every repo");
+  assert.deepEqual(scopes.repos, ["owner/repo"], "the derived axis is not the namespace's live mapping");
+});
+
+test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcard included", async () => {
+  // The innocent direction, both halves. Derivation applies only when the caller named
+  // nothing; an admin that means every repo says so with the single entry "*" and gets
+  // it, which is how the seat and the auditor are minted.
+  const { call, close } = await connect(adminAgent("DrDustinEdwards"));
+  const narrow = parse(await call({ action: "mint", name: "one-repo", kind: "session", namespaces: ["capsid"], repos: ["o/other"] }));
+  const wide = parse(await call({ action: "mint", name: "every-repo", kind: "seat", namespaces: ["capsid"], repos: ["*"] }));
+  await close();
+  assert.deepEqual((narrow.scopes as { repos: string[] }).repos, ["o/other"]);
+  assert.equal((wide.scopes as { repos: string }).repos, "*");
+});
+
+test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not in today's mapping", async () => {
+  const { call, close } = await connect(adminAgent("DrDustinEdwards"));
+  const body = parse(await call({ action: "mint", name: "everything", kind: "seat", namespaces: ["*"] }));
+  await close();
+  assert.equal((body.scopes as { repos: string }).repos, "*");
+});
+
+test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
+  // Fail closed, the same way scripts/mint-agents.mjs reposForNamespace does. The
+  // alternative is a silent fallback to the wildcard on exactly the namespace nobody
+  // has finished configuring.
+  const { call, close } = await connect(adminAgent("DrDustinEdwards"), []);
+  const result = await call({ action: "mint", name: "ghost-driver", kind: "driver", namespaces: ["not-registered"] });
+  await close();
+  assert.match(refusalOf(result), /not registered/, `expected a refusal naming the namespace: ${result.content[0].text}`);
 });
 
 test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {

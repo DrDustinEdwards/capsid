@@ -70,6 +70,54 @@ export interface ReverifyOutcome {
  * count cannot drift; an increment run twice can, and this path runs on a merge AND
  * on a sweep, so it will be run twice on the same pull request eventually.
  */
+/** The two statements that record one pull request's merge state against one outcome.
+ *
+ *  Exported as a builder, the way outcomePrStatements is, so the integration suite can
+ *  execute the REAL SQL against a REAL D1 and watch the flags move. The alternative
+ *  here is a regex over this file, and a regex cannot tell a CASE that fires from one
+ *  that does not: the defect this closes was a `verified` flag that was never set, and
+ *  a source scan would have found the column name either way. GitHub cannot be reached
+ *  from the integration runtime (global_fetch_strictly_public), so the whole reverifyPr
+ *  path is not drivable there; this is the part of it that holds the logic. */
+export function reverifyStatements(db: D1Database, jobId: string, prUrl: string, merged: boolean, now: Date): D1PreparedStatement[] {
+  return [
+    db
+      .prepare("UPDATE job_outcome_prs SET merged = ?3, merge_verified_at = ?4 WHERE job_id = ?1 AND pr_url = ?2")
+      .bind(jobId, prUrl, merged ? 1 : 0, now.toISOString()),
+    // prs_merged is RECOMPUTED from the join rows, and the verified flag goes true
+    // because this number is now GitHub's.
+    //
+    // prs_opened GOES WITH IT, once every pull request this job named has been read.
+    // It did not, and that left the whole re-verification path unable to feed the thing
+    // it exists for: recordFor requires verified.prs_opened before it counts a single
+    // merge (src/agent-record.ts), so a job completed while GitHub was down, merged
+    // later and swept, showed GitHub's merge count on its outcome row and still
+    // reported prs_merged 0 on the agent's record, and min_record still refused the
+    // next claim (audit 2026-09-13, finding 10).
+    //
+    // Only when NO join row is still unread, because reading one pull request of three
+    // proves nothing about the count. Never downgraded: the CASE leaves an already-true
+    // flag alone rather than writing false over it.
+    db
+      .prepare(
+        `UPDATE job_outcomes
+           SET prs_merged = (SELECT COUNT(*) FROM job_outcome_prs WHERE job_id = ?1 AND merged = 1),
+               prs_opened = CASE
+                 WHEN (SELECT COUNT(*) FROM job_outcome_prs WHERE job_id = ?1 AND merge_verified_at IS NULL) = 0
+                   THEN (SELECT COUNT(*) FROM job_outcome_prs WHERE job_id = ?1)
+                 ELSE prs_opened
+               END,
+               verified = CASE
+                 WHEN (SELECT COUNT(*) FROM job_outcome_prs WHERE job_id = ?1 AND merge_verified_at IS NULL) = 0
+                   THEN json_set(json_set(verified, '$.prs_merged', json('true')), '$.prs_opened', json('true'))
+                 ELSE json_set(verified, '$.prs_merged', json('true'))
+               END
+         WHERE job_id = ?1`
+      )
+      .bind(jobId),
+  ];
+}
+
 export async function reverifyPr(
   env: Env,
   namespace: string,
@@ -91,21 +139,7 @@ export async function reverifyPr(
   const out: ReverifyOutcome[] = [];
   for (const row of named) {
     const before = row.merged;
-    await env.DB.batch([
-      env.DB
-        .prepare("UPDATE job_outcome_prs SET merged = ?3, merge_verified_at = ?4 WHERE job_id = ?1 AND pr_url = ?2")
-        .bind(row.job_id, prUrl, merged ? 1 : 0, now.toISOString()),
-      // prs_merged is RECOMPUTED from the join rows, and the verified flag goes true
-      // because this number is now GitHub's. Nothing else on the row is named.
-      env.DB
-        .prepare(
-          `UPDATE job_outcomes
-           SET prs_merged = (SELECT COUNT(*) FROM job_outcome_prs WHERE job_id = ?1 AND merged = 1),
-               verified = json_set(verified, '$.prs_merged', json('true'))
-           WHERE job_id = ?1`
-        )
-        .bind(row.job_id),
-    ]);
+    await env.DB.batch(reverifyStatements(env.DB, row.job_id, prUrl, merged, now));
     out.push({ job_id: row.job_id, pr_url: prUrl, merged, changed: before === null || before !== (merged ? 1 : 0) });
   }
   return out;

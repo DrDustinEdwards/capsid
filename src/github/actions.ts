@@ -395,21 +395,38 @@ export async function ciDispatch(
   //    failing closed here would break ci_dispatch on a network blip. Checks 1 and 2
   //    hold without a lookup.
   if (args.workflow) {
-    try {
-      const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${encodePath(`.github/workflows/${args.workflow.split("/").pop()}`)}`);
-      if (resp.ok) {
-        const data = (await resp.json()) as { content?: string; encoding?: string };
-        const body = data.encoding === "base64" && data.content ? base64Decode(data.content) : "";
-        if (body.includes(SCORE_PATH_MARKER)) {
-          throw new Error(
-            `ci_dispatch refuses: ${args.workflow} on ${full} posts to ${SCORE_PATH_MARKER}, which makes it a scorer whatever it is called. A hand dispatch of it can mint a signed score report for an arbitrary ref.`
-          );
+    // BOTH COPIES ARE CHECKED, and the ref's copy is the one that was missing.
+    //
+    // The lookup had no `?ref=`, so it read the DEFAULT BRANCH while the dispatch runs
+    // the workflow as it exists on `args.ref`. A scorer added or renamed on a feature
+    // branch was therefore invisible to the check that exists to catch exactly that
+    // (audit 2026-09-13, finding 12). The default branch still matters, because GitHub
+    // only makes a workflow dispatchable if it is on the default branch, so a rename
+    // there is the other half of the same trick. Refusing if EITHER copy is a scorer is
+    // the only answer that covers both.
+    const path = encodePath(`.github/workflows/${args.workflow.split("/").pop()}`);
+    const refs = args.ref ? [undefined, args.ref] : [undefined];
+    for (const ref of refs) {
+      try {
+        const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+        const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${path}${query}`);
+        if (resp.ok) {
+          const data = (await resp.json()) as { content?: string; encoding?: string };
+          const body = data.encoding === "base64" && data.content ? base64Decode(data.content) : "";
+          if (body.includes(SCORE_PATH_MARKER)) {
+            throw new Error(
+              `ci_dispatch refuses: ${args.workflow} on ${full}${ref ? ` at ${ref}` : ""} posts to ${SCORE_PATH_MARKER}, which makes it a scorer whatever it is called. A hand dispatch of it can mint a signed score report for an arbitrary ref.`
+            );
+          }
         }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith("ci_dispatch refuses")) throw err;
+        // Anything else is a lookup problem, not a verdict. Named, not swallowed. This
+        // stays fail-open deliberately: a repo whose default branch this tool cannot
+        // see is ordinary, and failing closed here would break ci_dispatch on a network
+        // blip. Checks 1 and 2 above hold without a lookup.
+        console.log(`CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${args.workflow}${ref ? ` @${ref}` : ""}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith("ci_dispatch refuses")) throw err;
-      // Anything else is a lookup problem, not a verdict. Named, not swallowed.
-      console.log(`CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${args.workflow}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -418,14 +435,25 @@ export async function ciDispatch(
     // A RERUN IS A DISPATCH BY ANOTHER NAME. Rerunning the scorer's failed jobs
     // re-executes the Post step with the key, against whatever ref that run used.
     const runResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${args.run_id}`);
-    if (runResp.ok) {
-      const runData = (await runResp.json()) as { path?: string; name?: string };
-      const runBasename = (runData.path ?? "").split("/").pop() ?? "";
-      if (runBasename === SCORER_WORKFLOW) {
-        throw new Error(
-          `ci_dispatch refuses: run ${args.run_id} on ${full} is a ${SCORER_WORKFLOW} run, and rerunning it re-executes the signing step against that run's ref. The loop dispatches its own scorer.`
-        );
-      }
+    // A RUN THIS CANNOT IDENTIFY IS NOT RERUN. The check was inside `if (runResp.ok)`
+    // and a failed GET fell through to the POST below, so the one lookup that decides
+    // whether this is the scorer could be skipped by whatever made the GET fail, and
+    // the rerun went ahead anyway (audit 2026-09-13, finding 12).
+    //
+    // Fail closed here, unlike the content check above, and the difference is what the
+    // lookup is FOR: there, a missing file leaves two other checks standing; here, this
+    // is the only thing between a caller and re-executing the signing step.
+    if (!runResp.ok) {
+      throw new Error(
+        `ci_dispatch refuses: run ${args.run_id} on ${full} could not be read (${runResp.status}), so whether it is a ${SCORER_WORKFLOW} run is unknown. A rerun re-executes that run's jobs with this repo's secrets, so an unidentified run is not rerun.`
+      );
+    }
+    const runData = (await runResp.json()) as { path?: string; name?: string };
+    const runBasename = (runData.path ?? "").split("/").pop() ?? "";
+    if (runBasename === SCORER_WORKFLOW) {
+      throw new Error(
+        `ci_dispatch refuses: run ${args.run_id} on ${full} is a ${SCORER_WORKFLOW} run, and rerunning it re-executes the signing step against that run's ref. The loop dispatches its own scorer.`
+      );
     }
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${args.run_id}/rerun-failed-jobs`, {
       method: "POST",

@@ -87,7 +87,11 @@ interface Recorded {
   params: unknown[];
 }
 
-function resumeDb(row: Record<string, unknown>) {
+// `siblingSpent` is what OTHER rows sharing this row's (namespace, title) have already
+// spent. The cap is counted across the work rather than the row (ruled 2026-09-13), so
+// a fake that can only hold one row cannot express the case the ruling is about: the
+// same work posted again after a fail, or beside a blocked row, on a fresh row at 0.
+function resumeDb(row: Record<string, unknown>, siblingSpent = 0) {
   const recorded: Recorded[] = [];
   const stmt = (sql: string, params: unknown[] = []) => {
     const flat = sql.replace(/\s+/g, " ").trim();
@@ -96,6 +100,12 @@ function resumeDb(row: Record<string, unknown>) {
       first: async () => {
         if (/SELECT \* FROM jobs WHERE status = 'claimed' AND claimed_by/i.test(flat)) return null;
         if (/SELECT \* FROM jobs WHERE id = \?1/i.test(flat)) return params[0] === row.id ? { ...row } : null;
+        // THE WORK-WIDE CORRECTION BUDGET (audit 2026-09-13, finding 9). Summed over
+        // every job sharing (namespace, title); this fake holds one row, so the sum is
+        // that row's count. Modelled rather than left unanswered because
+        // correctionsForWork fails CLOSED, so a fake that returns nothing turns every
+        // resume in the suite into a refusal.
+        if (/SUM\(corrections_count\)/i.test(flat)) return { spent: Number(row.corrections_count ?? 0) + siblingSpent };
         if (/SELECT id, title, body FROM documents/i.test(flat)) return null;
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
@@ -183,6 +193,33 @@ test("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {
   assert.match(String(result.refusal), /admin caller may resume it/, "a refusal that does not say who CAN act leaves the job stuck with no route out");
   assert.equal(row.status, "blocked", "a refused resume must leave the job exactly as it was");
   assert.equal(row.corrections_count, CORRECTION_CAP, "a refused resume must not spend the budget it was refused for");
+});
+
+test("PLANT: re-posting the same work does NOT reset the correction budget", async () => {
+  // Audit 2026-09-13, finding 9. The unique open-title index covers only `queued` and
+  // `claimed`, so failing a job, or leaving it blocked, frees (namespace, title) to be
+  // posted again on a fresh row at corrections_count 0. The cap was read off that row,
+  // so the ceiling reset and the loop it bounds was unbounded by the cheapest possible
+  // move. Counted per (namespace, title) now, index untouched, per the ruling.
+  //
+  // This row is brand new and has spent nothing; its predecessors spent the whole cap.
+  const { db, row } = resumeDb(await blockedRow(0), CORRECTION_CAP);
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "posting it again");
+  assert.equal(result.ok, false, "a fresh row for the same work reset the cap");
+  assert.match(String(result.refusal), new RegExp(RETRY_CAP_REASON));
+  assert.match(String(result.refusal), /per \(namespace, title\) rather than per row/, "the refusal must say why re-posting did not help");
+  assert.equal(row.status, "blocked");
+  assert.equal(row.corrections_count, 0, "a refused resume must not spend a budget it was refused for");
+});
+
+test("THE INNOCENT DIRECTION: work whose siblings spent nothing still resumes", async () => {
+  // Without this, a cap that refused everything would pass the plant above.
+  const { db, row } = resumeDb(await blockedRow(0), 0);
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "first go");
+  assert.equal(result.ok, true, `an unspent budget was refused: ${JSON.stringify(result)}`);
+  assert.equal(row.status, "claimed");
 });
 
 test("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", async () => {

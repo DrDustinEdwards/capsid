@@ -532,15 +532,55 @@ export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string
 // same function answers for both, and the answer is turned into a JobResult here so
 // the two cannot describe the same verdict differently.
 //
-// Returns null when the gate does not apply (no review_required, or no pull request),
-// which is the normal path for almost every job.
+// THE BUDGET IS A PROPERTY OF THE WORK, NOT OF THE ROW.
+//
+// corrections_count lives on a row, and the unique open-title index only covers
+// `queued` and `claimed`, so a job that was failed, or one still sitting `blocked`,
+// leaves (namespace, title) free to be posted again. The new row starts at 0 and the
+// ceiling resets, which made the cap a property of how many times a row existed
+// rather than of how many times the work had been sent back (audit 2026-09-13,
+// finding 9).
+//
+// Ruled 2026-09-13: count per (namespace, title) and leave the index alone. The
+// alternative was widening the unique index to include `blocked`, which needs a
+// migration and would also refuse a legitimate re-post of work that stopped at a gate.
+//
+// Summed across every row for that work, whatever its status, and the current row is
+// one of them. Unindexed on purpose: jobs is a single-user queue of a few hundred rows
+// at most, and the only index that could serve this is the partial one this ruling
+// declined to widen.
+//
+// FAILS CLOSED. A read that throws, or a SUM that comes back as anything but a finite
+// number, returns NaN, and atCorrectionCap treats a budget it cannot read as a budget
+// already spent.
+async function correctionsForWork(db: D1Database, namespace: string, title: string): Promise<number> {
+  try {
+    const row = await db
+      .prepare("SELECT COALESCE(SUM(corrections_count), 0) AS spent FROM jobs WHERE namespace = ?1 AND title = ?2")
+      .bind(namespace, title)
+      .first<{ spent: number }>();
+    const spent = row?.spent;
+    return typeof spent === "number" && Number.isFinite(spent) ? spent : Number.NaN;
+  } catch (err) {
+    console.error(`CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`);
+    return Number.NaN;
+  }
+}
+
+// Returns null when the gate does not apply: no review_required, or no pull request on
+// a transition that does not demand one. That is the normal path for almost every job.
 async function reviewRefusal(
   env: Env,
   agent: Agent,
   now: Date,
   action: string,
   id: string,
-  resultRef: string | null
+  resultRef: string | null,
+  // WHAT THIS TRANSITION OWES THE REVIEWER. `complete` hands the work on, so it must
+  // name a pull request and carry an APPROVE; `block` and `fail` do not close the work
+  // out and may legitimately have nothing to review. See reviewGate for the whole
+  // rule, which is stated there so both call sites cannot describe different ones.
+  opts: { requirePullRequest?: boolean; candidateRefs?: readonly (string | null | undefined)[] } = {}
 ): Promise<JobResult | null> {
   const current = await readJob(env.DB, id);
   if (!current) return null;
@@ -549,7 +589,7 @@ async function reviewRefusal(
   const ref = resultRef ?? current.result_ref;
   let outcome: ReviewOutcome | null;
   try {
-    outcome = await reviewGate(env, { namespace: current.namespace, review_required: current.review_required, result_ref: ref });
+    outcome = await reviewGate(env, { namespace: current.namespace, review_required: current.review_required, result_ref: ref }, opts);
   } catch (err) {
     // A GITHUB FAILURE HOLDS THE JOB, it does not wave it through. This gate exists to
     // put a second reader in front of the seat, and an unreadable comment list is not
@@ -566,12 +606,35 @@ async function reviewRefusal(
     return refuse(action, `${id} is ${outcome.reason} The job stays claimed and its lease keeps running.`);
   }
 
+
   // CHANGES and BLOCK both MOVE the job, so neither is a plain refusal: the row has to
   // record what the reviewer said, or the next reader sees a job that stalled for no
   // stated reason.
   const { review } = outcome;
   const said = review.said ? ` ${review.said}` : "";
   if (outcome.kind === "rework") {
+    // THE CAP IS CHECKED BEFORE THE CORRECTION IS SPENT, so the loop it bounds is
+    // actually bounded. It counted correctly and stopped nothing: the rework path
+    // always incremented and always left the job claimed, so a third CHANGES spent a
+    // third correction and sent the work back again, and the only place the ceiling
+    // was enforced was `resume`, which this path never touches. A reviewer and a
+    // driver disagreeing forever is precisely the loop the cap exists for, and the
+    // test over it asserted the counter reached 2 rather than that anything stopped
+    // (audit 2026-09-13, finding 8).
+    //
+    // At the cap the job goes to the seat instead, through the ordinary block path, so
+    // it carries the reviewer's objection and the gate counter behaves as it does for
+    // any other block. fromReview stops blockJob consulting the review that produced
+    // it and recursing.
+    const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
+    if (atCorrectionCap(spentOnWork)) {
+      return blockJob(env, agent, now, id, {
+        reason:
+          `review by ${review.by}: CHANGES.${said} This is correction ${spentOnWork + 1} against this work, past the cap of ${CORRECTION_CAP}: ` +
+          `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
+        fromReview: true,
+      });
+    }
     // BACK TO THE DRIVER, and it spends a correction from the same budget the retry
     // cap bounds. A review sending work round forever is the loop that cap exists for,
     // and counting it separately would exempt it.
@@ -617,7 +680,14 @@ export async function completeJob(
   // the summary, and the row recorded nothing.
   const swallowed = swallowedParamTag(args.result_summary);
   if (swallowed) return refuse("complete", swallowedTagRefusal("result_summary", swallowed));
-  const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null);
+  // THE ONE TRANSITION THAT HANDS WORK ON. It must name a pull request and carry an
+  // APPROVE from an actor that may review; evidence.prs counts as naming it, because a
+  // driver that reported its work there and a document key in result_ref had, before
+  // this, escaped the gate entirely.
+  const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
+    requirePullRequest: true,
+    candidateRefs: args.evidence?.prs,
+  });
   if (review) return review;
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
@@ -632,6 +702,13 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
+  // THE GATE IS CONSULTED HERE TOO, and its absence was the third way out of a review.
+  // `complete` was gated and `block` was gated; `fail` was not, so a driver holding a
+  // CHANGES it did not want could close the job as failed and leave the pull request
+  // sitting there for the seat to find and merge. It does NOT demand a pull request,
+  // because work that genuinely could not be done has none.
+  const review = await reviewRefusal(env, agent, now, "fail", id, null);
+  if (review) return review;
   return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null });
 }
 
@@ -730,7 +807,7 @@ export async function blockJob(
   // is read before the transition, because the transition is what makes this block
   // the third one.
   const current = await readJob(env.DB, id);
-  const capped = current !== null && atCorrectionCap(current.corrections_count);
+  const capped = current !== null && atCorrectionCap(await correctionsForWork(env.DB, current.namespace, current.title));
   return holderTransition(env, agent, now, "block", id, {
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
@@ -821,10 +898,12 @@ export async function resumeJob(
   // is one where each further correction has stopped being progress, and what to do
   // next belongs to a person. An ADMIN is that person arriving, so an admin resume
   // passes and does not spend the budget.
-  if (!agent.admin && atCorrectionCap(current.corrections_count)) {
+  const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
+  if (!agent.admin && atCorrectionCap(spentOnWork)) {
     return refuse(
       "resume",
-      `${id} has been corrected ${current.corrections_count} times, which is the cap of ${CORRECTION_CAP}: ${RETRY_CAP_REASON}. ` +
+      `the work titled '${current.title}' has been corrected ${spentOnWork} times across every job posted for it, which is the cap of ${CORRECTION_CAP}: ${RETRY_CAP_REASON}. ` +
+        `The count is per (namespace, title) rather than per row, so failing this job and posting it again does not reset it. ` +
         `Every resume so far was defensible on its own, which is why the ceiling is counted rather than argued. ` +
         `An admin caller may resume it; a driver or the seat may not.`
     );
@@ -851,6 +930,26 @@ export async function resumeJob(
   // hold.
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
+    // APPROVING IS THE SEAT'S ACT, and nothing checked who was doing it. `resume` takes
+    // the write grant every driver holds, so any driver could pass the policy version
+    // and approve its own blocked command (audit 2026-09-13, finding 12). The classes
+    // exclude deploys, secrets and merges, so the reachable worst case was a driver
+    // pushing its own branch and opening its own pull request, which is what it was
+    // going to ask for anyway. It is still wrong: the policy's whole shape is "what the
+    // SEAT may approve alone", and a check nobody performs makes the noun decorative.
+    //
+    // THE SEAT IS IDENTIFIED BY can_merge, NOT BY kind. src/agents-schema.ts says kind
+    // is descriptive and not authorizing, and the auto-merge tick using it that way is
+    // recorded as a defect rather than a precedent. can_merge is the flag the seat
+    // holds and no driver does, so it is the credential fact that separates them.
+    if (!agent.admin && !agent.scopes.flags.can_merge) {
+      return refuse(
+        "resume",
+        `${id} cannot be approved by ${agent.actor} on the gate policy alone. Approving a blocked command is the seat's act, ` +
+          `and this caller holds neither the admin identity nor can_merge. Resume it without approved_by_policy once a human has said yes, ` +
+          `or ask the seat to approve it.`
+      );
+    }
     const command = commandFromSummary(current.result_summary);
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       try {

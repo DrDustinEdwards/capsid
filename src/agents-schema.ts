@@ -164,10 +164,21 @@ export function allowsScope(list: ScopeList, value: string): boolean {
 export function allowsToolAction(list: ScopeList, tool: string, action: string | undefined): boolean {
   if (list === "*") return true;
   if (!list.includes(tool)) return false;
-  if (action === undefined) return true;
   const prefix = `${tool}.`;
   const qualified = list.some((entry) => entry.startsWith(prefix));
-  return qualified ? list.includes(`${prefix}${action}`) : true;
+  if (!qualified) return true;
+  // AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, not waved through as "the whole
+  // tool". Reading undefined as the whole tool is what made this narrowing decorative
+  // for every tool but jobs: the registrar passed no action, so a reviewer minted
+  // ["manage_pr", "manage_pr.comment"] could close a pull request, and three tests
+  // over this function could not see it because they always passed an action.
+  //
+  // The rule stays opt-in in the direction that matters: a list with no qualified
+  // sibling for this tool is untouched, so every agent minted before the qualifier
+  // existed behaves exactly as it did. What changed is that OPTING IN now means the
+  // call path has to say what it is doing, and a path that cannot is refused.
+  if (action === undefined) return false;
+  return list.includes(`${prefix}${action}`);
 }
 
 // How a scope list reads in a refusal. A refusal that says "not in scope" without

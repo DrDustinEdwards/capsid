@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { defaultScopes } from "../src/agents-schema.ts";
-import { blockJob, completeJob } from "../src/jobs.ts";
+import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
+import { blockJob, completeJob, failJob } from "../src/jobs.ts";
 import { atCorrectionCap } from "../src/jobs-schema.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -16,7 +16,27 @@ interface Recorded {
   params: unknown[];
 }
 
-function queueDb(row: Record<string, unknown>) {
+// THE AUDIT ROWS THAT SAY WHICH COMMENTS CAPSID POSTED, AND FOR WHOM.
+//
+// The review gate reads these to tell a reviewer's verdict from prose anybody with a
+// `gh` token wrote on the pull request: every comment Capsid posts is authored by the
+// same App installation, so the login on the comment cannot answer it. Default: the
+// comments withComments serves were posted for an agent holding can_comment_pr.
+function reviewerAudit(ids: number[], opts: { actor?: string; canComment?: boolean } = {}) {
+  const scopes = defaultScopes(["capsid"]);
+  scopes.grants = ["read", "write"];
+  scopes.flags.can_comment_pr = opts.canComment !== false;
+  return ids.map((id) => ({
+    actor: opts.actor ?? "agent:capsid-reviewer",
+    params: JSON.stringify({ repo: "DrDustinEdwards/capsid-mcp", number: 27, action: "comment", comment_id: id }),
+    scopes: serializeScopes(scopes),
+  }));
+}
+
+// The comment ids withComments hands out, in the order it hands them out.
+const COMMENT_IDS = [100, 101, 102, 103];
+
+function queueDb(row: Record<string, unknown>, audit: unknown[] = reviewerAudit(COMMENT_IDS)) {
   const recorded: Recorded[] = [];
   const stmt = (sql: string, params: unknown[] = []) => {
     const flat = sql.replace(/\s+/g, " ").trim();
@@ -24,6 +44,12 @@ function queueDb(row: Record<string, unknown>) {
       bind: (...bound: unknown[]) => stmt(sql, bound),
       first: async () => {
         if (/SELECT \* FROM jobs WHERE id = \?1/i.test(flat)) return params[0] === row.id ? { ...row } : null;
+        // THE WORK-WIDE CORRECTION BUDGET (audit 2026-09-13, finding 9). Summed over
+        // every job sharing (namespace, title); this fake holds one row, so the sum is
+        // that row's count. Modelled rather than left unanswered because
+        // correctionsForWork fails CLOSED, so a fake that returns nothing turns every
+        // resume in the suite into a refusal.
+        if (/SUM\(corrections_count\)/i.test(flat)) return { spent: Number(row.corrections_count ?? 0) };
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id) return null;
@@ -40,7 +66,7 @@ function queueDb(row: Record<string, unknown>) {
         }
         return null;
       },
-      all: async () => ({ results: [] }),
+      all: async () => (/FROM audit_log/i.test(flat) ? { results: audit } : { results: [] }),
       run: async () => ({}),
       raw: async () => [],
     } as unknown as D1PreparedStatement;
@@ -98,7 +124,7 @@ const NOW = new Date("2026-09-12T12:00:00Z");
 async function withComments<T>(bodies: string[], fn: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
   globalThis.fetch = (async () =>
-    new Response(JSON.stringify(bodies.map((body, i) => ({ user: { login: "reviewer" }, body, created_at: `2026-09-12T1${i}:00:00Z` }))), {
+    new Response(JSON.stringify(bodies.map((body, i) => ({ id: COMMENT_IDS[i], user: { login: "reviewer" }, body, created_at: `2026-09-12T1${i}:00:00Z` }))), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     })) as never;
@@ -164,6 +190,35 @@ test("A SECOND CHANGES REACHES THE CAP, so a review loop is bounded by the same 
   });
 });
 
+test("PLANT: AT the cap, a further CHANGES BLOCKS for the seat instead of going round again", async () => {
+  // The test above asserts the counter reaches 2. It does not assert that anything
+  // STOPS, and nothing did: the rework path always incremented and always left the job
+  // claimed, so a third CHANGES spent a third correction and sent the work back. The
+  // cap was enforced only on `resume`, which this path never touches (audit
+  // 2026-09-13, finding 8). Driven through completeJob, the path a driver calls.
+  const { db, row } = queueDb(claimedRow({ corrections_count: 2 }));
+  await withComments(["REVIEW: still not right. CHANGES"], async () => {
+    // A BLOCK IS A SUCCESSFUL OUTCOME, so the call reports ok: the job stopped for the
+    // seat rather than failing. What this test is about is the row, not the return.
+    await finish(db);
+    assert.equal(row.status, "blocked", "a review loop past the cap sent the work back to the driver again");
+    assert.equal(row.corrections_count, 2, "a blocked-for-the-seat job must not also spend another correction");
+    assert.match(String(row.result_summary), /retry cap; human decision required/);
+    assert.match(String(row.result_summary), /still not right/, "the seat needs the reviewer's actual objection");
+  });
+});
+
+test("THE INNOCENT DIRECTION: below the cap, CHANGES still goes back to the driver", async () => {
+  // Without this, a rework path broken for everybody passes the plant above and every
+  // review would land on the seat's desk.
+  const { db, row } = queueDb(claimedRow({ corrections_count: 0 }));
+  await withComments(["REVIEW: one more pass. CHANGES"], async () => {
+    await finish(db);
+    assert.equal(row.status, "claimed", "an ordinary CHANGES must stay with the driver");
+    assert.equal(row.corrections_count, 1);
+  });
+});
+
 test("BLOCK: the job is blocked for the seat, carrying the objection", async () => {
   const { db, row } = queueDb(claimedRow());
   await withComments(["REVIEW: this changes the auth model and needs a ruling. BLOCK"], async () => {
@@ -199,14 +254,69 @@ test("A JOB WITHOUT review_required IS UNTOUCHED, which is almost every job", as
   assert.equal(row.status, "done");
 });
 
-test("A JOB WITH NO PULL REQUEST PROCEEDS, because there is nothing for a reviewer to read", async () => {
+test("PLANT: complete with a DOCUMENT KEY is refused, because the reviewed party chose the ref", async () => {
+  // THIS TEST USED TO ASSERT THE OPPOSITE, and that is the finding. reviewGate returned
+  // proceed whenever result_ref was not a pull request URL, and result_ref is chosen by
+  // the driver, so the party being reviewed decided whether it was reviewed. The column
+  // exists to stop exactly that (migrations/0017_jobs_review.sql). Driven through the
+  // real completeJob, not through reviewGate.
   const { db, row } = queueDb(claimedRow({ result_ref: null }));
   const result = await completeJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", {
     result_summary: "wrote the ruling",
     result_ref: "capsid/decisions.md",
   });
-  assert.equal(result.ok, true, `a job that finished with a document was stranded: ${JSON.stringify(result)}`);
-  assert.equal(row.status, "done");
+  assert.equal(result.ok, false, "a review_required job closed with a document key and no verdict");
+  assert.match(String(result.refusal), /names no pull request/);
+  assert.equal(row.status, "claimed");
+});
+
+test("EVIDENCE NAMES THE PULL REQUEST TOO, so reporting it there is not a way past the gate", async () => {
+  // The other half of the same hole: result_ref a document, evidence.prs the real work.
+  const { db, row } = queueDb(claimedRow({ result_ref: null }));
+  await withComments(["REVIEW: reads fine. APPROVE"], async () => {
+    const result = await completeJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", {
+      result_summary: "opened PR 27",
+      result_ref: "capsid/decisions.md",
+      evidence: { prs: [PR] },
+    });
+    assert.equal(result.ok, true, `an approved job was refused: ${JSON.stringify(result)}`);
+    assert.equal(row.status, "done");
+  });
+});
+
+test("PLANT: a REVIEW comment Capsid did not post for a reviewer is not a verdict", async () => {
+  // The identity half. A driver with local `gh` can write the envelope; what it cannot
+  // do is make Capsid record that a can_comment_pr actor asked for that comment. With
+  // newest-wins, before this the same comment also overwrote a real CHANGES.
+  const { db, row } = queueDb(claimedRow(), reviewerAudit(COMMENT_IDS, { actor: "agent:capsid-driver", canComment: false }));
+  await withComments(["REVIEW: looks good to me. APPROVE"], async () => {
+    const result = await finish(db);
+    assert.equal(result.ok, false, "a comment from an actor with no can_comment_pr counted as a review");
+    assert.match(String(result.refusal), /no review yet/);
+    assert.equal(row.status, "claimed");
+  });
+});
+
+test("THE GATE IS ON FAIL TOO, so a driver cannot walk away from a CHANGES by failing", async () => {
+  // The third way out, and the one nothing consulted at all: complete was gated, block
+  // was gated, fail was not. A driver holding a verdict it did not want could close the
+  // job as failed and leave the pull request for the seat to find.
+  const { db, row } = queueDb(claimedRow());
+  await withComments(["REVIEW: the refusal is swallowed. CHANGES"], async () => {
+    const result = await failJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", "giving up");
+    assert.equal(result.ok, false);
+    assert.equal(row.status, "claimed", "fail closed a job the reviewer had sent back");
+    assert.match(String(row.result_summary), /CHANGES/);
+  });
+});
+
+test("FAIL WITH NO PULL REQUEST STILL WORKS, because work that could not be done has none", async () => {
+  // The innocent case for the rule above. Refusing here would leave a driver unable to
+  // report that a job cannot be done, and the only escape would be the admin.
+  const { db, row } = queueDb(claimedRow({ result_ref: null }));
+  const result = await failJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", "the API this needs was retired");
+  assert.equal(result.ok, true, `a genuinely failed job was stranded: ${JSON.stringify(result)}`);
+  assert.equal(row.status, "failed");
 });
 
 test("AN UNREADABLE GITHUB HOLDS THE JOB rather than waving it through", async () => {

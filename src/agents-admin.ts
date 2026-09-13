@@ -117,6 +117,58 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   return scopes;
 }
 
+// THE REPOS AXIS A MINT GETS WHEN THE CALLER NAMES NONE.
+//
+// scripts/mint-agents.mjs already derives this for a driver on the --apply path, and
+// the tool's own description already promised it ("Defaults to every repo of the
+// namespaces it is scoped to"). The handler did not do it: it started from
+// defaultScopes, whose repos is "*", so every agent minted through MCP was born
+// reaching every repo in the portfolio while the script's agents were narrow (audit
+// 2026-09-13, finding 3). Two mint paths that disagree about the default is the same
+// class of defect as a guard with no caller: the narrow one is the one nobody uses in
+// a hurry.
+//
+// Derived from the live namespaces mapping, which is the same table resolveRepo reads
+// and the same one the repos axis is compared against, so the two cannot drift apart
+// by construction.
+//
+// A namespace scope of "*" derives "*": an agent that may reach every namespace may
+// reach every namespace's repos, and enumerating today's mapping would silently
+// exclude a namespace registered tomorrow. A namespace with NO mapped repo refuses
+// rather than falling back to the wildcard, exactly as reposForNamespace does in the
+// script.
+async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): Promise<{ repos: "*" | string[] } | { error: string }> {
+  if (namespaces === "*") return { repos: "*" };
+  const repos: string[] = [];
+  for (const namespace of namespaces) {
+    const row = await db.prepare("SELECT repos FROM namespaces WHERE namespace = ?1").bind(namespace).first<{ repos: string }>();
+    if (!row) {
+      return {
+        error:
+          `namespace '${namespace}' is not registered, so the repos this agent may reach cannot be derived. ` +
+          `Register it first, or pass repos explicitly.`,
+      };
+    }
+    let list: unknown;
+    try {
+      list = JSON.parse(row.repos || "[]");
+    } catch {
+      return { error: `namespace '${namespace}' has a corrupt repos mapping. Repair it with update_namespace, or pass repos explicitly.` };
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      return {
+        error:
+          `namespace '${namespace}' maps no repos, so an agent scoped to it would get the wildcard by default. ` +
+          `Map its repos with update_namespace, or pass repos explicitly (pass the single entry * to mean every repo deliberately).`,
+      };
+    }
+    for (const entry of list as Array<{ repo?: unknown }>) {
+      if (typeof entry?.repo === "string" && entry.repo && !repos.includes(entry.repo)) repos.push(entry.repo);
+    }
+  }
+  return { repos };
+}
+
 export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs & { name: string; kind: string }): Promise<AgentResult> {
   const name = args.name.trim();
   if (!name) return refuse("mint", "an agent needs a name: it is the audit identity every row it writes carries.");
@@ -136,7 +188,19 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
   if (existing) {
     return refuse("mint", `an agent named '${name}' already exists (${existing.id}). A name is an audit identity and is never reused, including after a revoke.`);
   }
-  const scopes = applyScopes({ ...defaultScopes([]), namespaces: scopeList(args.namespaces) }, { ...args, namespaces: undefined });
+  const named = scopeList(args.namespaces);
+  // Derived only when the caller named none. An explicit repos list, including the
+  // single entry "*", is still exactly what the caller asked for.
+  let derived: "*" | string[] | undefined;
+  if (!args.repos) {
+    const answer = await reposForNamespaces(db, named);
+    if ("error" in answer) return refuse("mint", answer.error);
+    derived = answer.repos;
+  }
+  const scopes = applyScopes(
+    { ...defaultScopes([]), namespaces: named, ...(derived === undefined ? {} : { repos: derived }) },
+    { ...args, namespaces: undefined }
+  );
   // THE KEY EXISTS IN THIS FUNCTION AND NOWHERE ELSE. It is returned once; what is
   // stored, logged and read back is its sha256.
   const key = mintAgentKey();
