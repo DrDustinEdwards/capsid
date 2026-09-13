@@ -110,6 +110,12 @@ interface PrFacts {
   commits: number;
   changed_files: number;
   head_sha: string;
+  // THE REPO THIS PULL REQUEST IS ACTUALLY ON, resolved through the namespace mapping
+  // just below. It was resolved and then discarded, so the CI lookup that follows asked
+  // the namespace PRIMARY about a head sha belonging to some other mapped repo and
+  // recorded the answer as this job's CI (audit 2026-09-13, finding 11). foxhound is
+  // the namespace that has more than one, so it is the one where this was wrong.
+  repo: string;
 }
 
 export interface EvidenceVerdict {
@@ -152,6 +158,7 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
     commits: typeof pr.commits === "number" ? pr.commits : 0,
     changed_files: typeof pr.changed_files === "number" ? pr.changed_files : 0,
     head_sha: pr.head?.sha ?? "",
+    repo: resolved.full,
   };
 }
 
@@ -166,11 +173,15 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
 // change did not judge it.
 const NOT_A_FAILURE = new Set(["success", "skipped", "neutral"]);
 
-async function ciGreenForSha(env: Env, namespace: string, sha: string): Promise<{ green: boolean | null; note?: string }> {
+async function ciGreenForSha(env: Env, namespace: string, sha: string, repo: string): Promise<{ green: boolean | null; note?: string }> {
   if (!sha) return { green: null, note: "the pull request carried no head sha, so CI could not be looked up" };
   let status;
   try {
-    status = await ciStatus(env, namespace, undefined, { ref: sha, limit: 20 });
+    // THE REPO THE PULL REQUEST IS ON, not the namespace primary. The selector was
+    // undefined, so for a multi-repo namespace this asked the wrong repo about a sha
+    // it has never seen, got "no workflow runs", and recorded that as "CI has nothing
+    // to say" rather than as a lookup aimed at the wrong place.
+    status = await ciStatus(env, namespace, repo, { ref: sha, limit: 20 });
   } catch (err) {
     return { green: null, note: `CI could not be read for ${sha.slice(0, 7)}: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -287,7 +298,8 @@ export async function verifyEvidence(
   // CI on the LAST pull request's head, which is the one a driver opens at the end of
   // its work. Asking about every one of them would be a workflow-run lookup per pull
   // request to answer a single boolean.
-  const ci = await ciGreenForSha(env, namespace, facts[facts.length - 1].head_sha);
+  const last = facts[facts.length - 1];
+  const ci = await ciGreenForSha(env, namespace, last.head_sha, last.repo);
   if (ci.note) verdict.notes.push(ci.note);
   if (ci.green !== null) {
     verdict.ci_green = ci.green ? 1 : 0;
