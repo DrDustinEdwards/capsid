@@ -532,15 +532,20 @@ export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string
 // same function answers for both, and the answer is turned into a JobResult here so
 // the two cannot describe the same verdict differently.
 //
-// Returns null when the gate does not apply (no review_required, or no pull request),
-// which is the normal path for almost every job.
+// Returns null when the gate does not apply: no review_required, or no pull request on
+// a transition that does not demand one. That is the normal path for almost every job.
 async function reviewRefusal(
   env: Env,
   agent: Agent,
   now: Date,
   action: string,
   id: string,
-  resultRef: string | null
+  resultRef: string | null,
+  // WHAT THIS TRANSITION OWES THE REVIEWER. `complete` hands the work on, so it must
+  // name a pull request and carry an APPROVE; `block` and `fail` do not close the work
+  // out and may legitimately have nothing to review. See reviewGate for the whole
+  // rule, which is stated there so both call sites cannot describe different ones.
+  opts: { requirePullRequest?: boolean; candidateRefs?: readonly (string | null | undefined)[] } = {}
 ): Promise<JobResult | null> {
   const current = await readJob(env.DB, id);
   if (!current) return null;
@@ -549,7 +554,7 @@ async function reviewRefusal(
   const ref = resultRef ?? current.result_ref;
   let outcome: ReviewOutcome | null;
   try {
-    outcome = await reviewGate(env, { namespace: current.namespace, review_required: current.review_required, result_ref: ref });
+    outcome = await reviewGate(env, { namespace: current.namespace, review_required: current.review_required, result_ref: ref }, opts);
   } catch (err) {
     // A GITHUB FAILURE HOLDS THE JOB, it does not wave it through. This gate exists to
     // put a second reader in front of the seat, and an unreadable comment list is not
@@ -565,6 +570,7 @@ async function reviewRefusal(
   if (outcome.kind === "waiting") {
     return refuse(action, `${id} is ${outcome.reason} The job stays claimed and its lease keeps running.`);
   }
+
 
   // CHANGES and BLOCK both MOVE the job, so neither is a plain refusal: the row has to
   // record what the reviewer said, or the next reader sees a job that stalled for no
@@ -617,7 +623,14 @@ export async function completeJob(
   // the summary, and the row recorded nothing.
   const swallowed = swallowedParamTag(args.result_summary);
   if (swallowed) return refuse("complete", swallowedTagRefusal("result_summary", swallowed));
-  const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null);
+  // THE ONE TRANSITION THAT HANDS WORK ON. It must name a pull request and carry an
+  // APPROVE from an actor that may review; evidence.prs counts as naming it, because a
+  // driver that reported its work there and a document key in result_ref had, before
+  // this, escaped the gate entirely.
+  const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
+    requirePullRequest: true,
+    candidateRefs: args.evidence?.prs,
+  });
   if (review) return review;
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
@@ -632,6 +645,13 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
+  // THE GATE IS CONSULTED HERE TOO, and its absence was the third way out of a review.
+  // `complete` was gated and `block` was gated; `fail` was not, so a driver holding a
+  // CHANGES it did not want could close the job as failed and leave the pull request
+  // sitting there for the seat to find and merge. It does NOT demand a pull request,
+  // because work that genuinely could not be done has none.
+  const review = await reviewRefusal(env, agent, now, "fail", id, null);
+  if (review) return review;
   return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null });
 }
 
