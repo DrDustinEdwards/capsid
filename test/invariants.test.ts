@@ -63,9 +63,15 @@ test("the block scan found the whole tool surface", () => {
   assert.ok(sourceFiles().length >= 10, "the src/ walk collapsed to a handful of files");
 });
 
+// "admin" is the write grant PLUS the admin identity, so a tool marked admin is
+// gated MORE tightly than one marked write, not less. Added 2026-09-13 with
+// register_namespace and update_namespace; without it this scan reads the stronger
+// requirement as no requirement and reports the two tools as ungated.
+const WRITE_GATED: ReadonlyArray<string> = ["write", "admin"];
+
 test("every tool whose handler contains mutating SQL is gated on the write grant", () => {
   const ungated = BLOCKS.filter(
-    (b) => MUTATING_SQL.test(b.body) && requiredGrant(b.name) !== "write" && !SCOPE_GATE.test(b.body)
+    (b) => MUTATING_SQL.test(b.body) && !WRITE_GATED.includes(requiredGrant(b.name)) && !SCOPE_GATE.test(b.body)
   ).map((b) => `${b.name} (src/${b.file})`);
   assert.deepEqual(
     ungated,

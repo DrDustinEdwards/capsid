@@ -87,6 +87,12 @@ export const ROLES = [
     // Same shape, same reason: posting a job is a write, and `jobs.post` is what
     // stops that write from also being claim, complete, fail, block and resume.
     tools: ["jobs", "jobs.post"],
+    // NO REPOS, matching watcherAgent() in src/watcher.ts exactly. The tools axis
+    // already refuses every repo tool, so this is inert today; it is set because the
+    // comment on watcherAgent promises the minted credential and the identity the
+    // Worker uses are the same authority, and until 2026-09-13 they differed on this
+    // axis with nothing comparing them.
+    repos: [],
     what: "reads health, status and CI, and posts a job when it finds something wrong. It cannot claim or finish one, and it cannot fix anything.",
   },
   {
@@ -191,6 +197,61 @@ export function parseNamespaces(text) {
   return names;
 }
 
+// THE REPOS AXIS IS DERIVED FROM THE MAPPING, NEVER RETYPED HERE.
+//
+// A driver used to be minted with no `repos`, which the mint defaults to the "*"
+// wildcard, and "*" can never refuse. That made the namespace-to-repo mapping the
+// ONLY thing standing between a driver and every repo the App reaches, and the
+// mapping was editable with a plain write grant until 2026-09-13. Setting the axis
+// is the half that holds even if the mapping is edited: a driver scoped to its own
+// repos is refused on any other, remap or no remap.
+//
+// Read from the same `namespaces` response the selection already parses rather than
+// from a table in this file. A second copy of the mapping is a copy that goes stale,
+// and the stale one would be the one deciding authorization.
+export function parseNamespaceRepos(text) {
+  let rows;
+  try {
+    rows = JSON.parse(text);
+  } catch {
+    throw new Error(`the namespaces tool did not answer with JSON. Raw: ${text.slice(0, 300)}`);
+  }
+  if (!Array.isArray(rows)) throw new Error(`the namespaces tool answered with ${typeof rows}, not an array.`);
+  const map = new Map();
+  for (const row of rows) {
+    if (typeof row?.namespace !== "string" || !row.namespace) continue;
+    let repos = row.repos;
+    if (typeof repos === "string") {
+      try {
+        repos = JSON.parse(repos);
+      } catch {
+        repos = [];
+      }
+    }
+    const names = Array.isArray(repos)
+      ? repos.map((r) => r?.repo).filter((r) => typeof r === "string" && r.length > 0)
+      : [];
+    map.set(row.namespace, names);
+  }
+  if (map.size === 0) throw new Error("the namespaces tool returned no namespaces; its response shape changed.");
+  return map;
+}
+
+// The repos a driver for this namespace may reach. REFUSES rather than falling back
+// to the wildcard: a namespace whose mapping could not be read is one whose driver
+// must not be minted wide by accident, which is the failure this whole change is
+// about.
+export function reposForNamespace(map, namespace) {
+  const repos = map.get(namespace);
+  if (!repos || repos.length === 0) {
+    throw new Error(
+      `namespace '${namespace}' maps to no repos, so its driver's repos axis cannot be derived. ` +
+        `Map it first with update_namespace (admin only), then mint. Refusing rather than minting with the "*" wildcard.`
+    );
+  }
+  return repos;
+}
+
 let id = 0;
 async function rpc(origin, key, method, params) {
   const res = await fetch(`${origin}/ops/mcp`, {
@@ -258,12 +319,43 @@ async function main() {
     wanted = selectAgents(namespace);
   }
 
+  // THE REPOS AXIS, ATTACHED BEFORE ANYTHING IS MINTED OR PRINTED.
+  //
+  // A driver carries no `repos` in AGENTS, and an omitted axis mints as the "*"
+  // wildcard, which can never refuse. That is what made the namespace mapping the
+  // only boundary. Derived here from the live mapping rather than from a table in
+  // this file, so the axis and the mapping cannot disagree.
+  //
+  // THIS COSTS THE OFFLINE DRY RUN, deliberately. A dry run's whole job is to say
+  // what would be minted, and after this change that includes the repos axis, which
+  // cannot be known without asking. A dry run that printed everything except the one
+  // new thing would be worse than a slower one.
+  const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
+  if (needsRepos.length > 0) {
+    if (!initialized) {
+      await rpc(origin, key, "initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "mint-agents", version: "1" },
+      });
+      initialized = true;
+    }
+    const result = await rpc(origin, key, "tools/call", { name: "namespaces", arguments: {} });
+    const text = result?.content?.map((c) => c.text ?? "").join("") ?? "";
+    const mapping = parseNamespaceRepos(text);
+    for (const a of needsRepos) {
+      // One namespace per driver, which selectAgents and driverFor both guarantee.
+      a.repos = reposForNamespace(mapping, a.namespaces[0]);
+    }
+  }
+
   if (!apply) {
     console.log(`dry run. Would mint ${wanted.length} agent(s) and write keys into ${keyDir()}:`);
     for (const a of wanted) {
       const path = keyPath(a.name);
       const state = existsSync(path) ? "SKIP, file exists" : `-> ${path}`;
-      console.log(`  ${a.name.padEnd(22)} ${a.kind.padEnd(7)} ns=${a.namespaces.join(",").padEnd(14)} ${state}`);
+      const repos = a.repos === undefined ? "*" : a.repos.join(",");
+      console.log(`  ${a.name.padEnd(22)} ${a.kind.padEnd(7)} ns=${a.namespaces.join(",").padEnd(14)} repos=${repos.padEnd(34)} ${state}`);
     }
     console.log("\nRe-run with --apply to mint.");
     return;

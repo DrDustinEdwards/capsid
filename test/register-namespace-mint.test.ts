@@ -8,15 +8,33 @@ import { sourceFile } from "./source-files.ts";
 
 // register_namespace RETURNS THE MINT COMMAND AND DOES NOT MINT (2026-09-11).
 //
-// The seam this closes: register_namespace takes a plain "write" grant, which
-// every driver agent holds, while minting is gated on agent.admin so that an
-// agent cannot widen itself. Minting inside register would have handed any driver
-// a fresh write credential for a namespace of its choosing.
+// The seam this closed: register_namespace took a plain "write" grant, which every
+// driver agent holds, while minting is gated on agent.admin so that an agent cannot
+// widen itself. Minting inside register would have handed any driver a fresh write
+// credential for a namespace of its choosing.
+//
+// THE PREMISE CHANGED ON 2026-09-13, and this test is how that was noticed. The
+// tripwire below used to assert register_namespace was "write", with a comment
+// saying whoever changed it should be told by a test rather than discover it in a
+// review. It worked exactly that way.
+//
+// What changed: register_namespace and update_namespace are now admin-only, because
+// the mapping they edit IS the authorization boundary. A driver could remap its own
+// namespace onto any repo the App reaches and, with a repos axis of "*", read and
+// write it. So the 2026-09-11 reasoning is narrower than it looked: keeping the mint
+// out of register was necessary and not sufficient, since register could still point
+// a namespace at a repo of the caller's choosing without minting anything.
+//
+// The rest of this file is unchanged and still necessary: register_namespace
+// must still not mint, because admin-gating the tool does not make minting inside it
+// a good idea.
 
-test("the premise still holds: register_namespace is write, not admin", () => {
-  // If this ever became admin-only the reasoning above changes, and whoever
-  // changes it should be told by a test rather than discover it in a review.
-  assert.equal(TOOL_GRANTS.register_namespace, "write");
+test("the premise MOVED: register_namespace is admin, and still does not mint", () => {
+  assert.equal(TOOL_GRANTS.register_namespace, "admin");
+  assert.equal(TOOL_GRANTS.update_namespace, "admin");
+  // `agents` is still gated in its handler rather than in the table. Left that way
+  // deliberately in the commit that moved these two: changing it belongs in a commit
+  // about the agents tool, not in one about the namespace mapping.
   assert.equal(TOOL_GRANTS.agents, "write");
   // The admin gate on minting lives in the handler, not in TOOL_GRANTS. Named
   // exactly via sourceFile(): a find() over the walk matches top-level
