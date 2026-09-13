@@ -301,6 +301,12 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
       first: async () => {
         if (/SELECT \* FROM jobs WHERE status = 'claimed' AND claimed_by/i.test(flat)) return null;
         if (/SELECT \* FROM jobs WHERE id = \?1/i.test(flat)) return params[0] === row.id ? { ...row } : null;
+        // THE WORK-WIDE CORRECTION BUDGET (audit 2026-09-13, finding 9). Summed over
+        // every job sharing (namespace, title); this fake holds one row, so the sum is
+        // that row's count. Modelled rather than left unanswered because
+        // correctionsForWork fails CLOSED, so a fake that returns nothing turns every
+        // resume in the suite into a refusal.
+        if (/SUM\(corrections_count\)/i.test(flat)) return { spent: Number(row.corrections_count ?? 0) };
         if (/SELECT body FROM documents WHERE namespace = \?1 AND path = \?2/i.test(flat)) {
           return params[1] === GATE_POLICY_PATH ? { body: policyBody } : null;
         }
