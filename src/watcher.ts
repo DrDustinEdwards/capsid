@@ -48,6 +48,27 @@ export const BLOCKED_STALE_HOURS = 24;
 // fixing.
 export const CI_RED_HOURS = 2;
 
+// THE OFF-ACCOUNT MIRROR'S WINDOW, AND IT IS NOT BACKUP_STALE_HOURS.
+//
+// BACKUP_STALE_HOURS is the LOCAL dump at 26 hours, measured from a key this Worker
+// writes itself. This is a different thing measured from the other side: the newest
+// dump present in DrDustinEdwards/capsid-backups, which this Worker only observes.
+// The mirror's schedule lives in that repo and can change without this one hearing,
+// so one constant standing for both would go wrong silently the day it does.
+//
+// 36 hours is the daily cadence plus real slack. The newest dump is stamped at the
+// backup cron's 09:00 UTC, and the mirror picks it up hours later, so at 08:59 UTC
+// the freshest possible dump is already about 24 hours old before the mirror has
+// even run. A tighter window would fire every morning.
+export const MIRROR_STALE_HOURS = 36;
+
+// The mapping label and the path, spelled once. The repo itself is NEVER named here:
+// it is resolved from the capsid namespace's mapping, which is the authorization
+// boundary and is admin-only to edit. A hardcoded owner/name would be a second copy
+// of that mapping sitting outside the boundary.
+export const MIRROR_REPO_LABEL = "backups";
+export const MIRROR_DUMP_PREFIX = "backups/json";
+
 // Spend over this fraction of a monthly cap is worth saying out loud before the cap
 // stops the loop rather than after.
 export const BUDGET_WARN_FRACTION = 0.8;
@@ -311,6 +332,132 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   ];
 }
 
+// ---- the off-account mirror ---------------------------------------------------------
+//
+// MEASURE THE DUMP, NOT THE ATTEMPT. Two earlier versions of this check keyed on a
+// verified POST /backup/credential, and that signal is measured false: on run
+// 34696901751 the mirror's credential step concluded SUCCESS and the run then failed
+// two steps later, so no dump landed. The mirror was dead for four days, 2026-09-09
+// to 2026-09-12, and the Worker saw a healthy credential request on every one of
+// them. A credential request proves the mirror STARTED. Only a dump proves a backup
+// EXISTS.
+//
+// THE TIMESTAMP COMES FROM THE DIRECTORY NAME, not from the commit date and not from
+// the commit message. The mirror writes backups/json/<dump timestamp>/, so the
+// directory names ARE the thing being asked about: which dumps exist. A commit date
+// would answer "when did the mirror last push", which is the same only while the
+// mirror is healthy, and a commit message would couple this check to how the other
+// repo words its commits.
+
+// `2026-09-12T09-00-11-132Z` as the backup writes it. Anchored and total: a directory
+// that is not a dump stamp yields null rather than an accidental date, so a stray
+// entry cannot look like a fresh backup.
+const DUMP_STAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
+
+export function parseDumpStamp(name: string): Date | null {
+  const m = DUMP_STAMP.exec(name);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s, ms] = m;
+  const at = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}Z`);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/** The newest dump present, from listRepoTree entries under backups/json/. Null when
+ *  none of the entries parse, which is "no dump" and not "a very old dump". */
+export function newestDump(entries: Array<{ path?: string }>): Date | null {
+  let newest: Date | null = null;
+  for (const entry of entries) {
+    const name = (entry.path ?? "").split("/").filter(Boolean).pop() ?? "";
+    const at = parseDumpStamp(name);
+    if (at && (!newest || at > newest)) newest = at;
+  }
+  return newest;
+}
+
+export interface MirrorRun {
+  name?: string;
+  status?: string;
+  conclusion?: string | null;
+  created_at?: string;
+  url?: string;
+}
+
+/** The mirror's own workflow runs, newest first, ignoring anything else in that repo.
+ *  Matched on the workflow NAME rather than the file path, because that is what the
+ *  runs API returns. */
+function latestMirrorRun(runs: MirrorRun[]): MirrorRun | null {
+  return runs.find((r) => r.status === "completed" && (r.name ?? "").toLowerCase().includes("mirror")) ?? null;
+}
+
+/**
+ * THE DUMP AGE DECIDES WHETHER, THE RUN CONCLUSION EXPLAINS WHY.
+ *
+ * Three states, three findings, because they need three different actions, and
+ * collapsing them is how the third one gets missed. A green run with no new dump is
+ * the subtlest and the one a conclusion-first check cannot see at all.
+ */
+export function mirrorFindings(
+  namespace: string,
+  newest: Date | null,
+  runs: MirrorRun[],
+  now: Date
+): Finding[] {
+  // No dump at all is its own fact. "Never mirrored" and "stopped mirroring" call for
+  // different things: the first is a setup that never worked, the second is a
+  // regression in one that did.
+  if (newest === null) {
+    return [
+      finding(namespace, "mirror-no-dump", "the off-account mirror holds no dump at all", [
+        "No directory under backups/json/ parses as a dump timestamp.",
+        "Either the mirror has never succeeded, or the layout changed and this check is reading the wrong place.",
+      ]),
+    ];
+  }
+
+  const hours = (now.getTime() - newest.getTime()) / 3_600_000;
+  if (hours < MIRROR_STALE_HOURS) return [];
+
+  const age = `newest dump: ${newest.toISOString()} (${hours.toFixed(1)} hours old, the window is ${MIRROR_STALE_HOURS})`;
+  const latest = latestMirrorRun(runs);
+
+  // (b) Nothing has run. The schedule is off, Actions is off, or the repo is archived.
+  if (!latest) {
+    return [
+      finding(namespace, "mirror-not-running", "the off-account mirror is stale and its workflow has not run", [
+        age,
+        "No completed mirror run was returned for this repo.",
+        "A disabled schedule, Actions turned off, or an archived repo all look like this.",
+      ]),
+    ];
+  }
+
+  const conclusion = latest.conclusion ?? "none";
+  const green = conclusion === "success" || conclusion === "skipped" || conclusion === "neutral";
+
+  // (c) Green and no dump. The hardest one to see and the reason the dump is the
+  // primary signal: every conclusion-first check reports this mirror as healthy.
+  if (green) {
+    return [
+      finding(namespace, "mirror-green-no-dump", "the off-account mirror ran green and no new dump appeared", [
+        age,
+        `last run: ${latest.created_at ?? "unknown"} concluded ${conclusion}`,
+        latest.url ? `run: ${latest.url}` : "no run url reported",
+        "A commit step that no-ops, or a sync that wrote nothing, passes CI and backs up nothing.",
+      ]),
+    ];
+  }
+
+  // (a) Ran and failed. The 2026-09-09 case.
+  return [
+    finding(namespace, `mirror-run-failed-${conclusion}`, "the off-account mirror's workflow is failing", [
+      age,
+      `last run: ${latest.created_at ?? "unknown"} concluded ${conclusion}`,
+      latest.url ? `run: ${latest.url}` : "no run url reported",
+      "The mirror commits the dump in its last step, so a red run anywhere earlier means no backup landed.",
+    ]),
+  ];
+}
+
 // ---- posting and clearing ---------------------------------------------------------
 
 export interface WatcherReport {
@@ -474,6 +621,31 @@ export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
 
   const blocked = await attempt("blocked jobs", () => readStaleBlocked(env, now));
   if (blocked) out.push(...staleBlockedFindings(blocked, now));
+
+  // THE OFF-ACCOUNT MIRROR. Resolved through the namespace mapping like every other
+  // repo call: capsid, selector "backups". Nothing is hardcoded here and no agent
+  // scope changes, because this runs inside the tick rather than through the
+  // registrar.
+  //
+  // BOTH READS ARE SEPARATELY FAIL-SAFE, and the dump read is the one that gates.
+  // `attempt` returns null when GitHub cannot be reached, and a null dump listing
+  // skips the check entirely rather than reporting an empty mirror: "cannot see the
+  // mirror" and "the mirror is dead" are different facts, and posting the second
+  // during an outage would file a job every half hour about GitHub being down. A
+  // failed RUN read is softer and degrades to an empty list, which still lets the
+  // stale-dump finding fire and say only that nothing has run.
+  const dumps = await attempt("mirror dumps", async () => {
+    const tree = await listRepoTree(env, "capsid", MIRROR_DUMP_PREFIX, undefined, MIRROR_REPO_LABEL);
+    return ((tree as { entries?: Array<{ path?: string }> }).entries ?? []) as Array<{ path?: string }>;
+  });
+  if (dumps) {
+    const runs =
+      (await attempt("mirror runs", async () => {
+        const report = await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 });
+        return ((report as { runs?: MirrorRun[] }).runs ?? []) as MirrorRun[];
+      })) ?? [];
+    out.push(...mirrorFindings("capsid", newestDump(dumps), runs, now));
+  }
 
   for (const namespace of ROSTER) {
     const runs = await attempt(`ci ${namespace}`, async () => {
