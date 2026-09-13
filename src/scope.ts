@@ -41,7 +41,16 @@ import { protectedHits } from "./improve-schema";
 // cannot decide it and the handler calls checkScope itself at the point where the
 // action is known. Exactly two tools are like this and both are subsystem tools with
 // a read action: `jobs` (list) and `lint` (gather).
-export type ToolRequirement = "read" | "write" | "action";
+//
+// "admin" is write PLUS the admin identity, for a tool that edits the authorization
+// boundary itself. It lives here rather than in the handler because these tools are
+// admin-only in WHOLE, which the registrar can decide from the tool name alone, and
+// because rule 6 of CLAUDE.md says this table is the one statement of what each tool
+// requires. `agents` and `improve_run` action `sign_policy` still gate in their
+// handlers: sign_policy must, being one action of a tool whose other actions are
+// not admin, and `agents` is left alone here rather than changed in a commit about
+// something else.
+export type ToolRequirement = "read" | "write" | "action" | "admin";
 
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   list: "read",
@@ -57,8 +66,13 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   delete: "write",
   move: "write",
   restore: "write",
-  register_namespace: "write",
-  update_namespace: "write",
+  // THE NAMESPACE-TO-REPO MAPPING IS THE AUTHORIZATION BOUNDARY, so editing it is
+  // admin work. Both were "write" until 2026-09-13, which meant any namespace-scoped
+  // driver holding write could remap its own namespace onto any repo the App reaches
+  // and, with a repos axis of "*", immediately read and write it. Found by a driver
+  // refusing a job whose own body told it to do exactly that.
+  register_namespace: "admin",
+  update_namespace: "admin",
   // gather reads, finalize archives.
   lint: "action",
 
@@ -110,6 +124,9 @@ export interface ScopeNeed {
   // The repo selector as the caller passed it (a label, or "owner/name").
   repo?: string;
   grant?: AgentGrant;
+  // The caller must be the admin identity, not merely hold the write grant. Set by
+  // the registrar for a tool whose TOOL_GRANTS entry is "admin".
+  admin?: boolean;
   // Flags whose absence refuses the call. Every one is checked, and the refusal
   // names the FIRST missing one.
   flags?: readonly ScopeFlag[];
@@ -145,6 +162,16 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     return (
       `unauthorized: '${need.tool}' requires the ${need.grant} grant and ${agent.actor} holds ${scopes.grants.length ? scopes.grants.join(", ") : "no grant at all"}. ` +
       `A read-only caller can use the read tools and nothing else.`
+    );
+  }
+  // BEFORE the namespace check, deliberately. A driver calling an admin-only tool on
+  // its OWN namespace would otherwise pass every remaining check, and the refusal it
+  // needs to read is "this tool is admin only", not silence.
+  if (need.admin && !agent.admin) {
+    return (
+      `unauthorized: '${need.tool}' is admin only and ${agent.actor} is a minted agent. ` +
+      `It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, ` +
+      `so a scoped caller that could edit it could widen itself. Ask the admin to make the mapping.`
     );
   }
   if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace)) {
@@ -226,8 +253,14 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
         tool: name,
         namespace,
         repo,
-        // An "action" tool is checked by its handler, where the action is known.
-        ...(requirement === "action" ? {} : { grant: requirement }),
+        // An "action" tool is checked by its handler, where the action is known, so
+        // the registrar names no grant for it. An "admin" tool needs the write grant
+        // AND the admin identity.
+        ...(requirement === "admin"
+          ? { grant: "write" as const, admin: true }
+          : requirement === "action"
+            ? {}
+            : { grant: requirement }),
       });
       if (refusal) return deny(refusal);
       if (takesNamespace && namespace === undefined) {
