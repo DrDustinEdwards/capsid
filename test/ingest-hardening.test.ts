@@ -281,3 +281,81 @@ test("a correctly bound baseline is still ingested, so the binding is not a wall
   assert.equal(result.ok, true, result.message);
   assert.notEqual(d1.rows.improve_runs[0].status, "awaiting-score", "the run must advance");
 });
+
+// ---- F13: the check on args.ref, which the harness could not see ------------------
+//
+// Audit 2026-09-13, finding F13. The renamed-scorer plant above puts the scorer YAML
+// on the CONTENTS route, and withFetch routes by pathname with the query string
+// dropped, so the default-branch read and the `?ref=` read are the same stub. It
+// refuses on the first iteration every time, and reverting
+//   const refs = args.ref ? [undefined, args.ref] : [undefined]
+// back to a default-only lookup leaves it green. That reversion is the exact defect
+// finding 12 fixed a day earlier.
+//
+// The case the loop exists for is the one the stub could not express: INNOCENT on the
+// default branch, scorer only on the ref being dispatched. Counting calls inside the
+// route is what tells the two reads apart.
+
+const INNOCENT_YAML = Buffer.from("name: nightly\njobs:\n  build:\n    steps:\n      - run: npm test\n", "utf8").toString(
+  "base64"
+);
+const SCORER_YAML = Buffer.from(
+  'name: nightly\njobs:\n  score:\n    steps:\n      - run: curl -X POST "$CAPSID_URL/improve/score"\n',
+  "utf8"
+).toString("base64");
+
+test("PLANT: ci_dispatch refuses a scorer that exists only on the ref being dispatched", async () => {
+  let reads = 0;
+  const contents = () => {
+    reads += 1;
+    // First read is the default branch (no ?ref=), second is args.ref. Innocent on
+    // the branch GitHub requires the workflow to live on, scorer on the one that
+    // actually runs.
+    return { body: { content: reads === 1 ? INNOCENT_YAML : SCORER_YAML, encoding: "base64" } };
+  };
+  await withFetch(
+    {
+      "GET /repos/owner/repo/contents/.github/workflows/nightly.yml": contents,
+      "POST /repos/owner/repo/actions/workflows/nightly.yml/dispatches": { status: 204 },
+    },
+    async (calls) => {
+      await assert.rejects(
+        () => ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "nightly.yml", ref: "topic" }),
+        /posts to \/improve\/score/,
+        "a scorer on the dispatch ref must be refused even when the default branch is innocent"
+      );
+      assert.equal(reads, 2, `both copies must be read, not ${reads}`);
+      // The second read is the one that carries the ref, which is the whole fix.
+      const refRead = calls.find((c) => c.path.endsWith("nightly.yml") && c.search.includes("ref=topic"));
+      assert.ok(refRead, `no lookup carried ?ref=topic: ${JSON.stringify(calls.map((c) => c.path + c.search))}`);
+      assert.equal(
+        calls.filter((c) => c.method === "POST" && c.path.includes("/dispatches")).length,
+        0,
+        "a refused dispatch was issued anyway"
+      );
+    }
+  );
+});
+
+test("THE INNOCENT DIRECTION: both copies innocent, and the dispatch goes out", async () => {
+  // Without this the plant above passes against a ci_dispatch that refuses every
+  // workflow carrying a ref, which would stop every legitimate branch dispatch.
+  await withFetch(
+    {
+      "GET /repos/owner/repo/contents/.github/workflows/nightly.yml": {
+        body: { content: INNOCENT_YAML, encoding: "base64" },
+      },
+      "POST /repos/owner/repo/actions/workflows/nightly.yml/dispatches": { status: 204 },
+      // ci_dispatch reports the run it started, so the innocent path reads it back.
+      "GET /repos/owner/repo/actions/runs": { body: { total_count: 0, workflow_runs: [] } },
+    },
+    async (calls) => {
+      await ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "nightly.yml", ref: "topic" });
+      assert.equal(
+        calls.filter((c) => c.method === "POST" && c.path.includes("/dispatches")).length,
+        1,
+        "an innocent workflow was not dispatched"
+      );
+    }
+  );
+});
