@@ -578,6 +578,27 @@ async function reviewRefusal(
   const { review } = outcome;
   const said = review.said ? ` ${review.said}` : "";
   if (outcome.kind === "rework") {
+    // THE CAP IS CHECKED BEFORE THE CORRECTION IS SPENT, so the loop it bounds is
+    // actually bounded. It counted correctly and stopped nothing: the rework path
+    // always incremented and always left the job claimed, so a third CHANGES spent a
+    // third correction and sent the work back again, and the only place the ceiling
+    // was enforced was `resume`, which this path never touches. A reviewer and a
+    // driver disagreeing forever is precisely the loop the cap exists for, and the
+    // test over it asserted the counter reached 2 rather than that anything stopped
+    // (audit 2026-09-13, finding 8).
+    //
+    // At the cap the job goes to the seat instead, through the ordinary block path, so
+    // it carries the reviewer's objection and the gate counter behaves as it does for
+    // any other block. fromReview stops blockJob consulting the review that produced
+    // it and recursing.
+    if (atCorrectionCap(current.corrections_count)) {
+      return blockJob(env, agent, now, id, {
+        reason:
+          `review by ${review.by}: CHANGES.${said} This is correction ${current.corrections_count + 1}, past the cap of ${CORRECTION_CAP}: ` +
+          `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
+        fromReview: true,
+      });
+    }
     // BACK TO THE DRIVER, and it spends a correction from the same budget the retry
     // cap bounds. A review sending work round forever is the loop that cap exists for,
     // and counting it separately would exempt it.

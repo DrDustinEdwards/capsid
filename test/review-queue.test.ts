@@ -184,6 +184,35 @@ test("A SECOND CHANGES REACHES THE CAP, so a review loop is bounded by the same 
   });
 });
 
+test("PLANT: AT the cap, a further CHANGES BLOCKS for the seat instead of going round again", async () => {
+  // The test above asserts the counter reaches 2. It does not assert that anything
+  // STOPS, and nothing did: the rework path always incremented and always left the job
+  // claimed, so a third CHANGES spent a third correction and sent the work back. The
+  // cap was enforced only on `resume`, which this path never touches (audit
+  // 2026-09-13, finding 8). Driven through completeJob, the path a driver calls.
+  const { db, row } = queueDb(claimedRow({ corrections_count: 2 }));
+  await withComments(["REVIEW: still not right. CHANGES"], async () => {
+    // A BLOCK IS A SUCCESSFUL OUTCOME, so the call reports ok: the job stopped for the
+    // seat rather than failing. What this test is about is the row, not the return.
+    await finish(db);
+    assert.equal(row.status, "blocked", "a review loop past the cap sent the work back to the driver again");
+    assert.equal(row.corrections_count, 2, "a blocked-for-the-seat job must not also spend another correction");
+    assert.match(String(row.result_summary), /retry cap; human decision required/);
+    assert.match(String(row.result_summary), /still not right/, "the seat needs the reviewer's actual objection");
+  });
+});
+
+test("THE INNOCENT DIRECTION: below the cap, CHANGES still goes back to the driver", async () => {
+  // Without this, a rework path broken for everybody passes the plant above and every
+  // review would land on the seat's desk.
+  const { db, row } = queueDb(claimedRow({ corrections_count: 0 }));
+  await withComments(["REVIEW: one more pass. CHANGES"], async () => {
+    await finish(db);
+    assert.equal(row.status, "claimed", "an ordinary CHANGES must stay with the driver");
+    assert.equal(row.corrections_count, 1);
+  });
+});
+
 test("BLOCK: the job is blocked for the seat, carrying the objection", async () => {
   const { db, row } = queueDb(claimedRow());
   await withComments(["REVIEW: this changes the auth model and needs a ruling. BLOCK"], async () => {
