@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
+import { reverifyStatements } from "../src/outcome-prs";
 import { legacyAgent } from "../src/agents";
 
 // JOBS AS EVIDENCE, AGAINST A REAL D1 (migrations/0011).
@@ -76,10 +77,32 @@ async function plantOutcome(jobId: string, opened: number, merged: number, verif
     .run();
 }
 
+// A MINTED AGENT ROW, because agentSummaries reads the agents TABLE and the fixture
+// never wrote to it. Everything else here drives the queue as a legacy operator key,
+// which resolves to a caller without ever inserting a row, so `status.agents` was []
+// on every run and the per-credential assertions below iterated nothing. Added
+// 2026-09-13 when a count check turned that vacuous pass into a failure.
+async function seedAgent(name: string) {
+  await env.DB
+    .prepare(
+      `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
+       VALUES (?1, ?2, 'driver', ?3, ?4, 'github:DrDustinEdwards', '2026-09-10 00:00:00')`
+    )
+    .bind(
+      `agent_${name.slice(0, 12).padEnd(12, "0")}`,
+      name,
+      `hash-${name}`,
+      JSON.stringify({ namespaces: ["capsid"], repos: ["DrDustinEdwards/capsid"], tools: "*", grants: ["read", "write"], flags: {} })
+    )
+    .run();
+}
+
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM job_outcomes").run();
   await env.DB.prepare("DELETE FROM jobs").run();
   await env.DB.prepare("DELETE FROM audit_log").run();
+  await env.DB.prepare("DELETE FROM agents").run();
+  await env.DB.prepare("DELETE FROM job_outcome_prs").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
 });
 
@@ -214,8 +237,15 @@ describe("job outcomes", () => {
     // is attached. The ?? [] is the optional type falling in line with the SCOPED case,
     // where improve_status omits the inventory entirely (audit 2026-09-13, finding 7),
     // not a branch this test can take: the assertion below would read nothing.
+    await seedAgent("capsid-driver");
     const status = await improveStatus(jobsEnv() as never, "capsid");
     const agents = status.agents ?? [];
+    // THE COUNT CHECK IS THE POINT. Without it this test passed by iterating an empty
+    // array: the fixture seeds no agents table row, so every per-credential assertion
+    // below was skipped and a regression that emptied the inventory would have been
+    // reported as a pass. capsid/conventions.md calls this out by name, "an assertion
+    // that can pass by reading nothing", and it had been true here since the test was
+    // written.
     expect(agents.length).toBeGreaterThan(0);
     for (const agent of agents) {
       expect(agent.record).toBeDefined();
@@ -227,5 +257,67 @@ describe("job outcomes", () => {
       }
       expect(Object.keys(agent.record).join(" ")).not.toMatch(/score|rating|trust/i);
     }
+  });
+
+  // ---- audit 2026-09-13, finding 10 ----------------------------------------------
+
+  it("PLANT: re-verifying the last pull request marks prs_opened verified, which is what min_record reads", async () => {
+    // The defect: reverify set verified.prs_merged and left verified.prs_opened alone,
+    // and recordFor requires prs_opened before it counts a single merge. So a job
+    // completed while GitHub was down, merged later and swept, had GitHub's merge count
+    // on its outcome row and prs_merged 0 on the agent's record, and min_record kept
+    // refusing the next claim. Real D1, real SQL, real json_set.
+    await env.DB
+      .prepare(
+        `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
+           result_kind, verified, recorded_at)
+         VALUES ('job_unverified', 'agent:capsid-driver', 'capsid', 1, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`
+      )
+      .bind(JSON.stringify({ prs_opened: false, prs_merged: false }))
+      .run();
+    await env.DB
+      .prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_unverified', ?1, NULL, NULL)")
+      .bind("https://github.com/o/r/pull/9")
+      .run();
+
+    await env.DB.batch(reverifyStatements(env.DB, "job_unverified", "https://github.com/o/r/pull/9", true, NOW));
+
+    const row = await env.DB
+      .prepare("SELECT prs_opened, prs_merged, verified FROM job_outcomes WHERE job_id = 'job_unverified'")
+      .first<{ prs_opened: number; prs_merged: number; verified: string }>();
+    const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
+    expect(row!.prs_merged).toBe(1);
+    expect(verified.prs_merged).toBe(true);
+    expect(verified.prs_opened).toBe(true);
+    expect(row!.prs_opened).toBe(1);
+  });
+
+  it("A JOB WITH AN UNREAD PULL REQUEST LEFT does NOT get prs_opened verified", async () => {
+    // The other half, and the reason the CASE counts unread rows instead of flipping
+    // the flag on any successful read: reading one pull request of two proves nothing
+    // about the count.
+    await env.DB
+      .prepare(
+        `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
+           result_kind, verified, recorded_at)
+         VALUES ('job_partial', 'agent:capsid-driver', 'capsid', 2, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`
+      )
+      .bind(JSON.stringify({ prs_opened: false, prs_merged: false }))
+      .run();
+    for (const url of ["https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"]) {
+      await env.DB
+        .prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_partial', ?1, NULL, NULL)")
+        .bind(url)
+        .run();
+    }
+
+    await env.DB.batch(reverifyStatements(env.DB, "job_partial", "https://github.com/o/r/pull/1", true, NOW));
+
+    const row = await env.DB
+      .prepare("SELECT verified FROM job_outcomes WHERE job_id = 'job_partial'")
+      .first<{ verified: string }>();
+    const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
+    expect(verified.prs_merged).toBe(true);
+    expect(verified.prs_opened).toBe(false);
   });
 });

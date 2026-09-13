@@ -116,16 +116,33 @@ test("a seeded URL is verified against GitHub before anything is counted", () =>
 
 // ---- what re-verification touches ---------------------------------------------------
 
-test("re-verification updates only the merge fields, and recomputes rather than increments", () => {
-  const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(body, "reverifyPr is gone");
-  const update = /UPDATE job_outcomes[\s\S]*?WHERE job_id = \?1/.exec(body[0]);
+test("re-verification recomputes rather than increments, and touches nothing it cannot verify", () => {
+  // The SQL moved into reverifyStatements on 2026-09-13 so the integration suite can
+  // execute it against a real D1; this scan follows it there. What it still guards is
+  // the increment, which drifts because this path runs on a merge AND on a sweep and
+  // will eventually run twice on the same pull request.
+  const body = /export function reverifyStatements[\s\S]*?\n\}\n/.exec(SOURCE);
+  assert.ok(body, "reverifyStatements is gone");
+  // ANCHORED ON THE CLOSING BACKTICK, not on the first `WHERE job_id = ?1`, because
+  // that one is inside the subselect that recomputes the count. The non-greedy match
+  // this replaces stopped there, so `update[0]` was a truncated prefix ending mid
+  // statement and the "must not be touched" loop below was scanning text that could
+  // not have contained any of those columns whatever the code did. It passed by
+  // reading nothing, which is the failure mode capsid/conventions.md names.
+  const update = /UPDATE job_outcomes[\s\S]*?WHERE job_id = \?1`/.exec(body[0]);
   assert.ok(update, "the outcome update is gone");
-  // An increment run twice drifts, and this path runs on a merge AND on a sweep, so
-  // it will be run twice on the same pull request eventually.
+  assert.match(update[0], /verified = /, "the scan stopped before the end of the statement again");
   assert.match(update[0], /prs_merged = \(SELECT COUNT\(\*\)/);
   assert.equal(/prs_merged = prs_merged/.test(update[0]), false, "never an increment");
-  for (const column of ["prs_opened", "commits", "files_changed", "tests_added", "ci_green", "duration_minutes"]) {
+  // prs_opened IS touched now, and that is the fix rather than a regression: it is
+  // recomputed from the join rows, never incremented, and only when no row is left
+  // unread (audit 2026-09-13, finding 10). test-integration/job-outcomes.test.ts is
+  // what proves the CASE fires; this only proves it is not an increment.
+  assert.match(update[0], /prs_opened = CASE/);
+  assert.equal(/prs_opened = prs_opened \+/.test(update[0]), false, "never an increment");
+  // The rest stay untouched: this path learns a merge state, and nothing else about
+  // the work has changed since the row was written.
+  for (const column of ["commits", "files_changed", "tests_added", "ci_green", "duration_minutes"]) {
     assert.equal(new RegExp(`${column}\\s*=`).test(update[0]), false, `${column} must not be touched`);
   }
 });
@@ -134,8 +151,10 @@ test("an unreachable GitHub leaves every row exactly as it was", () => {
   const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
   assert.ok(body);
   assert.match(body[0], /if \(typeof facts === "string"\) return \[\];/);
+  // The write is now one call to the statement builder, so what has to come first is
+  // the bail before THAT rather than before the SQL text.
   assert.ok(
-    body[0].indexOf('typeof facts === "string"') < body[0].indexOf("UPDATE job_outcome_prs"),
+    body[0].indexOf('typeof facts === "string"') < body[0].indexOf("reverifyStatements("),
     "the bail must come before any write"
   );
 });
@@ -144,9 +163,12 @@ test("a pull request closed unmerged is recorded as 0, and does not increment th
   const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
   assert.ok(body);
   assert.match(body[0], /const merged = facts\.merged === true;/, "merged is strictly GitHub's answer");
-  assert.match(body[0], /merged \? 1 : 0/);
+  // The 1-or-0 and the recomputation both live in the builder now.
+  const builder = /export function reverifyStatements[\s\S]*?\n\}\n/.exec(SOURCE);
+  assert.ok(builder, "reverifyStatements is gone");
+  assert.match(builder[0], /merged \? 1 : 0/);
   // And the recomputation counts merged = 1 only, so a 0 contributes nothing.
-  assert.match(body[0], /WHERE job_id = \?1 AND merged = 1/);
+  assert.match(builder[0], /WHERE job_id = \?1 AND merged = 1/);
 });
 
 test("a row that does not name the pull request is untouched", () => {
