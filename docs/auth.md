@@ -29,18 +29,27 @@ Roles are few and separated. Each one is a single capability, not a bundle. `scr
 
 | role | reads | writes | flag |
 | --- | --- | --- | --- |
-| `<ns>-driver` | its own namespace | its own namespace, pull requests only | none |
+| `<ns>-driver` | its own namespace | its own namespace, pull requests only | none by default; two exceptions below |
 | `auditor` | every namespace and repo | nothing at all | none |
 | `reviewer` | every namespace and repo | a comment on a pull request | `can_comment_pr` |
 | `watcher` | every namespace | `jobs.post`, and no other job action | none |
 | `seat` | every namespace | every namespace | `can_merge` |
 | `site-seat` | `dustinedwards` | `dustinedwards` | `can_merge` |
 
+**A project driver holds no blast-radius flag by default, and two of them hold one.** Granted by the seat on 2026-09-11, each for a stated reason rather than as a convenience: `capsid-driver` holds `can_touch_protected`, and `claude-skills-driver` holds `can_touch_protected` and `can_write_workflows`. In both repos the protected list is what the driver's own jobs edit, because tests, CI and `scripts/` are the subject of the work rather than something near it, and in claude-skills a skill's workflow is part of the artifact. Every other driver holds none, and `improve_status` and the console list the flags each one actually has, so the inventory is the answer rather than this paragraph. Widening one is `agents` action `update_scopes`, which is admin only and audit-logged with the scopes before and after.
+
 The reviewer and the watcher both need the write grant, because commenting and posting a job both go through write tools. The tools axis keeps that from being a general write. An entry can name an action: `jobs.post` or `manage_pr.comment`. A list naming at least one action of a tool is narrowed to the actions it names. A bare tool name with no qualified sibling still means the whole tool, and `*` still allows everything, so no agent minted before this changes behaviour. The two tools whose action decides what they do (`jobs` and `lint`) pass the action to `checkScope` at the point where it is known, which is the same shape the grant check already uses.
 
 The `agents` tool is admin only. An agent that could mint another could widen itself. `mint` returns a key once and stores only its sha256. `list` is the inventory, revoked rows included. `revoke` sets `revoked_at` rather than deleting, so rows an agent wrote still resolve to what it was allowed to do, while its key stops resolving immediately. `update_scopes` replaces named axes and leaves the rest.
 
 Audit rows and `jobs.claimed_by` record a minted agent as `agent:<name>`.
+
+**Four of these have never connected, and what each is waiting for is written down so an unused credential reads as a plan rather than a loose end.** `improve_status` shows `last_seen: null` for all four today.
+
+- `seat` is used the first time a merge is made by a machine rather than by a person at GitHub. Until then the human merges pull requests and the seat's key sits unused on disk, which is the correct state while `capsid/policy/auto-merge.md` ships disabled.
+- `reviewer` is used the first time a job is posted with `review_required`, since that is the only thing that waits for a `REVIEW:` comment. No job has been posted with it yet.
+- `auditor` is used by an outside model doing a cold audit, which is a thing a person starts rather than something the system reaches for.
+- `watcher` is different from the other three, and its `null` means something else. The tick has no bearer token to present, so it builds a SYNTHETIC watcher identity in `src/watcher.ts` shaped to match the minted role exactly, and `touchLastSeen` returns early for an agent with no row. The minted `watcher` key is therefore unused by construction, and its `last_seen` stays `null` however many findings the tick posts. What records that work is `audit_log`, where the actor is `agent:watcher` either way. The key is there for a person driving the watcher's checks by hand from outside the Worker.
 
 Three kinds of caller resolve, in this order:
 

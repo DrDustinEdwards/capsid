@@ -211,9 +211,9 @@ it to what the work actually needs and no further:
 | `grants` | read, write | read, write |
 | `can_merge` | no | yes |
 | `can_direct_write` | no | no |
-| `can_write_workflows` | no | no |
+| `can_write_workflows` | no, except claude-skills-driver | no |
 | `can_dispatch` | no | no |
-| `can_touch_protected` | no | no |
+| `can_touch_protected` | no, except capsid-driver and claude-skills-driver | no |
 | `money_paths` | no | no |
 
 **`repos` is derived, not typed.** The script reads the namespace mapping from the
@@ -223,6 +223,15 @@ rather than falling back to the `*` wildcard, because a wildcard can never refus
 and a mint is the wrong place to discover that. Mapping a namespace is admin-only
 (`register_namespace` and `update_namespace`), so the boundary and the axis are set
 by different calls and neither is editable by the credential they bind.
+
+**The two exceptions are named rather than left as a general no**, because a table
+that says no while the inventory says yes teaches a reader to distrust the table.
+The seat granted them on 2026-09-11, each for a stated reason: in both repos the
+protected paths are the subject of the driver's jobs rather than something near
+them, since tests, CI and `scripts/` are what that work edits, and in claude-skills
+a skill's workflow is part of the artifact being shipped. Every other driver holds
+none. `improve_status` and the console list what each agent actually holds, so the
+inventory settles it and this table describes the rule.
 
 A driver opens pull requests; a human merges them. That is the same rule the
 improve loop already runs on. Giving a driver `can_merge` is how it stops being
@@ -246,7 +255,48 @@ be cut over in one sitting. The order that works:
    `last_seen` moving, which is how to know the agent is the credential in use and
    not the operator key underneath it.
 3. When every machine has an agent and `last_seen` proves it, remove the operator
-   hash: `npx wrangler secret put OPERATOR_KEY_HASH` with the remaining entries.
+   hash: `npx wrangler secret put OPERATOR_KEY_HASH` with the remaining entries, or
+   `npx wrangler secret delete OPERATOR_KEY_HASH` when none remain.
+
+**On this deployment step 3 is done, and the steps above still describe a fresh
+setup.** `OPERATOR_KEY_HASH` was deleted 2026-09-12 after a check found no consumer
+of it in any repo, workflow or machine config. Nothing above is wrong for a stranger
+standing this up, who sets the secret at section 3 and has it throughout; what
+changes once it is gone is how you mint, and that is the next section.
+
+### Minting once no operator key exists
+
+`scripts/mint-agents.mjs` authenticates only with `CAPSID_OPERATOR_KEY` as a bearer
+on `/ops/mcp` and exits 2 without it, so with the secret deleted the script cannot
+run at all. The OAuth admin session on `/mcp` is then the only admin, and `agents`
+action `mint` works there, but it returns the key in its response, which puts a live
+credential in a chat transcript or a client log. That is the thing the script exists
+to avoid: it writes the key straight to `~/.capsid/agent-<name>.key` at mode 0600
+and reports only a 12-hex fingerprint.
+
+So the path is a temporary re-add, and the secret is the shortest-lived part of it:
+
+```
+node -e "const b=require('crypto').randomBytes(32).toString('hex');console.log('capsid_'+b)"   # keep this, do not paste it anywhere
+node -e "console.log(require('crypto').createHash('sha256').update(process.argv[1]).digest('hex'))" <the key>
+npx wrangler secret put OPERATOR_KEY_HASH        # paste the HASH, not the key
+CAPSID_OPERATOR_KEY=<the key> node scripts/mint-agents.mjs --namespace <ns> --apply
+npx wrangler secret delete OPERATOR_KEY_HASH
+```
+
+**`improve_run` action `mint_operator_key` is not a shortcut for this.** It issues a
+`ro:` entry, and a read-only key is not admin (`admin` is `grant === "write"` in
+`src/agents.ts`), so a key minted that way cannot mint an agent. It exists for the
+read-only tier and nothing else.
+
+**What it would take to mint over OAuth instead**, stated rather than built: the
+`agents` tool would need a mode that writes the key somewhere other than its
+response, and there is nowhere good. The console is admin-gated and would be the
+natural home, but it never mints by ruling, and a browser download is not mode 0600
+on the machine that needs it. A device-code flow in `scripts/mint-agents.mjs` that
+obtained an admin token the way any OAuth client does would keep the key on the
+machine and off the wire, and that is the shape worth costing if the re-add becomes
+frequent. It is one ruling and a day of work, not a small change.
 
 There is a script for it, and it is the path that keeps a key out of a terminal:
 `scripts/mint-agents.mjs` sends each mint and writes the key straight into
