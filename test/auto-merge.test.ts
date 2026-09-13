@@ -12,10 +12,11 @@ import {
   loadMergePolicy,
   mergeParams,
   parseMergePolicy,
+  autoMergeTick,
   type PrFacts,
 } from "../src/auto-merge.ts";
 import { signTaskBody } from "../src/improve-task.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // PART 1 OF THE AUTONOMY ARC. The Worker may merge a pull request with no human when
 // every check in capsid/policy/auto-merge.md passes. These tests drive each check to
@@ -306,5 +307,114 @@ test("the merge audit row names the policy version, the job, the driver and both
     merge_sha: "f852780aabbccddeeff0011223344556677889900",
     passed: [...POLICY_CHECKS],
     at: "2026-09-12T03:00:00.000Z",
+  });
+});
+
+// ---- F4: the TICK, which nothing had ever run -------------------------------------
+//
+// Audit 2026-09-13, finding F4. Every check above drives `evaluatePolicy`, a pure
+// function with hand-built facts. `autoMergeTick` is what production calls
+// (src/improve/tick.ts), and no test imported it. So the seven checks were verified
+// and the thing that consults them was not: a tick that skipped loadMergePolicy, or
+// ignored `enabled: false`, or merged regardless of the verdict, would have left this
+// file entirely green.
+//
+// auto-merge is the one policy still shipping disabled, which makes the first two
+// cases the ones that matter: they are the code that runs today.
+
+const NS_ROW = [{ namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) }];
+
+async function tickEnv(policyBody: string | null, over: Record<string, unknown> = {}) {
+  const { db } = fakeD1({
+    namespaces: NS_ROW,
+    documents: policyBody === null ? [] : [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body: policyBody }],
+    ...over,
+  });
+  return fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET });
+}
+
+test("PLANT: a disabled policy makes the tick reach GitHub not once", async () => {
+  const env = await tickEnv(await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false")));
+  await withFetch({}, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
+    assert.equal(report.ran, false, "a disabled policy ran the tick");
+    assert.match(report.note, /disabled/);
+    assert.equal(report.outcomes.length, 0);
+    // The strongest assertion is not that nothing merged, it is that nothing was
+    // even LOOKED at: `enabled` is read before any repo is resolved.
+    assert.equal(calls.length, 0, `a disabled policy still called GitHub: ${JSON.stringify(calls)}`);
+  });
+});
+
+test("PLANT: an unsigned policy makes the tick reach GitHub not once", async () => {
+  const env = await tickEnv(GOOD_POLICY);
+  await withFetch({}, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
+    assert.equal(report.ran, false, "an unsigned policy ran the tick");
+    assert.match(report.note, /carries no capsid-task-signature/);
+    assert.equal(calls.length, 0, `an unsigned policy still called GitHub: ${JSON.stringify(calls)}`);
+  });
+});
+
+test("PLANT: no policy document at all makes the tick reach GitHub not once", async () => {
+  const env = await tickEnv(null);
+  await withFetch({}, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
+    assert.equal(report.ran, false);
+    assert.match(report.note, /no merge policy/);
+    assert.equal(calls.length, 0);
+  });
+});
+
+// The enabled cases. These are what the tick WOULD do, and nothing has ever run them.
+
+const OWNER = "/repos/DrDustinEdwards/capsid";
+const HEAD_SHA = "bfae8ca9012345678901234567890123456789ab";
+
+function tickRoutes(changedFiles: string[]) {
+  return {
+    [`GET ${OWNER}`]: { body: { default_branch: "master" } },
+    [`GET ${OWNER}/pulls`]: {
+      body: [{ number: 23, body: "Closes job_4c0ecc28548b.", head: { sha: HEAD_SHA }, base: { ref: "master" } }],
+    },
+    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename })) },
+    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
+      body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
+    },
+    [`PUT ${OWNER}/pulls/23/merge`]: { body: { sha: "merged00000000000000000000000000000000000" } },
+  };
+}
+
+async function enabledEnv() {
+  return tickEnv(await signTaskBody(SECRET, GOOD_POLICY), {
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "claimed" }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+}
+
+test("PLANT: an enabled policy merges a green PR, through the tick and not through evaluatePolicy", async () => {
+  const env = await enabledEnv();
+  await withFetch(tickRoutes(["src/jobs.ts", "docs/schema.md"]), async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
+    assert.equal(report.ran, true, report.note);
+    assert.equal(report.outcomes.length, 1);
+    assert.equal(report.outcomes[0].merged, true, `the green PR was not merged: ${report.outcomes[0].why}`);
+    const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
+    assert.equal(merges.length, 1, "the tick reported a merge it never issued");
+  });
+});
+
+test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge", async () => {
+  // The innocent direction of the plant above, and the one that matters: a tick that
+  // called evaluatePolicy and merged anyway would pass the test above and fail here.
+  const env = await enabledEnv();
+  await withFetch(tickRoutes([".github/workflows/nightly.yml"]), async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
+    assert.equal(report.ran, true, report.note);
+    assert.equal(report.outcomes.length, 1);
+    assert.equal(report.outcomes[0].merged, false, "a protected-path PR was auto-merged");
+    assert.ok(report.outcomes[0].failed, "a decline recorded no failing check");
+    const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
+    assert.equal(merges.length, 0, "a declined PR was merged anyway");
   });
 });
