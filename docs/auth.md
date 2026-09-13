@@ -16,6 +16,13 @@ Scopes are five axes. `namespaces` and `repos` are a list or `*`. `tools` is an 
 
 A new agent gets read on its named namespaces and no flags. Scopes are stored as JSON and the parse fails closed: a null, truncated or wrong-shaped column resolves to no namespaces, no tools, no grants and no flags.
 
+**The `repos` axis is set per driver, and editing the mapping is admin work.** Both halves were added 2026-09-13 and either alone leaves a hole. Until then every agent carried `repos: "*"`, because `scripts/mint-agents.mjs` named no repos for a driver and an omitted axis mints wide, and `allowsScope("*", v)` can never refuse. That made the namespace-to-repo mapping the only thing standing between a driver and every repo the App reaches, and `update_namespace` took a plain write grant, which every driver holds. A driver could therefore remap its own namespace onto any repo and then read and write it.
+
+- `register_namespace` and `update_namespace` are `admin` in `TOOL_GRANTS`, checked by the registrar like every other requirement. A driver that needs a namespace mapped asks for it, the way it asks for a mint.
+- A driver is minted with `repos` set to its namespace's mapped repos, read from the live mapping rather than from a list in the script, so the axis and the mapping cannot disagree. A namespace that maps to nothing refuses the mint rather than falling back to the wildcard.
+
+After both, a remap gains a driver nothing: the repos axis refuses independently of what the mapping says.
+
 ### Roles
 
 Roles are few and separated. Each one is a single capability, not a bundle. `scripts/mint-agents.mjs` holds them in two lists: `ROLES`, asked for by name, and `AGENTS`, the per-namespace bootstrap that holds the drivers and the seat. `node scripts/mint-agents.mjs --roles` prints a mint command for each entry in `ROLES`, which is the four below that are not a driver or the seat; the driver rows and the seat are minted by the same script's namespace path (`docs/bootstrap.md`). A test fails the build if any role names a second blast-radius flag.
@@ -50,4 +57,4 @@ Two gated endpoints:
 
 Login and repo access use two different GitHub credentials: an OAuth App for login (OAuth Apps cannot mint installation tokens) and a GitHub App for repo access. Keep both.
 
-`register_namespace` returns the command that mints the new namespace's driver agent, `node scripts/mint-agents.mjs --namespace <ns> --apply`. It does not mint it: minting is admin only, and `register_namespace` takes a plain write grant.
+`register_namespace` returns the command that mints the new namespace's driver agent, `node scripts/mint-agents.mjs --namespace <ns> --apply`. It does not mint it, and since 2026-09-13 it is admin only itself, so the separation is now belt and braces: registering a namespace and minting a credential for it are two acts by the same caller rather than one act that quietly does both.

@@ -207,6 +207,7 @@ it to what the work actually needs and no further:
 | scope | a project driver | the seat |
 | --- | --- | --- |
 | `namespaces` | its own | all of them |
+| `repos` | its namespace's mapped repos | all of them |
 | `grants` | read, write | read, write |
 | `can_merge` | no | yes |
 | `can_direct_write` | no | no |
@@ -214,6 +215,14 @@ it to what the work actually needs and no further:
 | `can_dispatch` | no | no |
 | `can_touch_protected` | no | no |
 | `money_paths` | no | no |
+
+**`repos` is derived, not typed.** The script reads the namespace mapping from the
+live `namespaces` tool and sets the axis from it, so a driver reaches its own repos
+and nothing else. It refuses to mint a driver for a namespace that maps to no repos
+rather than falling back to the `*` wildcard, because a wildcard can never refuse
+and a mint is the wrong place to discover that. Mapping a namespace is admin-only
+(`register_namespace` and `update_namespace`), so the boundary and the axis are set
+by different calls and neither is editable by the credential they bind.
 
 A driver opens pull requests; a human merges them. That is the same rule the
 improve loop already runs on. Giving a driver `can_merge` is how it stops being

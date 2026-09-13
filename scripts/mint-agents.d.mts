@@ -1,10 +1,15 @@
 // Types for the agent minter, so test/mint-agents.test.ts type-checks under
 // tsconfig.test.json (noImplicitAny). The runtime is scripts/mint-agents.mjs.
 export const ORIGIN_DEFAULT: string;
+// `repos` is OPTIONAL on an AGENTS entry and required on the wire. It is absent in
+// the list and filled in by main() from the live namespace mapping before anything
+// is minted, because a repos axis copied into this file would be a second copy of
+// the authorization boundary. See parseNamespaceRepos.
 export const AGENTS: Array<{
   name: string;
   kind: string;
   namespaces: string[];
+  repos?: string[];
   grants: string[];
   flags?: Record<string, boolean>;
 }>;
@@ -37,6 +42,12 @@ export function selectAgents(
 ): Array<(typeof AGENTS)[number] | (typeof ROLES)[number]>;
 export function driverFor(namespace: string): (typeof AGENTS)[number];
 export function parseNamespaces(text: string): string[];
+// The namespace-to-repos mapping as the `namespaces` tool serves it, and the lookup
+// that turns one namespace into a driver's repos axis. reposForNamespace THROWS for
+// a namespace that maps to nothing rather than returning an empty list, so a mint
+// cannot fall back to the wildcard by accident.
+export function parseNamespaceRepos(text: string): Map<string, string[]>;
+export function reposForNamespace(map: Map<string, string[]>, namespace: string): string[];
 export function parseArgs(argv: string[]): {
   apply: boolean;
   namespace: string | undefined;
