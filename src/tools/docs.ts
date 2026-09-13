@@ -909,6 +909,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
+      // THE OVERRIDE IS ITSELF SCOPED, on delete too (audit 2026-09-13, finding C1).
+      // write and restore asked for the flag and delete and move did not, so the opt-in
+      // alone was enough and the caller is the one who chooses the opt-in. A driver
+      // holding write and not one flag could delete improve/prompts/run.md, the loop's
+      // own instruction file. Same block as write and restore, naming this tool.
+      if (allow_improve_paths === true) {
+        const overrideRefusal = ctx.scope({ tool: "delete", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
+        if (overrideRefusal) return fail(overrideRefusal);
+      }
       // THE IMPROVE CONTROL-SURFACE GUARD, on delete too (audit 2026-09-07, Opus MAJOR
       // 5.4). Removing improve/prompts/run.md drops the loop back to the hardcoded
       // default prompt and removing a skill retires it, so a delete is a steering
@@ -994,6 +1003,14 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
+      // THE OVERRIDE IS ITSELF SCOPED, on move too (audit 2026-09-13, finding C1). The
+      // reasoning is the delete handler's: the opt-in is the caller's to pass, so the
+      // flag is what bounds it. Checked once for the move rather than per end, because
+      // one call moves one document and the refusal is about the caller, not the path.
+      if (allow_improve_paths === true) {
+        const overrideRefusal = ctx.scope({ tool: "move", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
+        if (overrideRefusal) return fail(overrideRefusal);
+      }
       // THE IMPROVE CONTROL-SURFACE GUARD, BOTH ENDS (audit 2026-09-07, Opus MAJOR
       // 5.4). A move touches two paths and either can steer the loop: moving a document
       // INTO improve/skills/ installs a skill other namespaces' runs re-inject, and
