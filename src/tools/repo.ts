@@ -27,6 +27,7 @@ import {
 import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_BODY, MAX_COMMIT_MESSAGE, MAX_PATH, MAX_PR_BODY, MAX_PR_COMMENT, MAX_PR_TITLE, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
+import { resolveRepo } from "../github/client";
 import { reverifyPr } from "../outcome-prs";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
@@ -50,6 +51,35 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     }
   };
 
+  // THE REPOS AXIS, ASKED ABOUT THE REPO THIS CALL ACTUALLY REACHES.
+  //
+  // The registrar can only compare a fully qualified owner/name, because that is the
+  // only form of the `repo` argument that is a scope value; a label is a selector, and
+  // omitting it is the default. So every repo tool resolves the selector against the
+  // namespace mapping HERE, where the mapping is readable, and asks the one
+  // enforcement point about the result. Without this the axis bound nothing on the
+  // default call path: an admin remap of a namespace's primary silently redirected
+  // every driver scoped to the old repo (audit 2026-09-13, finding 4).
+  //
+  // It costs one extra D1 read per repo call, which is the price of the axis meaning
+  // what the mint script says it means.
+  const scopedRepo = async (tool: string, namespace: string, selector: string | undefined) => {
+    const resolved = await resolveRepo(env, namespace, selector);
+    return { resolved, refusal: ctx.scope({ tool, namespace, repo: resolved.full }) };
+  };
+
+  // The read tools' wrapper: resolve, check the axis, then run. Reads are open to any
+  // admitted client by grant, and the axis is what says WHICH repo they may read.
+  const guardedRead = async (tool: string, namespace: string, selector: string | undefined, fn: () => Promise<unknown>) => {
+    try {
+      const { refusal } = await scopedRepo(tool, namespace, selector);
+      if (refusal) return fail(refusal);
+      return ok(await fn());
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   // Repo writes are operator-gated and audit-logged. The whole result (which
   // includes the resolved repo) goes into params so a misdirected write is
   // diagnosable from the log; path is the file path where one applies.
@@ -62,16 +92,32 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     // registrar has already checked the tool, the grant, the namespace and the repo
     // selector by now; a wrapper could not have checked these, because `mode:
     // "direct"` needs can_direct_write and `mode: "pr"` does not.
-    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean } = {}
+    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; repo?: string } = {}
   ) => {
     // EVERY REPO MUTATION FUNNELS THROUGH HERE, which is why the flag check is here
     // and not in each of the seven tools: this is the one place that already sees
     // all of them (quality audit 1.5 put the GitHub dance behind one helper for the
     // same reason). test/scope-coverage.test.ts derives that no repo write tool
     // reaches GitHub any other way.
+    // RESOLVED FIRST, so the repos axis is asked about the repo this write reaches
+    // rather than about the selector, which is usually absent. A namespace that cannot
+    // be resolved fails here, before anything is written.
+    let resolvedRepo: string;
+    try {
+      resolvedRepo = (await resolveRepo(env, namespace, intent.repo)).full;
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
     const refusal = ctx.scope({
       tool: action,
       namespace,
+      repo: resolvedRepo,
+      // WHAT THIS CALL IS ASKING TO DO, which is what the tools axis narrows on. Its
+      // absence here is what let a reviewer minted ["manage_pr", "manage_pr.comment"]
+      // close a pull request, and closing deletes the head branch (audit 2026-09-13,
+      // critical 1). The registrar populates it too; both are kept, because this is
+      // the one place every repo mutation passes through.
+      action: intent.action,
       grant: "write",
       flags: repoWriteFlags(action, { ...intent, path: intent.path ?? path ?? undefined }),
     });
@@ -121,7 +167,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       description: "List a directory in a namespace's GitHub repo. Omit path for the repo root. Live GitHub, briefly cached.",
       inputSchema: { namespace: nsName, path: bounded(MAX_PATH).optional(), ref: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
-    ({ namespace, path, ref, repo }) => guarded(() => listRepoTree(env, namespace, path ?? "", ref, repo))
+    ({ namespace, path, ref, repo }) => guardedRead("list_repo_tree", namespace, repo, () => listRepoTree(env, namespace, path ?? "", ref, repo))
   );
 
   server.registerTool(
@@ -142,7 +188,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, path, paths, ref, repo }) =>
-      guarded(() => {
+      guardedRead("read_repo_file", namespace, repo, () => {
         // EXACTLY ONE OF THE TWO. Accepting both and preferring one would make the
         // ignored argument invisible.
         if (path && paths) throw new Error("read_repo_file: pass path for one file or paths for several, not both");
@@ -169,7 +215,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ query, namespace, path_prefix, ref, max_results, max_files, start, repo }) =>
-      guarded(() =>
+      guardedRead("search_code", namespace, repo, () =>
         searchCode(env, namespace, query, {
           pathPrefix: path_prefix,
           ref,
@@ -209,7 +255,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         namespace,
         path,
         () => writeRepoFile(env, namespace, path, content, message, mode ?? "pr", branch, repo, allow_workflow_write),
-        { path, mode: mode ?? "pr", allow_workflow_write }
+        { path, mode: mode ?? "pr", allow_workflow_write, repo }
       )
   );
 
@@ -221,7 +267,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       inputSchema: { namespace: nsName, branch: bounded(MAX_REF), from: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
     ({ namespace, branch, from, repo }) =>
-      guardedWrite("create_branch", namespace, null, () => createBranch(env, namespace, branch, from, repo))
+      guardedWrite("create_branch", namespace, null, () => createBranch(env, namespace, branch, from, repo), { repo })
   );
 
   server.registerTool(
@@ -239,7 +285,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, title, head, base, body, repo }) =>
-      guardedWrite("open_pr", namespace, null, () => openPr(env, namespace, title, head, base, body, repo))
+      guardedWrite("open_pr", namespace, null, () => openPr(env, namespace, title, head, base, body, repo), { repo })
   );
 
   server.registerTool(
@@ -269,7 +315,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         namespace,
         path,
         () => deleteRepoFile(env, namespace, path, message, mode ?? "pr", branch, repo, allow_workflow_write),
-        { path, mode: mode ?? "pr", allow_workflow_write }
+        { path, mode: mode ?? "pr", allow_workflow_write, repo }
       )
   );
 
@@ -324,7 +370,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           }
           return result;
         },
-        { action }
+        { action, repo }
       )
   );
 
@@ -347,7 +393,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       // THE LOG TAIL IS WITHHELD FROM A READ-ONLY CALLER (2026-08-13): a build log
       // carries whatever the workflow echoed. That is a scope question, so it is
       // asked of the one enforcement point rather than decided here from a boolean.
-      guarded(() =>
+      guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
           logTail: ctx.scope({ tool: "ci_status", namespace, grant: "write" }) === null,
@@ -375,7 +421,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         "What is in flight in a namespace's repo, in one call: branches (name, head sha, last commit date, ahead/behind the default branch, and the open PR number if the branch has one), tags, and open pull requests. Answers the triage question that otherwise costs three separate calls. Sets truncated:true when any of the three lists hit its 100-item page. Read-only, live GitHub, briefly cached.",
       inputSchema: { namespace: nsName, repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
-    ({ namespace, repo }) => guarded(() => repoRefs(env, namespace, repo))
+    ({ namespace, repo }) => guardedRead("repo_refs", namespace, repo, () => repoRefs(env, namespace, repo))
   );
 
   server.registerTool(
@@ -400,7 +446,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, ref, base, head, sha, limit, patch, repo }) =>
-      guarded(() => repoHistory(env, namespace, { ref, base, head, sha, limit, patch }, repo))
+      guardedRead("repo_history", namespace, repo, () => repoHistory(env, namespace, { ref, base, head, sha, limit, patch }, repo))
   );
 
   server.registerTool(
@@ -420,7 +466,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, branch, force, repo }) =>
-      guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo))
+      guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo), { repo })
   );
 
   server.registerTool(
@@ -451,7 +497,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         () => ciDispatch(env, namespace, { workflow, ref, run_id, inputs }, repo),
         // The workflow file name is the path this dispatch runs, so a dispatch of a
         // workflow under a protected or money path is checked as one.
-        { path: workflow }
+        { path: workflow, repo }
       )
   );
 }
