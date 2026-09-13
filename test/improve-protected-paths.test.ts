@@ -259,3 +259,75 @@ test("the flag is asked for only when the opt-in is passed, on delete and move",
   await mv.close();
   assert.equal(moved.isError ?? false, false, moved.content[0]?.text);
 });
+
+// ---- F2: the override refusal on write and restore, which was never exercised ------
+//
+// Audit 2026-09-13, finding F2. The ctx.scope block on write and restore has been
+// there since the agents arc, and no test ever made it REFUSE: the only test that sets
+// allow_improve_paths uses buildServer(..., "write", ...), which is legacyAgent("write")
+// and holds every flag, so it takes the allowed branch every time. Deleting both lines
+// left the suite green. blast-radius.test.ts plants can_touch_protected on REPO writes,
+// which is the other guard of the same name.
+//
+// C1 added the same block to delete and move; these two are the pair that already
+// existed and had no plant.
+
+test("write of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
+  const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
+  const out = await call(client, "write", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    title: "run",
+    body: "a driver rewriting the loop's own instructions",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "a driver with no flags rewrote the loop's run prompt");
+  assert.match(out.content[0].text, /needs the can_touch_protected flag/);
+  assert.equal(recorded.length, 0, "a refused write still touched the store");
+});
+
+test("restore of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
+  // Restore is the one that installs an OLDER system prompt, which is why it was
+  // given the block in the first place (audit 2026-09-07).
+  const { client, recorded, close } = await connectAs(driverAgent(), {
+    ...RUN_PROMPT,
+    versions: [
+      {
+        id: 11,
+        document_id: 1,
+        namespace: "capsid",
+        path: "improve/prompts/run.md",
+        title: "run",
+        body: "AN OLDER SYSTEM PROMPT",
+        snapshot_at: "2026-08-01 00:00:00",
+      },
+    ],
+  });
+  const out = await call(client, "restore", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    version_id: 11,
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await close();
+  assert.equal(out.isError, true, "a driver with no flags restored an older run prompt");
+  assert.match(out.content[0].text, /needs the can_touch_protected flag/);
+  assert.equal(recorded.length, 0, "a refused restore still touched the store");
+});
+
+test("a driver holding can_touch_protected may write the run prompt", async () => {
+  const { client, close } = await connectAs(driverAgent("capsid", ["can_touch_protected"]), RUN_PROMPT);
+  const out = await call(client, "write", {
+    namespace: "capsid",
+    path: "improve/prompts/run.md",
+    title: "run",
+    body: "a deliberate edit by a caller that holds the flag",
+    confirm: true,
+    allow_improve_paths: true,
+  });
+  await close();
+  assert.equal(out.isError ?? false, false, out.content[0].text);
+});
