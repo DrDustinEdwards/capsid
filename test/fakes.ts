@@ -456,6 +456,20 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       if (table === "agents") return rows.agents;
       return [];
     }
+    // The `namespaces` tool's listing: aliased, with an unconsolidated subselect. Not
+    // a `SELECT *` dump, so the branch above does not reach it, and without this the
+    // tool answered [] for every caller and a filter test could not tell a scoped
+    // answer from a broken query.
+    if (/FROM namespaces n/i.test(flat)) {
+      return rows.namespaces.map((n) => ({
+        namespace: n.namespace,
+        repos: n.repos ?? "[]",
+        created_at: "2026-01-01 00:00:00",
+        unconsolidated: rows.documents.filter(
+          (d) => d.namespace === n.namespace && ["episodic", "source"].includes(String(d.type)) && !String(d.path).startsWith("archive/")
+        ).length,
+      }));
+    }
     if (/FROM document_links/i.test(flat)) {
       // brief asks for one document's edges in each direction and writes the path
       // as a LITERAL, binding only the namespace. backlinks binds both and wants

@@ -1117,7 +1117,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     "namespaces",
     {
       annotations: hintsFor("namespaces"),
-      description: "List all namespaces and the repos each maps to.",
+      description:
+        "List the namespaces this caller is scoped to and the repos each maps to. A caller scoped to every namespace sees every one; a scoped agent sees only its own, because the mapping IS the authorization boundary its repo calls resolve through.",
       inputSchema: {},
     },
     async () => {
@@ -1135,7 +1136,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
            FROM namespaces n ORDER BY n.namespace`
         )
         .all();
-      return ok(results);
+      // FILTERED TO THE CALLER'S OWN NAMESPACES. This tool takes no arguments, so
+      // namespaceRefusal at the registrar has nothing to fire on, and every read-grant
+      // agent, a one-namespace driver included, read the whole mapping (audit
+      // 2026-09-13, finding 7). That mapping is what scripts/mint-agents.mjs uses to
+      // set the repos axis and what resolveRepo resolves through, so handing it to a
+      // narrowed caller hands it the shape of the boundary it sits behind.
+      const scoped = ctx.agent.scopes.namespaces;
+      const visible = scoped === "*" ? results : results.filter((row) => scoped.includes(String((row as { namespace: string }).namespace)));
+      return ok(visible);
     }
   );
 

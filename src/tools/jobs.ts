@@ -97,6 +97,14 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
       const now = new Date();
       try {
         if (args.action === "list") {
+          // THE READ ACTION ASKS TOO, and it did not: this branch returned before
+          // ctx.scope, so `list` was the one action of this tool that reached no
+          // grant check at all (audit 2026-09-13, finding 5). The registrar now
+          // passes the action, which already narrows a caller minted ["jobs",
+          // "jobs.post"]; this adds the grant, so a read the caller may not make is
+          // refused for its own reason rather than by a neighbouring check.
+          const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace });
+          if (listRefusal) return fail(listRefusal);
           if (args.status !== undefined && !isJobStatus(args.status)) {
             return fail(`'${args.status}' is not a job status. One of: ${JOB_STATUSES.join(", ")}.`);
           }
