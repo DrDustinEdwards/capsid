@@ -146,6 +146,28 @@ test("THE ADMIN STILL SEES THE WHOLE MAPPING", async () => {
   assert.deepEqual(rows.map((r) => r.namespace).sort(), ["capsid", "foxhound"]);
 });
 
+test("PLANT: improve_status hands a scoped caller NO credential inventory", async () => {
+  // The other site of the same bug as `namespaces`, and the one that matters more:
+  // `agents` names every minted credential, its namespaces, its grants and the
+  // blast-radius flags it holds, which is the map an agent looking to widen itself
+  // would want. It was attached even when the caller named one namespace.
+  const { client, close } = await connect(driver());
+  const result = (await client.callTool({ name: "improve_status", arguments: { namespace: "capsid" } })) as {
+    content: Array<{ text: string }>;
+  };
+  await close();
+  const body = JSON.parse(result.content[0].text) as { agents?: unknown[] };
+  assert.equal(body.agents, undefined, "a scoped driver read the whole credential inventory");
+});
+
+test("THE ADMIN STILL GETS THE INVENTORY, which is who it is for", async () => {
+  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const result = (await client.callTool({ name: "improve_status", arguments: {} })) as { content: Array<{ text: string }> };
+  await close();
+  const body = JSON.parse(result.content[0].text) as { agents?: unknown[] };
+  assert.ok(Array.isArray(body.agents), "the admin lost the inventory it is the audience for");
+});
+
 // ---- finding 5: jobs.list, and improve_run's control surface ------------------------
 
 test("PLANT: an agent scoped to jobs.post is REFUSED action list", async () => {

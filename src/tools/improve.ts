@@ -117,7 +117,7 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ namespace, task_path }) => {
       try {
-        return ok(await improveStatus(env, namespace, task_path));
+        return ok(await improveStatus(env, namespace, task_path, { namespaces: ctx.agent.scopes.namespaces, admin: ctx.agent.admin }));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
