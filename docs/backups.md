@@ -9,7 +9,11 @@ A daily Cron Trigger (09:00 UTC) exports the database to `MEDIA`:
 
 After each export, `document_versions` rows older than 90 days and `audit_log` rows older than 180 are pruned. Pruning runs after the export, so every pruned row exists in at least one retained dump.
 
-The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps off-account, so they survive loss of the whole Cloudflare account. This repo mints that job's credential at `POST /backup/credential` and nothing more: the mirror workflow, its schedule and its retention live in that repository, and no check here reads whether it is still running. Local backup freshness is measured (`BACKUP_STALE_HOURS`, read by live gate 1c and by the watcher); the mirror's is not.
+The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps off-account, so they survive loss of the whole Cloudflare account. Its workflow, schedule and retention live in that repository; this repo mints its credential at `POST /backup/credential` and observes the result.
+
+**The watcher measures the mirror, and it measures the dump rather than the run.** Every half hour it lists `backups/json/` in that repo, resolved through the capsid namespace's `backups` mapping, and reads the newest directory name as the dump's own timestamp. Older than `MIRROR_STALE_HOURS` (36, the daily cadence plus slack) and it posts a finding, using the mirror workflow's latest conclusion to say which of three things happened: the workflow ran and failed, it has not run at all, or it ran green and no dump appeared. A GitHub it cannot reach posts nothing, because "cannot see the mirror" and "the mirror is dead" are different facts.
+
+The dump is the signal because the attempt is not. The mirror was dead from 2026-09-09 to 2026-09-12, and on every one of those days it requested and received a valid backup credential before failing two steps later, so anything keyed on the credential reported it healthy. `MIRROR_STALE_HOURS` is deliberately not `BACKUP_STALE_HOURS`: that one is the local dump at 26 hours measured from a key this Worker writes, and the other repo's schedule can change without this one hearing.
 
 Run one on demand with a write-grant key (read-only keys are refused):
 
