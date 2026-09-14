@@ -589,10 +589,16 @@ function main(argv) {
       // nothing. The message naming the missing module is at the TOP, and printing only
       // the tail turned "vitest could not resolve X" into three closing braces.
       const nonEmpty = seg.lines.filter((l) => l.trim() !== "");
+      // ONE LEADING SPACE, AND IT IS DELIBERATE. These two lines echo the sandbox
+      // tool's raw output, and GitHub's tsc problem matcher, which actions/setup-node
+      // registers for the WHOLE job, anchors at `^([^\s].*)`. Without the space a lint
+      // phase that found type errors made every green CI run carry failure annotations
+      // against a path and a line nobody wrote. Guarded by
+      // test/secondary-recompute.test.ts, which holds the matcher regexp verbatim.
       process.stderr.write(
-        `SECONDARY ${kind}: ${seg.lines.length} lines, ${why}. First: ${JSON.stringify(nonEmpty.slice(0, 3))}\n`
+        ` SECONDARY ${kind}: ${seg.lines.length} lines, ${why}. First: ${JSON.stringify(nonEmpty.slice(0, 3))}\n`
       );
-      process.stderr.write(`SECONDARY ${kind}: last: ${JSON.stringify(nonEmpty.slice(-3))}\n`);
+      process.stderr.write(` SECONDARY ${kind}: last: ${JSON.stringify(nonEmpty.slice(-3))}\n`);
     }
     /** @type {Record<string, unknown>} */
     let claimed = {};
