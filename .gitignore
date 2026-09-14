@@ -11,5 +11,9 @@ wrangler.jsonc
 # one `git add -A` away.
 .improve-holdout/
 
+# The improve loop's local build output: a bundled worker and its source map, about
+# 16MB of it, in the working tree of a public repo. Nothing reads it from here.
+.improve-build/
+
 # Project MCP config: carries a driver bearer token
 .mcp.json
