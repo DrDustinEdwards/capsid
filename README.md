@@ -95,7 +95,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
    npx wrangler secret put OPERATOR_KEY_HASH
    ```
 
-   The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (`docs/bootstrap.md`), remove the operator hash.
+   The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (`docs/bootstrap.md`), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.mjs` authenticates with `CAPSID_OPERATOR_KEY` and nothing else. `docs/bootstrap.md` carries that sequence under "Minting once no operator key exists".
 
 6. Create a GitHub **OAuth App** (for login) at https://github.com/settings/developers:
 
@@ -160,9 +160,11 @@ Auto-merge and pre-approved gates run only when their policy document's `enabled
 
 The nightly driver exists only after `node scripts/schedule-drivers.mjs --install --namespace <ns> --apply`. The task it creates is disabled until it is enabled by hand.
 
+Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13; the loop and auto-merge are still off.
+
 ## Security
 
-Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, the scorer isolated so attempt code never runs beside a credential, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Each fix ships with a test observed failing against the code it replaced. The audits live in Capsid, not in this repository.
+Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, the scorer isolated so attempt code never runs beside a credential, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Two further audits on 2026-09-13, one on the source and one on the test suite, closed four more criticals, each one a check a call path did not reach rather than a rule nobody had written. Each fix ships with a test observed failing against the code it replaced. The audits live in Capsid, not in this repository.
 
 ## License
 
