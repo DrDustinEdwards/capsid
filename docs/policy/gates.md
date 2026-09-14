@@ -64,3 +64,6 @@ It cannot describe less than the code enforces: a class the Worker would approve
 this document does not name is refused at load time. It cannot approve a command that
 matched no class. The refusal is the default and a match has to be demonstrated. It
 ships disabled. Turning it on is recorded in the audit log.
+
+The stored copy's closing paragraph instead records when it was enabled, so the
+difference between the two is history rather than drift.
