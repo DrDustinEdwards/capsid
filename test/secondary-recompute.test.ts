@@ -160,6 +160,62 @@ test("a mismatch between the artifact and the sandbox is reported, not swallowed
   assert.match(run.stderr, /The sandbox value is used\./);
 });
 
+// ---- the run log is not a tsc report ----------------------------------------
+
+// actions/setup-node registers GitHub's `tsc` problem matcher for the whole job, and
+// a matcher reads EVERY line of EVERY step, not just the typecheck's. The head and
+// tail lines above echo the sandbox's raw output, so a lint phase that found type
+// errors printed them at column 0 and GitHub turned them into FAILURE annotations on
+// runs that concluded success: two of them on every green master run, against
+// `.github` line 7, a path and a line nobody wrote. Both numbers came from the
+// fixture below. The regexp is greedy, so on a line holding two diagnostics it
+// captured the second one's position and carried the JSON array's trailing `"]` into
+// the message.
+//
+// The matcher anchors at `^([^\s].*)`, so one leading space is the whole fix, and a
+// leading space is also invisible enough that someone would tidy it away. This is the
+// guard that stops them: the regexp is verbatim from the pinned setup-node sha
+// (a0853c2, `.github/tsc.json`), and no line the scorer writes may match it.
+const TSC_MATCHER = /^([^\s].*)[\(:](\d+)[,:](\d+)(?:\):\s+|\s+-\s+)(error|warning|info)\s+TS(\d+)\s*:\s*(.*)$/;
+
+test("no line the scorer writes is read as a tsc error by GitHub's problem matcher", () => {
+  const dir = mkdtempSync(join(tmpdir(), "capsid-secondary-"));
+  const metricsPath = join(dir, "metrics.json");
+  writeFileSync(metricsPath, JSON.stringify({ test_pass_rate: 1, lint_count: 0 }));
+  const tapPath = join(dir, "holdout.tap");
+  writeFileSync(
+    tapPath,
+    stream([
+      M.test,
+      "ok 1 - one",
+      `${M.status}0`,
+      M.lint,
+      "src/a.ts(3,9): error TS2322: Type 'string' is not assignable to type 'number'.",
+      "src/b.ts(7,1): error TS2554: Expected 1 arguments, but got 2.",
+      `${M.status}2`,
+      M.end,
+    ])
+  );
+
+  const run = spawnSync(process.execPath, [SCORER, "--secondary", tapPath, "capsid", NONCE, metricsPath], {
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0);
+
+  const lines = [...run.stdout.split("\n"), ...run.stderr.split("\n")].filter((l) => l.trim() !== "");
+  // A content check that can pass by reading nothing is not a check: these two say
+  // the scorer really did echo the tool's output before the loop below reads it.
+  assert.ok(lines.length > 0, "no output was read, so nothing was checked");
+  assert.equal(
+    lines.filter((l) => l.includes("TS2554")).length,
+    2,
+    "the head and tail lines must still carry the tool's own output verbatim"
+  );
+  for (const line of lines) {
+    assert.equal(TSC_MATCHER.test(line), false, `GitHub would annotate this line: ${JSON.stringify(line)}`);
+  }
+});
+
 // ---- the trusted map --------------------------------------------------------
 
 test("every roster namespace has a command map entry, and the map is what names the trees", () => {
