@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { monitorAttempt } from "../improve-gates";
-import { MAX_ATTEMPTS_PER_RUN, MAX_CONSECUTIVE_REVERTS, type BestRecord } from "../improve-schema";
+import { estimatedScorerMinutes, maxAttemptsFor, MAX_CONSECUTIVE_REVERTS, meteredMinutes, type BestRecord } from "../improve-schema";
 import { checkHoldout, readHoldoutManifest, type ScoreReport } from "../improve-scorer";
 import { anchorVerdict, compare, type MetricMap } from "../improve-scores";
 import { abstractSkill, recordSkill, recordSkillOutcome } from "../improve-skills";
@@ -30,6 +30,25 @@ export interface IngestResult {
 
 // Called from the /improve/score endpoint after the signature has verified.
 // Runs in an HTTP request rather than in a tick, so it has room to decide.
+
+/**
+ * THE RESERVATION IS REPLACED, NOT ADDED TO. `dispatchScorer` books an estimate
+ * against the cap the moment it dispatches, which is what makes a scorer in flight
+ * visible to the next check; this is where the reported figure takes its place.
+ * Adding instead of replacing would charge every run twice.
+ *
+ * NO OUTBOUND CALL. Reading the exact billed figure from the Actions API would put
+ * a network call on this path, and this path runs on every report including the
+ * ones the deterministic guard reverts. Ruled 2026-09-15: a revert that phones out
+ * is a revert that can fail for a reason unrelated to the attempt, and that
+ * property is worth more than an exact meter.
+ *
+ * Clamped at zero so an estimate larger than the actual cannot drive the month
+ * negative and buy back budget nobody spent.
+ */
+export function settledMinutes(run: Pick<RunRow, "namespace" | "ci_minutes">, reported: number): number {
+  return Math.max(0, run.ci_minutes - estimatedScorerMinutes(run.namespace) + meteredMinutes(run.namespace, reported));
+}
 export async function ingestScore(env: Env, report: ScoreReport, now: Date): Promise<IngestResult> {
   const run = await runById(env.DB, report.run_id);
   if (!run) return { ok: false, message: `unknown run ${report.run_id}` };
@@ -105,7 +124,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
         runId: run.id,
         expected: "judging",
         next: "finalizing",
-        patch: { note: `the base commit fails its own anchors: ${verdict.reasons.join("; ")}`, ci_minutes: run.ci_minutes + report.ci_minutes },
+        patch: { note: `the base commit fails its own anchors: ${verdict.reasons.join("; ")}`, ci_minutes: settledMinutes(run, report.ci_minutes) },
       });
       return {
         ok: true,
@@ -114,7 +133,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
           : "baseline recorded; the base fails its own anchors, but the run moved out of judging mid-ingest and was not transitioned here",
       };
     }
-    const resumed = await advanceRun(env.DB, { runId: run.id, expected: "judging", next: "attempting", patch: { current_attempt: null, ci_minutes: run.ci_minutes + report.ci_minutes } });
+    const resumed = await advanceRun(env.DB, { runId: run.id, expected: "judging", next: "attempting", patch: { current_attempt: null, ci_minutes: settledMinutes(run, report.ci_minutes) } });
     return {
       ok: true,
       message: resumed ? "baseline recorded" : "baseline recorded, but the run moved out of judging mid-ingest and was not transitioned here",
@@ -245,7 +264,8 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
     await maybeAbstract(env, run, attempt, change, comparison.delta);
   }
 
-  const ceiling = run.attempts >= MAX_ATTEMPTS_PER_RUN;
+  const attemptCap = maxAttemptsFor(run.namespace);
+  const ceiling = run.attempts >= attemptCap;
   const exhausted = consecutive >= MAX_CONSECUTIVE_REVERTS;
   // Checked (audit 2026-09-06): the verdict above is already committed on the
   // attempt row; if a tick's stale guard reclaimed the run while it was being
@@ -260,11 +280,11 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
       consecutive_reverts: consecutive,
       current_attempt: null,
       cost_usd: run.cost_usd + monitor.costUsd,
-      ci_minutes: run.ci_minutes + report.ci_minutes,
+      ci_minutes: settledMinutes(run, report.ci_minutes),
       ...(exhausted
         ? { note: `${consecutive} consecutive reverts; restored to the best known commit and stopped` }
         : ceiling
-          ? { note: `reached the ${MAX_ATTEMPTS_PER_RUN} attempt ceiling` }
+          ? { note: `reached the ${attemptCap} attempt ceiling` }
           : {}),
     },
   });

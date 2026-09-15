@@ -363,7 +363,13 @@ test("AN IMPROVEMENT IS KEPT, and becomes the new best", async () => {
     assert.equal(run.reverts, 0);
     assert.equal(run.consecutive_reverts, 0);
     assert.equal(run.status, "attempting", "a kept attempt should let the run continue");
-    assert.equal(run.ci_minutes, 3);
+    // WAS 3, THE REPORTED WALL CLOCK, until 2026-09-15. Two rulings changed it.
+    // ci_minutes is now REPLACED by the report rather than accumulated, because
+    // dispatchScorer books an estimate against the cap at dispatch and adding the
+    // report on top would charge every run twice. And a repo GitHub bills nothing
+    // for contributes nothing to a meter denominated in minutes: this fixture is
+    // capsid, which is public, so its reservation and its settlement are both 0.
+    assert.equal(run.ci_minutes, 0);
 
     const best = kv.puts.find((p) => p.key === "improve:best:capsid");
     assert.ok(best, "a kept attempt did not become the new best");
