@@ -9,7 +9,8 @@ import {
 import {
   BUDGET_KEY,
   DEFAULT_CONDITION,
-  MAX_ATTEMPTS_PER_RUN,
+  maxAttemptsFor,
+  scheduledFor,
   ROSTER,
   SCORES_PATH,
   chicagoDay,
@@ -177,7 +178,10 @@ export async function openRuns(
   condition: RunCondition = DEFAULT_CONDITION
 ): Promise<OpenSummary> {
   const { mode, reason } = await readMode(env.APP_KV);
-  const namespaces = only ? [only] : [...ROSTER];
+  // ONE BILLED NAMESPACE PER NIGHT, plus the free one. Opening all five every
+  // night costs 19.2 billed minutes per attempt; the rotation costs one
+  // namespace's worth. `only` still names a single namespace explicitly.
+  const namespaces = only ? [only] : scheduledFor(now);
 
   // THE BUDGET COMES FIRST: an exceeded cap opens nothing anywhere.
   const budgetReason = await enforceBudget(env, now);
@@ -338,7 +342,7 @@ function renderSubscriptionTask(
     "",
     "## Attempt list",
     "",
-    `Up to ${MAX_ATTEMPTS_PER_RUN} attempts. One scoped change each, on its own branch off the base above.`,
+    `Up to ${maxAttemptsFor(namespace)} attempts. One scoped change each, on its own branch off the base above.`,
     "After each one, run the scorer and keep it only if no anchor regressed and the weighted",
     "secondary score improved. Revert otherwise. Stop after five consecutive reverts.",
     "",

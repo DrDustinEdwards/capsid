@@ -138,6 +138,38 @@ nobody can review.
 An anchor CI did not report counts as failed, never as skipped. A comparison with no comparable
 metrics reverts and says so.
 
+## What the minutes meter counts
+
+The monthly Actions cap is spent against `ci_minutes`, and three rules decide
+what lands there. All three were ruled 2026-09-15 after the September cycle was
+measured run by run.
+
+**A repo GitHub bills nothing for contributes nothing.** capsid is public, so its
+scorer runs cost no Actions minutes however long they take. Counting their wall
+clock would have paused the whole roster after about thirteen nights over minutes
+nobody was charged for. For capsid the cap that binds is `model_usd_month`.
+
+**A dispatch is charged when it is dispatched.** The estimate in
+`SCORER_BILLED_MINUTES` is booked the moment the scorer is dispatched, so a run in
+flight is visible to the next check. The report replaces that estimate rather than
+adding to it. Before this, `ci_minutes` moved only when the signed report arrived,
+one scorer duration later, and the tick checked the cap once before advancing up
+to three runs.
+
+**What is attributed to the loop, and what is not.** The scorer's own run is the
+loop's, and so is the first CI run on an attempt branch, because that branch is
+created for one attempt and nothing else pushes to it. Nothing after that is
+attributed: a person pushing to or rebasing the branch fires the same workflow and
+cannot be told apart from the loop, and the merge fires a run that any change
+would have caused. Those runs are real minutes and they are not counted here,
+which is a stated gap rather than an estimate.
+
+The reported figure is wall clock across the scorer's two jobs, and GitHub bills
+per job rounded up to the minute. Reading the exact figure back from the Actions
+API would put a network call on the ingest path, which also runs on every reverted
+attempt, and a revert that depends on an outbound call can fail for a reason that
+has nothing to do with the attempt. The gap is accepted on purpose.
+
 ## What stops it, in increasing order of scope
 
 - **The reward-hacking monitor**, per attempt. The deterministic path check above,
