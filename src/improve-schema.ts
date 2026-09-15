@@ -167,6 +167,46 @@ export function maxAttemptsFor(namespace: string): number {
   return onRoster(namespace) ? ATTEMPT_CAPS[namespace] : Math.min(...Object.values(ATTEMPT_CAPS));
 }
 
+// A REPO GITHUB BILLS NOTHING FOR CONTRIBUTES NOTHING TO THE METER. Ruled
+// 2026-09-15: a cap denominated in minutes counts minutes that are BILLED. capsid
+// is public, its 30 scorer runs in the September cycle took 2.3 minutes each and
+// cost zero, and counting that wall clock would have paused the entire roster
+// after roughly 13 nights over minutes nobody was ever charged for. For capsid the
+// binding cap is model_usd_month, which is the honest one.
+export function isFreeOfCharge(namespace: string): boolean {
+  return (FREE_ROSTER as readonly string[]).includes(namespace);
+}
+
+// WHAT ONE SCORER RUN COSTS, IN THE UNIT GITHUB BILLS IN: per job, rounded up to
+// the minute, summed. Measured 2026-09-15 over the 78 runs of the September cycle.
+// Held against the cap AT DISPATCH, so a scorer in flight is not invisible to the
+// next check, and replaced by the reported figure when the report lands.
+const SCORER_BILLED_MINUTES: Record<RosterNamespace, number> = {
+  capsid: 0,
+  dustinedwards: 4.9,
+  foxhound: 7.6,
+  foxing: 3.9,
+  germomics: 2.8,
+};
+
+// An off-roster namespace is charged the LARGEST figure rather than a default,
+// because a namespace nobody costed is the one least safe to guess cheap on.
+export function estimatedScorerMinutes(namespace: string): number {
+  if (isFreeOfCharge(namespace)) return 0;
+  return onRoster(namespace) ? SCORER_BILLED_MINUTES[namespace] : Math.max(...Object.values(SCORER_BILLED_MINUTES));
+}
+
+// What a REPORTED scorer duration contributes to the monthly meter. Free repos
+// contribute nothing. The reported figure is wall clock across the scorer's two
+// jobs, which is not the unit the allowance is billed in; that gap is accepted
+// deliberately (ruled 2026-09-15) because reading the exact figure back from the
+// Actions API would put an outbound call on the ingest path, and the revert path
+// is worth more network-free than the meter is worth exact.
+export function meteredMinutes(namespace: string, reported: number): number {
+  if (isFreeOfCharge(namespace)) return 0;
+  return Number.isFinite(reported) && reported > 0 ? reported : 0;
+}
+
 // The billed namespaces open ONE PER NIGHT, rotating, so a night costs one
 // namespace's attempts rather than four. capsid is not in the rotation because
 // its runs are free, so it opens every night.

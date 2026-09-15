@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ROSTER, maxAttemptsFor, scheduledFor } from "../src/improve-schema.ts";
+import { settledMinutes } from "../src/improve/ingest.ts";
+import { ROSTER, estimatedScorerMinutes, isFreeOfCharge, maxAttemptsFor, meteredMinutes, scheduledFor } from "../src/improve-schema.ts";
 
 // PER-NAMESPACE ATTEMPT CAPS AND THE NIGHTLY ROTATION (ruled 2026-09-15).
 //
@@ -59,4 +60,60 @@ test("every namespace the rotation can name is on the roster", () => {
       assert.ok((ROSTER as readonly string[]).includes(ns), `${ns} is not on the roster`);
     }
   }
+});
+
+// THE MONTHLY METER (ruled 2026-09-15). Two properties, and neither is about how
+// long a scorer takes. A repo GitHub bills nothing for contributes nothing, and
+// the estimate booked at dispatch is a lien that the report REPLACES rather than
+// adds to, so a run is never charged twice.
+
+test("a free repo contributes NOTHING to the meter, however long its scorer took", () => {
+  assert.equal(isFreeOfCharge("capsid"), true, "capsid's repo is public");
+  assert.equal(estimatedScorerMinutes("capsid"), 0);
+  assert.equal(meteredMinutes("capsid", 2.3), 0, "capsid's measured 2.3 wall-clock minutes cost nothing");
+  assert.equal(meteredMinutes("capsid", 9999), 0, "no reported figure makes a free repo cost something");
+});
+
+test("every BILLED namespace does contribute, and carries a non-zero estimate", () => {
+  for (const ns of ROSTER.filter((n) => !isFreeOfCharge(n))) {
+    assert.ok(estimatedScorerMinutes(ns) > 0, `${ns} has no dispatch estimate`);
+    assert.equal(meteredMinutes(ns, 4), 4, `${ns} did not meter its reported minutes`);
+  }
+});
+
+test("an off-roster namespace is charged the LARGEST estimate, never the free repo's zero", () => {
+  const largest = Math.max(...ROSTER.map((ns) => estimatedScorerMinutes(ns)));
+  assert.equal(estimatedScorerMinutes("not-a-namespace"), largest);
+  assert.ok(estimatedScorerMinutes("not-a-namespace") > 0, "an unknown namespace must not be free");
+});
+
+test("a negative or unusable reported figure meters as zero, never as a credit", () => {
+  assert.equal(meteredMinutes("foxhound", -5), 0);
+  assert.equal(meteredMinutes("foxhound", Number.NaN), 0);
+  assert.equal(meteredMinutes("foxhound", Number.POSITIVE_INFINITY), 0);
+});
+
+test("the dispatch reservation is REPLACED by the report, not added to it", () => {
+  // foxhound is billed and its dispatch estimate is 7.6. A run that has just
+  // dispatched carries that lien; the report settles it.
+  const reserved = estimatedScorerMinutes("foxhound");
+  assert.equal(reserved, 7.6);
+
+  const afterDispatch = { namespace: "foxhound", ci_minutes: reserved };
+  assert.equal(settledMinutes(afterDispatch, 5), 5, "the lien was not released");
+
+  // The failure this pins: adding instead of replacing charges the run twice,
+  // which would read as 12.6 here.
+  assert.notEqual(settledMinutes(afterDispatch, 5), reserved + 5);
+
+  // A second attempt on the same run settles only its own lien, leaving the
+  // first attempt's settled minutes alone.
+  const secondDispatch = { namespace: "foxhound", ci_minutes: 5 + reserved };
+  assert.equal(settledMinutes(secondDispatch, 6), 11);
+});
+
+test("settlement never goes negative, so an over-estimate cannot buy back budget", () => {
+  const over = { namespace: "foxhound", ci_minutes: 0 };
+  assert.equal(settledMinutes(over, 0), 0);
+  assert.ok(settledMinutes(over, 1) >= 0);
 });

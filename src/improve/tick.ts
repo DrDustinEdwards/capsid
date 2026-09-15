@@ -8,6 +8,7 @@ import { gatherFindings, watcherTick } from "../watcher";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
+  estimatedScorerMinutes,
   maxAttemptsFor,
   MAX_CONSECUTIVE_REVERTS,
   RUN_MAX_AGE_MS,
@@ -430,11 +431,11 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
  * dispatched on a single reading of the cap. The tick-level check stays as a
  * cheap early-out; this is the one that binds.
  *
- * WHAT THIS DOES NOT YET FIX: the spend is still booked only when the signed
- * report arrives, so a scorer in flight is invisible to the next check. Booking an
- * estimate here needs ingest to stop ADDING the reported figure, which
- * test/improve-run.test.ts pins, and the reported figure is wall clock while the
- * allowance is billed per job. Both halves are one ruling and it has not been made.
+ * BOOKED AT DISPATCH, NOT AT REPORT. `ci_minutes` used to move only when the
+ * signed report arrived, one scorer duration later, so every run in flight was
+ * invisible to the next check. The estimate booked here is a LIEN: `ingest`
+ * replaces it with the reported figure rather than adding to it, so nothing is
+ * counted twice and no outbound call is added to the ingest path.
  *
  * Returns the refusal reason when the cap is already exceeded, and null when the
  * dispatch happened.
@@ -455,7 +456,7 @@ async function dispatchScorer(
     runId: run.id,
     expected: "awaiting-score",
     next: "awaiting-score",
-    patch,
+    patch: { ...patch, ci_minutes: run.ci_minutes + estimatedScorerMinutes(run.namespace) },
   });
   return null;
 }
