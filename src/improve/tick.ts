@@ -8,7 +8,7 @@ import { gatherFindings, watcherTick } from "../watcher";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
-  MAX_ATTEMPTS_PER_RUN,
+  maxAttemptsFor,
   MAX_CONSECUTIVE_REVERTS,
   RUN_MAX_AGE_MS,
   SCORE_TIMEOUT_MS,
@@ -190,7 +190,7 @@ async function advanceOne(env: Env, run: RunRow, now: Date): Promise<TickOutcome
 
   switch (run.status) {
     case "opening":
-      return dispatchBaseline(env, run);
+      return dispatchBaseline(env, run, now);
     case "attempting":
       return startAttempt(env, run, now);
     case "awaiting-score":
@@ -216,7 +216,7 @@ async function advanceOne(env: Env, run: RunRow, now: Date): Promise<TickOutcome
   }
 }
 
-async function dispatchBaseline(env: Env, run: RunRow): Promise<TickOutcome> {
+async function dispatchBaseline(env: Env, run: RunRow, now: Date): Promise<TickOutcome> {
   if (!run.base_sha) {
     await advanceRun(env.DB, { runId: run.id, expected: "opening", next: "finalizing", patch: { note: "no base commit could be resolved" } });
     return { runId: run.id, namespace: run.namespace, from: "opening", to: "finalizing", note: "no base commit" };
@@ -241,17 +241,21 @@ async function dispatchBaseline(env: Env, run: RunRow): Promise<TickOutcome> {
   // An empty push: the branch is created at the base commit and nothing is
   // written to it, which is exactly what "measure the base" means.
   await pushAttempt(env, { namespace: run.namespace, branch, baseSha: run.base_sha, summary: "baseline", files: [] });
-  await dispatchWorkflow(env, run.namespace, SCORER_WORKFLOW, { branch, run_id: run.id, attempt_id: id });
+  const refused = await dispatchScorer(env, run, branch, id, now);
+  if (refused) {
+    return { runId: run.id, namespace: run.namespace, from: "opening", to: run.status, note: refused };
+  }
   return { runId: run.id, namespace: run.namespace, from: "opening", to: "awaiting-score", note: `baseline dispatched on ${branch}` };
 }
 
 async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutcome> {
-  if (run.attempts >= MAX_ATTEMPTS_PER_RUN) {
+  const cap = maxAttemptsFor(run.namespace);
+  if (run.attempts >= cap) {
     await advanceRun(env.DB, {
       runId: run.id,
       expected: "attempting",
       next: "finalizing",
-      patch: { note: `reached the ${MAX_ATTEMPTS_PER_RUN} attempt ceiling` },
+      patch: { note: `reached the ${cap} attempt ceiling` },
     });
     return { runId: run.id, namespace: run.namespace, from: "attempting", to: "finalizing", note: "attempt ceiling reached" };
   }
@@ -403,16 +407,57 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
     })),
   ]);
 
-  await dispatchWorkflow(env, run.namespace, SCORER_WORKFLOW, { branch, run_id: run.id, attempt_id: id });
-  // The status was claimed at the top; this books the attempt and the spend, and
-  // refreshes advanced_at so the stale guard measures from the dispatch.
+  const refusedAttempt = await dispatchScorer(env, run, branch, id, now, {
+    current_attempt: id,
+    attempts: run.attempts + 1,
+    cost_usd: run.cost_usd + proposal.costUsd,
+  });
+  if (refusedAttempt) {
+    return { runId: run.id, namespace: run.namespace, from: "attempting", to: run.status, note: refusedAttempt };
+  }
+  return { runId: run.id, namespace: run.namespace, from: "attempting", to: "awaiting-score", note: `attempt ${index} dispatched on ${branch}` };
+}
+
+/**
+ * THE ONE PLACE A SCORER IS DISPATCHED, so the cap is read immediately before
+ * the spend and the spend is booked immediately after it.
+ *
+ * TWO DEFECTS THIS CLOSES, both measured 2026-09-15 and both invisible while the
+ * loop was off.
+ *
+ * ONE CHECK PER DISPATCH, NOT ONE PER TICK. `tick` calls `enforceBudget` once and
+ * then advances up to RUNS_PER_TICK runs, so three scorer runs could be
+ * dispatched on a single reading of the cap. The tick-level check stays as a
+ * cheap early-out; this is the one that binds.
+ *
+ * WHAT THIS DOES NOT YET FIX: the spend is still booked only when the signed
+ * report arrives, so a scorer in flight is invisible to the next check. Booking an
+ * estimate here needs ingest to stop ADDING the reported figure, which
+ * test/improve-run.test.ts pins, and the reported figure is wall clock while the
+ * allowance is billed per job. Both halves are one ruling and it has not been made.
+ *
+ * Returns the refusal reason when the cap is already exceeded, and null when the
+ * dispatch happened.
+ */
+async function dispatchScorer(
+  env: Env,
+  run: RunRow,
+  branch: string,
+  attemptId: string,
+  now: Date,
+  patch: Record<string, unknown> = {}
+): Promise<string | null> {
+  const refusal = await enforceBudget(env, now);
+  if (refusal) return refusal;
+  await dispatchWorkflow(env, run.namespace, SCORER_WORKFLOW, { branch, run_id: run.id, attempt_id: attemptId });
+  // Also refreshes advanced_at, so the stale guard measures from the dispatch.
   await advanceRun(env.DB, {
     runId: run.id,
     expected: "awaiting-score",
     next: "awaiting-score",
-    patch: { current_attempt: id, attempts: run.attempts + 1, cost_usd: run.cost_usd + proposal.costUsd },
+    patch,
   });
-  return { runId: run.id, namespace: run.namespace, from: "attempting", to: "awaiting-score", note: `attempt ${index} dispatched on ${branch}` };
+  return null;
 }
 
 // THE STALE GUARD. A dispatched scorer that has not reported in 20 minutes is treated
@@ -457,7 +502,7 @@ async function checkStaleScore(env: Env, run: RunRow, now: Date): Promise<TickOu
   await advanceRun(env.DB, {
     runId: run.id,
     expected: "awaiting-score",
-    next: consecutive >= MAX_CONSECUTIVE_REVERTS || run.attempts >= MAX_ATTEMPTS_PER_RUN ? "finalizing" : "attempting",
+    next: consecutive >= MAX_CONSECUTIVE_REVERTS || run.attempts >= maxAttemptsFor(run.namespace) ? "finalizing" : "attempting",
     patch: {
       reverts: run.reverts + 1,
       consecutive_reverts: consecutive,

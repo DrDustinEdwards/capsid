@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { monitorAttempt } from "../improve-gates";
-import { MAX_ATTEMPTS_PER_RUN, MAX_CONSECUTIVE_REVERTS, type BestRecord } from "../improve-schema";
+import { maxAttemptsFor, MAX_CONSECUTIVE_REVERTS, type BestRecord } from "../improve-schema";
 import { checkHoldout, readHoldoutManifest, type ScoreReport } from "../improve-scorer";
 import { anchorVerdict, compare, type MetricMap } from "../improve-scores";
 import { abstractSkill, recordSkill, recordSkillOutcome } from "../improve-skills";
@@ -245,7 +245,8 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
     await maybeAbstract(env, run, attempt, change, comparison.delta);
   }
 
-  const ceiling = run.attempts >= MAX_ATTEMPTS_PER_RUN;
+  const attemptCap = maxAttemptsFor(run.namespace);
+  const ceiling = run.attempts >= attemptCap;
   const exhausted = consecutive >= MAX_CONSECUTIVE_REVERTS;
   // Checked (audit 2026-09-06): the verdict above is already committed on the
   // attempt row; if a tick's stale guard reclaimed the run while it was being
@@ -264,7 +265,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
       ...(exhausted
         ? { note: `${consecutive} consecutive reverts; restored to the best known commit and stopped` }
         : ceiling
-          ? { note: `reached the ${MAX_ATTEMPTS_PER_RUN} attempt ceiling` }
+          ? { note: `reached the ${attemptCap} attempt ceiling` }
           : {}),
     },
   });
