@@ -141,9 +141,45 @@ export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
 // ---- the numbers ------------------------------------------------------------
 
-// Per namespace per run. Here so the tool description, the task doc and the loop
-// cannot quote three different figures.
-export const MAX_ATTEMPTS_PER_RUN = 10;
+// Per namespace per run, and PER NAMESPACE rather than one global number,
+// because one scorer run costs a different number of BILLED minutes in each
+// repo. Measured 2026-09-15 over 78 runs: foxhound 7.6, dustinedwards 4.9,
+// foxing 3.9, germomics 2.8, capsid 2.3.
+//
+// CAPSID IS 10 BECAUSE ITS RUNS COST NOTHING, NOT BECAUSE IT IS TRUSTED MORE.
+// That repo is public and GitHub bills no Actions minutes for a public repo, so
+// its 10 buys nothing from the allowance. Every other number here is bought from
+// a 2,000-minute month that is a hard stop rather than a bill, and at the rates
+// above one attempt across the four billed namespaces costs 19.2 minutes.
+// Raising one without re-measuring spends an allowance nobody is watching.
+const ATTEMPT_CAPS: Record<RosterNamespace, number> = {
+  capsid: 10,
+  dustinedwards: 2,
+  foxhound: 2,
+  foxing: 3,
+  germomics: 3,
+};
+
+// The attempt ceiling for one namespace. An off-roster caller gets the SMALLEST
+// cap rather than a default, because a namespace nobody costed is the one least
+// safe to be generous with.
+export function maxAttemptsFor(namespace: string): number {
+  return onRoster(namespace) ? ATTEMPT_CAPS[namespace] : Math.min(...Object.values(ATTEMPT_CAPS));
+}
+
+// The billed namespaces open ONE PER NIGHT, rotating, so a night costs one
+// namespace's attempts rather than four. capsid is not in the rotation because
+// its runs are free, so it opens every night.
+const FREE_ROSTER = ["capsid"] as const;
+const BILLED_ROTATION = ["foxhound", "dustinedwards", "foxing", "germomics"] as const;
+
+// Which namespaces open tonight. Keyed on the UTC day NUMBER so the answer is a
+// pure function of the date: two opener invocations on the same night agree, and
+// a night the loop was off does not shift the order for every night after it.
+export function scheduledFor(now: Date): RosterNamespace[] {
+  const day = Math.floor(now.getTime() / 86_400_000);
+  return [...FREE_ROSTER, BILLED_ROTATION[day % BILLED_ROTATION.length]];
+}
 
 // After this many reverts in a row the run restores to improve:best and stops.
 // Consecutive rather than cumulative: a run alternating keep and revert is
