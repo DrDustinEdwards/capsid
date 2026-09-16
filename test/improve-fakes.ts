@@ -30,6 +30,7 @@ export const IMPROVE_RUN_DEFAULTS: Record<string, unknown> = {
   ci_minutes: 0,
   status: "opening",
   consecutive_reverts: 0,
+  consecutive_unjudged: 0,
   current_attempt: null,
   base_sha: "base000",
   pr_url: null,

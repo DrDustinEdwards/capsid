@@ -140,6 +140,17 @@ export interface ScoreReport {
   // What CI says it ran. Checked against the manifest, which is the half CI
   // cannot forge without also having write access to the holdout bucket.
   holdout: { total: number; passed: number };
+  // WHETHER THE MACHINE WORKED, as distinct from how the attempt scored. The scorer
+  // sets ok: false when a step that had to run did not: the holdout container
+  // failing to start is the case this exists for, because it produces a clean
+  // "0 of N" that reads exactly like an attempt breaking every hidden test.
+  //
+  // OPTIONAL, and an absent field means the machine was fine. A report from a
+  // workflow older than this one still parses, and a caller that builds a report by
+  // hand does not have to know about the field. That is the safe direction: the
+  // default is to judge the attempt, and this field only ever moves an attempt OUT
+  // of being judged. parseScoreReport always fills it in.
+  environment?: { ok: boolean; reason: string | null };
   ci_minutes: number;
 }
 
@@ -196,6 +207,18 @@ export function parseScoreReport(bodyText: string): ReportParse {
   }
   const ciMinutes = typeof r.ci_minutes === "number" && Number.isFinite(r.ci_minutes) ? r.ci_minutes : 0;
 
+  // Absent, or any shape this does not recognise, means the machine was fine. Only
+  // an explicit ok: false marks an environment failure, so a malformed field cannot
+  // spare an attempt from being judged.
+  const rawEnv = r.environment as { ok?: unknown; reason?: unknown } | undefined;
+  const envOk = !(rawEnv && rawEnv.ok === false);
+  const envReason =
+    !envOk && typeof rawEnv?.reason === "string" && rawEnv.reason.length > 0
+      ? rawEnv.reason.slice(0, 512)
+      : envOk
+        ? null
+        : "the scorer reported an environment failure and gave no reason";
+
   return {
     ok: true,
     report: {
@@ -207,6 +230,7 @@ export function parseScoreReport(bodyText: string): ReportParse {
       anchors: anchors.map,
       secondary: secondary.map,
       holdout: { total: holdout.total, passed: holdout.passed },
+      environment: { ok: envOk, reason: envReason },
       ci_minutes: ciMinutes,
     },
   };
@@ -327,6 +351,14 @@ export async function readHoldoutManifests(env: Env): Promise<Record<string, Hol
 export interface HoldoutVerdict {
   ok: boolean;
   refusal: string | null;
+  // WHETHER THE REFUSAL IS ABOUT THE MACHINE OR ABOUT THE REPORT. A hidden suite
+  // that did not arrive (no manifest, an empty manifest, fewer cases than the
+  // manifest declares) is an environment failure: the attempt is left unjudged
+  // rather than blamed for failing tests that never ran. A report claiming a count
+  // that cannot happen is not: that is a broken or forged report, and unjudged
+  // costs an attempt nothing, so routing it there would hand every attempt a free
+  // escape from being judged.
+  environmental: boolean;
   // The pass rate the loop should score, which is computed HERE from the
   // manifest's total rather than taken from the report. A report that ran 3 of 11
   // tests and passed all 3 does not get to call that 1.0.
@@ -341,6 +373,7 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
     return {
       ok: false,
       refusal: `no holdout manifest for ${report.namespace}. Upload improve/holdout/${report.namespace}/manifest.json to the holdout bucket before the loop can score this namespace.`,
+      environmental: true,
       passRate: null,
     };
   }
@@ -354,6 +387,7 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
       refusal:
         `the holdout manifest for ${report.namespace} declares zero tests. An empty hidden suite scores exactly like a passing one, ` +
         `so it is refused until the suite exists. Upload real tests and a manifest with their count to the holdout bucket.`,
+      environmental: true,
       passRate: null,
     };
   }
@@ -362,7 +396,10 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
       ok: false,
       refusal:
         `holdout size mismatch for ${report.namespace}: the manifest declares ${manifest.total} tests and the report claims ${report.holdout.total}. ` +
-        `Treated as a failed anchor. Shrinking the hidden suite is the cheapest way to pass it, so a disagreement here is refused rather than reconciled.`,
+        `Shrinking the hidden suite is the cheapest way to pass it, so a disagreement here is refused rather than reconciled. ` +
+        `The holdout is synced onto the runner and mounted read only, so a short count is a sync that did not finish rather than an attempt that deleted cases, ` +
+        `and the attempt is left unjudged rather than blamed for tests that never ran.`,
+      environmental: true,
       passRate: null,
     };
   }
@@ -370,12 +407,13 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
     return {
       ok: false,
       refusal: `holdout report claims ${report.holdout.passed} of ${manifest.total} passed, which is not a possible result`,
+      environmental: false,
       passRate: null,
     };
   }
   // Computed from the manifest's total, deliberately. See HoldoutVerdict.
   // total is > 0 here: the zero-test manifest was refused above.
-  return { ok: true, refusal: null, passRate: report.holdout.passed / manifest.total };
+  return { ok: true, refusal: null, environmental: false, passRate: report.holdout.passed / manifest.total };
 }
 
 // ---- temporary holdout credentials (platform arc 2026-09-06) ----------------

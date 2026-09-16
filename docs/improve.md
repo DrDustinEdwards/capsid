@@ -178,6 +178,15 @@ has nothing to do with the attempt. The gap is accepted on purpose.
   the scorer scores well.
 - **Consecutive reverts**, per run. The run restores to the best known commit and
   stops.
+- **Consecutive UNJUDGED attempts**, per run, on a lower ceiling. An attempt the
+  scorer could not measure (the holdout container never finished, the hidden suite
+  never arrived, no report came back before the timeout) is left unjudged: it is not
+  kept, not reverted, not counted against the ceiling above, and the skill that
+  proposed it is not marked. Nothing about the code was observed, so the run stops
+  where it is rather than restoring, and the note names the scoring environment. The
+  ceiling is lower than the revert ceiling because an unjudged attempt bought no
+  information at all, and because unjudged costs an attempt nothing: a lower bar is
+  what stops it becoming a way to avoid being judged.
 - **The drift gate**, per project. Too many reverts across recent runs, or any
   anchor dropping against the best recorded run, pauses the project. The pause key
   has no expiry: an expiring pause silently resumes a project
@@ -188,7 +197,7 @@ has nothing to do with the attempt. The gap is accepted on purpose.
 ## What a run leaves behind
 
 Nothing is deleted, ever. One row per attempt with its lineage parent, its scores
-on both sides and why it was kept or reverted; one archive document per attempt,
+on both sides and why it was kept, reverted or left unjudged; one archive document per attempt,
 written before the score arrives so an attempt that is never scored still
 leaves a record; one run summary; and an audit row for every step. Every table is
 in the nightly backup, so the lineage survives outside the database.

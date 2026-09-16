@@ -11,6 +11,7 @@ import {
   estimatedScorerMinutes,
   maxAttemptsFor,
   MAX_CONSECUTIVE_REVERTS,
+  MAX_CONSECUTIVE_UNJUDGED,
   RUN_MAX_AGE_MS,
   SCORE_TIMEOUT_MS,
   SCORER_WORKFLOW,
@@ -35,6 +36,7 @@ import {
   type RunRow,
 } from "../improve-state";
 import { finalizeRun, gatherContext, renderAttemptDoc, renderObjective } from "./finalize";
+import { unjudgedCeilingNote } from "./ingest";
 import { baselineId, enforceBudget, loadScores, readDoc, recentAttempts } from "./open";
 
 // How many runs one tick will advance. Bounded so a tick cannot exceed its
@@ -479,7 +481,7 @@ async function checkStaleScore(env: Env, run: RunRow, now: Date): Promise<TickOu
     return { runId: run.id, namespace: run.namespace, from: "awaiting-score", to: "awaiting-score", note: `waiting (${Math.round(waited / 1000)}s of ${SCORE_TIMEOUT_MS / 1000}s)` };
   }
 
-  const note = `no score report after ${Math.round(waited / 60_000)} minutes; treated as a revert`;
+  const note = `no score report after ${Math.round(waited / 60_000)} minutes; the attempt is left unjudged`;
   if (isBaseline) {
     // A baseline that never scores makes every later comparison unprovable, so the run
     // ends here rather than making ten attempts that must all revert.
@@ -495,21 +497,27 @@ async function checkStaleScore(env: Env, run: RunRow, now: Date): Promise<TickOu
             .bind(id, note),
         ]
       : []),
-    ...(attempt?.skill_id ? recordSkillOutcome(env.DB, attempt.skill_id, false) : []),
+    // NO recordSkillOutcome. A scorer that never reported measured nothing, so the
+    // skill that proposed this attempt is neither better nor worse for it. Marking
+    // it a loss here is how a broken runner used to damage a skill's record.
     improveAudit(env.DB, "improve-score-timeout", run.namespace, { run_id: run.id, attempt_id: id, waited_ms: waited }),
   ]);
 
-  const consecutive = run.consecutive_reverts + 1;
+  // UNJUDGED, NOT REVERTED. This used to move reverts and consecutive_reverts, so
+  // five scorers that never reported restored the namespace to its best commit and
+  // recorded five bad changes that were never measured. The unjudged counter has its
+  // own ceiling and does not restore.
+  const consecutive = run.consecutive_unjudged + 1;
+  const exhausted = consecutive >= MAX_CONSECUTIVE_UNJUDGED;
   await advanceRun(env.DB, {
     runId: run.id,
     expected: "awaiting-score",
-    next: consecutive >= MAX_CONSECUTIVE_REVERTS || run.attempts >= maxAttemptsFor(run.namespace) ? "finalizing" : "attempting",
+    next: exhausted || run.attempts >= maxAttemptsFor(run.namespace) ? "finalizing" : "attempting",
     patch: {
-      reverts: run.reverts + 1,
-      consecutive_reverts: consecutive,
+      consecutive_unjudged: consecutive,
       current_attempt: null,
-      ...(consecutive >= MAX_CONSECUTIVE_REVERTS ? { note: `${consecutive} consecutive reverts; restored to the best known commit and stopped` } : {}),
+      ...(exhausted ? { note: unjudgedCeilingNote(consecutive) } : {}),
     },
   });
-  return { runId: run.id, namespace: run.namespace, from: "awaiting-score", to: "attempting", note };
+  return { runId: run.id, namespace: run.namespace, from: "awaiting-score", to: exhausted ? "finalizing" : "attempting", note };
 }
