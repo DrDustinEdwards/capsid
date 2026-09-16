@@ -105,3 +105,21 @@ test("zero readable repos reports the unread, and claims nothing about identity"
   assert.equal(findings.length, 1, "an entirely unreadable roster produced more than the unread finding");
   assert.match(findings[0].body, /0 of 5 repos read/);
 });
+
+test("A REPORT SCRIPT THAT DIVERGES ALONE IS REPORTED, even when every block agrees", () => {
+  // Found by planting: the comparison read `blocks.size > 1` alone and this case
+  // went unreported, which is the exact shape of the 2026-09-13 miss. e58c3cc
+  // changed ONLY scripts/improve-report.mjs, and that change reached nobody for
+  // three days while every score block still matched.
+  const read = [
+    surface("capsid", "aaaa", "bbbb"),
+    surface("dustinedwards", "aaaa", "cccc"),
+    surface("foxhound", "aaaa", "cccc"),
+    surface("foxing", "aaaa", "cccc"),
+    surface("germomics", "aaaa", "cccc"),
+  ];
+  const [f] = identityFindings(read, [], []);
+  assert.ok(f, "a roster agreeing on every score block but split on the report script reported nothing");
+  assert.match(f.title, /1 score block\(s\), 2 report script\(s\)/);
+  assert.match(f.body, /bbbb: capsid/, "the finding does not name the odd report script out");
+});
