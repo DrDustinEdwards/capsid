@@ -641,14 +641,19 @@ test("a transferred skill's LOSS is recorded too, so transfer is falsifiable", a
 
 // ---- the stale guard and the restore ----------------------------------------
 
-test("A SCORE THAT NEVER ARRIVES IS A REVERT, and the run continues", async () => {
+// SUPERSEDED 2026-09-16: a score that never arrives was a REVERT, and that was the
+// defect. A scorer that did not report measured nothing, so the attempt is left
+// unjudged and the run continues. What that costs and what stops it repeating is
+// pinned in test/improve-unjudged.test.ts; this keeps the half that was always
+// right, which is that the run does not wedge.
+test("A SCORE THAT NEVER ARRIVES LEAVES THE ATTEMPT UNJUDGED, and the run continues", async () => {
   await withFetch({}, async () => {
     const late = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60_000);
     const { d1, env } = await harness({ improveRuns: [AWAITING], improveAttempts: [ATTEMPT] });
     const outcomes = await tickRuns(env, late);
-    assert.match(outcomes[0].note, /no score report after 21 minutes/);
+    assert.match(outcomes[0].note, /no score report after \d+ minutes/);
     assert.equal(d1.rows.improve_attempts[0].status, "timed-out");
-    assert.equal(d1.rows.improve_runs[0].reverts, 1);
+    assert.equal(d1.rows.improve_runs[0].reverts, 0, "a machine that never reported was counted as a bad change");
     assert.equal(d1.rows.improve_runs[0].status, "attempting", "the run wedged instead of continuing");
   });
 });
@@ -658,20 +663,31 @@ test("a score still inside the window is WAITED for, not reverted", async () => 
     const soon = new Date(Date.parse("2026-09-04T08:04:00Z") + 60_000);
     const { d1, env } = await harness({ improveRuns: [AWAITING], improveAttempts: [ATTEMPT] });
     const outcomes = await tickRuns(env, soon);
-    assert.match(outcomes[0].note, /waiting \(60s of 1200s\)/);
+    // DERIVED from the constant. This read `1200s` until SCORE_TIMEOUT_MS was raised
+    // above the scorer workflow's own ceiling, and a hardcoded number here would have
+    // gone stale silently on the next change to it.
+    assert.match(outcomes[0].note, new RegExp(`waiting \\(60s of ${SCORE_TIMEOUT_MS / 1000}s\\)`));
     assert.equal(d1.rows.improve_attempts[0].status, "awaiting-score");
     assert.equal(d1.rows.improve_runs[0].reverts, 0);
   });
 });
 
+// DRIVEN BY A REAL REVERT, not by a timeout. It used to tip the counter with a
+// scorer that never reported, which no longer moves it: that path is an environment
+// failure now and has its own ceiling. The rule under test is unchanged, so it is
+// tested through the thing that still triggers it, an attempt that was measured and
+// did not improve.
 test("AFTER FIVE CONSECUTIVE REVERTS THE RUN RESTORES TO BEST AND STOPS", async () => {
-  await withFetch({}, async () => {
-    const late = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60_000);
+  await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
+      apiKey: "sk-test",
+      documents: [ARCHIVE_DOC],
       improveRuns: [{ ...AWAITING, consecutive_reverts: MAX_CONSECUTIVE_REVERTS - 1, reverts: 4, attempts: 5 }],
       improveAttempts: [ATTEMPT],
+      improveScores: BASELINE,
     });
-    await tickRuns(env, late);
+    // A tie: measured, and no improvement, so it reverts.
+    await ingestScore(env, report({ secondary: { ...report().secondary, lint_count: 10 } }), NOW);
     const run = d1.rows.improve_runs[0];
     assert.equal(run.consecutive_reverts, MAX_CONSECUTIVE_REVERTS);
     assert.equal(run.status, "finalizing", "the run kept attempting past five consecutive reverts");

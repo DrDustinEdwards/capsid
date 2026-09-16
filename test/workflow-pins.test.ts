@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { SCORE_TIMEOUT_MS } from "../src/improve-schema.ts";
 
 // THE WORKFLOW SUPPLY-CHAIN GUARD (residual 6, closed 2026-09-08).
 //
@@ -132,5 +133,93 @@ test("the two credential-holding jobs are pinned, which is the case this guard w
   assert.ok(
     deployJob.lines.some((l) => /timeout-minutes:/.test(l)),
     "the deploy job, which holds CLOUDFLARE_API_TOKEN, has no timeout"
+  );
+});
+
+// ---- the scorer's clock and the Worker's must not drift apart ---------------
+//
+// SCORE_TIMEOUT_MS is how long the Worker waits for a dispatched scorer before it
+// gives up on the attempt. The scorer workflow has its own ceiling: the sum of the
+// timeout-minutes along its longest needs chain. When the Worker's wait is SHORTER
+// than that ceiling, a perfectly healthy run that takes its time is declared dead
+// while it is still working, and its real report is then discarded as stale.
+//
+// That is what this repo shipped: 20 minutes against a 25 + 20 workflow. It has
+// never fired only because the suites are still small, which is exactly the kind of
+// defect that surfaces the first night a repo grows.
+//
+// The fix was to raise the WORKER's timeout above the workflow's ceiling rather
+// than to lower the workflow's. Lowering the workflow kills healthy runs on the
+// bigger repos, which turns a slow success into a failure; the Worker's timeout
+// exists only to stop a run wedging forever, so making it longer costs nothing but
+// a slower recovery from a genuinely lost report.
+//
+// Both sides are DERIVED here, so neither can be edited without the other.
+
+function timeoutMinutes(job: Job): number | null {
+  for (const line of job.lines) {
+    const m = /^\s{4,}timeout-minutes:\s*(\d+)/.exec(line);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+function needsOf(job: Job): string[] {
+  for (const line of job.lines) {
+    const m = /^\s{4,}needs:\s*(.+)$/.exec(line);
+    if (!m) continue;
+    return m[1]
+      .replace(/[[\]]/g, "")
+      .split(",")
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+// The longest weighted path through the needs graph: the wall clock a run can take
+// with every job using its whole allowance.
+function sequentialCeilingMinutes(workflow: string): { minutes: number; jobs: number } {
+  const all = jobs().filter((j) => j.workflow === workflow);
+  const byId = new Map(all.map((j) => [j.id, j]));
+  const seen = new Map<string, number>();
+  const cost = (id: string, stack: Set<string>): number => {
+    const cached = seen.get(id);
+    if (cached !== undefined) return cached;
+    const job = byId.get(id);
+    if (!job || stack.has(id)) return 0;
+    stack.add(id);
+    const own = timeoutMinutes(job) ?? 0;
+    const upstream = needsOf(job).map((n) => cost(n, stack));
+    stack.delete(id);
+    const total = own + (upstream.length ? Math.max(...upstream) : 0);
+    seen.set(id, total);
+    return total;
+  };
+  const minutes = all.length ? Math.max(...all.map((j) => cost(j.id, new Set()))) : 0;
+  return { minutes, jobs: all.length };
+}
+
+test("THE SCORER'S OWN CEILING IS READ, not assumed: the parse finds both jobs and their timeouts", () => {
+  // The count assertion that stops this guard passing vacuously. A parser that
+  // matched nothing would report a ceiling of 0, which every timeout clears.
+  const all = jobs().filter((j) => j.workflow === "improve-score.yml");
+  assert.equal(all.length, 2, `expected build and score in improve-score.yml, parsed ${all.map((j) => j.id).join(", ")}`);
+  for (const job of all) {
+    assert.ok(timeoutMinutes(job) !== null, `no timeout-minutes parsed out of improve-score.yml:${job.id}`);
+  }
+  assert.deepEqual(needsOf(all.find((j) => j.id === "score")!), ["build"], "the score job's needs chain was not parsed");
+  const { minutes } = sequentialCeilingMinutes("improve-score.yml");
+  assert.ok(minutes >= 40, `the parsed sequential ceiling is ${minutes} minutes, which is too small to be the real one`);
+});
+
+test("SCORE_TIMEOUT_MS EXCEEDS THE SCORER WORKFLOW'S OWN SEQUENTIAL CEILING", () => {
+  const { minutes } = sequentialCeilingMinutes("improve-score.yml");
+  const workerMinutes = SCORE_TIMEOUT_MS / 60_000;
+  assert.ok(
+    workerMinutes > minutes,
+    `the Worker gives a dispatched scorer ${workerMinutes} minutes and the workflow may take ${minutes}. ` +
+      `A healthy run is declared timed out and its real report is discarded as stale. ` +
+      `Raise SCORE_TIMEOUT_MS in src/improve-schema.ts above ${minutes} minutes, or lower the workflow's timeout-minutes.`
   );
 });

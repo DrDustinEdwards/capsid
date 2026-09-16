@@ -14,6 +14,7 @@ import {
   pauseNamespace,
   priorDoc,
   readBest,
+  RUN_COLUMNS,
   type AttemptRow,
   type RunRow,
 } from "../improve-state";
@@ -63,9 +64,7 @@ export async function finalizeRun(
   // plus the two before it.
   const { results: recent } = await env.DB
     .prepare(
-      `SELECT id, namespace, mode, started, finished, attempts, kept, reverts, cost_usd, ci_minutes, status,
-              consecutive_reverts, current_attempt, base_sha, pr_url, note, condition, advanced_at
-       FROM improve_runs WHERE namespace = ?1 ORDER BY started DESC LIMIT 3`
+      `SELECT ${RUN_COLUMNS} FROM improve_runs WHERE namespace = ?1 ORDER BY started DESC LIMIT 3`
     )
     .bind(run.namespace)
     .all<RunRow>();
