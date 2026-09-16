@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { test } from "node:test";
-import { MARKER, blockHash, normalize, splitBlock } from "../scripts/sync-scorer.mjs";
+import { MARKER, SOURCE_ROOT, TARGETS, blockHash, normalize, splitBlock } from "../scripts/sync-scorer.mjs";
 
 // THE HALF OF THE IDENTITY GUARD THAT CAN RUN OFFLINE (2026-09-10).
 //
@@ -67,4 +67,50 @@ test("splitBlock refuses a missing marker", () => {
 test("splitBlock refuses a duplicate marker, rather than guessing a split point", () => {
   const doubled = `# ${MARKER}\nscore:\n# ${MARKER}\n`;
   assert.throws(() => splitBlock(doubled, "doubled.yml"), /marker found 2 times/);
+});
+
+// ---- the copier's own configuration ----------------------------------------
+//
+// Nothing here resolved a path until 2026-09-16, and the copier had been dead
+// since 4c1a089 on 2026-09-12: that commit renamed every mention of the
+// repository from capsid-mcp to capsid, including the SOURCE DIRECTORY, but the
+// clone stays at dev/capsid-mcp deliberately. The first git call threw, and no
+// test noticed because no test looked.
+
+test("the copier's source resolves to THIS repository, whatever it is named", () => {
+  // Derived from the script's own location, so a rename cannot point it at a
+  // directory that does not exist. Checked by looking for the two files the
+  // copier reads, which is the assertion that would have gone red on 2026-09-12.
+  assert.ok(existsSync(SOURCE_ROOT), `the copier's source does not exist: ${SOURCE_ROOT}`);
+  assert.ok(existsSync(join(SOURCE_ROOT, "package.json")), `${SOURCE_ROOT} is not a repository root`);
+  assert.ok(
+    existsSync(join(SOURCE_ROOT, ".github", "workflows", "improve-score.yml")),
+    "the copier's source has no scorer workflow to copy"
+  );
+  assert.ok(existsSync(join(SOURCE_ROOT, "scripts", "improve-report.mjs")), "the copier's source has no report script to copy");
+});
+
+test("THE COPIER NEVER WRITES INTO THE dustinedwards-info CLONE (ruling 60)", () => {
+  // Ruling 60: every rollout the Capsid seat makes to that repo runs in the
+  // worktree on improve/capsid, never in the clone, because the site session owns
+  // the clone and main. The target list named the clone, so --apply would have
+  // written straight into it.
+  assert.equal(TARGETS.length, 4, `expected 4 targets, found ${TARGETS.length}; the list is not the one this guard read`);
+  const offenders = TARGETS.filter((t) => basename(t.dir) === "dustinedwards-info").map((t) => t.dir);
+  assert.deepEqual(offenders, [], "a target points at the dustinedwards-info clone; ruling 60 requires the worktree");
+  const dustin = TARGETS.find((t) => /dustinedwards/.test(t.label));
+  assert.ok(dustin, "no dustinedwards target at all; the rollout would silently skip it");
+  // Compared with path functions, not a regex: a separator class is one escaping
+  // slip away from matching only forward slashes and passing on every Windows path.
+  assert.equal(basename(dustin.dir), "capsid", "the dustinedwards target is not the ruling 60 worktree");
+  assert.equal(basename(dirname(dustin.dir)), "worktrees", "the dustinedwards target is not under worktrees/");
+  assert.equal(dustin.ref, "improve/capsid", "the dustinedwards target is not on the ruling 60 branch");
+});
+
+test("every target is an absolute path with a ref and a label", () => {
+  for (const t of TARGETS) {
+    assert.ok(isAbsolute(t.dir), `target ${t.label} is not an absolute path: ${t.dir}`);
+    assert.ok(t.ref.length > 0, `target ${t.dir} has no ref`);
+    assert.ok(t.label.length > 0, `target ${t.dir} has no label`);
+  }
 });

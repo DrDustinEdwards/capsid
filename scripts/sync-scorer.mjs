@@ -18,8 +18,8 @@
 // human's gate: merging these repos deploys them.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { createHash } from "node:crypto";
 
 export const MARKER = "BYTE-IDENTICAL BELOW THIS LINE";
@@ -27,13 +27,81 @@ export const WORKFLOW = ".github/workflows/improve-score.yml";
 export const REPORT = "scripts/improve-report.mjs";
 
 const DEV = join(import.meta.dirname, "..", "..");
-const SOURCE = { dir: "capsid", ref: "master" };
-const TARGETS = [
-  { dir: "dustinedwards-info", ref: "main" },
-  { dir: "foxhound", ref: "main" },
-  { dir: "foxing", ref: "main" },
-  { dir: "germomics", ref: "main" },
+
+// THE SOURCE IS THIS REPO, RESOLVED FROM THIS FILE RATHER THAN NAMED.
+//
+// It was a hardcoded folder name, and 4c1a089 rewrote it along with every other
+// mention of the renamed repository. The REPOSITORY is capsid; the clone on this
+// machine deliberately keeps its pre-rename folder name, as capsid/core.md says,
+// so the rename pointed this at a directory that does not exist and the copier
+// threw on its first git call ever after. Nothing caught it because nothing had
+// run it and no test resolved the path. The folder is not named here on purpose:
+// test/repo-name.test.ts bans the old spelling in this directory, and deriving
+// the path means no spelling is needed at all.
+//
+// Deriving it from import.meta.dirname removes the class rather than correcting
+// the spelling: this file lives in the source repo, so the source is wherever
+// this file is, whatever anyone renames.
+export const SOURCE_ROOT = join(import.meta.dirname, "..");
+const SOURCE = { dir: SOURCE_ROOT, ref: "master", label: basename(SOURCE_ROOT) };
+
+// EVERY TARGET IS AN ABSOLUTE PATH, and dustinedwards-info is NOT its clone.
+//
+// Ruling 60 (dustinedwards/decisions-vol-18.md, 2026-09-11): every rollout the
+// Capsid seat makes to dustinedwards-info runs in dev/worktrees/capsid on branch
+// improve/capsid, never in dev/dustinedwards-info, because the site session owns
+// that clone and main. This list named the clone, so running --apply would have
+// written into it. The job that ordered this rollout says the same thing in its
+// own words, which is what surfaced the conflict.
+export const TARGETS = [
+  { dir: join(DEV, "worktrees", "capsid"), ref: "improve/capsid", label: "dustinedwards-info (worktree, ruling 60)" },
+  { dir: join(DEV, "foxhound"), ref: "main", label: "foxhound" },
+  { dir: join(DEV, "foxing"), ref: "main", label: "foxing" },
+  { dir: join(DEV, "germomics"), ref: "main", label: "germomics" },
 ];
+
+// A REF BEHIND ITS REMOTE IS A REFUSAL, and this is the one that nearly shipped.
+//
+// The copier reads `git show <ref>:<path>`, which is whatever the LOCAL ref points
+// at. On 2026-09-16 this repo's local master was 26 commits behind origin and did
+// not contain the Job B cache the rollout existed to propagate. The dry run duly
+// reported three of four targets as "identical", because they matched a source
+// that was stale, and --apply would have written the PRE-cache block into all of
+// them while printing that nothing needed to change.
+//
+// Checked without fetching, deliberately: a copier that reaches the network to
+// decide what to copy can fail for reasons unrelated to the copy. It compares the
+// ref to its own remote-tracking branch and tells the human to fetch.
+function requireCurrent(dir, ref, label) {
+  const at = (/** @type {string} */ r) =>
+    execFileSync("git", ["-C", dir, "rev-parse", r], { encoding: "utf8" }).trim();
+  let remote;
+  try {
+    remote = at(`origin/${ref}`);
+  } catch {
+    throw new Error(`${label}: no origin/${ref} to check ${ref} against. Fetch first. Nothing was written.`);
+  }
+  const local = at(ref);
+  if (local !== remote) {
+    throw new Error(
+      `${label}: ${ref} is ${local.slice(0, 7)} and origin/${ref} is ${remote.slice(0, 7)}. ` +
+        `The copier reads the local ref, so this would copy something other than what is on the remote. ` +
+        `Run: git -C ${dir} fetch origin. Nothing was written.`
+    );
+  }
+}
+
+// A MISSING CLONE IS A NAMED REFUSAL, not a git stack trace. The failure this
+// replaces printed "cannot change to ..." from deep inside execFileSync, which
+// reads as a broken script rather than as a machine that is not provisioned.
+function requireRepo(dir, label) {
+  if (!existsSync(join(dir, ".git"))) {
+    throw new Error(
+      `${label}: no git repository at ${dir}. This machine is not provisioned for it, or the folder was renamed. ` +
+        `Nothing was written.`
+    );
+  }
+}
 
 /**
  * The shared block is the marker line to end of file. The marker must occur
@@ -83,7 +151,7 @@ export function blockHash(text) {
  * @returns {string}
  */
 function show(dir, ref, path) {
-  return execFileSync("git", ["-C", join(DEV, dir), "show", `${ref}:${path}`], {
+  return execFileSync("git", ["-C", dir, "show", `${ref}:${path}`], {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
@@ -93,21 +161,25 @@ function main() {
   const apply = process.argv.includes("--apply");
   const short = (/** @type {string} */ s) => blockHash(s).slice(0, 16);
 
-  const srcWorkflow = splitBlock(show(SOURCE.dir, SOURCE.ref, WORKFLOW), `${SOURCE.dir} ${WORKFLOW}`);
+  requireRepo(SOURCE.dir, SOURCE.label);
+  requireCurrent(SOURCE.dir, SOURCE.ref, SOURCE.label);
+  const srcWorkflow = splitBlock(show(SOURCE.dir, SOURCE.ref, WORKFLOW), `${SOURCE.label} ${WORKFLOW}`);
   const srcReport = normalize(show(SOURCE.dir, SOURCE.ref, REPORT));
 
-  console.log(`source ${SOURCE.dir}@${SOURCE.ref}`);
+  console.log(`source ${SOURCE.label}@${SOURCE.ref}`);
   console.log(`  score block  ${short(srcWorkflow.tail)}  ${srcWorkflow.tail.split("\n").length} lines`);
   console.log(`  report       ${short(srcReport)}  ${srcReport.split("\n").length} lines\n`);
 
   let changed = 0;
   for (const t of TARGETS) {
-    const cur = splitBlock(show(t.dir, t.ref, WORKFLOW), `${t.dir} ${WORKFLOW}`);
+    requireRepo(t.dir, t.label);
+    requireCurrent(t.dir, t.ref, t.label);
+    const cur = splitBlock(show(t.dir, t.ref, WORKFLOW), `${t.label} ${WORKFLOW}`);
     const curReport = normalize(show(t.dir, t.ref, REPORT));
     const wfDrift = short(cur.tail) !== short(srcWorkflow.tail);
     const rpDrift = short(curReport) !== short(srcReport);
 
-    console.log(`${t.dir}@${t.ref}`);
+    console.log(`${t.label}@${t.ref}`);
     console.log(`  score block  ${short(cur.tail)} -> ${short(srcWorkflow.tail)}  ${wfDrift ? "CHANGES" : "identical"}`);
     console.log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
     if (wfDrift || rpDrift) changed++;
@@ -115,8 +187,8 @@ function main() {
 
     // The target keeps its own build job (everything above the marker) and takes
     // the source's block verbatim. Only the block below the marker is shared.
-    if (wfDrift) writeFileSync(join(DEV, t.dir, WORKFLOW), `${cur.head}\n${srcWorkflow.tail}`, "utf8");
-    if (rpDrift) writeFileSync(join(DEV, t.dir, REPORT), srcReport, "utf8");
+    if (wfDrift) writeFileSync(join(t.dir, WORKFLOW), `${cur.head}\n${srcWorkflow.tail}`, "utf8");
+    if (rpDrift) writeFileSync(join(t.dir, REPORT), srcReport, "utf8");
     if (wfDrift || rpDrift) console.log("  written to the working tree");
   }
 
