@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { test } from "node:test";
-import { MARKER, blockHash, normalize, splitBlock } from "../scripts/sync-scorer.mjs";
+import { MARKER, SOURCE_ROOT, TARGETS, blockHash, normalize, normalizePins, preservePinComments, splitBlock } from "../scripts/sync-scorer.mjs";
 
-// THE HALF OF THE IDENTITY GUARD THAT CAN RUN OFFLINE (2026-09-10).
+// WHAT THIS FILE CHECKS: THE COPIER'S MECHANICS, ON THIS REPO'S COPY ONLY.
+//
+// Corrected 2026-09-16. It used to open by asserting that the score job and
+// scripts/improve-report.mjs are byte-identical across all five roster repos, and
+// it verifies none of that: four of the five are not on disk in CI. A test whose
+// banner claims a cross-repo property while its body cannot see across repos is
+// the vacuous shape this repo keeps finding, and the claim was false when measured
+// (three distinct score blocks on 2026-09-16).
+//
+// The cross-repo claim now lives in the Worker's watcher, which is the only thing
+// with read access to all five, and in test/scorer-identity.test.ts, which pins
+// what that watcher reports. What is checked HERE is that the copier can split,
+// hash and compare correctly, and that its source and targets resolve.
+//
+// THE ORIGINAL NOTE, kept because it is the incident that produced the copier:
 //
 // The score job and scripts/improve-report.mjs are byte-identical across all five
 // roster repos. Nothing enforced that, and on 2026-09-10 a comment pass rewrote
@@ -67,4 +81,97 @@ test("splitBlock refuses a missing marker", () => {
 test("splitBlock refuses a duplicate marker, rather than guessing a split point", () => {
   const doubled = `# ${MARKER}\nscore:\n# ${MARKER}\n`;
   assert.throws(() => splitBlock(doubled, "doubled.yml"), /marker found 2 times/);
+});
+
+// ---- the copier's own configuration ----------------------------------------
+//
+// Nothing here resolved a path until 2026-09-16, and the copier had been dead
+// since 4c1a089 on 2026-09-12: that commit renamed every mention of the
+// repository from capsid-mcp to capsid, including the SOURCE DIRECTORY, but the
+// clone stays at dev/capsid-mcp deliberately. The first git call threw, and no
+// test noticed because no test looked.
+
+test("the copier's source resolves to THIS repository, whatever it is named", () => {
+  // Derived from the script's own location, so a rename cannot point it at a
+  // directory that does not exist. Checked by looking for the two files the
+  // copier reads, which is the assertion that would have gone red on 2026-09-12.
+  assert.ok(existsSync(SOURCE_ROOT), `the copier's source does not exist: ${SOURCE_ROOT}`);
+  assert.ok(existsSync(join(SOURCE_ROOT, "package.json")), `${SOURCE_ROOT} is not a repository root`);
+  assert.ok(
+    existsSync(join(SOURCE_ROOT, ".github", "workflows", "improve-score.yml")),
+    "the copier's source has no scorer workflow to copy"
+  );
+  assert.ok(existsSync(join(SOURCE_ROOT, "scripts", "improve-report.mjs")), "the copier's source has no report script to copy");
+});
+
+test("THE COPIER NEVER WRITES INTO THE dustinedwards-info CLONE (ruling 60)", () => {
+  // Ruling 60: every rollout the Capsid seat makes to that repo runs in the
+  // worktree on improve/capsid, never in the clone, because the site session owns
+  // the clone and main. The target list named the clone, so --apply would have
+  // written straight into it.
+  assert.equal(TARGETS.length, 4, `expected 4 targets, found ${TARGETS.length}; the list is not the one this guard read`);
+  const offenders = TARGETS.filter((t) => basename(t.dir) === "dustinedwards-info").map((t) => t.dir);
+  assert.deepEqual(offenders, [], "a target points at the dustinedwards-info clone; ruling 60 requires the worktree");
+  const dustin = TARGETS.find((t) => /dustinedwards/.test(t.label));
+  assert.ok(dustin, "no dustinedwards target at all; the rollout would silently skip it");
+  // Compared with path functions, not a regex: a separator class is one escaping
+  // slip away from matching only forward slashes and passing on every Windows path.
+  assert.equal(basename(dustin.dir), "capsid", "the dustinedwards target is not the ruling 60 worktree");
+  assert.equal(basename(dirname(dustin.dir)), "worktrees", "the dustinedwards target is not under worktrees/");
+  assert.equal(dustin.ref, "improve/capsid", "the dustinedwards target is not on the ruling 60 branch");
+});
+
+test("every target is an absolute path with a ref and a label", () => {
+  for (const t of TARGETS) {
+    assert.ok(isAbsolute(t.dir), `target ${t.label} is not an absolute path: ${t.dir}`);
+    assert.ok(t.ref.length > 0, `target ${t.dir} has no ref`);
+    assert.ok(t.label.length > 0, `target ${t.dir} has no label`);
+  }
+});
+
+// ---- the pin, shared; the version comment, not ------------------------------
+//
+// Measured 2026-09-14 to 2026-09-16: Renovate expanded "# v5" to "# v5.1.0" in
+// dustinedwards-info and nowhere else. Three of 400 lines differed, the SHAs were
+// byte-identical, and the copier read it as divergence. The SHA is the security
+// property and stays strict; the comment is normalized for comparison and
+// preserved on write, so re-syncing does not hand Renovate a pull request to
+// re-open every cycle.
+
+const PINNED = "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5";
+const PINNED_LONG = "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0";
+const PINNED_OTHER_SHA = "      - uses: actions/checkout@0000000000000000000000000000000000000000 # v5";
+
+test("the version comment is normalized away and the SHA is not", () => {
+  assert.equal(normalizePins(PINNED), normalizePins(PINNED_LONG), "two spellings of the same pin did not compare equal");
+  assert.ok(normalizePins(PINNED).includes("fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"), "normalizing dropped the SHA");
+  assert.notEqual(
+    normalizePins(PINNED),
+    normalizePins(PINNED_OTHER_SHA),
+    "A DIFFERENT SHA MUST STILL BE A DIFFERENCE. That is the guard firing, and it means one repo is running an action version nobody reviewed."
+  );
+});
+
+test("a line that is not a pinned action is untouched", () => {
+  const plain = "        run: npm ci # install";
+  assert.equal(normalizePins(plain), plain);
+  const tagged = "      - uses: ./local-action # not pinned by sha";
+  assert.equal(normalizePins(tagged), tagged);
+});
+
+test("writing PRESERVES the target's own comment when the SHA is unchanged", () => {
+  const written = preservePinComments(PINNED, PINNED_LONG);
+  assert.equal(written, PINNED_LONG, "the copier would have reverted Renovate's annotation");
+});
+
+test("writing keeps the source comment when the target has no such pin", () => {
+  const written = preservePinComments(PINNED, "      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5");
+  assert.equal(written, PINNED, "a pin new to the target lost its comment");
+});
+
+test("writing does not carry a comment across a SHA change", () => {
+  // The target's comment describes the version the target had. If the SHA moved,
+  // that comment is now wrong and the source's is the accurate one.
+  const written = preservePinComments(PINNED_OTHER_SHA, PINNED_LONG);
+  assert.equal(written, PINNED_OTHER_SHA, "a stale version comment was carried onto a new SHA");
 });
