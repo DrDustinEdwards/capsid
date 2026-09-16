@@ -193,11 +193,40 @@ jobs:
           # before corepack has provisioned pnpm for a pnpm-workspace repo.
           package-manager-cache: false
 
+      # NODE_MODULES IS CACHED IN THIS JOB AND IN NO OTHER. This job checks out the
+      # DEFAULT branch only and never puts attempt code on the runner, so nothing an
+      # attempt wrote can reach what is saved here. Job A is the opposite case and
+      # caches no directory attempt code can write; test/workflow-pins.test.ts is the
+      # guard and capsid/conventions.md carries the rule.
+      #
+      # NO restore-keys, deliberately. A near miss must never half-restore a
+      # node_modules built from a different lockfile and then skip the install. The key
+      # carries the exact lockfile hash, so a hit means exactly these dependencies and
+      # anything else is a miss that installs normally.
+      #
+      # ONE STEP FOR BOTH PACKAGE MANAGERS, so this block stays byte-identical across
+      # four npm repos and one pnpm workspace: both lockfiles are hashed and hashFiles
+      # ignores a pattern matching nothing. The nested paths are for pnpm, whose
+      # symlinks and virtual store live inside the node_modules directories themselves.
+      - name: Cache the installed dependencies
+        id: deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            node_modules
+            */node_modules
+            */*/node_modules
+          key: scorer-deps-${{ runner.os }}-${{ hashFiles('.nvmrc') }}-${{ hashFiles('package-lock.json', 'pnpm-lock.yaml') }}
+
       # PACKAGE-MANAGER AGNOSTIC so this job stays byte-identical across an npm repo and
       # a pnpm workspace: pnpm-lock.yaml picks pnpm via corepack, honouring the repo's
       # packageManager field, otherwise npm ci. Both read the DEFAULT branch's lockfile,
       # which an attempt cannot edit because it is a protected path.
+      #
+      # Skipped only on an EXACT cache hit. npm ci deletes node_modules before it
+      # installs, so running it anyway would throw the restore away and save nothing.
       - name: Install dependencies
+        if: steps.deps.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           if [ -f pnpm-lock.yaml ]; then
