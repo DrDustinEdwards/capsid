@@ -86,16 +86,83 @@ const READERS = otherReaders();
 // importing a name in order to use it is what a caller does. This lands before
 // any barrel exists, where it is a no-op, so the guard is already correct on the
 // day one appears.
+// A COMMENT IS NOT A CALLER EITHER, and this is the half that was missing.
+//
+// Stripping re-exports (below) landed 2026-09-10 and works: a barrel-only export
+// with no other mention IS reported. What still vouched for a dead export was
+// PROSE. `hasCallerElsewhere` looks for the bare name, so one sentence naming a
+// function in an unrelated comment made it look called, and the guard went green
+// while checking nothing. That is the shape this repo keeps finding: exit 0 on
+// success and exit 0 on failure-to-check.
+//
+// Measured 2026-09-16: a planted export, re-exported through src/github.ts with no
+// real caller, is correctly reported; add one comment elsewhere naming it and the
+// report empties. That is how an export with zero callers survived a bloat pass on
+// 2026-09-15 and was deleted by hand instead of by this guard.
+//
+// STRING LITERALS ARE DELIBERATELY KEPT. A name inside a string is not a call
+// either, but it can be a real reference (a registry keyed by name, a dynamic
+// import), and this guard's failure mode on a false positive is a red build that
+// asks a human to add a reviewed name. The measured hole is comments; widening to
+// strings is a separate change with its own evidence.
+//
+// SCANNED CHARACTER BY CHARACTER RATHER THAN BY REGEX, because a regex that cuts
+// from `//` to end of line also cuts the middle out of "https://example.com" and
+// would delete real code sitting after a URL on the same line. That would turn a
+// live caller invisible and report a used export as dead, which is the failure
+// that gets a guard deleted rather than fixed.
+function stripComments(text: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === "/" && next === "/") {
+      while (i < text.length && text[i] !== "\n") i += 1;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i += 1;
+      i += 2;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      out += c;
+      i += 1;
+      while (i < text.length) {
+        if (text[i] === "\\") {
+          out += text.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += text[i];
+        if (text[i] === quote) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}
+
 const RE_EXPORT_FROM = /export\s+(?:type\s+)?\{[^}]*\}\s*from\s*["'][^"']+["'];?/g;
 const RE_EXPORT_STAR = /export\s+\*(?:\s+as\s+[A-Za-z0-9_]+)?\s+from\s*["'][^"']+["'];?/g;
-function withoutReExports(text: string): string {
-  return text.replace(RE_EXPORT_FROM, "").replace(RE_EXPORT_STAR, "");
+// What a caller can look like, once prose and forwarding are removed.
+function callableText(text: string): string {
+  return stripComments(text).replace(RE_EXPORT_FROM, "").replace(RE_EXPORT_STAR, "");
 }
 
 function hasCallerElsewhere(name: string, ownFile: string): boolean {
   const re = new RegExp(`\\b${name}\\b`);
-  if (sourceFiles().some((f) => f.name !== ownFile && re.test(withoutReExports(f.text)))) return true;
-  return READERS.some((f) => re.test(withoutReExports(f.text)));
+  if (sourceFiles().some((f) => f.name !== ownFile && re.test(callableText(f.text)))) return true;
+  return READERS.some((f) => re.test(callableText(f.text)));
 }
 
 test("the scan finds the exports at all, so nothing here can pass by reading nothing", () => {
@@ -147,6 +214,14 @@ test("PLANT: the two exports the holdout imports are still exported from src", (
 // regression no edit to the attempt could clear. Both directions are still
 // asserted, and the failure message still prints where each one currently lives.
 const KNOWN_SUSPECTS = [
+  // SURFACED 2026-09-16 by teaching this guard that a comment is not a caller.
+  // Both had zero call sites and were vouched for by one prose mention each:
+  // `aggregate` by two comments in test/improve-fakes.ts, `assemble` by one in
+  // test/write-invariants.test.ts. Reviewed, not cleared: the holdout is a consumer
+  // no scan here can see, so removing either still means scoring a branch without it
+  // and reading holdout_pass_rate.
+  "aggregate",
+  "assemble",
   "ATTEMPT_STATUSES",
   "BACKUP_BUCKET_NAME",
   "BACKUP_DUMP_PREFIX",
@@ -205,7 +280,14 @@ test("no new no-caller export appears without review", () => {
   const declared = new Set(declaredByHoldout());
   const reviewed = new Set(KNOWN_SUSPECTS);
   const unreviewed: string[] = [];
-  for (const { file, name } of exportsOfSrc()) {
+  // THE COUNT, ASSERTED BEFORE THE RESULT. An empty `unreviewed` is only
+  // meaningful if this walked real exports across real readers; both numbers are
+  // checked here and printed in the failure, so "0 violations" cannot be reached
+  // by parsing nothing.
+  const examined = exportsOfSrc();
+  assert.ok(examined.length > 100, `only ${examined.length} exports examined; the walk is broken`);
+  assert.ok(READERS.length > 20, `only ${READERS.length} reader files loaded; the caller scan is broken`);
+  for (const { file, name } of examined) {
     if (hasCallerElsewhere(name, file)) continue;
     // The manifest is the third place to look, and it is the one that cost an
     // anchor when it did not exist.
@@ -218,7 +300,8 @@ test("no new no-caller export appears without review", () => {
     [],
     `these exports have no caller in src/, none in test/, test-integration/ or scripts/, and no holdout ` +
       `manifest entry, and are not in the reviewed list: ${unreviewed.join(", ")}. ` +
-      `Add them to KNOWN_SUSPECTS after looking, or give them a caller.`
+      `Add them to KNOWN_SUSPECTS after looking, or give them a caller. ` +
+      `(${examined.length} exports examined against ${READERS.length} reader files; comments and barrel re-exports do not count as callers.)`
   );
 });
 test("PLANT: a name in the holdout manifest is never reported as a suspect", () => {
@@ -233,4 +316,30 @@ test("PLANT: a name in the holdout manifest is never reported as a suspect", () 
       `${name} is vouched for by ${MANIFEST} and must not also be listed as a suspect`
     );
   }
+});
+
+// ---- the stripper itself ----------------------------------------------------
+//
+// stripComments decides what counts as a caller, so a bug in it either hides a
+// dead export (too greedy on prose) or deletes a live caller (too greedy on code).
+// The second is the dangerous one: a guard that reports a used export as dead gets
+// deleted rather than fixed.
+test("a comment does not vouch for an export, and a URL in a string is not a comment", () => {
+  assert.equal(stripComments("const a = 1; // mentions ghostName").includes("ghostName"), false);
+  assert.equal(stripComments("/* ghostName */ const a = 1;").includes("ghostName"), false);
+  assert.equal(stripComments("/**\n * ghostName\n */\nconst a = 1;").includes("ghostName"), false);
+
+  // THE CASE A REGEX STRIPPER GETS WRONG. Cutting from the first // to end of line
+  // eats the rest of a line that merely contains a URL, and a caller sitting after
+  // one on the same line disappears.
+  const url = 'const u = "https://example.com/x"; realCaller(u);';
+  assert.equal(stripComments(url), url, "a // inside a string was treated as a comment");
+  assert.ok(stripComments(url).includes("realCaller"), "a real caller after a URL was stripped");
+
+  // An escaped quote must not end the string early and expose the rest as code.
+  const esc = 'const s = "a \\" // not a comment"; realCaller();';
+  assert.ok(stripComments(esc).includes("realCaller"), "an escaped quote broke the string scan");
+
+  // A name inside a string is deliberately KEPT: it can be a real reference.
+  assert.ok(stripComments('const s = "ghostName";').includes("ghostName"));
 });
