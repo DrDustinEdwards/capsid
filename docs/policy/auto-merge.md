@@ -7,7 +7,7 @@ same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
 - version: 1
-- enabled: false
+- enabled: true
 - namespaces: capsid
 
 `enabled` ships as `false`. Turning it on is a ruling, and the document is on the
