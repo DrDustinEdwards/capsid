@@ -485,6 +485,8 @@ jobs:
         env:
           NODE_BIN: ${{ steps.trusted.outputs.node }}
           CAPSID_NONCE: ${{ steps.trusted.outputs.nonce }}
+          HOLDOUT_SYNC: ${{ steps.holdout.outcome }}
+          HOLDOUT_RUN: ${{ steps.holdout_run.outcome }}
         run: |
           set -uo pipefail
           TOTAL=$("${NODE_BIN}" -e 'try{process.stdout.write(String(require(process.env.RUNNER_TEMP + "/holdout/manifest.json").total))}catch{process.stdout.write("")}')
@@ -492,6 +494,28 @@ jobs:
           echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
           echo "passed=${PASSED}" >> "$GITHUB_OUTPUT"
           echo "holdout ${PASSED} of ${TOTAL}"
+
+          # AN EMPTY STREAM IS NOT A RESULT, AND THIS IS WHERE THAT IS DECIDED.
+          #
+          # Both steps above are continue-on-error, so a holdout container that fails
+          # to start leaves an empty holdout.tap and this step reported "0 of 11": a
+          # clean, plausible score, identical to an attempt that broke every hidden
+          # test, and the loop reverted a change nothing had measured. The count is
+          # still reported (0 is the right SCORE for a run that proved nothing), but
+          # it is now accompanied by the fact that no measurement happened, and the
+          # Worker leaves such an attempt unjudged rather than blaming it.
+          #
+          # Two ways to miss the measurement, both checked: the container never
+          # printed its end marker, or the hidden suite never arrived to be run.
+          if ! "${NODE_BIN}" "${RUNNER_TEMP}/trusted/improve-report.mjs" --holdout-terminated "${RUNNER_TEMP}/holdout.tap" "${CAPSID_NONCE}"; then
+            echo "env_failure=1" >> "$GITHUB_OUTPUT"
+            echo "env_reason=the holdout container did not finish (run step: ${HOLDOUT_RUN}); its output carries no end marker, so no hidden test is known to have run" >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT FAILURE: the container did not finish. Reporting this as unmeasured rather than as ${PASSED} of ${TOTAL}."
+          elif [ "${HOLDOUT_SYNC}" != "success" ]; then
+            echo "env_failure=1" >> "$GITHUB_OUTPUT"
+            echo "env_reason=the holdout suite did not sync from R2 (step outcome: ${HOLDOUT_SYNC}), so the container ran with no hidden tests to run" >> "$GITHUB_OUTPUT"
+            echo "ENVIRONMENT FAILURE: the holdout never synced. Reporting this as unmeasured rather than as ${PASSED} of ${TOTAL}."
+          fi
 
       # The same trusted copy and the same stream. A mismatch on either recomputed metric
       # is printed and the sandbox value is the one that reaches the signed body.
@@ -524,6 +548,8 @@ jobs:
           BUILD_PASSES: ${{ needs.build.outputs.build_passes }}
           HOLDOUT_TOTAL: ${{ steps.holdout_count.outputs.total }}
           HOLDOUT_PASSED: ${{ steps.holdout_count.outputs.passed }}
+          ENV_FAILURE: ${{ steps.holdout_count.outputs.env_failure }}
+          ENV_FAILURE_REASON: ${{ steps.holdout_count.outputs.env_reason }}
           SECONDARY_TEST_PASS_RATE: ${{ steps.secondary.outputs.test_pass_rate }}
           SECONDARY_LINT_COUNT: ${{ steps.secondary.outputs.lint_count }}
           NODE_OPTIONS: ""
