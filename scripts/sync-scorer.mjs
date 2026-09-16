@@ -130,6 +130,79 @@ export function splitBlock(text, label) {
  * @param {string} text
  * @returns {string}
  */
+// ---- pinned actions: the SHA is shared, the version comment is not -----------
+//
+// A pinned step is `uses: owner/action@<40 hex> # v5`. The SHA is the security
+// property and is compared STRICTLY. The trailing comment is an annotation, and
+// Renovate rewrites it per repository on its own schedule: on 2026-09-14 it
+// expanded `# v5` to `# v5.1.0` in dustinedwards-info and nowhere else, which made
+// three of 400 lines differ and read as divergence. Measured the same week: the
+// SHAs were byte-identical across all five.
+//
+// So the comment is normalized out of the comparison, and PRESERVED on write. If
+// the copier overwrote it, Renovate would re-add it and open a pull request every
+// cycle, and a diff that is noise every time is a diff a reader learns to skip.
+// That is the habit this guard exists to protect.
+//
+// ONE PLACE UPGRADES THESE ACTIONS, and it is capsid. Renovate runs only here and
+// in dustinedwards-info; the other three targets have no config, so they change
+// only through this copier. When a real bump lands, the SHA changes and the strict
+// comparison fires. THAT IS THE GUARD WORKING, not routine drift: a SHA that
+// differs between repos means one of them is running an action version nobody
+// reviewed, and it is worth stopping for.
+const PIN_LINE = /^(\s*-?\s*uses:\s*[^\s@]+@[0-9a-f]{40})(\s*#.*)?\s*$/;
+
+/**
+ * Drop the trailing version comment from every pinned `uses:` line, for
+ * COMPARISON only. The SHA stays, so a real pin change is still a difference.
+ * @param {string} text
+ * @returns {string}
+ */
+export function normalizePins(text) {
+  return text
+    .split("\n")
+    .map((line) => {
+      const m = PIN_LINE.exec(line);
+      return m ? m[1] : line;
+    })
+    .join("\n");
+}
+
+/** Every pinned line in `text`, keyed by the trimmed `uses: ...@sha`, valued by its
+ *  trailing comment. @param {string} text */
+function pinComments(text) {
+  /** @type {Map<string, string>} */
+  const map = new Map();
+  for (const line of text.split("\n")) {
+    const m = PIN_LINE.exec(line);
+    if (m) map.set(m[1].trim(), (m[2] ?? "").trim());
+  }
+  return map;
+}
+
+/**
+ * The source block, with each pinned line's trailing comment replaced by the
+ * TARGET's own comment for the same action at the same SHA. A line whose SHA the
+ * target does not carry keeps the source's comment, because there is nothing to
+ * preserve and the pin is new to that repo.
+ * @param {string} sourceBlock
+ * @param {string} targetBlock
+ * @returns {string}
+ */
+export function preservePinComments(sourceBlock, targetBlock) {
+  const theirs = pinComments(targetBlock);
+  return sourceBlock
+    .split("\n")
+    .map((line) => {
+      const m = PIN_LINE.exec(line);
+      if (!m) return line;
+      const comment = theirs.get(m[1].trim());
+      if (comment === undefined || comment.length === 0) return line;
+      return `${m[1]} ${comment}`;
+    })
+    .join("\n");
+}
+
 export function normalize(text) {
   return text.replace(/\r\n/g, "\n");
 }
@@ -164,10 +237,11 @@ function main() {
   requireRepo(SOURCE.dir, SOURCE.label);
   requireCurrent(SOURCE.dir, SOURCE.ref, SOURCE.label);
   const srcWorkflow = splitBlock(show(SOURCE.dir, SOURCE.ref, WORKFLOW), `${SOURCE.label} ${WORKFLOW}`);
+  const srcCompare = normalizePins(srcWorkflow.tail);
   const srcReport = normalize(show(SOURCE.dir, SOURCE.ref, REPORT));
 
   console.log(`source ${SOURCE.label}@${SOURCE.ref}`);
-  console.log(`  score block  ${short(srcWorkflow.tail)}  ${srcWorkflow.tail.split("\n").length} lines`);
+  console.log(`  score block  ${short(srcCompare)}  ${srcWorkflow.tail.split("\n").length} lines`);
   console.log(`  report       ${short(srcReport)}  ${srcReport.split("\n").length} lines\n`);
 
   let changed = 0;
@@ -176,18 +250,19 @@ function main() {
     requireCurrent(t.dir, t.ref, t.label);
     const cur = splitBlock(show(t.dir, t.ref, WORKFLOW), `${t.label} ${WORKFLOW}`);
     const curReport = normalize(show(t.dir, t.ref, REPORT));
-    const wfDrift = short(cur.tail) !== short(srcWorkflow.tail);
+    const wfDrift = short(normalizePins(cur.tail)) !== short(srcCompare);
     const rpDrift = short(curReport) !== short(srcReport);
 
     console.log(`${t.label}@${t.ref}`);
-    console.log(`  score block  ${short(cur.tail)} -> ${short(srcWorkflow.tail)}  ${wfDrift ? "CHANGES" : "identical"}`);
+    console.log(`  score block  ${short(normalizePins(cur.tail))} -> ${short(srcCompare)}  ${wfDrift ? "CHANGES" : "identical"}`);
     console.log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
     if (wfDrift || rpDrift) changed++;
     if (!apply) continue;
 
     // The target keeps its own build job (everything above the marker) and takes
     // the source's block verbatim. Only the block below the marker is shared.
-    if (wfDrift) writeFileSync(join(t.dir, WORKFLOW), `${cur.head}\n${srcWorkflow.tail}`, "utf8");
+    // The target keeps its own version comment on any pin whose SHA is unchanged.
+    if (wfDrift) writeFileSync(join(t.dir, WORKFLOW), `${cur.head}\n${preservePinComments(srcWorkflow.tail, cur.tail)}`, "utf8");
     if (rpDrift) writeFileSync(join(t.dir, REPORT), srcReport, "utf8");
     if (wfDrift || rpDrift) console.log("  written to the working tree");
   }

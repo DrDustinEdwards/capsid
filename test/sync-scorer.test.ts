@@ -2,9 +2,23 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { test } from "node:test";
-import { MARKER, SOURCE_ROOT, TARGETS, blockHash, normalize, splitBlock } from "../scripts/sync-scorer.mjs";
+import { MARKER, SOURCE_ROOT, TARGETS, blockHash, normalize, normalizePins, preservePinComments, splitBlock } from "../scripts/sync-scorer.mjs";
 
-// THE HALF OF THE IDENTITY GUARD THAT CAN RUN OFFLINE (2026-09-10).
+// WHAT THIS FILE CHECKS: THE COPIER'S MECHANICS, ON THIS REPO'S COPY ONLY.
+//
+// Corrected 2026-09-16. It used to open by asserting that the score job and
+// scripts/improve-report.mjs are byte-identical across all five roster repos, and
+// it verifies none of that: four of the five are not on disk in CI. A test whose
+// banner claims a cross-repo property while its body cannot see across repos is
+// the vacuous shape this repo keeps finding, and the claim was false when measured
+// (three distinct score blocks on 2026-09-16).
+//
+// The cross-repo claim now lives in the Worker's watcher, which is the only thing
+// with read access to all five, and in test/scorer-identity.test.ts, which pins
+// what that watcher reports. What is checked HERE is that the copier can split,
+// hash and compare correctly, and that its source and targets resolve.
+//
+// THE ORIGINAL NOTE, kept because it is the incident that produced the copier:
 //
 // The score job and scripts/improve-report.mjs are byte-identical across all five
 // roster repos. Nothing enforced that, and on 2026-09-10 a comment pass rewrote
@@ -113,4 +127,51 @@ test("every target is an absolute path with a ref and a label", () => {
     assert.ok(t.ref.length > 0, `target ${t.dir} has no ref`);
     assert.ok(t.label.length > 0, `target ${t.dir} has no label`);
   }
+});
+
+// ---- the pin, shared; the version comment, not ------------------------------
+//
+// Measured 2026-09-14 to 2026-09-16: Renovate expanded "# v5" to "# v5.1.0" in
+// dustinedwards-info and nowhere else. Three of 400 lines differed, the SHAs were
+// byte-identical, and the copier read it as divergence. The SHA is the security
+// property and stays strict; the comment is normalized for comparison and
+// preserved on write, so re-syncing does not hand Renovate a pull request to
+// re-open every cycle.
+
+const PINNED = "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5";
+const PINNED_LONG = "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0";
+const PINNED_OTHER_SHA = "      - uses: actions/checkout@0000000000000000000000000000000000000000 # v5";
+
+test("the version comment is normalized away and the SHA is not", () => {
+  assert.equal(normalizePins(PINNED), normalizePins(PINNED_LONG), "two spellings of the same pin did not compare equal");
+  assert.ok(normalizePins(PINNED).includes("fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"), "normalizing dropped the SHA");
+  assert.notEqual(
+    normalizePins(PINNED),
+    normalizePins(PINNED_OTHER_SHA),
+    "A DIFFERENT SHA MUST STILL BE A DIFFERENCE. That is the guard firing, and it means one repo is running an action version nobody reviewed."
+  );
+});
+
+test("a line that is not a pinned action is untouched", () => {
+  const plain = "        run: npm ci # install";
+  assert.equal(normalizePins(plain), plain);
+  const tagged = "      - uses: ./local-action # not pinned by sha";
+  assert.equal(normalizePins(tagged), tagged);
+});
+
+test("writing PRESERVES the target's own comment when the SHA is unchanged", () => {
+  const written = preservePinComments(PINNED, PINNED_LONG);
+  assert.equal(written, PINNED_LONG, "the copier would have reverted Renovate's annotation");
+});
+
+test("writing keeps the source comment when the target has no such pin", () => {
+  const written = preservePinComments(PINNED, "      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5");
+  assert.equal(written, PINNED, "a pin new to the target lost its comment");
+});
+
+test("writing does not carry a comment across a SHA change", () => {
+  // The target's comment describes the version the target had. If the SHA moved,
+  // that comment is now wrong and the source's is the accurate one.
+  const written = preservePinComments(PINNED_OTHER_SHA, PINNED_LONG);
+  assert.equal(written, PINNED_OTHER_SHA, "a stale version comment was carried onto a new SHA");
 });

@@ -6,6 +6,8 @@ export const REPORT: string;
 export function splitBlock(text: string, label: string): { head: string; tail: string };
 export function normalize(text: string): string;
 export function blockHash(text: string): string;
+export function normalizePins(text: string): string;
+export function preservePinComments(sourceBlock: string, targetBlock: string): string;
 export const SOURCE_ROOT: string;
 export interface SyncTarget {
   dir: string;
