@@ -223,3 +223,102 @@ test("SCORE_TIMEOUT_MS EXCEEDS THE SCORER WORKFLOW'S OWN SEQUENTIAL CEILING", ()
       `Raise SCORE_TIMEOUT_MS in src/improve-schema.ts above ${minutes} minutes, or lower the workflow's timeout-minutes.`
   );
 });
+
+// ---- the job that runs attempt code caches nothing it can write -------------
+//
+// Job A checks out the ATTEMPT branch and executes its code. An actions/cache step
+// there would persist whatever that code wrote and restore it into later runs, and
+// because dispatchWorkflow dispatches the scorer at the DEFAULT branch ref, the
+// cache lands in the default branch's scope where every later run in the repository
+// restores it, Job B included. That is a write path from an attempt into the
+// dependencies of the thing measuring it.
+//
+// WHAT IS BANNED IS A DIRECTORY ATTEMPT CODE CAN WRITE, not caching as such
+// (ruled 2026-09-16). setup-node's `cache: npm` stays: it caches npm's
+// content-addressed download cache, whose entries are verified against the
+// integrity hashes in the lockfile, and an attempt cannot forge a package that
+// passes that check. node_modules and build output are the opposite: they are
+// executed directly, with nothing verifying them.
+//
+// SCOPE: this reads THIS repository's copy. Job A is per-repo by design, so the
+// other four copies are guarded by the same test in their own repos, exactly as
+// test/sync-scorer.test.ts splits what can run offline from what needs the clones.
+
+const WRITABLE_CACHE_DIR = /(^|[\s"'`|/])(node_modules|dist|build|out|coverage|\.next|\.output|\.improve-build)(\s|\/|$)/;
+
+function stepsOf(job: Job): string[][] {
+  const steps: string[][] = [];
+  let current: string[] | null = null;
+  for (const line of job.lines) {
+    if (/^ {6}- /.test(line)) {
+      if (current) steps.push(current);
+      current = [line];
+    } else if (current) {
+      current.push(line);
+    }
+  }
+  if (current) steps.push(current);
+  return steps;
+}
+
+function buildJob(): Job {
+  const job = jobs().find((j) => j.workflow === "improve-score.yml" && j.id === "build");
+  assert.ok(job, "no build job parsed out of improve-score.yml");
+  return job;
+}
+
+test("THE JOB A SCAN IS NOT VACUOUS: it parses the build job's steps and sees the cache directive that IS allowed", () => {
+  const job = buildJob();
+  const steps = stepsOf(job);
+  assert.ok(steps.length >= 5, `only ${steps.length} steps parsed out of the build job`);
+  // The strongest non-vacuity check available: the allowed directive is known to be
+  // in this job, so a parser reading the wrong region fails here rather than
+  // reporting a clean scan of nothing.
+  assert.ok(
+    job.lines.some((l) => /^\s+cache:\s*npm\s*$/.test(l)),
+    "setup-node's `cache: npm` was not found in the build job; the scan is reading the wrong region"
+  );
+});
+
+test("JOB A CACHES NO DIRECTORY ATTEMPT CODE CAN WRITE", () => {
+  const job = buildJob();
+  const offenders: string[] = [];
+  let cacheSteps = 0;
+  for (const step of stepsOf(job)) {
+    const uses = step.find((l) => /uses:\s*\S*actions\/cache(\/(restore|save))?@/.test(l));
+    if (!uses) continue;
+    cacheSteps += 1;
+    const paths = step.filter((l) => WRITABLE_CACHE_DIR.test(l));
+    if (paths.length > 0) {
+      offenders.push(`${job.workflow}:${job.id} caches ${paths.map((p) => p.trim()).join(", ")}`);
+      continue;
+    }
+    // FAIL CLOSED: a cache step whose paths this test cannot read is not a pass.
+    if (!step.some((l) => /^\s+path:/.test(l))) {
+      offenders.push(`${job.workflow}:${job.id} has an actions/cache step with no readable path block`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "the job that runs attempt code is caching a directory that code can write. " +
+      "It would be saved at the end of the job and restored into every later run in this repository, Job B included. " +
+      `setup-node's cache: npm is exempt and is not counted here; ${cacheSteps} actions/cache step(s) were examined.`
+  );
+});
+
+test("JOB B IS WHERE CACHING BELONGS, and it caches node_modules on an exact key", () => {
+  // The other half of the same rule. If this disappears the loop silently pays for
+  // an install on every scored attempt, and the guard above would still be green.
+  const job = jobs().find((j) => j.workflow === "improve-score.yml" && j.id === "score");
+  assert.ok(job, "no score job parsed out of improve-score.yml");
+  const text = job.lines.join("\n");
+  assert.match(text, /uses:\s*actions\/cache@[0-9a-f]{40}/, "Job B has no pinned actions/cache step");
+  assert.match(text, /^\s+node_modules\s*$/m, "Job B's cache does not name node_modules");
+  assert.doesNotMatch(text, /restore-keys:/, "Job B uses restore-keys; a near miss could half-restore and then skip the install");
+  assert.match(
+    text,
+    /if:\s*steps\.deps\.outputs\.cache-hit\s*!=\s*'true'/,
+    "the install step is not gated on an exact cache hit, so the cache saves nothing"
+  );
+});
