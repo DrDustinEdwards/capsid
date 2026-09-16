@@ -7,7 +7,7 @@ improve loop task document. An unsigned copy, or one edited after signing, appro
 nothing.
 
 - version: 1
-- enabled: false
+- enabled: true
 
 A driver that reaches a push, a migration or a pull request stops and blocks with the
 exact command. Every one of those then waits on a person, including the ones whose
