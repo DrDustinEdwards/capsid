@@ -9,13 +9,23 @@ name: improve-score
 #          code/. It never sees a credential and persist-credentials is false.
 #          It also exports build_passes as a JOB OUTPUT taken from the build
 #          step's own outcome, because the artifact is attacker-writable.
-#   score  (BYTE-IDENTICAL across all five roster repos) checks out the DEFAULT
+#   score  (MEANT TO BE BYTE-IDENTICAL across all five roster repos; see below)
+#          checks out the DEFAULT
 #          branch ONLY, never overlays the attempt onto the runner, and runs the
 #          holdout inside a network-less read-only container with the attempt
 #          mounted read-only. It reads results from the container's stdout pipe.
 #
 # ONLY THE build JOB DIFFERS PER REPO. The score job and scripts/improve-report.mjs
 # are copied verbatim; change them here and re-copy, never edit one copy.
+#
+# BYTE-IDENTICAL IS THE INTENT, NOT A FACT THIS FILE CAN ASSERT. Measured for the
+# first time on 2026-09-16 and it was not true: three distinct score blocks across
+# the five, after the copier threw on every run from 2026-09-12 and three commits
+# to this surface reached nobody. Nothing in this repo can see the other four
+# copies, so the claim is checked where it can be: the Worker's watcher reads all
+# five default branches on its own cadence and posts a job naming which repos
+# differ and in which block. Pinned action SHAs are compared strictly there; the
+# trailing version comment is not, because Renovate rewrites it per repo.
 #
 # WHY THE CONTAINER (audit 2026-09-07, Opus CRITICAL 5.1 and Grok CRITICAL 1+2). The
 # previous split ran `cp -r attempt/code/. .` over the default-branch checkout and then

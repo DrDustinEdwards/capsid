@@ -2,9 +2,10 @@ import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
 import { BACKUP_STALE_HOURS, healthReport, type HealthReport } from "./health";
-import { ciStatus, listRepoTree, repoHistory } from "./github";
+import { ciStatus, listRepoTree, readRepoFile, repoHistory } from "./github";
 import { improveStatus, type StatusReport } from "./improve-run";
 import { ROSTER } from "./improve-schema";
+import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 
 // ---- the watcher ----------------------------------------------------------------
@@ -598,6 +599,124 @@ export function newestMigration(names: string[]): string | null {
   return sql.length ? sql[sql.length - 1] : null;
 }
 
+/** THE SCORER SURFACE IS MEANT TO BE IDENTICAL IN ALL FIVE ROSTER REPOS, and until
+ *  2026-09-16 nothing measured whether it was. The copier had thrown on every run
+ *  since 2026-09-12, three commits changed the shared surface and reached nobody,
+ *  and four separate places asserted byte-identity while no check could see across
+ *  repos. This is that check, in the only component with read access to all five.
+ *
+ *  A READ THAT RETURNS NOTHING IS A FINDING, never four hashes that happen to
+ *  agree. The count of repos actually read is in the finding, so "they all match"
+ *  can never be reached by matching one repo against itself, and a repo that could
+ *  not be read is named rather than dropped from the comparison.
+ *
+ *  It reports; it does not prevent. The copier is what fixes the divergence and a
+ *  human runs it. */
+async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
+  const read: Array<{ namespace: string; block: string; report: string }> = [];
+  const unreadable: string[] = [];
+  const malformed: string[] = [];
+
+  for (const namespace of ROSTER) {
+    const files = await attempt(`scorer surface ${namespace}`, async () => {
+      const wf = await readRepoFile(env, namespace, SCORER_WORKFLOW);
+      const rp = await readRepoFile(env, namespace, SCORER_REPORT);
+      return {
+        workflow: (wf as { content?: string }).content ?? "",
+        report: (rp as { content?: string }).content ?? "",
+      };
+    });
+    if (!files || files.workflow.length === 0 || files.report.length === 0) {
+      unreadable.push(namespace);
+      continue;
+    }
+    const block = sharedBlock(files.workflow);
+    if (block === null) {
+      // The marker is missing or doubled, so there is no block to compare. Reported
+      // rather than skipped: a file that has lost its marker has stopped being the
+      // shape the copier can maintain at all.
+      malformed.push(namespace);
+      continue;
+    }
+    read.push({
+      namespace,
+      block: (await digest(normalizePins(block))).slice(0, 16),
+      report: (await digest(files.report)).slice(0, 16),
+    });
+  }
+
+  return identityFindings(read, unreadable, malformed);
+}
+
+export interface ScorerSurface {
+  namespace: string;
+  block: string;
+  report: string;
+}
+
+/** The judgement, with no IO in it, so every branch is reachable from a test:
+ *  what was read, what could not be, and what that means. */
+export function identityFindings(read: ScorerSurface[], unreadable: string[], malformed: string[]): Finding[] {
+  const out: Finding[] = [];
+  const seen = `${read.length} of ${ROSTER.length} repos read`;
+
+  if (unreadable.length > 0 || malformed.length > 0) {
+    out.push(
+      finding("capsid", `scorer-unread-${unreadable.concat(malformed).sort().join("-")}`, "the scorer surface could not be read everywhere", [
+        ...unreadable.map((n) => `${n}: could not be read, so it is not in the comparison below`),
+        ...malformed.map((n) => `${n}: the ${SCORER_MARKER} marker is missing or doubled, so it has no shared block`),
+        seen,
+        "A repo that cannot be read is not a repo that agrees. Until this clears, any identity result below covers fewer than five.",
+      ])
+    );
+  }
+
+  // FEWER THAN TWO READ IS NOT AGREEMENT. One repo always matches itself and zero
+  // repos always match too; neither says anything about identity.
+  if (read.length < 2) {
+    if (read.length > 0) {
+      out.push(
+        finding("capsid", "scorer-identity-unknown", "the scorer surface cannot be compared", [
+          seen,
+          "At least two repos must be readable before identity means anything.",
+        ])
+      );
+    }
+    return out;
+  }
+
+  const blocks = new Map<string, string[]>();
+  const reports = new Map<string, string[]>();
+  for (const r of read) {
+    blocks.set(r.block, [...(blocks.get(r.block) ?? []), r.namespace]);
+    reports.set(r.report, [...(reports.get(r.report) ?? []), r.namespace]);
+  }
+
+  const describe = (groups: Map<string, string[]>) =>
+    [...groups.entries()].map(([hash, names]) => `${hash}: ${names.sort().join(", ")}`).sort();
+
+  if (blocks.size > 1 || reports.size > 1) {
+    out.push(
+      finding(
+        "capsid",
+        `scorer-diverged-${[...blocks.keys()].sort().join("-").slice(0, 24)}-${[...reports.keys()].sort().join("-").slice(0, 24)}`,
+        `the scorer surface differs across the roster (${blocks.size} score block(s), ${reports.size} report script(s))`,
+        [
+          seen,
+          `score block, ${blocks.size} distinct:`,
+          ...describe(blocks).map((line) => `  ${line}`),
+          `report script, ${reports.size} distinct:`,
+          ...describe(reports).map((line) => `  ${line}`),
+          "Pinned action SHAs are compared strictly; the trailing version comment is not, so this is not Renovate.",
+          "Fix by running scripts/sync-scorer.mjs from capsid and landing the result per repo.",
+        ]
+      )
+    );
+  }
+
+  return out;
+}
+
 export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
   const out: Finding[] = [];
 
@@ -646,6 +765,8 @@ export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
       })) ?? [];
     out.push(...mirrorFindings("capsid", newestDump(dumps), runs, now));
   }
+
+  out.push(...((await attempt("scorer identity", () => scorerIdentityFindings(env))) ?? []));
 
   for (const namespace of ROSTER) {
     const runs = await attempt(`ci ${namespace}`, async () => {
