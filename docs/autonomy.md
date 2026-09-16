@@ -1,6 +1,8 @@
 # Autonomy
 
-What the machine may do with no human in the loop. Both policies ship disabled. Each one lives in two places: a reviewable file in `docs/policy/`, and the copy the Worker actually reads, a signed document in the store. An unsigned copy, or one edited after signing, authorizes nothing.
+What the machine may do with no human in the loop. Each policy lives in two places: a reviewable file in `docs/policy/`, and the copy the Worker actually reads, a signed document in the store. An unsigned copy, or one edited after signing, authorizes nothing.
+
+Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13 under signature `a999f926`, auto-merge since 2026-09-16 under `dcde046a`. **The signed store document is the authority for that value, not this file.** Turning one on is a ruling that lands in the audit log, and nothing in this repo is gated against it: this paragraph read "Both policies ship disabled" until 2026-09-16, by which point it had been wrong about gates for three days.
 
 **Auto-merge** (`docs/policy/auto-merge.md`, read from `capsid/policy/auto-merge.md`).
 The five-minute tick walks every open pull request on the namespaces the policy names
