@@ -130,6 +130,10 @@ export interface RunRow {
   ci_minutes: number;
   status: RunStatus;
   consecutive_reverts: number;
+  // Environment failures in a row: a scorer that never reported, a container that
+  // never finished, a hidden suite that never arrived. Kept apart from
+  // consecutive_reverts because it says nothing about the code.
+  consecutive_unjudged: number;
   current_attempt: string | null;
   base_sha: string | null;
   pr_url: string | null;
@@ -162,9 +166,11 @@ export interface AttemptRow {
   ts: string;
 }
 
-const RUN_COLUMNS =
+// Exported so a caller selecting run rows cannot keep its own copy of this list and
+// fall behind a migration. improve/finalize.ts held a second copy until 0018.
+export const RUN_COLUMNS =
   "id, namespace, mode, started, finished, attempts, kept, reverts, cost_usd, ci_minutes, status, " +
-  "consecutive_reverts, current_attempt, base_sha, pr_url, note, condition, advanced_at";
+  "consecutive_reverts, consecutive_unjudged, current_attempt, base_sha, pr_url, note, condition, advanced_at";
 
 const ATTEMPT_COLUMNS =
   "id, namespace, run_id, change_summary, diff_ref, score_before, score_after, kept, reason, lineage_parent, " +
@@ -231,6 +237,7 @@ export interface Transition {
       | "cost_usd"
       | "ci_minutes"
       | "consecutive_reverts"
+      | "consecutive_unjudged"
       | "current_attempt"
       | "base_sha"
       | "pr_url"

@@ -1,6 +1,15 @@
 import type { Env } from "../env";
 import { monitorAttempt } from "../improve-gates";
-import { estimatedScorerMinutes, maxAttemptsFor, MAX_CONSECUTIVE_REVERTS, meteredMinutes, type BestRecord } from "../improve-schema";
+import {
+  estimatedScorerMinutes,
+  maxAttemptsFor,
+  MAX_CONSECUTIVE_REVERTS,
+  MAX_CONSECUTIVE_UNJUDGED,
+  meteredMinutes,
+  isUnjudged,
+  UNJUDGED_STATUSES,
+  type BestRecord,
+} from "../improve-schema";
 import { checkHoldout, readHoldoutManifest, type ScoreReport } from "../improve-scorer";
 import { anchorVerdict, compare, type MetricMap } from "../improve-scores";
 import { abstractSkill, recordSkill, recordSkillOutcome } from "../improve-skills";
@@ -156,6 +165,24 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
     return { ok: false, message: `attempt ${attempt.id} belongs to run ${attempt.run_id}, not ${run.id}` };
   }
   if (run.status !== "awaiting-score" || run.current_attempt !== report.attempt_id) {
+    // A LATE REPORT FOR AN UNJUDGED ATTEMPT IS STILL THE ONLY MEASUREMENT IT WILL
+    // EVER HAVE. The run gave up waiting and moved on, so this cannot drive the
+    // state machine: its counters have advanced, it may be several attempts further
+    // on, and rewinding them to apply a verdict the run already worked around would
+    // corrupt the one record of what the run actually did.
+    //
+    // The ATTEMPT ROW is a different question. It currently says the machine broke,
+    // which was true and is no longer the whole truth, and that row is what lineage
+    // selection and the skill records read later. Writing the real verdict there
+    // costs the state machine nothing and is strictly more information.
+    //
+    // Only from an unjudged status: an attempt already kept or reverted has a real
+    // verdict, and a second report for it is the duplicate this guard was written
+    // for. And no write to improve:best, even on a late keep: best is what the next
+    // run branches from, and this attempt's base is now several attempts stale.
+    if (isUnjudged(attempt.status)) {
+      return await recordLateScore(env, run, attempt, report, now);
+    }
     return {
       ok: true,
       message: `run ${run.id} is not awaiting a score for ${report.attempt_id}; ignored as a duplicate or stale report`,
@@ -170,6 +197,25 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
 
   const moved = await advanceRun(env.DB, { runId: run.id, expected: "awaiting-score", next: "judging" });
   if (!moved) return { ok: true, message: `run ${run.id} is not awaiting a score; this report is a duplicate and was ignored` };
+
+  // A BROKEN MACHINE IS NOT A BAD CHANGE. Checked before the scores are loaded and
+  // before the monitor runs, because an attempt that cannot be judged is not worth
+  // spending a model call on.
+  //
+  // Two sources, one verdict. The scorer says its own environment failed (the
+  // holdout container never finished, so its "0 of N" is an empty stream rather than
+  // a result), or the hidden suite did not arrive at all. Either way nothing about
+  // this attempt was measured, so it is left UNJUDGED: not kept, not reverted, not
+  // counted against the restore-to-best ceiling, and the skill that proposed it is
+  // not marked. See MAX_CONSECUTIVE_UNJUDGED for what stops this repeating forever.
+  const environmentFailure = report.environment?.ok === false
+    ? report.environment.reason ?? "the scorer reported an environment failure"
+    : !holdout.ok && holdout.environmental
+      ? holdout.refusal
+      : null;
+  if (environmentFailure) {
+    return await recordUnjudged(env, run, attempt, report, environmentFailure, now);
+  }
 
   const { doc } = await loadScores(env, run.namespace);
   const baseline = await metricsFor(env.DB, run.id, null);
@@ -294,6 +340,183 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
     message: advanced ? reason : `${reason} (the run moved out of judging mid-ingest; its counters were not updated here)`,
     kept: keep,
   };
+}
+
+// ---- the environment failed --------------------------------------------------
+
+// UNJUDGED: the scorer did not measure this attempt, so nothing is recorded about
+// the code. What moves is the unjudged counter and nothing else.
+//
+// Deliberately NOT written here, each for its own reason:
+//   reverts / consecutive_reverts  they mean "measured and rejected", and five of
+//                                  them restore the namespace to best. A machine
+//                                  that never ran is not evidence about the code.
+//   recordSkillOutcome             a skill is not worse for having been proposed on
+//                                  a night the runner broke.
+//   scoreStatements                the metrics in this report were produced by the
+//                                  failure. Storing them would put a 0 into the
+//                                  series the next comparison reads as real.
+//   writeBest                      an unjudged attempt is never kept.
+async function recordUnjudged(
+  env: Env,
+  run: RunRow,
+  attempt: AttemptRow,
+  report: ScoreReport,
+  why: string,
+  now: Date
+): Promise<IngestResult> {
+  const reason = `unjudged: ${why}`;
+  const consecutive = run.consecutive_unjudged + 1;
+  const exhausted = consecutive >= MAX_CONSECUTIVE_UNJUDGED;
+
+  await env.DB.batch([
+    env.DB
+      .prepare(
+        // Status-keyed exactly like the judging write, so a late or duplicated call
+        // cannot flip an attempt that has since reached a real verdict.
+        `UPDATE improve_attempts
+         SET status = 'unjudged', kept = 0, reason = ?2
+         WHERE id = ?1 AND status = 'awaiting-score'
+         RETURNING id`
+      )
+      .bind(attempt.id, reason),
+    improveAudit(env.DB, "improve-unjudged", run.namespace, {
+      run_id: run.id,
+      attempt_id: attempt.id,
+      reason: why,
+      consecutive_unjudged: consecutive,
+    }),
+  ]);
+
+  const advanced = await advanceRun(env.DB, {
+    runId: run.id,
+    expected: "judging",
+    next: exhausted || run.attempts >= maxAttemptsFor(run.namespace) ? "finalizing" : "attempting",
+    patch: {
+      consecutive_unjudged: consecutive,
+      current_attempt: null,
+      ci_minutes: settledMinutes(run, report.ci_minutes),
+      ...(exhausted ? { note: unjudgedCeilingNote(consecutive) } : {}),
+    },
+  });
+
+  return {
+    ok: true,
+    message: advanced ? reason : `${reason} (the run moved out of judging mid-ingest; its counters were not updated here)`,
+    kept: false,
+  };
+}
+
+// The note a run stops on when the scoring environment keeps failing. It names the
+// MACHINE, because that is all that was observed: no attempt reached a verdict, so
+// the run learned nothing about the code and there is nothing to restore away from.
+export function unjudgedCeilingNote(consecutive: number): string {
+  return (
+    `${consecutive} attempts in a row could not be scored: the scoring environment failed each time. ` +
+    `Nothing was measured, so no attempt was reverted and the namespace was left where it is. ` +
+    `Check the scorer workflow before the next run.`
+  );
+}
+
+// ---- a verdict that arrived after the run gave up ---------------------------
+
+// THE SAME JUDGEMENT AS THE PATH ABOVE, WRITTEN ONLY TO THE ATTEMPT ROW.
+//
+// It differs from the judging path in exactly four ways, and each is deliberate:
+//   the UPDATE is keyed on the unjudged statuses rather than awaiting-score,
+//   the run's counters and status are not touched (it has moved on),
+//   improve:best is not written even on a keep (this attempt's base is stale now),
+//   and no pull request is opened, for the same reason.
+//
+// The monitor still runs. `kept` on an attempt row makes it a base candidate in
+// selectBase, so recording a keep no monitor ever looked at would put an unchecked
+// commit into the lineage by a side door.
+async function recordLateScore(
+  env: Env,
+  run: RunRow,
+  attempt: AttemptRow,
+  report: ScoreReport,
+  now: Date
+): Promise<IngestResult> {
+  const manifest = await readHoldoutManifest(env, run.namespace);
+  const holdout = checkHoldout(manifest, report);
+  const anchors: MetricMap = { ...report.anchors, holdout_pass_rate: holdout.passRate };
+
+  // A late report that ALSO says the machine broke leaves the row as it is. There is
+  // nothing new to record, and the counter already moved when the run gave up.
+  if (report.environment?.ok === false || (!holdout.ok && holdout.environmental)) {
+    return {
+      ok: true,
+      message: `a late report for ${attempt.id} also reports an environment failure; the attempt stays unjudged`,
+    };
+  }
+
+  const { doc } = await loadScores(env, run.namespace);
+  const baseline = await metricsFor(env.DB, run.id, null);
+  const comparison = compare(doc.secondary, baseline, report.secondary);
+  const anchorsVerdict = anchorVerdict(doc.anchors, anchors);
+  const change = (await readDoc(env.DB, run.namespace, attempt.diff_ref ?? "")) ?? "";
+  const monitor = await monitorAttempt(env, {
+    changedPaths: changedPathsFrom(change),
+    changeSummary: attempt.change_summary ?? "",
+    reasoning: change,
+    diff: change,
+  });
+
+  const keep = !monitor.flagged && holdout.ok && anchorsVerdict.passed && comparison.improved;
+  const verdict = monitor.flagged
+    ? `flagged by the reward-hacking monitor (${monitor.source}): ${monitor.reason}`
+    : !holdout.ok
+      ? holdout.refusal ?? "the holdout was refused"
+      : !anchorsVerdict.passed
+        ? `failed an anchor: ${anchorsVerdict.reasons.join("; ")}`
+        : comparison.improved
+          ? `improved: ${comparison.reason}`
+          : `no improvement: ${comparison.reason}`;
+  const reason = `late report, after the run stopped waiting: ${verdict}`;
+
+  const { results } = await env.DB
+    .prepare(
+      `UPDATE improve_attempts
+       SET status = ?2, kept = ?3, reason = ?4, score_before = ?5, score_after = ?6,
+           flagged = ?7, flag_reason = ?8, anchors_json = ?9, secondary_json = ?10
+       WHERE id = ?1 AND status IN (${UNJUDGED_STATUSES.map((s) => `'${s}'`).join(", ")})
+       RETURNING id`
+    )
+    .bind(
+      attempt.id,
+      monitor.flagged ? "flagged" : keep ? "kept" : "reverted",
+      keep ? 1 : 0,
+      reason,
+      comparison.scoreBefore,
+      comparison.scoreAfter,
+      monitor.flagged ? 1 : 0,
+      monitor.reason,
+      JSON.stringify(anchors),
+      JSON.stringify(report.secondary)
+    )
+    .all<{ id: string }>();
+
+  // Nothing updated means the row left the unjudged statuses between the read and
+  // this write. Whatever it says now was written by a path that had the run behind
+  // it, so it outranks this one.
+  if (results.length === 0) {
+    return { ok: true, message: `${attempt.id} is no longer unjudged; the late report was ignored` };
+  }
+
+  await env.DB.batch([
+    ...(attempt.skill_id ? recordSkillOutcome(env.DB, attempt.skill_id, keep) : []),
+    improveAudit(env.DB, "improve-late-score", run.namespace, {
+      run_id: run.id,
+      attempt_id: attempt.id,
+      reason,
+      kept: keep,
+      flagged: monitor.flagged,
+      note: "recorded on the attempt row only; the run had already moved on",
+    }),
+  ]);
+
+  return { ok: true, message: reason, kept: keep };
 }
 
 async function maybeAbstract(env: Env, run: RunRow, attempt: AttemptRow, change: string, delta: number): Promise<void> {

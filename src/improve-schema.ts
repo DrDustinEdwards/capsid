@@ -226,11 +226,56 @@ export function scheduledFor(now: Date): RosterNamespace[] {
 // learning slowly, a run reverting five times running has lost the thread.
 export const MAX_CONSECUTIVE_REVERTS = 5;
 
-// How long a dispatched scorer workflow has to report back. Past it the attempt
-// is reverted and logged and the run continues rather than wedging. Stated
-// honestly: this is a ceiling chosen against a CI job that takes two to four
-// minutes on this repo today, not a measured p99 of the five repos.
-export const SCORE_TIMEOUT_MS = 20 * 60 * 1000;
+// After this many UNJUDGED attempts in a row the run stops, without restoring to
+// improve:best. Unjudged is an environment failure: the scorer never produced a
+// measurement, so nothing is known about the code and there is nothing to restore
+// away from.
+//
+// THREE, AND LOWER THAN THE REVERT CEILING ON PURPOSE, for two reasons.
+//
+// A revert at least bought a measurement, so spending another attempt after one is
+// buying information. An unjudged attempt bought nothing, so a third, fourth and
+// fifth dispatch into a machine that is still broken spend CI minutes and model
+// cost to learn the same nothing. Two retries is enough to ride out a transient
+// runner eviction or a registry blip, which is what most of these are.
+//
+// And it bounds the one thing this status could otherwise be used for. Unjudged
+// costs an attempt nothing: it is not counted, and the skill that proposed it is
+// not marked. An attempt that could tell it was about to fail would therefore
+// rather crash the scorer than be judged by it, and killing the container is within
+// reach of code the container runs. It cannot get the attempt KEPT, so the most it
+// buys is escaping the revert counter, and a ceiling below that counter's is what
+// takes the escape back.
+export const MAX_CONSECUTIVE_UNJUDGED = 3;
+
+// The attempt statuses that mean "the scorer never produced a verdict on this".
+// Two spellings because the two failures are worth telling apart in the record:
+// 'timed-out' is no report at all, 'unjudged' is a report that arrived saying its
+// own environment failed. Everything downstream treats them identically, and this
+// list is what makes that true in one place rather than in each caller.
+export const UNJUDGED_STATUSES = ["unjudged", "timed-out"] as const;
+
+export function isUnjudged(status: string): boolean {
+  return (UNJUDGED_STATUSES as readonly string[]).includes(status);
+}
+
+// How long a dispatched scorer workflow has to report back. Past it the attempt is
+// left UNJUDGED and the run continues rather than wedging.
+//
+// THIS MUST EXCEED THE SCORER WORKFLOW'S OWN CEILING, which is the sum of the
+// timeout-minutes along its longest needs chain: build (25) then score (20), so 45.
+// It was 20 against that 45, so a healthy run that took its time was declared dead
+// while it was still working, and the real report it posted afterwards was then
+// discarded as stale. Nothing reported the loss.
+//
+// Raised rather than lowering the workflow's side. Lowering the workflow kills
+// healthy runs on the bigger repos, which converts a slow success into a failure;
+// this timeout exists only to stop a run wedging forever, so a longer wait costs
+// nothing but a slower recovery from a report that really was lost. Fifty is the 45
+// minute ceiling plus five for the queueing delay before a dispatched job starts.
+//
+// test/workflow-pins.test.ts derives both sides and fails if they drift apart.
+export const SCORE_TIMEOUT_MS = 50 * 60 * 1000;
 
 // A run alive this long finalizes wherever it is. The nightly cadence is the
 // reason: a run still crawling at hour seven would still hold the namespace's one

@@ -1,0 +1,22 @@
+-- An environment failure leaves an attempt UNJUDGED rather than reverted.
+--
+-- The scorer can fail in ways that are not the attempt's fault: the holdout
+-- container failing to start, the hidden suite not arriving from R2, a runner
+-- evicted, a report that never comes. Every one of those used to land as a revert,
+-- moving reverts and consecutive_reverts and marking the proposing skill bad, so
+-- five broken machines in a row restored the namespace to its best commit and
+-- blamed code that was never measured. The loop's own memory reads those rows
+-- later, which is what made a wrong verdict durable.
+--
+-- Unjudged attempts carry status 'unjudged' in improve_attempts (the status column
+-- is free text, so no change is needed there) and are counted here, separately,
+-- with their own ceiling. Counted rather than ignored because an attempt that
+-- produced no measurement must still not be retried forever: the ceiling is
+-- MAX_CONSECUTIVE_UNJUDGED in src/improve-schema.ts, and reaching it stops the run
+-- WITHOUT restoring to improve:best. There is nothing to restore away from when
+-- nothing was measured.
+--
+-- Reset to 0 by any attempt that reaches a real verdict, exactly like
+-- consecutive_reverts, so an occasional broken runner between good attempts does
+-- not accumulate toward the ceiling.
+ALTER TABLE improve_runs ADD COLUMN consecutive_unjudged INTEGER NOT NULL DEFAULT 0;

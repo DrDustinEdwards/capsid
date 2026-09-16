@@ -491,6 +491,21 @@ function main(argv) {
     }
     process.exit(passed ? 0 : 1);
   }
+  // AN EMPTY STREAM IS NOT A RESULT. Exits 0 when the container printed its end
+  // marker and 1 when it did not, so the workflow can tell "every hidden test
+  // failed" from "no hidden test ever ran". holdoutPassCount returns 0 for both,
+  // which is correct for a SCORE and useless as a diagnosis: a container that fails
+  // to start reports a clean 0 of N, indistinguishable from an attempt that broke
+  // the whole suite, and the loop then reverts a change it never measured.
+  if (argv[0] === "--holdout-terminated") {
+    let terminated = false;
+    try {
+      terminated = parseHoldoutStream(readFileSync(argv[1], "utf8"), argv[2] ?? "").terminated;
+    } catch {
+      terminated = false;
+    }
+    process.exit(terminated ? 0 : 1);
+  }
   if (argv[0] === "--holdout-stream") {
     let count = 0;
     try {
@@ -671,6 +686,14 @@ function main(argv) {
       bundle_size_bytes: metric(m.bundle_size_bytes),
     },
     holdout: { total: numOrNull(holdoutTotal) ?? 0, passed: numOrNull(holdoutPassed) ?? 0 },
+    // WHETHER THE MACHINE WORKED. Set by the count step when the holdout container
+    // did not finish or the suite never synced. The Worker leaves an attempt
+    // carrying ok: false UNJUDGED rather than reverting it, because none of the
+    // numbers above describe the attempt in that case.
+    environment:
+      process.env.ENV_FAILURE === "1"
+        ? { ok: false, reason: String(process.env.ENV_FAILURE_REASON || "").slice(0, 512) || null }
+        : { ok: true, reason: null },
     ci_minutes: Number(process.env.CI_MINUTES ?? "0"),
   };
   process.stdout.write(JSON.stringify(body));
