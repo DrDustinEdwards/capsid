@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
-import { sourceFiles } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { fakeEnv, fakeKv } from "./fakes.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
 import { securityHeadersFor } from "../src/headers.ts";
@@ -30,19 +34,15 @@ const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 // tool is registered from another module, and the authoritative number in
 // counts.ts would be quietly wrong in the direction that matters: too low.
 
-test("tools count matches the registrations across all of src/", () => {
-  const perFile = sourceFiles()
-    .map((f) => ({ name: f.name, n: (f.text.match(/server\.registerTool\(/g) ?? []).length }))
-    .filter((f) => f.n > 0);
-  const registered = perFile.reduce((sum, f) => sum + f.n, 0);
-  // Vacuity guard: a walk that found no registrations at all would otherwise
-  // compare 0 against 0 the day counts.ts is also emptied.
-  assert.ok(registered > 0, "no registerTool calls found anywhere under src/; the scan is broken");
-  assert.equal(
-    registered,
-    CAPSID.tools,
-    `src/ registers ${registered} tools (${perFile.map((f) => `${f.name}: ${f.n}`).join(", ")}) but counts.ts says ${CAPSID.tools}`
-  );
+test("tools count matches the tools the server serves", async () => {
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "counts", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  assert.ok(tools.length > 0, "the server serves no tools; the listing is broken");
+  assert.equal(tools.length, CAPSID.tools, `the server serves ${tools.length} tools and counts.ts says ${CAPSID.tools}`);
 });
 
 test("live gate count matches the distinct gates in verify-live.mjs", () => {
@@ -89,6 +89,7 @@ function consentDialogHeaders(): string[] {
   return headers;
 }
 
+// scanner-rule: quality audit 5.2, header counts derived from what is emitted. The consent dialog is in src/routes.ts, which node --test cannot load
 test("header counts match what the header layer and the consent dialog actually emit", () => {
   const html = securityHeadersFor("html");
   const fromLayer = Object.keys(html).filter(isEnforcedSecurityHeader);

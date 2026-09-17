@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   CSP_REPORT_LIMIT,
@@ -37,7 +35,6 @@ import { fakeKv } from "./fakes.ts";
 // this reason. So the limiter and the response are tested directly, as modules the
 // suite can import, and the WIRING between them is asserted against the source.
 
-const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
 const NOW = new Date("2026-08-17T12:00:00Z");
 const IP = "203.0.113.7";
@@ -188,21 +185,9 @@ test("a rate-limited caller gets a 429 with a usable Retry-After, not a 204", as
 
 // ---- the wiring, which the source is the only witness to -------------------
 
-test("the handler checks the limit BEFORE it reads the body", async () => {
-  // Ordering is load-bearing: a limited caller must not be able to make the Worker read
-  // and parse a 16KB body first, and must not reach the R2 write at all.
-  const routes = read("../src/routes.ts");
-  const handler = routes.slice(routes.indexOf("async function handleCspReport"), routes.indexOf("export const defaultHandler"));
-  const limitAt = handler.indexOf("checkRate");
-  const bodyAt = handler.indexOf("await request.text()");
-  const putAt = handler.indexOf("env.MEDIA.put");
-  assert.ok(limitAt !== -1, "handleCspReport does not rate limit at all");
-  assert.ok(bodyAt !== -1 && putAt !== -1, "the handler no longer reads a body or writes to R2; this scan is stale");
-  assert.ok(limitAt < bodyAt, "the body is read before the rate limit is checked");
-  assert.ok(limitAt < putAt, "the report is stored before the rate limit is checked");
-  // And it RETURNS on a refusal rather than merely logging one.
-  assert.match(handler, /if \(!rate\.allowed\) \{[\s\S]{0,200}?return rateLimitedResponse\(rate\);/);
-});
+// That the handler checks the limit before it reads the body or writes to R2 is proven
+// against the real Worker in test-integration/csp-report.test.ts.
+
 
 test("the csp thresholds are the measured ones, and clear of real volume", async () => {
   // 47 reports exist in R2 across the endpoint's whole life (2026-08-12 to

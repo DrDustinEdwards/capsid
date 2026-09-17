@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import { MAX_REPORT_BYTES } from "../src/improve-scorer";
 
 // THE THREE HMAC SINKS, END TO END, AGAINST A REAL D1 AND A REAL KV.
 //
@@ -234,5 +235,56 @@ describe("the two credential endpoints", () => {
     const wrongHeaders = await post("/backup/credential", await backupKey(), { jti: crypto.randomUUID() });
     expect(wrongHeaders.status).toBe(400);
     expect(await wrongHeaders.text()).toMatch(/timestamp header/);
+  });
+});
+
+describe("the refusal each signed endpoint returns", () => {
+  // Replaces a unit test that checked these strings were present in src/routes.ts
+  // (job_3e1596235513). The three endpoints refuse an oversized body and a body naming
+  // the wrong namespace in their own words, and a caller reads the words.
+  const oversized = "x".repeat(MAX_REPORT_BYTES + 1);
+
+  function streamed(path: string, text: string, headers: Record<string, string>) {
+    // No Content-Length, so the size is only discovered by reading.
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text));
+        controller.close();
+      },
+    });
+    return SELF.fetch(`https://capsid.test${path}`, { method: "POST", headers, body, duplex: "half" } as RequestInit);
+  }
+
+  it("/improve/score names the declared size when Content-Length is over the limit", async () => {
+    const response = await post("/improve/score", await scoreKey(NAMESPACE), { pad: oversized });
+    expect(response.status).toBe(413);
+    expect(await response.text()).toMatch(new RegExp(`^report too large: [0-9]+ bytes exceeds ${MAX_REPORT_BYTES}$`));
+  });
+
+  it("/improve/score refuses an oversized streamed body without a declared size", async () => {
+    const response = await streamed("/improve/score", oversized, { "Content-Type": "application/json", "X-Improve-Namespace": NAMESPACE });
+    expect(response.status).toBe(413);
+    expect(await response.text()).toBe(`report too large: exceeds ${MAX_REPORT_BYTES} bytes`);
+  });
+
+  it("the two credential mints refuse an oversized body as a request, not a report", async () => {
+    const holdout = await streamed("/improve/holdout-credential", oversized, { "X-Improve-Namespace": NAMESPACE });
+    expect(holdout.status).toBe(413);
+    expect(await holdout.text()).toBe(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
+    const backup = await streamed("/backup/credential", oversized, {});
+    expect(backup.status).toBe(413);
+    expect(await backup.text()).toBe(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
+  });
+
+  it("/improve/score refuses a report body naming another namespace than its key", async () => {
+    const response = await post("/improve/score", await scoreKey(NAMESPACE), report(crypto.randomUUID(), { namespace: "foxing" }));
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe(`the report body names namespace 'foxing' but it was signed with the key for '${NAMESPACE}'`);
+  });
+
+  it("/improve/holdout-credential refuses a request body naming another namespace than its key", async () => {
+    const response = await post("/improve/holdout-credential", await scoreKey(NAMESPACE), { namespace: "foxing", jti: crypto.randomUUID() });
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe(`the request body names namespace 'foxing' but it was signed with the key for '${NAMESPACE}'`);
   });
 });

@@ -35,6 +35,7 @@ test("the scheduled live gate asserts the live sha equals master head", () => {
   assert.match(expectLine, /github\.sha/);
 });
 
+// scanner-rule: conventions-verification, enumerate every site. src/index.ts cannot load under node --test
 test("both improve crons rethrow after logging, like the backup cron", () => {
   const idx = read("src/index.ts");
   // BACKUP_CRON_THREW already rethrew; it is the known-true case that proves this

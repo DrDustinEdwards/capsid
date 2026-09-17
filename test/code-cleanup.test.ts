@@ -14,6 +14,7 @@ import { collectSourceFiles, sourceFiles } from "./source-files.ts";
 //     cannot hide from the guards that read through it. This proves the recursion
 //     against a fixture tree, so it does not depend on src/ actually being nested.
 
+// scanner-rule: quality audit 1.1 and 6.6, one definition imported everywhere
 test("the anchor KV key literal lives only in the improve-schema constant", () => {
   const offenders = sourceFiles()
     .filter((f) => f.name !== "improve-schema.ts")
@@ -25,6 +26,7 @@ test("the anchor KV key literal lives only in the improve-schema constant", () =
   assert.ok(sourceFiles().some((f) => f.name === "improve-schema.ts" && /anchorKey = /.test(f.text)));
 });
 
+// scanner-rule: quality audit 1.1 and 6.6, one definition imported everywhere
 test("the write-integrity core lives in store-guards.ts, and the write path imports it", () => {
   const guards = sourceFiles().find((f) => f.name === "store-guards.ts");
   assert.ok(guards, "src/store-guards.ts is missing; the write-integrity core was not extracted");

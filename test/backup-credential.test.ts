@@ -138,15 +138,11 @@ test("backup HMAC and parse refusal strings are pinned byte-for-byte", async () 
   assert.equal(short.ok === false && short.refusal, "the credential request body must carry a jti of 8 to 128 characters");
 });
 
-test("the three signed endpoints keep their distinct refusal strings", () => {
-  const routes = sourceFile("routes.ts");
-  assert.ok(routes.includes("`request too large: exceeds ${MAX_REPORT_BYTES} bytes`"));
-  assert.ok(routes.includes("`report too large: exceeds ${MAX_REPORT_BYTES} bytes`"));
-  assert.ok(routes.includes("`report too large: ${declared} bytes exceeds ${MAX_REPORT_BYTES}`"));
-  assert.ok(routes.includes("the request body names namespace"));
-  assert.ok(routes.includes("the report body names namespace"));
-});
+// The refusal each signed endpoint returns is checked against the real Worker in
+// test-integration/signed-endpoints.test.ts.
 
+// scanner-rule: CLAUDE.md rule 10 applied to the backup parent key, the same way it
+// limits HOLDOUT. Only the scorer and the env declaration may name it.
 test("ONLY src/improve-scorer.ts names the backup parent key id", () => {
   const offenders = sourceFiles()
     .filter((f) => f.name !== "improve-scorer.ts" && f.name !== "env.ts")
@@ -162,10 +158,10 @@ test("ONLY src/improve-scorer.ts names the backup parent key id", () => {
   assert.match(env, /"R2_BACKUP_PARENT_ACCESS_KEY_ID">/, "AttemptEnv no longer omits the backup parent key");
 });
 
-test("the endpoint path is wired into routes and the derive script offers the flag", () => {
+test("the endpoint path is fixed and the derive script offers the flag", () => {
   assert.equal(BACKUP_CREDENTIAL_PATH, "/backup/credential");
-  const routes = sourceFile("routes.ts");
-  assert.match(routes, /BACKUP_CREDENTIAL_PATH/, "routes.ts never serves the backup credential endpoint");
+  // That routes.ts serves the path is asserted by test/route-gates.test.ts, which requires
+  // every listed route to be dispatched.
   const script = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "improve-derive-key.mjs"), "utf8");
   assert.match(script, /--backup-credential/, "the derive script cannot produce the backup credential key");
   assert.match(script, /capsid-backup-credential:v1/, "the script and the Worker disagree on the derivation context");

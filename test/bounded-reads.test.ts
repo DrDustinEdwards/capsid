@@ -260,6 +260,7 @@ test("a small resource listing carries no cursor", async () => {
   assert.equal(listed.nextCursor, undefined, "a complete listing advertised another page");
 });
 
+// scanner-rule: bounded reads (audit 9.2), the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
 test("the resources/list override cannot silently drop a statically registered resource", async () => {
   // The handler below replaces the one McpServer installs, which also serves
   // resources registered by URI rather than by template. There are none today and
@@ -322,6 +323,7 @@ test("brief returns all four of its parallel sections", async () => {
   assert.equal(out.core_links.outgoing.length, 1, "the outgoing-edge read came back empty");
 });
 
+// scanner-rule: quality audit 2.4, advertised limits are interpolated from the constant
 test("the advertised caps are INTERPOLATED, not restated as digits", () => {
   // 2.4. MAX_SCAN_CAP lived as a local const inside searchCode while the tool
   // description said "max 200" in prose, so the number existed twice and only one
