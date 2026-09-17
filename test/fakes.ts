@@ -674,8 +674,12 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
 // contentType added for the improve arc: the Anthropic SDK's streaming helper needs a
 // text/event-stream response, and `text` alone gets no content type, which surfaces as
 // "request ended without sending any chunks" a long way from the cause.
-export type RouteSpec = { status?: number; body?: unknown; text?: string; contentType?: string };
-export type Route = RouteSpec | ((requestBody: unknown) => RouteSpec);
+// headers added for pagination: GitHub says "there is another page" only in a Link
+// header, so a harness that could not send one could not model a paged list.
+export type RouteSpec = { status?: number; body?: unknown; text?: string; contentType?: string; headers?: Record<string, string> };
+// A function route also receives the query, because routing ignores it and a paged
+// list answers differently per `page=`.
+export type Route = RouteSpec | ((requestBody: unknown, search: URLSearchParams) => RouteSpec);
 
 export interface FetchCall {
   method: string;
@@ -704,17 +708,18 @@ export async function withFetch(
     calls.push({ method, path: parsed.pathname, body, search: parsed.search });
     const route = routes[`${method} ${parsed.pathname}`];
     if (!route) return new Response(`no route for ${method} ${parsed.pathname}`, { status: 500 });
-    const spec = typeof route === "function" ? route(body) : route;
+    const spec = typeof route === "function" ? route(body, parsed.searchParams) : route;
     const payload = spec.text !== undefined ? spec.text : spec.body === undefined ? "" : JSON.stringify(spec.body);
     // A JSON route DECLARES ITS CONTENT TYPE. github/client.ts calls resp.json()
     // unconditionally and never noticed, but the Anthropic SDK branches on the header and
     // hands back an unparsed body without it, which surfaces as `response.content is
     // undefined` a long way from the cause.
-    const headers = spec.contentType
+    const typeHeader = spec.contentType
       ? { "Content-Type": spec.contentType }
       : spec.text !== undefined || spec.body === undefined
         ? undefined
         : { "Content-Type": "application/json" };
+    const headers = spec.headers ? { ...typeHeader, ...spec.headers } : typeHeader;
     // A 204/205/304 MUST have a null body or the Response constructor throws, and
 // GitHub really does answer 204 to a ref delete and a workflow dispatch. A harness
     // that could not express the status its own subject returns pushed every such
