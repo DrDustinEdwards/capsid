@@ -25,7 +25,7 @@ test("the integration suite has files, and they are where the config looks", () 
   // And the unit glob does NOT reach them, or node --test would try to run a file
   // importing `cloudflare:test` and fail for a reason that has nothing to do with
   // the code under test.
-  assert.equal(PKG.scripts.test, 'node --import ./test/resolve-ts.mjs --test "test/*.test.ts"');
+  assert.equal(PKG.scripts.test, 'node scripts/test-budget.mjs "test/*.test.ts"');
 });
 
 test("PLANT: CI runs both suites and typechecks all three configs", () => {

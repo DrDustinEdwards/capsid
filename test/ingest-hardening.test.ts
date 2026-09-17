@@ -350,7 +350,9 @@ test("THE INNOCENT DIRECTION: both copies innocent, and the dispatch goes out", 
       "GET /repos/owner/repo/actions/runs": { body: { total_count: 0, workflow_runs: [] } },
     },
     async (calls) => {
-      await ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "nightly.yml", ref: "topic" });
+      // The fake never lists the started run, so without the short poll this test
+      // waited out the full 30-second timeout.
+      await ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "nightly.yml", ref: "topic" }, undefined, { timeoutMs: 1, intervalMs: 1 });
       assert.equal(
         calls.filter((c) => c.method === "POST" && c.path.includes("/dispatches")).length,
         1,
