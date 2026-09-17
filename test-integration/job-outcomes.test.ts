@@ -228,9 +228,25 @@ describe("job outcomes", () => {
   });
 
   it("a job with no bar is claimed without the record ever being read", async () => {
+    // The record is computed from every outcome row, so reading it on a claim that
+    // asks no question would put a table scan in front of the queue's hottest path.
     await post({ title: "no bar" });
-    const won = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
+    const base = jobsEnv() as unknown as { DB: D1Database };
+    const read: string[] = [];
+    const counting = {
+      ...base,
+      DB: {
+        prepare(sql: string) {
+          read.push(sql);
+          return base.DB.prepare(sql);
+        },
+        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
+      },
+    } as unknown as Parameters<typeof claimJob>[0];
+    const won = await claimJob(counting, DRIVER, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
+    expect(read.length, "the claim issued no statements, so this proves nothing").toBeGreaterThan(0);
+    expect(read.filter((sql) => /FROM job_outcomes/.test(sql))).toEqual([]);
   });
 
   it("improve_status carries a record per credential, and it is counts and rates only", async () => {

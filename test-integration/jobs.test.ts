@@ -149,6 +149,21 @@ describe("the refusals", () => {
     expect((await row(b.job!.id))?.status).toBe("queued");
   });
 
+  it("an agent, an OAuth session and an operator key can each hold a lease", async () => {
+    // claimed_by has the shape of audit_log.actor, so one query joins a job to what its
+    // driver did. Each of the three caller kinds claims its own job.
+    for (const [title, actor] of [
+      ["held by an agent", "agent:capsid-driver"],
+      ["held by a session", "github:someone"],
+      ["held by a key", "opkey:0123456789ab"],
+    ] as const) {
+      const posted = await post({ title });
+      const claimed = await claimJob(jobsEnv(), legacyAgent("write", actor), NOW, { id: posted.job!.id });
+      expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
+      expect(claimed.job!.claimed_by).toBe(actor);
+    }
+  });
+
   it("two drivers racing one job resolve to exactly one winner", async () => {
     const posted = await post({ title: "contested" });
     const id = posted.job!.id;
