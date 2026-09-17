@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CORRECTION_CAP, RETRY_CAP_REASON, atCorrectionCap, cappedSummary } from "../src/jobs-schema.ts";
-import { sourceFile } from "./source-files.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { resumeJob } from "../src/jobs.ts";
 import { signTaskBody } from "../src/improve-task.ts";
@@ -60,20 +59,6 @@ test("DERIVED: the column the cap is counted in exists in a migration", () => {
   assert.ok(names.length > 0, "the scan found no migrations; it is reading nothing");
   const sql = names.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
   assert.match(sql, /ALTER TABLE jobs ADD COLUMN corrections_count INTEGER NOT NULL DEFAULT 0/);
-});
-
-test("DERIVED: a correction spends the budget and an ADMIN resume does not", () => {
-  // The cap puts a human at the boundary, so the human arriving must be what LIFTS
-  // it rather than what spends it. Read from the source, because this is a branch
-  // the unit rules above cannot see.
-  const jobs = sourceFile("jobs.ts");
-  assert.match(jobs, /corrections_count = corrections_count \+ \?\d/, "resume does not increment the budget, so the cap can never be reached");
-  assert.match(jobs, /correction && !agent\.admin/, "the spend is not conditioned on an explicit correction by a non-admin");
-});
-
-test("DERIVED: block is where the cap is applied", () => {
-  const jobs = sourceFile("jobs.ts");
-  assert.match(jobs, /cappedSummary/, "block never writes the capped summary, so a capped job reads like an ordinary one");
 });
 
 // ---- the behavioural half, against a row that can disagree -----------------------

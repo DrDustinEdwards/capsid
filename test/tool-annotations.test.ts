@@ -118,16 +118,6 @@ test("PLANT: readOnlyHint is exactly the negation of the write gate", () => {
   assert.deepEqual(wrong, [], wrong.join("; "));
 });
 
-test("PLANT: every write-gated tool declares readOnlyHint false", () => {
-  // The same property said the way the audit asked for it, so a reader looking for
-  // that sentence finds an assertion rather than an inference.
-  const lying = toolBlocks()
-    .filter((b) => isWriteGated(b.name))
-    .filter((b) => hintsFor(b.name).readOnlyHint !== false)
-    .map((b) => b.name);
-  assert.deepEqual(lying, [], `these write-gated tools claim to be read-only: ${lying.join(", ")}`);
-});
-
 test("PLANT: every mutating tool declares destructiveHint true", () => {
   const mutating = toolBlocks().filter((b) => isWriteGated(b.name) && matches(b.body, DESTRUCTIVE));
   assert.ok(mutating.length >= 10, `the destructive scan found only ${mutating.length} mutating tools; it is broken`);
