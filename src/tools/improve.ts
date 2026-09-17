@@ -50,42 +50,19 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path }) => {
       try {
-        // SIGN A POLICY DOCUMENT. ADMIN ONLY, and checked here rather than inside the
-        // signer for the same reason `agents` checks it at the tool: the registrar can
-        // say whether a caller may write, and only the handler can say whether a caller
-        // may mint authority. A minted agent that could sign a policy could sign one
-        // that widened itself.
+        // SIGN A POLICY DOCUMENT. Admin only, like every action but run and claim:
+        // TOOL_ACTION_GRANTS in src/scope.ts states it and the registrar refuses a
+        // minted agent before this handler runs. A minted agent that could sign a
+        // policy could sign one that widened itself.
         if (action === "sign_policy") {
-          if (!ctx.agent.admin) {
-            return fail(
-              `unauthorized: 'sign_policy' on improve_run is admin only, and ${ctx.actor} is a minted agent. ` +
-                `A signed policy is what decides whether this Worker may merge without a human, so an agent that could sign one could widen itself. ` +
-                `Call this as the OAuth admin session, or with a write-grant operator key.`
-            );
-          }
           if (!namespace || !path) return fail("sign_policy needs the namespace and the path of the policy document.");
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
           return signed.ok ? ok(signed) : fail(signed.error);
         }
         if (action && action !== "run") {
-          // THE CONTROL SURFACE IS ADMIN, and it was a plain write that every driver
-          // holds (audit 2026-09-13, finding 5). `mode` switches the whole loop off,
-          // `pause` stops a namespace, `budget` moves the spend ceiling and
-          // `mint_operator_key` issues a credential: none of those is work a driver
-          // does, and all four were reachable by any agent with the write grant
-          // because TOOL_GRANTS.improve_run is "write" and nothing asked again.
-          //
-          // `claim` is deliberately NOT in this set. Taking and releasing the driver
-          // lease is exactly what a driver does, every run, and it is the key that
-          // stops two of them working one namespace.
-          if (action !== "claim" && !ctx.agent.admin) {
-            return fail(
-              `unauthorized: improve_run action '${action}' is admin only, and ${ctx.actor} is a minted agent. ` +
-                `It controls the loop rather than doing its work: mode switches the loop off, pause stops a namespace, budget moves the spend ceiling ` +
-                `and mint_operator_key issues a credential. A driver takes and releases its lease with action 'claim' and runs with action 'run'. ` +
-                `Call this as the OAuth admin session, or with a write-grant operator key.`
-            );
-          }
+          // THE CONTROL SURFACE IS ADMIN (audit 2026-09-13, finding 5), and so is every
+          // action here but claim. TOOL_ACTION_GRANTS in src/scope.ts is where that is
+          // stated and enforced; this handler no longer repeats it.
           return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release }));
         }
         if (namespace && !onRoster(namespace)) {

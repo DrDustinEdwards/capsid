@@ -32,15 +32,12 @@ import { sourceFile } from "./source-files.ts";
 test("the premise MOVED: register_namespace is admin, and still does not mint", () => {
   assert.equal(TOOL_GRANTS.register_namespace, "admin");
   assert.equal(TOOL_GRANTS.update_namespace, "admin");
-  // `agents` is still gated in its handler rather than in the table. Left that way
-  // deliberately in the commit that moved these two: changing it belongs in a commit
-  // about the agents tool, not in one about the namespace mapping.
-  assert.equal(TOOL_GRANTS.agents, "write");
-  // The admin gate on minting lives in the handler, not in TOOL_GRANTS. Named
-  // exactly via sourceFile(): a find() over the walk matches top-level
-  // src/agents.ts first, which does not carry the gate, and the assertion then
-  // reports on a file it was never about. That is how this test first passed.
-  assert.match(sourceFile("tools/agents.ts"), /agent[.]admin/, "the admin gate on minting is gone");
+  // `agents` was gated in its handler, with "write" here, until 2026-09-16. The admin
+  // gate on minting now lives in the table like these two, and the handler no longer
+  // repeats it. Named exactly via sourceFile(): a find() over the walk matches
+  // top-level src/agents.ts first, which is a different file.
+  assert.equal(TOOL_GRANTS.agents, "admin", "the admin gate on minting is gone from the table");
+  assert.doesNotMatch(sourceFile("tools/agents.ts"), /agent[.]admin/, "the agents handler decides admin for itself again");
 });
 
 test("register_namespace's handler does not mint", () => {

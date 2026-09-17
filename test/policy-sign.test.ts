@@ -4,6 +4,8 @@ import { signPolicyDocument } from "../src/policy-sign.ts";
 import { splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
 import { loadMergePolicy, AUTO_MERGE_POLICY_PATH, POLICY_CHECKS } from "../src/auto-merge.ts";
 import { sourceFile } from "./source-files.ts";
+import { adminAgent } from "../src/agents.ts";
+import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 
 // THE ONE THING THAT MINTS POLICY AUTHORITY. Before this, verifySignedBody had no
@@ -168,13 +170,21 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 
 // ---- admin only -----------------------------------------------------------------
 
-test("sign_policy is admin only at the tool layer, and says why", () => {
-  const tool = sourceFile("tools/improve.ts");
-  const guard = /if \(action === "sign_policy"\)[\s\S]*?\n        \}/.exec(tool);
-  assert.ok(guard, "the sign_policy branch is gone from src/tools/improve.ts");
-  assert.match(guard[0], /ctx\.agent\.admin/, "signing a policy must be gated on admin, not on the write grant");
-  assert.match(guard[0], /widen itself/i, "the refusal should say why, not only that it refused");
+test("sign_policy is admin only in the scope table, and the refusal says why", () => {
+  // Stated in TOOL_ACTION_GRANTS and enforced by the registrar since 2026-09-16; the
+  // handler in src/tools/improve.ts used to check ctx.agent.admin itself.
+  assert.equal(requiredForAction("improve_run", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
+  const driver = { ...adminAgent("DrDustinEdwards"), actor: "agent:capsid-driver", admin: false };
+  const refusal = checkScope(driver, { tool: "improve_run", action: "sign_policy", namespace: "capsid", ...needFor(requiredForAction("improve_run", "sign_policy")) });
+  assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
+  assert.match(refusal, /admin only/);
+  assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
+  assert.doesNotMatch(tool(), /!ctx\.agent\.admin\b/, "the handler decides admin for itself again; the table is the one statement (CLAUDE.md rule 6)");
 });
+
+function tool(): string {
+  return sourceFile("tools/improve.ts");
+}
 
 test("the signer takes no body argument, so it cannot be used to sign arbitrary bytes", () => {
   const source = sourceFile("policy-sign.ts");

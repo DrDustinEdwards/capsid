@@ -9,7 +9,7 @@ import { fail, ok, type ToolCtx } from "./docs";
 const AGENT_ACTIONS = ["mint", "list", "revoke", "update_scopes"] as const;
 
 export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
-  const { db, agent, actor } = ctx;
+  const { db, actor } = ctx;
 
   // THE CREDENTIAL CONTROL PLANE'S ONE TOOL, a ruled exception to hard rule 1 taking
   // the surface from 31 to 32 (capsid/decisions.md, 2026-09-11). The FIFTH, after
@@ -56,13 +56,8 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
     },
     async (args) => {
       try {
-        if (!agent.admin) {
-          return fail(
-            `unauthorized: '${args.action}' on agents is admin only, and ${actor} is a minted agent. ` +
-              `An agent that can mint or re-scope another can widen itself, which would make every scope below it decoration. ` +
-              `Call this as the OAuth admin session, or with a write-grant operator key.`
-          );
-        }
+        // Admin only, every action. TOOL_GRANTS.agents in src/scope.ts states it and the
+        // registrar refuses a minted agent before this handler runs.
         const scopeArgs = { namespaces: args.namespaces, repos: args.repos, tools: args.tools, grants: args.grants, flags: args.flags };
         switch (args.action) {
           case "mint": {
