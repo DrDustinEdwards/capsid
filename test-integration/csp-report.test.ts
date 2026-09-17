@@ -1,4 +1,6 @@
-import { SELF } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
+import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
+import { REPORT_PREFIX } from "../src/headers";
 import { describe, expect, it } from "vitest";
 
 // /csp-report's BODY CAP, measured against the real runtime (residual 11).
@@ -74,5 +76,38 @@ describe("/csp-report bounds the body in bytes, before buffering it", () => {
     expect(new TextEncoder().encode(body).byteLength).toBeLessThan(CAP);
     const resp = await postReport(body);
     expect(resp.status).toBe(204);
+  });
+});
+
+describe("/csp-report is rate limited before it reads or stores anything", () => {
+  // Replaces a unit test that compared the positions of checkRate, request.text() and
+  // MEDIA.put in the source of src/routes.ts (job_3e1596235513).
+  it("a limited caller gets 429 before the content type is checked, and nothing reaches R2", async () => {
+    const ip = "203.0.113.77";
+    let verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
+    for (let i = 0; i < CSP_REPORT_LIMIT.perHour + 1 && verdict.allowed; i++) {
+      verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
+    }
+    expect(verdict.allowed, "the limiter never refused, so this test proves nothing").toBe(false);
+    const stored = async () => (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.length;
+    const before = await stored();
+
+    // A wrong content type is a 415 for an unlimited caller. The limited caller is
+    // refused first.
+    const wrongType = await SELF.fetch(`${ORIGIN}/csp-report`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", "CF-Connecting-IP": ip },
+      body: "not a report",
+    });
+    expect(wrongType.status).toBe(429);
+
+    const valid = await SELF.fetch(`${ORIGIN}/csp-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": ip },
+      body: report("a limited caller"),
+    });
+    expect(valid.status).toBe(429);
+    expect(await valid.text()).toMatch(/^too many reports:/);
+    expect(await stored()).toBe(before);
   });
 });
