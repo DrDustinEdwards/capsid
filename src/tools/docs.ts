@@ -260,7 +260,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("brief"),
       description:
-        `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only assembly, no reasoning. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. Doing the start-ritual reads by hand stays a valid fallback.`,
+        `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only assembly, no reasoning. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions, repo-structure and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes. Doing the start-ritual reads by hand stays a valid fallback.`,
       inputSchema: { namespace: nsName },
     },
     async ({ namespace }) => {
@@ -322,40 +322,70 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // the reads rather than joined in, so each documents SELECT stays a plain
       // projection. A poisoned task or core.md is instructions at turn 0; last_actor
       // is how a session tells the operator's own writing from another client's.
+      //
+      // ONE QUERY FOR ALL OF THEM (AUDIT-2026-09-16.md). It was one lastActor call per
+      // document, 21 of the 28 queries on the capsid brief of 2026-09-17. The pairs
+      // travel as ONE JSON parameter because D1 caps a statement at 100 bound
+      // parameters and the open-task list has no cap of its own. The correlated
+      // subquery is the lastActor query per pair, so it uses audit_log_doc as that did.
+      type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null };
-      const withActor = async <T extends { namespace: string; path: string }>(row: T | null): Promise<(Actored<T>) | null> =>
-        row ? { ...row, last_actor: await lastActor(row.namespace, row.path) } : null;
-      const withActors = async <T extends { namespace: string; path: string }>(rows: T[]): Promise<Actored<T>[]> =>
-        Promise.all(rows.map((r) => withActor(r) as Promise<Actored<T>>));
-      const [conventionsA, repoStructureA, coreA, openTasksA, recentEpisodicsA] = await Promise.all([
-        withActor(conventions),
-        withActor(repoStructure),
-        withActor(core),
-        withActors(openTasks),
-        withActors(recentEpisodics),
-      ]);
+      const present = [conventions, repoStructure, core, ...openTasks, ...recentEpisodics].filter((r): r is NonNullable<typeof r> => r !== null);
+      const actors = new Map<string, string | null>();
+      if (present.length) {
+        // A plain SELECT rather than a CTE, and no comment inside prepare(), so
+        // test-integration/query-plans.test.ts, which walks SELECT statements written
+        // directly as prepare()'s argument, checks this plan too.
+        const { results } = await db
+          .prepare(
+            `SELECT json_extract(w.value, '$[0]') AS ns, json_extract(w.value, '$[1]') AS path,
+               (SELECT actor FROM audit_log
+                WHERE namespace = json_extract(w.value, '$[0]') AND path = json_extract(w.value, '$[1]')
+                ORDER BY id DESC LIMIT 1) AS actor
+             FROM json_each(?1) AS w`
+          )
+          .bind(JSON.stringify(present.map((r) => [r.namespace, r.path])))
+          .all<{ ns: string; path: string; actor: string | null }>();
+        for (const row of results) actors.set(JSON.stringify([row.ns, row.path]), row.actor ?? null);
+      }
+      const withActor = <T extends Keyed>(row: T | null): Actored<T> | null =>
+        row ? { ...row, last_actor: actors.get(JSON.stringify([row.namespace, row.path])) ?? null } : null;
+      const withActors = <T extends Keyed>(rows: T[]): Actored<T>[] => rows.map((r) => withActor(r) as Actored<T>);
+      const conventionsA = withActor(conventions);
+      const repoStructureA = withActor(repoStructure);
+      const coreA = withActor(core);
+      const openTasksA = withActors(openTasks);
+      const recentEpisodicsA = withActors(recentEpisodics);
 
       // Stay under budget by trimming the largest, most re-readable sections to
       // metadata first (episodics, then task bodies), and report what was cut.
+      //
+      // ONLY A CUT THAT HAPPENED IS REPORTED, and nothing is cut when the three
+      // documents that are never trimmed exceed the budget by themselves: trimming
+      // the rest cannot bring the packet under it, so that state is reported as
+      // floor_exceeds_budget with the sizes instead. Until 2026-09-17 every capsid
+      // brief said it had trimmed "0 episodic bodies".
       type Row = { namespace: string; path: string; title: string | null; body: string | null; updated_at: string; last_actor?: string | null };
       const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
         rows.map((r) => ({ namespace: r.namespace, path: r.path, title: r.title, updated_at: r.updated_at, last_actor: r.last_actor ?? null, body: `(trimmed for size: read ${r.namespace}/${r.path})` }));
+      const sizes = {
+        conventions: conventionsA?.body?.length ?? 0,
+        repo_structure: repoStructureA?.body?.length ?? 0,
+        core: coreA?.body?.length ?? 0,
+      };
+      const floorChars = sizes.conventions + sizes.repo_structure + sizes.core;
+      const floorOver = floorChars > BRIEF_BUDGET;
       const trimmed: string[] = [];
-      let total =
-        (conventionsA?.body?.length ?? 0) +
-        (repoStructureA?.body?.length ?? 0) +
-        (coreA?.body?.length ?? 0) +
-        bodyChars(openTasksA as Row[]) +
-        bodyChars(recentEpisodicsA as Row[]);
+      let total = floorChars + bodyChars(openTasksA as Row[]) + bodyChars(recentEpisodicsA as Row[]);
       let episodicsOut: unknown[] = recentEpisodicsA;
       let tasksOut: unknown[] = openTasksA;
-      if (total > BRIEF_BUDGET) {
+      if (!floorOver && total > BRIEF_BUDGET && bodyChars(recentEpisodicsA as Row[]) > 0) {
         total -= bodyChars(recentEpisodicsA as Row[]);
         episodicsOut = toStub(recentEpisodicsA as Row[]);
         trimmed.push(`${recentEpisodicsA.length} episodic bodies`);
       }
-      if (total > BRIEF_BUDGET) {
+      if (!floorOver && total > BRIEF_BUDGET && bodyChars(openTasksA as Row[]) > 0) {
         total -= bodyChars(openTasksA as Row[]);
         tasksOut = toStub(openTasksA as Row[]);
         trimmed.push(`${openTasksA.length} task bodies`);
@@ -372,6 +402,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         approx_chars: total,
         ...(coreA ? {} : { warning: `no core.md for namespace ${namespace}` }),
         ...(trimmed.length ? { trimmed } : {}),
+        ...(floorOver ? { floor_exceeds_budget: { ...sizes, floor: floorChars, budget: BRIEF_BUDGET } } : {}),
       });
     }
   );

@@ -1,10 +1,11 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
-import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON } from "../src/index";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
+import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
 
-// THE SCHEDULED HANDLER, ALL THREE CRONS, AGAINST REAL BINDINGS.
+// THE SCHEDULED HANDLER, ALL FOUR CRONS, AGAINST REAL BINDINGS.
 //
-// Three expressions share 09:00 UTC, and Cloudflare delivers the invocation once
+// Several expressions fire in the 09:00 UTC hour, and Cloudflare delivers the invocation once
 // per expression, so the handler dispatches on `controller.cron` rather than on the
 // clock. test/improve-cron.test.ts derives the handler's list and the config's list
 // from each other; what it cannot do is RUN either of them. This does, which is how
@@ -24,9 +25,14 @@ async function fire(cron: string) {
   await waitOnExecutionContext(ctx);
 }
 
-describe("the three cron expressions", () => {
-  it("the handler exports exactly the three the config declares", () => {
-    expect([BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON]).toEqual(["0 9 * * *", "0 8,9 * * *", "*/5 * * * *"]);
+describe("the four cron expressions", () => {
+  it("the handler exports exactly the four the config declares", () => {
+    expect([BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON]).toEqual([
+      "0 9 * * *",
+      "0 8,9 * * *",
+      "*/5 * * * *",
+      "30 9 * * *",
+    ]);
   });
 
   it("the backup cron writes real dumps to real R2", async () => {
@@ -66,8 +72,44 @@ describe("the three cron expressions", () => {
     expect(runs?.n).toBe(0);
   });
 
+  // THE SKILLS REFRESH, added 2026-09-17: it was the fourth expression and this file
+  // fired only three, so a refresh that threw against a real binding was invisible.
+  // It fires daily and gates on its weekday inside the handler, so both halves are
+  // driven: the skip, which reads only real KV, and the run, which posts a job into
+  // real D1. The two docs fetches are stubbed; the network is not what is under test.
+  const skillsJobs = () =>
+    env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND posted_by = ?2")
+      .bind(SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR)
+      .first<{ n: number }>();
+
+  it("the skills refresh skips on any other weekday and writes nothing", async () => {
+    const otherDay = (new Date().getUTCDay() + 1) % 7;
+    await env.APP_KV.put(SCHEDULE_KEY, JSON.stringify({ enabled: true, dayUtc: otherDay }));
+    await fire(SKILLS_REFRESH_CRON);
+    expect((await skillsJobs())?.n).toBe(0);
+    expect(await env.APP_KV.get(guideKey("fable-5-1"))).toBeNull();
+  });
+
+  it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')").bind(SKILLS_NAMESPACE).run();
+    await env.APP_KV.put(SCHEDULE_KEY, JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/models/overview.md")) return new Response("Models: claude-fable-5-1 is the newest.");
+      if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response("guide text");
+      return new Response("not stubbed", { status: 500 });
+    });
+    try {
+      await fire(SKILLS_REFRESH_CRON);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+    expect((await skillsJobs())?.n).toBe(1);
+    expect(await env.APP_KV.get(guideKey("fable-5-1"))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it("an unrecognised cron expression does no work at all", async () => {
-    // The dispatch is on the expression, so a fourth cron added to the config and
+    // The dispatch is on the expression, so a cron added to the config and
     // not to the handler must be inert rather than falling into the backup branch.
     const before = (await env.MEDIA.list()).objects.length;
     await fire("0 0 1 1 *");

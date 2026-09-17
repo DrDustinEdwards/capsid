@@ -602,6 +602,15 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const [namespace, path] = params as [string, string];
       return rows.versions.filter((v) => v.namespace === namespace && v.path === path);
     }
+    // brief's grouped provenance: one row per requested (namespace, path) pair, from a
+    // JSON array bound as ?1, with the newest actor or null.
+    if (/FROM json_each\(\?1\)/i.test(flat) && /FROM audit_log/i.test(flat)) {
+      const pairs = JSON.parse(params[0] as string) as Array<[string, string]>;
+      return pairs.map(([ns, path]) => {
+        const matches = rows.audit_log.filter((a) => a.namespace === ns && a.path === path);
+        return { ns, path, actor: matches.length ? matches[matches.length - 1].actor : null };
+      });
+    }
     const single = answerFirst(sql, params);
     return single ? [single] : [];
   };
