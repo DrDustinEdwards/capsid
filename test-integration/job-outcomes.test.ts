@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { reverifyStatements } from "../src/outcome-prs";
+import { outcomeStatement } from "../src/job-outcomes";
 import { legacyAgent } from "../src/agents";
 
 // JOBS AS EVIDENCE, AGAINST A REAL D1 (migrations/0011).
@@ -197,6 +198,38 @@ describe("job outcomes", () => {
     expect(after?.prs_merged).toBeNull();
   });
 
+  it("PLANT: the writer's own statement defers to the first record, and a second batch still commits", async () => {
+    // The test above plants its own SQL. This one sends outcomeStatement twice: without
+    // ON CONFLICT DO NOTHING the second batch would abort on the primary key, taking the
+    // transition that carries it with it.
+    const row = (agent: string, merged: number | null) => ({
+      job_id: "job_000000000abc",
+      agent,
+      namespace: "capsid",
+      prs_opened: null,
+      prs_merged: merged,
+      commits: null,
+      files_changed: null,
+      tests_added: null,
+      ci_green: null,
+      blocked_count: 0,
+      resumed_count: 0,
+      duration_minutes: null,
+      result_kind: "none" as const,
+      verified: UNVERIFIED,
+      recorded_at: NOW.toISOString(),
+    });
+    await env.DB.batch([outcomeStatement(env.DB, row(DRIVER_ACTOR, null))]);
+    await env.DB.batch([
+      outcomeStatement(env.DB, row("agent:impostor", 999)),
+      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('test', 'second-batch', 'capsid', NULL, '{}')"),
+    ]);
+    expect(await outcomeCount("job_000000000abc")).toBe(1);
+    expect((await outcomeRow("job_000000000abc"))?.agent).toBe(DRIVER_ACTOR);
+    const second = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'second-batch'").first<{ n: number }>();
+    expect(second?.n, "the batch carrying the second outcome was aborted").toBe(1);
+  });
+
   it("PLANT: the bar a job sets on a driver's history is enforced at the CLAIM", async () => {
     const posted = await post({ title: "needs a track record", min_record: { prs_merged: 2 } });
     const id = posted.job!.id;
@@ -228,9 +261,25 @@ describe("job outcomes", () => {
   });
 
   it("a job with no bar is claimed without the record ever being read", async () => {
+    // The record is computed from every outcome row, so reading it on a claim that
+    // asks no question would put a table scan in front of the queue's hottest path.
     await post({ title: "no bar" });
-    const won = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
+    const base = jobsEnv() as unknown as { DB: D1Database };
+    const read: string[] = [];
+    const counting = {
+      ...base,
+      DB: {
+        prepare(sql: string) {
+          read.push(sql);
+          return base.DB.prepare(sql);
+        },
+        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
+      },
+    } as unknown as Parameters<typeof claimJob>[0];
+    const won = await claimJob(counting, DRIVER, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
+    expect(read.length, "the claim issued no statements, so this proves nothing").toBeGreaterThan(0);
+    expect(read.filter((sql) => /FROM job_outcomes/.test(sql))).toEqual([]);
   });
 
   it("improve_status carries a record per credential, and it is counts and rates only", async () => {

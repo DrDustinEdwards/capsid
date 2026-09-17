@@ -54,34 +54,16 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
 
 // ---- the schema's own promises -------------------------------------------------
 
-test("ONE ROW PER JOB IS THE SCHEMA'S PROMISE, not the writer's", () => {
-  // Both halves. The PRIMARY KEY is what makes a second account of a job impossible;
-  // ON CONFLICT DO NOTHING is what stops a second terminal transition aborting the
-  // batch that carries it. Either one alone leaves a way for the table to be wrong.
+test("ONE ROW PER JOB IS THE SCHEMA'S PROMISE: the primary key is declared", () => {
+  // The writer's half, ON CONFLICT DO NOTHING, is proven against SQLite in
+  // test-integration/job-outcomes.test.ts: "a second insert for the same job cannot
+  // overwrite the first record".
   assert.match(MIGRATION, /job_id TEXT PRIMARY KEY/, "job_id is no longer the primary key, so two rows could describe one job");
-  assert.match(
-    sourceFile("job-outcomes.ts"),
-    /ON CONFLICT\(job_id\) DO NOTHING/,
-    "the insert no longer defers to the first record"
-  );
 });
 
-test("every column the writer binds is a column the migration declares", () => {
-  // Derived in one direction from the source and checked against the file, so a
-  // column added to the INSERT and not to the table is a build failure here rather
-  // than a runtime error on the first job that finishes.
-  const insert = /INSERT INTO job_outcomes \(([^)]*)\)/.exec(sourceFile("job-outcomes.ts"));
-  assert.ok(insert, "the outcome insert is gone from src/job-outcomes.ts");
-  const bound = insert[1].split(",").map((c) => c.trim()).filter(Boolean);
-  assert.ok(bound.length >= 14, `the insert binds only ${bound.length} columns, so the walk is broken`);
-  for (const column of bound) {
-    assert.match(
-      MIGRATION,
-      new RegExp(`^\\s*${column}\\s+(TEXT|INTEGER)`, "m"),
-      `the insert binds ${column} and migrations/0011_job_outcomes.sql does not declare it`
-    );
-  }
-});
+// That every column the writer binds exists is proven by the real insert in
+// test-integration/job-outcomes.test.ts, which SQLite refuses on an unknown column.
+
 
 test("the dump carries the new table, so the verified counts survive a restore", () => {
   // The pull requests these numbers were read from can be deleted on GitHub, so the
@@ -366,6 +348,7 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   assert.match(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!, /1 merged pull request\b/);
 });
 
+// scanner-rule: conventions-verification, enumerate every site: every path that hands out a lease checks the record bar
 test("the claim and the resume both ask the record question", () => {
   // Enumerate every site: resume hands a caller a lease exactly as claim does, so a
   // driver that could not have claimed a job must not acquire it by resuming one.
@@ -376,13 +359,6 @@ test("the claim and the resume both ask the record question", () => {
   assert.match(source, /const resumeShortfall = await recordShortfall/, "resume does not check the record bar");
 });
 
-test("the record is only read when a job actually asks for one", () => {
-  // The record is computed from every outcome row. Paying for that read on every
-  // claim to answer a question almost no job asks would put a table scan in front of
-  // the queue's hottest path.
-  assert.match(
-    sourceFile("jobs.ts"),
-    /if \(!job\.min_record\) return null;/,
-    "recordShortfall no longer short-circuits on a job with no bar"
-  );
-});
+// That the record is read only when a job sets a bar is proven by counting the reads
+// against SQLite in test-integration/job-outcomes.test.ts.
+

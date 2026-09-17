@@ -156,6 +156,7 @@ function codeOnly(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
 
+// scanner-rule: the namespace-to-repo mapping is the authorization boundary (capsid/conventions.md, GitHub access). A second copy of it in code cannot be observed by calling the watcher
 test("the repo is resolved through the mapping and is never named in code", () => {
   const code = codeOnly(sourceFile("watcher.ts"));
   // Vacuity: the stripper must not have eaten the file it is meant to scan.
@@ -167,13 +168,6 @@ test("the repo is resolved through the mapping and is never named in code", () =
   assert.equal((code.match(/MIRROR_REPO_LABEL/g) ?? []).length >= 3, true, "the label is not used by both mirror reads");
 });
 
-test("the dump read gates the check, so an unreachable GitHub posts nothing", () => {
-  // attempt() returns null on a failed read. The listing must gate: reporting an
-  // unreadable mirror as an empty one would file a job every half hour during a
-  // GitHub outage, which is the noise that gets a watcher turned off.
-  const src = sourceFile("watcher.ts");
-  const at = src.indexOf('attempt("mirror dumps"');
-  assert.ok(at > 0, "the mirror dump read is not wrapped in attempt()");
-  const after = src.slice(at, at + 900);
-  assert.match(after, /if \(dumps\)/, "a null dump listing does not skip the check");
-});
+// That an unreadable mirror listing posts nothing, and a readable empty one posts
+// mirror-no-dump, is driven through gatherFindings in test/watcher-gather.test.ts.
+
