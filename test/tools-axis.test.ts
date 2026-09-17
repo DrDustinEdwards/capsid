@@ -156,6 +156,7 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
 
 // ---- DERIVED: a new action tool cannot be added without wiring its action ----------
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point
 test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", () => {
   // The guard against the finding recurring. A tool added with an `action` or `mode`
   // enum whose name is not in the enforcement point's table would be unnarrowable in

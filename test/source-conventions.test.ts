@@ -19,6 +19,7 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // where the next copy would be written (quality audit 1.1). They scan all of src/
 // now, which is also what lets server.ts be split later without losing them.
 
+// scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("one REPORT_PREFIX, and no file defines its own", () => {
   assert.equal(REPORT_PREFIX, "reports/csp/");
   const offenders = sourceFiles()
@@ -40,6 +41,7 @@ test("one REPORT_PREFIX, and no file defines its own", () => {
   );
 });
 
+// scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through timingSafeEqual, in every file", () => {
   // The specific compares, still where they belong.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
@@ -65,6 +67,7 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   );
 });
 
+// scanner-rule: conventions-verification, enumerate every site
 test("every destructive tool goes through the one confirmation helper", () => {
   const all = sourceFiles();
   // confirmDestructive is called from exactly one place: the helper.
