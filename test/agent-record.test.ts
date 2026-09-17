@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordFor, recordsFrom, type RecordRows, type RecordSubject } from "../src/agent-record.ts";
+import { loadAgentRecords, recordFor, recordsFrom, type RecordRows, type RecordSubject } from "../src/agent-record.ts";
 import { sourceFile } from "./source-files.ts";
 
 // THE AGENT RECORD: counts and rates over the outcome rows.
@@ -205,14 +205,28 @@ test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
     );
   }
   // And the source says so, so the next reader finds the reason rather than the rule.
+  // scanner-rule: agent records are counts and rates, never a score (jobs as evidence,
+  // capsid/decisions.md 2026-09-11). A comment is prose, so its text is what is checked.
   assert.match(sourceFile("agent-record.ts"), /COUNTS AND RATES, NEVER A SCORE/);
 });
 
-test("the inventory is read with grouped queries, not one set per credential", () => {
+test("the inventory is read with grouped queries, not one set per credential", async () => {
   // A per-agent loop would grow the query count with the number of credentials, on a
   // page that renders all of them.
-  const source = sourceFile("agent-record.ts");
-  const prepares = [...source.matchAll(/\.prepare\(/g)].length;
-  assert.equal(prepares, 3, `loadRecordRows issues ${prepares} queries; it should be three grouped reads`);
-  assert.doesNotMatch(source, /for \(const agent of agents\) \{[^}]*await/s, "the loader awaits inside a per-agent loop");
+  const countFor = async (howMany: number) => {
+    let prepared = 0;
+    const db = {
+      prepare: () => {
+        prepared += 1;
+        const stmt = { bind: () => stmt, all: async () => ({ results: [] }), first: async () => null };
+        return stmt;
+      },
+    } as unknown as D1Database;
+    const agents: RecordSubject[] = Array.from({ length: howMany }, (_, i) => ({ name: `driver-${i}`, kind: "driver", namespaces: ["capsid"] }));
+    const records = await loadAgentRecords(db, agents);
+    assert.equal(Object.keys(records).length, howMany);
+    return prepared;
+  };
+  assert.equal(await countFor(1), 3, "the loader should issue three grouped reads");
+  assert.equal(await countFor(50), 3, "the query count grew with the number of credentials");
 });
