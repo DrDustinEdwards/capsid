@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { reverifyStatements } from "../src/outcome-prs";
+import { outcomeStatement } from "../src/job-outcomes";
 import { legacyAgent } from "../src/agents";
 
 // JOBS AS EVIDENCE, AGAINST A REAL D1 (migrations/0011).
@@ -195,6 +196,38 @@ describe("job outcomes", () => {
     const after = await outcomeRow(id);
     expect(after?.agent).toBe(before?.agent);
     expect(after?.prs_merged).toBeNull();
+  });
+
+  it("PLANT: the writer's own statement defers to the first record, and a second batch still commits", async () => {
+    // The test above plants its own SQL. This one sends outcomeStatement twice: without
+    // ON CONFLICT DO NOTHING the second batch would abort on the primary key, taking the
+    // transition that carries it with it.
+    const row = (agent: string, merged: number | null) => ({
+      job_id: "job_000000000abc",
+      agent,
+      namespace: "capsid",
+      prs_opened: null,
+      prs_merged: merged,
+      commits: null,
+      files_changed: null,
+      tests_added: null,
+      ci_green: null,
+      blocked_count: 0,
+      resumed_count: 0,
+      duration_minutes: null,
+      result_kind: "none" as const,
+      verified: UNVERIFIED,
+      recorded_at: NOW.toISOString(),
+    });
+    await env.DB.batch([outcomeStatement(env.DB, row(DRIVER_ACTOR, null))]);
+    await env.DB.batch([
+      outcomeStatement(env.DB, row("agent:impostor", 999)),
+      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('test', 'second-batch', 'capsid', NULL, '{}')"),
+    ]);
+    expect(await outcomeCount("job_000000000abc")).toBe(1);
+    expect((await outcomeRow("job_000000000abc"))?.agent).toBe(DRIVER_ACTOR);
+    const second = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'second-batch'").first<{ n: number }>();
+    expect(second?.n, "the batch carrying the second outcome was aborted").toBe(1);
   });
 
   it("PLANT: the bar a job sets on a driver's history is enforced at the CLAIM", async () => {
