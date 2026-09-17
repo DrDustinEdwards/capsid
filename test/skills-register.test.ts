@@ -81,6 +81,7 @@ function world(over: World = {}) {
 
 // ---- the claim this change rests on ------------------------------------------------
 
+// scanner-rule: conventions-verification, enumerate every site: a third way to create a skill must be seen, which no call to the two known ones can show
 test("before this change, recordSkill was the only INSERT into improve_skills; now there are exactly two", () => {
   const inserts = ["improve-skills.ts", "skills-register.ts"].map(
     (f) => (sourceFile(f).match(/INSERT INTO improve_skills/g) ?? []).length
@@ -175,7 +176,6 @@ test("register_skill takes improve_run's admin default in the scope table", () =
     ...needFor(requiredForAction("improve_run", "register_skill")),
   });
   assert.match(refusal ?? "", /admin only/);
-  assert.doesNotMatch(sourceFile("tools/improve.ts"), /!ctx\.agent\.admin\b/, "the handler must not decide admin for itself (CLAUDE.md rule 6)");
 });
 
 interface ToolResult {

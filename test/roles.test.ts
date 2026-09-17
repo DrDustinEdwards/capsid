@@ -4,6 +4,10 @@ import { ROLES, roleMintCommand, selectAgents } from "../scripts/mint-agents.mjs
 import { SCOPE_FLAGS, allowsToolAction, defaultScopes, parseScopes, serializeScopes } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { checkScope, repoWriteFlags } from "../src/scope.ts";
+import { buildServer } from "../src/server.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // GROUP 1: NAMED ROLES, AND THE ONE THING THE SCOPE VOCABULARY COULD NOT SAY.
 //
@@ -94,15 +98,23 @@ test("checkScope with no action is exactly what it was, so every other tool is u
 });
 
 test("the jobs tool asks the enforcement point about the qualified name", async () => {
-  // The unit rules above are worth nothing if the handler never passes the action.
-  // Read the source rather than trusting that it does.
-  const { sourceFile } = await import("./source-files.ts");
-  const jobs = sourceFile("tools/jobs.ts");
-  assert.match(
-    jobs,
-    /ctx\.scope\(\{\s*tool:\s*"jobs",\s*action:\s*args\.action/,
-    "tools/jobs.ts does not pass the action to the enforcement point, so a qualified entry narrows nothing"
-  );
+  // The unit rules above are worth nothing if the handler never passes the action. An
+  // agent narrowed to jobs.list is called through the real tool with two actions.
+  const lister = scopedAgent((s) => {
+    s.namespaces = "*";
+    s.tools = ["jobs", "jobs.list"];
+  });
+  const server = buildServer(fakeEnv({ DB: fakeD1({}).db, APP_KV: fakeKv({}).kv }), lister);
+  const client = new Client({ name: "roles", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const call = async (action: string) =>
+    ((await client.callTool({ name: "jobs", arguments: { action, namespace: "capsid" } })) as { content: Array<{ text: string }> }).content[0]?.text ?? "";
+  const claimed = await call("claim");
+  const listed = await call("list");
+  await client.close();
+  assert.match(claimed, /jobs\.claim/, "a claim by an agent narrowed to jobs.list was not refused by the enforcement point");
+  assert.equal(JSON.parse(listed).ok, true, `the narrowing refused the one action it allows: ${listed}`);
 });
 
 // ---- the reviewer's flag --------------------------------------------------------

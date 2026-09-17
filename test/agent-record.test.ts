@@ -192,6 +192,7 @@ test("recordsFrom keys by agent name and fills the loop columns only for drivers
   assert.equal(Object.getPrototypeOf(records), null);
 });
 
+// scanner-rule: agent records are counts and rates, never a score (jobs as evidence, capsid/decisions.md 2026-09-11). The second half checks a comment, which is prose
 test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
   // The rule stated as a guard. Every field is a count with a name on it or a rate
   // with a stated denominator; the moment one number stands for all of them,
@@ -205,8 +206,6 @@ test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
     );
   }
   // And the source says so, so the next reader finds the reason rather than the rule.
-  // scanner-rule: agent records are counts and rates, never a score (jobs as evidence,
-  // capsid/decisions.md 2026-09-11). A comment is prose, so its text is what is checked.
   assert.match(sourceFile("agent-record.ts"), /COUNTS AND RATES, NEVER A SCORE/);
 });
 
