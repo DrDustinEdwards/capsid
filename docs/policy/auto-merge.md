@@ -38,6 +38,13 @@ that passed before the one that refused.
   lockfile. The protected list already covers these three. Stating them again means
   removing a pattern from one list does not open the other.
 
+A merge under this policy is also a deploy wherever the repo deploys on merge to its
+default branch. capsid does. Ruled 2026-09-16 by Dustin after the first real merge (PR
+#52) shipped to production with no human: the checks above are the whole condition, and
+the live gate's rollback is the backstop. Extending this policy to another namespace
+authorises unattended production deploys there too, and is decided one namespace at a
+time.
+
 Anything else waits for the seat. A pull request that fails any check is left open,
 audited with the check that refused it, and reported under `improve_status` as
 awaiting the seat.
