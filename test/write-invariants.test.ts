@@ -5,7 +5,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
-import { allSourceText, sourceFile } from "./source-files.ts";
 
 // THE BEHAVIOURAL HALF of the write-path invariants. test/invariants.test.ts reads the
 // source; this file DRIVES the real tool handlers over a real MCP connection and records
@@ -492,29 +491,6 @@ for (const { name, opts, withIfMatch, expected } of ARMING_CASES) {
   });
 }
 
-test("ARMING PARITY: both call sites pass the SAME consent signal", async () => {
-  // The behavioural cases above cannot reach the elicited arm: the in-memory client
-  // advertises no elicitation capability, so a call without confirm is refused before any
-  // guard is chosen. The signal is pinned at the source instead: one shared expression
-  // inside the protocol helper, and both call sites handing it the same variable.
-  //
-  // The two call sites stay in server.ts; the commit protocol and its arming condition
-  // moved to src/store-guards.ts on 2026-09-07 (audit MAJOR 17).
-  const server = allSourceText();
-  assert.equal(
-    server.split("commit.run(elicited, statements)").length - 1,
-    2,
-    "a call site stopped passing the shared elicited signal to the commit protocol"
-  );
-  // And the condition that consumes it is stated once, inside the helper.
-  const guards = sourceFile("store-guards.ts");
-  assert.equal(
-    guards.split("if_match !== undefined || elicited").length - 1,
-    1,
-    "the arming condition is written more than once again"
-  );
-});
-
 test("CREATE COLLISION: an uncontested create still succeeds", async () => {
   const { client, recorded, close } = await connect("write", { exists: false });
   const result = await call(client, "write", {
@@ -792,6 +768,26 @@ test("an accepted elicitation reaches the commit, so the arm is really reachable
   assert.match(prompts[0], /Overwrite capsid\/doc\.md\?/);
   assert.ok(!result.isError, `an approved overwrite was refused: ${result.content?.[0]?.text}`);
   assert.match(sqlFor(recorded), /INSERT INTO documents/);
+});
+
+test("ARMING PARITY: an elicited write, restore and delete each arm the body guard first", async () => {
+  // Consent given through elicitation is bound to the body it was about, in all three
+  // tools, and the guard leads the batch. No call passes confirm or if_match, so the
+  // elicited signal is the only thing that can arm the guard (audit MAJOR 17, and
+  // audit 2026-09-06 round 2, item 6 for delete).
+  const calls: Array<[string, Record<string, unknown>]> = [
+    ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
+    ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    ["delete", { namespace: "capsid", path: "doc.md" }],
+  ];
+  for (const [tool, args] of calls) {
+    const { client, batches, prompts, close } = await connectEliciting({ body: "prior body" });
+    const result = await call(client, tool, args);
+    await close();
+    assert.equal(prompts.length, 1, `${tool} did not elicit, so the elicited arm was not exercised`);
+    assert.ok(!result.isError, `${tool} was refused: ${result.content?.[0]?.text}`);
+    assert.equal(guardOf(batches), "body", `${tool} did not arm the body guard after an elicitation`);
+  }
 });
 
 test("a declined elicitation refuses, and writes nothing", async () => {
