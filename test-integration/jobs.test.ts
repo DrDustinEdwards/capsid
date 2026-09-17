@@ -372,6 +372,40 @@ describe("resume", () => {
     expect(onDone.refusal).toMatch(/is done, not blocked/);
   });
 
+  it("PLANT: a job that leaves blocked while resume is deciding is not taken back", async () => {
+    // resume reads the row, checks it, then moves it with a keyed UPDATE. A human who
+    // fails the job between the read and the UPDATE must win: the UPDATE is keyed on
+    // status = 'blocked', and only SQLite can show the key holding.
+    const id = await blockedJob("resume race");
+    const base = jobsEnv() as unknown as { DB: D1Database };
+    const racing = {
+      ...base,
+      DB: {
+        prepare(sql: string) {
+          if (/UPDATE jobs SET status = 'claimed'/.test(sql)) {
+            const real = base.DB.prepare(sql);
+            return {
+              bind: (...args: unknown[]) => {
+                const bound = real.bind(...args);
+                return {
+                  first: async () => {
+                    await base.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(id).run();
+                    return bound.first();
+                  },
+                };
+              },
+            };
+          }
+          return base.DB.prepare(sql);
+        },
+        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
+      },
+    } as unknown as Parameters<typeof resumeJob>[0];
+    const resumed = await resumeJob(racing, legacyAgent("write", SEAT), NOW, id, "the human approved it");
+    expect(resumed.ok).toBe(false);
+    expect((await row(id))?.status).toBe("failed");
+  });
+
   it("a blocked job cannot be claimed, so resume is the only way out of blocked", async () => {
     const id = await blockedJob("claim refuses blocked");
     const byOther = await claimJob(jobsEnv(), OTHER, NOW, { namespace: "capsid", id });
