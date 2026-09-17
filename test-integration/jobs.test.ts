@@ -335,11 +335,27 @@ describe("resume", () => {
     expect(listed?.resumed).toBe(2);
   });
 
-  it("a different caller may resume, because the seat that approves is not the session that blocked", async () => {
+  it("a different caller may resume, and the job goes back to the driver that blocked it", async () => {
+    // Ruled 2026-09-16, after the seat's resume of job_4918f3519cba left the job held
+    // by the seat.
     const id = await blockedJob("other caller");
     const resumed = await resumeJob(jobsEnv(), OTHER, NOW, id, "seat approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
+    expect((await row(id))?.claimed_by).toBe(DRIVER_ACTOR);
+  });
+
+  it("a different caller that passes take holds the job itself", async () => {
+    const id = await blockedJob("taken");
+    const resumed = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
+    expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await row(id))?.claimed_by).toBe(OTHER_ACTOR);
+  });
+
+  it("resume keeps the first claim's timestamp", async () => {
+    const id = await blockedJob("first claim");
+    const claimedAt = (await row(id))?.claimed_at;
+    await resumeJob(jobsEnv(), OTHER, at("2026-09-11T09:00:00.000Z"), id, "approved");
+    expect((await row(id))?.claimed_at).toBe(claimedAt);
   });
 
   it("resume refuses a queued job and a done job", async () => {
@@ -360,9 +376,19 @@ describe("resume", () => {
     const blocked = await blockedJob("the blocked one");
     const other = await post({ title: "something else" });
     await claimJob(jobsEnv(), OTHER, NOW, { id: other.job!.id });
-    const refused = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
+    const refused = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved", { take: true });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/already holds/);
+    expect((await row(blocked))?.status).toBe("blocked");
+  });
+
+  it("a job does not go back to a driver that is already holding another", async () => {
+    const blocked = await blockedJob("waiting for its driver");
+    const other = await post({ title: "the driver moved on" });
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: other.job!.id });
+    const refused = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/already holds .*resume it with take/s);
     expect((await row(blocked))?.status).toBe("blocked");
   });
 

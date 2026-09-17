@@ -62,13 +62,13 @@ test("DERIVED: the column the cap is counted in exists in a migration", () => {
   assert.match(sql, /ALTER TABLE jobs ADD COLUMN corrections_count INTEGER NOT NULL DEFAULT 0/);
 });
 
-test("DERIVED: resume spends the budget and an ADMIN resume does not", () => {
+test("DERIVED: a correction spends the budget and an ADMIN resume does not", () => {
   // The cap puts a human at the boundary, so the human arriving must be what LIFTS
   // it rather than what spends it. Read from the source, because this is a branch
   // the unit rules above cannot see.
   const jobs = sourceFile("jobs.ts");
   assert.match(jobs, /corrections_count = corrections_count \+ \?\d/, "resume does not increment the budget, so the cap can never be reached");
-  assert.match(jobs, /agent\.admin/, "nothing in jobs.ts distinguishes an admin resume, so an admin cannot lift the cap");
+  assert.match(jobs, /correction && !agent\.admin/, "the spend is not conditioned on an explicit correction by a non-admin");
 });
 
 test("DERIVED: block is where the cap is applied", () => {
@@ -111,6 +111,11 @@ function resumeDb(row: Record<string, unknown>, siblingSpent = 0) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id || row.status !== "blocked") return null;
           row.status = "claimed";
+          // The claimant and the timestamps the statement writes, applied from the
+          // BOUND params rather than assumed, so a resume that hands the lease to the
+          // wrong caller, or rewrites claimed_at, is visible on the row.
+          row.claimed_by = params[1];
+          if (/claimed_at = \?3/i.test(flat)) row.claimed_at = params[2];
           // The fake APPLIES the increment the statement asks for rather than
           // assuming it. A fake that kept its own answer is how a plant deleting the
           // clause leaves a suite green (test/skills-records.test.ts, 2026-09-12).
@@ -172,16 +177,61 @@ async function blockedRow(corrections: number) {
 const SECRET = "retry-cap-test-secret";
 const NOW = new Date("2026-09-12T03:00:00Z");
 
-test("the first two resumes are allowed, and each one spends the budget", async () => {
+test("the first two corrections are allowed, and each one spends the budget", async () => {
   // The innocent case first: a cap that refused ordinary work would be found by an
   // outage rather than by a test.
   for (const corrections of [0, 1]) {
     const { db, row } = resumeDb(await blockedRow(corrections));
     const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-    const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "the human ran it");
-    assert.equal(result.ok, true, `resume ${corrections + 1} refused: ${JSON.stringify(result)}`);
-    assert.equal(row.corrections_count, corrections + 1, "a resume that does not spend the budget can never reach the cap");
+    const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "fix the review findings", {
+      correction: true,
+    });
+    assert.equal(result.ok, true, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`);
+    assert.equal(row.corrections_count, corrections + 1, "a correction that does not spend the budget can never reach the cap");
   }
+});
+
+test("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the cap", async () => {
+  // job_466d6472511e, 2026-09-16: three ordinary pushes, each one blocked and resumed,
+  // put the job at corrections_count 2 and the next resume was refused as a retry
+  // loop. Nothing had been corrected. Three plain resumes here, and the budget must
+  // still read 0 after all of them.
+  const { db, row } = resumeDb(await blockedRow(0));
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  for (let i = 1; i <= 3; i++) {
+    const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", `push ${i} ran`);
+    assert.equal(result.ok, true, `plain resume ${i} refused: ${JSON.stringify(result)}`);
+    assert.equal(row.corrections_count, 0, `plain resume ${i} spent a correction`);
+    row.status = "blocked";
+  }
+});
+
+test("PLANT: a seat's resume returns the job to the driver that blocked it", async () => {
+  // job_4918f3519cba, 2026-09-16: the seat resumed it and the job became the seat's,
+  // which has no shell to finish it with.
+  const { db, row } = resumeDb(await blockedRow(0));
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "the push is approved");
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(row.claimed_by, "agent:capsid-driver", "the resumer took a job it did not block");
+});
+
+test("THE OTHER DIRECTION: take hands the lease to the resumer", async () => {
+  const { db, row } = resumeDb(await blockedRow(0));
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "I will finish it", { take: true });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(row.claimed_by, "agent:admin");
+});
+
+test("PLANT: resume keeps claimed_at, so duration is measured from the first claim", async () => {
+  // job_6bbd77bc4827, 2026-09-17: claimed_at 01:44:41 was the resume, not the claim,
+  // and the outcome recorded the stretch after it.
+  const { db, row } = resumeDb(await blockedRow(0));
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "the push ran");
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(row.claimed_at, "2026-09-12T00:00:00.000Z", "resume rewrote the first claim's timestamp");
 });
 
 test("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {
@@ -235,7 +285,11 @@ test("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", a
 test("AN ADMIN RESUME IS ALLOWED at the cap, and does not spend the budget", async () => {
   const { db, row } = resumeDb(await blockedRow(CORRECTION_CAP));
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "I looked at it and it is fine");
+  // Passed as a correction, so the exemption is what keeps the budget still rather
+  // than the absence of a correction.
+  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "I looked at it and it is fine", {
+    correction: true,
+  });
   assert.equal(result.ok, true, `an admin resume was refused: ${JSON.stringify(result)}`);
   assert.equal(row.status, "claimed");
   assert.equal(

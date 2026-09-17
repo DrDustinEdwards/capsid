@@ -29,7 +29,10 @@ that refused it, and reported under `improve_status` as awaiting the seat.
 driver that reaches a push, a migration or a pull request blocks with the exact command,
 and every one of those waits on a person. This policy lets the seat send a bounded one
 back itself: `jobs` action `resume` with `approved_by_policy` set to the document's
-version, refused unless the blocked command matches one of three classes.
+version, refused unless the blocked command matches one of three classes. A driver may
+do the same for a job it blocked itself, but only when every class matched is
+`push_branch` or `open_pr` (ruled 2026-09-16). A migration stays the seat's to approve,
+and a driver cannot approve another agent's job.
 `additive_migration` is a `wrangler d1 execute` naming a `--file` under `migrations/`
 whose every statement is `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN` or
 `CREATE INDEX`. An unrecognized statement form is a refusal, not a pass.

@@ -6,6 +6,7 @@ import {
   jobDocPath,
   corruptRequirement,
   missingForJob,
+  outsideJobNamespace,
   mintJobId,
   missingForRecord,
   serializeMinRecord,
@@ -23,7 +24,7 @@ import {
   cappedSummary,
 } from "./jobs-schema";
 import type { Agent } from "./agents";
-import { approveByPolicy } from "./gate-policy";
+import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { reviewGate, type ReviewOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { readRepoFile } from "./github/contents";
@@ -890,36 +891,49 @@ export async function blockJob(
 // is that a HUMAN approved something, and the seat that approves is routinely not
 // the session that blocked. The reason is required and lands in the audit row, so
 // what was approved is recorded rather than implied.
+//
+// WHO HOLDS IT AFTERWARDS: the driver that blocked it, not the caller that resumed
+// it (ruled 2026-09-16). A blocked row keeps claimed_by, and the lease goes back to
+// that claimant. Until then the resumer took the lease, so the seat's resume of
+// job_4918f3519cba left the job claimed by the seat, which has no shell to finish it
+// with, and the job had to be failed and posted again. `take` is the explicit way for
+// a resumer to acquire the job instead, and it runs every check a claim runs.
+export interface ResumeOptions {
+  // THE PRE-APPROVED GATE (autonomy arc part 2). When set, this resume is approved on
+  // the signed gate policy rather than on a human having said yes, and the value is
+  // the policy version the caller read. The command the job blocked on is matched
+  // against the policy classes and the resume is REFUSED when it matches none, so this
+  // narrows what the caller may do on its own rather than widening it.
+  approvedByPolicy?: string;
+  // The resumer acquires the job rather than returning it to the driver that blocked.
+  take?: boolean;
+  // This resume sends the work back to be CORRECTED, so it spends from the retry
+  // cap's budget. A plain resume does not (ruled 2026-09-16): job_466d6472511e reached
+  // the cap on three ordinary pushes, none of which corrected anything.
+  correction?: boolean;
+}
+
+// WHAT A DRIVER MAY APPROVE FOR ITSELF (ruled 2026-09-16). Pushing its own branch and
+// opening its own pull request. Not a migration: the ruling keeps migrations a human
+// gate, so `additive_migration` stays the seat's to approve. The classes and the
+// never list are the policy's own; this only narrows which of them a driver may use.
+const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
+
 export async function resumeJob(
   env: Env,
   agent: Agent,
   now: Date,
   id: string,
   reason: string,
-  // THE PRE-APPROVED GATE (autonomy arc part 2). When set, the seat is approving this
-  // resume on the signed gate policy rather than on a human having said yes, and the
-  // value is the policy version it read. The command the job blocked on is matched
-  // against the policy classes and the resume is REFUSED when it matches none, so this
-  // narrows what the seat may do on its own rather than widening it.
-  approvedByPolicy?: string
+  opts: ResumeOptions = {}
 ): Promise<JobResult> {
+  const { approvedByPolicy, take = false, correction = false } = opts;
   const actor = agent.actor;
   if (!ACTOR_SHAPE.test(actor)) {
     return refuse("resume", `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`);
   }
   if (!reason?.trim()) {
     return refuse("resume", "resume needs a reason: what the human approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen.");
-  }
-  // The same one-claim-per-caller rule the claim path runs on, for the same reason:
-  // a resume hands the caller a lease, and a driver holding two has abandoned one.
-  const held = await env.DB.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1")
-    .bind(actor)
-    .first<JobRow>();
-  if (held) {
-    return refuse(
-      "resume",
-      `${actor} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. Finish it before resuming another.`
-    );
   }
 
   const current = await readJob(env.DB, id);
@@ -931,24 +945,50 @@ export async function resumeJob(
     );
   }
 
-  // RESUME IS A CLAIM, so it asks the same scope question a claim asks. The caller
-  // that sends a job back in after a gate is routinely not the one that blocked it,
-  // and it ends up holding the lease and doing the rest of the work: a driver that
-  // could not have claimed this job must not acquire it by resuming it.
+  // The claimant the lease goes to. A blocked row with no claimant (none should
+  // exist, since block keys on claimed_by) goes to the caller, as before.
+  const holder = take || !current.claimed_by ? actor : current.claimed_by;
+  const acquiring = holder === actor;
+
+  // The same one-claim-per-caller rule the claim path runs on, for the same reason,
+  // asked of whoever ends up HOLDING the lease: a driver holding two has abandoned one.
+  const held = await env.DB.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1")
+    .bind(holder)
+    .first<JobRow>();
+  if (held) {
+    return refuse(
+      "resume",
+      `${holder} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. ` +
+        (acquiring ? "Finish it before resuming another." : `${id} stays blocked until that driver is free, or resume it with take.`)
+    );
+  }
+
+  // RESUME IS A CLAIM WHEN THE CALLER ACQUIRES THE JOB, so it asks the same scope
+  // question a claim asks: a driver that could not have claimed this job must not
+  // acquire it by resuming it. When the job goes back to its own claimant, that
+  // claimant already passed these checks at its claim, and the resumer is not taking
+  // anything.
   const corrupt = corruptRequirement(current);
   if (corrupt) {
     return refuse("resume", `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`);
   }
-  const missing = missingForJob(agent, current.namespace, current.required_scopes);
-  if (missing) {
-    return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`);
+  // THE NAMESPACE IS ASKED EITHER WAY. A resume that returns the job to its own
+  // claimant still moves a job, so a caller that cannot write the job's namespace may
+  // not do it; only the job's flags are left to the claimant it goes back to.
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) {
+    return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${outside} It stays blocked.`);
   }
-  // RESUME IS A CLAIM, so it asks the record question too. A job whose bar the
-  // resuming caller does not meet would otherwise be acquired by resuming it, which
-  // is the same escalation the scope check above refuses.
-  const resumeShortfall = await recordShortfall(env.DB, actor, current);
-  if (resumeShortfall) {
-    return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${resumeShortfall} It stays blocked for a driver that can finish it.`);
+  if (acquiring) {
+    const missing = missingForJob(agent, current.namespace, current.required_scopes);
+    if (missing) {
+      return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`);
+    }
+    // And the record question, on the same reasoning.
+    const resumeShortfall = await recordShortfall(env.DB, actor, current);
+    if (resumeShortfall) {
+      return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${resumeShortfall} It stays blocked for a driver that can finish it.`);
+    }
   }
 
   // THE RETRY CAP, CHECKED BEFORE ANYTHING IS SPENT. A job sent back twice already
@@ -999,15 +1039,37 @@ export async function resumeJob(
     // is descriptive and not authorizing, and the auto-merge tick using it that way is
     // recorded as a defect rather than a precedent. can_merge is the flag the seat
     // holds and no driver does, so it is the credential fact that separates them.
-    if (!agent.admin && !agent.scopes.flags.can_merge) {
+    //
+    // A DRIVER MAY APPROVE ITS OWN BRANCH PUSH AND PULL REQUEST (ruled 2026-09-16), and
+    // nothing wider: only on a job it blocked itself and still holds, and only when
+    // every class the command matched is in DRIVER_SELF_APPROVED. The classification is
+    // still the Worker's, through the same approveByPolicy call the seat's approval
+    // makes, so the never list still runs first and a force push still waits.
+    const isSeat = agent.admin || agent.scopes.flags.can_merge;
+    if (!isSeat && (current.claimed_by !== actor || take)) {
       return refuse(
         "resume",
-        `${id} cannot be approved by ${agent.actor} on the gate policy alone. Approving a blocked command is the seat's act, ` +
-          `and this caller holds neither the admin identity nor can_merge. Resume it without approved_by_policy once a human has said yes, ` +
-          `or ask the seat to approve it.`
+        `${id} cannot be approved by ${agent.actor} on the gate policy alone. A driver may approve only a job it blocked itself, ` +
+          `and ${id} was blocked by ${current.claimed_by ?? "nobody on record"}. Approving somebody else's blocked command is the seat's act, ` +
+          `and this caller holds neither the admin identity nor can_merge.`
       );
     }
     const command = commandFromSummary(current.result_summary);
+    // THE DRIVER'S NARROWER LIST IS CHECKED BEFORE THE POLICY IS, over the same
+    // classifier, so a driver's migration is refused without a repo read on its behalf.
+    // A command that classifies as nothing falls through to approveByPolicy, which
+    // refuses it for its own reason.
+    if (!isSeat && command) {
+      const match = classifyCommand(command);
+      const beyond = "klasses" in match ? match.klasses.filter((k) => !DRIVER_SELF_APPROVED.includes(k)) : [];
+      if (beyond.length > 0) {
+        return refuse(
+          "resume",
+          `${id} is not pre-approved for a driver: it matched ${beyond.join(", ")}, which a driver may not approve for itself. ` +
+            `A driver approves only ${DRIVER_SELF_APPROVED.join(" and ")}. It stays blocked for the human.`
+        );
+      }
+    }
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       try {
         const file = await readRepoFile(env, current.namespace, path);
@@ -1019,20 +1081,31 @@ export async function resumeJob(
     if (!verdict.approved) {
       return refuse("resume", id + " is not pre-approved: " + verdict.reason);
     }
+    // The approved verdict is the one that counts, so the driver's list is asserted on
+    // it too. Unreachable unless the two classifications disagree, which is the case
+    // this line exists for.
+    if (!isSeat && verdict.klasses.some((k) => !DRIVER_SELF_APPROVED.includes(k))) {
+      return refuse("resume", `${id} is not pre-approved for a driver: it matched ${verdict.klass}. It stays blocked for the human.`);
+    }
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
 
   const expires = leaseUntil(now);
-  // AN ADMIN RESUME DOES NOT SPEND THE BUDGET, and the 0 or 1 is BOUND rather than
-  // interpolated for the same reason bumpBlocked is: the statement stays one static
-  // string that the source guards can read and the query-plan test can EXPLAIN.
-  const spend = agent.admin ? 0 : 1;
+  // ONLY A CORRECTION SPENDS THE BUDGET, and never an admin's. The 0 or 1 is BOUND
+  // rather than interpolated for the same reason bumpBlocked is: the statement stays
+  // one static string that the source guards can read and the query-plan test can
+  // EXPLAIN.
+  //
+  // claimed_at IS NOT TOUCHED. It is the first claim, and duration_minutes measures
+  // from it (ruled 2026-09-16), so a job that waited at a gate is measured over its
+  // whole working life rather than over the stretch after its last resume.
+  const spend = correction && !agent.admin ? 1 : 0;
   const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = ?3, lease_expires = ?4,
+    `UPDATE jobs SET status = 'claimed', claimed_by = ?2, lease_expires = ?4,
        resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
      WHERE id = ?1 AND status = 'blocked' RETURNING id`
   )
-    .bind(id, actor, now.toISOString(), expires, spend)
+    .bind(id, holder, now.toISOString(), expires, spend)
     .first<{ id: string }>();
   if (!won) {
     return refuse("resume", `${id} left blocked between reading it and resuming it. Ask again.`);
@@ -1043,6 +1116,9 @@ export async function resumeJob(
     ...(await mirrorStatements(env.DB, job, "job-resumed", actor)),
     auditStatement(env.DB, actor, "job-resumed", job, {
       approved: reason,
+      held_by: holder,
+      ...(take ? { taken: true } : {}),
+      ...(spend ? { correction: true } : {}),
       lease_expires: expires,
       resumed_count: job.resumed_count,
       corrections_count: job.corrections_count,

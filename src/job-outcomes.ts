@@ -81,10 +81,12 @@ export function resultKindOf(resultRef: string | null | undefined): OutcomeResul
   return /^https:\/\//i.test(resultRef) ? "pr" : "doc";
 }
 
-// THE FINAL WORKING STRETCH, in whole minutes, and the migration says why it is not
-// the job's whole life: `resume` takes a fresh lease and resets claimed_at, so time
-// the job spent blocked waiting on a human is excluded. A human taking a day to run
-// a command is not the driver being slow.
+// FROM THE FIRST CLAIM, in whole minutes. `resume` no longer resets claimed_at
+// (ruled 2026-09-16), so time a job spent blocked at a gate is included. The comment
+// in migrations/0011 describes the earlier rule, which measured only the stretch after
+// the last resume and so reported a job that ran for an hour across two gates as a
+// few seconds. A job the lease sweep returned to the queue is measured from its new
+// claim, because the sweep clears claimed_at.
 //
 // null rather than 0 when there is no claim timestamp to measure from, and null
 // rather than a negative number if the clocks disagree: a duration that ran backwards
