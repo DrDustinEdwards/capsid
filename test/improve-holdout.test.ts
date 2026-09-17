@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { HOLDOUT_PREFIX, holdoutManifestKey } from "../src/improve-schema.ts";
 import { sourceFile, sourceFiles } from "./source-files.ts";
+import type { AttemptEnv } from "../src/env.ts";
+import type * as Attempt from "../src/improve-attempt.ts";
 
 // THE HOLDOUT ISOLATION GUARD.
 //
@@ -39,6 +41,7 @@ const ENV_PERMITTED = [
 // red on the day the isolation was best documented.
 const isComment = (line: string) => line.startsWith("//") || line.startsWith("*") || line.startsWith("/*");
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("ONLY src/improve-scorer.ts uses the holdout binding", () => {
   const offenders = sourceFiles()
     .filter((f) => f.name !== "improve-scorer.ts" && f.name !== "env.ts")
@@ -55,6 +58,7 @@ test("ONLY src/improve-scorer.ts uses the holdout binding", () => {
   );
 });
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("src/env.ts names it exactly twice, on the two pinned lines", () => {
   const env = sourceFile("env.ts");
   const uses = env
@@ -70,6 +74,7 @@ test("src/env.ts names it exactly twice, on the two pinned lines", () => {
   );
 });
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("the guard is NOT VACUOUS: the scorer really does use the binding", () => {
   // Without this the test above would pass by matching nothing the day the
   // subsystem stopped reading the manifest at all.
@@ -77,6 +82,7 @@ test("the guard is NOT VACUOUS: the scorer really does use the binding", () => {
   assert.match(scorer, /env\.HOLDOUT\.get\(/, "the scorer no longer reads the holdout bucket");
 });
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("no source file hardcodes the bucket NAME either, except the scorer", () => {
   // The binding is what is withheld, but a module that reached the bucket by name
   // through some other path would be just as wrong, and would pass the binding
@@ -96,17 +102,19 @@ test("no source file hardcodes the bucket NAME either, except the scorer", () =>
   assert.deepEqual(offenders, [], "a source file outside the scorer hardcodes the holdout bucket name");
 });
 
+// THE ATTEMPT MODULE TAKES AttemptEnv, AND AttemptEnv OMITS THE BINDING. Checked by type,
+// by npm run check:test: if AttemptEnv regains a banned key, or an entry point takes the
+// whole Env back through the side door, one of these assignments stops compiling.
+type Banned = "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID";
+type HasNone<K> = [Extract<K, Banned>] extends [never] ? true : false;
+const ATTEMPT_ENV_OMITS_THEM: HasNone<keyof AttemptEnv> = true;
+const PROPOSE_TAKES_ATTEMPT_ENV: HasNone<keyof Parameters<typeof Attempt.proposeChange>[0]> = true;
+const PUSH_TAKES_ATTEMPT_ENV: HasNone<keyof Parameters<typeof Attempt.pushAttempt>[0]> = true;
 test("the attempt module takes AttemptEnv, and AttemptEnv omits the binding", () => {
-  const env = sourceFile("env.ts");
-  assert.match(env, /export type AttemptEnv = Omit<Env, "HOLDOUT" \| "R2_TEMP_CRED_TOKEN" \| "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" \| "R2_BACKUP_PARENT_ACCESS_KEY_ID">;/);
-  const attempt = sourceFile("improve-attempt.ts");
-  assert.match(attempt, /import type \{ AttemptEnv \} from "\.\/env";/);
-  // Both exported entry points take it. A helper that took Env would hand the
-  // whole environment back to the attempt path through the side door.
-  assert.match(attempt, /export async function proposeChange\(env: AttemptEnv,/);
-  assert.match(attempt, /export async function pushAttempt\(\n?\s*env: AttemptEnv,/);
+  assert.deepEqual([ATTEMPT_ENV_OMITS_THEM, PROPOSE_TAKES_ATTEMPT_ENV, PUSH_TAKES_ATTEMPT_ENV], [true, true, true]);
 });
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("THE CI R2 READ TOKEN IS NOT IN THE WORKER'S ENVIRONMENT AT ALL", () => {
   // CI pulls the holdout tests with its own read-only R2 token, held as a repo secret. If
   // that token were also a Worker binding, the attempt path could read the suite over the
@@ -154,6 +162,7 @@ test("the manifest key is namespaced under the holdout prefix", () => {
 
 const TEMP_CRED_SECRETS = ["R2_TEMP_CRED_TOKEN", "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID"];
 
+// scanner-rule: CLAUDE.md rule 10, only src/improve-scorer.ts may reach the holdout
 test("ONLY src/improve-scorer.ts names the temp-credential secrets", () => {
   const offenders = sourceFiles()
     .filter((f) => f.name !== "improve-scorer.ts" && f.name !== "env.ts")
