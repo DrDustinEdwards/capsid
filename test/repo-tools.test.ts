@@ -398,6 +398,39 @@ test("the installation id is resolved per owner, and a pinned id is not consulte
   );
 });
 
+test("an installation token is minted for one repo and cached under owner/repo", async () => {
+  // Two repos under ONE owner. A token keyed by owner alone would be minted once and
+  // reused for the second repo, and a token minted without a repositories body would
+  // reach every repo in the installation (audit 2026-09-06, round 2, item 4).
+  const kv = fakeKv({ seedToken: false });
+  const env = makeEnv(
+    [
+      { repo: "a/ra", label: "primary" },
+      { repo: "a/rb", label: "second" },
+    ],
+    kv,
+    { GITHUB_APP_CLIENT_ID: "Iv1.test", GITHUB_APP_PRIVATE_KEY: await testPem() }
+  );
+  await withFetch(
+    {
+      "GET /repos/a/ra/installation": { body: { id: 111 } },
+      "POST /app/installations/111/access_tokens": (body: unknown) => ({
+        body: { token: `token-for-${(body as { repositories?: string[] }).repositories?.join(",")}` },
+      }),
+      "GET /repos/a/ra/contents/doc.md": { body: fileBody("a") },
+      "GET /repos/a/rb/contents/doc.md": { body: fileBody("b") },
+    },
+    async (calls) => {
+      await readRepoFile(env, "ns", "doc.md");
+      await readRepoFile(env, "ns", "doc.md", undefined, "second");
+      const bodies = calls.filter((c) => c.path.endsWith("/access_tokens")).map((c) => c.body);
+      assert.deepEqual(bodies, [{ repositories: ["ra"] }, { repositories: ["rb"] }], "each token must be scoped to the one repo it is for");
+      assert.equal(kv.store.get("gh:token:v3:a/ra"), "token-for-ra");
+      assert.equal(kv.store.get("gh:token:v3:a/rb"), "token-for-rb");
+    }
+  );
+});
+
 test("a 404 on installation resolution says the credentials are fine", async () => {
   const env = makeEnv(ONE_REPO, fakeKv({ seedToken: false }), {
     GITHUB_APP_CLIENT_ID: "Iv1.test",

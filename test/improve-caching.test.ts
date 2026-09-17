@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { proposeChange } from "../src/improve-attempt.ts";
+import { costOf } from "../src/improve-anthropic.ts";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sseMessage } from "./improve-fakes.ts";
-import { sourceFile } from "./source-files.ts";
 
 // PROMPT CACHING ON THE ATTEMPT PATH.
 //
@@ -112,27 +112,44 @@ test("the prefix is large enough to be worth caching", () => {
 });
 
 test("the cache counters are surfaced, so a dead cache is observable", async () => {
-  await withFetch(ROUTE, async () => {
-    const result = await proposeChange(ENV, input());
-    assert.equal(result.costUsd > 0, true);
-  });
   // A cache that silently stops working looks exactly like one that never worked.
-  // The counters are the only signal, so they are on the result and logged.
-  const anthropic = sourceFile("improve-anthropic.ts");
-  assert.match(anthropic, /cacheReadTokens: response\.usage\.cache_read_input_tokens \?\? 0,/);
-  assert.match(anthropic, /cacheWriteTokens: response\.usage\.cache_creation_input_tokens \?\? 0,/);
-  const attempt = sourceFile("improve-attempt.ts");
-  assert.match(attempt, /IMPROVE_ATTEMPT_TOKENS/);
-  assert.match(attempt, /cache_read=\$\{result\.cacheReadTokens\}/);
+  // The counters are the only signal, and the attempt logs them.
+  const route = {
+    "POST /v1/messages": {
+      contentType: "text/event-stream",
+      text: sseMessage(JSON.stringify({ summary: "s", reasoning: "r", files: [] }), {
+        cache_creation_input_tokens: 4000,
+        cache_read_input_tokens: 700,
+      }),
+    },
+  };
+  const logged: string[] = [];
+  const log = console.log;
+  console.log = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+  try {
+    await withFetch(route, async () => {
+      const result = await proposeChange(ENV, input());
+      assert.equal(result.costUsd > 0, true);
+    });
+  } finally {
+    console.log = log;
+  }
+  const line = logged.find((l) => l.startsWith("IMPROVE_ATTEMPT_TOKENS"));
+  assert.ok(line, "the attempt did not log its token counts");
+  assert.match(line, /cache_read=700 cache_write=4000/);
 });
 
 test("cache read and write are priced differently from plain input", () => {
   // A cache read is roughly a tenth of the input rate and a write roughly 1.25x.
   // Pricing them as plain input would make the cost estimate wrong in the
   // direction that hides the saving the cache exists for.
-  const anthropic = sourceFile("improve-anthropic.ts");
-  assert.match(anthropic, /cacheWrite \* rate\.input \* 1\.25/);
-  assert.match(anthropic, /cacheRead \* rate\.input \* 0\.1/);
+  const million = 1_000_000;
+  const plain = costOf("claude-sonnet-5", { input_tokens: million });
+  const read = costOf("claude-sonnet-5", { cache_read_input_tokens: million });
+  const write = costOf("claude-sonnet-5", { cache_creation_input_tokens: million });
+  assert.equal(plain, 3);
+  assert.ok(Math.abs(read / plain - 0.1) < 1e-9, `a cache read costs ${read / plain} of plain input`);
+  assert.ok(Math.abs(write / plain - 1.25) < 1e-9, `a cache write costs ${write / plain} of plain input`);
 });
 
 // ---- the dependency pin -----------------------------------------------------

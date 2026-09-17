@@ -13,7 +13,7 @@ import { tickRuns } from "../src/improve-run.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { sseChange } from "./improve-fakes.ts";
-import { allSourceText, sourceFile, sourceFiles, toolBlocks } from "./source-files.ts";
+import { sourceFile, sourceFiles } from "./source-files.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
 
 // THE 2026-09-06 ROUND-2 AUDIT FIXES, one block per finding. Each test was
@@ -169,6 +169,9 @@ test("a tick leaves a FRESH 'judging' run alone; only a stale one is returned to
   });
 });
 
+// scanner-rule: CLAUDE.md rule 10, every run transition is a CAS whose result is read. It
+// covers every call site in ingestScore, including ones added later, which no single
+// lost-CAS test can.
 test("every advanceRun inside ingestScore checks its result", () => {
   const owner = sourceFiles().find((f) => f.text.includes("export async function ingestScore"));
   assert.ok(owner, "could not locate ingestScore under src/");
@@ -202,19 +205,8 @@ test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs",
 
 // ---- 4. installation tokens are repo-scoped and cached per owner+repo -------
 
-test("installation tokens are minted scoped to the one repo and cached under owner/repo", () => {
-  const github = allSourceText();
-  assert.match(
-    github,
-    /const tokenKey = \(owner: string, repo: string\)/,
-    "tokenKey is still per owner: one repo's token is reused across every repo the owner has"
-  );
-  assert.match(
-    github,
-    /repositories: \[repo\]/,
-    "the access_tokens POST sends no repositories body, so the token reaches every repo in the installation"
-  );
-});
+// Proven by calling readRepoFile in test/repo-tools.test.ts: "an installation token is
+// minted for one repo and cached under owner/repo".
 
 // ---- 5. bounds: lint consumed, ci_dispatch inputs, history ------------------
 
@@ -303,20 +295,8 @@ test("delete snapshots the LIVE row via INSERT..SELECT inside its batch", async 
   assert.match(snapshot.sql.replace(/\s+/g, " "), /SELECT id, .*FROM documents/i);
 });
 
-test("delete arms the body guard after an elicitation, like write and restore do", () => {
-  // The in-memory client advertises no elicitation capability, so the elicited arm
-  // is pinned at the source, exactly as the ARMING PARITY test pins it for write
-  // and restore: the delete handler must choose requireBodyUnchanged on the same
-  // elicited signal. Without it, a body written during the 90-second prompt is
-  // deleted with a stale snapshot, and the racing writer's body exists nowhere.
-  const block = toolBlocks().find((b) => b.name === "delete");
-  assert.ok(block, "could not bound the delete handler");
-  assert.match(
-    block.body,
-    /elicited\s*\?\s*requireBodyUnchanged/,
-    "delete never arms requireBodyUnchanged: consent given during elicitation is not bound to the body it was about"
-  );
-});
+// Proven with an eliciting client in test/write-invariants.test.ts: "ARMING PARITY: an
+// elicited write, restore and delete each arm the body guard first".
 
 // ---- 7. prompts are data, and their titles are filtered ---------------------
 
@@ -372,6 +352,8 @@ test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai 
   assert.match(String(at("null")), /Origin/, "an opaque 'null' Origin was admitted to /mcp");
 });
 
+// scanner-rule: audit 2026-09-06 round 2, item 8. src/index.ts imports agents/mcp, which
+// node --test cannot load, so the wiring is only visible in its source.
 test("the /mcp Origin check is wired into the fetch handler", () => {
   const index = sourceFile("index.ts");
   assert.match(index, /mcpOriginProblem/, "index.ts never consults the Origin allowlist, so the check exists but guards nothing");

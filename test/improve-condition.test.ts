@@ -9,9 +9,17 @@ import {
   type RunCondition,
 } from "../src/improve-schema.ts";
 import { improveRunManual, openRuns } from "../src/improve-run.ts";
+import { tickRuns } from "../src/improve/tick.ts";
+import { finalizeRun } from "../src/improve/finalize.ts";
+import type { RunRow } from "../src/improve-state.ts";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { IMPROVE_RUN_DEFAULTS, sseMessage } from "./improve-fakes.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
-import { allSourceText, sourceFile, sourceFiles, toolBlocks } from "./source-files.ts";
+import { sourceFiles } from "./source-files.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
 
 // improve_runs.condition, from the arc's third ruling.
@@ -26,6 +34,8 @@ import { seedScoresDoc } from "./seed-scores.ts";
 const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0003_improve.sql"), "utf8");
 const SCORES = seedScoresDoc("capsid");
 const NOW = new Date("2026-09-05T08:05:00Z");
+// A run started just before NOW, so the age limit does not end it first.
+const FRESH = { started: "2026-09-05 08:00:00", advanced_at: "2026-09-05 08:00:00" };
 
 // ---- the column and the vocabulary ------------------------------------------
 
@@ -73,7 +83,7 @@ async function harness(kvSeed: Record<string, string> = {}) {
     },
     seedToken: true,
   });
-  const env = fakeEnv({ DB: d1.db, APP_KV: kv.kv, HOLDOUT: fakeR2().bucket, MEDIA: fakeR2().bucket });
+  const env = fakeEnv({ DB: d1.db, APP_KV: kv.kv, HOLDOUT: fakeR2().bucket, MEDIA: fakeR2().bucket, ANTHROPIC_API_KEY: "sk-test" });
   return { d1, kv, env };
 }
 
@@ -113,45 +123,61 @@ test("THE CONDITION IS IN THE OPENING AUDIT ROW, not only on the row it describe
   });
 });
 
-test("the FINISHING audit row carries it too, so one query covers a run's whole life", () => {
-  // Driven by source: reaching finalize behaviourally needs a full run, and the
-  // claim under test is that the field is present on the row the finalizer writes.
-  const run = allSourceText();
-  const start = run.indexOf('improveAudit(env.DB, "improve-run-finished"');
-  assert.ok(start !== -1, "the improve-run-finished audit row is gone");
-  const block = run.slice(start, start + 400);
-  assert.match(block, /condition: run\.condition,/);
-});
-
-test("the run summary document states the condition", () => {
-  const run = allSourceText();
-  assert.match(run, /`- condition: \$\{run\.condition\}`/);
+test("the FINISHING audit row and the run summary both carry it, so one query covers a run's whole life", async () => {
+  await withFetch({}, async () => {
+    const { d1, env } = await harness();
+    d1.rows.improve_runs.push({ ...IMPROVE_RUN_DEFAULTS, status: "finalizing", condition: "no-memory", ...FRESH });
+    await finalizeRun(env, d1.rows.improve_runs[0] as unknown as RunRow, NOW);
+    const finished = auditRows(d1.recorded).find((a) => a.action === "improve-run-finished");
+    assert.ok(finished, "no improve-run-finished audit row was written");
+    assert.equal(finished.params.condition, "no-memory");
+    const summary = d1.recorded.find((r) => r.sql.includes("INSERT INTO documents") && String(r.params[1]).endsWith("run-summary.md"));
+    assert.ok(summary, "no run summary document was written");
+    assert.match(String(summary.params[3]), /^- condition: no-memory$/m);
+  });
 });
 
 // ---- each condition switches something off ----------------------------------
 
-test("'no-memory' WITHHOLDS LINEAGE HISTORY from base selection", () => {
-  // The ablation is only real if the input is actually withheld. Asserted at the
-  // call site because that is where the withholding happens; a condition that
+// One attempt under a condition, returning which inputs the attempt read. The model
+// proposes nothing, so the attempt ends right after the reads under test.
+async function attemptReads(condition: string) {
+  const route = {
+    "POST /v1/messages": {
+      contentType: "text/event-stream",
+      text: sseMessage(JSON.stringify({ summary: "s", reasoning: "r", files: [] })),
+    },
+  };
+  let reads: string[] = [];
+  await withFetch(route, async (calls) => {
+    const { d1, env } = await harness();
+    d1.rows.improve_runs.push({ ...IMPROVE_RUN_DEFAULTS, status: "attempting", condition, ...FRESH });
+    const outcomes = await tickRuns(env, NOW);
+    assert.match(outcomes[0]?.note ?? "", /proposed no file changes/, `the attempt under ${condition} did not reach the model`);
+    assert.equal(calls.filter((c) => c.path === "/v1/messages").length, 1);
+    reads = d1.reads.map((r) => r.sql);
+  });
+  return {
+    lineage: reads.some((sql) => /FROM improve_attempts WHERE namespace = \?1 ORDER BY ts DESC/.test(sql)),
+    skills: reads.some((sql) => /FROM improve_skills s/.test(sql)),
+  };
+}
+
+test("'no-memory' WITHHOLDS LINEAGE HISTORY from base selection", async () => {
+  // The ablation is only real if the input is actually withheld. A condition that
   // reached selectBase with the full history would be a label that lies.
-  const run = allSourceText();
-  assert.match(
-    run,
-    /const lineage = run\.condition === "no-memory" \? \[\] : await recentAttempts\(/,
-    "'no-memory' no longer withholds lineage history"
-  );
-  assert.match(run, /selectBase\(best, lineage, run\.base_sha\)/);
+  assert.equal((await attemptReads("full")).lineage, true, "a full run did not read lineage, so this test proves nothing");
+  assert.equal((await attemptReads("no-memory")).lineage, false, "'no-memory' still reads lineage history");
 });
 
-test("'no-transfer' OFFERS NO cross-project skill", () => {
-  const run = allSourceText();
-  assert.match(
-    run,
-    /run\.condition !== "no-transfer" \? await candidateSkills\(/,
-    "'no-transfer' no longer withholds transferred skills"
-  );
+test("'no-transfer' OFFERS NO cross-project skill", async () => {
+  assert.equal((await attemptReads("full")).skills, true, "a full run did not look for a skill, so this test proves nothing");
+  assert.equal((await attemptReads("no-transfer")).skills, false, "'no-transfer' still looks for a transferred skill");
 });
 
+// scanner-rule: the improve arc's condition ruling (capsid/decisions.md), a condition that
+// changes nothing is a label that lies. A fourth value cannot be exercised by a test
+// written before it exists, so the source is what is checked.
 test("EVERY CONDITION OTHER THAN full CHANGES A BEHAVIOUR", () => {
   // The guard against adding a fourth value that records a difference it does not
   // make. Every non-default condition must be named somewhere in the orchestrator
@@ -208,22 +234,32 @@ test("the manual result reports the condition it ran under, including on a dry r
   });
 });
 
-test("the improve_run tool exposes condition and describes what each value does", () => {
-  const block = toolBlocks().find((b) => b.name === "improve_run");
-  assert.ok(block, "could not bound the improve_run registration");
-  assert.match(block.body, /condition: bounded\(/);
-  assert.match(block.body, /no-memory/);
-  assert.match(block.body, /no-transfer/);
-  // The tool passes it through rather than dropping it, which a description alone
-  // would not prove.
-  assert.match(block.body, /condition\s*\}\)\);/);
+test("the improve_run tool serves condition, describes each value, and passes it through", async () => {
+  await withFetch({}, async () => {
+    const { env } = await harness();
+    const server = buildServer(env, adminAgent("DrDustinEdwards"));
+    const client = new Client({ name: "condition-tool", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { tools } = await client.listTools();
+    const description = String((tools.find((t) => t.name === "improve_run")?.inputSchema.properties?.condition as { description?: string } | undefined)?.description ?? "");
+    for (const condition of RUN_CONDITIONS) assert.match(description, new RegExp(condition), `the condition argument does not describe ${condition}`);
+    const result = (await client.callTool({
+      name: "improve_run",
+      arguments: { namespace: "capsid", dry_run: true, condition: "no-transfer" },
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+    await client.close();
+    assert.notEqual(result.isError, true, result.content[0]?.text);
+    assert.equal(JSON.parse(result.content[0].text).condition, "no-transfer", "the tool dropped the condition");
+  });
 });
 
-// A type-level assertion: RunCondition is the union, not a bare string, so a typo
-// in a call site is a compile error rather than a row nobody notices.
+// A type-level assertion: RunRow.condition is the union, not a bare string, so a typo
+// in a call site is a compile error rather than a row nobody notices. The two
+// assignments are checked by npm run check:test.
 const TYPED: RunCondition = DEFAULT_CONDITION;
+const ROW_CONDITION: RunCondition = ({ condition: DEFAULT_CONDITION } as Pick<RunRow, "condition">).condition;
 test("the condition is a union type, not a bare string", () => {
   assert.equal(TYPED, "full");
-  const state = sourceFile("improve-state.ts");
-  assert.match(state, /condition: RunCondition;/, "RunRow.condition went back to a bare string");
+  assert.equal(ROW_CONDITION, "full");
 });
