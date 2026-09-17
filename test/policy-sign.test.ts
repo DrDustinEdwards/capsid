@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
 import { splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
-import { loadMergePolicy, AUTO_MERGE_POLICY_PATH, POLICY_CHECKS } from "../src/auto-merge.ts";
+import {
+  loadMergePolicy,
+  AUTO_MERGE_POLICY_PATH,
+  AUTO_MERGE_REFUSED_PATHS,
+  AUTO_MERGE_REQUIRED_CI,
+  POLICY_CHECKS,
+  requiredCiLabel,
+} from "../src/auto-merge.ts";
 import { adminAgent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
@@ -24,6 +31,9 @@ const POLICY_BODY = [
   "## Checks",
   "",
   ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
+  "",
+  ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
+  ...AUTO_MERGE_REQUIRED_CI.map((r) => `- step \`${requiredCiLabel(r)}\``),
   "",
 ].join("\n");
 
