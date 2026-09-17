@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderConsole, type ConsoleData } from "../src/console.ts";
 import type { NamespaceStatus } from "../src/improve-run.ts";
-import type { AgentReputation } from "../src/console-reputation.ts";
+import { reputationFrom, type AgentReputation } from "../src/console-reputation.ts";
 import { agentRecord } from "./fakes.ts";
 
 // GROUP 2: THE NAMESPACE ROWS.
@@ -81,6 +81,7 @@ function data(namespaces: NamespaceStatus[], agents: AgentReputation[] = []): Co
     },
     activity: [],
     activity_filter: { namespace: null, actor: null },
+    watcher_last: null,
     agents,
   };
 }
@@ -231,4 +232,50 @@ test("a namespace that has never run, never scored and never reported renders wi
   // A namespace with no report is NOT an integrity of zero, and the page must not
   // imply it is.
   assert.doesNotMatch(html, /\b0%/, "a missing truth report was rendered as 0%");
+});
+
+// THE WATCHER'S HEALTH IS ITS PASS STAMP, NOT ITS KEY. The Worker runs the watcher as
+// a synthetic identity and presents no key, so the minted row's last_seen stays null
+// for as long as the watcher works, and the cell used to read "never connected". The
+// key's own last_seen is still shown, because it answers a different question: is
+// the minted credential being used by anything.
+function watcherRow(watcherLast: string | null): string {
+  const [watcher, driver] = reputationFrom(
+    [
+      { name: "watcher", kind: "cron", namespaces: "*", grants: ["write"], flags: [], last_seen: null, revoked_at: null, record: agentRecord() },
+      { name: "capsid-driver", kind: "driver", namespaces: ["capsid"], grants: ["read", "write"], flags: [], last_seen: null, revoked_at: null, record: agentRecord() },
+    ],
+    { jobs: [], prsOpened: [], prsMerged: [], runs: [] }
+  );
+  const html = renderConsole({ ...data([], [watcher, driver]), watcher_last: watcherLast });
+  const start = html.indexOf("<td><code>watcher</code></td>");
+  assert.ok(start > 0, "the watcher row is not on the page");
+  return html.slice(start, html.indexOf("</tr>", start));
+}
+
+test("the watcher row shows the last pass, and the key's last_seen beside it", () => {
+  const row = watcherRow("2026-09-17T01:30:00.000Z");
+  assert.match(row, /last pass 2026-09-17T01:30:00.000Z/);
+  assert.match(row, /key: never connected/);
+});
+
+test("a watcher that has never passed says so, as a warning", () => {
+  const row = watcherRow(null);
+  assert.match(row, /class="warn">no pass recorded/);
+});
+
+test("only the watcher row changes: another agent with no last_seen still reads never connected", () => {
+  const [, driver] = reputationFrom(
+    [
+      { name: "watcher", kind: "cron", namespaces: "*", grants: ["write"], flags: [], last_seen: null, revoked_at: null, record: agentRecord() },
+      { name: "capsid-driver", kind: "driver", namespaces: ["capsid"], grants: ["read", "write"], flags: [], last_seen: null, revoked_at: null, record: agentRecord() },
+    ],
+    { jobs: [], prsOpened: [], prsMerged: [], runs: [] }
+  );
+  const html = renderConsole({ ...data([], [driver]), watcher_last: "2026-09-17T01:30:00.000Z" });
+  const start = html.indexOf("<td><code>capsid-driver</code></td>");
+  assert.ok(start > 0, "the driver row is not on the page");
+  const row = html.slice(start, html.indexOf("</tr>", start));
+  assert.match(row, /<td>never connected<\/td>/);
+  assert.doesNotMatch(html, /last pass/, "the pass stamp appeared on a row that is not the watcher's");
 });
