@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   AUTO_MERGE_POLICY_PATH,
+  FILES_LIMIT,
   POLICY_CHECKS,
   ciVerdict,
   declineParams,
@@ -417,4 +418,91 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
     const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
     assert.equal(merges.length, 0, "a declined PR was merged anyway");
   });
+});
+
+// ---- AUDIT-2026-09-16: THE TICK READ ONE PAGE ------------------------------------
+//
+// files and check-runs were fetched with per_page=100 and no next page was ever
+// followed, so a PR with 101 changed files was judged on 100, and a protected path on
+// page two passed paths_unprotected. The routes below answer the way GitHub does: at
+// most `per_page` rows per call, and a Link rel="next" header while more remain.
+
+function paged<T>(rows: T[], wrap: (page: T[]) => unknown = (page) => page) {
+  return (_body: unknown, search: URLSearchParams) => {
+    const perPage = Number(search.get("per_page") ?? 30);
+    const page = Number(search.get("page") ?? 1);
+    const slice = rows.slice((page - 1) * perPage, page * perPage);
+    const more = page * perPage < rows.length;
+    return {
+      body: wrap(slice),
+      ...(more ? { headers: { Link: `<https://api.github.com/repositories/1/x?per_page=${perPage}&page=${page + 1}>; rel="next"` } } : {}),
+    };
+  };
+}
+
+function pagedRoutes(files: string[], runs: Array<{ name: string; status: string; conclusion: string | null }>) {
+  return {
+    ...tickRoutes([]),
+    [`GET ${OWNER}/pulls/23/files`]: paged(files.map((filename) => ({ filename }))),
+    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: paged(runs, (page) => ({ total_count: runs.length, check_runs: page })),
+  };
+}
+
+const safeFiles = (n: number) => Array.from({ length: n }, (_, i) => `docs/page-${String(i).padStart(4, "0")}.md`);
+const green = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `check-${i}`, status: "completed", conclusion: "success" }));
+
+async function tickOnce(routes: Record<string, unknown>) {
+  const env = await enabledEnv();
+  let result: { report: Awaited<ReturnType<typeof autoMergeTick>>; merges: number } | null = null;
+  await withFetch(routes as never, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-17T12:00:00Z"));
+    result = { report, merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+  });
+  return result!;
+}
+
+test("PLANT: a protected path on the SECOND page of files is seen, and the PR is not merged", async () => {
+  const { report, merges } = await tickOnce(pagedRoutes([...safeFiles(100), "migrations/0099_planted.sql"], green(1)));
+  assert.equal(report.outcomes.length, 1);
+  assert.equal(merges, 0, "a PR whose 101st file is a migration was auto-merged");
+  assert.equal(report.outcomes[0].merged, false);
+  assert.equal(report.outcomes[0].failed, "paths_unprotected", report.outcomes[0].why ?? "");
+  assert.match(report.outcomes[0].why ?? "", /migrations\/0099_planted\.sql/);
+});
+
+test("PLANT: a failing check on the SECOND page of check runs is seen, and the PR is not merged", async () => {
+  const runs = [...green(100), { name: "late-check", status: "completed", conclusion: "failure" }];
+  const { report, merges } = await tickOnce(pagedRoutes(safeFiles(2), runs));
+  assert.equal(merges, 0, "a PR with a failing 101st check run was auto-merged");
+  assert.equal(report.outcomes[0].failed, "ci_green");
+  assert.match(report.outcomes[0].why ?? "", /late-check=failure/);
+});
+
+test("paging is not a refusal: a green PR spread over several pages still merges", async () => {
+  const { report, merges } = await tickOnce(pagedRoutes(safeFiles(250), green(150)));
+  assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+  assert.equal(merges, 1);
+});
+
+test("a file list GitHub itself truncates is refused, not judged on what came back", async () => {
+  // GitHub lists at most 3000 files for a pull request and then stops offering a next
+  // page, so a list that reaches the ceiling cannot be told apart from one that was cut.
+  const { report, merges } = await tickOnce(pagedRoutes(safeFiles(FILES_LIMIT), green(1)));
+  assert.equal(merges, 0);
+  assert.equal(report.outcomes[0].merged, false);
+  assert.equal(FILES_LIMIT, 3000, "GitHub documents 3000 as its per-PR file listing limit");
+  assert.match(report.outcomes[0].why ?? "", new RegExp(`at most ${FILES_LIMIT} files`));
+});
+
+test("a page that fails partway is refused, not judged on the pages that loaded", async () => {
+  const files = paged(safeFiles(150).map((filename) => ({ filename })));
+  const routes = {
+    ...pagedRoutes([], green(1)),
+    [`GET ${OWNER}/pulls/23/files`]: (body: unknown, search: URLSearchParams) =>
+      search.get("page") === "2" ? { status: 502, text: "bad gateway" } : files(body, search),
+  };
+  const { report, merges } = await tickOnce(routes);
+  assert.equal(merges, 0);
+  assert.equal(report.outcomes[0].merged, false);
+  assert.match(report.outcomes[0].why ?? "", /502/);
 });

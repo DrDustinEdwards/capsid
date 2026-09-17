@@ -337,18 +337,20 @@ test("GITHUB BEING UNREACHABLE NEVER FAILS THE JOB", async () => {
 // ---- the bar a job can set on a driver's history ---------------------------------
 
 test("a min_record nobody set is no requirement", () => {
-  assert.deepEqual(parseMinRecord(null), {});
-  assert.deepEqual(parseMinRecord(undefined), {});
+  assert.deepEqual(parseMinRecord(null), { ok: true, value: {} });
+  assert.deepEqual(parseMinRecord(undefined), { ok: true, value: {} });
+  assert.deepEqual(parseMinRecord("{}"), { ok: true, value: {} });
   assert.equal(missingForRecord({ prs_merged: 0 }, null), null);
 });
 
-test("a CORRUPT min_record strands nothing: it fails OPEN", () => {
-  // The opposite direction from parseScopes, and deliberately. A corrupt AGENT row
-  // must grant nothing; a corrupt JOB requirement must not invent a bar nobody wrote,
-  // because the cost is a job no amount of work can ever claim.
+test("a CORRUPT min_record refuses: it fails CLOSED", () => {
+  // Reversed 2026-09-17 (AUDIT-2026-09-16.md). A garbled bar is not the same as no
+  // bar; the claim marks such a job failed rather than leasing it to anyone.
   for (const bad of ["{", "[]", "null", '{"prs_merged":"lots"}', '{"prs_merged":-1}', '{"prs_merged":1.5}']) {
-    assert.deepEqual(parseMinRecord(bad), {}, `${bad} produced a requirement`);
-    assert.equal(missingForRecord({ prs_merged: 0 }, bad), null);
+    assert.equal(parseMinRecord(bad).ok, false, `${bad} parsed as a requirement`);
+    const refusal = missingForRecord({ prs_merged: 99 }, bad);
+    assert.ok(refusal, `${bad} was treated as no bar`);
+    assert.match(refusal, /min_record/);
   }
 });
 

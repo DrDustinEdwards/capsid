@@ -101,3 +101,52 @@ describe("required_scopes on the real queue transitions", () => {
     expect(await statusOf(posted.job!.id)).toBe("queued");
   });
 });
+
+// AUDIT-2026-09-16: A GARBLED REQUIREMENT IS NOT THE SAME AS NONE.
+//
+// parseRequiredScopes and parseMinRecord returned "no requirement" on a value they
+// could not read, so a row whose requirement had been damaged was leased to any
+// driver at all. Corrupted here by a raw splice, which is the way such a row arises:
+// post validates both fields before it writes them.
+describe("a corrupt job requirement fails closed at the claim", () => {
+  beforeEach(async () => {
+    await env.DB.prepare("DELETE FROM jobs").run();
+    await env.DB.prepare("DELETE FROM job_outcomes").run();
+  });
+
+  for (const [field, value] of [
+    ["required_scopes", "{not json"],
+    ["required_scopes", "[]"],
+    ["required_scopes", '{"flags":"can_merge"}'],
+    ["required_scopes", '{"flags":["can_fly"]}'],
+    ["min_record", "{not json"],
+    ["min_record", '{"prs_merged":"lots"}'],
+  ] as const) {
+    it(`PLANT: ${field} = ${value} refuses the claim, names the job and the field, and fails the job`, async () => {
+      const posted = await post();
+      const id = posted.job!.id;
+      await env.DB.prepare(`UPDATE jobs SET ${field} = ?1 WHERE id = ?2`).bind(value, id).run();
+
+      const refused = await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
+      expect(refused.ok, `a job with a corrupt ${field} was leased`).toBe(false);
+      expect(refused.refusal).toContain(id);
+      expect(refused.refusal).toContain(field);
+      // FAILED, not left queued: a claim with no id takes the top queued job, so a
+      // corrupt row left queued would refuse every claim in the namespace for good.
+      expect(await statusOf(id)).toBe("failed");
+    });
+  }
+
+  it("a corrupt requirement on a BLOCKED job refuses the resume and leaves it blocked", async () => {
+    const posted = await post();
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
+    await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
+    await env.DB.prepare("UPDATE jobs SET required_scopes = '{not json' WHERE id = ?1").bind(id).run();
+
+    const refused = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "picking it up");
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toContain("required_scopes");
+    expect(await statusOf(id)).toBe("blocked");
+  });
+});

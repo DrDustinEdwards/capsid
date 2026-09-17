@@ -136,28 +136,58 @@ export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// FAILS OPEN, which is the opposite of parseScopes and deliberately so. A corrupt
-// AGENT row must grant nothing, because the cost of getting that wrong is a caller
-// doing what it should not. A corrupt JOB requirement must not invent a requirement
-// nobody wrote, because the cost of getting THAT wrong is a job stranded in the queue
-// behind a refusal no scope change can satisfy. The claim still checks the write
-// grant and the namespace either way, which is the floor.
-export function parseRequiredScopes(json: string | null | undefined): RequiredScopes {
-  const empty: RequiredScopes = { flags: [] };
-  if (!json) return empty;
+// A JOB REQUIREMENT THAT CANNOT BE READ IS CORRUPT, NOT ABSENT (AUDIT-2026-09-16.md).
+//
+// Both parsers used to fail OPEN, on the reasoning that a corrupt requirement must not
+// strand a job behind a refusal nothing can satisfy. What that did instead was lease
+// a job whose requirement had been damaged to any driver at all, and a garbled
+// "needs can_merge" is not the same statement as "needs nothing". post validates both
+// fields before it writes them, so an unreadable value only arises from a write that
+// bypassed post, which is exactly the row that should not be handed out.
+//
+// The stranding the old ruling feared is handled at the claim instead: a job whose
+// requirement is corrupt is marked FAILED there, with the field named, the way a job
+// whose signature fails is. Resume refuses and leaves it blocked.
+//
+// null, undefined and "" are NO requirement, which is what post writes when none was
+// asked for. An object that omits the field is also none. Anything else that does not
+// parse to the documented shape is corrupt.
+export type ParsedRequirement<T> = { ok: true; value: T } | { ok: false; problem: string };
+
+function parseObject(field: string, json: string): ParsedRequirement<Record<string, unknown>> {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
   } catch {
-    return empty;
+    return { ok: false, problem: `${field} is not JSON` };
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return empty;
-  const record = raw as Record<string, unknown>;
-  return {
-    flags: Array.isArray(record.flags)
-      ? (record.flags.filter((f): f is ScopeFlag => (SCOPE_FLAGS as readonly unknown[]).includes(f)) as ScopeFlag[])
-      : [],
-  };
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return { ok: false, problem: `${field} is not a JSON object` };
+  }
+  return { ok: true, value: raw as Record<string, unknown> };
+}
+
+export function parseRequiredScopes(json: string | null | undefined): ParsedRequirement<RequiredScopes> {
+  if (!json) return { ok: true, value: { flags: [] } };
+  const parsed = parseObject("required_scopes", json);
+  if (!parsed.ok) return parsed;
+  const flags = parsed.value.flags;
+  if (flags === undefined) return { ok: true, value: { flags: [] } };
+  if (!Array.isArray(flags)) return { ok: false, problem: "required_scopes.flags is not an array" };
+  const unknown = flags.filter((f) => !(SCOPE_FLAGS as readonly unknown[]).includes(f));
+  if (unknown.length) {
+    const names = unknown.map((f) => JSON.stringify(f)).join(", ");
+    return { ok: false, problem: `required_scopes.flags names ${names}, which ${unknown.length === 1 ? "is not a flag" : "are not flags"}` };
+  }
+  return { ok: true, value: { flags: flags as ScopeFlag[] } };
+}
+
+/** The problem with a job's stored requirements, or null when both read cleanly. */
+export function corruptRequirement(job: { required_scopes: string | null; min_record: string | null }): string | null {
+  const scopes = parseRequiredScopes(job.required_scopes);
+  if (!scopes.ok) return scopes.problem;
+  const min = parseMinRecord(job.min_record);
+  return min.ok ? null : min.problem;
 }
 
 export function serializeRequiredScopes(required: Partial<RequiredScopes>): string {
@@ -173,7 +203,10 @@ export function serializeRequiredScopes(required: Partial<RequiredScopes>): stri
 // top.
 export function missingForJob(agent: Agent, namespace: string, requiredScopes: string | null | undefined): string | null {
   const required = parseRequiredScopes(requiredScopes);
-  return checkScope(agent, { tool: "jobs", namespace, grant: "write", flags: required.flags });
+  // Fails closed here too, so a caller that reaches this without the claim's corrupt
+  // check first still cannot be handed the job.
+  if (!required.ok) return `this job's ${required.problem}, so nothing can be checked against it.`;
+  return checkScope(agent, { tool: "jobs", namespace, grant: "write", flags: required.value.flags });
 }
 
 // job_<12 hex>, minted by the Worker. Not an AUTOINCREMENT integer: a job id is
@@ -204,21 +237,17 @@ export interface MinRecord {
   prs_merged?: number;
 }
 
-// FAILS OPEN, for the same reason parseRequiredScopes does and with the same asymmetry
-// against parseScopes: a corrupt JOB requirement must not invent a bar nobody wrote,
-// because the cost is a job stranded in the queue behind a refusal no amount of work
-// can satisfy.
-export function parseMinRecord(json: string | null | undefined): MinRecord {
-  if (!json) return {};
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch {
-    return {};
+// FAILS CLOSED, on the same terms as parseRequiredScopes above.
+export function parseMinRecord(json: string | null | undefined): ParsedRequirement<MinRecord> {
+  if (!json) return { ok: true, value: {} };
+  const parsed = parseObject("min_record", json);
+  if (!parsed.ok) return parsed;
+  const value = parsed.value.prs_merged;
+  if (value === undefined) return { ok: true, value: {} };
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return { ok: false, problem: `min_record.prs_merged is ${JSON.stringify(value)}, not a whole number of zero or more` };
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
-  const value = (raw as Record<string, unknown>).prs_merged;
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? { prs_merged: value } : {};
+  return { ok: true, value: { prs_merged: value } };
 }
 
 export function serializeMinRecord(min: MinRecord): string {
@@ -229,7 +258,9 @@ export function serializeMinRecord(min: MinRecord): string {
 // shortfall, or null. Takes the record's numbers rather than the record, so this stays
 // a pure comparison and src/agent-record.ts stays the only place they are computed.
 export function missingForRecord(record: { prs_merged: number }, minRecord: string | null | undefined): string | null {
-  const { prs_merged } = parseMinRecord(minRecord);
+  const parsed = parseMinRecord(minRecord);
+  if (!parsed.ok) return `this job's ${parsed.problem}, so no record can be compared against it.`;
+  const { prs_merged } = parsed.value;
   if (prs_merged === undefined || record.prs_merged >= prs_merged) return null;
   return `this job asks for a driver with at least ${prs_merged} merged pull request${prs_merged === 1 ? "" : "s"} on its record, and this one has ${record.prs_merged}.`;
 }

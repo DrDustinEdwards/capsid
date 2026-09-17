@@ -64,16 +64,21 @@ test("the legacy key and the admin can still claim anything, which is what keeps
   assert.equal(missingForJob(adminAgent("DrDustinEdwards"), "foxhound", everything), null);
 });
 
-test("a required_scopes blob that cannot be read demands nothing rather than everything", () => {
-  // The opposite fail-closed direction from parseScopes, and deliberately so. A
-  // corrupt AGENT row must grant nothing; a corrupt JOB requirement must not invent a
-  // requirement nobody wrote, because that would strand the job in the queue with a
-  // refusal no scope change can satisfy. The claim still checks the grant and the
-  // namespace, which is the floor.
-  assert.deepEqual(parseRequiredScopes("{"), { flags: [] });
-  assert.deepEqual(parseRequiredScopes("[]"), { flags: [] });
-  assert.deepEqual(parseRequiredScopes('{"flags":["can_fly","can_merge"],"grants":["admin"]}'), { flags: ["can_merge"] });
-  assert.equal(missingForJob(driver(), "capsid", "{"), null);
+test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather than demanding nothing", () => {
+  // Reversed 2026-09-17 (AUDIT-2026-09-16.md). This used to fail open, and a job whose
+  // requirement had been damaged was leased to any driver. The claim now marks such a
+  // job failed, so the stranding the old ruling feared cannot happen either.
+  for (const bad of ["{", "[]", "null", '{"flags":"can_merge"}', '{"flags":["can_fly","can_merge"]}']) {
+    const parsed = parseRequiredScopes(bad);
+    assert.equal(parsed.ok, false, `${bad} parsed as a requirement`);
+    const refusal = missingForJob(driver(), "capsid", bad);
+    assert.ok(refusal, `${bad} was treated as no requirement`);
+    assert.match(refusal, /required_scopes/);
+  }
+  // None is still none.
+  assert.deepEqual(parseRequiredScopes(null), { ok: true, value: { flags: [] } });
+  assert.deepEqual(parseRequiredScopes('{"flags":["can_merge"]}'), { ok: true, value: { flags: ["can_merge"] } });
+  assert.deepEqual(parseRequiredScopes("{}"), { ok: true, value: { flags: [] } });
 });
 
 test("the claim checks scopes BEFORE it takes the lease", () => {

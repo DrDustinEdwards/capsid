@@ -492,6 +492,27 @@ describe("list", () => {
     const stillQueued = await listJobs(jobsEnv(), { namespace: "capsid", status: "queued" });
     expect(stillQueued.jobs!.map((j) => j.title)).toEqual(["low"]);
   });
+
+  it("carries no body, unless one job is named and the body was asked for", async () => {
+    // AUDIT-2026-09-16.md. The column list is SQL a fake cannot check; this can.
+    const posted = await post({ title: "has a body" });
+    const id = posted.job!.id;
+
+    const listed = await listJobs(jobsEnv(), { namespace: "capsid" });
+    expect(listed.jobs!.length).toBeGreaterThan(0);
+    for (const job of listed.jobs!) expect(job).not.toHaveProperty("body");
+
+    // withBody without an id is ignored: a whole-namespace list never carries bodies.
+    const wide = await listJobs(jobsEnv(), { namespace: "capsid" }, { withBody: true });
+    for (const job of wide.jobs!) expect(job).not.toHaveProperty("body");
+
+    const one = await listJobs(jobsEnv(), { namespace: "capsid", id }, { withBody: true });
+    expect(one.jobs!).toHaveLength(1);
+    expect((one.jobs![0] as { body?: string }).body).toContain("capsid-task-signature");
+
+    const oneNoBody = await listJobs(jobsEnv(), { namespace: "capsid", id });
+    expect(oneNoBody.jobs![0]).not.toHaveProperty("body");
+  });
 });
 
 describe("the improve_status jobs block", () => {

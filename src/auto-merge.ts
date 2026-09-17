@@ -234,6 +234,41 @@ export function ciVerdict(
   return { conclusion: "success", note: `${runs.length} check(s) green` };
 }
 
+// ---- reading a paged GitHub list to the end ----------------------------------------
+//
+// AUDIT-2026-09-16: the tick read the first 100 files and the first 100 check runs of
+// a PR and judged it on those. Every page is read now, and a list that could not be
+// read whole is reported rather than judged. The cost is bounded: GitHub serves at most
+// FILES_LIMIT files for a pull request, which is FILES_MAX_PAGES pages at PER_PAGE, and
+// check runs stop at CHECKS_MAX_PAGES. A PR under 100 of each costs the same two reads
+// as before.
+//
+// THE NEXT PAGE IS REQUESTED BY NUMBER on the repo's own path. The Link header is read
+// only to learn that another page exists, so its URL never reaches ghFetch, whose
+// bounds check accepts only /repos/<owner>/<repo>/ paths.
+const PER_PAGE = 100;
+export const FILES_LIMIT = 3000;
+const FILES_MAX_PAGES = FILES_LIMIT / PER_PAGE;
+const CHECKS_MAX_PAGES = 10;
+
+async function readAllPages<T>(
+  env: Env,
+  owner: string,
+  repo: string,
+  path: string,
+  rowsOf: (body: unknown) => T[],
+  maxPages: number
+): Promise<{ items: T[]; problem: string | null }> {
+  const items: T[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const resp = await ghFetch(env, owner, repo, `${path}?per_page=${PER_PAGE}&page=${page}`);
+    if (!resp.ok) return { items, problem: `page ${page} returned ${resp.status}` };
+    items.push(...(rowsOf(await resp.json()) ?? []));
+    if (!/rel="next"/.test(resp.headers.get("Link") ?? "")) return { items, problem: null };
+  }
+  return { items, problem: `more than ${maxPages} pages` };
+}
+
 async function factsForPr(
   env: Env,
   namespace: string,
@@ -261,20 +296,28 @@ async function factsForPr(
     }
   }
 
-  const [filesResp, checksResp] = await Promise.all([
-    ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}/files?per_page=100`),
-    ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs?per_page=100`),
+  const [files, checks] = await Promise.all([
+    readAllPages<{ filename: string }>(
+      env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}/files`, (page) => page as Array<{ filename: string }>, FILES_MAX_PAGES
+    ),
+    readAllPages<{ name: string; status: string; conclusion: string | null }>(
+      env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
+      (page) => (page as { check_runs: Array<{ name: string; status: string; conclusion: string | null }> }).check_runs,
+      CHECKS_MAX_PAGES
+    ),
   ]);
-  const changedPaths = filesResp.ok ? ((await filesResp.json()) as Array<{ filename: string }>).map((f) => f.filename) : [];
-  const checks = checksResp.ok
-    ? ((await checksResp.json()) as { check_runs: Array<{ name: string; status: string; conclusion: string | null }> }).check_runs
-    : [];
-  // A read that failed is not a pass. Both feed checks that refuse on an empty answer:
-  // an unreadable file list yields no paths and an unreadable check list yields no
-  // runs, and ciVerdict calls no runs not-green.
-  const ci = filesResp.ok
-    ? ciVerdict(checks)
-    : { conclusion: null, note: `the changed-file list could not be read (${filesResp.status}), so this PR is not evaluated` };
+  // A GitHub file list stops at FILES_LIMIT with no next page, so a list that reached
+  // it may have been cut by GitHub rather than by this reader.
+  const filesProblem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
+  const changedPaths = files.items.map((f) => f.filename);
+  // A read that failed or was cut short is not a pass. Either one makes the PR
+  // unevaluated, which ci_green refuses with the reason, so the seat decides it. Judging
+  // it on the pages that did load is how a protected path on page two was merged.
+  const ci = filesProblem
+    ? { conclusion: null, note: `the changed-file list is incomplete (${filesProblem}), so this PR is not evaluated` }
+    : checks.problem
+      ? { conclusion: null, note: `the check-run list is incomplete (${checks.problem}), so this PR is not evaluated` }
+      : ciVerdict(checks.items);
 
   return {
     number: pr.number,
