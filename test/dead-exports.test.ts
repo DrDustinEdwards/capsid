@@ -159,10 +159,28 @@ function callableText(text: string): string {
   return stripComments(text).replace(RE_EXPORT_FROM, "").replace(RE_EXPORT_STAR, "");
 }
 
+// EVERY IDENTIFIER IN A FILE'S CALLABLE TEXT, computed once per file. An export name
+// is word characters only, so `\bname\b` matches exactly when some maximal run of
+// word characters equals the name, which is a set lookup. The scan used to strip
+// comments and run that regex over every reader for every export, and that was 122
+// of the suite's 219 summed seconds (measured 2026-09-17).
+function identifiers(text: string): Set<string> {
+  return new Set(callableText(text).match(/\w+/g) ?? []);
+}
+
+let callerIndex: { src: Array<{ name: string; ids: Set<string> }>; readers: Array<Set<string>> } | null = null;
+function callers() {
+  callerIndex ??= {
+    src: sourceFiles().map((f) => ({ name: f.name, ids: identifiers(f.text) })),
+    readers: READERS.map((f) => identifiers(f.text)),
+  };
+  return callerIndex;
+}
+
 function hasCallerElsewhere(name: string, ownFile: string): boolean {
-  const re = new RegExp(`\\b${name}\\b`);
-  if (sourceFiles().some((f) => f.name !== ownFile && re.test(callableText(f.text)))) return true;
-  return READERS.some((f) => re.test(callableText(f.text)));
+  const index = callers();
+  if (index.src.some((f) => f.name !== ownFile && f.ids.has(name))) return true;
+  return index.readers.some((ids) => ids.has(name));
 }
 
 test("the scan finds the exports at all, so nothing here can pass by reading nothing", () => {
