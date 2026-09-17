@@ -131,6 +131,7 @@ test("the gate check is not vacuous: several tools are found to be mutating", ()
   }
 });
 
+// scanner-rule: CLAUDE.md rules 5 and 6, guardedWrite is the one place a repo mutation is gated, flagged and audited. Its per-flag refusals are driven in test/blast-radius.test.ts
 test("the one mutating helper outside a tool handler carries the gate itself", () => {
   // guardedWrite writes the audit row for the repo tools, so their own blocks
   // contain no SQL and the scan above cannot see them. The gate has to be here.

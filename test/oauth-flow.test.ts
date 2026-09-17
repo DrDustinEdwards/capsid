@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "../src/approval.ts";
+import { approvalTag } from "../src/approval.ts";
 import { callerIp, checkRate, dcrRedirectRefusal, isLoopbackRedirect, MAX_PER_DAY, MAX_PER_HOUR, REGISTRATION_LIMIT, type RateVerdict } from "../src/rate-limit.ts";
 
 const checkRegistrationRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, REGISTRATION_LIMIT);
 import { fakeKv } from "./fakes.ts";
 
-const src = (name: string) => readFileSync(join(import.meta.dirname, "..", "src", name), "utf8");
 
 // The KV is the shared fake now (quality audit 6.2). Its failure injection came
 // from this file's local copy and is what makes the limiter's fail-open paths
 // testable at all; the merged version keeps it and adds list plus pagination.
+
+const src = (name: string) => readFileSync(join(import.meta.dirname, "..", "src", name), "utf8");
 
 const NOW = new Date("2026-08-17T14:30:00.000Z");
 const HOUR_KEY = "dcr:rate:h:1.2.3.4:2026-08-17T14";
@@ -116,78 +117,24 @@ test("callerIp reads CF-Connecting-IP and falls back off the edge", () => {
   assert.equal(callerIp(new Request("https://x/")), "unknown");
 });
 
-test("the rejection is wired to the library's registration callback", () => {
-  const index = src("index.ts");
-  assert.match(index, /clientRegistrationCallback: async/);
-  assert.match(index, /checkRate\(env\.APP_KV, ip, new Date\(\), REGISTRATION_LIMIT\)/);
-  assert.match(index, /status: 429/);
-  // Fail open at the wiring layer too: no env must not mean no registration.
-  assert.match(index, /if \(!env\) \{[\s\S]*?return;/);
-});
+// The wiring of this limiter into the provider's registration callback is driven in
+// test-integration/oauth-flow.test.ts: a caller over the limit gets 429 from /register.
 
 // ---- 1. F18: the state is consumed after the exchange, not before ------------
 
-test("the state delete follows the GitHub token exchange", () => {
-  const handler = src("routes.ts");
-  const callback = handler.slice(handler.indexOf("async function handleCallback"));
-  const readAt = callback.indexOf("await env.OAUTH_KV.get(stateKey)");
-  const exchangeAt = callback.indexOf("await fetch(GITHUB_TOKEN_URL");
-  const accessTokenAt = callback.indexOf("if (!tokenData.access_token)");
-  const deleteAt = callback.indexOf("await env.OAUTH_KV.delete(stateKey)", accessTokenAt);
-  assert.ok(readAt > 0 && exchangeAt > 0 && accessTokenAt > 0, "handleCallback no longer has the shape this asserts");
-  assert.ok(deleteAt > accessTokenAt, "the state is still deleted before the exchange succeeds");
-  // And nothing deletes it between the read and the exchange.
-  const between = callback.slice(readAt, exchangeAt);
-  const strayDelete = between.indexOf("OAUTH_KV.delete(stateKey)");
-  if (strayDelete !== -1) {
-    // The only permitted early delete is the corrupt-payload path, which returns 403.
-    assert.match(between.slice(strayDelete, strayDelete + 220), /unreadable/);
-  }
-});
+// The callback's state handling is driven in test-integration/oauth-flow.test.ts: a
+// failed token exchange leaves the state in place, and a corrupt stored state answers
+// 403, is removed, and never reaches GitHub.
 
-test("a corrupt stored state answers 403 instead of throwing", () => {
-  const handler = src("routes.ts");
-  const callback = handler.slice(handler.indexOf("async function handleCallback"));
-  // The parse is guarded and the guard returns the restart instruction.
-  assert.match(callback, /try \{\s*oauthReq = JSON\.parse\(stored\) as AuthRequest;\s*\} catch \{/);
-  assert.match(callback, /"stored authorization state is unreadable\. Restart from your MCP client\.", 403/);
-});
 
 // ---- 2. the approval cookie -------------------------------------------------
 
-test("the approval cookie lives 30 days, not a year", () => {
-  assert.equal(APPROVAL_MAX_AGE_SECONDS, 2_592_000);
-  const handler = src("routes.ts");
-  assert.match(handler, /Max-Age=\$\{APPROVAL_MAX_AGE_SECONDS\}/);
-  assert.doesNotMatch(handler, /Max-Age=31536000/, "the one year approval cookie is back");
-});
+// The approval cookie's lifetime, its binding to one redirect, the dialog listing every
+// registered redirect, and a stale approval for a client that no longer resolves are
+// driven in test-integration/oauth-flow.test.ts.
 
-test("an approval is bound to the EXACT requested redirect URI, not the set (audit 2026-09-06)", () => {
-  const handler = src("routes.ts");
-  // Both sides bind the single requested redirectUri, not client.redirectUris.
-  assert.match(handler, /approved\.includes\(await approvalTag\(oauthReq\.clientId, oauthReq\.redirectUri\)\)/);
-  assert.match(handler, /const tag = await approvalTag\(oauthReq\.clientId, oauthReq\.redirectUri\);/);
-  assert.doesNotMatch(handler, /approvalTag\(oauthReq\.clientId, client\.redirectUris\)/, "the set-based binding is back");
-  assert.doesNotMatch(handler, /approved\.includes\(oauthReq\.clientId\)/, "the bare client id check is back");
-});
 
-test("the dialog renders every registered redirect URI, not only the requested one", () => {
-  const handler = src("routes.ts");
-  // renderApprovalDialog takes the full registered set and lists the others.
-  assert.match(handler, /renderApprovalDialog\(oauthReq, client\.clientName \?\? oauthReq\.clientId, crypto\.randomUUID\(\), client\.redirectUris\)/);
-  assert.match(handler, /registeredUris/);
-});
 
-test("the client is resolved before the cookie can skip the dialog", () => {
-  // Order matters: a client id that no longer resolves must not ride an old cookie
-  // past the consent screen.
-  const handler = src("routes.ts");
-  const get = handler.slice(handler.indexOf("async function handleAuthorizeGet"), handler.indexOf("async function handleAuthorizePost"));
-  const lookupAt = get.indexOf("lookupClient(oauthReq.clientId)");
-  const approvedAt = get.indexOf("await approvedClients(");
-  assert.ok(lookupAt > 0 && approvedAt > 0);
-  assert.ok(lookupAt < approvedAt, "the cookie is still consulted before the client is resolved");
-});
 
 // The REAL function, not a copy of it: this is the security property of the cookie.
 test("the tag binds one redirect URI, so approving one does not authorize a sibling", async () => {
@@ -206,6 +153,21 @@ test("the tag binds one redirect URI, so approving one does not authorize a sibl
   // The measured shape: id, dot, 16 hex.
   assert.match(approvedForClaude, /^[A-Za-z0-9_-]+\.[0-9a-f]{16}$/);
   assert.equal(await approvalTag("abc", undefined), await approvalTag("abc", ""));
+});
+
+// scanner-rule: defence in depth behind the OAuth provider. parseAuthRequest already refuses
+// a client that does not resolve, so the handler's own order cannot be observed through the
+// Worker: a plant that moved the cookie check first left test-integration/oauth-flow.test.ts
+// green. src/routes.ts cannot load under node --test, so the order is read as text.
+test("the client is resolved before the cookie can skip the dialog", () => {
+  // Order matters: a client id that no longer resolves must not ride an old cookie
+  // past the consent screen.
+  const handler = src("routes.ts");
+  const get = handler.slice(handler.indexOf("async function handleAuthorizeGet"), handler.indexOf("async function handleAuthorizePost"));
+  const lookupAt = get.indexOf("lookupClient(oauthReq.clientId)");
+  const approvedAt = get.indexOf("await approvedClients(");
+  assert.ok(lookupAt > 0 && approvedAt > 0);
+  assert.ok(lookupAt < approvedAt, "the cookie is still consulted before the client is resolved");
 });
 
 // ---- Fix 4: DCR redirect cap and resource pinning ---------------------------
@@ -235,10 +197,6 @@ test("isLoopbackRedirect classifies hosts and treats a malformed URI as non-loop
   assert.equal(isLoopbackRedirect("not a url"), false);
 });
 
-test("the provider pins resourceMetadata.resource to the canonical /mcp URL", () => {
-  const index = src("index.ts");
-  assert.match(index, /resourceMetadata: \{ resource: CANONICAL_MCP_URL \}/);
-  assert.match(index, /CANONICAL_MCP_URL = "https:\/\/capsid\.dustin-edwards\.workers\.dev\/mcp"/);
-  // And the registration callback wires the redirect cap.
-  assert.match(index, /dcrRedirectRefusal\(clientMetadata\)/);
-});
+// The pinned resource and the redirect cap at registration are driven in
+// test-integration/oauth.test.ts: "serves protected-resource and authorization-server
+// metadata" and "PLANT: two https redirect_uris are refused at POST /register".

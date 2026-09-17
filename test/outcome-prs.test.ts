@@ -10,14 +10,17 @@ import {
   prUrlsFromJob,
 } from "../src/outcome-prs.ts";
 import { parseEvidence } from "../src/job-outcomes.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // OUTCOME ROWS ARE IMMUTABLE EXCEPT MERGE STATE. A driver never merges: it blocks and
 // the seat merges afterwards, so every row is written "opened, not merged" and stays
 // wrong. These cover the one narrow path that corrects it.
 
 const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0015_outcome_prs.sql"), "utf8");
-const SOURCE = readFileSync(join(import.meta.dirname, "..", "src", "outcome-prs.ts"), "utf8");
-const TOOL = readFileSync(join(import.meta.dirname, "..", "src", "tools", "jobs.ts"), "utf8");
 
 function recorder() {
   const recorded: Array<{ sql: string; params: unknown[] }> = [];
@@ -101,82 +104,19 @@ test("a near-miss URL is not mistaken for a pull request", () => {
   assert.deepEqual(urls, [], "an issue and a non-numeric pull path are neither of them evidence");
 });
 
-test("a seeded URL is verified against GitHub before anything is counted", () => {
-  // A URL scraped out of prose is a claim, and this whole change exists because a
-  // claim is not evidence. The seed writes merged NULL and the ordinary re-verify
-  // path is what sets it.
-  const sweep = /export async function reverifySweep[\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(sweep, "reverifySweep is gone");
-  assert.ok(
-    sweep[0].indexOf("outcomePrStatements") < sweep[0].indexOf("dueForReverify"),
-    "seeding must happen before the verification pass, so a seeded row is verified in the same sweep"
-  );
-  assert.equal(/prs_merged/.test(sweep[0]), false, "the sweep itself must not write a count");
-});
+// The re-verification rules are driven against a real D1 in
+// test-integration/outcome-prs.test.ts: a seeded URL is looked at in the same sweep and
+// counted only by GitHub's answer; the count is recomputed, never incremented, and no
+// other column moves; an unreadable pull request and an unnamed one write nothing; a
+// pull request closed unmerged is stored as 0; the sweep binds its limit, takes
+// never-checked rows first, and skips what is known merged.
+
 
 // ---- what re-verification touches ---------------------------------------------------
 
-test("re-verification recomputes rather than increments, and touches nothing it cannot verify", () => {
-  // The SQL moved into reverifyStatements on 2026-09-13 so the integration suite can
-  // execute it against a real D1; this scan follows it there. What it still guards is
-  // the increment, which drifts because this path runs on a merge AND on a sweep and
-  // will eventually run twice on the same pull request.
-  const body = /export function reverifyStatements[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(body, "reverifyStatements is gone");
-  // ANCHORED ON THE CLOSING BACKTICK, not on the first `WHERE job_id = ?1`, because
-  // that one is inside the subselect that recomputes the count. The non-greedy match
-  // this replaces stopped there, so `update[0]` was a truncated prefix ending mid
-  // statement and the "must not be touched" loop below was scanning text that could
-  // not have contained any of those columns whatever the code did. It passed by
-  // reading nothing, which is the failure mode capsid/conventions.md names.
-  const update = /UPDATE job_outcomes[\s\S]*?WHERE job_id = \?1`/.exec(body[0]);
-  assert.ok(update, "the outcome update is gone");
-  assert.match(update[0], /verified = /, "the scan stopped before the end of the statement again");
-  assert.match(update[0], /prs_merged = \(SELECT COUNT\(\*\)/);
-  assert.equal(/prs_merged = prs_merged/.test(update[0]), false, "never an increment");
-  // prs_opened IS touched now, and that is the fix rather than a regression: it is
-  // recomputed from the join rows, never incremented, and only when no row is left
-  // unread (audit 2026-09-13, finding 10). test-integration/job-outcomes.test.ts is
-  // what proves the CASE fires; this only proves it is not an increment.
-  assert.match(update[0], /prs_opened = CASE/);
-  assert.equal(/prs_opened = prs_opened \+/.test(update[0]), false, "never an increment");
-  // The rest stay untouched: this path learns a merge state, and nothing else about
-  // the work has changed since the row was written.
-  for (const column of ["commits", "files_changed", "tests_added", "ci_green", "duration_minutes"]) {
-    assert.equal(new RegExp(`${column}\\s*=`).test(update[0]), false, `${column} must not be touched`);
-  }
-});
 
-test("an unreachable GitHub leaves every row exactly as it was", () => {
-  const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(body);
-  assert.match(body[0], /if \(typeof facts === "string"\) return \[\];/);
-  // The write is now one call to the statement builder, so what has to come first is
-  // the bail before THAT rather than before the SQL text.
-  assert.ok(
-    body[0].indexOf('typeof facts === "string"') < body[0].indexOf("reverifyStatements("),
-    "the bail must come before any write"
-  );
-});
 
-test("a pull request closed unmerged is recorded as 0, and does not increment the count", () => {
-  const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(body);
-  assert.match(body[0], /const merged = facts\.merged === true;/, "merged is strictly GitHub's answer");
-  // The 1-or-0 and the recomputation both live in the builder now.
-  const builder = /export function reverifyStatements[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(builder, "reverifyStatements is gone");
-  assert.match(builder[0], /merged \? 1 : 0/);
-  // And the recomputation counts merged = 1 only, so a 0 contributes nothing.
-  assert.match(builder[0], /WHERE job_id = \?1 AND merged = 1/);
-});
 
-test("a row that does not name the pull request is untouched", () => {
-  const body = /export async function reverifyPr[\s\S]*?\n\}\n/.exec(SOURCE);
-  assert.ok(body);
-  assert.match(body[0], /SELECT job_id, merged FROM job_outcome_prs WHERE pr_url = \?1/);
-  assert.match(body[0], /if \(named\.length === 0\) return \[\];/, "no naming row means no work and no writes");
-});
 
 // ---- the bounds ----------------------------------------------------------------------
 
@@ -184,22 +124,64 @@ test("the sweep is bounded per run and by age, and runs daily", () => {
   assert.equal(REVERIFY_PER_SWEEP, 50);
   assert.equal(REVERIFY_WINDOW_DAYS, 30);
   assert.equal(SWEEP_INTERVAL_MS, 86_400_000);
-  assert.match(SOURCE, /LIMIT \?2/, "both queries bind their limit rather than interpolating it");
 });
 
-test("the sweep prefers what has never been checked", () => {
-  const due = /export async function dueForReverify[\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(due);
-  assert.match(due[0], /ORDER BY p\.merge_verified_at IS NOT NULL, p\.merge_verified_at ASC/);
-  assert.match(due[0], /p\.merged IS NULL OR p\.merged = 0/, "a row already known merged is not re-read");
-});
 
-test("a merge that fails to update an outcome does not fail the merge", () => {
-  const repo = readFileSync(join(import.meta.dirname, "..", "src", "tools", "repo.ts"), "utf8");
-  const hook = /if \(action === "merge"\) \{[\s\S]*?\n          \}/.exec(repo);
-  assert.ok(hook, "the merge hook is gone from manage_pr");
-  assert.match(hook[0], /try \{/, "the re-verification must be wrapped");
-  assert.match(hook[0], /OUTCOME_REVERIFY_FAILED/);
+async function connectAdmin(db: unknown) {
+  const server = buildServer(fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "outcome-prs", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return client;
+}
+
+test("a merge that fails to update an outcome does not fail the merge", async () => {
+  // The merge already happened on GitHub. Reporting it as failed because the outcome
+  // bookkeeping threw would be a lie about the merge.
+  const statement = (sql: string) => {
+    const stmt = {
+      bind: () => stmt,
+      first: async () => {
+        if (/job_outcome_prs/.test(sql)) throw new Error("planted outcome failure");
+        if (/FROM namespaces/.test(sql)) return { repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) };
+        return null;
+      },
+      all: async () => {
+        if (/job_outcome_prs/.test(sql)) throw new Error("planted outcome failure");
+        return { results: [] };
+      },
+      run: async () => ({ meta: {} }),
+    };
+    return stmt;
+  };
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
+  try {
+    await withFetch(
+      {
+        "GET /repos/owner/repo": { body: { default_branch: "main" } },
+        "GET /repos/owner/repo/pulls/7": {
+          body: { number: 7, state: "open", merged: false, head: { ref: "feat/x", sha: "abc" }, base: { ref: "main" } },
+        },
+        "PUT /repos/owner/repo/pulls/7/merge": { body: { merged: true, sha: "m1" } },
+        "DELETE /repos/owner/repo/git/refs/heads/feat/x": { status: 204 },
+      },
+      async () => {
+        const client = await connectAdmin({ prepare: statement, batch: async () => [] });
+        const result = (await client.callTool({
+          name: "manage_pr",
+          arguments: { namespace: "capsid", number: 7, action: "merge" },
+        })) as { isError?: boolean; content: Array<{ text: string }> };
+        await client.close();
+        assert.notEqual(result.isError, true, result.content[0]?.text);
+        assert.equal(JSON.parse(result.content[0].text).merged, true);
+      }
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.ok(errors.some((e) => e.startsWith("OUTCOME_REVERIFY_FAILED pr 7")), "the planted failure did not reach the re-verification");
 });
 
 // ---- evidence as an object or a JSON string ------------------------------------------
@@ -255,8 +237,23 @@ test("a non-string entry in prs is dropped and the rest survive", () => {
   assert.deepEqual(parsed.evidence?.prs, ["https://github.com/o/r/pull/1"]);
 });
 
-test("the tool accepts both forms and refuses an unparseable string", () => {
-  assert.match(TOOL, /\.union\(\[/, "the schema must accept both shapes");
-  assert.match(TOOL, /const parsed = parseEvidence\(args\.evidence\);/);
-  assert.match(TOOL, /if \("error" in parsed\) return fail\(parsed\.error\);/);
+test("the tool accepts both forms and refuses an unparseable string", async () => {
+  const d1 = fakeD1({});
+  const client = await connectAdmin(d1.db);
+  const complete = async (evidence: unknown) => {
+    const result = (await client.callTool({
+      name: "jobs",
+      arguments: { action: "complete", namespace: "capsid", id: "job_000000000001", result_summary: "done", evidence },
+    })) as { content: Array<{ text: string }> };
+    return result.content[0]?.text ?? "";
+  };
+  const evidence = { prs: ["https://github.com/o/r/pull/1"], commits: 6 };
+  const asObject = await complete(evidence);
+  const asString = await complete(JSON.stringify(evidence));
+  const garbage = await complete("6 commits, 19 files");
+  await client.close();
+  for (const [form, text] of [["object", asObject], ["string", asString]] as const) {
+    assert.doesNotMatch(text, /Input validation error|not JSON/, `evidence as a JSON ${form} was refused before the job was looked at: ${text}`);
+  }
+  assert.match(garbage, /not JSON/, "an unparseable evidence string was not refused");
 });

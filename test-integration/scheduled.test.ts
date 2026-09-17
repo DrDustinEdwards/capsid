@@ -1,6 +1,8 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
+import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_OPEN_HOUR_CT, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
+import { RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../src/improve-schema";
+import { activeRun, advanceableRuns } from "../src/improve-state";
 import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
 
 // THE SCHEDULED HANDLER, ALL FOUR CRONS, AGAINST REAL BINDINGS.
@@ -33,6 +35,18 @@ describe("the four cron expressions", () => {
       "*/5 * * * *",
       "30 9 * * *",
     ]);
+  });
+
+  it("the four are distinct, so a dispatch on the expression cannot be ambiguous", () => {
+    const handled = [BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON];
+    expect(new Set(handled).size).toBe(handled.length);
+  });
+
+  it("the opener fires in both UTC hours that can be 03:00 in Chicago, and runs only at 03:00", () => {
+    // Cloudflare cron expressions are UTC only. 03:00 America/Chicago is 08:00 UTC in
+    // CDT and 09:00 in CST, so both fire and chicagoHour decides.
+    expect(IMPROVE_OPEN_CRON).toBe("0 8,9 * * *");
+    expect(IMPROVE_OPEN_HOUR_CT).toBe(3);
   });
 
   it("the backup cron writes real dumps to real R2", async () => {
@@ -145,5 +159,27 @@ describe("the improve schema is real", () => {
       ).run()
     ).rejects.toThrow();
     await env.DB.prepare("DELETE FROM improve_runs WHERE id = 'r-one'").run();
+  });
+});
+
+describe("the improve state machine's terminal set", () => {
+  // activeRun and advanceableRuns decide what the tick advances. Both must treat
+  // exactly TERMINAL_RUN_STATUSES as finished, or a finished run is advanced again or
+  // a live one is left behind.
+  it("a run in a terminal status is neither active nor advanceable, and every other status is both", async () => {
+    await env.DB.prepare("DELETE FROM improve_runs").run();
+    for (const status of RUN_STATUSES) {
+      await env.DB.prepare("INSERT INTO improve_runs (id, namespace, mode, status) VALUES (?1, ?2, 'api', ?3)")
+        .bind(`run-${status}`, `ns-${status}`, status)
+        .run();
+    }
+    const terminal = new Set<string>(TERMINAL_RUN_STATUSES);
+    const advanceable = (await advanceableRuns(env.DB as never, 100)).map((r) => r.status).sort();
+    expect(advanceable).toEqual(RUN_STATUSES.filter((s) => !terminal.has(s)).sort());
+    for (const status of RUN_STATUSES) {
+      const active = await activeRun(env.DB as never, `ns-${status}`);
+      expect(active === null, `activeRun for a ${status} run`).toBe(terminal.has(status));
+    }
+    await env.DB.prepare("DELETE FROM improve_runs").run();
   });
 });
