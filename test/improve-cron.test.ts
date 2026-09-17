@@ -44,27 +44,25 @@ const BACKUP_CRON = handlerConstant("BACKUP_CRON");
 const IMPROVE_OPEN_CRON = handlerConstant("IMPROVE_OPEN_CRON");
 const IMPROVE_TICK_CRON = handlerConstant("IMPROVE_TICK_CRON");
 const SKILLS_REFRESH_CRON = handlerConstant("SKILLS_REFRESH_CRON");
-const IMPROVE_OPEN_HOUR_CT = Number(
-  /export const IMPROVE_OPEN_HOUR_CT = (\d+);/.exec(sourceFile("index.ts"))?.[1]
-);
 
 const HANDLED = [BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON];
 
+// scanner-rule: conventions-verification, a list in two places is derived both ways. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
 test("every cron the handler dispatches on is declared in the config", () => {
   const declared = declaredCrons();
   const missing = HANDLED.filter((c) => !declared.includes(c));
   assert.deepEqual(missing, [], `src/index.ts handles crons the config never fires: ${missing.join(", ")}`);
 });
 
+// scanner-rule: conventions-verification, a list in two places is derived both ways. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
 test("every cron the config fires is handled", () => {
   const declared = declaredCrons();
   const unhandled = declared.filter((c) => !HANDLED.includes(c));
   assert.deepEqual(unhandled, [], `wrangler.jsonc.example fires crons nothing handles: ${unhandled.join(", ")}`);
 });
 
-test("the four are distinct, so the dispatch cannot be ambiguous", () => {
-  assert.equal(new Set(HANDLED).size, 4);
-});
+// The four handled expressions are pinned, distinct, in test-integration/scheduled.test.ts.
+
 
 // THE COMMENT ABOVE THE ARRAY COUNTS THE ARRAY.
 //
@@ -113,17 +111,12 @@ test("DERIVED: the crons comment counts the crons the config declares", () => {
   );
 });
 
-test("the handler dispatches on controller.cron, not on the clock", () => {
-  // 09:00 UTC matches all three expressions and Cloudflare delivers the
-  // invocation once per expression. Branching on the time instead of the matched
-  // cron would run the wrong body, or all three bodies.
-  const index = sourceFile("index.ts");
-  assert.match(index, /const cron = controller\.cron;/);
-  for (const name of ["BACKUP_CRON", "IMPROVE_OPEN_CRON", "IMPROVE_TICK_CRON", "SKILLS_REFRESH_CRON"]) {
-    assert.match(index, new RegExp(`if \\(cron === ${name}\\)`), `${name} is declared but nothing dispatches on it`);
-  }
-});
+// That the handler dispatches on controller.cron is driven in
+// test-integration/scheduled.test.ts: each expression is fired and does only its own
+// work, and an unrecognised expression does nothing.
 
+
+// scanner-rule: conventions-verification, enumerate every site. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
 test("each branch is guarded on its own, so one throwing does not stop the others", () => {
   const index = sourceFile("index.ts");
   // Four separate ctx.waitUntil chains, each with its own catch. A shared try
@@ -134,12 +127,9 @@ test("each branch is guarded on its own, so one throwing does not stop the other
 
 // ---- the DST gate -----------------------------------------------------------
 
-test("THE OPENER CRON COVERS BOTH UTC HOURS that can be 03:00 in Chicago", () => {
-  // Cloudflare cron expressions are UTC only. 03:00 America/Chicago is 08:00 UTC
-  // in CDT and 09:00 in CST, so both fire and chicagoHour decides.
-  assert.equal(IMPROVE_OPEN_CRON, "0 8,9 * * *");
-  assert.equal(IMPROVE_OPEN_HOUR_CT, 3);
-});
+// The opener's two UTC hours and its 03:00 Chicago hour are pinned in
+// test-integration/scheduled.test.ts, which can import src/index.ts.
+
 
 test("chicagoHour picks exactly one of the two UTC hours, in BOTH halves of the year", () => {
   // Summer: CDT is UTC-5, so 08:00 UTC is 03:00 local and 09:00 UTC is 04:00.
@@ -185,8 +175,5 @@ test("THE TERMINAL STATUSES MATCH THE MIGRATION'S PARTIAL UNIQUE INDEX", () => {
   }
 });
 
-test("the code's own reads use the same terminal set as the index", () => {
-  const state = sourceFile("improve-state.ts");
-  const occurrences = state.split("status NOT IN ('done', 'paused')").length - 1;
-  assert.ok(occurrences >= 2, "the active-run and advanceable-run queries no longer share the terminal set spelling");
-});
+// That activeRun and advanceableRuns treat exactly TERMINAL_RUN_STATUSES as finished is
+// driven against a real D1 in test-integration/scheduled.test.ts.
