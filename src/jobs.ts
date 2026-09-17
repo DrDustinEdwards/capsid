@@ -4,6 +4,7 @@ import {
   JOB_LEASE_SECONDS,
   JOBS_ROWS_MAX,
   jobDocPath,
+  corruptRequirement,
   missingForJob,
   mintJobId,
   missingForRecord,
@@ -61,7 +62,7 @@ export interface JobResult {
   ok: boolean;
   action: string;
   job?: JobRow;
-  jobs?: JobRow[];
+  jobs?: Array<JobListRow | JobRow>;
   truncated?: boolean;
   note?: string;
   refusal?: string;
@@ -271,12 +272,44 @@ export async function postJob(
 
 // ---- list --------------------------------------------------------------------
 
+// THE LIST NEVER CARRIES A BODY UNLESS IT WAS ASKED FOR ONE JOB BY A WRITER
+// (AUDIT-2026-09-16.md). A body is the signed prompt a driver executes with shell and
+// repo credentials, and list was SELECT *, so a read grant on a namespace read every
+// prompt queued in it. The columns are named so the body never leaves D1 for a list;
+// claim returns it, and so does list when `withBody` is set, which the tool sets only
+// for a single named id and a caller holding write.
+export const JOB_LIST_COLUMNS = [
+  "id",
+  "namespace",
+  "title",
+  "status",
+  "priority",
+  "posted_by",
+  "claimed_by",
+  "lease_expires",
+  "gate_required",
+  "review_required",
+  "blocked_count",
+  "resumed_count",
+  "created_at",
+  "updated_at",
+  "result_summary",
+] as const;
+
+export type JobListRow = Pick<JobRow, (typeof JOB_LIST_COLUMNS)[number]>;
+
 export async function listJobs(
   env: Env,
-  args: { namespace?: string; status?: JobStatus }
+  args: { namespace?: string; status?: JobStatus; id?: string },
+  opts: { withBody?: boolean } = {}
 ): Promise<JobResult> {
   const where: string[] = [];
   const binds: unknown[] = [];
+  const withBody = opts.withBody === true && Boolean(args.id);
+  if (args.id) {
+    binds.push(args.id);
+    where.push(`id = ?${binds.length}`);
+  }
   if (args.namespace) {
     binds.push(args.namespace);
     where.push(`namespace = ?${binds.length}`);
@@ -288,10 +321,10 @@ export async function listJobs(
   binds.push(JOBS_ROWS_MAX + 1);
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const { results } = await env.DB.prepare(
-    `SELECT * FROM jobs ${clause} ORDER BY priority DESC, created_at ASC LIMIT ?${binds.length}`
+    `SELECT ${[...JOB_LIST_COLUMNS, ...(withBody ? ["body"] : [])].join(", ")} FROM jobs ${clause} ORDER BY priority DESC, created_at ASC LIMIT ?${binds.length}`
   )
     .bind(...binds)
-    .all<JobRow>();
+    .all<JobListRow>();
   const rows = results ?? [];
   // One extra row asked for, so "exactly the page" is distinguishable from "there
   // are more". Same shape as every other bounded read here.
@@ -369,6 +402,26 @@ export async function claimJob(
   // driver taking anything else for four hours. The check runs through the one
   // enforcement point, so a job requirement and an agent scope are compared by the
   // same function that decides every tool call.
+  // A REQUIREMENT THAT CANNOT BE READ FAILS THE JOB, on the signature check's reasoning
+  // below: left queued, the same row would be refused to every driver in turn, and a
+  // claim with no id takes the top queued job, so it would stop the namespace's queue.
+  const corrupt = corruptRequirement(candidate);
+  if (corrupt) {
+    const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not leased.`;
+    await env.DB.prepare(
+      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+       WHERE id = ?1 AND status = 'queued' RETURNING id`
+    )
+      .bind(candidate.id, reason, now.toISOString())
+      .first<{ id: string }>();
+    const failed = { ...candidate, status: "failed" as const, result_summary: reason, updated_at: now.toISOString() };
+    await env.DB.batch([
+      ...(await mirrorStatements(env.DB, failed, "job-requirement-corrupt", actor)),
+      auditStatement(env.DB, actor, "job-requirement-corrupt", failed, { reason: corrupt }),
+    ]);
+    return refuse("claim", `${reason} It has been marked failed.`);
+  }
+
   const missing = missingForJob(agent, candidate.namespace, candidate.required_scopes);
   if (missing) {
     return refuse(
@@ -882,6 +935,10 @@ export async function resumeJob(
   // that sends a job back in after a gate is routinely not the one that blocked it,
   // and it ends up holding the lease and doing the rest of the work: a driver that
   // could not have claimed this job must not acquire it by resuming it.
+  const corrupt = corruptRequirement(current);
+  if (corrupt) {
+    return refuse("resume", `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`);
+  }
   const missing = missingForJob(agent, current.namespace, current.required_scopes);
   if (missing) {
     return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`);
