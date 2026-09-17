@@ -317,6 +317,16 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out };
   }
 
+  // The skills the evaluation cycle measures next, after its transitions have landed.
+  // Unmodelled until 2026-09-17, which is why every tick test logged SKILL_CYCLE_THREW
+  // and nothing drove the cycle's dispatch.
+  if (/^SELECT id, version, source_namespace FROM improve_skills/i.test(text)) {
+    const out = rows.improve_skills
+      .filter((s) => ["candidate", "live"].includes(String(s.status)))
+      .map((s) => ({ id: s.id, version: s.version, source_namespace: s.source_namespace }));
+    return { handled: true, results: out };
+  }
+
 
   // The optimizer's negative feedback: refused proposals only, newest first.
   if (/FROM skill_edits/i.test(text)) {
