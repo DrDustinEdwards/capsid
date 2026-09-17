@@ -26,7 +26,9 @@ export type GateClass = (typeof GATE_CLASSES)[number];
 
 // What never matches a class, whatever else the command looks like. Each entry names
 // the consequence that keeps it off the list rather than the spelling it matches.
-const NEVER: Array<{ pattern: RegExp; why: string }> = [
+// Exported so test/gate-policy.test.ts can require a matching and a non-matching
+// example for every entry.
+export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /\b(wrangler|npx\s+wrangler)\s+secret\b/i, why: "it sets or deletes a secret" },
   { pattern: /\bgh\s+secret\b/i, why: "it sets or deletes a repository secret" },
   { pattern: /\bsecret\s+(put|delete|bulk)\b/i, why: "it sets or deletes a secret" },
@@ -78,7 +80,96 @@ export type GateMatch =
 // quoted string, say) produces a fragment that matches no class, and the whole command
 // is then refused, which is the safe direction and the one a human resolves in a
 // sentence.
-const SEGMENT_SPLIT = /\s*(?:&&|\|\||;|\||\n)\s*/;
+//
+// A lone `&` is a separator too: bash runs what follows it as a second command, and
+// PowerShell treats it as the call operator.
+const SEGMENT_SPLIT = /\s*(?:&&|\|\||;|\||&|\n)\s*/;
+
+// ---- what the never list reads ---------------------------------------------------
+//
+// THE NEVER LIST MATCHES COMMANDS, NOT PROSE. It ran over the raw string, so a pull
+// request titled "Add improve_run action register_skill" was refused as a change to
+// the loop's mode (job_704380bf1c08, 2026-09-17). The fix removes quoted arguments
+// from `gh pr create` pieces before the list runs, and from nothing else: a quoted
+// `--command "DROP TABLE jobs"` on a `d1 execute` piece is a command, and a quoted
+// branch name on a push is still the branch being pushed.
+//
+// Removing quoted text is only safe if the quoted text is inert. Bash and PowerShell
+// both expand `$` and run command substitution inside double quotes, and PowerShell
+// evaluates a parenthesised argument. Those were already a hole before this change:
+// `gh pr create --title "$(curl ...)"` classified as open_pr and was approved. So the
+// characters that make a shell evaluate something are refused anywhere in the command,
+// before anything is removed.
+
+// Anywhere in the command, quoted or not.
+const EXPANDS = /[$`]/;
+// Outside quotes only: a subexpression, a script block, or a redirect.
+const UNQUOTED_ACTIVE = /[(){}<>]/;
+const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
+const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
+
+/** The command as the never list reads it, or why it cannot be read safely. */
+export function neverListView(command: string): { view: string } | { refused: string } {
+  if (EXPANDS.test(command)) {
+    return {
+      refused:
+        "it contains a $ or a backtick, which bash and PowerShell expand even inside double quotes, so part of the command would be decided when it runs. It waits for the human.",
+    };
+  }
+
+  // One pass, tracking quotes, splitting on separators outside them. Each piece keeps
+  // its text with and without its removable quoted spans.
+  const pieces: Array<{ raw: string; bare: string }> = [];
+  let raw = "";
+  let bare = "";
+  let quote: "'" | '"' | null = null;
+  let span = "";
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      span += ch;
+      if (ch === quote) {
+        raw += span;
+        // A string ends here at the FIRST matching quote. Neither shell ends one
+        // earlier: a bash `\"` or a PowerShell `""` only makes it run on, and whatever
+        // it runs on over is then read by the list as unquoted text, never hidden.
+        bare += quote + quote;
+        quote = null;
+        span = "";
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      span = ch;
+      continue;
+    }
+    const separator = SEPARATORS.find((s) => command.startsWith(s, i));
+    if (separator) {
+      pieces.push({ raw, bare });
+      raw = "";
+      bare = "";
+      i += separator.length - 1;
+      continue;
+    }
+    if (UNQUOTED_ACTIVE.test(ch)) {
+      return {
+        refused: `it contains '${ch}' outside quotes, which is a subexpression, a script block or a redirect in bash or PowerShell. It waits for the human.`,
+      };
+    }
+    raw += ch;
+    bare += ch;
+  }
+  if (quote) return { refused: "it has a quote that never closes, so where its commands end cannot be read. It waits for the human." };
+  pieces.push({ raw, bare });
+
+  const view = pieces
+    .map(({ raw: text, bare: stripped }) => (OPEN_PR_PIECE.test(text.trim()) ? stripped : text))
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join(" ; ");
+  return { view };
+}
 
 /** The class one segment falls into, or why it falls into none. */
 function classifySegment(segment: string): { klass: GateClass; migrationPath?: string } | { refused: string } {
@@ -92,6 +183,15 @@ function classifySegment(segment: string): { klass: GateClass; migrationPath?: s
   }
   if (PUSH_BRANCH.test(segment)) return { klass: "push_branch" };
   if (OPEN_PR.test(segment)) return { klass: "open_pr" };
+  // A BARE `cd` STAYS REFUSED (job_94fa4387f81b). The policy has no way to tie a path
+  // to the job's repository, so an approved `cd <path>; git push ...` would approve a
+  // push in whatever folder the path names. A driver runs from its job folder and
+  // blocks without the cd; a command a human relays with a cd is approved by that human.
+  if (/^(cd|set-location|pushd)\b/i.test(segment)) {
+    return {
+      refused: `"${segment.slice(0, 80)}" changes directory, and this policy cannot tell which repository a path belongs to. Block without the cd and name the folder in the reason.`,
+    };
+  }
   return { refused: `"${segment.slice(0, 80)}" matches no pre-approved class, so this command waits for the human.` };
 }
 
@@ -114,8 +214,10 @@ export function classifyCommand(command: string): GateMatch {
   if (!trimmed) return { refused: "the blocked job records no command, so there is nothing to match against the policy." };
   // THE NEVER LIST FIRST, OVER THE WHOLE COMMAND, before any segment is looked at, so
   // a force flag anywhere in a compound cannot be split away from the push it belongs
-  // to and lost.
-  const denied = deniedReason(trimmed);
+  // to and lost. It reads the command with `gh pr create`'s quoted arguments removed.
+  const seen = neverListView(trimmed);
+  if ("refused" in seen) return { refused: `this command is on the policy's never list because ${seen.refused}` };
+  const denied = deniedReason(seen.view);
   if (denied) return { refused: `this command is on the policy's never list because ${denied}. It waits for the human.` };
 
   const segments = trimmed.split(SEGMENT_SPLIT).map((piece) => piece.trim()).filter(Boolean);
