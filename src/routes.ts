@@ -4,6 +4,7 @@ import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex, isAdminUser, sha256Hex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
 import { runBackup } from "./backup";
+import { routeRefusal } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
@@ -335,14 +336,20 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
 }
 
 async function handleBackup(request: Request, env: Env): Promise<Response> {
-  // The write grant, whether it comes from an agent row or from OPERATOR_KEY_HASH.
+  // No credential, or one that resolves to nobody: 401, so a client knows to send one.
   const caller = await resolveAgent(request, env);
-  if (!caller?.agent.scopes.grants.includes("write")) {
-    return new Response("unauthorized: write-grant operator key required", {
+  if (!caller) {
+    return new Response("unauthorized: admin operator key required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
+  // A caller that resolved but may not run this: 403. A backup and its prune cover
+  // every namespace in the store, so ROUTE_GRANTS in src/scope.ts requires the admin,
+  // through the same checkScope the tools use. Until 2026-09-16 this checked only the
+  // write grant, which every namespace-scoped driver holds.
+  const refusal = routeRefusal("/ops/backup", caller.agent);
+  if (refusal) return new Response(refusal, { status: 403 });
   const result = await runBackup(env);
   // 409 when another run holds the lease: a caller polling this endpoint should be
   // able to tell "I did nothing" from "I ran" without reading the body.

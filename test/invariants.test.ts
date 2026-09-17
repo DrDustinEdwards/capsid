@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sourceFiles, toolBlocks, type ToolBlock } from "./source-files.ts";
-import { TOOL_GRANTS, requiredGrant } from "../src/scope.ts";
+import { TOOL_ACTION_GRANTS, TOOL_GRANTS, requiredGrant } from "../src/scope.ts";
 
 // The two write-path invariants, guarded.
 //
@@ -100,14 +100,19 @@ test("a tool marked read does not mutate, which is the claim it would be dangero
   assert.ok(reads >= 8, `only ${reads} tools classify as read; the derivation is broken`);
 });
 
-test("the two action-scoped tools really do carry their own check", () => {
+test("the two handler-checked action tools really do carry their own check", () => {
   // They are the only tools the registrar cannot decide for, so they are the only
   // ones where forgetting the call leaves a hole. Named, because there being exactly
   // two of them is the property: a third would mean the registrar is losing ground.
-  const actionScoped = Object.entries(TOOL_GRANTS)
+  // improve_run is also "action", but its per-action requirements are in
+  // TOOL_ACTION_GRANTS and the registrar reads them (since 2026-09-16).
+  const allAction = Object.entries(TOOL_GRANTS)
     .filter(([, requirement]) => requirement === "action")
     .map(([name]) => name)
     .sort();
+  assert.deepEqual(allAction, ["improve_run", "jobs", "lint"]);
+  assert.deepEqual(Object.keys(TOOL_ACTION_GRANTS), ["improve_run"]);
+  const actionScoped = allAction.filter((name) => !Object.hasOwn(TOOL_ACTION_GRANTS, name));
   assert.deepEqual(actionScoped, ["jobs", "lint"]);
   for (const name of actionScoped) {
     const block = BLOCKS.find((b) => b.name === name);

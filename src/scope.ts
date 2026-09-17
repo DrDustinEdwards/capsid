@@ -37,19 +37,22 @@ import { protectedHits } from "./improve-schema";
 // and the artifact src/tool-annotations.ts's readOnlyHint is derived from, so the
 // two cannot disagree about whether a tool writes.
 //
-// "action" means the requirement depends on the action argument, so the registrar
-// cannot decide it and the handler calls checkScope itself at the point where the
-// action is known. Exactly two tools are like this and both are subsystem tools with
-// a read action: `jobs` (list) and `lint` (gather).
+// "action" means the requirement depends on the action argument. Three tools are
+// like this. `improve_run` states its per-action requirements in TOOL_ACTION_GRANTS
+// below, and the registrar reads them, because the requirement does not depend on
+// anything but the action. `jobs` (list reads) and `lint` (gather reads) also depend
+// on a namespace the handler resolves, so their handlers call checkScope at the point
+// where both are known.
 //
 // "admin" is write PLUS the admin identity, for a tool that edits the authorization
 // boundary itself. It lives here rather than in the handler because these tools are
 // admin-only in WHOLE, which the registrar can decide from the tool name alone, and
 // because rule 6 of CLAUDE.md says this table is the one statement of what each tool
-// requires. `agents` and `improve_run` action `sign_policy` still gate in their
-// handlers: sign_policy must, being one action of a tool whose other actions are
-// not admin, and `agents` is left alone here rather than changed in a commit about
-// something else.
+// requires.
+//
+// Until 2026-09-16 two tools gated admin inside their handlers, which is the shape
+// rule 6 forbids: `agents` (every action) and `improve_run` (every action but run and
+// claim). Both are now stated here and no handler decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin";
 
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
@@ -91,15 +94,17 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   ci_dispatch: "write",
 
   improve_status: "read",
-  improve_run: "write",
+  // Per action, in TOOL_ACTION_GRANTS: run and claim are a driver's work, and every
+  // other action controls the loop rather than doing it.
+  improve_run: "action",
 
   // list reads; every other action changes the queue.
   jobs: "action",
 
-  // The credential control plane. Write at the registrar, and admin-only inside the
-  // handler: the registrar can say whether a caller may write, and only the handler
-  // can say whether a caller may widen another caller.
-  agents: "write",
+  // The credential control plane. Admin in WHOLE: an agent that could mint, revoke or
+  // re-scope another could widen itself. This was "write" here with the admin check in
+  // the handler until 2026-09-16, which is a private grant check rule 6 forbids.
+  agents: "admin",
 };
 
 // FAIL CLOSED. A tool with no entry requires the write grant, so a tool added
@@ -108,6 +113,82 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
 // same set, so the fallback is a backstop and not the normal path.
 export function requiredGrant(tool: string): ToolRequirement {
   return Object.hasOwn(TOOL_GRANTS, tool) ? TOOL_GRANTS[tool] : "write";
+}
+
+// WHAT EACH ACTION REQUIRES, for a tool whose TOOL_GRANTS entry is "action" and whose
+// requirement depends on nothing but the action. The registrar reads this table, so
+// the requirement is written here and no handler repeats it.
+//
+// FAIL CLOSED on an action nobody listed: it takes `default`, which for improve_run is
+// admin, so an action added to the tool without touching this table is refused to a
+// driver rather than handed to it.
+export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {
+  improve_run: {
+    // mode switches the whole loop off, pause stops a namespace, budget moves the spend
+    // ceiling, mint_operator_key issues a credential, and sign_policy decides whether
+    // this Worker may merge without a human. None of those is a driver's work.
+    default: "admin",
+    actions: {
+      // A missing action is a run: see the handler's own branch for it.
+      run: "write",
+      // Taking and releasing the driver lease is exactly what a driver does, every
+      // run, and it is the key that stops two of them working one namespace.
+      claim: "write",
+    },
+  },
+};
+
+export function requiredForAction(tool: string, action: string | undefined): ToolRequirement {
+  const spec = Object.hasOwn(TOOL_ACTION_GRANTS, tool) ? TOOL_ACTION_GRANTS[tool] : null;
+  if (!spec) return requiredGrant(tool);
+  const key = action ?? "run";
+  return Object.hasOwn(spec.actions, key) ? spec.actions[key] : spec.default;
+}
+
+// A requirement as the part of a ScopeNeed it decides. The registrar and every route
+// use this one mapping, so "admin" means the same thing wherever it is enforced.
+export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" | "admin"> {
+  if (requirement === "admin") return { grant: "write", admin: true };
+  if (requirement === "action") return {};
+  return { grant: requirement };
+}
+
+// ---- routes ---------------------------------------------------------------------
+//
+// THE HTTP ROUTES THE REGISTRAR NEVER SEES. guardRegistrations wraps MCP tools, and a
+// plain route in src/routes.ts is outside it by construction. /ops/backup sat there
+// until 2026-09-16 checking only for the write grant, so a driver minted for one
+// namespace could run a full backup and prune across all of them.
+//
+// Every route in defaultHandler is in exactly one of these two tables, and
+// test/route-gates.test.ts fails when one is in neither, so a new route is a decision
+// somebody made rather than a gap nobody saw.
+
+// A route that goes through checkScope, and what it requires.
+export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
+  "/ops/backup": "admin",
+};
+
+// A route that does not, and why. Each reason names what authorizes the request
+// instead, because "public" and "authorized some other way" are different claims.
+export const UNGATED_ROUTES: Record<string, string> = {
+  "/health": "a liveness probe that returns provenance and store health, never a document",
+  "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
+  "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
+  "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
+  "/improve/holdout-credential": "signed with the per-namespace HMAC score key, and mints read access to that namespace's holdout only",
+  "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
+  "/authorize": "the OAuth authorization step, gated by the OAuth provider and GitHub login",
+  "/callback": "the OAuth callback, which validates state before issuing anything",
+  "/console": "the admin console, gated by its own GitHub OAuth session",
+  "/console.json": "the admin console's data, gated by the same console session",
+  "/console/callback": "the console's OAuth callback, which validates state before issuing a session",
+};
+
+// The refusal for a gated route, or null. The same checkScope the tools use.
+export function routeRefusal(path: string, agent: Agent): string | null {
+  const requirement = Object.hasOwn(ROUTE_GRANTS, path) ? ROUTE_GRANTS[path] : "admin";
+  return checkScope(agent, { tool: path, ...needFor(requirement) });
 }
 
 export interface ScopeNeed {
@@ -175,11 +256,8 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   // its OWN namespace would otherwise pass every remaining check, and the refusal it
   // needs to read is "this tool is admin only", not silence.
   if (need.admin && !agent.admin) {
-    return (
-      `unauthorized: '${need.tool}' is admin only and ${agent.actor} is a minted agent. ` +
-      `It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, ` +
-      `so a scoped caller that could edit it could widen itself. Ask the admin to make the mapping.`
-    );
+    const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
+    return `unauthorized: '${asked}' is admin only and ${agent.actor} is not the admin. ${adminReason(need.tool)} Ask the admin to do it.`;
   }
   if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace)) {
     return `unauthorized: ${agent.actor} is not scoped to the '${need.namespace}' namespace. Its namespace scope is ${describeScope(scopes.namespaces)}.`;
@@ -193,6 +271,24 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     }
   }
   return null;
+}
+
+// WHY EACH ADMIN-ONLY THING IS ADMIN ONLY, so the refusal a caller reads names its
+// own reason rather than another tool's. A requirement of "admin" with no entry here
+// fails the test that reads this table, rather than shipping a refusal with no reason.
+export const ADMIN_REASON: Record<string, string> = {
+  register_namespace:
+    "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
+  update_namespace:
+    "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
+  agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
+  improve_run:
+    "That action controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver takes its lease with action 'claim' and runs with action 'run'.",
+  "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
+};
+
+function adminReason(tool: string): string {
+  return Object.hasOwn(ADMIN_REASON, tool) ? ADMIN_REASON[tool] : "It acts on more than one namespace's scope.";
 }
 
 // THE DOCUMENT-SIDE TWIN OF THE PROTECTED-PATH FLAG. `allow_improve_paths` is how a
@@ -292,7 +388,6 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     const takesNamespace = Boolean(config?.inputSchema && Object.hasOwn(config.inputSchema, "namespace"));
-    const requirement = requiredGrant(name);
     const guarded: ToolHandler = (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
@@ -302,19 +397,17 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
       // scopedRepo in src/tools/repo.ts.
       const selector = typeof args.repo === "string" ? args.repo : undefined;
       const repo = selector?.includes("/") ? selector : undefined;
+      const action = actionOf(name, config, args);
       const refusal = checkScope(agent, {
         tool: name,
         namespace,
         repo,
-        action: actionOf(name, config, args),
-        // An "action" tool is checked by its handler, where the action is known, so
-        // the registrar names no grant for it. An "admin" tool needs the write grant
-        // AND the admin identity.
-        ...(requirement === "admin"
-          ? { grant: "write" as const, admin: true }
-          : requirement === "action"
-            ? {}
-            : { grant: requirement }),
+        action,
+        // A tool in TOOL_ACTION_GRANTS is decided here per action, because the action
+        // is already known. An "action" tool outside it (jobs, lint) is checked by its
+        // handler, where the namespace is known, so the registrar names no grant. An
+        // "admin" requirement needs the write grant AND the admin identity.
+        ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return deny(refusal);
       if (takesNamespace && namespace === undefined) {

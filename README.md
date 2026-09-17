@@ -46,7 +46,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 - `POST /mcp` MCP over Streamable HTTP, requires an OAuth access token (admin only)
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
-- `POST /ops/backup` runs a backup on demand, requires a write-grant key, returns a JSON summary
+- `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` GitHub OAuth flow
 - `GET /console`, `POST /console`, `GET /console.json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited
