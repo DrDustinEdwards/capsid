@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
 import { splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
 import { loadMergePolicy, AUTO_MERGE_POLICY_PATH, POLICY_CHECKS } from "../src/auto-merge.ts";
-import { sourceFile } from "./source-files.ts";
 import { adminAgent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
@@ -179,16 +178,19 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
-  assert.doesNotMatch(tool(), /!ctx\.agent\.admin\b/, "the handler decides admin for itself again; the table is the one statement (CLAUDE.md rule 6)");
+  // That no handler decides admin for itself is asserted for every handler in
+  // test/route-gates.test.ts.
 });
 
-function tool(): string {
-  return sourceFile("tools/improve.ts");
-}
 
-test("the signer takes no body argument, so it cannot be used to sign arbitrary bytes", () => {
-  const source = sourceFile("policy-sign.ts");
-  const signature = /export async function signPolicyDocument\([\s\S]*?\): Promise/.exec(source);
-  assert.ok(signature, "signPolicyDocument is gone from src/policy-sign.ts");
-  assert.equal(/\bbody\s*:/.test(signature[0]), false, "a body parameter would make this an oracle for signing anything");
+// THE SIGNER TAKES NO BODY ARGUMENT, so it cannot be used to sign arbitrary bytes: it
+// signs what the store holds. A type-level check, compiled by npm run check:test: a new
+// parameter changes the tuple length and this assignment stops compiling. The tampering
+// test above shows it signs the stored bytes.
+// Exact, in both directions: an optional parameter makes the length 4 | 5, which a plain
+// assignment of 4 would still accept.
+type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const SIGNER_ARITY_IS_FOUR: Exactly<Parameters<typeof signPolicyDocument>["length"], 4> = true;
+test("the signer takes exactly env, actor, namespace and path", () => {
+  assert.equal(SIGNER_ARITY_IS_FOUR, true);
 });
