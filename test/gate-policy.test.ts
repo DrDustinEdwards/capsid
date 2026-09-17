@@ -699,14 +699,16 @@ test("PLANT: a lone & is a separator, so it cannot carry a passenger", () => {
   assert.ok("refused" in match, "a backgrounded passenger rode on open_pr");
 });
 
-test("PLANT: a quote that never closes, or that the two shells end in different places, hides nothing", () => {
-  for (const cmd of [
-    'gh pr create --title "abc ; npx wrangler deploy',
-    'gh pr create --title "a \\" ; npx wrangler deploy ; echo \\"" --fill',
-  ]) {
-    const match = classifyCommand(cmd);
-    assert.ok("refused" in match, `${cmd} was approved`);
-  }
+test("PLANT: a quote that never closes is refused for that reason", () => {
+  const match = classifyCommand('gh pr create --title "abc ; npx wrangler deploy');
+  assert.ok("refused" in match, "an unterminated quote was approved");
+  assert.match(match.refused, /never closes/);
+});
+
+test("a bash escaped quote cannot hide a command: the list reads what follows it as unquoted", () => {
+  const match = classifyCommand('gh pr create --title "a \\" ; npx wrangler deploy ; echo \\"" --fill');
+  assert.ok("refused" in match, "an escaped quote hid a deploy");
+  assert.match(match.refused, /it deploys/);
 });
 
 test("a separator inside a quoted title is still split by the classifier, which refuses in the safe direction", () => {

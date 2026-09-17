@@ -130,10 +130,10 @@ export function neverListView(command: string): { view: string } | { refused: st
       span += ch;
       if (ch === quote) {
         raw += span;
-        // A backslash inside double quotes is an escape in bash and a literal in
-        // PowerShell, so the two shells disagree about where this string ends. Such a
-        // span is left in place for the list to read.
-        bare += quote === '"' && span.includes("\\") ? span : quote + quote;
+        // A string ends here at the FIRST matching quote. Neither shell ends one
+        // earlier: a bash `\"` or a PowerShell `""` only makes it run on, and whatever
+        // it runs on over is then read by the list as unquoted text, never hidden.
+        bare += quote + quote;
         quote = null;
         span = "";
       }
