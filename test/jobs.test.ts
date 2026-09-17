@@ -3,10 +3,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, TERMINAL_JOB_STATUSES, isJobStatus, isTerminalJobStatus, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
-import { allSourceText, sourceFile } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { sourceFile } from "./source-files.ts";
 import { completeJob, failJob, postJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
-import { fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // THE WORK QUEUE'S VOCABULARY, DERIVED FROM THE MIGRATION.
 //
@@ -61,18 +65,8 @@ test("every status in the vocabulary is classified terminal or not, and the two 
   assert.equal(isTerminalJobStatus("blocked"), false, "a blocked job is paused, not finished");
 });
 
-test("the job mirror asks the vocabulary which statuses are finished", () => {
-  // The source-text half, because the behavioural half needs a real D1 and lives in
-  // test-integration/jobs.test.ts. A mirror that goes back to comparing one status
-  // literal is the exact shape of the bug that left three documents stuck at active.
-  const jobs = sourceFile("jobs.ts");
-  assert.match(jobs, /status: isTerminalJobStatus\(job\.status\) \? "closed" : "active"/);
-  assert.doesNotMatch(
-    jobs,
-    /status: job\.status === "[a-z]+" \? "closed"/,
-    "the mirror decides its document status from one status literal again"
-  );
-});
+// Proven against a real D1 in test-integration/jobs.test.ts: "PLANT: a failed job's document is closed too" and "a blocked job's document stays active".
+
 
 test("isJobStatus refuses anything that is not one of them", () => {
   for (const status of JOB_STATUSES) assert.ok(isJobStatus(status));
@@ -96,16 +90,27 @@ test("the lease is the four hours the table's comment claims", () => {
   assert.match(MIGRATION, /lease_expires four hours out/);
 });
 
-test("every action the schema advertises is one the tool handles", () => {
-  // The enum in the tool schema is what a client can call; JOB_ACTIONS is what the
-  // description and the driver are written against. Derived from the source so an
-  // action added to one and not the other fails here.
-  const tool = sourceFile("tools/jobs.ts");
+test("every action the schema advertises is one the tool handles", async () => {
+  // JOB_ACTIONS is what the description and the driver are written against. Each is
+  // called through the real tool; an action with no branch falls through to the
+  // "unknown jobs action" refusal.
+  const d1 = fakeD1({});
+  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "jobs-actions", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const unhandled: string[] = [];
   for (const action of JOB_ACTIONS) {
-    assert.match(tool, new RegExp(`case "${action}"|action === "${action}"`), `the jobs tool has no branch for '${action}'`);
+    const result = (await client.callTool({ name: "jobs", arguments: { action, namespace: "capsid" } })) as {
+      content: Array<{ text: string }>;
+    };
+    if (/unknown jobs action/.test(result.content[0]?.text ?? "")) unhandled.push(action);
   }
+  await client.close();
+  assert.deepEqual(unhandled, [], `the jobs tool has no branch for: ${unhandled.join(", ")}`);
 });
 
+// scanner-rule: CLAUDE.md rule 8, meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
 test("every queue transition is a keyed UPDATE with RETURNING, never meta.changes", () => {
   // The rule the improve state machine already runs on, applied to the queue. A
   // transition that read meta.changes would be counting the FTS5 triggers on the
@@ -126,6 +131,7 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
   assert.doesNotMatch(code, /meta\.changes/, "src/jobs.ts reads meta.changes, which the FTS5 triggers inflate");
 });
 
+// scanner-rule: CLAUDE.md rule 5, every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
   // Hard rule 5: no write path skips document_versions and audit_log. The mirror
   // uses improveDocStatements, which carries both in the same batch, rather than
@@ -140,57 +146,21 @@ test("the queue's writes go through the shared document statements, not a second
 // so the same derive-from-the-source rule applies to them.
 const RESUME_MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0007_jobs_resume.sql"), "utf8");
 
-test("both counters the code reads are columns the migration adds", () => {
-  // Both directions: a counter surfaced by src/jobs.ts and never added by a
-  // migration is a query that fails at runtime, and a column added and never read
-  // is dead weight nobody will remove later.
-  const added = [...RESUME_MIGRATION.matchAll(/ALTER TABLE jobs ADD COLUMN (\w+)/g)].map((m) => m[1]).sort();
-  assert.deepEqual(added, ["blocked_count", "resumed_count"]);
-  const jobs = sourceFile("jobs.ts");
-  for (const column of added) {
-    assert.match(jobs, new RegExp(`\\b${column}\\b`), `src/jobs.ts never reads ${column}`);
-  }
-});
+// Proven against a real D1 in test-integration/jobs.test.ts: "a job can hit a gate, come back, and hit another, counting each".
 
-test("resume is a keyed UPDATE out of blocked, and it is the only way out of blocked", () => {
-  const jobs = sourceFile("jobs.ts");
-  // Scoped to resumeJob's own body first. Matching the file at large let the
-  // claim path's `SET status = 'claimed'` pair with the signature-failure path's
-  // `status = 'blocked'` clause, which is a match that proves nothing.
-  const resume = /export async function resumeJob[\s\S]*?\n}/.exec(jobs);
-  assert.ok(resume, "resumeJob is gone from src/jobs.ts");
-  const resumeUpdate = /UPDATE jobs SET status = 'claimed'[\s\S]*?RETURNING id/.exec(resume[0]);
-  assert.ok(resumeUpdate, "resume no longer moves a job out of blocked with a keyed UPDATE ... RETURNING");
-  assert.match(resumeUpdate[0], /WHERE id = \?1 AND status = 'blocked'/, "the resume CAS must key on blocked, or it could move a job out of any state");
-  assert.match(resumeUpdate[0], /resumed_count = resumed_count \+ 1/, "a resume that does not count itself cannot be reported");
-  // The claim path must stay closed to blocked jobs: resume is the audited door,
-  // and a claim that also took blocked rows would bypass the approval reason.
-  assert.match(jobs, /AND status = 'queued' RETURNING id/, "the claim CAS no longer keys on queued");
-});
 
-test("resume re-verifies the signature, because a blocked job sits in the table", () => {
-  // The window claim's check cannot cover: a job blocked at a gate waits on a human
-  // for as long as that takes, and resume hands the body back to a session holding
-  // shell and repo credentials.
-  const jobs = sourceFile("jobs.ts");
-  const resume = /export async function resumeJob[\s\S]*?\n}/.exec(jobs);
-  assert.ok(resume, "resumeJob is gone from src/jobs.ts");
-  assert.match(resume[0], /verifySignedBody\(/, "resume hands a body to a driver without re-verifying it");
-  assert.match(resume[0], /status = 'failed'/, "a tampered body must be failed, not handed back");
-});
+// Proven against a real D1 in test-integration/jobs.test.ts: "resume refuses a queued job and a done job" and "a blocked job cannot be claimed".
 
-test("resume enforces one claim per caller, like claim does", () => {
-  const jobs = sourceFile("jobs.ts");
-  const resume = /export async function resumeJob[\s\S]*?\n}/.exec(jobs);
-  assert.ok(resume);
-  assert.match(resume[0], /status = 'claimed' AND claimed_by = \?1/, "resume hands out a lease without checking what the caller already holds");
-});
 
-test("the jobs tool is registered exactly once, and reachable", () => {
-  const registrations = [...allSourceText().matchAll(/server\.registerTool\(\s*"jobs"/g)];
-  assert.equal(registrations.length, 1, "the jobs tool is registered more than once, or not at all");
-  assert.match(sourceFile("server.ts"), /registerJobTools\(server, ctx\)/, "buildServer does not register the queue's tool");
-});
+// Proven against a real D1 in test-integration/jobs.test.ts: "PLANT: a body edited while the job sat blocked is refused and failed".
+
+
+// Proven against a real D1 in test-integration/jobs.test.ts: "resume holds the one-claim-per-caller rule".
+
+
+// That the jobs tool is served, once, is covered by the tool count in
+// test/counts.test.ts and by every test here and in test/jobs-list.test.ts that calls it.
+
 
 // ---- A SWALLOWED PARAMETER TAG IS A MALFORMED CALL, NOT A SUMMARY -------------
 //
@@ -215,17 +185,21 @@ test("PLANT: the real malformed summary from job_9980f57bd359 is detected", () =
   assert.equal(found, "result_summary", "the field's own closing tag is the first one in the swallowed text");
 });
 
-test("every parameter name the tool accepts is one the guard knows", () => {
-  // Derived from the tool's own schema rather than retyped, so a parameter added
-  // to `jobs` and not to this list is a build failure rather than a hole. The names
-  // are the ones a caller writes, which is what a swallowed tag spells.
+test("every parameter name the guard knows is one the tool serves", async () => {
+  // Derived from the served schema rather than retyped, so a name the guard lists and
+  // nobody can send fails here.
   for (const name of JOB_PARAM_NAMES) {
     assert.equal(swallowedParamTag(`text </${name}> more`), name, `'</${name}>' is not detected`);
   }
-  const tool = sourceFile("tools/jobs.ts");
-  for (const name of JOB_PARAM_NAMES) {
-    assert.match(tool, new RegExp(`\\b${name}\\??:`), `the jobs tool has no '${name}' parameter, so the guard lists a name nobody can send`);
-  }
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "jobs-params", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  const served = Object.keys(tools.find((tool) => tool.name === "jobs")?.inputSchema.properties ?? {});
+  const missing = JOB_PARAM_NAMES.filter((name) => !served.includes(name));
+  assert.deepEqual(missing, [], `the jobs tool serves no parameter named: ${missing.join(", ")}`);
 });
 
 test("ordinary prose is not refused, including prose ABOUT the pattern", () => {

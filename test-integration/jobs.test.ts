@@ -372,6 +372,13 @@ describe("resume", () => {
     expect(onDone.refusal).toMatch(/is done, not blocked/);
   });
 
+  it("a blocked job cannot be claimed, so resume is the only way out of blocked", async () => {
+    const id = await blockedJob("claim refuses blocked");
+    const byOther = await claimJob(jobsEnv(), OTHER, NOW, { namespace: "capsid", id });
+    expect(byOther.ok).toBe(false);
+    expect((await row(id))?.status).toBe("blocked");
+  });
+
   it("resume holds the one-claim-per-caller rule", async () => {
     const blocked = await blockedJob("the blocked one");
     const other = await post({ title: "something else" });
