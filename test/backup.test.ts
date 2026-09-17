@@ -271,6 +271,7 @@ test("a pre-change flat dump key ages as its own single-object run", async () =>
   assert.equal(r2.deleted.flat().filter((k) => k.startsWith("backups/json/")).length, 7);
 });
 
+// scanner-rule: quality audit 1.1 and 6.6, one definition imported everywhere
 test("/health and the backup preflight probe the index through one module", () => {
   // They must agree. A backup that carried its own copy of the probe would drift
   // from the one the live gate asserts, and the drift would only surface on the day

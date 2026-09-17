@@ -118,6 +118,7 @@ test("operatorIdentity.grant still answers exactly as before", async () => {
 // It is an auth helper and it lives in src/auth.ts; it was findable only inside a
 // file named for the input-bounds module.
 
+// scanner-rule: secret comparisons are constant time. Timing cannot be observed in a test, so the loop's shape is what is checked
 test("timingSafeEqual accumulates rather than short-circuiting", () => {
   // The behavioural test below pins the ANSWER, and an implementation of
   // `return a === b` would give the same answers. The property that matters is not
