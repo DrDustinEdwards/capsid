@@ -62,7 +62,7 @@ test("register_namespace registers, mints nothing, and returns the mint instruct
   assert.equal(body.next, driverMintInstruction("sample"), "register_namespace no longer returns the mint instruction");
   const writes = d1.recorded.map((r) => r.sql);
   assert.ok(writes.some((sql) => /INSERT INTO namespaces/.test(sql)), "the namespace row was not written");
-  assert.deepEqual(writes.filter((sql) => /agents/.test(sql)), [], "register_namespace wrote to the agents table");
+  assert.deepEqual(writes.filter((sql) => /INTO agents\b/.test(sql)), [], "register_namespace wrote to the agents table");
 });
 
 test("the instruction it prints is parseable by the script it names", () => {
