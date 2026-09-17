@@ -215,7 +215,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
   const declared = /action: z\s*\.enum\(\[([^\]]+)\]\)/.exec(tool);
   assert.ok(declared, "improve_run's action enum is gone from src/tools/improve.ts");
   const actions = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(actions.length, 8, "improve_run's action list changed");
+  assert.equal(actions.length, 9, "improve_run's action list changed");
   const expected: Record<string, string> = {
     run: "write",
     claim: "write",
@@ -225,6 +225,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
     budget: "admin",
     mint_operator_key: "admin",
     sign_policy: "admin",
+    register_skill: "admin",
   };
   for (const action of actions) {
     assert.ok(Object.hasOwn(expected, action), `improve_run gained action '${action}'; decide its requirement here and in TOOL_ACTION_GRANTS`);

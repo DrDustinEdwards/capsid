@@ -1,11 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
-import { bounded, docPath, MAX_DOC_STATUS, nsName } from "../limits";
+import { bounded, docPath, MAX_BODY, MAX_DOC_STATUS, MAX_TITLE, nsName } from "../limits";
 import { ROSTER as IMPROVE_ROSTER, onRoster, RUN_CONDITIONS } from "../improve-schema";
 import { improveControl, improveRunManual, improveStatus } from "../improve-run";
 import { signPolicyDocument } from "../policy-sign";
+import { registerSkill } from "../skills-register";
 import { fail, ok, type ToolCtx } from "./docs";
+
+// A declared skill field is a sentence or a short paragraph, not a document.
+const MAX_SKILL_FIELD = 2000;
+const MAX_SKILL_BODY = MAX_BODY;
 
 export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
@@ -20,12 +25,12 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("improve_run"),
       description:
-        `Open improve runs, or control the loop. action defaults to "run": open runs for the roster (or one namespace) and advance them one step, respecting APP_KV improve_mode and skipping paused namespaces; dry_run reports the plan and writes NOTHING. The control actions each write one KV value, audit it, and read it back so the response is the value that actually landed: action "mode" sets improve_mode to value ("off" | "subscription" | "api"); action "pause"/"unpause" sets or clears improve:paused for one namespace or "all" (pause takes an optional reason); action "budget" sets the monthly caps actions_minutes_month and model_usd_month. action "mint_operator_key" generates a READ-ONLY (ro:) operator key, returns it ONCE and stores it nowhere, and prints the exact wrangler command that adds its hash to OPERATOR_KEY_HASH; it deliberately does NOT set the secret itself, because a Worker that can widen its own authorization list does not have one. action "claim" takes the SUBSCRIPTION-MODE DRIVER LEASE for one namespace (improve:driver:<ns>, six-hour TTL): it refuses if the lease is already held and never overwrites the holder, and release: true gives it back at the end of a run. It is best-effort mutual exclusion, not a lock, because KV has no compare-and-set; it stops a second /improve session, not two claims in the same millisecond. improve_status reflects the control actions on its next call. Requires an operator key with the write grant.`,
+        `Open improve runs, or control the loop. action defaults to "run": open runs for the roster (or one namespace) and advance them one step, respecting APP_KV improve_mode and skipping paused namespaces; dry_run reports the plan and writes NOTHING. The control actions each write one KV value, audit it, and read it back so the response is the value that actually landed: action "mode" sets improve_mode to value ("off" | "subscription" | "api"); action "pause"/"unpause" sets or clears improve:paused for one namespace or "all" (pause takes an optional reason); action "budget" sets the monthly caps actions_minutes_month and model_usd_month. action "mint_operator_key" generates a READ-ONLY (ro:) operator key, returns it ONCE and stores it nowhere, and prints the exact wrangler command that adds its hash to OPERATOR_KEY_HASH; it deliberately does NOT set the secret itself, because a Worker that can widen its own authorization list does not have one. action "claim" takes the SUBSCRIPTION-MODE DRIVER LEASE for one namespace (improve:driver:<ns>, six-hour TTL): it refuses if the lease is already held and never overwrites the holder, and release: true gives it back at the end of a run. It is best-effort mutual exclusion, not a lock, because KV has no compare-and-set; it stops a second /improve session, not two claims in the same millisecond. action "register_skill" registers one CANDIDATE skill abstracted from a finished job, from the skill object: the package's declared fields and its instruction body. The source job must be done with one merged pull request and green CI as the Worker verified it, and must not have produced a skill before; the namespace is read from the job. The row starts at status candidate, version 1, and the body is stored at capsid/improve/skills/<id>.md. improve_status reflects the control actions on its next call. Requires an operator key with the write grant.`,
       inputSchema: {
         action: z
-          .enum(["run", "mode", "pause", "unpause", "budget", "mint_operator_key", "claim", "sign_policy"])
+          .enum(["run", "mode", "pause", "unpause", "budget", "mint_operator_key", "claim", "sign_policy", "register_skill"])
           .optional()
-          .describe('What to do. Defaults to "run". The others control the loop: mode, pause, unpause, budget, mint_operator_key, claim.'),
+          .describe('What to do. Defaults to "run". The others control the loop: mode, pause, unpause, budget, mint_operator_key, claim, sign_policy, register_skill.'),
         namespace: nsName.optional().describe('For "run", limit to one namespace (omit for the whole roster). For pause/unpause, the target namespace, or "all".'),
         value: z.enum(["off", "subscription", "api"]).optional().describe('For action "mode": the mode to set.'),
         reason: bounded(MAX_DOC_STATUS).optional().describe('For action "pause": the reason recorded on the pause key. Defaults to a generic note.'),
@@ -41,6 +46,19 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           .boolean()
           .optional()
           .describe('For action "claim": release the lease instead of taking it. Defaults to false.'),
+        skill: z
+          .object({
+            id: bounded(64).describe("The skill id: lowercase letters, digits and hyphens."),
+            title: bounded(MAX_TITLE),
+            trigger_condition: bounded(MAX_SKILL_FIELD).describe("When the skill applies, in prose. The recommend step matches work against it."),
+            termination_test: bounded(MAX_SKILL_FIELD).describe("How a reader knows the skill's work is done."),
+            composition_interface: bounded(MAX_SKILL_FIELD).describe("What the skill takes in and hands on, so it composes with another."),
+            namespaces: z.array(nsName).max(32).nullable().describe("The namespaces the skill applies to, or null for any."),
+            body: bounded(MAX_SKILL_BODY).describe("The instruction body, stored as the skill's document."),
+            source_job: bounded(64).describe("The finished job the skill was abstracted from."),
+          })
+          .optional()
+          .describe('For action "register_skill": the candidate to register.'),
         condition: bounded(MAX_DOC_STATUS)
           .optional()
           .describe(
@@ -48,7 +66,7 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           ),
       },
     },
-    async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path }) => {
+    async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path, skill }) => {
       try {
         // SIGN A POLICY DOCUMENT. Admin only, like every action but run and claim:
         // TOOL_ACTION_GRANTS in src/scope.ts states it and the registrar refuses a
@@ -58,6 +76,13 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           if (!namespace || !path) return fail("sign_policy needs the namespace and the path of the policy document.");
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
           return signed.ok ? ok(signed) : fail(signed.error);
+        }
+        // REGISTER A CANDIDATE SKILL. Admin only by the same default: register_skill is
+        // not listed in TOOL_ACTION_GRANTS, so a driver is refused before this runs.
+        if (action === "register_skill") {
+          if (!skill) return fail("register_skill needs the skill object.");
+          const registered = await registerSkill(env, ctx.actor, skill);
+          return registered.ok ? ok(registered) : fail(registered.error);
         }
         if (action && action !== "run") {
           // THE CONTROL SURFACE IS ADMIN (audit 2026-09-13, finding 5), and so is every
