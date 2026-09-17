@@ -183,12 +183,14 @@ function hasCallerElsewhere(name: string, ownFile: string): boolean {
   return index.readers.some((ids) => ids.has(name));
 }
 
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest (count guard)
 test("the scan finds the exports at all, so nothing here can pass by reading nothing", () => {
   const exported = exportsOfSrc();
   assert.ok(exported.length > 100, `only ${exported.length} exports found across src/; the walk is broken`);
   assert.ok(sourceFiles().length > 20, "src/ walk returned too few files");
 });
 
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("PLANT: the holdout import manifest exists and names the exports it needs", () => {
   const declared = declaredByHoldout();
   assert.ok(declared.length > 0, `${MANIFEST} declares nothing; a manifest nobody fills is a guard nobody has`);
@@ -199,6 +201,7 @@ test("PLANT: the holdout import manifest exists and names the exports it needs",
   assert.deepEqual(phantom, [], `${MANIFEST} names exports that src/ does not have: ${phantom.join(", ")}`);
 });
 
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest. The manifest lists names only, so the name must stay exported somewhere in src/
 test("PLANT: the two exports the holdout imports are still exported from src", () => {
   // Named, not derived, because these two are the incident. A future pass that
   // removes them fails here with the reason attached rather than at 03:00 with an
@@ -252,7 +255,6 @@ const KNOWN_SUSPECTS = [
   "REPORTING_ENDPOINTS",
   "assertRepoArg",
   "clientFor",
-  "costOf",
   "verifyTaskDocument",
   "workflowRunsForBranch",
 ];
@@ -280,6 +282,7 @@ const KNOWN_SUSPECTS = [
 //
 // Deliberately NOT checked any more: that a reviewed name is STILL caller-less.
 // Gaining a caller is good news and was never a defect.
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("every reviewed suspect is still exported from src/", () => {
   const names = new Set(exportsOfSrc().map((e) => e.name));
   const gone = KNOWN_SUSPECTS.filter((n) => !names.has(n));
@@ -294,6 +297,7 @@ test("every reviewed suspect is still exported from src/", () => {
   );
 });
 
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("no new no-caller export appears without review", () => {
   const declared = new Set(declaredByHoldout());
   const reviewed = new Set(KNOWN_SUSPECTS);
@@ -322,6 +326,7 @@ test("no new no-caller export appears without review", () => {
       `(${examined.length} exports examined against ${READERS.length} reader files; comments and barrel re-exports do not count as callers.)`
   );
 });
+// scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("PLANT: a name in the holdout manifest is never reported as a suspect", () => {
   // The manifest earning its keep. Both incident exports have no caller in src/
   // or test/ either, and only the manifest keeps them off the list above.

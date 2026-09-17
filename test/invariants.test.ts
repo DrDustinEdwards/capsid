@@ -50,6 +50,7 @@ const SCOPE_GATE = /ctx\.scope\(\{[^}]*grant: "write"/;
 
 const BLOCKS: ToolBlock[] = toolBlocks();
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point (count guard for the scans in this file)
 test("the block scan found the whole tool surface", () => {
   // Vacuity guard. If this parse broke, every assertion below would pass over an
   // empty list and the file would be worthless while looking green.
@@ -69,6 +70,7 @@ test("the block scan found the whole tool surface", () => {
 // requirement as no requirement and reports the two tools as ungated.
 const WRITE_GATED: ReadonlyArray<string> = ["write", "admin"];
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, derived over every registration
 test("every tool whose handler contains mutating SQL is gated on the write grant", () => {
   const ungated = BLOCKS.filter(
     (b) => MUTATING_SQL.test(b.body) && !WRITE_GATED.includes(requiredGrant(b.name)) && !SCOPE_GATE.test(b.body)
@@ -80,6 +82,7 @@ test("every tool whose handler contains mutating SQL is gated on the write grant
   );
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, derived over every registration
 test("EVERY registered tool has a stated requirement, in both directions", () => {
   // The registrar reads TOOL_GRANTS to decide what a call needs. A tool missing from
   // it falls back to `write`, which is the safe direction and is still a drift: the
@@ -90,6 +93,7 @@ test("EVERY registered tool has a stated requirement, in both directions", () =>
   assert.deepEqual(Object.keys(TOOL_GRANTS).sort(), registered);
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, derived over every registration
 test("a tool marked read does not mutate, which is the claim it would be dangerous to get wrong", () => {
   // The direction that matters. A write tool wrongly marked `read` is admitted for a
   // read-only caller by the registrar and then writes.
@@ -100,6 +104,7 @@ test("a tool marked read does not mutate, which is the claim it would be dangero
   assert.ok(reads >= 8, `only ${reads} tools classify as read; the derivation is broken`);
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, derived over every registration
 test("the two handler-checked action tools really do carry their own check", () => {
   // They are the only tools the registrar cannot decide for, so they are the only
   // ones where forgetting the call leaves a hole. Named, because there being exactly
@@ -121,6 +126,7 @@ test("the two handler-checked action tools really do carry their own check", () 
   }
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point (count guard for the scans in this file)
 test("the gate check is not vacuous: several tools are found to be mutating", () => {
   // If a refactor moved every statement into a helper, the test above would pass
   // by matching nothing. This asserts it is still looking at real mutations.
