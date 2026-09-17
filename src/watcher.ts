@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
 import { BACKUP_STALE_HOURS, healthReport, type HealthReport } from "./health";
-import { ciStatus, listRepoTree, readRepoFile, repoHistory } from "./github";
+import { ciStatus, defaultBranchSha, listRepoTree, readRepoFile } from "./github";
 import { improveStatus, type StatusReport } from "./improve-run";
 import { ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
@@ -591,6 +591,8 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
   }
 }
 
+const basename = (path: string): string => path.split("/").filter(Boolean).pop() ?? "";
+
 /** The newest migration filename on master, which is what the live schema_version is
  *  compared against. Sorted by name, because the files are zero-padded and ordered by
  *  that padding everywhere else in this repo. */
@@ -621,10 +623,7 @@ async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
     const files = await attempt(`scorer surface ${namespace}`, async () => {
       const wf = await readRepoFile(env, namespace, SCORER_WORKFLOW);
       const rp = await readRepoFile(env, namespace, SCORER_REPORT);
-      return {
-        workflow: (wf as { content?: string }).content ?? "",
-        report: (rp as { content?: string }).content ?? "",
-      };
+      return { workflow: wf.content, report: rp.content };
     });
     if (!files || files.workflow.length === 0 || files.report.length === 0) {
       unreadable.push(namespace);
@@ -720,17 +719,18 @@ export function identityFindings(read: ScorerSurface[], unreadable: string[], ma
 export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
   const out: Finding[] = [];
 
+  // NO CASTS ON A REPO READER'S RESULT. Until 2026-09-17 both reads below went
+  // through one: the head read called repoHistory with no ref, which throws, and the
+  // migrations read took `name` from entries that carry `path`. attempt() swallowed
+  // the first and the cast hid the second, so neither check ever ran
+  // (AUDIT-2026-09-16.md 8.1, 8.21). With the inferred types, a renamed field fails
+  // `npm run check`; test/watcher-gather.test.ts drives both reads end to end.
   const health = await attempt("health", () => healthReport(env));
   if (health) {
-    const head = await attempt("master head", async () => {
-      const history = await repoHistory(env, "capsid", { limit: 1 });
-      const commits = (history as { commits?: Array<{ sha?: string }> }).commits ?? [];
-      return commits[0]?.sha ?? null;
-    });
+    const head = await attempt("master head", () => defaultBranchSha(env, "capsid"));
     const migrations = await attempt("migrations", async () => {
       const tree = await listRepoTree(env, "capsid", "migrations");
-      const entries = (tree as { entries?: Array<{ name?: string }> }).entries ?? [];
-      return newestMigration(entries.map((e) => e.name ?? ""));
+      return newestMigration(tree.entries.map((e) => basename(e.path)));
     });
     out.push(...healthFindings(health, head ?? null, migrations ?? null, "capsid"));
   }
@@ -755,24 +755,18 @@ export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
   // stale-dump finding fire and say only that nothing has run.
   const dumps = await attempt("mirror dumps", async () => {
     const tree = await listRepoTree(env, "capsid", MIRROR_DUMP_PREFIX, undefined, MIRROR_REPO_LABEL);
-    return ((tree as { entries?: Array<{ path?: string }> }).entries ?? []) as Array<{ path?: string }>;
+    return tree.entries;
   });
   if (dumps) {
-    const runs =
-      (await attempt("mirror runs", async () => {
-        const report = await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 });
-        return ((report as { runs?: MirrorRun[] }).runs ?? []) as MirrorRun[];
-      })) ?? [];
+    const runs: MirrorRun[] =
+      (await attempt("mirror runs", async () => (await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 })).runs)) ?? [];
     out.push(...mirrorFindings("capsid", newestDump(dumps), runs, now));
   }
 
   out.push(...((await attempt("scorer identity", () => scorerIdentityFindings(env))) ?? []));
 
   for (const namespace of ROSTER) {
-    const runs = await attempt(`ci ${namespace}`, async () => {
-      const report = await ciStatus(env, namespace, undefined, { limit: 5 });
-      return ((report as { runs?: CiRun[] }).runs ?? []) as CiRun[];
-    });
+    const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);
     if (runs) out.push(...ciFindings(namespace, runs, now));
   }
 

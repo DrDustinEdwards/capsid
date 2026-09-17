@@ -180,6 +180,7 @@ test("the panel renders every agent, revoked ones included, and never a key", ()
     },
     activity: [],
     activity_filter: { namespace: null, actor: null },
+    watcher_last: null,
     agents,
   });
   assert.match(html, /capsid-driver/);
