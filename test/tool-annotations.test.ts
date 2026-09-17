@@ -69,6 +69,7 @@ const DESTRUCTIVE = [
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
 
+// scanner-rule: conventions-verification, pair every content check with a count check
 test("the scan finds every tool, so nothing here can pass by reading nothing", () => {
   const blocks = toolBlocks();
   // Derived from src/counts.ts rather than spelled, so the surface moves in one
@@ -78,12 +79,14 @@ test("the scan finds every tool, so nothing here can pass by reading nothing", (
   assert.ok(blocks.every((b) => b.body.length > 100), "a zero-length block would make every match below vacuous");
 });
 
+// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: the hint table and the registrations name exactly the same tools", () => {
   const registered = toolBlocks().map((b) => b.name).sort();
   const tabled = Object.keys(TOOL_HINTS).sort();
   assert.deepEqual(tabled, registered, "a tool without an entry, or an entry without a tool, fails here");
 });
 
+// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: every tool is annotated at its registration, from the table and not by hand", () => {
   const unannotated = toolBlocks()
     .filter((b) => !new RegExp(`annotations: hintsFor\\("${b.name}"\\)`).test(b.body))
@@ -95,6 +98,7 @@ test("PLANT: every tool is annotated at its registration, from the table and not
   assert.equal(inline.length, 0, "an inline annotation literal bypasses the table this file checks");
 });
 
+// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: readOnlyHint is exactly the negation of the write gate", () => {
   const writeGated = toolBlocks().filter((b) => isWriteGated(b.name));
   // Vacuity guard. The read half is what is stable: fifteen read tools, and every
@@ -118,16 +122,7 @@ test("PLANT: readOnlyHint is exactly the negation of the write gate", () => {
   assert.deepEqual(wrong, [], wrong.join("; "));
 });
 
-test("PLANT: every write-gated tool declares readOnlyHint false", () => {
-  // The same property said the way the audit asked for it, so a reader looking for
-  // that sentence finds an assertion rather than an inference.
-  const lying = toolBlocks()
-    .filter((b) => isWriteGated(b.name))
-    .filter((b) => hintsFor(b.name).readOnlyHint !== false)
-    .map((b) => b.name);
-  assert.deepEqual(lying, [], `these write-gated tools claim to be read-only: ${lying.join(", ")}`);
-});
-
+// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: every mutating tool declares destructiveHint true", () => {
   const mutating = toolBlocks().filter((b) => isWriteGated(b.name) && matches(b.body, DESTRUCTIVE));
   assert.ok(mutating.length >= 10, `the destructive scan found only ${mutating.length} mutating tools; it is broken`);
@@ -135,6 +130,7 @@ test("PLANT: every mutating tool declares destructiveHint true", () => {
   assert.deepEqual(understated, [], `these tools can overwrite or remove and do not say so: ${understated.join(", ")}`);
 });
 
+// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: no read-only tool claims to be destructive, and no additive tool overstates", () => {
   // The innocent case. A guard that also fires on code doing nothing wrong gets
   // deleted rather than fixed, so the negative direction is asserted too.
