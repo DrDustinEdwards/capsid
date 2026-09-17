@@ -17,6 +17,13 @@ positive evaluations. A live skill goes `retired` on two consecutive non-positiv
 Retired rows stay, with their record, so the same idea is not abstracted twice from the
 same source.
 
+A skill is created in one of two ways. The loop abstracts one when an attempt is
+kept. An admin registers one with `improve_run` action `register_skill`, naming the
+finished job it was abstracted from. That job must be done, with one merged pull
+request and green CI as the Worker verified them, and must not have produced a skill
+before. The skill's namespace is read from the job. Drivers are refused, because a
+driver registering its own skill would be judging its own run.
+
 A status changes on evaluation evidence and never on a driver's report of its own
 run. Two evaluations minimum in either direction: one result is a sample. Evidence
 counts per version and per probe set, so an accepted edit resets it. Edits are bounded
@@ -44,6 +51,13 @@ The evaluation cycle is fortnightly, KV-configurable under
 cadence before doing anything else. Each cycle runs the namespace's probe set in the
 scorer sandbox twice per skill, with it and without it, and records the difference. A
 cadence below one day falls back to the default rather than being obeyed.
+
+That measurement is not built yet. No probe set exists in the code or the store: a
+probe set is only the `probe_set_version` string on `skill_evaluations`. The cycle
+dispatches `improve-score.yml` with `mode`, `skill_id` and `skill_version`, and that
+workflow declares only `branch`, `run_id` and `attempt_id`, all required, so GitHub
+refuses the dispatch. Nothing outside the tests calls `evaluationStatement`, so no
+probe result can be recorded.
 
 The console carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute
