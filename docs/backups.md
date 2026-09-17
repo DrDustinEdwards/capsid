@@ -15,7 +15,7 @@ The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps o
 
 The dump is the signal because the attempt is not. The mirror was dead from 2026-09-09 to 2026-09-12, and on every one of those days it requested and received a valid backup credential before failing two steps later, so anything keyed on the credential reported it healthy. `MIRROR_STALE_HOURS` is deliberately not `BACKUP_STALE_HOURS`: that one is the local dump at 26 hours measured from a key this Worker writes, and the other repo's schedule can change without this one hearing.
 
-Run one on demand with a write-grant key (read-only keys are refused):
+Run one on demand with the admin credential, a write-grant `OPERATOR_KEY_HASH` key. A backup and its prune cover every namespace, so a minted agent is refused with 403 even when it holds write, and a missing or unknown key gets 401:
 
 ```
 curl -X POST https://capsid.<your-subdomain>.workers.dev/ops/backup -H "Authorization: Bearer <key>"

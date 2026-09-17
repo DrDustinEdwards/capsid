@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
-import { TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
+import { TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFile, toolBlocks } from "./source-files.ts";
 
@@ -224,7 +224,11 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
   // registered.
   const uncovered = toolBlocks()
     .filter((b) => TOOL_GRANTS[b.name] !== "read")
-    .filter((b) => !Object.hasOwn(TOOL_GRANTS, b.name) || (TOOL_GRANTS[b.name] === "action" && !/ctx\.scope\(/.test(b.body)))
+    .filter(
+      (b) =>
+        !Object.hasOwn(TOOL_GRANTS, b.name) ||
+        (TOOL_GRANTS[b.name] === "action" && !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) && !/ctx\.scope\(/.test(b.body))
+    )
     .map((b) => b.name);
   assert.deepEqual(uncovered, [], `these write tools are not covered by checkScope: ${uncovered.join(", ")}`);
   // Vacuity: the walk found a real surface.
