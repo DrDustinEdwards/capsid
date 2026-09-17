@@ -4,7 +4,11 @@ import { driverAgentName, driverKeyPath, driverMintInstruction } from "../src/ag
 import { keyPath, parseArgs, selectAgents } from "../scripts/mint-agents.mjs";
 import { TOOL_GRANTS } from "../src/scope.ts";
 import { sep } from "node:path";
-import { sourceFile } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // register_namespace RETURNS THE MINT COMMAND AND DOES NOT MINT (2026-09-11).
 //
@@ -37,18 +41,28 @@ test("the premise MOVED: register_namespace is admin, and still does not mint", 
   // repeats it. Named exactly via sourceFile(): a find() over the walk matches
   // top-level src/agents.ts first, which is a different file.
   assert.equal(TOOL_GRANTS.agents, "admin", "the admin gate on minting is gone from the table");
-  assert.doesNotMatch(sourceFile("tools/agents.ts"), /agent[.]admin/, "the agents handler decides admin for itself again");
+  // That no handler decides admin for itself is asserted once, for every handler, in
+  // test/route-gates.test.ts.
 });
 
-test("register_namespace's handler does not mint", () => {
-  const docs = sourceFile("tools/docs.ts");
-  const start = docs.indexOf('"register_namespace"');
-  const end = docs.indexOf('"update_namespace"', start);
-  assert.ok(start !== -1 && end > start, "could not isolate the register_namespace registration");
-  const handler = docs.slice(start, end);
-  assert.doesNotMatch(handler, /mintAgent|action:\s*["']mint["']/, "register_namespace mints an agent");
-  assert.match(handler, /driverMintInstruction/, "register_namespace no longer returns the mint instruction");
-  assert.match(handler, /driver_agent:\s*null/, "the response no longer states that nothing was minted");
+test("register_namespace registers, mints nothing, and returns the mint instruction", async () => {
+  const d1 = fakeD1({});
+  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "register-mint", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const result = (await client.callTool({ name: "register_namespace", arguments: { namespace: "sample", repo: "owner/sample" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+  await client.close();
+  assert.notEqual(result.isError, true, result.content[0]?.text);
+  const body = JSON.parse(result.content[0].text) as { driver_agent: unknown; next: string };
+  assert.equal(body.driver_agent, null, "the response no longer states that nothing was minted");
+  assert.equal(body.next, driverMintInstruction("sample"), "register_namespace no longer returns the mint instruction");
+  const writes = d1.recorded.map((r) => r.sql);
+  assert.ok(writes.some((sql) => /INSERT INTO namespaces/.test(sql)), "the namespace row was not written");
+  assert.deepEqual(writes.filter((sql) => /agents/.test(sql)), [], "register_namespace wrote to the agents table");
 });
 
 test("the instruction it prints is parseable by the script it names", () => {
