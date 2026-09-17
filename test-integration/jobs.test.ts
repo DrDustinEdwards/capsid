@@ -149,6 +149,21 @@ describe("the refusals", () => {
     expect((await row(b.job!.id))?.status).toBe("queued");
   });
 
+  it("an agent, an OAuth session and an operator key can each hold a lease", async () => {
+    // claimed_by has the shape of audit_log.actor, so one query joins a job to what its
+    // driver did. Each of the three caller kinds claims its own job.
+    for (const [title, actor] of [
+      ["held by an agent", "agent:capsid-driver"],
+      ["held by a session", "github:someone"],
+      ["held by a key", "opkey:0123456789ab"],
+    ] as const) {
+      const posted = await post({ title });
+      const claimed = await claimJob(jobsEnv(), legacyAgent("write", actor), NOW, { id: posted.job!.id });
+      expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
+      expect(claimed.job!.claimed_by).toBe(actor);
+    }
+  });
+
   it("two drivers racing one job resolve to exactly one winner", async () => {
     const posted = await post({ title: "contested" });
     const id = posted.job!.id;
@@ -370,6 +385,47 @@ describe("resume", () => {
     const onDone = await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved again");
     expect(onDone.ok).toBe(false);
     expect(onDone.refusal).toMatch(/is done, not blocked/);
+  });
+
+  it("PLANT: a job that leaves blocked while resume is deciding is not taken back", async () => {
+    // resume reads the row, checks it, then moves it with a keyed UPDATE. A human who
+    // fails the job between the read and the UPDATE must win: the UPDATE is keyed on
+    // status = 'blocked', and only SQLite can show the key holding.
+    const id = await blockedJob("resume race");
+    const base = jobsEnv() as unknown as { DB: D1Database };
+    const racing = {
+      ...base,
+      DB: {
+        prepare(sql: string) {
+          if (/UPDATE jobs SET status = 'claimed'/.test(sql)) {
+            const real = base.DB.prepare(sql);
+            return {
+              bind: (...args: unknown[]) => {
+                const bound = real.bind(...args);
+                return {
+                  first: async () => {
+                    await base.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(id).run();
+                    return bound.first();
+                  },
+                };
+              },
+            };
+          }
+          return base.DB.prepare(sql);
+        },
+        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
+      },
+    } as unknown as Parameters<typeof resumeJob>[0];
+    const resumed = await resumeJob(racing, legacyAgent("write", SEAT), NOW, id, "the human approved it");
+    expect(resumed.ok).toBe(false);
+    expect((await row(id))?.status).toBe("failed");
+  });
+
+  it("a blocked job cannot be claimed, so resume is the only way out of blocked", async () => {
+    const id = await blockedJob("claim refuses blocked");
+    const byOther = await claimJob(jobsEnv(), OTHER, NOW, { namespace: "capsid", id });
+    expect(byOther.ok).toBe(false);
+    expect((await row(id))?.status).toBe("blocked");
   });
 
   it("resume holds the one-claim-per-caller rule", async () => {

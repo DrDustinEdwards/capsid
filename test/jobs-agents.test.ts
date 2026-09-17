@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, legacyAgent, type Agent } from "../src/agents.ts";
 import { missingForJob, parseRequiredScopes, serializeRequiredScopes } from "../src/jobs-schema.ts";
-import { sourceFile } from "./source-files.ts";
 
 // GROUP 5: THE QUEUE ASKS WHAT A DRIVER CAN DO BEFORE HANDING IT THE WORK.
 //
@@ -81,29 +80,10 @@ test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather 
   assert.deepEqual(parseRequiredScopes("{}"), { ok: true, value: { flags: [] } });
 });
 
-test("the claim checks scopes BEFORE it takes the lease", () => {
-  // Order is the property. A claim that takes the lease and then refuses has parked
-  // the job on a driver that cannot do it, and the queue's own rule is that a caller
-  // holds one claim at a time, so it has also blocked that driver from taking
-  // anything else until the lease expires.
-  const jobs = sourceFile("jobs.ts");
-  const claim = jobs.slice(jobs.indexOf("export async function claimJob"), jobs.indexOf("// ---- the transitions"));
-  assert.ok(claim.length > 500, "could not bound claimJob in src/jobs.ts");
-  const check = claim.indexOf("missingForJob(");
-  const lease = claim.indexOf("SET status = 'claimed'");
-  assert.ok(check > 0, "claimJob no longer checks the job's required scopes");
-  assert.ok(lease > 0, "claimJob no longer takes the lease, which cannot be right");
-  assert.ok(check < lease, "claimJob takes the lease before checking the driver's scopes");
-});
+// That the claim checks scopes before it takes the lease is proven against SQLite in
+// test-integration/job-required-scopes.test.ts: a refused job STAYS QUEUED.
 
-test("claimed_by speaks the audit vocabulary, so an agent claim is traceable to its rows", () => {
-  // migrations/0006 states that claimed_by has the same shape as audit_log.actor, so
-  // one query joins a job to what its driver did. An agent's actor is agent:<name>,
-  // and the queue has to accept it or a minted driver cannot hold a lease at all.
-  const jobs = sourceFile("jobs.ts");
-  const shape = /const ACTOR_SHAPE = ([^;]+);/.exec(jobs);
-  assert.ok(shape, "src/jobs.ts no longer states which actors can hold a lease");
-  assert.match(shape[1], /agent:/, "the queue does not accept an agent identity as a lease holder");
-  assert.match(shape[1], /github:/, "the queue stopped accepting an OAuth session");
-  assert.match(shape[1], /opkey:/, "the queue stopped accepting the legacy operator key");
-});
+
+// That agent, OAuth and operator-key identities can each hold a lease is proven by
+// claiming with all three against SQLite in test-integration/jobs.test.ts.
+
