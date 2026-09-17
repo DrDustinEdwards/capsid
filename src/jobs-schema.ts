@@ -209,6 +209,14 @@ export function missingForJob(agent: Agent, namespace: string, requiredScopes: s
   return checkScope(agent, { tool: "jobs", namespace, grant: "write", flags: required.value.flags });
 }
 
+/** Why this caller cannot move a job in this namespace, or null. The namespace half
+ *  of missingForJob, for a resume that returns a job to its own claimant: the caller
+ *  acquires nothing, so the job's flags are not its question, but it still moves a
+ *  job and must be able to write where the job lives. */
+export function outsideJobNamespace(agent: Agent, namespace: string): string | null {
+  return checkScope(agent, { tool: "jobs", namespace, grant: "write" });
+}
+
 // job_<12 hex>, minted by the Worker. Not an AUTOINCREMENT integer: a job id is
 // quoted in chat and in a commit message, and a guessable sequence invites
 // addressing a job by arithmetic. 48 bits is collision-free at this volume and the

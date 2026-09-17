@@ -153,7 +153,7 @@ describe("job outcomes", () => {
     expect((await outcomeRow(id))?.result_kind).toBe("none");
   });
 
-  it("a gated job carries its gate counts, and its duration is the LAST stretch", async () => {
+  it("a gated job carries its gate counts, and its duration runs from the FIRST claim", async () => {
     const posted = await post({ title: "gated" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
@@ -161,13 +161,14 @@ describe("job outcomes", () => {
       reason: "needs a push",
       command: "git push origin feat/x",
     });
-    // A day passes while a human runs the command. That wait is not the driver being
-    // slow, which is why resume takes a fresh lease and the duration measures from it.
+    // A day passes while a human runs the command. Ruled 2026-09-16: the duration still
+    // measures from the first claim, because measuring from the resume reported
+    // job_6bbd77bc4827's working life as its last few seconds.
     await resumeJob(jobsEnv(), DRIVER, at("2026-09-11T12:00:00.000Z"), id, "Dustin ran it");
     await completeJob(jobsEnv(), DRIVER, at("2026-09-11T12:20:00.000Z"), id, { result_summary: "done" });
 
     const row = await outcomeRow(id);
-    expect(row?.duration_minutes).toBe(20);
+    expect(row?.duration_minutes).toBe(1460);
     expect(row?.blocked_count).toBe(1);
     expect(row?.resumed_count).toBe(1);
   });
