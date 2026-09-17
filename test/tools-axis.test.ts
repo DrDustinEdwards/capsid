@@ -9,6 +9,17 @@ import { actionArgFor } from "../src/scope.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { toolBlocks } from "./source-files.ts";
 
+// The schemas the server actually serves, as the admin sees them.
+async function listedTools() {
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "tools-axis-list", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  return tools;
+}
+
 // THE TOOLS AXIS, DRIVEN THROUGH THE PATH A REAL CALLER USES.
 //
 // The qualifier (`manage_pr.comment`, `jobs.post`) was a working pure function with
@@ -163,21 +174,20 @@ test("DERIVED: every tool that declares an action-shaped argument is in ACTION_A
   assert.deepEqual(unwired, [], `these tools declare an action-shaped argument the enforcement point cannot see: ${unwired.join(", ")}`);
 });
 
-test("DERIVED: every tool named in ACTION_ARG spells its argument the way the tool does", () => {
+test("every tool named in ACTION_ARG serves an argument by that name", async () => {
   // The other direction. A table entry naming an argument the tool does not have is a
   // narrowing that silently never applies, which is the same defect wearing the other
   // hat: allowsToolAction would see undefined and, since 2026-09-13, refuse the tool
   // outright rather than quietly allowing everything. Both are wrong; this catches it.
   const wired = ["agents", "improve_run", "jobs", "lint", "manage_pr"];
-  const blocks = toolBlocks();
+  const tools = await listedTools();
   for (const tool of wired) {
     const key = actionArgFor(tool);
     assert.ok(key, `${tool} is expected in ACTION_ARG and is not there`);
-    const block = blocks.find((b) => b.name === tool);
-    assert.ok(block, `no registration found for ${tool}`);
-    assert.match(
-      (block as { body: string }).body,
-      new RegExp(`\\n\\s+${key}: z\\b`),
+    const listed = tools.find((t) => t.name === tool);
+    assert.ok(listed, `${tool} is not served`);
+    assert.ok(
+      Object.hasOwn(listed.inputSchema.properties ?? {}, key),
       `${tool}'s action argument is not spelled '${key}', so its narrowing can never apply`
     );
   }
