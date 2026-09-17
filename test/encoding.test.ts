@@ -21,7 +21,6 @@ test("the shared encoders round-trip, including non-ASCII and padding cases", ()
   assert.equal(bytesToHex(new Uint8Array([0, 15, 16, 255])), "000f10ff");
 });
 
-// scanner-rule: quality audit 1.1 and 6.6, one definition imported everywhere
 test("one base64 and one hex implementation, across ALL of src/", () => {
   // Widened from a two-file list to the whole directory (quality audit 1.1).
   // Duplicated crypto-adjacent helpers are not a tidiness problem: they drift, and

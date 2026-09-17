@@ -22,7 +22,6 @@ test("'closed' is a valid status", () => {
 // docs; nothing else filters on it, and in particular the lint loop must not,
 // because the archive/ prefix is the ONLY thing that takes a document out of
 // memory. A closed task is finished, not forgotten.
-// scanner-rule: capsid/decisions.md 2026-08-12, a closed document stays in the lint loop, filtered in one place
 test("closure does not remove a document from the lint loop", () => {
   // Scanned across all of src/ (quality audit 1.1): a second closed-filter added
   // in another module is exactly as damaging as one added here, and would have
