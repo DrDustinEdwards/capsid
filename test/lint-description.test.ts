@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { LINT_DESCRIPTION } from "../src/tools/lint.ts";
 import { buildTruthReport } from "../src/truth-report.ts";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // THE TOOL DESCRIPTION IS DERIVED FROM THE REPORT, NOT RETYPED BESIDE IT.
 //
@@ -86,13 +89,17 @@ test("documents by type is not described as one of the checks", () => {
 });
 
 // The registration must actually use the exported constant, or the constant is a
-// second copy that agrees with nothing. Read from source: registerLintTools needs a
-// live McpServer to call, and this is one string.
-test("the registration uses the exported description", () => {
-  const source = readFileSync(join(import.meta.dirname, "..", "src", "tools", "lint.ts"), "utf8");
-  assert.match(
-    source,
-    /description:\s*LINT_DESCRIPTION\s*,/,
-    "src/tools/lint.ts no longer registers LINT_DESCRIPTION, so what clients see is not what this test checks"
+// second copy that agrees with nothing. Checked against what the server serves.
+test("the served lint description is the exported one", async () => {
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "lint-description", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  assert.equal(
+    tools.find((t) => t.name === "lint")?.description,
+    LINT_DESCRIPTION,
+    "the lint tool does not serve LINT_DESCRIPTION, so what clients see is not what this file checks"
   );
 });
