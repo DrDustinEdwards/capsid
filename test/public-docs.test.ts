@@ -3,13 +3,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { improveControl } from "../src/improve-run.ts";
-import { AUTHORITATIVE } from "../src/counts.ts";
 import { sha256Hex } from "../src/auth.ts";
 import { operatorIdentity } from "../src/auth.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { allSourceText, sourceFile, sourceFiles } from "./source-files.ts";
+import { sourceFile } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
 
-const CAPSID = AUTHORITATIVE.capsid;
 
 // THE PUBLIC DOCS, AND THE ONE THING THAT MUST NEVER BE IN THEM.
 //
@@ -103,6 +105,7 @@ test("the docs describe the model without naming the private inventory", () => {
   assert.match(schema, /redacted from the private canon/i);
 });
 
+// scanner-rule: conventions-verification, a list written in docs is derived from the source it describes and compared
 test("bootstrap names every binding the Worker actually declares", () => {
   // Derived from src/env.ts rather than listed, so a binding added to the Worker
   // and not to the setup guide is a build failure. That is the whole failure mode
@@ -117,6 +120,7 @@ test("bootstrap names every binding the Worker actually declares", () => {
   }
 });
 
+// scanner-rule: conventions-verification, a list written in docs is derived from the source it describes and compared
 test("bootstrap names every secret the Worker reads", () => {
   const envSource = sourceFile("env.ts");
   const secrets = ["GITHUB_APP_PRIVATE_KEY", "GITHUB_CLIENT_SECRET", "OPERATOR_KEY_HASH", "IMPROVE_SCORE_SECRET", "ANTHROPIC_API_KEY"];
@@ -206,13 +210,17 @@ test("two mints are different keys", async () => {
   assert.equal(await sha256Hex(a.key), a.hash, "the reported hash is really the hash of the reported key");
 });
 
-test("the mint is a control action on the existing tool, not a new tool", () => {
-  // Hard rule 1: the surface stays small, and every addition is a ruled exception
-  // recorded in capsid/decisions.md. A key mint is a control verb on a tool that
-  // already has four of them, and it did NOT take a tool of its own. Counted across
-  // src/ against counts.ts, so a split of registerTool cannot hide one and the
-  // number moves in one place when a ruling adds a tool.
-  const registered = sourceFiles().reduce((n, f) => n + (f.text.match(/server\.registerTool\(/g) ?? []).length, 0);
-  assert.equal(registered, CAPSID.tools, `the surface moved to ${registered} tools`);
-  assert.match(allSourceText(), /"mint_operator_key"/, "the action must be reachable from the tool schema");
+test("the mint is a control action on the existing tool, not a new tool", async () => {
+  // Hard rule 1: the surface stays small. The tool count is asserted against the
+  // served tools in test/counts.test.ts; this checks the mint is an action of
+  // improve_run rather than a tool of its own.
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "public-docs", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  assert.equal(tools.some((tool) => tool.name.includes("mint")), false, "the mint became a tool of its own");
+  const action = tools.find((tool) => tool.name === "improve_run")?.inputSchema.properties?.action as { enum?: string[] } | undefined;
+  assert.ok(action?.enum?.includes("mint_operator_key"), "improve_run does not serve the mint_operator_key action");
 });

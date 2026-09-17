@@ -30,6 +30,7 @@ function mutationTools() {
   return toolBlocks().filter((t) => MUTATION_MARKERS.some((re) => re.test(t.body)));
 }
 
+// scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07) (count guard)
 test("the scan finds the mutation entry points at all, so this file cannot pass by reading nothing", () => {
   const found = mutationTools().map((t) => t.name).sort();
   assert.ok(found.length >= 4, `the mutation scan found ${found.length} tools; the walk is broken`);
@@ -38,6 +39,7 @@ test("the scan finds the mutation entry points at all, so this file cannot pass 
   assert.deepEqual(found, ["delete", "lint", "move", "restore", "write"]);
 });
 
+// scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07)
 test("PLANT: every document mutation entry point calls improveWriteRefusal", () => {
   const unguarded = mutationTools()
     .filter((t) => !/improveWriteRefusal\(/.test(t.body))
@@ -50,6 +52,7 @@ test("PLANT: every document mutation entry point calls improveWriteRefusal", () 
   );
 });
 
+// scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07)
 test("every guarded mutation reads its opt-in from the caller, except the one that has none", () => {
   // The flag has to be plumbed, not just referenced: a handler that calls the
   // guard with a hardcoded `true` would pass the test above and guard nothing.
@@ -74,6 +77,7 @@ test("every guarded mutation reads its opt-in from the caller, except the one th
   }
 });
 
+// scanner-rule: audit 2026-09-13 finding C1, every opt-in is scoped to can_touch_protected
 test("PLANT: every mutation that accepts the opt-in scopes it to can_touch_protected", () => {
   // AUDIT 2026-09-13, FINDING C1, and the same class as the test above it. The
   // override shipped on write, then restore; delete and move accepted
@@ -95,6 +99,7 @@ test("PLANT: every mutation that accepts the opt-in scopes it to can_touch_prote
   );
 });
 
+// scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07) (count guard)
 test("the opt-in scan sees the tools it claims to, so it cannot pass by reading nothing", () => {
   const withOptIn = mutationTools()
     .filter((t) => t.body.includes("allow_improve_paths: z.boolean().optional()"))
@@ -175,6 +180,7 @@ test("the flag opens it, and ordinary paths were never closed", () => {
   }
 });
 
+// scanner-rule: defence in depth for a write caller added later that skips commitOnBranch, which no call made today can reach. The commitOnBranch half is also driven by the workflow plant above
 test("the refusal is checked in BOTH the shared dance and the write primitive", () => {
   // commitOnBranch covers delete_repo_file, whose mutate does its own ghFetch and
   // never reaches putFile. putFile covers a caller added later that does not go
@@ -187,11 +193,32 @@ test("the refusal is checked in BOTH the shared dance and the write primitive", 
   assert.equal(WORKFLOW_DIR, ".github/workflows/");
 });
 
-test("the opt-in reaches audit_log, so a workflow write is greppable afterwards", () => {
-  const github = allSourceText();
-  assert.match(
-    github,
-    /allow_workflow_write: true \} : \{\}/,
-    "the flag must be returned, because guardedWrite files the whole result into audit_log.params"
+test("the opt-in is returned, so guardedWrite files it into audit_log", async () => {
+  // guardedWrite writes the whole result into audit_log.params, so a workflow authored
+  // or removed through the repo tools is greppable afterwards only if the flag is on
+  // the result. An ordinary write carries no flag.
+  const env = fakeEnv({
+    DB: {
+      prepare: () => ({
+        bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }) }),
+      }),
+    },
+    APP_KV: fakeKv({ seedToken: true }).kv,
+  });
+  const file = (path: string) => ({
+    [`GET /repos/owner/repo/contents/${path}`]: { body: { sha: "old" } },
+    [`PUT /repos/owner/repo/contents/${path}`]: { body: { content: { sha: "new" }, commit: { sha: "c1" } } },
+    [`DELETE /repos/owner/repo/contents/${path}`]: { body: { commit: { sha: "c2" } } },
+  });
+  await withFetch(
+    { "GET /repos/owner/repo": { body: { default_branch: "main" } }, ...file(".github/workflows/x.yml"), ...file("src/x.ts") },
+    async () => {
+      const wrote = await writeRepoFile(env, "ns", ".github/workflows/x.yml", "on: push", "m", "direct", "main", undefined, true);
+      const removed = await deleteRepoFile(env, "ns", ".github/workflows/x.yml", "m", "direct", "main", undefined, true);
+      const ordinary = await writeRepoFile(env, "ns", "src/x.ts", "x", "m", "direct", "main");
+      assert.equal((wrote as { allow_workflow_write?: boolean }).allow_workflow_write, true, "a workflow write does not report its flag");
+      assert.equal((removed as { allow_workflow_write?: boolean }).allow_workflow_write, true, "a workflow delete does not report its flag");
+      assert.equal(Object.hasOwn(ordinary, "allow_workflow_write"), false, "an ordinary write reports a flag it did not use");
+    }
   );
 });
