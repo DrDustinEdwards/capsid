@@ -187,7 +187,10 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
 // signs what the store holds. A type-level check, compiled by npm run check:test: a new
 // parameter changes the tuple length and this assignment stops compiling. The tampering
 // test above shows it signs the stored bytes.
-const SIGNER_ARITY: Parameters<typeof signPolicyDocument>["length"] = 4;
+// Exact, in both directions: an optional parameter makes the length 4 | 5, which a plain
+// assignment of 4 would still accept.
+type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const SIGNER_ARITY_IS_FOUR: Exactly<Parameters<typeof signPolicyDocument>["length"], 4> = true;
 test("the signer takes exactly env, actor, namespace and path", () => {
-  assert.equal(SIGNER_ARITY, 4);
+  assert.equal(SIGNER_ARITY_IS_FOUR, true);
 });
