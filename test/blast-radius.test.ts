@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
-import { TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
+import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFile, toolBlocks } from "./source-files.ts";
 
@@ -217,6 +217,8 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
 
 // ---- the derived half --------------------------------------------------------
 
+// scanner-rule: CLAUDE.md rule 6, no new tool bypasses checkScope. Derived over every
+// registration, including tools added later.
 test("DERIVED: every write tool is on the enforcement point's path", () => {
   // Not a list of tools somebody remembered to check. The registrations are walked,
   // and each write tool must be covered by the registrar (its requirement is stated)
@@ -235,6 +237,8 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
   assert.ok(toolBlocks().length >= 30, "the tool walk collapsed");
 });
 
+// scanner-rule: CLAUDE.md rule 6, a repo mutation carries its flags through guardedWrite.
+// Derived over every GitHub mutation call site.
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
   // The seven repo write tools reach GitHub through guardedWrite, which is where
   // repoWriteFlags runs. A tool calling a github.ts mutation directly would skip the
@@ -263,7 +267,7 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
   }
 });
 
-test("DERIVED: every flag is reachable, so none of them is decoration", () => {
+test("every flag is required by some path, so none of them is decoration", () => {
   // A flag nothing ever asks for is a checkbox that reads as protection and is not.
   // Each one has to be produced by repoWriteFlags for some call, or be named by the
   // document-side override, which is the only other place a flag is required.
@@ -273,13 +277,11 @@ test("DERIVED: every flag is reachable, so none of them is decoration", () => {
       produced.add(flag);
     }
   }
-  const docs = sourceFile("tools/docs.ts");
-  const scope = sourceFile("scope.ts");
+  // The document-side override is the only other place a flag is required. That it is
+  // really required, on write, restore, delete and move, is proven by the refusal tests in
+  // test/improve-protected-paths.test.ts.
+  for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
   for (const flag of SCOPE_FLAGS) {
-    const named = produced.has(flag) || docs.includes("IMPROVE_OVERRIDE_FLAGS") && scope.includes(`"${flag}"`);
-    assert.ok(named, `${flag} is required by no path, so holding it or not changes nothing`);
+    assert.ok(produced.has(flag), `${flag} is required by no path, so holding it or not changes nothing`);
   }
-  // And specifically: the one flag not produced by a repo write is required by the
-  // document-side override, rather than merely being mentioned somewhere.
-  assert.match(scope, /IMPROVE_OVERRIDE_FLAGS = /);
 });
