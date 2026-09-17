@@ -10,6 +10,7 @@ import {
   type ConsoleUser,
 } from "./console-auth";
 import { loadReputation, type AgentReputation } from "./console-reputation";
+import { WATCHER_LAST_KEY, WATCHER_NAME } from "./watcher";
 import { activityFilterFrom, loadActivity, ACTIVITY_LIMIT, type ActivityFilter, type ActivityRow } from "./console-activity";
 
 // THE CONSOLE: one page that answers "what is the state of every namespace" without
@@ -46,6 +47,10 @@ export interface ConsoleData {
   agents: AgentReputation[];
   activity: ActivityRow[];
   activity_filter: ActivityFilter;
+  // THE WATCHER'S LAST PASS, from the stamp watcherTick writes. The minted `watcher`
+  // row's last_seen cannot answer this: the tick runs as a synthetic identity and
+  // presents no key, so that column only says whether the minted key was ever used.
+  watcher_last: string | null;
 }
 
 export async function consoleData(
@@ -69,6 +74,7 @@ export async function consoleData(
     agents: await loadReputation(env.DB, improve.agents ?? []),
     activity: await loadActivity(env.DB, filter),
     activity_filter: filter,
+    watcher_last: await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null),
   };
 }
 
@@ -337,7 +343,21 @@ function pct(value: number | null): string {
   return value === null ? "-" : `${Math.round(value * 100)}%`;
 }
 
-function agentRow(agent: AgentReputation, csrf: string): string {
+// THE WATCHER ROW SHOWS THE PASS, NOT ONLY THE KEY. last_seen moves only when a key is
+// presented, and the Worker runs the watcher without one, so for this row "never
+// connected" was true of the key and false of the watcher. The tick does not touch
+// last_seen for it either: that column is how an unused credential is noticed, and a
+// minted key nothing presents should keep reading as unused.
+function lastSeenCell(agent: AgentReputation, watcherLast: string | null): string {
+  const key = escapeHtml(agent.last_seen ?? "never connected");
+  if (agent.name !== WATCHER_NAME) return key;
+  const pass = watcherLast
+    ? `last pass ${escapeHtml(watcherLast)}`
+    : `<span class="warn">no pass recorded</span>`;
+  return `${pass}<br><span class="muted">key: ${key}</span>`;
+}
+
+function agentRow(agent: AgentReputation, csrf: string, watcherLast: string | null): string {
   const scope = agent.namespaces === "*" ? "every namespace" : agent.namespaces.join(", ");
   const flags = agent.flags.length ? agent.flags.join(", ") : "none";
   const attempts =
@@ -346,7 +366,7 @@ function agentRow(agent: AgentReputation, csrf: string): string {
       : `<td class="num">${agent.attempts_kept} kept / ${agent.attempts_reverted} reverted</td>`;
   const state = agent.revoked_at
     ? `<span class="bad">revoked ${escapeHtml(agent.revoked_at)}</span>`
-    : escapeHtml(agent.last_seen ?? "never connected");
+    : lastSeenCell(agent, watcherLast);
   // THE VERIFIED COLUMN, and it is deliberately not the same numbers as the one
   // beside it. "PRs opened / merged" counts what this credential DID through this
   // Worker, from audit_log. These three come from job_outcomes and only from the
@@ -383,7 +403,7 @@ function agentsPanel(data: ConsoleData, csrf: string): string {
 <th>jobs done / failed / blocked</th><th>PRs opened / merged</th>
 <th>verified: merge rate / CI green / median</th><th>attempts</th><th></th>
 </tr></thead>
-<tbody>${data.agents.map((a) => agentRow(a, csrf)).join("")}</tbody>
+<tbody>${data.agents.map((a) => agentRow(a, csrf, data.watcher_last)).join("")}</tbody>
 </table></div>`;
 }
 
