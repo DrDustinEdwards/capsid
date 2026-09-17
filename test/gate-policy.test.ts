@@ -315,6 +315,9 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id || row.status !== "blocked") return null;
           row.status = "claimed";
+          // Who holds it afterwards, from the BOUND param, so a resume that hands
+          // the lease to the wrong caller is visible on the row.
+          row.claimed_by = params[1];
           return { id: row.id };
         }
         return null;
@@ -326,6 +329,7 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
   };
   return {
     recorded,
+    row,
     db: {
       prepare: (sql: string) => stmt(sql),
       batch: async (statements: unknown[]) => {
@@ -402,7 +406,7 @@ test("a policy-approved resume records which class matched and what it matched o
   const { db, recorded } = resumeDb(await blockedJob("git push -u origin feat/autonomy-policy-gates"), policy);
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
 
-  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "pre-approved branch push", "1");
+  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "pre-approved branch push", { approvedByPolicy: "1" });
   assert.equal(result.ok, true, `resume refused: ${result.ok ? "" : JSON.stringify(result)}`);
 
   const row = auditRow(recorded, "job-resumed");
@@ -432,7 +436,7 @@ test("a command on the never list refuses the resume and leaves the job blocked"
   const { db, recorded } = resumeDb(job, policy);
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
 
-  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "trying it on", "1");
+  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "trying it on", { approvedByPolicy: "1" });
   assert.equal(result.ok, false);
   assert.match(JSON.stringify(result), /not pre-approved/);
   assert.equal(
@@ -444,25 +448,93 @@ test("a command on the never list refuses the resume and leaves the job blocked"
 
 // ---- audit 2026-09-13, finding 12: who may approve, and over what ------------------
 
-test("PLANT: a DRIVER cannot approve its own blocked command on the policy", async () => {
-  // The finding. resume takes the write grant every driver holds and nothing asked who
-  // was approving, so the noun in "what the SEAT may approve alone" was decorative.
-  // Driven through resumeJob, which is the path the `jobs` tool calls.
+// ---- ruled 2026-09-16: a driver approves its own branch push and pull request -------
+//
+// Finding 12 closed approval to everyone but the seat. The ruling reopens exactly two
+// classes to the driver that blocked the job, and nothing else: a migration, a force
+// push, somebody else's job and a command that classifies as nothing all still wait.
+
+async function driverResume(command: string, opts: { claimedBy?: string; take?: boolean } = {}) {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
-  const { db, recorded } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, driverAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "approved", "1");
-  assert.equal(result.ok, false, "a driver approved its own blocked command");
-  assert.match(String(result.ok === false ? result.refusal : ""), /Approving a blocked command is the seat's act/);
-  assert.equal(auditRow(recorded, "job-resumed"), null, "the refused approval still moved the job");
+  const job = await blockedJob(command);
+  if (opts.claimedBy) job.claimed_by = opts.claimedBy;
+  const fake = resumeDb(job, policy);
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, driverAgent() as never, new Date("2026-09-17T03:00:00Z"), "job_4c0ecc28548b", "the policy covers it", {
+    approvedByPolicy: "1",
+    take: opts.take,
+  });
+  return { result, ...fake };
+}
+
+test("a DRIVER approves its own branch push, and the audit row names the class", async () => {
+  // The whole path the driver takes: the job reached a push_branch block, and the
+  // driver sends it back in on the policy with no human in between.
+  const { result, recorded, row } = await driverResume("git push -u origin fix/driver-policy-resume");
+  assert.equal(result.ok, true, `the driver was refused its own branch push: ${JSON.stringify(result)}`);
+  assert.equal(row.status, "claimed");
+  assert.equal(row.claimed_by, "agent:capsid-driver");
+  const audit = auditRow(recorded, "job-resumed");
+  assert.ok(audit, "a policy-approved driver resume must write its audit row");
+  assert.equal(audit.approved_by_policy, "1");
+  assert.equal(audit.policy_class, "push_branch");
+  assert.equal(audit.policy_detail, "git push -u origin fix/driver-policy-resume");
 });
 
-test("THE INNOCENT DIRECTION: the seat, holding can_merge, still approves", async () => {
+test("a DRIVER approves the push and the pull request together", async () => {
+  const { result, recorded } = await driverResume('git push -u origin feat/x && gh pr create --base master --title "t" --fill');
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(auditRow(recorded, "job-resumed")?.policy_class, "push_branch+open_pr");
+});
+
+test("PLANT: a DRIVER's force push is refused and the job stays blocked for the human", async () => {
+  for (const command of ["git push --force origin feat/x", "git push -f origin feat/x", "git push --force-with-lease origin feat/x"]) {
+    const { result, recorded, row } = await driverResume(command);
+    assert.equal(result.ok, false, `${command} was self-approved`);
+    assert.match(String(result.refusal), /never list/);
+    assert.equal(row.status, "blocked", `${command} moved the job out of blocked`);
+    assert.equal(recorded.some((r) => /^UPDATE jobs SET/i.test(r.sql)), false);
+  }
+});
+
+test("PLANT: a DRIVER's push to a default branch is refused", async () => {
+  const { result, row } = await driverResume("git push origin master");
+  assert.equal(result.ok, false, "a push to master was self-approved");
+  assert.equal(row.status, "blocked");
+});
+
+test("PLANT: a DRIVER may not approve a migration, which the ruling keeps human", async () => {
+  const { result, row } = await driverResume("npx wrangler d1 execute capsid --remote --file migrations/0019_x.sql");
+  assert.equal(result.ok, false, "a driver approved a migration");
+  assert.match(String(result.refusal), /matched additive_migration, which a driver may not approve/);
+  assert.equal(row.status, "blocked");
+});
+
+test("PLANT: a DRIVER may not approve a command that classifies as nothing", async () => {
+  const { result, row } = await driverResume("npm run deploy");
+  assert.equal(result.ok, false, "an unclassified command was self-approved");
+  assert.match(String(result.refusal), /matches no pre-approved class/);
+  assert.equal(row.status, "blocked");
+});
+
+test("PLANT: a DRIVER may not approve a job another agent blocked, nor take one on the policy", async () => {
+  const other = await driverResume("git push -u origin feat/x", { claimedBy: "agent:foxing-driver" });
+  assert.equal(other.result.ok, false, "a driver approved another driver's push");
+  assert.match(String(other.result.refusal), /may approve only a job it blocked itself/);
+  assert.equal(other.row.status, "blocked");
+
+  const taken = await driverResume("git push -u origin feat/x", { take: true });
+  assert.equal(taken.result.ok, false, "a driver took and approved in one call");
+  assert.equal(taken.row.status, "blocked");
+});
+
+test("a SEAT's policy approval returns the job to the driver that blocked it", async () => {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
-  const { db } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
+  const { db, row } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "approved", "1");
+  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "approved", { approvedByPolicy: "1" });
   assert.equal(result.ok, true, `the seat was refused its own policy: ${JSON.stringify(result)}`);
+  assert.equal(row.claimed_by, "agent:capsid-driver", "the seat took the job it approved");
 });
 
 test("A DRIVER MAY STILL RESUME WITHOUT THE POLICY, because a human saying yes is the ordinary path", async () => {

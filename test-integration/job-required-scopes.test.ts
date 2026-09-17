@@ -87,9 +87,28 @@ describe("required_scopes on the real queue transitions", () => {
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
     expect(await statusOf(id)).toBe("blocked");
 
-    const refused = await resumeJob(jobsEnv(), driver(), NOW, id, "picking it up");
+    // take: without it the job goes back to the seat that blocked it, and the driver
+    // acquires nothing.
+    const refused = await resumeJob(jobsEnv(), driver(), NOW, id, "picking it up", { take: true });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/can_merge/);
+    expect(await statusOf(id)).toBe("blocked");
+
+    const returned = await resumeJob(jobsEnv(), driver(), NOW, id, "the push ran");
+    expect(returned.ok, returned.refusal).toBe(true);
+    expect(returned.job?.claimed_by).toBe(SEAT_AGENT.actor);
+  });
+
+  it("PLANT: another namespace's driver cannot resume a job, even to hand it back", async () => {
+    // A resume that returns the job to its claimant acquires nothing, so it skips the
+    // flag check. It still moves a job, so the namespace is asked either way.
+    const posted = await post({ required_scopes: undefined });
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
+    await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
+    const refused = await resumeJob(jobsEnv(), driver("foxhound"), NOW, id, "not mine");
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/capsid/);
     expect(await statusOf(id)).toBe("blocked");
   });
 
