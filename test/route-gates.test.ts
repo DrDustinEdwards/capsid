@@ -17,7 +17,10 @@ import {
   requiredForAction,
   routeRefusal,
 } from "../src/scope.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { buildServer } from "../src/server.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 // EVERY ROUTE GOES THROUGH THE ONE ENFORCEMENT POINT, OR SAYS WHY IT DOES NOT.
 //
@@ -80,6 +83,7 @@ async function resolveWith(bearer: string) {
 
 // ---- /ops/backup ----------------------------------------------------------------
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, /ops/backup is gated through checkScope. src/routes.ts imports agents/mcp and cannot load under node --test, so the handler's source is what is checked
 test("REPRODUCTION: /ops/backup refuses a one-namespace driver that holds write", async () => {
   const agent = await resolveWith(DRIVER_KEY);
   // The caller is exactly the one the finding describes.
@@ -162,6 +166,7 @@ function dispatches(): { path: string; handler: string }[] {
   return found;
 }
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, every route is a decision. Derived over every dispatch line in src/routes.ts
 test("every route in defaultHandler is either gated through checkScope or listed as ungated with a reason", () => {
   const routes = dispatches();
   // Measured 2026-09-16: 14 dispatch lines over 12 distinct paths. A change to either
@@ -184,6 +189,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
   }
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point. src/routes.ts imports agents/mcp and cannot load under node --test
 test("every gated route's handler asks routeRefusal about its own path", () => {
   const gated = dispatches().filter((r) => Object.hasOwn(ROUTE_GRANTS, r.path));
   assert.equal(gated.length, 1, "the number of gated dispatch lines changed");
@@ -210,11 +216,17 @@ test("every admin requirement has a reason its refusal can name", () => {
   for (const name of admin) assert.ok(Object.hasOwn(ADMIN_REASON, name), `${name} is admin only and ADMIN_REASON has no entry for it`);
 });
 
-test("improve_run: run and claim are a driver's work and every other action is admin", () => {
-  const tool = readFileSync(join(import.meta.dirname, "..", "src", "tools", "improve.ts"), "utf8");
-  const declared = /action: z\s*\.enum\(\[([^\]]+)\]\)/.exec(tool);
-  assert.ok(declared, "improve_run's action enum is gone from src/tools/improve.ts");
-  const actions = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+test("improve_run: run and claim are a driver's work and every other action is admin", async () => {
+  // The actions come from the schema the server serves, so an action added to the tool
+  // without a decision here fails.
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "route-gates", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  const served = tools.find((tool) => tool.name === "improve_run")?.inputSchema.properties?.action as { enum?: string[] } | undefined;
+  const actions = served?.enum ?? [];
   assert.equal(actions.length, 9, "improve_run's action list changed");
   const expected: Record<string, string> = {
     run: "write",
@@ -235,6 +247,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
   assert.equal(requiredForAction("improve_run", undefined), "write");
 });
 
+// scanner-rule: CLAUDE.md rule 6, one enforcement point, no handler decides a grant for itself. An absent check cannot be observed by calling the tool
 test("no tool handler decides admin for itself", () => {
   // agents and improve_run did until 2026-09-16. improve_status passes admin through
   // to shape what it returns, which is not a gate, so the scan looks for the refusal
