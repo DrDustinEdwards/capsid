@@ -65,6 +65,7 @@ function codePaths(): Array<{ rel: string; text: string }> {
   return files;
 }
 
+// scanner-rule: repo rename 2026-09-12 (capsid/core.md), SELF_REPO is the single spelling (count guard)
 test("the scan reads the code paths it claims to, so nothing below passes on an empty walk", () => {
   const files = codePaths();
   assert.ok(files.length >= 20, `the code-path scan found only ${files.length} files`);
@@ -75,6 +76,7 @@ test("the scan reads the code paths it claims to, so nothing below passes on an 
   assert.ok(files.every((f) => f.text.length > 0), "a scanned file came back empty");
 });
 
+// scanner-rule: repo rename 2026-09-12 (capsid/core.md), SELF_REPO is the single spelling
 test("the old repository name does not reappear in a code path", () => {
   const violations: string[] = [];
   const matched = new Set<number>();

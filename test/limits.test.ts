@@ -79,6 +79,7 @@ const BOUNDING_PRIMITIVES = [
 const BARE_Z_STRING = /z\.string\(\)/;
 const isComment = (line: string) => line.startsWith("//") || line.startsWith("*");
 
+// scanner-rule: quality audit 1.1, every tool argument is bounded (count guard for the scan below)
 test("the bounding primitives are still exactly two, and still in limits.ts", () => {
   // The pin behind the exemption in the next test. A third bare z.string() in
   // limits.ts is not a primitive, it is an unbounded field, and it fails here.
@@ -98,6 +99,7 @@ test("the bounding primitives are still exactly two, and still in limits.ts", ()
   }
 });
 
+// scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
   // Widened from server.ts to the whole directory (quality audit 1.1). An
   // unbounded field is unbounded wherever it is declared, and the day a tool

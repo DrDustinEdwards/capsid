@@ -81,11 +81,13 @@ const MUTATION_PATTERNS: Array<{ label: string; find: (text: string) => number[]
   { label: "DELETE FROM documents", find: deleteHits },
 ];
 
+// scanner-rule: CLAUDE.md rule 8, a path mutation goes through pathMutation() and nowhere else
 test("pathMutation markers are present and well ordered", () => {
   const { start, end } = helperRange();
   assert.ok(end - start > 200, "helper body is implausibly small; markers may have drifted");
 });
 
+// scanner-rule: CLAUDE.md rule 8, a path mutation goes through pathMutation() and nowhere else (count guard)
 test("the scan reads a plausible number of source files", () => {
   // An assertion that can pass by reading nothing is not an assertion. If the
   // directory walk broke, every offender check below would pass over an empty list.
@@ -93,6 +95,7 @@ test("the scan reads a plausible number of source files", () => {
   assert.ok(SOURCES.some((f) => f.text.includes(HELPER_START)));
 });
 
+// scanner-rule: CLAUDE.md rule 8, a path mutation goes through pathMutation() and nowhere else
 test("every documents.path mutation in src/ lives inside pathMutation()", () => {
   const { file, start, end } = helperRange();
   const offenders: string[] = [];
@@ -116,6 +119,7 @@ test("every documents.path mutation in src/ lives inside pathMutation()", () => 
   );
 });
 
+// scanner-rule: CLAUDE.md rule 8, a path mutation goes through pathMutation() and nowhere else (the scan is not vacuous)
 test("the helper actually contains both mutation shapes", () => {
   const { text, start, end } = helperRange();
   const body = text.slice(start, end);
@@ -143,6 +147,7 @@ test("the UPDATE pattern does not fire on path in a WHERE clause", () => {
   assert.deepEqual(pathMutationHits(innocent), []);
 });
 
+// scanner-rule: CLAUDE.md rule 8, a path mutation goes through pathMutation() and nowhere else
 test("all three known callers route through the helper", () => {
   const all = SOURCES.map((f) => f.text).join("\n");
   for (const caller of ["pathMutation(db, namespace, path, null)", "pathMutation(db, namespace, path, new_path)", "pathMutation(db, namespace, path, `archive/${path}`)"]) {

@@ -61,6 +61,7 @@ test("a real proposal path IS allowed, so the gate is not a blanket refusal", ()
   assert.equal(assertProposalTarget({ namespace: "capsid", path: `${PROPOSAL_PREFIX}anything.md` }), null);
 });
 
+// scanner-rule: CLAUDE.md rule 10, the meta-loop writes only under capsid/improve/proposals/
 test("EVERY WRITE IN THE MODULE PASSES THROUGH THE GATE", () => {
   // A source guard, because the behavioural half cannot prove a path that does not
   // exist yet. If a second write is ever added here without a check in front of
@@ -79,6 +80,7 @@ test("EVERY WRITE IN THE MODULE PASSES THROUGH THE GATE", () => {
   assert.match(meta, /\*\*NOT APPLIED\.\*\*/);
 });
 
+// scanner-rule: CLAUDE.md rule 10, the meta-loop writes only under capsid/improve/proposals/
 test("the module does not import anything that could apply a proposal", () => {
   // It reads the run prompt to reason about it and writes only under the
   // proposals prefix. A path mutation, a delete, or a repo write here would be a
