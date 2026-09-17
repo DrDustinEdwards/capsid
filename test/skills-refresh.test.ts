@@ -29,6 +29,7 @@ test("discovers models and collapses dated snapshots", () => {
   assert.ok(slugs.length > 0, "parsed zero models means the matcher broke");
 });
 
+// scanner-rule: conventions-verification, a list spelled in two places is derived and compared. The other copy is in the claude-skills repo, read as text
 test("THE WORKER AND THE REPO SCRIPT AGREE ON WHAT A MODEL ID LOOKS LIKE", async () => {
   // The same discovery runs in two places: here, and in claude-skills'
   // scripts/model-guides.mjs. A list spelled twice is a list that drifts, and the

@@ -114,6 +114,7 @@ test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gather
 const READERS = ["defaultBranchSha", "listRepoTree", "readRepoFile", "ciStatus"];
 const EXPECTED_READER_CALLS = 7;
 
+// scanner-rule: AUDIT-2026-09-16 items 8.1 and 8.21, reader results keep their types
 test("the watcher reads every repo reader's result through its real type, never a cast", () => {
   const code = sourceFile("watcher.ts")
     .replace(/\/\*[\s\S]*?\*\//g, "")
