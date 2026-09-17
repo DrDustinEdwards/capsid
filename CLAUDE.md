@@ -14,6 +14,7 @@ Capsid: a single-user, Cloudflare-native MCP server serving a consolidated knowl
 - `capsid/schema.md` the knowledge model and the lint loop.
 - `capsid/repo-structure.md` the 9-layer precedence model and the .claude standard shape.
 - `capsid/protocol-restore.md` tested restore procedures, including the D1 export gotcha.
+- `AUDIT-2026-09-16.md` a source audit of this Worker as of that date. Snapshot, not canon. Capsid outranks it.
 
 ## Session ritual
 
