@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REPORT_PREFIX } from "../src/headers.ts";
 import { sourceFiles } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // ONE DEFINITION, IMPORTED. The conventions that are about the SHAPE of src/
 // rather than the behaviour of any one module.
@@ -14,6 +19,7 @@ import { sourceFiles } from "./source-files.ts";
 // where the next copy would be written (quality audit 1.1). They scan all of src/
 // now, which is also what lets server.ts be split later without losing them.
 
+// scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("one REPORT_PREFIX, and no file defines its own", () => {
   assert.equal(REPORT_PREFIX, "reports/csp/");
   const offenders = sourceFiles()
@@ -35,6 +41,7 @@ test("one REPORT_PREFIX, and no file defines its own", () => {
   );
 });
 
+// scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through timingSafeEqual, in every file", () => {
   // The specific compares, still where they belong.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
@@ -60,6 +67,7 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   );
 });
 
+// scanner-rule: conventions-verification, enumerate every site
 test("every destructive tool goes through the one confirmation helper", () => {
   const all = sourceFiles();
   // confirmDestructive is called from exactly one place: the helper.
@@ -72,10 +80,17 @@ test("every destructive tool goes through the one confirmation helper", () => {
   }
 });
 
-test("move and lint finalize still accept a confirm argument", () => {
-  const text = sourceFiles().map((f) => f.text).join("\n");
-  assert.match(text, /path: docPath, new_path: docPath, confirm: z\.boolean\(\)\.optional\(\)/);
-  // consumed gained .max(LINT_CONSUMED_MAX) and a comment on 2026-09-06; the pin
-  // is about confirm still being accepted beside it, not about the bound.
-  assert.match(text, /consumed: z\.array\(docPath\)\.max\(LINT_CONSUMED_MAX\)\.optional\(\),\s*\n\s*confirm: z\.boolean\(\)\.optional\(\)/);
+test("move and lint finalize still accept an optional boolean confirm", async () => {
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "confirm-schema", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  for (const name of ["move", "lint"]) {
+    const schema = tools.find((t) => t.name === name)?.inputSchema;
+    assert.ok(schema, `${name} is not served`);
+    assert.equal((schema.properties?.confirm as { type?: string } | undefined)?.type, "boolean", `${name} does not accept confirm`);
+    assert.equal((schema.required ?? []).includes("confirm"), false, `${name} requires confirm`);
+  }
 });

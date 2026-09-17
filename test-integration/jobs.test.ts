@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { legacyAgent } from "../src/agents";
-import { JOB_LEASE_SECONDS, jobDocPath } from "../src/jobs-schema";
+import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
 import { splitSignedTask, verifyTaskDoc } from "../src/improve-task";
 
 // THE WORK QUEUE, AGAINST A REAL D1.
@@ -635,5 +635,30 @@ describe("the signature", () => {
     const posted = await post({ title: "untampered" });
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
+  });
+});
+
+describe("the retry cap, where the block is written", () => {
+  // Replaces a test in test/retry-cap.test.ts that only checked jobs.ts mentioned
+  // cappedSummary (job_3e1596235513).
+  async function blockedAt(corrections: number, title: string) {
+    const posted = await post({ title });
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid", id });
+    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
+    expect(blocked.ok, blocked.refusal).toBe(true);
+    return String((await row(id))?.result_summary);
+  }
+
+  it("a block at the cap says so in the summary, and keeps what the driver said", async () => {
+    const summary = await blockedAt(CORRECTION_CAP, "at the cap");
+    expect(summary).toContain(RETRY_CAP_REASON);
+    expect(summary).toContain("needs a human");
+  });
+
+  it("a block under the cap does not", async () => {
+    const summary = await blockedAt(CORRECTION_CAP - 1, "under the cap");
+    expect(summary).not.toContain(RETRY_CAP_REASON);
   });
 });

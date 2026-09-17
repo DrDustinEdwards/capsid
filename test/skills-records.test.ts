@@ -3,8 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-  FAILURE_NOTES_PER_SKILL,
-  MAX_OFFERED,
   attributionStatements,
   dueTransitions,
   offerSkills,
@@ -56,6 +54,8 @@ test("a job earns a candidate only when its outcome is fully verified", () => {
   );
 });
 
+// scanner-rule: skills lifecycle, "never live on creation" (docs/skills.md). A module
+// that holds no INSERT cannot create a row, which no call to it can demonstrate.
 test("this module cannot create a skill at all, so it cannot create one that is live", () => {
   // Group 2 is "never live on creation". The cheapest way to keep that true is for
   // the deciding module to have no write that creates a row: creation goes through
@@ -66,38 +66,11 @@ test("this module cannot create a skill at all, so it cannot create one that is 
   assert.equal(/SET status\s*=/i.test(SOURCE.replace(/commitTransition[\s\S]*?\n\}/, "")), false, "only commitTransition may move a status");
 });
 
-test("a source that already produced a skill is looked up without filtering by status", () => {
-  // A skill retired for not helping would otherwise be abstracted again from the same
-  // attempt next pass, evaluated again, and retired again, forever. Both columns are
-  // spelled out rather than interpolated, because a query assembled by concatenation
-  // cannot be reconstructed by the integration suite's query-plan guard, which is the
-  // only thing that reads every statement this Worker issues.
-  const query = /alreadyAbstracted[\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(query, "alreadyAbstracted is gone");
-  assert.match(query[0], /WHERE source_attempt = \?1 LIMIT 1/);
-  assert.match(query[0], /WHERE source_job = \?1 LIMIT 1/);
-  assert.equal(/\$\{/.test(query[0]), false, "no interpolation into the statement");
-  assert.equal(/status\s*(=|IN)/.test(query[0]), false, "and no status filter, or a retired source would look unused");
-});
-
 // ---- group 3: what gets offered --------------------------------------------------
-
-test("at most three skills are offered, and the bound is stated once", () => {
-  assert.equal(MAX_OFFERED, 3);
-  assert.match(SOURCE, /LIMIT \?3/, "the limit must be bound rather than interpolated");
-});
-
-test("only candidate and live skills are offered, never retired ones", () => {
-  // A retired skill is a record of something that did not work. Offering it would be
-  // recommending the thing the evidence retired.
-  assert.match(SOURCE, /s\.status IN \('candidate', 'live'\)/);
-});
-
-test("a skill with no trigger condition is never offered", () => {
-  // The rows that predate migration 0012 have none, and matching them on title would
-  // be inventing the field the match runs on.
-  assert.match(SOURCE, /s\.trigger_condition IS NOT NULL/);
-});
+//
+// The status, trigger, limit and failure-note rules of the recommend query, and the
+// retired-source lookup, are proven against a real D1 in
+// test-integration/skills-records.test.ts.
 
 test("ftsQuery reduces free prose to bare words, so an operator in a description cannot change the query", () => {
   // FTS5 takes a query language and work descriptions regularly contain its
@@ -163,20 +136,6 @@ test("a very long note is bounded before it is stored", () => {
   assert.equal(String(recorded[0].params[4]).length, 2000);
 });
 
-test("the recommend step attaches exactly two notes per skill", () => {
-  assert.equal(FAILURE_NOTES_PER_SKILL, 2);
-  assert.match(SOURCE, /ORDER BY created_at DESC LIMIT \?2/, "newest first, and bounded");
-});
-
-test("a failure note never moves a skill's status", () => {
-  // Only an evaluation does that. A note is prose about one run, and a system that let
-  // prose retire a skill would have two status mechanisms disagreeing.
-  const notes = /failureNoteStatements[\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(notes);
-  assert.equal(/improve_skills/.test(notes[0]), false, "the failure path must not touch the skill row");
-  assert.match(MIGRATION, /THIS IS NOT A SECOND SCORE/i);
-});
-
 // ---- the migration ----------------------------------------------------------------
 
 test("migration 0013 adds both attribution columns and the failures table", () => {
@@ -186,6 +145,10 @@ test("migration 0013 adds both attribution columns and the failures table", () =
   for (const column of ["skill", "namespace", "source_kind", "source_id", "note"]) {
     assert.match(MIGRATION, new RegExp(`\\b${column}\\b`), `skill_failures needs ${column}`);
   }
+});
+
+test("the failures table is not a second score, and the migration says so", () => {
+  assert.match(MIGRATION, /THIS IS NOT A SECOND SCORE/i);
 });
 
 test("offered and used are stored separately, and the migration says why", () => {

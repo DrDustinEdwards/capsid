@@ -317,6 +317,18 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out };
   }
 
+  // What the evaluation cycle dispatches, read after its transitions. Unmodelled until
+  // 2026-09-17, so every unit test that ran the tick saw the cycle throw here. The
+  // status filter is read from the SQL, so a cycle that stopped asking for it would
+  // dispatch retired skills here as it would against SQLite.
+  if (/^SELECT id, version, source_namespace FROM improve_skills/i.test(text)) {
+    const onlyOpen = /status IN \('candidate', 'live'\)/i.test(text);
+    const out = rows.improve_skills
+      .filter((s) => !onlyOpen || ["candidate", "live"].includes(String(s.status)))
+      .map((s) => ({ id: s.id, version: s.version, source_namespace: s.source_namespace }));
+    return { handled: true, results: out };
+  }
+
 
   // The optimizer's negative feedback: refused proposals only, newest first.
   if (/FROM skill_edits/i.test(text)) {
@@ -470,6 +482,17 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     if (existing) Object.assign(existing, { title: row.title, body_ref: row.body_ref });
     else rows.improve_skills.push(row);
     return { handled: true, results: [] };
+  }
+
+  // THE STATUS TRANSITION (commitTransition): keyed on the expected status, so a status
+  // that moved underneath the read is not overwritten, and stamped when it retires.
+  if (/^UPDATE improve_skills SET status = \?3, retired_at = CASE/i.test(text)) {
+    const [id, from, to, at] = params;
+    const row = rows.improve_skills.find((k) => k.id === id && (!/AND status = \?2/i.test(text) || k.status === from));
+    if (!row) return { handled: true, results: [] };
+    row.status = to;
+    if (to === "retired") row.retired_at = at;
+    return { handled: true, results: [{ id: row.id }] };
   }
 
   if (/^UPDATE improve_skills/i.test(text)) {

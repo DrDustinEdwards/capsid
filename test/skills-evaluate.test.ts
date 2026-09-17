@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   CADENCE_KEY,
@@ -13,15 +11,32 @@ import {
   judgeEdit,
   mergeProposals,
   rejectedEdits,
+  runEvaluationCycle,
 } from "../src/skills-evaluate.ts";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { tickRuns } from "../src/improve/tick.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // GROUPS 4, 5 AND 6: the cadence that produces evidence, the gate that accepts an
 // edit, and the duplicate detector. The deciding rules live in ./skills-lifecycle and
 // are tested there; this is the half that touches rows and the clock.
 
-const SOURCE = readFileSync(join(import.meta.dirname, "..", "src", "skills-evaluate.ts"), "utf8");
-const TICK = readFileSync(join(import.meta.dirname, "..", "src", "improve", "tick.ts"), "utf8");
+const NOW = new Date("2026-09-12T00:00:00Z");
+
+// Two non-positive evaluations at version 1, which retire a live skill.
+const negative = (skill: string, day: string) => ({
+  skill, version: 1, namespace: "capsid", probe_set_version: "p1", delta: -0.1, runs: 5, verdict: "negative", evaluated_at: `2026-09-${day}`,
+});
+
+const DISPATCH_ROUTES = {
+  "GET /repos/owner/repo": { body: { default_branch: "main" } },
+  "POST /repos/owner/repo/actions/workflows/improve-score.yml/dispatches": { status: 204 },
+};
+
+function cycleEnv() {
+  const fake = fakeD1({});
+  const kv = fakeKv({ seedToken: true });
+  return { fake, kv, env: fakeEnv({ DB: fake.db, APP_KV: kv.kv, GITHUB_APP_CLIENT_ID: "x", GITHUB_APP_PRIVATE_KEY: "y" }) };
+}
 
 function env(kv: Record<string, string> = {}, opts: Parameters<typeof fakeD1>[0] = {}) {
   const fake = fakeD1(opts);
@@ -68,21 +83,44 @@ test("a corrupt last-cycle stamp runs the cycle rather than blocking it forever"
   assert.match(verdict.reason, /does not parse/);
 });
 
-test("the cycle gates on its own cadence rather than the tick's", () => {
-  assert.match(TICK, /runEvaluationCycle\(env, now\)/, "the tick must call the cycle");
-  assert.match(SOURCE, new RegExp(LAST_CYCLE_KEY.replace(/[:]/g, "[:]")), "and the cycle must stamp its own last-run key");
-  assert.match(TICK, /SKILL_CYCLE_THREW/, "a throwing cycle must not stop the improve runs advancing");
+test("the tick runs the evaluation cycle, and the cycle stamps its own last-run key", async () => {
+  await withFetch({}, async () => {
+    const { env: e, kv } = cycleEnv();
+    await tickRuns(e, NOW);
+    assert.equal(kv.store.get(LAST_CYCLE_KEY), NOW.toISOString(), "the tick did not run the cycle");
+    const again = await runEvaluationCycle(e, new Date(NOW.getTime() + 60_000));
+    assert.equal(again.ran, false, "the cycle must gate on its own stamp, not run on every tick");
+  });
 });
 
-test("transitions are applied before the next round is dispatched", () => {
-  // Doing the reads in the other order spends two probe-set runs measuring a skill
-  // this cycle's evidence is about to retire.
-  const body = /export async function runEvaluationCycle[\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(body, "runEvaluationCycle is gone");
-  assert.ok(
-    body[0].indexOf("dueTransitions") < body[0].indexOf("dispatchWorkflow"),
-    "the transition pass must run before the dispatch pass"
-  );
+test("a throwing cycle does not stop the tick", async () => {
+  await withFetch({}, async () => {
+    const { env: e, kv, fake } = cycleEnv();
+    const prepare = fake.db.prepare.bind(fake.db);
+    (fake.db as { prepare: (sql: string) => D1PreparedStatement }).prepare = (sql: string) => {
+      if (/FROM improve_skills WHERE status IN/i.test(sql)) throw new Error("planted cycle failure");
+      return prepare(sql);
+    };
+    await tickRuns(e, NOW);
+    assert.equal(kv.store.has(LAST_CYCLE_KEY), false, "the planted failure did not reach the cycle");
+  });
+});
+
+test("transitions are applied before the next round is dispatched", async () => {
+  // Dispatching first would spend two probe-set runs measuring a skill this cycle's
+  // evidence is about to retire.
+  await withFetch(DISPATCH_ROUTES, async (calls) => {
+    const { env: e, fake } = cycleEnv();
+    fake.rows.improve_skills.push(
+      { id: "fading", status: "live", version: 1, source_namespace: "capsid" },
+      { id: "fresh", status: "candidate", version: 1, source_namespace: "capsid" }
+    );
+    fake.rows.skill_evaluations.push(negative("fading", "01"), negative("fading", "02"));
+    const report = await runEvaluationCycle(e, NOW);
+    assert.deepEqual(report.transitions.map((t) => [t.skill, t.to]), [["fading", "retired"]]);
+    const dispatched = calls.filter((c) => c.method === "POST").map((c) => (c.body as { inputs: { skill_id: string } }).inputs.skill_id);
+    assert.deepEqual(dispatched, ["fresh"], "the skill retired this cycle was dispatched anyway");
+  });
 });
 
 test("an evaluation row stores the verdict derived at write time", () => {
@@ -211,8 +249,4 @@ test("two live near-duplicates with overlapping triggers are proposed, and other
     [["a", "b"]],
     "only the live near-duplicate pair, and never the candidate"
   );
-});
-
-test("the merged result starts as a candidate, which the module says in one place", () => {
-  assert.match(SOURCE, /merged result starts as a candidate/i);
 });
