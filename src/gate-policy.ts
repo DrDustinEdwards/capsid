@@ -72,18 +72,16 @@ export type GateMatch =
   | { klasses: GateClass[]; migrationPaths: string[] }
   | { refused: string };
 
-// WHERE ONE COMMAND ENDS AND THE NEXT BEGINS.
+// WHERE ONE COMMAND ENDS AND THE NEXT BEGINS: see commandPieces below, which is the
+// one splitter both the never list and the class matcher read.
 //
 // Not a shell parser, and it does not need to be. The only way this can be wrong in the
 // dangerous direction is by MISSING a separator, which would leave a second command
-// hidden inside a segment the policy approved. Splitting too eagerly (on a `|` inside a
-// quoted string, say) produces a fragment that matches no class, and the whole command
-// is then refused, which is the safe direction and the one a human resolves in a
-// sentence.
+// hidden inside a segment the policy approved. A separator inside quotes is not missed,
+// it is not a separator: the shell does not act on it either.
 //
 // A lone `&` is a separator too: bash runs what follows it as a second command, and
 // PowerShell treats it as the call operator.
-const SEGMENT_SPLIT = /\s*(?:&&|\|\||;|\||&|\n)\s*/;
 
 // ---- what the never list reads ---------------------------------------------------
 //
@@ -108,8 +106,23 @@ const UNQUOTED_ACTIVE = /[(){}<>]/;
 const OPEN_PR_PIECE = /^gh\s+pr\s+create\b/i;
 const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
 
-/** The command as the never list reads it, or why it cannot be read safely. */
-export function neverListView(command: string): { view: string } | { refused: string } {
+/**
+ * The command's pieces, split on shell separators that are NOT inside quotes.
+ *
+ * ONE SPLITTER, TWO READERS. This scan already existed inside neverListView, and
+ * classifyCommand split the command a second time with a plain regex that knew nothing
+ * about quotes. The two disagreed on exactly the commands a driver blocks with. On
+ * 2026-09-17 claude-skills job_33d90163ad1e blocked on a branch push and a
+ * `gh pr create` whose `--body` prose contained a semicolon; the regex cut the sentence
+ * in half and the tail, `"job_33d90163ad1e.""`, matched no class, so the whole command
+ * was refused. A pull request body is prose and will contain semicolons, ampersands
+ * and pipes.
+ *
+ * Refusing a piece that cannot be placed is correct and is unchanged. Treating quoted
+ * prose as a piece was the defect. Both readers now take their pieces from here, so
+ * they cannot disagree again.
+ */
+export function commandPieces(command: string): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
   if (EXPANDS.test(command)) {
     return {
       refused:
@@ -162,8 +175,15 @@ export function neverListView(command: string): { view: string } | { refused: st
   }
   if (quote) return { refused: "it has a quote that never closes, so where its commands end cannot be read. It waits for the human." };
   pieces.push({ raw, bare });
+  return { pieces };
+}
 
-  const view = pieces
+/** The command as the never list reads it, or why it cannot be read safely. */
+export function neverListView(command: string): { view: string } | { refused: string } {
+  const split = commandPieces(command);
+  if ("refused" in split) return split;
+
+  const view = split.pieces
     .map(({ raw: text, bare: stripped }) => (OPEN_PR_PIECE.test(text.trim()) ? stripped : text))
     .map((text) => text.trim())
     .filter(Boolean)
@@ -220,7 +240,10 @@ export function classifyCommand(command: string): GateMatch {
   const denied = deniedReason(seen.view);
   if (denied) return { refused: `this command is on the policy's never list because ${denied}. It waits for the human.` };
 
-  const segments = trimmed.split(SEGMENT_SPLIT).map((piece) => piece.trim()).filter(Boolean);
+  // THE SAME QUOTE-AWARE SPLIT THE NEVER LIST USED, not a second one. See commandPieces.
+  const split = commandPieces(trimmed);
+  if ("refused" in split) return { refused: `this command is on the policy's never list because ${split.refused}` };
+  const segments = split.pieces.map(({ raw: piece }) => piece.trim()).filter(Boolean);
   if (segments.length === 0) return { refused: "the blocked job records no command, so there is nothing to match against the policy." };
   const klasses: GateClass[] = [];
   const migrationPaths: string[] = [];

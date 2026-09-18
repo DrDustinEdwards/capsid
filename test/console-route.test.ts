@@ -120,6 +120,7 @@ test("the shell renders with ZERO namespaces rather than throwing on an empty ro
         reason: null,
       },
       protected_paths: [],
+      policies: { gates: { version: "1", enabled: true }, auto_merge: { version: "3", enabled: true } },
       agents: [],
       namespaces: [],
     },
