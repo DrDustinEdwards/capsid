@@ -24,9 +24,11 @@ request and green CI as the Worker verified them, and must not have produced a s
 before. The skill's namespace is read from the job. Drivers are refused, because a
 driver registering its own skill would be judging its own run.
 
-A status changes on evaluation evidence and never on a driver's report of its own
-run. Two evaluations minimum in either direction: one result is a sample. Evidence
-counts per version and per probe set, so an accepted edit resets it. Edits are bounded
+A status changes on VERIFIED EVIDENCE and never on a driver's report of its own run.
+Verified means the Worker read it from GitHub itself: a pull request merged and CI
+green, as recorded on `job_outcomes`, and a scored improve attempt when the loop runs.
+Two evaluations minimum in either direction: one result is a sample. Evidence counts
+per version and per probe set, so an accepted edit resets it. Edits are bounded
 at 20 percent of the instruction lines, counted by distinct lines touched, and accepted
 only on strict improvement. A tie is a rejection. Rejected edits are kept in
 `skill_edits` and handed to the next optimizer run, so a proposal already refused is not
@@ -46,18 +48,31 @@ Two live skills whose triggers overlap and whose bodies differ by less than 10 p
 are proposed for merging, to a human. Only live skills. A candidate has not been
 evaluated enough to merge, and a retired one is a record.
 
-The evaluation cycle is fortnightly, KV-configurable under
-`skills:evaluate:cadence-days` and riding the five-minute tick, which gates on the
-cadence before doing anything else. Each cycle runs the namespace's probe set in the
-scorer sandbox twice per skill, with it and without it, and records the difference. A
-cadence below one day falls back to the default rather than being obeyed.
+THERE IS NO SCHEDULED PROBE. Dropped 2026-09-16, ruled by Dustin as option C. The
+evaluation cycle used to end by running each namespace's probe set in the scorer
+sandbox twice per skill, with the skill and without it. That never happened once: the
+cycle dispatched `improve-score.yml` with `mode`, `skill_id` and `skill_version`, and
+that workflow declares only `branch`, `run_id` and `attempt_id`, all required, so
+GitHub refused every dispatch and the cycle logged the error. It was dropped rather
+than repaired because a working probe needs the loop's attempt path, model spend, and a
+probe set that exists nowhere: a probe set is only the `probe_set_version` string on
+`skill_evaluations`. Evidence comes from verified job outcomes instead, which is a
+signal GitHub already produces.
 
-That measurement is not built yet. No probe set exists in the code or the store: a
-probe set is only the `probe_set_version` string on `skill_evaluations`. The cycle
-dispatches `improve-score.yml` with `mode`, `skill_id` and `skill_version`, and that
-workflow declares only `branch`, `run_id` and `attempt_id`, all required, so GitHub
-refuses the dispatch. Nothing outside the tests calls `evaluationStatement`, so no
-probe result can be recorded.
+What survives is the cycle's other half, which applies stored evidence: it reads the
+evaluations, commits the transitions they decide, and audits each one. It is
+fortnightly, KV-configurable under `skills:evaluate:cadence-days` and riding the
+five-minute tick, which gates on the cadence before doing anything else. A cadence below
+one day falls back to the default rather than being obeyed. The cadence is unchanged
+from the probing design, so a status moves up to a fortnight after the evidence that
+decides it lands.
+
+NO STATUS MOVES YET. `evaluationStatement` is still the only writer of
+`skill_evaluations` and still has no production caller. The writer that turns a verified
+job outcome into one of those rows is job_6464e6d62063. What it needs from this change:
+the cycle no longer dispatches anything, so it is free to write rows on its own
+schedule, and `attributionStatements` is the single credit path, so it should route any
+wins and losses it records through that rather than adding a second one.
 
 The console carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute

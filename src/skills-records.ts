@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { IMPROVE_ACTOR } from "./improve-state";
 import {
   attribute,
   nextStatus,
@@ -236,6 +237,15 @@ export interface AttributionInput {
  * skill that actually moves, and nothing for the ones that do not: a skill offered and
  * not used produces no write at all, so the table does not fill up with rows recording
  * that nothing happened.
+ *
+ * THIS IS THE ONLY WRITER OF wins AND losses, since 2026-09-16. The improve loop used
+ * to call recordSkillOutcome(db, id, kept), a second credit system that knew only
+ * "kept" and therefore charged a LOSS to a skill the model was offered and declined to
+ * use. Two systems disagreeing about what a loss means is one too many, and the one
+ * that implements the ruling won.
+ *
+ * Each credit carries its own audit row, as recordSkillOutcome's did, so a counter can
+ * be traced back to the run that moved it and the reason attribute() gave.
  */
 export function attributionStatements(db: D1Database, input: AttributionInput): D1PreparedStatement[] {
   const used = new Set(input.used);
@@ -247,7 +257,10 @@ export function attributionStatements(db: D1Database, input: AttributionInput): 
     statements.push(
       verdict.credit === "win"
         ? db.prepare("UPDATE improve_skills SET wins = wins + 1 WHERE id = ?1").bind(skill)
-        : db.prepare("UPDATE improve_skills SET losses = losses + 1 WHERE id = ?1").bind(skill)
+        : db.prepare("UPDATE improve_skills SET losses = losses + 1 WHERE id = ?1").bind(skill),
+      db
+        .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'improve-skill-outcome', ?2, NULL, ?3)")
+        .bind(IMPROVE_ACTOR, "capsid", JSON.stringify({ skill_id: skill, credit: verdict.credit, signal: input.signal, reason: verdict.reason }))
     );
   }
   return statements;

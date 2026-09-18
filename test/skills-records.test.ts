@@ -86,6 +86,15 @@ test("ftsQuery reduces free prose to bare words, so an operator in a description
 
 // ---- group 3: attribution, applied -----------------------------------------------
 
+// Each credit is a counter update PLUS its audit row, so the statements are read by
+// kind rather than counted. The audit half arrived with the 2026-09-16 change that made
+// this the loop's only credit path: recordSkillOutcome audited every outcome it wrote,
+// and dropping it must not lose that.
+const counterUpdates = (recorded: Array<{ sql: string; params: unknown[] }>) =>
+  recorded.filter((r) => /UPDATE improve_skills SET (wins|losses)/.test(r.sql));
+const outcomeAudits = (recorded: Array<{ sql: string; params: unknown[] }>) =>
+  recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && /improve-skill-outcome/.test(r.sql));
+
 test("only used skills produce a write, and the direction follows the verifier", () => {
   const { recorded, db } = recorder();
   attributionStatements(db, {
@@ -93,9 +102,17 @@ test("only used skills produce a write, and the direction follows the verifier",
     used: ["s1", "s2"],
     signal: "verified-success",
   });
-  assert.equal(recorded.length, 2, "the unused skill must produce no write at all");
-  assert.ok(recorded.every((r) => /SET wins = wins \+ 1/.test(r.sql)));
-  assert.deepEqual(recorded.map((r) => r.params[0]), ["s1", "s2"]);
+  const updates = counterUpdates(recorded);
+  assert.equal(updates.length, 2, "the unused skill must produce no write at all");
+  assert.ok(updates.every((r) => /SET wins = wins \+ 1/.test(r.sql)));
+  assert.deepEqual(updates.map((r) => r.params[0]), ["s1", "s2"]);
+  // One audit row per credit, and none for the skill that earned nothing.
+  const audits = outcomeAudits(recorded);
+  assert.equal(audits.length, 2, "every credit carries its own audit row");
+  assert.deepEqual(
+    audits.map((r) => JSON.parse(String(r.params[2])).skill_id),
+    ["s1", "s2"]
+  );
 });
 
 test("improvised success and environment failure write nothing, even for a used skill", () => {
@@ -109,9 +126,18 @@ test("improvised success and environment failure write nothing, even for a used 
 test("a verified failure charges a loss to the used skill only", () => {
   const { recorded, db } = recorder();
   attributionStatements(db, { offered: ["s1", "s2"], used: ["s2"], signal: "verified-failure" });
-  assert.equal(recorded.length, 1);
-  assert.match(recorded[0].sql, /SET losses = losses \+ 1/);
-  assert.equal(recorded[0].params[0], "s2");
+  const updates = counterUpdates(recorded);
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].sql, /SET losses = losses \+ 1/);
+  assert.equal(updates[0].params[0], "s2");
+  const audits = outcomeAudits(recorded);
+  assert.equal(audits.length, 1);
+  assert.deepEqual(JSON.parse(String(audits[0].params[2])), {
+    skill_id: "s2",
+    credit: "loss",
+    signal: "verified-failure",
+    reason: "the skill was used and the verifier reported failure.",
+  });
 });
 
 // ---- group 7: failure memory ------------------------------------------------------
