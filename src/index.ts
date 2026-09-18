@@ -83,6 +83,12 @@ const provider = new OAuthProvider({
     const ip = callerIp(request);
     const verdict = await checkRate(env.APP_KV, ip, new Date(), REGISTRATION_LIMIT);
     if (verdict.allowed) return;
+    if (verdict.window === "unavailable") {
+      // Unreachable while REGISTRATION_LIMIT is onUnavailable: "allow", and handled
+      // rather than cast so flipping that policy cannot produce a refusal with a
+      // count nobody measured in it.
+      return { code: "temporarily_unavailable", status: 503, description: `Registration rate limiting is unavailable: ${verdict.detail}. Retry shortly.` };
+    }
     console.error(`DCR_RATE_LIMITED ${ip} hit the ${verdict.window} limit (${verdict.count} of ${verdict.limit})`);
     return {
       code: "access_denied",

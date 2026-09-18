@@ -233,6 +233,11 @@ export function driverMintInstruction(namespace: string): string {
   return (
     `Mint its driver agent as the admin: node scripts/mint-agents.mjs --namespace ${namespace} --apply. ` +
     `The key is returned once and lands in ${driverKeyPath(namespace)} at mode 0600. ` +
-    `register_namespace does not mint it: minting is admin only, and this tool takes a plain write grant.`
+    // "and this tool takes a plain write grant" until 2026-09-17, which had been
+    // false since register_namespace became admin only on 2026-09-13. The sentence
+    // cannot import TOOL_GRANTS, because src/scope.ts imports this module and the
+    // cycle would run at load time; test/audit-2026-09-16.test.ts holds the two
+    // together instead, and fails when the table moves.
+    `register_namespace does not mint it: minting is admin only, and register_namespace is itself admin only.`
   );
 }

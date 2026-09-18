@@ -74,7 +74,15 @@ describe("lint mode report", () => {
   it("PLANT: a second run the same day snapshots the first rather than accumulating", async () => {
     const client = await connect();
     try {
-      const first = await callLint(client, { namespace: "capsid", mode: "report" });
+      // A report for today already exists, written by the test above against this
+      // same database. Since 2026-09-16 that makes this an OVERWRITE, and an
+      // overwrite is confirmed the way `write` confirms one: refused first, with
+      // nothing written, and then taken with confirm: true.
+      const unconfirmed = await callLint(client, { namespace: "capsid", mode: "report" });
+      expect(unconfirmed.isError, "a report overwrote today's report without asking").toBe(true);
+      expect(unconfirmed.text).toMatch(/confirmation required/);
+
+      const first = await callLint(client, { namespace: "capsid", mode: "report", confirm: true });
       expect(first.isError).toBeFalsy();
 
       const reports = await env.DB.prepare(

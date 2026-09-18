@@ -14,7 +14,7 @@ import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./doc
 // reachable by parsing the source, and a paraphrase cannot be derived from
 // anything.
 export const LINT_DESCRIPTION =
-  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns the packet a driving LLM needs to compile the wiki: current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs via write, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type, which is reported beside the checks rather than being one of them, and produces ONE integrity percentage. It STORES the result as <namespace>/reports/lint-<date>.md so the trend is a document, and improve_status surfaces the latest number per namespace. A check that could not run is excluded from integrity rather than counted as clean. finalize and report require operator key; finalize also requires confirmation, elicited when the client supports it, otherwise pass confirm: true.";
+  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns the packet a driving LLM needs to compile the wiki: current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs via write, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type, which is reported beside the checks rather than being one of them, and produces ONE integrity percentage. It STORES the result as <namespace>/reports/lint-<date>.md so the trend is a document, and improve_status surfaces the latest number per namespace. A check that could not run is excluded from integrity rather than counted as clean. finalize and report require operator key. finalize requires confirmation, and so does a report that would overwrite an existing one for the same date; both are elicited when the client supports it, otherwise pass confirm: true.";
 
 export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
@@ -257,6 +257,23 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace, path)
           .first<{ id: number; title: string | null; body: string | null }>();
         const title = `Truth report - ${namespace} - ${path.slice("reports/lint-".length, -3)}`;
+        // THE SAME CONFIRMATION `write` ASKS FOR (audit 2026-09-16, defect 5). One
+        // report per namespace per day means a second run the same date OVERWRITES
+        // the first, and this path asked nothing before doing it: the prior body was
+        // snapshotted to document_versions, so nothing was lost, but a caller got no
+        // say and the response never mentioned that a report was replaced. The
+        // elicitation is the one `write` uses for the identical situation, so a
+        // client that supports it is asked and one that does not is told to pass
+        // confirm: true. A FIRST report for the date is untouched: there is nothing
+        // to overwrite and nothing to ask about.
+        if (prior) {
+          const overwrite = await requireConfirmation(server, confirm, {
+            prompt: `Overwrite the truth report at ${namespace}/${path}? The current version will be snapshotted to document_versions first.`,
+            declined: `report for ${namespace}/${path} declined; nothing was written`,
+            unsupported: `confirmation required: ${namespace}/${path} already exists. Re-run lint report with confirm: true to overwrite it. The current version will be snapshotted to document_versions first.`,
+          });
+          if (!overwrite.ok) return fail(overwrite.message);
+        }
         const statements = [];
         if (prior) {
           statements.push(

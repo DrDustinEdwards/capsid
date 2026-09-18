@@ -365,8 +365,22 @@ const ACTION_ARG: Record<string, string> = {
 };
 
 // The action a tool falls back to when the caller omits an optional one, so a
-// narrowed list does not refuse the tool's own default. Only improve_run has one.
-const DEFAULT_ACTION: Record<string, string> = { improve_run: "run" };
+// narrowed list does not refuse the tool's own default.
+//
+// AN ENTRY HERE IS REQUIRED WHEREVER THE HANDLER HAS A DEFAULT. Since 2026-09-13 an
+// unknown action on a narrowed tool is refused rather than read as the whole tool
+// (allowsToolAction), so a handler default this table does not know about becomes a
+// refusal: `lint` was missing until 2026-09-17, and an agent minted
+// ["lint", "lint.gather"] was refused its own default mode because the registrar saw
+// no action where the handler would have read "gather". test/audit-2026-09-16.test.ts
+// derives the requirement from the served schemas: an action argument the tool marks
+// optional is a handler default, and needs a line here.
+const DEFAULT_ACTION: Record<string, string> = { improve_run: "run", lint: "gather" };
+
+/** The action a call means when the caller omits the argument, or undefined. */
+export function defaultActionFor(tool: string): string | undefined {
+  return Object.hasOwn(DEFAULT_ACTION, tool) ? DEFAULT_ACTION[tool] : undefined;
+}
 
 export function actionArgFor(tool: string): string | undefined {
   return Object.hasOwn(ACTION_ARG, tool) ? ACTION_ARG[tool] : undefined;
@@ -452,7 +466,14 @@ export function repoWriteFlags(
   const flags: ScopeFlag[] = [];
   if (args.mode === "direct") flags.push("can_direct_write");
   if (args.allow_workflow_write === true) flags.push("can_write_workflows");
-  if (tool === "manage_pr" && args.action === "merge") flags.push("can_merge");
+  // CLOSE IS HELD TO THE SAME FLAG AS MERGE (audit 2026-09-16, defect 8), because
+  // close DELETES THE HEAD BRANCH: manage_pr has deleted it on both actions since
+  // 2026-09-06, so a plain write grant could destroy the only copy of a branch
+  // somebody else pushed. That is the same blast radius as merging it, and a write
+  // grant is not the credential that should carry it. The alternative was to stop
+  // deleting on close, which would put back the invisible litter the deletion was
+  // added to clear.
+  if (tool === "manage_pr" && (args.action === "merge" || args.action === "close")) flags.push("can_merge");
   // A COMMENT IS A WRITE, AND IT IS THE SMALLEST ONE THIS TOOL MAKES. Separated from
   // can_merge rather than folded into it so the reviewer role can hold one without
   // the other, which is the whole reason the role exists.

@@ -37,11 +37,17 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 const parse = (result: { content: Array<{ text: string }> }) => JSON.parse(result.content[0].text);
 
 // The bound is enforced in SQL, so the proof is the value bound to the LIMIT.
+//
+// BY THE INDEX THE LIMIT NAMES, not by position. This read the LAST bound parameter
+// until 2026-09-16, when resources/list grew a namespace scope bound after its limit
+// and the helper started reporting that instead, which is a bound test that would
+// have passed whatever the LIMIT carried.
 const limitBoundTo = (recorded: Recorded[], match: RegExp): unknown => {
   const stmt = recorded.find((r) => match.test(r.sql.replace(/\s+/g, " ")));
   assert.ok(stmt, `no statement matched ${match}`);
-  assert.match(stmt.sql.replace(/\s+/g, " "), /LIMIT \?\d+/, "the query carries no LIMIT, so the whole table is materialized");
-  return stmt.params[stmt.params.length - 1];
+  const limit = /LIMIT \?(\d+)/.exec(stmt.sql.replace(/\s+/g, " "));
+  assert.ok(limit, "the query carries no LIMIT, so the whole table is materialized");
+  return stmt.params[Number(limit[1]) - 1];
 };
 
 const docs = (n: number, namespace = "capsid", prefix = "doc"): DocRow[] =>
