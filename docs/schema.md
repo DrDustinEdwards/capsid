@@ -330,9 +330,18 @@ can act on it. `improve_skills` has held one row per skill since the first impro
 migration; migrations 0012 and 0013 gave those rows a lifecycle and the evidence to
 move through it.
 
-The rule: a skill's status changes on evaluation evidence,
-never on a driver's judgement of its own run. A driver reporting that a skill helped
-is the party being measured reporting the measurement.
+The rule: a skill's status changes on VERIFIED evidence, never on a driver's judgement
+of its own run. A driver reporting that a skill helped is the party being measured
+reporting the measurement. Verified means the Worker read the signal from GitHub
+itself: a pull request merged and CI green, as stored on `job_outcomes`, and a scored
+improve attempt when the loop runs.
+
+AMENDED 2026-09-16 (option C). The 2026-09-12 rule said evaluations were the only
+evidence. They were also the only evidence that never existed: the fortnightly probe
+that was meant to produce them dispatched a scorer workflow body GitHub refuses, so no
+`skill_evaluations` row was ever written and no status could ever move. Scheduled
+probing is dropped, and verified job outcomes take its place. Everything below about
+how evidence is counted is unchanged; what changed is where it comes from.
 
 Three states. Every skill starts `candidate`, including one abstracted from an
 attempt that was kept: being born of a success is not evidence that the written form
