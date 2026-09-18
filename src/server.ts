@@ -188,16 +188,23 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     // filtering, and NO CURSOR, so the walk ended on page one and its own documents
     // were unreachable. The keyset cursor still names the last row RETURNED, which is
     // what keeps the walk correct now that the page is whole.
-    const visible = visibleNamespaces === "*" ? null : visibleNamespaces;
-    const nsClause = visible ? ` AND namespace IN (${visible.map((_, i) => `?${i + 4}`).join(", ")})` : "";
+    //
+    // ONE BOUND PARAMETER RATHER THAN A SPLICED CLAUSE, so the statement is the same
+    // text on every call: scripts/sql-statements.mjs walks src/ for prepared
+    // statements and test-integration/query-plans.test.ts plans each one against the
+    // real schema, and a statement assembled per caller is one it reports as
+    // unreconstructable and cannot check. json_each turns the JSON array into rows.
+    // Null is the unscoped caller, and the predicate is then a constant.
+    const visible = visibleNamespaces === "*" ? null : JSON.stringify(visibleNamespaces);
     const { results } = await db
       .prepare(
         `SELECT namespace, path, title FROM documents
-         WHERE ((?1 = '' AND ?2 = '') OR (namespace > ?1 OR (namespace = ?1 AND path > ?2)))${nsClause}
+         WHERE ((?1 = '' AND ?2 = '') OR (namespace > ?1 OR (namespace = ?1 AND path > ?2)))
+           AND (?4 IS NULL OR namespace IN (SELECT value FROM json_each(?4)))
          ORDER BY namespace, path
          LIMIT ?3`
       )
-      .bind(afterNs, afterPath, MAX_ROWS + 1, ...(visible ?? []))
+      .bind(afterNs, afterPath, MAX_ROWS + 1, visible)
       .all<{ namespace: string; path: string; title: string | null }>();
     // Kept as a second pass on purpose: it is a no-op against the query above, and it
     // is what still holds if a later edit loses the predicate.
