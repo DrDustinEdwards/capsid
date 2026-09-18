@@ -316,6 +316,11 @@ test("the in-Worker watcher is NOT the write-only caller that reaches gather", a
   // any grant is considered. The SHAPE is real and the plant above is the one that
   // proves the line; this asserts the named example is not an instance, so nobody
   // re-derives a severity from it.
+  //
+  // The refusal names lint.gather rather than lint from 2026-09-16 (audit defect 3):
+  // an omitted mode now resolves to the handler's own default BEFORE the axis is
+  // consulted, so the qualified thing the caller asked for is what the refusal names.
+  // What is being asserted has not moved: this caller cannot reach lint in any form.
   const { client, close } = await connect(watcherAgent());
   const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid" } })) as {
     isError?: boolean;
@@ -323,5 +328,5 @@ test("the in-Worker watcher is NOT the write-only caller that reaches gather", a
   };
   await close();
   assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /not scoped to the 'lint' tool/, result.content[0].text);
+  assert.match(result.content[0].text, /not scoped to the 'lint\.gather' tool/, result.content[0].text);
 });

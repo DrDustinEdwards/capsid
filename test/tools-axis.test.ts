@@ -73,9 +73,11 @@ function reviewer(): Agent {
 // ---- critical 1: the reviewer cannot close ----------------------------------------
 
 test("PLANT: a reviewer scoped to manage_pr.comment is REFUSED action close", async () => {
-  // The finding, exactly: close needs no flag (repoWriteFlags returns [] for it), so
-  // the tools axis was the only thing standing between a reviewer and a closed pull
-  // request with its head branch deleted.
+  // The finding, exactly: close needed no flag at all when this was written, so the
+  // tools axis was the only thing standing between a reviewer and a closed pull
+  // request with its head branch deleted. close has carried can_merge since
+  // 2026-09-16, and this still asserts the AXIS refusal rather than the flag one,
+  // because checkScope names the tool before it names a missing flag.
   await withFetch({}, async (calls) => {
     const result = await callAs(reviewer(), "manage_pr", { namespace: "capsid", number: 7, action: "close" });
     assert.equal(result.isError, true, "a reviewer closed a pull request");

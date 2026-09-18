@@ -100,7 +100,9 @@ test("repoWriteFlags derives the flags from the CALL, not from the tool name", (
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: "src/x.ts", mode: "pr" }), []);
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: "src/x.ts", mode: "direct" }), ["can_direct_write"]);
   assert.deepEqual(repoWriteFlags("manage_pr", { action: "merge" }), ["can_merge"]);
-  assert.deepEqual(repoWriteFlags("manage_pr", { action: "close" }), []);
+  // CLOSE CARRIES can_merge TOO since 2026-09-16 (audit defect 8): closing deletes
+  // the head branch, which is the same destruction merging performs.
+  assert.deepEqual(repoWriteFlags("manage_pr", { action: "close" }), ["can_merge"]);
   assert.deepEqual(repoWriteFlags("ci_dispatch", { path: "improve-score.yml" }), ["can_dispatch"]);
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: ".github/workflows/ci.yml", mode: "pr", allow_workflow_write: true }), [
     "can_write_workflows",
