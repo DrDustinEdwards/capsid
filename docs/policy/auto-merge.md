@@ -6,13 +6,19 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 2
+- version: 3
 - enabled: true
 - namespaces: capsid
 
-`enabled` ships as `false`. Turning it on is a ruling, and the document is on the
+This file ships the value that is signed, so `enabled` reads `true` here because the
+policy is on for capsid. Turning it on or off is a ruling, and the document is on the
 ordinary write tool's refusal list, so changing it needs `allow_improve_paths: true`
 and the `can_touch_protected` flag, and lands in the audit log.
+
+Version 3 adds five refused paths. Version 2 refused the sources that run the checks
+but not the sources those checks read their answers from, and each of those was a
+two-step route: a green driver pull request weakens the source and merges on its own,
+and the next pull request then passes the check it weakened.
 
 Version 2 was ruled by Dustin on 2026-09-17: on capsid, a driver pull request with
 green CI merges on its own unless it touches a path that changes what judges a change,
@@ -63,6 +69,11 @@ list differs from it in either direction.
 - path `^src\/auto-merge\.ts$` the auto-merge source, which holds this list.
 - path `^src\/policy-sign\.ts$` the policy signer.
 - path `^src\/improve-schema\.ts$` the protected path list.
+- path `^src\/scope\.ts$` isMoneyPath, which is the whole of the paths_not_money check.
+- path `^src\/improve-task\.ts$` verifySignedBody, which is how loadMergePolicy decides the stored policy is signed.
+- path `^src\/auth\.ts$` the HMAC and the constant-time comparison that verifier delegates to.
+- path `^src\/encoding\.ts$` the hex encoding of the signature that verifier compares.
+- path `^src\/github\/client\.ts$` the reader that supplies the changed paths and the CI facts every check judges.
 - path `^scripts\/path-guard\.mjs$` the driver's enforcement of the protected path list.
 - path `(^|\/)migrations\/` a migration, which runs against the live database.
 - path `(^|\/)wrangler\.(jsonc?|toml)(\.example)?$` deployment configuration.
@@ -105,6 +116,7 @@ awaiting the seat.
 It cannot widen the set of repos the Worker reaches: a namespace it names that is not
 on the improve roster is refused when the policy is parsed. It cannot describe less or
 more than the code enforces: a check, refused path or required step on which the two
-disagree is refused at load time. A version 1 document, which has no refused paths,
-loads nothing under this code, so between this code deploying and version 2 being
-signed nothing is auto-merged.
+disagree is refused at load time. That is also what closes the window on every version
+bump: a version 2 document lists five fewer refused paths than this code enforces, so
+it loads nothing here, and between this code deploying and version 3 being signed
+nothing is auto-merged. The same was true of version 1 against the version 2 code.
