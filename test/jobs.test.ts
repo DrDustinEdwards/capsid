@@ -265,3 +265,47 @@ test("a well-formed call is still accepted, so the guard is not a wall", async (
     "a clean summary was refused by the tag guard instead of reaching the database"
   );
 });
+
+// ---- the skills a run names are checked before anything is written ---------------
+//
+// Ruled 2026-09-16. A driver names offered and used; the credit direction comes from
+// what the Worker verified. These are the two refusals that keep the offered-to-used
+// rate meaning something, and both refuse BEFORE the transition, so a refused call
+// writes nothing at all.
+
+test("a skill id that does not exist is REFUSED, not dropped", async () => {
+  // Dropping it would record this run as having been offered nothing, which is the one
+  // way the offered-to-used rate can be wrong without anybody writing a wrong number.
+  const d1 = fakeD1({ improveSkills: [{ id: "sk-real", status: "candidate", version: 1, source_namespace: "foxhound" }] });
+  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
+    result_summary: "done",
+    skills: { offered: ["sk-real", "sk-ghost"], used: ["sk-real"] },
+  });
+  assert.equal(out.ok, false, "a non-existent skill id was accepted");
+  assert.match(out.refusal ?? "", /sk-ghost/);
+  assert.match(out.refusal ?? "", /refused rather than dropped/);
+  const wrote = d1.recorded.some((r) => /INSERT INTO job_outcomes/i.test(r.sql));
+  assert.equal(wrote, false, "a refused complete still wrote an outcome row");
+});
+
+test("a skill named as USED but not OFFERED is refused", async () => {
+  // It did not come from the recommend step, so crediting it would measure something
+  // this loop did not do.
+  const d1 = fakeD1({ improveSkills: [{ id: "sk-a", status: "candidate", version: 1, source_namespace: "foxhound" }] });
+  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
+    result_summary: "done",
+    skills: { offered: [], used: ["sk-a"] },
+  });
+  assert.equal(out.ok, false, "a used-but-not-offered skill was accepted");
+  assert.match(out.refusal ?? "", /not as offered/);
+});
+
+test("naming no skills at all is not a refusal: most jobs have no recommend step", async () => {
+  const d1 = fakeD1({});
+  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
+    result_summary: "done",
+  });
+  // It refuses for an unrelated reason (no such job in this fake) or succeeds, but it
+  // must not refuse ON THE SKILLS.
+  assert.equal(/skill/i.test(out.refusal ?? ""), false, `refused on skills when none were named: ${out.refusal}`);
+});

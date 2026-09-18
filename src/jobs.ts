@@ -29,11 +29,14 @@ import { reviewGate, type ReviewOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { readRepoFile } from "./github/contents";
 import { signTaskBody, verifySignedBody } from "./improve-task";
+import { attributionStatements } from "./skills-records";
 import { loadRecordRows, recordFor } from "./agent-record";
 import {
   outcomeFrom,
   outcomeStatement,
+  signalFor,
   verifyEvidence,
+  type JobSkills,
   type JobEvidence,
   type JobOutcomeRow,
 } from "./job-outcomes";
@@ -506,6 +509,9 @@ async function holderTransition(
     // What the driver says this job produced. Verified against GitHub and written
     // into job_outcomes below, on the terminal transitions only.
     evidence?: JobEvidence;
+    // The skills the driver was offered and used. Names only: the CREDIT direction
+    // comes from signalFor(), which reads what the Worker verified on GitHub.
+    skills?: JobSkills;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -562,7 +568,7 @@ async function holderTransition(
   ];
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
-    const row = outcomeFrom(job, verdict, now);
+    const row = outcomeFrom(job, verdict, now, patch.skills);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // ONE ROW PER PULL REQUEST THE EVIDENCE NAMED, in the same batch as the outcome.
@@ -570,6 +576,16 @@ async function holderTransition(
     // so the row kept counts with no way back to what they counted, and the merge
     // state it recorded at complete time could never be corrected.
     statements.push(...outcomePrStatements(env.DB, job.id, patch.evidence?.prs ?? []));
+    // THE CREDIT, FROM THE VERIFIED SIGNAL AND NOWHERE ELSE (ruled 2026-09-16). The
+    // driver names offered and used; signalFor reads merge state and CI as this Worker
+    // read them off GitHub. An unverifiable job earns nothing in either direction.
+    statements.push(
+      ...attributionStatements(env.DB, {
+        offered: patch.skills?.offered ?? [],
+        used: patch.skills?.used ?? [],
+        signal: signalFor(verdict),
+      })
+    );
   }
   await env.DB.batch(statements);
   return { ok: true, action, job, ...(outcome ? { outcome } : {}) };
@@ -719,12 +735,44 @@ async function reviewRefusal(
   return blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true });
 }
 
+/**
+ * Every skill id the caller named, checked against the table.
+ *
+ * REFUSED, NOT IGNORED. A driver that names a skill which does not exist has either
+ * a stale id or a typo, and silently dropping it would record "offered nothing" for a
+ * run that was offered something. That is the one way the offered-to-used rate can be
+ * wrong without anybody writing a wrong number. Returns the refusal, or null.
+ */
+async function unknownSkills(db: D1Database, skills: JobSkills | undefined): Promise<string | null> {
+  const named = [...new Set([...(skills?.offered ?? []), ...(skills?.used ?? [])])];
+  if (named.length === 0) return null;
+  const placeholders = named.map((_, i) => `?${i + 1}`).join(", ");
+  const found = await db
+    .prepare(`SELECT id FROM improve_skills WHERE id IN (${placeholders})`)
+    .bind(...named)
+    .all<{ id: string }>();
+  const have = new Set((found.results ?? []).map((r) => r.id));
+  const missing = named.filter((id) => !have.has(id));
+  if (missing.length === 0) return null;
+  return `no skill exists with id ${missing.join(", ")}. A named skill that does not exist is refused rather than dropped, because dropping it would record this run as having been offered nothing.`;
+}
+
+// USED MUST BE A SUBSET OF OFFERED. A skill used but never offered did not come from
+// the recommend step, so crediting it would measure something this loop did not do.
+function usedNotOffered(skills: JobSkills | undefined): string | null {
+  const offered = new Set(skills?.offered ?? []);
+  const stray = [...new Set(skills?.used ?? [])].filter((id) => !offered.has(id));
+  return stray.length === 0
+    ? null
+    : `${stray.join(", ")} named as used but not as offered. A skill this run did not receive from the recommend step cannot be credited to it.`;
+}
+
 export async function completeJob(
   env: Env,
   agent: Agent,
   now: Date,
   id: string,
-  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence }
+  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills }
 ): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
@@ -743,16 +791,21 @@ export async function completeJob(
     candidateRefs: args.evidence?.prs,
   });
   if (review) return review;
+  const stray = usedNotOffered(args.skills);
+  if (stray) return refuse("complete", stray);
+  const unknown = await unknownSkills(env.DB, args.skills);
+  if (unknown) return refuse("complete", unknown);
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
     result_summary: args.result_summary,
     result_ref: args.result_ref ?? null,
     lease_expires: null,
     evidence: args.evidence,
+    skills: args.skills,
   });
 }
 
-export async function failJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
+export async function failJob(env: Env, agent: Agent, now: Date, id: string, reason: string, skills?: JobSkills): Promise<JobResult> {
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
@@ -763,7 +816,11 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   // because work that genuinely could not be done has none.
   const review = await reviewRefusal(env, agent, now, "fail", id, null);
   if (review) return review;
-  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null });
+  const strayOnFail = usedNotOffered(skills);
+  if (strayOnFail) return refuse("fail", strayOnFail);
+  const unknownOnFail = await unknownSkills(env.DB, skills);
+  if (unknownOnFail) return refuse("fail", unknownOnFail);
+  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills });
 }
 
 // BLOCKED CARRIES THE EXACT COMMAND. A job that hit a gate is not a failure, it is

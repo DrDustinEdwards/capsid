@@ -291,6 +291,15 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
 
+  // THE EXISTENCE CHECK jobs.complete runs over the skill ids a driver names.
+  // Modelled so the refusal can be driven: a fake that threw here would make the
+  // refusal untestable and the test would pass for the wrong reason.
+  if (/^SELECT id FROM improve_skills WHERE id IN/i.test(text)) {
+    const named = params.map(String);
+    const out = rows.improve_skills.filter((s) => named.includes(String(s.id))).map((s) => ({ id: s.id }));
+    return { handled: true, results: out };
+  }
+
   // THE RECOMMEND QUERY, matched before the generic `FROM improve_skills s` reader
   // below for the reason that one already documents: a less specific branch placed
   // first claims this and answers from the wrong table.
