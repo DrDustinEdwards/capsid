@@ -7,6 +7,7 @@ import {
   durationMinutes,
   outcomeFrom,
   resultKindOf,
+  signalFor,
   verifyEvidence,
   type EvidenceVerdict,
 } from "../src/job-outcomes.ts";
@@ -362,3 +363,92 @@ test("the claim and the resume both ask the record question", () => {
 // That the record is read only when a job sets a bar is proven by counting the reads
 // against SQLite in test-integration/job-outcomes.test.ts.
 
+
+// ---- the skills a job was offered and used --------------------------------------
+//
+// REPRODUCTION, red before the fix. migration 0013 added skill_ids_offered and
+// skill_ids_used to job_outcomes on 2026-09-12 and nothing has ever written them, so
+// improve_status's offered-to-used rate sums NULL over every row and reports 0 of 0.
+// The recommend step is judged on that gap, so the one number that says whether it
+// works has never had an input.
+test("REPRO: the outcome row carries the skills the job was offered and used", () => {
+  const verdict: EvidenceVerdict = {
+    prs_opened: 1,
+    prs_merged: 1,
+    commits: 2,
+    files_changed: 3,
+    tests_added: null,
+    ci_green: 1,
+    verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true },
+    notes: [],
+  };
+  const row = outcomeFrom(job(), verdict, new Date("2026-09-11T11:00:00.000Z"), {
+    offered: ["sk-a", "sk-b"],
+    used: ["sk-a"],
+  });
+  assert.equal(row.skill_ids_offered, JSON.stringify(["sk-a", "sk-b"]));
+  assert.equal(row.skill_ids_used, JSON.stringify(["sk-a"]));
+});
+
+test("NULL IS NOT AN EMPTY LIST: a job that named no skills stores null, not []", () => {
+  // improve_status sums json_array_length over these columns, and SUM skips NULL. A
+  // job that never had a recommend step must contribute to neither total, which an
+  // empty array would not do: it would count as "offered nothing", which is a
+  // measurement, where NULL is the absence of one.
+  const verdict: EvidenceVerdict = {
+    prs_opened: null, prs_merged: null, commits: null, files_changed: null,
+    tests_added: null, ci_green: null,
+    verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false },
+    notes: [],
+  };
+  const row = outcomeFrom(job(), verdict, new Date("2026-09-11T11:00:00.000Z"));
+  assert.equal(row.skill_ids_offered, null);
+  assert.equal(row.skill_ids_used, null);
+});
+
+// ---- the signal is the Worker's, not the driver's -------------------------------
+//
+// Ruled 2026-09-16, amending 2026-09-12. A driver names which skills it was offered
+// and used; the DIRECTION comes only from what this Worker verified on GitHub. These
+// drive signalFor to each of its three answers, because a signal that has only been
+// seen returning "win" is one nobody has verified.
+
+const verdictWith = (over: Partial<EvidenceVerdict>): EvidenceVerdict => ({
+  prs_opened: 1,
+  prs_merged: 1,
+  commits: 1,
+  files_changed: 1,
+  tests_added: null,
+  ci_green: 1,
+  verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true },
+  notes: [],
+  ...over,
+});
+
+test("A WIN NEEDS EVERY NAMED PR MERGED AND CI GREEN, both verified", () => {
+  assert.equal(signalFor(verdictWith({})), "verified-success");
+});
+
+test("a named PR that did not merge is a loss, and so is red CI", () => {
+  assert.equal(signalFor(verdictWith({ prs_opened: 2, prs_merged: 1 })), "verified-failure");
+  assert.equal(signalFor(verdictWith({ ci_green: 0 })), "verified-failure");
+});
+
+test("UNVERIFIED EARNS NOTHING IN EITHER DIRECTION, and that is not a loss", () => {
+  // The case the 2026-09-12 ruling already decided: charging a loss for a GitHub
+  // outage would retire skills for being present during one.
+  const unread = verdictWith({ verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false } });
+  assert.equal(signalFor(unread), "environment-failure");
+  // CI could not be read, merge state could.
+  assert.equal(
+    signalFor(verdictWith({ ci_green: null, verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: false } })),
+    "environment-failure"
+  );
+});
+
+test("a job that named no pull request earns nothing, rather than a loss", () => {
+  // Most jobs in this queue are research or docs and name no PR. If those counted as
+  // losses, every skill would retire on the ordinary work of the portfolio.
+  assert.equal(signalFor(verdictWith({ prs_opened: null, prs_merged: null, ci_green: null })), "environment-failure");
+  assert.equal(signalFor(verdictWith({ prs_opened: 0, prs_merged: 0 })), "environment-failure");
+});
