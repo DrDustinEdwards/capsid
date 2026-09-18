@@ -53,8 +53,38 @@ const SOURCE = { dir: SOURCE_ROOT, ref: "master", label: basename(SOURCE_ROOT) }
 // that clone and main. This list named the clone, so running --apply would have
 // written into it. The job that ordered this rollout says the same thing in its
 // own words, which is what surfaced the conflict.
+//
+// A ROLLOUT BRANCH IS NOT WHAT THE REPO RUNS, and comparing against one hides drift.
+//
+// `ref` is where the copier WRITES. `runs` is what the repo actually RUNS: its
+// default branch, the ref CI reads and the one the watcher hashes. They are the same
+// everywhere except dustinedwards-info, where ruling 60 sends the write to a rollout
+// branch in the worktree.
+//
+// Measured 2026-09-18, job_3bde47744566. improve/capsid carried this copier's own
+// last output, synced on 2026-09-16 and never landed. main did not: 748f859 that
+// morning recut the comment headers of 93 files repo-wide, scripts/improve-report.mjs
+// among them, leaving a696dd63 against this repo's 6ab6cc8c. The executable lines
+// were byte-identical and 352 comment lines were not. The watcher reads default
+// branches and reported the drift; the copier read the rollout branch, compared its
+// own last output with itself, and printed identical.
+//
+// A report of agreement that does not exist is the same defect as a report of drift
+// that does not exist, which is what capsid/decisions.md ruled on 2026-09-16 and what
+// the stale-clone fix in PR #78 corrected the same morning. This is that defect one
+// ref further out: the clone was current, and the ref was not the one that matters.
+//
+// `runs` is read from the REMOTE-TRACKING ref, never the local branch, because capsid
+// may require nothing of a local branch it does not own. main in that repository is
+// checked out in dev/dustinedwards-info and belongs to the site session, so no fetch
+// run from the worktree can move it.
 export const TARGETS = [
-  { dir: join(DEV, "worktrees", "capsid"), ref: "improve/capsid", label: "dustinedwards-info (worktree, ruling 60)" },
+  {
+    dir: join(DEV, "worktrees", "capsid"),
+    ref: "improve/capsid",
+    runs: "main",
+    label: "dustinedwards-info (worktree, ruling 60)",
+  },
   { dir: join(DEV, "foxhound"), ref: "main", label: "foxhound" },
   { dir: join(DEV, "foxing"), ref: "main", label: "foxing" },
   { dir: join(DEV, "germomics"), ref: "main", label: "germomics" },
@@ -142,6 +172,58 @@ export function remoteHead(dir, ref, label) {
     throw new Error(`${label}: the remote has no ${ref}. Nothing was written.`);
   }
   return sha;
+}
+
+/**
+ * The compare ref for a target whose `runs` branch is owned by somebody else. It
+ * checks the REMOTE-TRACKING ref against the remote and nothing else, because the
+ * local branch is not evidence and, where another session has it checked out, not
+ * even movable from here. The bytes are then read from `origin/<ref>`.
+ * @param {string} dir
+ * @param {string} ref
+ * @param {string} label
+ */
+export function requireRemoteCurrent(dir, ref, label) {
+  let tracking;
+  try {
+    tracking = execFileSync("git", ["-C", dir, "rev-parse", `origin/${ref}`], { encoding: "utf8" }).trim();
+  } catch {
+    throw new Error(`${label}: no origin/${ref} to read. Run: git -C ${dir} fetch origin. Nothing was written.`);
+  }
+  const actual = remoteHead(dir, ref, label);
+  if (tracking !== actual) {
+    throw new Error(
+      `${label}: origin/${ref} is ${tracking.slice(0, 7)} but the remote is at ${actual.slice(0, 7)}. ` +
+        `This clone has not fetched, so it would be compared against something the repo no longer runs. ` +
+        `Run: git -C ${dir} fetch origin. Nothing was written.`
+    );
+  }
+}
+
+/**
+ * WRITING ONTO A ROLLOUT BRANCH THAT IS BEHIND WHAT IT WILL BE MERGED INTO IS REFUSED.
+ *
+ * When `runs` and `ref` differ, the copier compares against the default branch and
+ * writes into the rollout branch's tree. That is only sound while the rollout branch
+ * contains the default branch: otherwise the file is correct and everything around it
+ * is however many commits stale, and the pull request carries that difference as well
+ * as the fix. improve/capsid was 64 commits behind main when this was written, which
+ * is how a committed rollout sat unlanded for two days.
+ * @param {string} dir
+ * @param {string} ref
+ * @param {string} runs
+ * @param {string} label
+ */
+export function requireLanded(dir, ref, runs, label) {
+  const behind = execFileSync("git", ["-C", dir, "rev-list", "--count", `${ref}..origin/${runs}`], {
+    encoding: "utf8",
+  }).trim();
+  if (behind !== "0") {
+    throw new Error(
+      `${label}: ${ref} is ${behind} commit(s) behind origin/${runs}, so writing here would base the fix on a stale tree. ` +
+        `Run: git -C ${dir} merge origin/${runs}. Nothing was written.`
+    );
+  }
 }
 
 // A MISSING CLONE IS A NAMED REFUSAL, not a git stack trace. The failure this
@@ -300,17 +382,28 @@ function main() {
   let changed = 0;
   for (const t of TARGETS) {
     requireRepo(t.dir, t.label);
-    requireCurrent(t.dir, t.ref, t.label);
-    const cur = splitBlock(show(t.dir, t.ref, WORKFLOW), `${t.label} ${WORKFLOW}`);
-    const curReport = normalize(show(t.dir, t.ref, REPORT));
+    // What the repo RUNS is what gets compared. Where that is the same ref the copier
+    // writes, the local branch is read and checked three ways as before; where it is a
+    // branch somebody else owns, the remote-tracking ref is read instead.
+    const runs = t.runs ?? t.ref;
+    const read = t.runs ? `origin/${runs}` : runs;
+    if (t.runs) requireRemoteCurrent(t.dir, runs, t.label);
+    else requireCurrent(t.dir, runs, t.label);
+    const cur = splitBlock(show(t.dir, read, WORKFLOW), `${t.label} ${WORKFLOW}`);
+    const curReport = normalize(show(t.dir, read, REPORT));
     const wfDrift = short(normalizePins(cur.tail)) !== short(srcCompare);
     const rpDrift = short(curReport) !== short(srcReport);
 
-    console.log(`${t.label}@${t.ref}`);
+    // The ref that was COMPARED is printed, not the one that will be written, because
+    // a line naming the wrong ref is how this went unnoticed for two days.
+    console.log(`${t.label}@${read}${t.runs ? ` (writes ${t.ref})` : ""}`);
     console.log(`  score block  ${short(normalizePins(cur.tail))} -> ${short(srcCompare)}  ${wfDrift ? "CHANGES" : "identical"}`);
     console.log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
     if (wfDrift || rpDrift) changed++;
     if (!apply) continue;
+
+    // A rollout branch behind what it will be merged into is refused before any write.
+    if (t.runs && (wfDrift || rpDrift)) requireLanded(t.dir, t.ref, runs, t.label);
 
     // The target keeps its own build job (everything above the marker) and takes
     // the source's block verbatim. Only the block below the marker is shared.
