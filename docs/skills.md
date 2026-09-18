@@ -67,12 +67,27 @@ one day falls back to the default rather than being obeyed. The cadence is uncha
 from the probing design, so a status moves up to a fortnight after the evidence that
 decides it lands.
 
-NO STATUS MOVES YET. `evaluationStatement` is still the only writer of
-`skill_evaluations` and still has no production caller. The writer that turns a verified
-job outcome into one of those rows is job_6464e6d62063. What it needs from this change:
-the cycle no longer dispatches anything, so it is free to write rows on its own
-schedule, and `attributionStatements` is the single credit path, so it should route any
-wins and losses it records through that rather than adding a second one.
+A FINISHED JOB IS EVIDENCE, since 2026-09-18. `jobs` action `complete` and action
+`fail` take a `skills` object naming which skills the run was offered and which it
+used. Those two lists are stored separately on `job_outcomes`, and the gap between them
+is what judges the recommend step. NAMES ONLY: the credit direction never comes from
+the driver. `signalFor` reads what this Worker verified on GitHub, and gives a win only
+when every named pull request merged and CI was green, a loss when a named pull request
+did not merge or CI was red, and nothing at all when the run named no pull request or
+could not be verified. That last case is most jobs in this queue, which are research or
+documents; counting them as losses would retire every skill on the ordinary work of the
+portfolio. A skill id that does not exist is refused rather than dropped, and so is one
+named as used but not as offered.
+
+NO STATUS MOVES YET, AND THE REASON HAS CHANGED. Wins and losses now accumulate from
+verified job outcomes. What still does not exist is a way to count them AT THE CURRENT
+VERSION: `improve_skills.wins` and `losses` are cumulative counters that carry no
+version and are never reset, so they cannot answer "two results at version 3", which is
+the bar this document states and which is what makes the edit bound matter.
+`dueTransitions` therefore still reads only `skill_evaluations`, and
+`evaluationStatement` still has no production caller, so no candidate has yet been
+promoted. Closing that needs a ruling on where versioned attribution is stored, and the
+options are written up in the pull request for job_6464e6d62063.
 
 The console carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute

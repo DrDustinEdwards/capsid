@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { ciStatus } from "./github";
 import { ghFetch, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
+import type { RunSignal } from "./skills-lifecycle";
 
 // JOBS AS EVIDENCE. One outcome row per finished job, written once, carrying counts
 // rather than prose.
@@ -59,7 +60,48 @@ export interface JobOutcomeRow {
   duration_minutes: number | null;
   result_kind: OutcomeResultKind;
   verified: string;
+  // THE SKILLS THIS JOB WAS OFFERED AND THE ONES IT USED, as JSON arrays, or NULL.
+  // Migration 0013 added both columns on 2026-09-12 and nothing wrote them until
+  // 2026-09-18, so improve_status's offered-to-used rate summed NULL over every row
+  // and reported 0 of 0. That gap is how the recommend step is judged.
+  //
+  // NULL, NOT AN EMPTY ARRAY, when the job named none. improve_status sums
+  // json_array_length and SUM skips NULL, so a job that never had a recommend step
+  // contributes to neither total. An empty array would instead say "offered nothing",
+  // which is a measurement, and this is the absence of one.
+  skill_ids_offered: string | null;
+  skill_ids_used: string | null;
   recorded_at: string;
+}
+
+/** The skills a driver reports for one finished job. Names only; the credit comes
+ *  from what the Worker verified on GitHub, never from this. */
+export interface JobSkills {
+  offered?: readonly string[];
+  used?: readonly string[];
+}
+
+const skillColumn = (ids: readonly string[] | undefined): string | null =>
+  ids && ids.length > 0 ? JSON.stringify([...ids]) : null;
+
+/**
+ * What one finished job says about the skills it used, as a signal attribute() reads.
+ *
+ * THE SIGNAL IS THE WORKER'S, NOT THE DRIVER'S (ruled 2026-09-16). A driver names
+ * which skills it was offered and which it used, and nothing else it says reaches the
+ * credit. The direction comes only from what this Worker read off GitHub: every named
+ * pull request merged, and CI green on the head of the last one.
+ *
+ * UNVERIFIED IS "environment-failure", WHICH EARNS NOTHING IN EITHER DIRECTION. A job
+ * that named no pull request, or one whose pull requests could not be read, says
+ * nothing about a skill. Charging a loss there would retire skills for being present
+ * during a GitHub outage, which is the case the 2026-09-12 ruling already decided.
+ */
+export function signalFor(verdict: EvidenceVerdict): RunSignal {
+  const checked = verdict.verified.prs_merged && verdict.verified.ci_green;
+  if (!checked || verdict.prs_opened === null || verdict.prs_opened === 0) return "environment-failure";
+  const allMerged = verdict.prs_merged !== null && verdict.prs_merged === verdict.prs_opened;
+  return allMerged && verdict.ci_green === 1 ? "verified-success" : "verified-failure";
 }
 
 const NOTHING_VERIFIED: VerifiedFields = {
@@ -312,7 +354,7 @@ export async function verifyEvidence(
 
 // ---- the write ----------------------------------------------------------------
 
-export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date): JobOutcomeRow {
+export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills): JobOutcomeRow {
   return {
     job_id: job.id,
     // claimed_by at the moment the job ended. COPIED, not joined: a later lease
@@ -332,6 +374,8 @@ export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date): J
     duration_minutes: durationMinutes(job.claimed_at, now),
     result_kind: resultKindOf(job.result_ref),
     verified: JSON.stringify(verdict.verified),
+    skill_ids_offered: skillColumn(skills?.offered),
+    skill_ids_used: skillColumn(skills?.used),
     recorded_at: now.toISOString(),
   };
 }
@@ -345,8 +389,9 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
   return db
     .prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed,
-         tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified, recorded_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+         tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified,
+         skill_ids_offered, skill_ids_used, recorded_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
        ON CONFLICT(job_id) DO NOTHING`
     )
     .bind(
@@ -364,6 +409,8 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.duration_minutes,
       row.result_kind,
       row.verified,
+      row.skill_ids_offered,
+      row.skill_ids_used,
       row.recorded_at
     );
 }

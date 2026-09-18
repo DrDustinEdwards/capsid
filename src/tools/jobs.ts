@@ -77,6 +77,15 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .boolean()
           .optional()
           .describe("For resume: this resume sends the work back to be corrected, so it spends one correction from the retry cap's budget. A plain resume spends nothing. An admin resume never spends."),
+        skills: z
+          .object({
+            offered: z.array(bounded(64)).max(16).optional().describe("Skill ids the recommend step offered this run."),
+            used: z.array(bounded(64)).max(16).optional().describe("Skill ids this run actually followed. Must be a subset of offered."),
+          })
+          .optional()
+          .describe(
+            "For complete and fail: which skills this run was offered and which it used. NAMES ONLY. The credit direction is never taken from here: a win needs every named pull request merged and CI green as the WORKER read them off GitHub, a loss is a named PR that did not merge or CI red, and a run that named no pull request or could not be verified earns nothing in either direction. A skill id that does not exist is refused rather than dropped, and a skill named as used but not as offered is refused, because it did not come from the recommend step. Offered and used are stored separately on job_outcomes: the gap between them is how the recommend step itself is judged."
+          ),
         evidence: z
           .union([
             z.object({
@@ -170,12 +179,13 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
                 result_summary: args.result_summary ?? "",
                 result_ref: args.result_ref,
                 evidence: parsedEvidence,
+                skills: args.skills,
               })
             );
           }
           case "fail": {
             if (!args.id) return fail("fail needs the job id.");
-            return ok(await failJob(env, agent, now, args.id, args.reason ?? ""));
+            return ok(await failJob(env, agent, now, args.id, args.reason ?? "", args.skills));
           }
           case "block": {
             if (!args.id) return fail("block needs the job id.");
