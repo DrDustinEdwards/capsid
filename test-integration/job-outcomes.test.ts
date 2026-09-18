@@ -217,6 +217,8 @@ describe("job outcomes", () => {
       duration_minutes: null,
       result_kind: "none" as const,
       verified: UNVERIFIED,
+      skill_ids_offered: null,
+      skill_ids_used: null,
       recorded_at: NOW.toISOString(),
     });
     await env.DB.batch([outcomeStatement(env.DB, row(DRIVER_ACTOR, null))]);
