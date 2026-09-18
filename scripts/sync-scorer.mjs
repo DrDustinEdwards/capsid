@@ -69,10 +69,27 @@ export const TARGETS = [
 // that was stale, and --apply would have written the PRE-cache block into all of
 // them while printing that nothing needed to change.
 //
-// Checked without fetching, deliberately: a copier that reaches the network to
-// decide what to copy can fail for reasons unrelated to the copy. It compares the
-// ref to its own remote-tracking branch and tells the human to fetch.
-function requireCurrent(dir, ref, label) {
+// IT ASKS THE REMOTE, AND AN UNREACHABLE REMOTE IS A REFUSAL.
+//
+// This used to compare the local ref to its own remote-tracking branch and go no
+// further, on the reasoning that a copier reaching the network can fail for reasons
+// unrelated to the copy. That check cannot see the case it exists for: when the
+// remote-tracking ref is ITSELF stale, both sides are the same old commit and the
+// check passes.
+//
+// Measured 2026-09-18 on foxhound. Its clone had never been fetched, so `main` and
+// `origin/main` were both 826b67f while the real remote was 3360275, seven days and
+// one merged sync PR ahead. The check passed, the copier read the stale blobs, and
+// the dry run reported foxhound's scorer as diverged from capsid's. It was not:
+// every one of the five repos was byte-identical on its actual remote. A report of
+// drift that does not exist is the same defect as a report of agreement that does
+// not exist, which is what capsid/decisions.md ruled on 2026-09-16; this one cost
+// job_63f96b1d1a32, which was posted to investigate a divergence that was never there.
+//
+// So `git ls-remote` is asked, and the original concern is answered by failing
+// CLOSED: a remote that cannot be reached refuses the run and says so, rather than
+// falling back to comparing two local refs that agree with each other and nothing else.
+export function requireCurrent(dir, ref, label) {
   const at = (/** @type {string} */ r) =>
     execFileSync("git", ["-C", dir, "rev-parse", r], { encoding: "utf8" }).trim();
   let remote;
@@ -89,6 +106,42 @@ function requireCurrent(dir, ref, label) {
         `Run: git -C ${dir} fetch origin. Nothing was written.`
     );
   }
+  const actual = remoteHead(dir, ref, label);
+  if (actual !== remote) {
+    throw new Error(
+      `${label}: origin/${ref} is ${remote.slice(0, 7)} but the remote is at ${actual.slice(0, 7)}. ` +
+        `This clone has not fetched, so ${ref} and origin/${ref} agree with each other and with nothing else. ` +
+        `Run: git -C ${dir} fetch origin. Nothing was written.`
+    );
+  }
+}
+
+/**
+ * The commit the REAL remote has for a ref. A remote that cannot be reached refuses
+ * the run: the whole point of this check is that the local refs are not evidence.
+ * @param {string} dir
+ * @param {string} ref
+ * @param {string} label
+ * @returns {string}
+ */
+export function remoteHead(dir, ref, label) {
+  let out;
+  try {
+    out = execFileSync("git", ["-C", dir, "ls-remote", "origin", `refs/heads/${ref}`], {
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (err) {
+    throw new Error(
+      `${label}: the remote could not be reached to check ${ref} (${err instanceof Error ? err.message.split("\n")[0] : String(err)}). ` +
+        `Refusing rather than trusting this clone's own refs. Nothing was written.`
+    );
+  }
+  const sha = out.split("\n").map((l) => l.trim()).filter(Boolean)[0]?.split(/\s+/)[0];
+  if (!sha) {
+    throw new Error(`${label}: the remote has no ${ref}. Nothing was written.`);
+  }
+  return sha;
 }
 
 // A MISSING CLONE IS A NAMED REFUSAL, not a git stack trace. The failure this
