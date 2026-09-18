@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   AUTO_MERGE_POLICY_PATH,
+  AUTO_MERGE_REFUSED_PATHS,
+  AUTO_MERGE_REQUIRED_CI,
   FILES_LIMIT,
   POLICY_CHECKS,
   ciVerdict,
@@ -14,6 +16,7 @@ import {
   mergeParams,
   parseMergePolicy,
   autoMergeTick,
+  requiredCiLabel,
   type PrFacts,
 } from "../src/auto-merge.ts";
 import { signTaskBody } from "../src/improve-task.ts";
@@ -39,8 +42,11 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     headSha: "bfae8ca9012345678901234567890123456789ab",
     body: "Closes job_4c0ecc28548b.\n\nRefuse a swallowed parameter tag.",
     changedPaths: ["src/jobs.ts", "docs/schema.md"],
+    filesProblem: null,
     ciConclusion: "success",
     ciNote: "3 check(s) green",
+    ciSteps: AUTO_MERGE_REQUIRED_CI.map((r) => ({ ...r, conclusion: "success" })),
+    ciStepsProblem: null,
     jobId: "job_4c0ecc28548b",
     jobClaimedBy: "agent:capsid-driver",
     driverAgent: { name: "capsid-driver", kind: "driver", revoked: false },
@@ -118,17 +124,78 @@ test("ci_green: a PR nothing has reported on never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
 });
 
-test("paths_unprotected: a green PR touching a protected path never merges", () => {
-  const verdict = evaluatePolicy(greenPr({ changedPaths: ["src/jobs.ts", "test/jobs.test.ts"] }));
-  assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "paths_unprotected");
-  assert.match(verdict.merge === false ? verdict.why : "", /test\/jobs\.test\.ts/);
+// Policy version 2 (ruled 2026-09-17): tests, src/, docs, CLAUDE.md and .claude/ merge
+// on green. Under version 1 every one of these was left for the seat by
+// paths_unprotected, which is what this job existed to change.
+test("paths_not_refused: tests, src/, docs, CLAUDE.md and .claude/ merge on green", () => {
+  for (const changedPaths of [
+    ["src/jobs.ts", "test/jobs.test.ts"],
+    ["CLAUDE.md"],
+    [".claude/commands/improve.md"],
+    ["test-integration/jobs.test.ts", "docs/autonomy.md"],
+  ]) {
+    const verdict = evaluatePolicy(greenPr({ changedPaths }));
+    assert.equal(verdict.merge, true, `${changedPaths.join(", ")}: ${verdict.merge ? "" : verdict.why}`);
+  }
 });
 
-test("paths_unprotected: CLAUDE.md is protected, so a docs-looking change still waits", () => {
-  const verdict = evaluatePolicy(greenPr({ changedPaths: ["CLAUDE.md"] }));
+test("paths_not_refused: every path the ruling names refuses on its own", () => {
+  const named = [
+    ".github/workflows/improve-score.yml",
+    "scripts/improve-report.mjs",
+    "scripts/sync-scorer.mjs",
+    "improve/holdout/capsid/imports.txt",
+    "src/gate-policy.ts",
+    "src/auto-merge.ts",
+    "src/policy-sign.ts",
+    "src/improve-schema.ts",
+    "migrations/0016_next.sql",
+    "wrangler.jsonc",
+    "wrangler.jsonc.example",
+    ".dev.vars",
+    ".env",
+    ".env.production",
+  ];
+  for (const path of named) {
+    const verdict = evaluatePolicy(greenPr({ changedPaths: ["src/jobs.ts", path] }));
+    assert.equal(verdict.merge, false, `${path} must not merge`);
+    assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", `${path}`);
+    assert.match(verdict.merge === false ? verdict.why : "", new RegExp(path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")));
+  }
+});
+
+test("paths_not_refused: every pattern in the list matches at least one path above or below", () => {
+  // A pattern nothing matches is a refusal nobody has observed. Count stated: the
+  // list has 20 entries today, and each must be exercised.
+  const samples = [
+    ".github/workflows/improve-score.yml", "scripts/improve-report.mjs", "scripts/sync-scorer.mjs",
+    "improve/holdout/capsid/imports.txt", "src/improve-scorer.ts", "test/improve-holdout.test.ts",
+    "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/improve-schema.ts",
+    "scripts/path-guard.mjs", "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
+    "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
+  ];
+  assert.equal(AUTO_MERGE_REFUSED_PATHS.length, 20);
+  for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
+    assert.ok(samples.some((s) => pattern.test(s)), `${pattern.source} matches no sample`);
+  }
+  for (const path of samples) {
+    const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
+    assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
+  }
+});
+
+test("paths_not_refused: similar-looking paths that are ordinary code are not refused", () => {
+  for (const path of ["src/jobs.ts", "src/improve/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts", "scripts/mint-agents.mjs", "src/environment.ts"]) {
+    const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
+    assert.equal(verdict.merge, true, `${path}: ${verdict.merge ? "" : verdict.why}`);
+  }
+});
+
+test("paths_not_refused: an incomplete file list is refused before any path is judged", () => {
+  const verdict = evaluatePolicy(greenPr({ filesProblem: "page 2 returned 502" }));
   assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "paths_unprotected");
+  assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused");
+  assert.deepEqual(verdict.merge === false ? verdict.passed : null, []);
 });
 
 test("paths_not_money: a billing surface never merges", () => {
@@ -139,29 +206,65 @@ test("paths_not_money: a billing surface never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "paths_not_money");
 });
 
-test("no_migration_workflow_lockfile: each of the three refuses on its own", () => {
-  for (const path of ["migrations/0012_skills.sql", ".github/workflows/ci.yml", "package-lock.json"]) {
+test("no_migration_workflow_lockfile: a workflow and a lockfile refuse on their own", () => {
+  // Neither is on the refused list, so this check is the only thing refusing them.
+  for (const path of [".github/workflows/ci.yml", "package-lock.json", "pnpm-lock.yaml"]) {
     const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
     assert.equal(verdict.merge, false, `${path} must not merge`);
-    // The protected list catches all three first, which is the point: two independent
-    // statements of the same refusal. What matters is that none of them merges.
-    assert.ok(
-      verdict.merge === false && ["paths_unprotected", "no_migration_workflow_lockfile"].includes(verdict.failed),
-      `${path} refused by ${verdict.merge === false ? verdict.failed : "nothing"}`
-    );
+    assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile", path);
   }
+  // A migration is on both lists, and the refused list sees it first.
+  const migration = evaluatePolicy(greenPr({ changedPaths: ["migrations/0012_skills.sql"] }));
+  assert.equal(migration.merge === false && migration.failed, "paths_not_refused");
+});
+
+test("ci_green: a run that lacks the integration suite never merges", () => {
+  const ciSteps = AUTO_MERGE_REQUIRED_CI.filter((r) => r.step !== "Integration tests").map((r) => ({ ...r, conclusion: "success" }));
+  const verdict = evaluatePolicy(greenPr({ ciSteps }));
+  assert.equal(verdict.merge, false);
+  assert.equal(verdict.merge === false && verdict.failed, "ci_green");
+  assert.match(verdict.merge === false ? verdict.why : "", /checks \/ Integration tests/);
+});
+
+test("ci_green: each required step, skipped or missing, refuses on its own", () => {
+  assert.equal(AUTO_MERGE_REQUIRED_CI.length, 6, "the unit suite, four typechecks and the integration suite");
+  for (const required of AUTO_MERGE_REQUIRED_CI) {
+    for (const conclusion of ["skipped", "failure", null, "absent"]) {
+      const ciSteps = AUTO_MERGE_REQUIRED_CI.flatMap((r) =>
+        r !== required ? [{ ...r, conclusion: "success" }] : conclusion === "absent" ? [] : [{ ...r, conclusion }]
+      );
+      const verdict = evaluatePolicy(greenPr({ ciSteps }));
+      assert.equal(verdict.merge === false && verdict.failed, "ci_green", `${required.step} ${conclusion}`);
+      assert.ok(verdict.merge === false && verdict.why.includes(requiredCiLabel(required)), `${required.step} ${conclusion}`);
+    }
+  }
+});
+
+test("ci_green: a same-named step in another job or workflow does not count", () => {
+  const ciSteps = AUTO_MERGE_REQUIRED_CI.map((r) =>
+    r.step === "Tests" ? { ...r, job: "score", conclusion: "success" } : { ...r, conclusion: "success" }
+  );
+  assert.equal(evaluatePolicy(greenPr({ ciSteps })).merge, false);
+  const other = AUTO_MERGE_REQUIRED_CI.map((r) =>
+    r.step === "Tests" ? { ...r, workflow: ".github/workflows/improve-score.yml", conclusion: "success" } : { ...r, conclusion: "success" }
+  );
+  assert.equal(evaluatePolicy(greenPr({ ciSteps: other })).merge, false);
+});
+
+test("ci_green: steps that could not be read never merge", () => {
+  const verdict = evaluatePolicy(greenPr({ ciSteps: [], ciStepsProblem: "the workflow run list returned 403" }));
+  assert.equal(verdict.merge === false && verdict.failed, "ci_green");
+  assert.match(verdict.merge === false ? verdict.why : "", /403/);
 });
 
 test("a failing check reports only the checks that actually passed before it", () => {
   const verdict = evaluatePolicy(greenPr({ ciConclusion: "failure", ciNote: "checks=failure" }));
   assert.equal(verdict.merge, false);
-  // ci_green sits fourth, so exactly the three before it passed. An audit row that
-  // claimed the path checks passed would be claiming a check that never ran.
-  assert.deepEqual(verdict.merge === false ? verdict.passed : [], [
-    "body_names_job",
-    "author_is_driver",
-    "base_is_default_branch",
-  ]);
+  // ci_green sits last, so exactly the six before it passed. An audit row that
+  // claimed a later check passed would be claiming a check that never ran.
+  assert.deepEqual(verdict.merge === false ? verdict.passed : [], POLICY_CHECKS.slice(0, 6));
+  const early = evaluatePolicy(greenPr({ changedPaths: ["src/gate-policy.ts"], ciConclusion: "failure" }));
+  assert.deepEqual(early.merge === false ? early.passed : null, [], "the never-list is checked first");
 });
 
 // ---- the job id in a PR body ----------------------------------------------------
@@ -202,6 +305,14 @@ const GOOD_POLICY = [
   "## Checks",
   "",
   ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
+  "",
+  "## Refused paths",
+  "",
+  ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
+  "",
+  "## Required CI",
+  "",
+  ...AUTO_MERGE_REQUIRED_CI.map((r) => `- step \`${requiredCiLabel(r)}\``),
   "",
 ].join("\n");
 
@@ -261,6 +372,38 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
   assert.match(refused.error, /does not name ci_green/);
 });
 
+test("loadMergePolicy refuses a signed policy whose refused paths or required steps differ from the code, in either direction", async () => {
+  const load = async (body: string) => loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
+  const migrations = AUTO_MERGE_REFUSED_PATHS.find((p) => p.pattern.source.includes("migrations"))!;
+  const migrationLine = `- path \`${migrations.pattern.source}\` ${migrations.why}\n`;
+
+  // Dropped from the document: the version 1 document, which has no such section, is
+  // this case for every entry, so a version 1 policy loads nothing under this code.
+  const dropped = await load(GOOD_POLICY.replace(migrationLine, ""));
+  assert.ok("error" in dropped);
+  assert.match(dropped.error, /refused paths does not list .*migrations/);
+
+  // Added to the document without code behind it.
+  const added = await load(GOOD_POLICY.replace(migrationLine, `${migrationLine}- path \`^docs/\` docs\n`));
+  assert.ok("error" in added);
+  assert.match(added.error, /lists \^docs\/, which this Worker does not enforce/);
+
+  const noIntegration = await load(GOOD_POLICY.replace("- step `.github/workflows/ci.yml / checks / Integration tests`\n", ""));
+  assert.ok("error" in noIntegration);
+  assert.match(noIntegration.error, /required CI steps does not list .*Integration tests/);
+
+  const v1 = await load(GOOD_POLICY.split("## Refused paths")[0]);
+  assert.ok("error" in v1, "a policy with no refused paths must not load");
+});
+
+test("parseMergePolicy does not read a refused path or a step as a check id", () => {
+  const parsed = parseMergePolicy(GOOD_POLICY);
+  assert.ok("policy" in parsed);
+  assert.deepEqual(parsed.policy.checks, [...POLICY_CHECKS]);
+  assert.equal(parsed.policy.refusedPaths.length, AUTO_MERGE_REFUSED_PATHS.length);
+  assert.equal(parsed.policy.requiredCi.length, AUTO_MERGE_REQUIRED_CI.length);
+});
+
 // ---- the document that actually ships -------------------------------------------
 
 test("the shipped policy document names exactly the checks the code enforces", () => {
@@ -272,6 +415,21 @@ test("the shipped policy document names exactly the checks the code enforces", (
     [...POLICY_CHECKS].sort(),
     "the shipped document and the code must name the same checks, in both directions"
   );
+  assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
+  assert.deepEqual(parsed.policy.requiredCi, AUTO_MERGE_REQUIRED_CI.map(requiredCiLabel));
+  assert.equal(parsed.policy.version, "2");
+});
+
+test("every required CI step is a step the CI workflow actually has", () => {
+  // A required step the workflow does not have refuses every PR, silently, from the
+  // day the step is renamed. Checked against the shipped workflow text.
+  const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const stepNames = [...workflow.matchAll(/^\s+- name: (.+)$/gm)].map((m) => m[1].trim());
+  assert.match(workflow, /^  checks:\n    name: checks$/m);
+  for (const r of AUTO_MERGE_REQUIRED_CI) {
+    assert.equal(r.workflow, ".github/workflows/ci.yml");
+    assert.ok(stepNames.includes(r.step), `ci.yml has no step named '${r.step}'`);
+  }
 });
 
 // ---- the audit rows -------------------------------------------------------------
@@ -288,7 +446,14 @@ test("the decline audit row names the policy version, the PR, the failing check 
     head_sha: "bfae8ca9012345678901234567890123456789ab",
     failed: "ci_green",
     why: "CI on bfae8ca is failure: checks=failure",
-    passed: ["body_names_job", "author_is_driver", "base_is_default_branch"],
+    passed: [
+      "paths_not_refused",
+      "paths_not_money",
+      "no_migration_workflow_lockfile",
+      "body_names_job",
+      "author_is_driver",
+      "base_is_default_branch",
+    ],
     at: "2026-09-12T03:00:00.000Z",
   });
 });
@@ -383,13 +548,46 @@ function tickRoutes(changedFiles: string[]) {
       body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
     },
     [`PUT ${OWNER}/pulls/23/merge`]: { body: { sha: "merged00000000000000000000000000000000000" } },
+    ...ciRunRoutes(AUTO_MERGE_REQUIRED_CI.map((r) => r.step)),
   };
 }
 
-async function enabledEnv() {
+// The Actions runs for the head sha and the jobs of the CI run, as GitHub serves them.
+// The CI run carries the named steps; an older CI run and an unrelated workflow's run
+// sit beside it so the newest-run and path filters are exercised.
+function ciRunRoutes(steps: string[]) {
+  return {
+    [`GET ${OWNER}/actions/runs`]: (_body: unknown, search: URLSearchParams) => ({
+      body: {
+        workflow_runs:
+          search.get("head_sha") === HEAD_SHA
+            ? [
+                { id: 900, path: ".github/workflows/ci.yml" },
+                { id: 950, path: ".github/workflows/ci.yml" },
+                { id: 990, path: ".github/workflows/improve-score.yml" },
+              ]
+            : [],
+      },
+    }),
+    [`GET ${OWNER}/actions/runs/900/jobs`]: { body: { jobs: [] } },
+    [`GET ${OWNER}/actions/runs/950/jobs`]: {
+      body: {
+        jobs: [
+          { name: "checks", steps: [{ name: "Install dependencies", conclusion: "success" }, ...steps.map((name) => ({ name, conclusion: "success" }))] },
+          { name: "deploy", steps: [{ name: "Deploy", conclusion: "skipped" }] },
+        ],
+      },
+    },
+  };
+}
+
+async function enabledEnv(claimedBy = "agent:capsid-driver") {
   return tickEnv(await signTaskBody(SECRET, GOOD_POLICY), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "claimed" }],
-    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: claimedBy, status: "claimed" }],
+    agents: [
+      { name: "capsid-driver", kind: "driver", revoked_at: null },
+      { name: "seat", kind: "seat", revoked_at: null },
+    ],
   });
 }
 
@@ -417,6 +615,70 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
     assert.ok(report.outcomes[0].failed, "a decline recorded no failing check");
     const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
     assert.equal(merges.length, 0, "a declined PR was merged anyway");
+  });
+});
+
+// ---- policy version 2, the five plants the job names, through the tick ----------------
+//
+// job_61cc059c8083. Each runs the real tick against a signed version 2 document, so a
+// tick that ignored the verdict, or read the version 1 list, fails here.
+
+async function tickPlant(files: string[], opts: { claimedBy?: string; steps?: string[] } = {}) {
+  const env = await enabledEnv(opts.claimedBy);
+  const routes = { ...tickRoutes(files), ...ciRunRoutes(opts.steps ?? AUTO_MERGE_REQUIRED_CI.map((r) => r.step)) };
+  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
+  await withFetch(routes as never, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
+    assert.equal(report.ran, true, report.note);
+    assert.equal(report.outcomes.length, 1);
+    out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+  });
+  return out!;
+}
+
+test("PLANT v2: a driver PR touching only test/ and src/ is merged by the tick", async () => {
+  const { outcome, merges } = await tickPlant(["src/jobs.ts", "test/jobs.test.ts"]);
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+  assert.equal(merges, 1);
+  assert.deepEqual(outcome.passed, [...POLICY_CHECKS]);
+});
+
+test("PLANT v2: a PR touching src/gate-policy.ts is refused by the tick", async () => {
+  const { outcome, merges } = await tickPlant(["src/jobs.ts", "src/gate-policy.ts"]);
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "paths_not_refused");
+  assert.match(outcome.why ?? "", /src\/gate-policy\.ts/);
+});
+
+test("PLANT v2: a PR touching migrations/ is refused by the tick", async () => {
+  const { outcome, merges } = await tickPlant(["src/jobs.ts", "migrations/0016_outcome_notes.sql"]);
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "paths_not_refused");
+});
+
+test("PLANT v2: a PR whose CI lacks the integration suite is refused by the tick", async () => {
+  const steps = AUTO_MERGE_REQUIRED_CI.map((r) => r.step).filter((s) => s !== "Integration tests");
+  const { outcome, merges } = await tickPlant(["src/jobs.ts"], { steps });
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "ci_green");
+  assert.match(outcome.why ?? "", /Integration tests/);
+});
+
+test("PLANT v2: a PR from the seat's job is refused by the tick", async () => {
+  const { outcome, merges } = await tickPlant(["src/jobs.ts"], { claimedBy: "agent:seat" });
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "author_is_driver");
+  assert.match(outcome.why ?? "", /kind 'seat', not a driver/);
+});
+
+test("the tick refuses when the Actions run list cannot be read", async () => {
+  const env = await enabledEnv();
+  const routes = { ...tickRoutes(["src/jobs.ts"]), [`GET ${OWNER}/actions/runs`]: { status: 403, text: "Resource not accessible by integration" } };
+  await withFetch(routes as never, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
+    assert.equal(report.outcomes[0].failed, "ci_green");
+    assert.match(report.outcomes[0].why ?? "", /403/);
+    assert.equal(calls.filter((c) => c.method === "PUT").length, 0);
   });
 });
 
@@ -466,7 +728,7 @@ test("PLANT: a protected path on the SECOND page of files is seen, and the PR is
   assert.equal(report.outcomes.length, 1);
   assert.equal(merges, 0, "a PR whose 101st file is a migration was auto-merged");
   assert.equal(report.outcomes[0].merged, false);
-  assert.equal(report.outcomes[0].failed, "paths_unprotected", report.outcomes[0].why ?? "");
+  assert.equal(report.outcomes[0].failed, "paths_not_refused", report.outcomes[0].why ?? "");
   assert.match(report.outcomes[0].why ?? "", /migrations\/0099_planted\.sql/);
 });
 

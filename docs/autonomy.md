@@ -12,16 +12,18 @@ capsid included**, so passing these checks ships to production with no human:
 
 | check | what it requires |
 | --- | --- |
+| `paths_not_refused` | the changed-file list was read whole, and no path matches the policy's refused paths: the scorer and its scripts, the holdout suite, the policy and signer sources, the protected path list, migrations, wrangler config, secrets, and the files that define the checks |
+| `paths_not_money` | no changed path names a billing or payment surface |
+| `no_migration_workflow_lockfile` | no changed path is a migration, a workflow or a lockfile |
 | `body_names_job` | the PR body carries the id of the job the work came from |
 | `author_is_driver` | that job was claimed by a minted, unrevoked agent of kind `driver` |
 | `base_is_default_branch` | the PR targets the repo's default branch |
-| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, and at least one reported |
-| `paths_unprotected` | no changed path matches `PROTECTED_PATH_PATTERNS`, the list the loop enforces |
-| `paths_not_money` | no changed path names a billing or payment surface |
-| `no_migration_workflow_lockfile` | no changed path is a migration, a workflow or a lockfile |
+| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the unit suite, the four typechecks and the integration suite to success |
 
-The document names the checks and the code enforces them. A check the Worker runs that
-the document does not name is refused at load time. A test asserts the two agree in
+Tests, `src/`, docs, `CLAUDE.md` and `.claude/` merge on green since policy version 2 (2026-09-17). The improve loop's `PROTECTED_PATH_PATTERNS` still decides what the loop may edit and no longer decides what auto-merges.
+
+The document names the checks, the refused paths and the required CI steps, and the code
+enforces them. A document that disagrees with the code on any of the three is refused at load time. A test asserts the two agree in
 both directions. A pull request failing any check is left open, audited with the check
 that refused it, and reported under `improve_status` as awaiting the seat.
 
