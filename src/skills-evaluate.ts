@@ -1,6 +1,4 @@
 import type { Env } from "./env";
-import { dispatchWorkflow } from "./github";
-import { SCORER_WORKFLOW } from "./improve-schema";
 import { improveAudit } from "./improve-state";
 import {
   acceptEdit,
@@ -14,20 +12,33 @@ import { commitTransition, dueTransitions } from "./skills-records";
 
 // ---- the evaluation cycle -------------------------------------------------------
 //
-// GROUP 4. A skill's status moves on evaluation evidence, and this is what produces
-// it: on a cadence, every candidate and live skill has its namespace's probe set run
-// in the scorer sandbox twice, with the skill and without it, and the difference is
-// recorded. Nothing here decides a status; ./skills-records reads the rows and
+// GROUP 4. A skill's status moves on evaluation evidence, and this APPLIES that
+// evidence: it reads the rows already recorded and commits the transitions they
+// decide. Nothing here decides a status; ./skills-records reads the rows and
 // ./skills-lifecycle decides. The split is deliberate, because the deciding half is
 // then testable without a sandbox.
+//
+// SCHEDULED PROBING WAS DROPPED, 2026-09-16 (option C, capsid/decisions.md). This
+// cycle used to dispatch the scorer workflow per skill with `mode`, `skill_id` and
+// `skill_version`. That workflow declares none of those and requires three inputs the
+// cycle never sent, so GitHub rejected every such dispatch and the cycle logged the
+// error: no probe ever ran, and no skill_evaluations row was ever written by anything.
+// The probe was not repaired because a working one needs what has never existed: the
+// loop's attempt path, model spend, and a probe set defined nowhere. Evidence now
+// comes from VERIFIED JOB OUTCOMES and scored improve attempts, which are signals
+// GitHub already produces. The writer that turns a job outcome into a
+// skill_evaluations row is job_6464e6d62063 and is deliberately not implemented here.
 
 export const CADENCE_KEY = "skills:evaluate:cadence-days";
 export const LAST_CYCLE_KEY = "skills:evaluate:last";
 
-// BIWEEKLY BY DEFAULT, and KV-configurable. Fortnightly rather than nightly because
-// an evaluation costs two full probe-set runs per skill, and because the transition
-// rules need two evaluations to move anything: a cadence faster than the thing it
-// feeds just spends CI to reach the same answer sooner.
+// BIWEEKLY BY DEFAULT, and KV-configurable. This gate is now the only thing keeping
+// the transition pass off all but one tick in four thousand, and it costs one KV read
+// on the rest. It is UNCHANGED from the probing design on purpose: what the right
+// cadence is for a pass that now only reads evidence somebody else wrote is a separate
+// question from dropping the probe, and it is left to the job that starts writing that
+// evidence. The consequence to know is that a status moves up to a fortnight after the
+// evidence that decides it lands.
 export const DEFAULT_CADENCE_DAYS = 14;
 
 // The floor. A cadence of zero or a negative number would run the cycle on every
@@ -69,23 +80,22 @@ export function cycleDue(lastIso: string | null, days: number, now: Date): DueVe
 export interface CycleReport {
   ran: boolean;
   note: string;
-  dispatched: Array<{ skill: string; namespace: string }>;
   transitions: Array<{ skill: string; from: SkillStatus; to: SkillStatus; reason: string }>;
 }
 
 /**
- * One pass: apply whatever the stored evidence already decides, then dispatch the
- * next round of measurements.
+ * One pass: apply whatever the stored evidence already decides.
  *
- * TRANSITIONS FIRST, deliberately. A skill that this cycle's evidence retires should
- * not have its next evaluation dispatched, and doing the reads in the other order
- * would spend two probe-set runs measuring something about to be retired.
+ * This cycle DISPATCHES NOTHING. It used to end by sending one scorer run per skill;
+ * see the note at the head of this file for why that was dropped rather than fixed.
+ * What remains is the half that was always correct: read the evaluations, commit the
+ * transitions they decide, audit each one.
  */
 export async function runEvaluationCycle(env: Env, now: Date): Promise<CycleReport> {
   const days = await cadenceDays(env);
   const last = await env.APP_KV.get(LAST_CYCLE_KEY).catch(() => null);
   const verdict = cycleDue(last, days, now);
-  if (!verdict.due) return { ran: false, note: verdict.reason, dispatched: [], transitions: [] };
+  if (!verdict.due) return { ran: false, note: verdict.reason, transitions: [] };
 
   const transitions: CycleReport["transitions"] = [];
   for (const { skill, verdict: decision } of await dueTransitions(env)) {
@@ -104,31 +114,10 @@ export async function runEvaluationCycle(env: Env, now: Date): Promise<CycleRepo
     ]);
   }
 
-  // What is left to measure, after the retirements above have taken effect.
-  const remaining = await env.DB.prepare(
-    `SELECT id, version, source_namespace FROM improve_skills WHERE status IN ('candidate', 'live')`
-  ).all<{ id: string; version: number; source_namespace: string }>();
-
-  const dispatched: CycleReport["dispatched"] = [];
-  for (const skill of remaining.results ?? []) {
-    try {
-      await dispatchWorkflow(env, skill.source_namespace, SCORER_WORKFLOW, {
-        mode: "skill-probe",
-        skill_id: skill.id,
-        skill_version: String(skill.version),
-      });
-      dispatched.push({ skill: skill.id, namespace: skill.source_namespace });
-    } catch (err) {
-      // One namespace that will not dispatch does not stop the rest of the cycle.
-      console.error(`SKILL_PROBE_DISPATCH_FAILED ${skill.id}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
   await env.APP_KV.put(LAST_CYCLE_KEY, now.toISOString());
   return {
     ran: true,
-    note: `${verdict.reason} ${transitions.length} transition(s), ${dispatched.length} probe(s) dispatched.`,
-    dispatched,
+    note: `${verdict.reason} ${transitions.length} transition(s).`,
     transitions,
   };
 }

@@ -32,6 +32,5 @@ normalizeDashes
 onRoster
 pathProblem
 readSkillBody
-recordSkillOutcome
 runId
 seedScoresDoc

@@ -146,20 +146,11 @@ export async function candidateSkills(
     .slice(0, limit);
 }
 
-export function recordSkillOutcome(db: D1Database, skillId: string, kept: boolean): D1PreparedStatement[] {
-  return [
-    db
-      .prepare(
-        kept
-          ? "UPDATE improve_skills SET wins = wins + 1 WHERE id = ?1"
-          : "UPDATE improve_skills SET losses = losses + 1 WHERE id = ?1"
-      )
-      .bind(skillId),
-    db
-      .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'improve-skill-outcome', ?2, NULL, ?3)")
-      .bind(IMPROVE_ACTOR, "capsid", JSON.stringify({ skill_id: skillId, kept })),
-  ];
-}
+// recordSkillOutcome WAS DELETED 2026-09-16. It was a second credit system: it took
+// `kept` and nothing else, so it charged a LOSS to a skill the model was offered and
+// declined to use, which the 2026-09-12 attribution ruling says earns nothing. The one
+// writer of wins and losses is now attributionStatements in ./skills-records, which
+// applies that ruling through attribute().
 
 export async function readSkillBody(db: D1Database, skill: SkillRow): Promise<string> {
   const row = await db

@@ -106,9 +106,12 @@ test("a throwing cycle does not stop the tick", async () => {
   });
 });
 
-test("transitions are applied before the next round is dispatched", async () => {
-  // Dispatching first would spend two probe-set runs measuring a skill this cycle's
-  // evidence is about to retire.
+test("transitions are still applied, and the cycle dispatches nothing at all", async () => {
+  // Was: "transitions are applied before the next round is dispatched". That ordering
+  // mattered while the cycle ended by dispatching a probe per surviving skill. Option C
+  // (2026-09-16) dropped the probe, so there is no second half to order against and the
+  // property worth holding is the stronger one: the transition half still works, and
+  // neither skill produces a dispatch.
   await withFetch(DISPATCH_ROUTES, async (calls) => {
     const { env: e, fake } = cycleEnv();
     fake.rows.improve_skills.push(
@@ -118,8 +121,11 @@ test("transitions are applied before the next round is dispatched", async () => 
     fake.rows.skill_evaluations.push(negative("fading", "01"), negative("fading", "02"));
     const report = await runEvaluationCycle(e, NOW);
     assert.deepEqual(report.transitions.map((t) => [t.skill, t.to]), [["fading", "retired"]]);
-    const dispatched = calls.filter((c) => c.method === "POST").map((c) => (c.body as { inputs: { skill_id: string } }).inputs.skill_id);
-    assert.deepEqual(dispatched, ["fresh"], "the skill retired this cycle was dispatched anyway");
+    assert.deepEqual(
+      calls.filter((c) => c.method === "POST").map((c) => c.path),
+      [],
+      "the cycle dispatched something. Scheduled probing was dropped; a POST from here is the dead probe returning."
+    );
   });
 });
 
