@@ -175,6 +175,7 @@ test("the panel renders every agent, revoked ones included, and never a key", ()
         reason: null,
       },
       protected_paths: [],
+      policies: { gates: { version: "1", enabled: true }, auto_merge: { version: "3", enabled: true } },
       agents,
       namespaces: [],
     },
