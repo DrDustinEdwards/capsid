@@ -9,9 +9,15 @@ export function blockHash(text: string): string;
 export function normalizePins(text: string): string;
 export function preservePinComments(sourceBlock: string, targetBlock: string): string;
 export const SOURCE_ROOT: string;
+export function requireCurrent(dir: string, ref: string, label: string): void;
+export function remoteHead(dir: string, ref: string, label: string): string;
+export function requireRemoteCurrent(dir: string, ref: string, label: string): void;
+export function requireLanded(dir: string, ref: string, runs: string, label: string): void;
 export interface SyncTarget {
   dir: string;
   ref: string;
+  /** The ref the repo RUNS, when that is not the ref the copier writes. */
+  runs?: string;
   label: string;
 }
 export const TARGETS: SyncTarget[];

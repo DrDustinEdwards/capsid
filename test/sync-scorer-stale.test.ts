@@ -4,7 +4,6 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-// @ts-expect-error - a .mjs script with no type declarations, driven here for real.
 import { requireCurrent } from "../scripts/sync-scorer.mjs";
 
 // A CLONE THAT HAS NEVER FETCHED AGREES WITH ITSELF AND WITH NOTHING ELSE.
