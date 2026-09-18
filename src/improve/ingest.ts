@@ -12,7 +12,8 @@ import {
 } from "../improve-schema";
 import { checkHoldout, readHoldoutManifest, type ScoreReport } from "../improve-scorer";
 import { anchorVerdict, compare, type MetricMap } from "../improve-scores";
-import { abstractSkill, recordSkill, recordSkillOutcome } from "../improve-skills";
+import { abstractSkill, recordSkill } from "../improve-skills";
+import { attributionStatements } from "../skills-records";
 import {
   advanceRun,
   attemptById,
@@ -274,7 +275,15 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
         JSON.stringify(report.secondary)
       ),
     ...scoreStatements(env.DB, run.id, run.namespace, attempt.id, { ...anchors, ...report.secondary }),
-    ...(attempt.skill_id ? recordSkillOutcome(env.DB, attempt.skill_id, keep) : []),
+    // SCORED, SO THE SIGNAL IS A VERDICT ON THE WORK. The attempt carried the skill
+    // through to a measured score, so it was used; kept is a win and reverted a loss.
+    ...(attempt.skill_id
+      ? attributionStatements(env.DB, {
+          offered: [attempt.skill_id],
+          used: [attempt.skill_id],
+          signal: keep ? "verified-success" : "verified-failure",
+        })
+      : []),
     ...(archive
       ? await improveDocStatements(env.DB, {
           namespace: run.namespace,
@@ -351,8 +360,11 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
 //   reverts / consecutive_reverts  they mean "measured and rejected", and five of
 //                                  them restore the namespace to best. A machine
 //                                  that never ran is not evidence about the code.
-//   recordSkillOutcome             a skill is not worse for having been proposed on
-//                                  a night the runner broke.
+//   attributionStatements          a skill is not worse for having been proposed on
+//                                  a night the runner broke. attribute() says the same
+//                                  thing for "environment-failure", so this is now
+//                                  agreement between the two rather than a special
+//                                  case kept only here.
 //   scoreStatements                the metrics in this report were produced by the
 //                                  failure. Storing them would put a 0 into the
 //                                  series the next comparison reads as real.
@@ -505,7 +517,15 @@ async function recordLateScore(
   }
 
   await env.DB.batch([
-    ...(attempt.skill_id ? recordSkillOutcome(env.DB, attempt.skill_id, keep) : []),
+    // SCORED, SO THE SIGNAL IS A VERDICT ON THE WORK. The attempt carried the skill
+    // through to a measured score, so it was used; kept is a win and reverted a loss.
+    ...(attempt.skill_id
+      ? attributionStatements(env.DB, {
+          offered: [attempt.skill_id],
+          used: [attempt.skill_id],
+          signal: keep ? "verified-success" : "verified-failure",
+        })
+      : []),
     improveAudit(env.DB, "improve-late-score", run.namespace, {
       run_id: run.id,
       attempt_id: attempt.id,

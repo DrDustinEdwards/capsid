@@ -22,7 +22,8 @@ import {
   type RunStatus,
 } from "../improve-schema";
 import { selectBase } from "../improve-select";
-import { candidateSkills, readSkillBody, recordSkillOutcome } from "../improve-skills";
+import { candidateSkills, readSkillBody } from "../improve-skills";
+import { attributionStatements } from "../skills-records";
 import {
   activeRun,
   advanceableRuns,
@@ -328,7 +329,11 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'reverted', ?7, ?8, 0)`
         )
         .bind(id, run.namespace, run.id, proposal.summary || null, note, choice.attemptId, baseSha, skill?.id ?? null),
-      ...(skill ? recordSkillOutcome(env.DB, skill.id, false) : []),
+      // OFFERED, NOT USED. The model was handed the skill and proposed nothing, so
+      // nothing it did followed the skill. Under the attribution ruling that earns
+      // nothing in either direction, and attribute() returns "none" for it, so this
+      // produces no write at all. Until 2026-09-16 it charged a loss.
+      ...(skill ? attributionStatements(env.DB, { offered: [skill.id], used: [], signal: "verified-failure" }) : []),
     ]);
     await advanceRun(env.DB, {
       runId: run.id,
@@ -361,7 +366,10 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'flagged', ?7, ?8, 0, 1, ?5)`
         )
         .bind(id, run.namespace, run.id, proposal.summary || null, preflight.reason, choice.attemptId, baseSha, skill?.id ?? null),
-      ...(skill ? recordSkillOutcome(env.DB, skill.id, false) : []),
+      // USED AND REFUSED. The model did propose, following whatever the skill said,
+      // and the deterministic path monitor rejected the result before it was pushed.
+      // That is a verdict on the work itself, so the skill takes the loss.
+      ...(skill ? attributionStatements(env.DB, { offered: [skill.id], used: [skill.id], signal: "verified-failure" }) : []),
     ]);
     await advanceRun(env.DB, {
       runId: run.id,
