@@ -19,6 +19,8 @@ import {
   type ServedProtectedPath,
 } from "./improve-schema";
 import { verifyAnchors } from "./improve-scores";
+import { loadGatePolicy } from "./gate-policy";
+import { loadMergePolicy } from "./auto-merge";
 import {
   IMPROVE_ACTOR,
   improveAudit,
@@ -195,6 +197,21 @@ export interface StatusReport {
   // any push, through scripts/path-guard.mjs. Served rather than copied so a pattern
   // added to PROTECTED_PATH_PATTERNS is in the next call's response.
   protected_paths: ServedProtectedPath[];
+  // THE SIGNED POLICIES' VERSION, SERVED (2026-09-18). /improve step 4b tells a driver
+  // to read capsid/policy/gates.md for the version it must pass as approved_by_policy.
+  // A namespace-scoped driver cannot read the capsid namespace, so every driver except
+  // capsid's was refused at that first step and had nothing to pass: claude-skills
+  // job_33d90163ad1e, 2026-09-17. It refused to guess, which was right.
+  //
+  // ONLY THE VERSION AND WHETHER IT IS ON. Not the body, and not the classes: a driver
+  // needs to name the version it is approving under, and nothing else. The body stays
+  // readable only by a caller scoped to the capsid namespace.
+  //
+  // The version is reported only when the policy actually LOADS, signature verified and
+  // agreeing with the code. A policy the Worker would refuse to act on reports why
+  // instead of a version, because a driver that passed a version from an unloadable
+  // document would be refused at the resume with a less obvious message.
+  policies: PolicyVersions;
   // THE CREDENTIAL INVENTORY, on the console a driver already reads. An inventory
   // that can only be seen by calling a separate admin-only tool is one nobody looks
   // at, and last_seen only answers "is this credential still in use" if somebody
@@ -248,6 +265,29 @@ async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   // whatever it was handed.
   const records = await loadAgentRecords(db, inventory);
   return inventory.map((agent) => ({ ...agent, record: records[agent.name] }));
+}
+
+/** One signed policy as a driver needs it: which version, and whether it is on. */
+export type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
+
+export interface PolicyVersions {
+  gates: ServedPolicy;
+  auto_merge: ServedPolicy;
+}
+
+async function servedPolicies(env: Env): Promise<PolicyVersions> {
+  // Each load verifies the stored document's signature and checks it describes no less
+  // than the code enforces. A throw is reported, not raised: a driver asking what
+  // version is current should not have status fail because a policy is being re-signed.
+  const one = async (load: () => Promise<{ policy: { version: string; enabled: boolean } } | { error: string }>): Promise<ServedPolicy> => {
+    try {
+      const loaded = await load();
+      return "error" in loaded ? { reason: loaded.error } : { version: loaded.policy.version, enabled: loaded.policy.enabled };
+    } catch (err) {
+      return { reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  };
+  return { gates: await one(() => loadGatePolicy(env)), auto_merge: await one(() => loadMergePolicy(env)) };
 }
 
 export async function improveStatus(
@@ -349,6 +389,7 @@ export async function improveStatus(
       "cost_usd is an ESTIMATE computed from token counts and published rates, including cache read and write multipliers. It is for sanity-checking, not accounting.",
     budget,
     protected_paths: servedProtectedPaths(),
+    policies: await servedPolicies(env),
     // THE CREDENTIAL INVENTORY IS FOR THE SEAT. It names every agent, its namespaces,
     // its grants and the blast-radius flags it holds, which is precisely the map an
     // agent looking to widen itself would want, and it was attached even when the
