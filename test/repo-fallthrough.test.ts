@@ -606,6 +606,63 @@ test("ci_status finds the failing step BY TIMESTAMP, since its name is not in th
   );
 });
 
+// THE TWO CLOCKS HAVE DIFFERENT PRECISION. Reproduced from this repo's run
+// 35300342260, attempt 1, step verify:live: the jobs API reported completed_at
+// 2026-09-18T02:43:48Z, truncated to the second, while the step's own failure output
+// is stamped 02:43:48.29 through 02:43:48.81. An upper bound of `at <= to` cut every
+// one of those lines and returned 1549 bytes labelled "whole", so the reader was told
+// the failing step's complete output did not contain the failure.
+const SUBSECOND_LOG = [
+  "2026-09-18T02:43:45.1000000Z setup noise nobody asked for",
+  "2026-09-18T02:43:46.8697156Z ##[group]Run npm run verify:live",
+  "2026-09-18T02:43:47.4117562Z PASS  1 health + provenance",
+  "2026-09-18T02:43:47.6486773Z PASS  1c backup freshness",
+  // Everything below here lands after the truncated second and used to be dropped.
+  "2026-09-18T02:43:48.2975644Z PASS  2b canary client record",
+  "2026-09-18T02:43:48.7756331Z PASS  2 register (fresh client)",
+  "2026-09-18T02:43:48.8080189Z [TypeError: fetch failed] { [cause]: Error: read ECONNRESET }",
+  "2026-09-18T02:43:48.8184600Z ##[error]Process completed with exit code 1.",
+  // And the cleanup, which must STILL be excluded: widening by one second must not
+  // reach the next step, or the fix trades one wrong region for another.
+  "2026-09-18T02:43:50.3555580Z ##[group]Run node scripts/reap-probe-clients.mjs",
+  "2026-09-18T02:43:50.8815118Z reap: deleted client but it still reads back",
+  "2026-09-18T02:43:51.9000000Z Cleaning up orphan processes",
+].join("\n");
+
+const SUBSECOND_STEP = {
+  name: "verify:live",
+  conclusion: "failure",
+  started_at: "2026-09-18T02:43:46Z",
+  completed_at: "2026-09-18T02:43:48Z",
+};
+
+test("ci_status keeps the failure that lands AFTER the step's truncated completed_at", async () => {
+  await withFetch(
+    {
+      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
+      "GET /repos/o/r/actions/runs/42/jobs": {
+        body: { jobs: [{ id: 9, name: "live gate", conclusion: "failure", steps: [SUBSECOND_STEP] }] },
+      },
+      "GET /repos/o/r/actions/jobs/9/logs": { text: SUBSECOND_LOG },
+    },
+    async () => {
+      const out = (await ciStatus(makeEnv(), "ns", undefined, { logTail: true })) as {
+        failed_run: { log?: string; log_region?: string };
+      };
+      const body = out.failed_run.log ?? "";
+      // The whole point: the error is in the sub-second tail.
+      assert.match(body, /ECONNRESET/, "the uncaught exception was cut off by the truncated upper bound");
+      assert.match(body, /exit code 1/, "the step's own failure marker was cut off");
+      assert.match(body, /PASS {2}2b canary/, "output between the truncated second and the real end was dropped");
+      // Still bounded on both sides.
+      assert.equal(/setup noise/.test(body), false, "output from before the step leaked in");
+      assert.equal(/reap: deleted client/.test(body), false, "the NEXT step leaked in; the widening overshot");
+      assert.equal(/orphan processes/.test(body), false, "post-run cleanup leaked in");
+      assert.match(out.failed_run.log_region ?? "", /timestamp window/);
+    }
+  );
+});
+
 test("ci_status NAMES the fallback when the step has no usable window", async () => {
   // Failing to locate the step is allowed; claiming to have located it is not.
   await withFetch(

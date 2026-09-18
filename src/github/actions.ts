@@ -105,6 +105,24 @@ export const CI_LOG_BUDGET = 64 * 1024;
 // Every log line carries an ISO timestamp and the jobs API gives each step's
 // started_at and completed_at, so the step's output is the lines inside that
 // window. On that run it is 51 lines and 3137 bytes against a 93KB job log.
+//
+// THE TWO CLOCKS HAVE DIFFERENT PRECISION, AND THAT SILENTLY CUT THE FAILURE OFF.
+// A log line is stamped to seven decimal places; the jobs API reports a step's
+// started_at and completed_at to the SECOND, truncated down. So `at <= to` discards
+// everything between the truncated second and the step's real end, which is up to a
+// full second of output, and it is the LAST second: exactly where the error lands.
+//
+// Measured on this repo's run 35300342260, attempt 1, step verify:live. The API
+// reported completed_at 2026-09-18T02:43:48Z; the step's own last line, the
+// `Process completed with exit code 1` marker, is stamped 02:43:48.8184600Z. The
+// window therefore ended at gate 1c (02:43:47.6486773Z) and dropped gates 2b and 2
+// and the whole uncaught-exception dump. What came back was 1549 bytes labelled
+// "whole", so the reader was told the failing step's complete output did not contain
+// the failure. It cost an incident the first look at its own cause.
+//
+// Truncating DOWN only ever widens the lower bound, so `from` needs no adjustment.
+// The upper bound is extended to the end of the second the API named.
+const STEP_STAMP_PRECISION_MS = 1000;
 function failingStepLog(
   log: string,
   step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined
@@ -120,7 +138,7 @@ function failingStepLog(
         const stamp = /^(\S+Z)/.exec(line);
         if (!stamp) return false;
         const at = Date.parse(stamp[1]);
-        return Number.isFinite(at) && at >= from && at <= to;
+        return Number.isFinite(at) && at >= from && at < to + STEP_STAMP_PRECISION_MS;
       })
       .join("\n");
     if (windowed.length > 0) {

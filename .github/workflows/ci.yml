@@ -230,6 +230,17 @@ jobs:
           set -euo pipefail
           HEALTH_URL=https://capsid.dustin-edwards.workers.dev/health
           ROLLBACK_FROM=$(curl -fsS "$HEALTH_URL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).sha??"unknown")}catch{process.stdout.write("unreadable")}})')
+          # ROLL BACK ONLY WHAT THIS RUN PUT LIVE. `needs.deploy.result` survives a
+          # rerun of just this job, so the `if:` above is true on a rerun whose deploy
+          # happened in an earlier attempt and has already been rolled back. On
+          # 2026-09-18 that ran the rollback a second time and "the previous version"
+          # was the refused commit, moving production forward onto it. The guard
+          # compares what is live NOW against this run's own commit; see the script.
+          if ! node scripts/rollback-guard.mjs "${ROLLBACK_FROM}" "${GITHUB_SHA}"; then
+            echo "::error::not rolling back. master and production may disagree; a human decides."
+            echo "rollback_skipped: live=${ROLLBACK_FROM} this_run=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           echo "::warning::the live gate failed against ${ROLLBACK_FROM}; rolling back to the previous version"
           npx --yes wrangler@4.107.0 rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
           # The rollout is not instant, so read the sha back rather than assuming.
