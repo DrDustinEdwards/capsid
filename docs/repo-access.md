@@ -7,6 +7,6 @@ A namespace can map to several repos, each with a label (for example `primary` a
 - **Read**: `list_repo_tree`, `read_repo_file`, `search_code`, `repo_refs`, `repo_history`, `ci_status`
 - **Write**: `write_repo_file`, `create_branch`, `delete_branch`, `open_pr`, `delete_repo_file`, `manage_pr`, `ci_dispatch`
 
-`write_repo_file` defaults to `mode: "pr"` (commit to a new branch, open a pull request). `mode: "direct"` commits to the default branch and needs `can_direct_write`. `manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe.
+`write_repo_file` defaults to `mode: "pr"` (commit to a new branch, open a pull request). `mode: "direct"` commits to the default branch and needs `can_direct_write`. `manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch.
 
 `search_code` is a server-side tree walk (a recursive Git Trees listing, then bounded content scans), not GitHub's code search API, which returns empty results for private repositories under an App installation token. Use `path_prefix` to narrow large repos.

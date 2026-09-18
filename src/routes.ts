@@ -407,7 +407,11 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
   const ip = callerIp(request);
   const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
   if (!rate.allowed) {
-    console.error(`CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})`);
+    // The unavailable refusal has already logged itself, naming the failure; logging
+    // it again here as a limit that fired would record a count nobody measured.
+    if (rate.window !== "unavailable") {
+      console.error(`CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})`);
+    }
     return rateLimitedResponse(rate);
   }
 

@@ -345,7 +345,12 @@ export function renderTruthReport(report: TruthReport): string {
   const lines: string[] = [];
   lines.push(`# Truth report - ${report.namespace} - ${report.generated.slice(0, 10)}`);
   lines.push("");
-  lines.push(`integrity: ${report.integrity === null ? "0" : report.integrity}%`);
+  // NOT MEASURED IS NOT ZERO (audit 2026-09-16, defect 4). `integrity` is null when
+  // no check had a subject to judge, and this line rendered that as "integrity: 0%",
+  // which reads as a store in the worst state it can be in. INTEGRITY_LINE does not
+  // match the words, so integrityOf returns null and improve_status reports it as no
+  // report, which is the same answer a missing document gets.
+  lines.push(`integrity: ${report.integrity === null ? "not measured" : `${report.integrity}%`}`);
   lines.push("");
   lines.push(
     "One number and the checks it is made of. Integrity is subjects in good standing over subjects judged, across every check that had a subject to judge. " +

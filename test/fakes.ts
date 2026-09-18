@@ -562,6 +562,15 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         const ns = params[0] as string;
         out = out.filter((d) => d.namespace === ns);
       }
+      // The caller's namespace scope, BOUND rather than written as literals:
+      // resources/list narrows its LIMIT to what the caller may see (src/server.ts),
+      // and a fake that ignored the clause would hand a scoped caller every
+      // namespace's rows, which is the bug that query was rewritten to stop.
+      const boundNsIn = flat.match(/namespace IN \((\?\d+(?:\s*,\s*\?\d+)*)\)/i);
+      if (boundNsIn) {
+        const wanted = boundNsIn[1].split(",").map((token) => params[Number(token.trim().slice(1)) - 1] as string);
+        out = out.filter((d) => wanted.includes(d.namespace));
+      }
       // gather's rules query pins its namespace and its paths as LITERALS rather than
       // binding them. Resolved here too, or the fake hands gather every seeded document as
       // "the rules" and the size arithmetic under test measures the wrong rows.

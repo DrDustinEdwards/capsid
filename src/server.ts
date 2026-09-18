@@ -181,18 +181,26 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
         throw new McpError(ErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
       }
     }
+    // FILTERED IN THE QUERY, so the LIMIT bounds what this caller can SEE rather than
+    // what the store holds. The comment here claimed that for months while the filter
+    // ran in JS over an already-cut page (audit 2026-09-16, defect 6): a caller scoped
+    // to a namespace that sorts late got 501 rows it may not see, an empty page after
+    // filtering, and NO CURSOR, so the walk ended on page one and its own documents
+    // were unreachable. The keyset cursor still names the last row RETURNED, which is
+    // what keeps the walk correct now that the page is whole.
+    const visible = visibleNamespaces === "*" ? null : visibleNamespaces;
+    const nsClause = visible ? ` AND namespace IN (${visible.map((_, i) => `?${i + 4}`).join(", ")})` : "";
     const { results } = await db
       .prepare(
         `SELECT namespace, path, title FROM documents
-         WHERE (?1 = '' AND ?2 = '') OR (namespace > ?1 OR (namespace = ?1 AND path > ?2))
+         WHERE ((?1 = '' AND ?2 = '') OR (namespace > ?1 OR (namespace = ?1 AND path > ?2)))${nsClause}
          ORDER BY namespace, path
          LIMIT ?3`
       )
-      .bind(afterNs, afterPath, MAX_ROWS + 1)
+      .bind(afterNs, afterPath, MAX_ROWS + 1, ...(visible ?? []))
       .all<{ namespace: string; path: string; title: string | null }>();
-    // FILTERED BEFORE THE PAGE IS CUT, so the bound is a bound on what this caller can
-    // see rather than on what the store holds. The cursor still names the last row
-    // returned, which is what keeps the keyset walk correct across a filtered page.
+    // Kept as a second pass on purpose: it is a no-op against the query above, and it
+    // is what still holds if a later edit loses the predicate.
     const scoped = namespaceFilter(results);
     const more = scoped.length > MAX_ROWS;
     const kept = more ? scoped.slice(0, MAX_ROWS) : scoped;
