@@ -58,6 +58,17 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /^src\/auto-merge\.ts$/i, why: "the auto-merge source, which holds this list" },
   { pattern: /^src\/policy-sign\.ts$/i, why: "the policy signer" },
   { pattern: /^src\/improve-schema\.ts$/i, why: "the protected path list" },
+  // ADDED IN VERSION 3. Version 2 refused the sources that run the checks but not the
+  // sources those checks read their answers from. Each of these is a two-step route: a
+  // green driver PR weakens the source and merges on its own, and the next PR then
+  // passes the check it weakened. src/scope.ts and src/improve-task.ts were found by
+  // the seat reviewing PR #70; the other three are what those two delegate to and what
+  // supplies the facts they judge.
+  { pattern: /^src\/scope\.ts$/i, why: "isMoneyPath, which is the whole of the paths_not_money check" },
+  { pattern: /^src\/improve-task\.ts$/i, why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed" },
+  { pattern: /^src\/auth\.ts$/i, why: "the HMAC and the constant-time comparison that verifier delegates to" },
+  { pattern: /^src\/encoding\.ts$/i, why: "the hex encoding of the signature that verifier compares" },
+  { pattern: /^src\/github\/client\.ts$/i, why: "the reader that supplies the changed paths and the CI facts every check judges" },
   { pattern: /^scripts\/path-guard\.mjs$/i, why: "the driver's enforcement of the protected path list" },
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)wrangler\.(jsonc?|toml)(\.example)?$/i, why: "deployment configuration" },

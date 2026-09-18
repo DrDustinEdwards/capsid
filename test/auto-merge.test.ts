@@ -171,10 +171,11 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
     ".github/workflows/improve-score.yml", "scripts/improve-report.mjs", "scripts/sync-scorer.mjs",
     "improve/holdout/capsid/imports.txt", "src/improve-scorer.ts", "test/improve-holdout.test.ts",
     "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/improve-schema.ts",
+    "src/scope.ts", "src/improve-task.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
     "scripts/path-guard.mjs", "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
     "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
   ];
-  assert.equal(AUTO_MERGE_REFUSED_PATHS.length, 20);
+  assert.equal(AUTO_MERGE_REFUSED_PATHS.length, 25);
   for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
     assert.ok(samples.some((s) => pattern.test(s)), `${pattern.source} matches no sample`);
   }
@@ -184,8 +185,36 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
   }
 });
 
+// VERSION 3 (2026-09-17). Version 2 refused the file that asks each question without
+// refusing the file that holds the answer, so each of these was a two-step route: a
+// green driver PR weakens the source, merges on its own, and the next PR passes the
+// check it weakened. Reproduced against the version 2 code before the patterns were
+// added: every one of these five returned merge: true on otherwise-passing facts.
+test("paths_not_refused: the sources the checks read their answers from refuse on their own", () => {
+  const sources = [
+    ["src/scope.ts", "isMoneyPath, the whole of paths_not_money"],
+    ["src/improve-task.ts", "verifySignedBody, how loadMergePolicy decides the policy is signed"],
+    ["src/auth.ts", "the HMAC and the constant-time comparison the verifier delegates to"],
+    ["src/encoding.ts", "the hex encoding of the signature the verifier compares"],
+    ["src/github/client.ts", "the reader that supplies the changed paths and the CI facts"],
+  ];
+  for (const [path, what] of sources) {
+    const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
+    assert.equal(verdict.merge, false, `${path} (${what}) must not merge`);
+    assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
+    // Alongside an innocent path, so the refusal is the path and not the count.
+    const mixed = evaluatePolicy(greenPr({ changedPaths: ["src/jobs.ts", path] }));
+    assert.equal(mixed.merge === false && mixed.failed, "paths_not_refused", `${path} beside src/jobs.ts`);
+  }
+});
+
 test("paths_not_refused: similar-looking paths that are ordinary code are not refused", () => {
-  for (const path of ["src/jobs.ts", "src/improve/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts", "scripts/mint-agents.mjs", "src/environment.ts"]) {
+  for (const path of [
+    "src/jobs.ts", "src/improve/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
+    "scripts/mint-agents.mjs", "src/environment.ts",
+    // Near-misses of the version 3 patterns, each a real file this repo carries.
+    "src/github/refs.ts", "src/improve-state.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
+  ]) {
     const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
     assert.equal(verdict.merge, true, `${path}: ${verdict.merge ? "" : verdict.why}`);
   }
@@ -417,7 +446,8 @@ test("the shipped policy document names exactly the checks the code enforces", (
   );
   assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
   assert.deepEqual(parsed.policy.requiredCi, AUTO_MERGE_REQUIRED_CI.map(requiredCiLabel));
-  assert.equal(parsed.policy.version, "2");
+  assert.equal(parsed.policy.version, "3");
+  assert.equal(parsed.policy.enabled, true);
 });
 
 test("every required CI step is a step the CI workflow actually has", () => {
