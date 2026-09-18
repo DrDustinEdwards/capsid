@@ -24,10 +24,10 @@ import { fakeKv } from "./fakes.ts";
 // because every accepted report becomes an R2 object. The handler already bounded
 // content type, body size and shape; nothing bounded arrival rate.
 //
-// EVERY TEST IS ABOUT ONE OF TWO PROPERTIES: the limit actually fires, and it NEVER
-// fires for the wrong reason. The second matters more. The point of this endpoint
-// is hearing about violations, so a limiter that turns a KV hiccup into silence has
-// destroyed the thing it was added to protect.
+// EVERY TEST IS ABOUT ONE OF TWO PROPERTIES: the limit actually fires, and it says
+// WHY it fired. The second matters more since 2026-09-16, when this endpoint started
+// refusing on a KV failure rather than allowing: a refusal that cannot be told apart
+// from a spent budget is one nobody can diagnose during the outage that caused it.
 //
 // WHY THE HANDLER ITSELF IS SOURCE-SCANNED rather than driven: src/routes.ts
 // imports the Agents SDK, which pulls in `cloudflare:workers`, and node --test
@@ -82,60 +82,97 @@ test("the daily limit fires even when the hour is quiet", async () => {
   assert.deepEqual(kv.puts, [], "a refused report advanced the counter");
 });
 
-// ---- FAIL OPEN, on every path ----------------------------------------------
+// ---- WHAT AN UNREADABLE COUNTER MEANS, per endpoint ------------------------
 //
-// The one rule of this module. The thing guarded is hearing about violations, so
-// every failure below must let the report through. Each is a separate path with its
-// own way of going wrong.
+// REVERSED 2026-09-16 (audit defect 7, job_38ae28d18699). This block used to say the
+// one rule of the module was to fail open everywhere, because the thing guarded is
+// hearing about violations. That reasoning weighed the wrong two costs against each
+// other. /csp-report is UNAUTHENTICATED and every accepted report becomes an R2
+// object, so failing open during a KV outage hands an anonymous caller an unbounded
+// write path to R2; a report dropped during that outage costs one browser diagnostic
+// nobody was waiting on. /register keeps the old answer for the opposite reason,
+// stated on REGISTRATION_LIMIT: refusing there locks the owner out of reconnecting.
+//
+// The two directions are planted separately below, because one function now gives two
+// answers and a test that only drove one of them could not tell them apart.
 
-test("fail open: a KV read that throws still allows", async () => {
+test("PLANT: a KV read that throws REFUSES a csp report, and says it could not measure", async () => {
   const kv = fakeKv({ failGet: true });
-  assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, true, "a KV read failure silenced the endpoint");
+  const verdict = await checkCspReportRate(kv.kv, IP, NOW);
+  assert.equal(verdict.allowed, false, "a KV read failure left the unauthenticated R2 write path unbounded");
+  assert.equal(verdict.window, "unavailable", "the refusal was reported as a spent budget rather than an unmeasured one");
 });
 
-test("fail open: a KV write that throws still allows", async () => {
-  // The counter does not advance, so the ceiling is soft under KV trouble. That is
-  // the intended trade: refusing would punish the caller for the store's problem.
+test("PLANT: a KV write that throws REFUSES too, because the ceiling stops advancing", async () => {
+  // The read succeeded, so this one call is known to be under the limit. The counter
+  // not advancing is what matters: every later call in the window reads the same low
+  // number, and the ceiling is gone for as long as KV is unwell.
   const kv = fakeKv({ failPut: true });
-  assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, true);
+  assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, false);
 });
 
-test("fail open: a non-numeric counter allows WITHOUT writing the corruption back", async () => {
-  // Number("banana") is NaN and every comparison with NaN is false, so dropping the
-  // finite check ALSO allows the call and a test asserting only `allowed` cannot
-  // tell the two apart. A plant proved that.
-  //
-  // The difference is what happens next. Without the check the limiter falls
-  // through to the write and stores String(NaN + 1), which is the literal "NaN",
-  // and every later read of that key is non-numeric too: the limit is then disabled
-  // for that caller for the rest of the window, silently. With it, the read throws,
-  // the limiter fails open on the spot, and NOTHING is written.
+test("PLANT: a non-numeric counter REFUSES, and is not written back", async () => {
+  // Number("banana") is NaN and every comparison with NaN is false, so without the
+  // finite check the limiter falls through to the write and stores String(NaN + 1),
+  // the literal "NaN". Every later read of that key is non-numeric too, so the limit
+  // would be disabled for that caller for the rest of the window, silently.
   const kv = fakeKv({ corrupt: "banana" });
-  assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, true);
+  assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, false);
   assert.deepEqual(kv.puts, [], "a corrupt counter was incremented, poisoning the key for the whole window");
 });
 
-test("fail open: no KV binding allows, and is REPORTED as a binding problem", async () => {
-  // A plant corrected this one. An absent binding is already caught by the read
-  // try/catch (reading .get off undefined throws inside it), so removing the
-  // explicit guard still allows the call and an assertion on `allowed` alone proves
-  // nothing about the guard.
-  //
-  // What the guard buys is the log line, and on a fail-open path the log is the
-  // ONLY output. "no KV binding" names a deploy that is missing APP_KV; the
-  // fallback would report it as a read failure quoting a TypeError, which sends
-  // whoever reads it looking at KV health instead of at wrangler.jsonc.
+test("PLANT: no KV binding REFUSES, and is REPORTED as a binding problem", async () => {
+  // An absent binding is already caught by the read try/catch (reading .get off
+  // undefined throws inside it), so an assertion on `allowed` alone proves nothing
+  // about the explicit guard. What the guard buys is the diagnosis: "no KV binding"
+  // names a deploy missing APP_KV, where the fallback would quote a TypeError and
+  // send whoever reads it looking at KV health instead of at wrangler.jsonc.
   const errors: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
   try {
-    assert.equal((await checkCspReportRate(undefined, IP, NOW)).allowed, true, "a missing KV binding silenced the endpoint");
+    assert.equal((await checkCspReportRate(undefined, IP, NOW)).allowed, false, "a missing KV binding left the endpoint unbounded");
   } finally {
     console.error = original;
   }
   assert.equal(errors.length, 1, `expected one log line, got: ${errors.join(" | ")}`);
   assert.match(errors[0], /CSP_REPORT_RATE_LIMIT_UNAVAILABLE no KV binding/, `wrong diagnosis: ${errors[0]}`);
+  assert.match(errors[0], /refusing/, "the log claimed the report was allowed through");
   assert.doesNotMatch(errors[0], /read failed/, "a missing binding was reported as a KV read failure");
+});
+
+test("an unavailable refusal answers 503 and not 429", async () => {
+  // A 429 would tell the caller it had sent too many when nobody counted anything.
+  const kv = fakeKv({ failGet: true });
+  const verdict = await checkCspReportRate(kv.kv, IP, NOW);
+  assert.equal(verdict.allowed, false);
+  const response = rateLimitedResponse(verdict);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("Retry-After"), "60");
+  assert.match(await response.text(), /rate limiting is unavailable/);
+});
+
+// ---- /register keeps failing open, and that is the point --------------------
+
+test("THE OTHER DIRECTION: every KV failure still ALLOWS a registration", async () => {
+  // An outage must not lock the owner out of reconnecting his own server. Each path
+  // is driven, because they fail in different places and a single case would leave
+  // the rest free to change.
+  for (const [name, kv] of [
+    ["read throws", fakeKv({ failGet: true }).kv],
+    ["write throws", fakeKv({ failPut: true }).kv],
+    ["corrupt counter", fakeKv({ corrupt: "banana" }).kv],
+    ["no binding", undefined],
+  ] as const) {
+    assert.equal((await checkRegistrationRate(kv, IP, NOW)).allowed, true, `a registration was refused when ${name}`);
+  }
+});
+
+test("the two endpoints give OPPOSITE answers to the same KV failure", async () => {
+  // The property the split exists for, asserted as one statement so a refactor that
+  // collapsed the policies back into one rule cannot pass the file.
+  assert.equal((await checkCspReportRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, false);
+  assert.equal((await checkRegistrationRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, true);
 });
 
 // ---- the two policies do not share a budget --------------------------------

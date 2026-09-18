@@ -49,7 +49,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` GitHub OAuth flow
 - `GET /console`, `POST /console`, `GET /console.json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403
-- `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited
+- `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
 - `POST /backup/credential` mints the credential the off-account backup writes with

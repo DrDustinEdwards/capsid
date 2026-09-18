@@ -562,6 +562,19 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         const ns = params[0] as string;
         out = out.filter((d) => d.namespace === ns);
       }
+      // The caller's namespace scope, arriving as ONE bound parameter holding a JSON
+      // array (resources/list, src/server.ts: the statement has to stay static for the
+      // plan walk). Null is the unscoped caller and filters nothing. A fake that
+      // ignored this would hand a scoped caller every namespace's rows, which is the
+      // bug that query was rewritten to stop.
+      const jsonNsIn = flat.match(/\(\?(\d+) IS NULL OR namespace IN \(SELECT value FROM json_each\(\?\d+\)\)\)/i);
+      if (jsonNsIn) {
+        const raw = params[Number(jsonNsIn[1]) - 1];
+        if (typeof raw === "string") {
+          const wanted = JSON.parse(raw) as string[];
+          out = out.filter((d) => wanted.includes(d.namespace));
+        }
+      }
       // gather's rules query pins its namespace and its paths as LITERALS rather than
       // binding them. Resolved here too, or the fake hands gather every seeded document as
       // "the rules" and the size arithmetic under test measures the wrong rows.
