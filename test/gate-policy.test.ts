@@ -641,7 +641,13 @@ const NEVER_EXAMPLES: Record<string, { trigger: string; real: string[] }> = {
   [String.raw`\btruncate\b`]: { trigger: "Truncate long titles", real: ['npx wrangler d1 execute capsid --remote --command "TRUNCATE jobs"'] },
   [String.raw`\brm\s+-rf?\b`]: { trigger: "Explain the rm -rf guard", real: ["rm -rf .improve-build"] },
   [String.raw`\bgh\s+pr\s+merge\b`]: { trigger: "Document gh pr merge", real: ["gh pr merge 23 --merge"] },
-  [String.raw`\bgit\s+push[^\n;&|]*\b(master|main)\b`]: { trigger: "Document git push to main", real: ["git push origin master", 'git push origin "main"'] },
+  [String.raw`\bgit\s+(?:-C\s+\S+\s+)?push[^\n;&|]*\b(master|main)\b`]: {
+    trigger: "Document git push to main",
+    // The `-C` form is here because push_branch accepts it: an entry that only read
+    // `git push` would leave the one check that stops a default-branch push blind to
+    // exactly the shape the driver now writes.
+    real: ["git push origin master", 'git push origin "main"', "git -C C:\\Users\\email\\dev\\worktrees\\capsid push origin master"],
+  },
 };
 
 test("every never entry has an example it refuses and a quoted title it does not, in both directions", () => {
@@ -772,4 +778,53 @@ test("a bare cd stays refused, and the refusal says why", () => {
     assert.ok("refused" in match, `${cmd} was approved`);
     assert.match(match.refused, /changes directory/);
   }
+});
+
+// ---- the worktree form ------------------------------------------------------------
+//
+// THE SHAPE A DRIVER NEEDS WHEN ITS REPO IS NOT THE FOLDER IT STANDS IN. Every
+// dustinedwards block command in the week to 2026-09-19 named its worktree with a
+// `cd`, which the test above refuses, so a driver that was allowed to self-approve a
+// push and a pull request never could (job_1c756c10f584). `-C` and `--repo` name the
+// same directory on the command that uses it.
+
+const WORKTREE = "C:\\Users\\email\\dev\\worktrees\\capsid";
+
+test("git -C <path> push is push_branch, in every path spelling a driver writes", () => {
+  for (const path of [WORKTREE, "C:/Users/email/dev/worktrees/capsid", "../dustinedwards-info", '"C:\\Users\\email\\dev\\my worktree"']) {
+    const match = classifyCommand(`git -C ${path} push -u origin improve/capsid`);
+    assert.ok("klasses" in match, `${path} was refused: ${JSON.stringify(match)}`);
+    assert.deepEqual(match.klasses, ["push_branch"]);
+  }
+});
+
+test("the whole unattended block command classifies, in both host separators", () => {
+  const push = `git -C ${WORKTREE} push -u origin fix/search-additions`;
+  const pr =
+    "gh pr create --repo DrDustinEdwards/dustinedwards-info --base main --head fix/search-additions " +
+    '--title "Add the search additions" --body "Closes job_1c756c10f584; the driver ran this itself."';
+  // PowerShell 5.1 has no `&&`, so the Windows host gets the semicolon. Both are
+  // separators here, and neither may change what the pieces classify as.
+  for (const separator of [" && ", "; "]) {
+    const match = classifyCommand(push + separator + pr);
+    assert.ok("klasses" in match, `${separator} was refused: ${JSON.stringify(match)}`);
+    assert.deepEqual(match.klasses, ["push_branch", "open_pr"], "both halves must place, and in order");
+  }
+});
+
+test("THE DANGEROUS DIRECTION: -C carries no default-branch push and no force flag past the never list", () => {
+  for (const cmd of [
+    `git -C ${WORKTREE} push -u origin master`,
+    `git -C ${WORKTREE} push origin main`,
+    `git -C ${WORKTREE} push --force origin fix/x`,
+  ]) {
+    const match = classifyCommand(cmd);
+    assert.ok("refused" in match, `${cmd} was approved`);
+    assert.match(match.refused, /never list/);
+  }
+});
+
+test("a -C path carrying a glob is not a path this policy reads", () => {
+  const match = classifyCommand("git -C C:\\Users\\email\\dev\\* push -u origin fix/x");
+  assert.ok("refused" in match, "a glob would let the shell pick the directory when the command ran");
 });
