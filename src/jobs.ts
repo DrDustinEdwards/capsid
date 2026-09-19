@@ -3,6 +3,7 @@ import { improveDocStatements, priorDoc } from "./improve-state";
 import {
   JOB_LEASE_SECONDS,
   JOBS_ROWS_MAX,
+  OPEN_JOB_STATUSES,
   jobDocPath,
   corruptRequirement,
   missingForJob,
@@ -168,6 +169,37 @@ async function recordShortfall(db: D1Database, actor: string, job: JobRow): Prom
 // UNCONFIGURED IS A REFUSAL, not a skip. With no IMPROVE_SCORE_SECRET there is no
 // key to sign with, and a queue of unsignable jobs is a queue the driver will
 // refuse one at a time at 03:00 instead of here.
+
+/** The open statuses in prose, derived rather than retyped, so a status added to
+ *  OPEN_JOB_STATUSES cannot leave the refusal claiming a shorter list than the index
+ *  enforces. */
+function openMeans(): string {
+  const names = [...OPEN_JOB_STATUSES];
+  const last = names.pop();
+  return names.length ? `${names.join(", ")} or ${last}` : String(last);
+}
+
+/** WHAT THE DUPLICATE POST COLLIDED WITH. The unique index is the rule and D1's error
+ *  names only the constraint, so the row is read back to say which job is holding the
+ *  title and what state it is in: "there is already one" sends the reader to the
+ *  console to find out whether anybody is waiting on it. A blocked job is the case
+ *  that matters, because it is waiting on a human rather than on a driver.
+ *
+ *  The lookup is the MESSAGE, never the rule: if the holder finished between the
+ *  constraint firing and this read, the refusal still stands and says what it can. */
+async function duplicateRefusal(env: Env, namespace: string, title: string): Promise<string> {
+  const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 3}`).join(", ");
+  const holder = await env.DB.prepare(
+    `SELECT id, status FROM jobs WHERE namespace = ?1 AND title = ?2 AND status IN (${placeholders}) LIMIT 1`
+  )
+    .bind(namespace, title, ...OPEN_JOB_STATUSES)
+    .first<{ id: string; status: string }>()
+    .catch(() => null);
+  const named = holder ? `: ${holder.id} is ${holder.status}` : "";
+  const waiting = holder?.status === "blocked" ? " That one is blocked, which means somebody is already waiting on it." : "";
+  return `${namespace} already has an open job titled '${title}'${named}. Finish or fail that one first, or post this under a different title. Open means ${openMeans()}.${waiting}`;
+}
+
 export async function postJob(
   env: Env,
   agent: Agent,
@@ -261,13 +293,10 @@ export async function postJob(
     await env.DB.batch(statements);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // The partial unique index over (namespace, title) where status is queued or
-    // claimed. Reported as what it means rather than as the constraint's own text.
+    // The partial unique index over (namespace, title) where the status is open.
+    // Reported as what it means rather than as the constraint's own text.
     if (/UNIQUE/i.test(message)) {
-      return refuse(
-        "post",
-        `${args.namespace} already has an open job titled '${title}'. Finish or fail that one first, or post this under a different title. Open means queued or claimed.`
-      );
+      return refuse("post", await duplicateRefusal(env, args.namespace, title));
     }
     throw err;
   }

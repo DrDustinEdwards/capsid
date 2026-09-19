@@ -7,6 +7,7 @@ import { improveStatus, type StatusReport } from "./improve-run";
 import { ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
+import { OPEN_JOB_STATUSES } from "./jobs-schema";
 
 // ---- the watcher ----------------------------------------------------------------
 //
@@ -468,14 +469,23 @@ export interface WatcherReport {
   cleared: string[];
 }
 
-/** The fingerprints of every watcher job still open. A job a driver has already
- *  claimed is left alone: the driver owns it, and closing it underneath would be the
- *  queue losing work. */
+/** The fingerprints of every watcher job still open, over EVERY open status rather
+ *  than queued alone. This map does two jobs, and only one of them wanted the narrow
+ *  read: it decides what the pass skips posting, and it is the list the pass offers to
+ *  `clearFinding`. Queued-only made the skip miss a claimed or blocked copy, which is
+ *  the second half of the 2026-09-18 duplicate: the index did not count blocked as
+ *  open and neither did this.
+ *
+ *  A job a driver claimed, or one blocked for a human, is still left alone: closing it
+ *  underneath its owner would be the queue losing work. That guarantee lives in
+ *  `clearFinding`'s keyed UPDATE, which moves a row only out of `queued`, so widening
+ *  the read here cannot close anything it could not close before. */
 export async function openWatcherFingerprints(env: Env): Promise<Map<string, string>> {
+  const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   const { results } = await env.DB.prepare(
-    `SELECT id, title FROM jobs WHERE posted_by = ?1 AND status = 'queued'`
+    `SELECT id, title FROM jobs WHERE posted_by = ?1 AND status IN (${placeholders})`
   )
-    .bind(WATCHER_ACTOR)
+    .bind(WATCHER_ACTOR, ...OPEN_JOB_STATUSES)
     .all<{ id: string; title: string }>();
   const open = new Map<string, string>();
   for (const row of results ?? []) {
