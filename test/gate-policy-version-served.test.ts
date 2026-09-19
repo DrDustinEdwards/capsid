@@ -59,9 +59,12 @@ const AUTO_MERGE = [
   "",
   ...AUTO_MERGE_REFUSED_PATHS.map(({ pattern, why }) => `- path \`${pattern.source}\` ${why}.`),
   "",
-  "## Required CI",
-  "",
-  ...AUTO_MERGE_REQUIRED_CI.map((r) => `- step \`${requiredCiLabel(r)}\``),
+  ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
+    `## Required CI, ${ns}`,
+    "",
+    ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
+    "",
+  ]),
 ].join("\n");
 
 async function envWith(documents: DocRow[], secret: string | undefined = SECRET) {
