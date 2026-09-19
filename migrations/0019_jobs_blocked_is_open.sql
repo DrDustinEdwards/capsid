@@ -1,0 +1,29 @@
+-- A BLOCKED JOB COUNTS AS OPEN.
+--
+-- WHAT THIS FIXES. The partial unique index from migrations/0006 covered queued and
+-- claimed, so a blocked job held no title. Measured 2026-09-18: job_3bde47744566 was
+-- claimed and then blocked for the seat, and the watcher's next pass twelve minutes
+-- later posted job_e50feeceb99c with the same title and the same fingerprint. A
+-- driver had to claim the copy and fail it by hand.
+--
+-- WHY BLOCKED BELONGS IN THE CLAUSE. Blocked is the most open a job can be: it is a
+-- pause with somebody waiting on it, `resume` takes the same row back to claimed, and
+-- the job carries its own outcome across the gate. A second copy costs a driver run
+-- to close and tells the human the same thing twice.
+--
+-- WHY THE INDEX AND NOT A CHECK IN THE HANDLER. The index is what makes the rule hold
+-- for every poster rather than for the one that remembered, and only SQLite can
+-- enforce it against two posts racing. src/jobs.ts reads the row after the constraint
+-- fires so the refusal can name it; that lookup is the message, never the rule.
+--
+-- STILL PARTIAL. done and failed hold nothing, so a recurring title recurs, which is
+-- what the partial clause bought in the first place.
+--
+-- DROP THEN CREATE, because SQLite cannot alter an index's WHERE clause in place. The
+-- name is kept so nothing that reads the schema by name has to change. Applying this
+-- against a database that already holds a blocked job sharing a title with an open one
+-- FAILS, deliberately: two open copies of the same work is the state this index exists
+-- to forbid, and it has to be resolved by finishing one of them rather than by the
+-- migration picking a winner.
+DROP INDEX IF EXISTS jobs_open_title;
+CREATE UNIQUE INDEX IF NOT EXISTS jobs_open_title ON jobs (namespace, title) WHERE status IN ('queued', 'claimed', 'blocked');

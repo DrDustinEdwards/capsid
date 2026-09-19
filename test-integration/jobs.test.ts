@@ -130,12 +130,48 @@ describe("the refusals", () => {
     expect(second.refusal).toMatch(/already has an open job titled 'only once'/);
 
     // And the index is PARTIAL, so the same title is postable again once the first
-    // one is out of queued and claimed. A plain unique index would make a recurring
+    // one is out of the open statuses. A plain unique index would make a recurring
     // job impossible, which is the thing the partial clause buys.
     await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
     await failJob(jobsEnv(), DRIVER, NOW, first.job!.id, "gave up");
     const third = await post({ title: "only once" });
     expect(third.ok, third.refusal).toBe(true);
+  });
+
+  it("A BLOCKED JOB IS OPEN, so the same title cannot be posted over it", async () => {
+    // Measured 2026-09-18: the watcher re-posted an identical finding 12 minutes
+    // after the first copy was blocked for the seat, because the index counted only
+    // queued and claimed. A blocked job is the most open a job can be, since somebody
+    // is waiting on it, and a second copy costs a driver run to close and tells the
+    // human the same thing twice.
+    const first = await post({ title: "waiting on the seat" });
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, first.job!.id, {
+      reason: "needs a merge",
+      command: "gh pr merge 1 --squash",
+    });
+    expect(blocked.ok, blocked.refusal).toBe(true);
+    expect((await row(first.job!.id))?.status).toBe("blocked");
+
+    const second = await post({ title: "waiting on the seat" });
+    expect(second.ok).toBe(false);
+    // THE REFUSAL NAMES THE ROW. "there is already one" sends the reader to the
+    // console to find out which one and whether anyone is waiting on it.
+    expect(second.refusal).toMatch(new RegExp(`${first.job!.id} is blocked`));
+    expect(second.refusal).toMatch(/queued, claimed or blocked/);
+  });
+
+  it("a failed or done job does not hold the title, so a recurring job still recurs", async () => {
+    // The other direction of the same rule, kept explicit: widening the index to
+    // blocked must not quietly make every title permanent.
+    for (const finish of ["fail", "complete"] as const) {
+      const posted = await post({ title: `recurs by ${finish}` });
+      await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
+      if (finish === "fail") await failJob(jobsEnv(), DRIVER, NOW, posted.job!.id, "gave up");
+      else await completeJob(jobsEnv(), DRIVER, NOW, posted.job!.id, { result_summary: "done" });
+      const again = await post({ title: `recurs by ${finish}` });
+      expect(again.ok, `${finish}: ${again.refusal}`).toBe(true);
+    }
   });
 
   it("a caller that already holds a claim cannot take another", async () => {
