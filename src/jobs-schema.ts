@@ -9,11 +9,15 @@ import { checkScope } from "./scope";
 export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-// The states a job can be claimed out of or is still holding a slot in. The partial
-// unique index in migrations/0006_jobs.sql names the same two values, and
-// test/jobs.test.ts asserts the two agree: a status added here and not there would
-// let two open jobs share a title.
-export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed"];
+// The states a job is still holding a slot in. The partial unique index names the
+// same values, and test/jobs.test.ts asserts the two agree against the LAST migration
+// that defines that index: a status added here and not there would let two open jobs
+// share a title.
+//
+// BLOCKED IS OPEN (migrations/0019). It is a pause with somebody waiting on it, and
+// `resume` takes the same row back to claimed. Leaving it out is what let the watcher
+// re-post a finding twelve minutes after the first copy was blocked for the seat.
+export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "blocked"];
 
 // THE STATES A JOB IS FINISHED IN. A job's mirrored document closes on these and
 // stays active on the rest, so `brief` and `search` stop carrying finished work as

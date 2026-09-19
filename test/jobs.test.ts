@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, TERMINAL_JOB_STATUSES, isJobStatus, isTerminalJobStatus, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
@@ -21,19 +21,57 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // FILE, so the statuses the code believes in and the statuses the index enforces
 // cannot drift apart.
 
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0006_jobs.sql"), "utf8");
+const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
+const MIGRATION = readFileSync(join(MIGRATIONS_DIR, "0006_jobs.sql"), "utf8");
 
-test("the partial index and OPEN_JOB_STATUSES name the same two statuses", () => {
+/** Every definition of the jobs_open_title index across migrations/, in the order
+ *  wrangler applies them. The LAST one is the index the database ends up with, which
+ *  is the reason this reads the directory instead of one file: migrations/0019
+ *  redefines the index 0006 created, and a guard pinned to 0006 would have gone on
+ *  asserting the superseded clause. */
+function openTitleIndexClauses(): { file: string; statuses: string[] }[] {
+  const found: { file: string; statuses: string[] }[] = [];
+  for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+    const definition = /CREATE UNIQUE INDEX[^;]*?jobs_open_title[^;]*?WHERE status IN \(([^)]*)\)/i.exec(sql);
+    if (!definition) continue;
+    found.push({
+      file,
+      statuses: definition[1]
+        .split(",")
+        .map((s) => s.trim().replace(/'/g, ""))
+        .sort(),
+    });
+  }
+  return found;
+}
+
+test("the partial index and OPEN_JOB_STATUSES name the same statuses", () => {
   // The index is what refuses a duplicate open job; OPEN_JOB_STATUSES is what the
   // code believes it says. Both directions, so adding a status to one and not the
   // other is a build failure rather than a duplicate nobody expected.
-  const clause = /WHERE status IN \(([^)]*)\)/.exec(MIGRATION);
-  assert.ok(clause, "the partial unique index is gone from migrations/0006_jobs.sql");
-  const inIndex = clause[1]
-    .split(",")
-    .map((s) => s.trim().replace(/'/g, ""))
-    .sort();
-  assert.deepEqual(inIndex, [...OPEN_JOB_STATUSES].sort());
+  const clauses = openTitleIndexClauses();
+  // TWO definitions today: 0006 created the index and 0019 widened it to blocked.
+  // Stated as a count so a regex that silently stops matching fails here rather than
+  // passing over an empty list.
+  assert.equal(clauses.length, 2, `expected 2 definitions of jobs_open_title, found ${clauses.map((c) => c.file).join(", ") || "none"}`);
+  assert.equal(clauses[0].file, "0006_jobs.sql");
+  const effective = clauses[clauses.length - 1];
+  assert.deepEqual(
+    effective.statuses,
+    [...OPEN_JOB_STATUSES].sort(),
+    `${effective.file} is the last definition of the index, and it disagrees with OPEN_JOB_STATUSES`
+  );
+});
+
+test("BLOCKED IS AN OPEN STATUS, in the code and in the index the database ends up with", () => {
+  // The 2026-09-18 duplicate, pinned from both sides. The watcher re-posted a finding
+  // twelve minutes after the first copy was blocked for the seat, because neither the
+  // index nor the code counted a blocked job as holding its title.
+  assert.ok(OPEN_JOB_STATUSES.includes("blocked"), "a blocked job is a pause with somebody waiting on it, which is open");
+  const effective = openTitleIndexClauses().at(-1);
+  assert.ok(effective, "no migration defines jobs_open_title");
+  assert.ok(effective.statuses.includes("blocked"), `${effective.file} does not count a blocked job as open`);
 });
 
 test("every status the code knows is a status the migration's comment declares", () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ROLES } from "../scripts/mint-agents.mjs";
 import { allowsToolAction } from "../src/agents-schema.ts";
+import { OPEN_JOB_STATUSES } from "../src/jobs-schema.ts";
 import { checkScope } from "../src/scope.ts";
 import {
   BLOCKED_STALE_HOURS,
@@ -384,14 +385,18 @@ test("newestMigration takes the last by name, and ignores what is not a migratio
   assert.equal(newestMigration([]), null);
 });
 
-test("openWatcherFingerprints reads only QUEUED jobs the watcher itself posted", async () => {
+test("openWatcherFingerprints reads every OPEN job the watcher itself posted", async () => {
+  // Queued alone was the watcher's half of the 2026-09-18 duplicate: this map is what
+  // the pass skips on, so a claimed or blocked copy was invisible to it. Closing
+  // somebody else's job is still impossible, because clearFinding's UPDATE is keyed on
+  // queued; the test below this one pins that.
   const seen: unknown[][] = [];
   const env = {
     DB: {
       prepare: (sql: string) => {
         const flat = sql.replace(/\s+/g, " ");
         assert.match(flat, /posted_by = \?1/, "a read that is not keyed on the watcher would adopt other people's jobs");
-        assert.match(flat, /status = 'queued'/, "a job a driver has claimed is the driver's, not the watcher's to close");
+        assert.match(flat, /status IN \(\?2, \?3, \?4\)/, "the skip must see every open status, or a blocked finding posts twice");
         return {
           bind: (...b: unknown[]) => {
             seen.push(b);
@@ -409,7 +414,7 @@ test("openWatcherFingerprints reads only QUEUED jobs the watcher itself posted",
     },
   } as never;
   const open = await openWatcherFingerprints(env);
-  assert.deepEqual(seen, [[WATCHER_ACTOR]]);
+  assert.deepEqual(seen, [[WATCHER_ACTOR, ...OPEN_JOB_STATUSES]]);
   assert.deepEqual([...open.entries()], [["ci-red-abc", "job_1"]], "a title with no fingerprint is not a watcher finding");
 });
 
