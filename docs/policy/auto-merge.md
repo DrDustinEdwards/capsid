@@ -6,14 +6,27 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 3
+- version: 4
 - enabled: true
-- namespaces: capsid
+- namespaces: capsid, dustinedwards
 
 This file ships the value that is signed, so `enabled` reads `true` here because the
-policy is on for capsid. Turning it on or off is a ruling, and the document is on the
-ordinary write tool's refusal list, so changing it needs `allow_improve_paths: true`
-and the `can_touch_protected` flag, and lands in the audit log.
+policy is on. Turning it on or off is a ruling, and the document is on the ordinary
+write tool's refusal list, so changing it needs `allow_improve_paths: true` and the
+`can_touch_protected` flag, and lands in the audit log.
+
+Version 4 adds dustinedwards and makes the required CI steps per namespace. The step
+list was one array of capsid's own step names, so naming a second namespace in it
+would have checked capsid's steps against another repo's workflow and refused every
+pull request there: fail-closed, and also useless, because nothing would ever merge.
+Ruled 2026-09-19 on `job_1c756c10f584`, which measured that dustinedwards-info's CI
+shares neither the job name nor a single step name with capsid's.
+
+The refused paths stay one list, extended with dustinedwards-info's judge files. Every
+pattern here is a refusal, so a namespace inheriting another's pattern can only refuse
+more, and capsid has no file matching any of the six added (measured 2026-09-19). A
+refused-path list split per namespace would trade that for a second place to forget a
+pattern.
 
 Version 3 adds five refused paths. Version 2 refused the sources that run the checks
 but not the sources those checks read their answers from, and each of those was a
@@ -75,6 +88,12 @@ list differs from it in either direction.
 - path `^src\/encoding\.ts$` the hex encoding of the signature that verifier compares.
 - path `^src\/github\/client\.ts$` the reader that supplies the changed paths and the CI facts every check judges.
 - path `^scripts\/path-guard\.mjs$` the driver's enforcement of the protected path list.
+- path `^\.github\/workflows\/` any workflow, which is what CI runs.
+- path `^scripts\/check-[^/]*\.mjs$` a check script, which is what the Gates step runs.
+- path `^scripts\/lib\/` the library those check scripts read their rules from.
+- path `(^|\/)\.aislop\/` the slop checker's word lists and allowances.
+- path `(^|\/)workers\/` a worker that ships beside the site.
+- path `(^|\/)package-lock\.json$` the lockfile CI installs from.
 - path `(^|\/)migrations\/` a migration, which runs against the live database.
 - path `(^|\/)wrangler\.(jsonc?|toml)(\.example)?$` deployment configuration.
 - path `(^|\/)\.dev\.vars` a secrets file.
@@ -87,9 +106,13 @@ list differs from it in either direction.
 
 ## Required CI
 
-Each entry is `<workflow path> / <job name> / <step name>`. The CI workflow runs the
-four typechecks and both suites as steps of one job, so a check-run name cannot show
-that any of them ran; the step list can.
+Each entry is `<workflow path> / <job name> / <step name>`, under the namespace whose
+repo it belongs to. A repo runs its suites as steps of one job, so a check-run name
+cannot show that any of them ran; the step list can. A step written under no namespace
+heading does not parse, and a namespace this Worker holds no steps for merges nothing,
+because a green run nobody has written a step list for proves nothing.
+
+## Required CI, capsid
 
 - step `.github/workflows/ci.yml / checks / Typecheck`
 - step `.github/workflows/ci.yml / checks / Typecheck tests`
@@ -97,6 +120,20 @@ that any of them ran; the step list can.
 - step `.github/workflows/ci.yml / checks / Typecheck the copied scorer script`
 - step `.github/workflows/ci.yml / checks / Tests`
 - step `.github/workflows/ci.yml / checks / Integration tests`
+
+## Required CI, dustinedwards
+
+Every step of that repo's one job, ruled 2026-09-19. Install and the build step are
+named alongside the three that judge, so a reordered workflow that drops one refuses
+rather than merging on a run that skipped it. These five names were read off
+dustinedwards-info's `ci.yml` on 2026-09-19; no test in this repo can catch a rename
+there, because this repo does not hold that workflow.
+
+- step `.github/workflows/ci.yml / Gates, clean checkout / Install`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Migrations, stack and content build, publication twins, enhancement bundles, local sync`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Lint`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Slop`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Gates`
 
 ## What a merge means
 
@@ -106,6 +143,13 @@ default branch. capsid does. Ruled 2026-09-16 by Dustin after the first real mer
 the live gate's rollback is the backstop. Extending this policy to another namespace
 authorises unattended production deploys there too, and is decided one namespace at a
 time.
+
+**dustinedwards-info does not.** Its `deploy.yml` is `workflow_dispatch` only, and that
+is a ruling of 2026-08-25 rather than an omission: push-to-deploy was considered in the
+same ruling and refused, because it would make every merge a release. So an auto-merge
+there lands on `main` and ships nothing, and releasing stays `npm run ship` or the
+dispatch button. Measured from that workflow on 2026-09-19. If it ever gains an
+`on: push` deploy, this paragraph is wrong and the namespace needs deciding again.
 
 Anything else waits for the seat. A pull request that fails any check is left open,
 audited with the check that refused it, and reported under `improve_status` as

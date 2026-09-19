@@ -16,6 +16,8 @@ import {
   mergeParams,
   parseMergePolicy,
   autoMergeTick,
+  namespacedCiLabels,
+  requiredCiFor,
   requiredCiLabel,
   type PrFacts,
 } from "../src/auto-merge.ts";
@@ -29,6 +31,10 @@ import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 // that has never been observed failing has not been verified".
 
 const SECRET = "test-improve-secret";
+
+// The required steps are per namespace since version 4. Every fixture below is a
+// capsid pull request, so these are the steps its CI has to show.
+const CAPSID_CI = AUTO_MERGE_REQUIRED_CI.capsid;
 
 // A PR that passes every check. Each test below breaks exactly one field of it, so a
 // refusal can only come from the check that field feeds.
@@ -45,7 +51,7 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     filesProblem: null,
     ciConclusion: "success",
     ciNote: "3 check(s) green",
-    ciSteps: AUTO_MERGE_REQUIRED_CI.map((r) => ({ ...r, conclusion: "success" })),
+    ciSteps: CAPSID_CI.map((r) => ({ ...r, conclusion: "success" })),
     ciStepsProblem: null,
     jobId: "job_4c0ecc28548b",
     jobClaimedBy: "agent:capsid-driver",
@@ -166,7 +172,7 @@ test("paths_not_refused: every path the ruling names refuses on its own", () => 
 
 test("paths_not_refused: every pattern in the list matches at least one path above or below", () => {
   // A pattern nothing matches is a refusal nobody has observed. Count stated: the
-  // list has 20 entries today, and each must be exercised.
+  // list has 31 entries today, and each must be exercised.
   const samples = [
     ".github/workflows/improve-score.yml", "scripts/improve-report.mjs", "scripts/sync-scorer.mjs",
     "improve/holdout/capsid/imports.txt", "src/improve-scorer.ts", "test/improve-holdout.test.ts",
@@ -174,8 +180,11 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
     "src/scope.ts", "src/improve-task.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
     "scripts/path-guard.mjs", "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
     "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
+    // VERSION 4: dustinedwards-info's judge files, on the same one list.
+    ".github/workflows/ci.yml", "scripts/check-all.mjs", "scripts/lib/slop.mjs", ".aislop/allow.txt",
+    "workers/og/index.ts", "package-lock.json",
   ];
-  assert.equal(AUTO_MERGE_REFUSED_PATHS.length, 25);
+  assert.equal(AUTO_MERGE_REFUSED_PATHS.length, 31);
   for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
     assert.ok(samples.some((s) => pattern.test(s)), `${pattern.source} matches no sample`);
   }
@@ -236,19 +245,23 @@ test("paths_not_money: a billing surface never merges", () => {
 });
 
 test("no_migration_workflow_lockfile: a workflow and a lockfile refuse on their own", () => {
-  // Neither is on the refused list, so this check is the only thing refusing them.
-  for (const path of [".github/workflows/ci.yml", "package-lock.json", "pnpm-lock.yaml"]) {
-    const verdict = evaluatePolicy(greenPr({ changedPaths: [path] }));
-    assert.equal(verdict.merge, false, `${path} must not merge`);
-    assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile", path);
+  // The only lockfile still refused by this check alone. Version 4 put every workflow
+  // and package-lock.json on the refused list as well, and the refused list runs
+  // first, so those two are asserted below instead.
+  const verdict = evaluatePolicy(greenPr({ changedPaths: ["pnpm-lock.yaml"] }));
+  assert.equal(verdict.merge, false);
+  assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile");
+
+  // On both lists, and the refused list sees them first. Each stays refused if the
+  // other check is the one that changes, which is why the overlap is deliberate.
+  for (const path of ["migrations/0012_skills.sql", ".github/workflows/ci.yml", "package-lock.json"]) {
+    const both = evaluatePolicy(greenPr({ changedPaths: [path] }));
+    assert.equal(both.merge === false && both.failed, "paths_not_refused", path);
   }
-  // A migration is on both lists, and the refused list sees it first.
-  const migration = evaluatePolicy(greenPr({ changedPaths: ["migrations/0012_skills.sql"] }));
-  assert.equal(migration.merge === false && migration.failed, "paths_not_refused");
 });
 
 test("ci_green: a run that lacks the integration suite never merges", () => {
-  const ciSteps = AUTO_MERGE_REQUIRED_CI.filter((r) => r.step !== "Integration tests").map((r) => ({ ...r, conclusion: "success" }));
+  const ciSteps = CAPSID_CI.filter((r) => r.step !== "Integration tests").map((r) => ({ ...r, conclusion: "success" }));
   const verdict = evaluatePolicy(greenPr({ ciSteps }));
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
@@ -256,10 +269,10 @@ test("ci_green: a run that lacks the integration suite never merges", () => {
 });
 
 test("ci_green: each required step, skipped or missing, refuses on its own", () => {
-  assert.equal(AUTO_MERGE_REQUIRED_CI.length, 6, "the unit suite, four typechecks and the integration suite");
-  for (const required of AUTO_MERGE_REQUIRED_CI) {
+  assert.equal(CAPSID_CI.length, 6, "the unit suite, four typechecks and the integration suite");
+  for (const required of CAPSID_CI) {
     for (const conclusion of ["skipped", "failure", null, "absent"]) {
-      const ciSteps = AUTO_MERGE_REQUIRED_CI.flatMap((r) =>
+      const ciSteps = CAPSID_CI.flatMap((r) =>
         r !== required ? [{ ...r, conclusion: "success" }] : conclusion === "absent" ? [] : [{ ...r, conclusion }]
       );
       const verdict = evaluatePolicy(greenPr({ ciSteps }));
@@ -270,14 +283,47 @@ test("ci_green: each required step, skipped or missing, refuses on its own", () 
 });
 
 test("ci_green: a same-named step in another job or workflow does not count", () => {
-  const ciSteps = AUTO_MERGE_REQUIRED_CI.map((r) =>
+  const ciSteps = CAPSID_CI.map((r) =>
     r.step === "Tests" ? { ...r, job: "score", conclusion: "success" } : { ...r, conclusion: "success" }
   );
   assert.equal(evaluatePolicy(greenPr({ ciSteps })).merge, false);
-  const other = AUTO_MERGE_REQUIRED_CI.map((r) =>
+  const other = CAPSID_CI.map((r) =>
     r.step === "Tests" ? { ...r, workflow: ".github/workflows/improve-score.yml", conclusion: "success" } : { ...r, conclusion: "success" }
   );
   assert.equal(evaluatePolicy(greenPr({ ciSteps: other })).merge, false);
+});
+
+// ---- version 4: the required steps are the namespace's, not the policy's ----------
+
+test("requiredCiFor answers per namespace, and a namespace nobody wrote down gets null", () => {
+  assert.equal(requiredCiFor("capsid")?.length, 6, "the unit suite, four typechecks and the integration suite");
+  assert.equal(requiredCiFor("dustinedwards")?.length, 5, "every step of its one job");
+  assert.equal(requiredCiFor("foxhound"), null, "a roster namespace with no steps written down");
+  assert.equal(requiredCiFor("nonesuch"), null);
+});
+
+test("ci_green: a namespace with no required steps refuses instead of passing on an empty list", () => {
+  // THE ONE WAY THIS COULD HAVE BEEN QUIET. An empty required list makes `notRun`
+  // empty, so ci_green would have passed any run that reported at all.
+  const verdict = evaluatePolicy(greenPr({ namespace: "foxhound", ciSteps: [] }));
+  assert.equal(verdict.merge, false);
+  assert.equal(verdict.merge === false && verdict.failed, "ci_green");
+  assert.match(verdict.merge === false ? verdict.why : "", /no required CI steps are written down/);
+});
+
+test("ci_green: one namespace's green steps do not satisfy another's", () => {
+  const asDustinedwards = AUTO_MERGE_REQUIRED_CI.dustinedwards.map((r) => ({ ...r, conclusion: "success" }));
+  // capsid's PR, dustinedwards' steps all green: the job name differs, so none of
+  // capsid's six are shown to have run.
+  const wrong = evaluatePolicy(greenPr({ ciSteps: asDustinedwards }));
+  assert.equal(wrong.merge, false);
+  assert.equal(wrong.merge === false && wrong.failed, "ci_green");
+  assert.match(wrong.merge === false ? wrong.why : "", /checks \/ Typecheck/);
+
+  // And the same facts under the namespace they belong to do merge, so the refusal
+  // above is the namespace and not something else about the steps.
+  const right = evaluatePolicy(greenPr({ namespace: "dustinedwards", ciSteps: asDustinedwards }));
+  assert.equal(right.merge, true, right.merge ? "" : right.why);
 });
 
 test("ci_green: steps that could not be read never merge", () => {
@@ -339,10 +385,15 @@ const GOOD_POLICY = [
   "",
   ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
   "",
-  "## Required CI",
-  "",
-  ...AUTO_MERGE_REQUIRED_CI.map((r) => `- step \`${requiredCiLabel(r)}\``),
-  "",
+  // ONE SECTION PER NAMESPACE, which is what makes a step's repo readable. The
+  // document has to carry every namespace the code holds steps for, not just the ones
+  // it covers, because loadMergePolicy compares the two lists in both directions.
+  ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
+    `## Required CI, ${ns}`,
+    "",
+    ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
+    "",
+  ]),
 ].join("\n");
 
 test("parseMergePolicy reads the version, the switch and the namespaces", () => {
@@ -425,12 +476,34 @@ test("loadMergePolicy refuses a signed policy whose refused paths or required st
   assert.ok("error" in v1, "a policy with no refused paths must not load");
 });
 
+test("parseMergePolicy files each step under its own namespace heading", () => {
+  const parsed = parseMergePolicy(GOOD_POLICY);
+  assert.ok("policy" in parsed);
+  assert.ok(parsed.policy.requiredCi.includes("capsid / .github/workflows/ci.yml / checks / Tests"));
+  assert.ok(parsed.policy.requiredCi.includes("dustinedwards / .github/workflows/ci.yml / Gates, clean checkout / Gates"));
+});
+
+test("parseMergePolicy refuses a required step written under no namespace heading", () => {
+  const orphan = GOOD_POLICY.replace("## Required CI, capsid", "## Required CI");
+  const parsed = parseMergePolicy(orphan);
+  assert.ok("error" in parsed, "a step whose repo is unstated must not parse");
+  assert.match(parsed.error, /under no namespace heading/);
+});
+
+test("parseMergePolicy does not carry a namespace heading past the next heading", () => {
+  // A step under `## What a merge means` would otherwise be filed under whichever
+  // namespace appeared above it.
+  const trailing = `${GOOD_POLICY}\n## What a merge means\n\n- step \`.github/workflows/ci.yml / checks / Smuggled\`\n`;
+  const parsed = parseMergePolicy(trailing);
+  assert.ok("error" in parsed, "a step after an unrelated heading must not parse");
+});
+
 test("parseMergePolicy does not read a refused path or a step as a check id", () => {
   const parsed = parseMergePolicy(GOOD_POLICY);
   assert.ok("policy" in parsed);
   assert.deepEqual(parsed.policy.checks, [...POLICY_CHECKS]);
   assert.equal(parsed.policy.refusedPaths.length, AUTO_MERGE_REFUSED_PATHS.length);
-  assert.equal(parsed.policy.requiredCi.length, AUTO_MERGE_REQUIRED_CI.length);
+  assert.equal(parsed.policy.requiredCi.length, namespacedCiLabels().length);
 });
 
 // ---- the document that actually ships -------------------------------------------
@@ -445,18 +518,23 @@ test("the shipped policy document names exactly the checks the code enforces", (
     "the shipped document and the code must name the same checks, in both directions"
   );
   assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
-  assert.deepEqual(parsed.policy.requiredCi, AUTO_MERGE_REQUIRED_CI.map(requiredCiLabel));
-  assert.equal(parsed.policy.version, "3");
+  assert.deepEqual(parsed.policy.requiredCi, namespacedCiLabels());
+  assert.equal(parsed.policy.version, "4");
   assert.equal(parsed.policy.enabled, true);
 });
 
 test("every required CI step is a step the CI workflow actually has", () => {
   // A required step the workflow does not have refuses every PR, silently, from the
   // day the step is renamed. Checked against the shipped workflow text.
+  //
+  // CAPSID ONLY, AND THAT IS A REAL GAP. Version 4 added dustinedwards steps, and this
+  // repo does not hold dustinedwards-info's workflow, so nothing here can catch a
+  // rename there. Those five step names were read off that repo's ci.yml on
+  // 2026-09-19 and nothing keeps them honest afterwards.
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
   const stepNames = [...workflow.matchAll(/^\s+- name: (.+)$/gm)].map((m) => m[1].trim());
   assert.match(workflow, /^  checks:\n    name: checks$/m);
-  for (const r of AUTO_MERGE_REQUIRED_CI) {
+  for (const r of CAPSID_CI) {
     assert.equal(r.workflow, ".github/workflows/ci.yml");
     assert.ok(stepNames.includes(r.step), `ci.yml has no step named '${r.step}'`);
   }
@@ -578,7 +656,7 @@ function tickRoutes(changedFiles: string[]) {
       body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
     },
     [`PUT ${OWNER}/pulls/23/merge`]: { body: { sha: "merged00000000000000000000000000000000000" } },
-    ...ciRunRoutes(AUTO_MERGE_REQUIRED_CI.map((r) => r.step)),
+    ...ciRunRoutes(CAPSID_CI.map((r) => r.step)),
   };
 }
 
@@ -655,7 +733,7 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
 
 async function tickPlant(files: string[], opts: { claimedBy?: string; steps?: string[] } = {}) {
   const env = await enabledEnv(opts.claimedBy);
-  const routes = { ...tickRoutes(files), ...ciRunRoutes(opts.steps ?? AUTO_MERGE_REQUIRED_CI.map((r) => r.step)) };
+  const routes = { ...tickRoutes(files), ...ciRunRoutes(opts.steps ?? CAPSID_CI.map((r) => r.step)) };
   let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
@@ -687,7 +765,7 @@ test("PLANT v2: a PR touching migrations/ is refused by the tick", async () => {
 });
 
 test("PLANT v2: a PR whose CI lacks the integration suite is refused by the tick", async () => {
-  const steps = AUTO_MERGE_REQUIRED_CI.map((r) => r.step).filter((s) => s !== "Integration tests");
+  const steps = CAPSID_CI.map((r) => r.step).filter((s) => s !== "Integration tests");
   const { outcome, merges } = await tickPlant(["src/jobs.ts"], { steps });
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "ci_green");
