@@ -6,7 +6,7 @@ reviewable source. The copy the Worker reads is the signed document at
 improve loop task document. An unsigned copy, or one edited after signing, approves
 nothing.
 
-- version: 2
+- version: 3
 - enabled: true
 
 A driver that reaches a push, a migration or a pull request stops and blocks with the
@@ -26,8 +26,8 @@ resume is refused when it matches none.
   ADD COLUMN`, or `CREATE INDEX`. The file is read and every statement is checked.
   Anything the parser does not recognise is a refusal, not a pass, so a statement form
   it has never seen waits for the human.
-- `push_branch` A `git push origin <branch>` for a branch that is not `master` or
-  `main`, with no force flag.
+- `push_branch` A `git push origin <branch>`, or a `git -C <path> push origin <branch>`,
+  for a branch that is not `master` or `main`, with no force flag.
 - `open_pr` A `gh pr create`.
 
 A command made of several shell commands is split on the separators **that are not
@@ -50,6 +50,27 @@ whole command, and a `$` or a backtick anywhere still refuses, because both shel
 expand those inside double quotes. The same quote-aware pass now serves the never list
 and the class matcher, so the two cannot disagree about where a command ends.
 
+**Version 3, 2026-09-19: `git -C <path> push` is a branch push, and `cd <path>; git push`
+is still not.** A driver whose repository is not the folder it stands in, which is every
+dustinedwards rollout, had no way to name its directory and still classify: the
+directory went in as a `cd`, and a `cd` is refused. So every dustinedwards block command
+in the week to 2026-09-19 waited on a human for a push this policy already allowed.
+Measured on `job_1c756c10f584`.
+
+The two forms are not the same risk. A `cd` is its own piece and it moves every piece
+after it, so approving one approves the push, the pull request and anything else that
+follows, in a folder this policy cannot tie to the job's repository. `-C` binds the
+directory to one git invocation, and that piece is still wholly a branch push: the never
+list rules out `master`, `main` and every force spelling whatever folder it runs in,
+which is the whole of what `push_branch` means. The pull request half needs no new shape,
+because `gh pr create --repo <owner>/<name>` already carries its repository as an
+argument.
+
+The path is read as a narrow set of characters rather than as any run of non-spaces,
+because `*` and `?` would leave the shell to choose the directory when the command ran.
+A path with a space is quoted. The Windows host convention of a semicolon separator is
+unaffected: the pieces are split the same way, and each one still has to place.
+
 ## Never on this list
 
 Checked before any class is tried, over the whole command, so a command that both looks
@@ -62,7 +83,7 @@ to master.
 - Setting or deleting a secret, in `wrangler` or in `gh`.
 - Revoking a credential.
 - A force push, in any of its spellings, or a `+refs/` ref update.
-- A push to a default branch.
+- A push to a default branch, in the `git push` and the `git -C <path> push` form.
 - `wrangler deploy` or `wrangler rollback`.
 - Editing `wrangler.jsonc`.
 - Changing the improve loop's mode.

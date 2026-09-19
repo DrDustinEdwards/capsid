@@ -70,6 +70,18 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /^src\/encoding\.ts$/i, why: "the hex encoding of the signature that verifier compares" },
   { pattern: /^src\/github\/client\.ts$/i, why: "the reader that supplies the changed paths and the CI facts every check judges" },
   { pattern: /^scripts\/path-guard\.mjs$/i, why: "the driver's enforcement of the protected path list" },
+  // ADDED IN VERSION 4, and they are dustinedwards-info's judge files. The list stays
+  // one list rather than one per namespace: every pattern here is a refusal, so a
+  // namespace inheriting another's pattern can only refuse more, and capsid has no
+  // file matching any of these (measured 2026-09-19, job_1c756c10f584). A refused-path
+  // list split per namespace would trade that safety for a second place to forget a
+  // pattern.
+  { pattern: /^\.github\/workflows\//i, why: "any workflow, which is what CI runs" },
+  { pattern: /^scripts\/check-[^/]*\.mjs$/i, why: "a check script, which is what the Gates step runs" },
+  { pattern: /^scripts\/lib\//i, why: "the library those check scripts read their rules from" },
+  { pattern: /(^|\/)\.aislop\//i, why: "the slop checker's word lists and allowances" },
+  { pattern: /(^|\/)workers\//i, why: "a worker that ships beside the site" },
+  { pattern: /(^|\/)package-lock\.json$/i, why: "the lockfile CI installs from" },
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)wrangler\.(jsonc?|toml)(\.example)?$/i, why: "deployment configuration" },
   { pattern: /(^|\/)\.dev\.vars/i, why: "a secrets file" },
@@ -90,21 +102,52 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
   return hits;
 }
 
-// THE CI STEPS A GREEN PR MUST HAVE RUN. The CI workflow runs all four typechecks and
-// both suites as steps of one job, so check-run names cannot show that any of them
-// ran. ci_green reads the steps of the newest run of this workflow on the head sha,
-// and each one named here must have concluded success. A skipped step is not a pass.
-export const AUTO_MERGE_REQUIRED_CI: Array<{ workflow: string; job: string; step: string }> = [
-  "Typecheck",
-  "Typecheck tests",
-  "Typecheck integration tests",
-  "Typecheck the copied scorer script",
-  "Tests",
-  "Integration tests",
-].map((step) => ({ workflow: ".github/workflows/ci.yml", job: "checks", step }));
+// THE CI STEPS A GREEN PR MUST HAVE RUN, PER NAMESPACE. A repo's CI runs its suites as
+// steps of one job, so check-run names cannot show that any of them ran. ci_green reads
+// the steps of the newest run of each named workflow on the head sha, and every step
+// named for that namespace must have concluded success. A skipped step is not a pass.
+//
+// PER NAMESPACE BECAUSE THE STEP NAMES BELONG TO THE REPO, NOT TO THIS POLICY. This was
+// one array of capsid's own step names. Naming a second namespace in a policy that
+// checked capsid's steps against another repo's workflow would have refused every pull
+// request there: fail-closed, and also useless, because nothing would ever merge
+// (job_1c756c10f584, 2026-09-19). A namespace with no list here merges nothing, which
+// is the same refusal for a namespace whose CI nobody has written down.
+export interface RequiredStep {
+  workflow: string;
+  job: string;
+  step: string;
+}
 
-export const requiredCiLabel = (r: { workflow: string; job: string; step: string }): string =>
-  `${r.workflow} / ${r.job} / ${r.step}`;
+const ciStep = (job: string) => (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
+
+export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
+  capsid: ["Typecheck", "Typecheck tests", "Typecheck integration tests", "Typecheck the copied scorer script", "Tests", "Integration tests"].map(
+    ciStep("checks")
+  ),
+  // Every step of dustinedwards-info's one job, ruled 2026-09-19. Install and the build
+  // step are named alongside the three that judge, so a reordered workflow that drops
+  // one refuses rather than merging on a run that skipped it.
+  dustinedwards: [
+    "Install",
+    "Migrations, stack and content build, publication twins, enhancement bundles, local sync",
+    "Lint",
+    "Slop",
+    "Gates",
+  ].map(ciStep("Gates, clean checkout")),
+};
+
+/** The steps that namespace's pull requests must have run, or null when none are written down. */
+export function requiredCiFor(namespace: string): RequiredStep[] | null {
+  const rows = Object.hasOwn(AUTO_MERGE_REQUIRED_CI, namespace) ? AUTO_MERGE_REQUIRED_CI[namespace] : undefined;
+  return rows && rows.length > 0 ? rows : null;
+}
+
+export const requiredCiLabel = (r: RequiredStep): string => `${r.workflow} / ${r.job} / ${r.step}`;
+
+/** Every required step as the document writes it, under its namespace's heading. */
+export const namespacedCiLabels = (): string[] =>
+  Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => rows.map((r) => `${ns} / ${requiredCiLabel(r)}`));
 
 export interface MergePolicy {
   version: string;
@@ -112,6 +155,10 @@ export interface MergePolicy {
   namespaces: string[];
   checks: string[];
   refusedPaths: string[];
+  // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
+  // the step was written under. One flat list keeps the load-time agreement check a
+  // single comparison in both directions, so a namespace section present in the code
+  // and missing from the document is caught by the same line that catches a step.
   requiredCi: string[];
 }
 
@@ -132,6 +179,10 @@ const CHECK_ITEM = /^- `([a-z_]+)`/;
 // read as check ids.
 const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
+// The heading a required step is filed under: `## Required CI, <namespace>`. A step
+// written before any such heading is a refusal rather than a step belonging to
+// whichever namespace came first.
+const CI_HEADING = /^##\s+Required CI,\s*([a-z0-9-]+)\s*$/i;
 
 /** Parse the policy body below its frontmatter. Returns the policy or a refusal. */
 export function parseMergePolicy(body: string): { policy: MergePolicy } | { error: string } {
@@ -155,14 +206,27 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   const checks: string[] = [];
   const refusedPaths: string[] = [];
   const requiredCi: string[] = [];
+  let ciNamespace: string | null = null;
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
+    // ANY heading closes the section, so a step under `## What a merge means` is not
+    // filed under the last namespace that happened to appear above it.
+    if (trimmed.startsWith("##")) {
+      const heading = CI_HEADING.exec(trimmed);
+      ciNamespace = heading ? heading[1] : null;
+      continue;
+    }
     const check = CHECK_ITEM.exec(trimmed);
     if (check) checks.push(check[1]);
     const path = PATH_ITEM.exec(trimmed);
     if (path) refusedPaths.push(path[1]);
     const step = STEP_ITEM.exec(trimmed);
-    if (step) requiredCi.push(step[1]);
+    if (step) {
+      if (!ciNamespace) {
+        return { error: `the policy lists required CI step '${step[1]}' under no namespace heading, so which repo's CI it describes is unstated.` };
+      }
+      requiredCi.push(`${ciNamespace} / ${step[1]}`);
+    }
   }
   return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, requiredCi } };
 }
@@ -200,8 +264,18 @@ export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy }
     AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source)
   );
   if (paths) return { error: paths };
-  const steps = listDisagreement("required CI steps", parsed.policy.requiredCi, AUTO_MERGE_REQUIRED_CI.map(requiredCiLabel));
+  const steps = listDisagreement("required CI steps", parsed.policy.requiredCi, namespacedCiLabels());
   if (steps) return { error: steps };
+  // A NAMESPACE THE POLICY COVERS AND NOBODY HAS WRITTEN CI STEPS FOR MERGES NOTHING.
+  // Without this, ci_green's step check would have nothing to compare and would pass
+  // on any run that reported at all, which is the one way a widening here could be
+  // quiet rather than fail-closed.
+  const uncovered = parsed.policy.namespaces.filter((n) => requiredCiFor(n) === null);
+  if (uncovered.length > 0) {
+    return {
+      error: `the policy covers ${uncovered.join(", ")}, for which this Worker holds no required CI steps. A green run there would prove nothing, so it is refused rather than merged.`,
+    };
+  }
   return parsed;
 }
 
@@ -318,7 +392,11 @@ export function evaluatePolicy(facts: PrFacts): PolicyVerdict {
   if (facts.ciStepsProblem) {
     return no("ci_green", `the CI steps on ${sha} could not be read (${facts.ciStepsProblem}), so the required suites are not shown to have run.`);
   }
-  const notRun = AUTO_MERGE_REQUIRED_CI.filter(
+  const required = requiredCiFor(facts.namespace);
+  if (!required) {
+    return no("ci_green", `no required CI steps are written down for namespace '${facts.namespace}', so a green run there shows nothing. It waits for the seat.`);
+  }
+  const notRun = required.filter(
     (r) => !facts.ciSteps.some((s) => s.workflow === r.workflow && s.job === r.job && s.step === r.step && s.conclusion === "success")
   );
   if (notRun.length > 0) {
@@ -398,10 +476,12 @@ interface WorkflowRun {
 }
 
 // The steps of the newest run of each required workflow on this sha. Only workflows
-// AUTO_MERGE_REQUIRED_CI names are read, so an unrelated workflow costs nothing. The
-// run list is filtered by head_sha, which for a pull_request run is the PR head.
+// this namespace's required steps name are read, so an unrelated workflow costs
+// nothing. The run list is filtered by head_sha, which for a pull_request run is the
+// PR head.
 async function ciStepsFor(
   env: Env,
+  namespace: string,
   owner: string,
   repo: string,
   headSha: string
@@ -412,7 +492,7 @@ async function ciStepsFor(
   if (!runsResp.ok) return { steps: [], problem: `the workflow run list returned ${runsResp.status}` };
   const runs = ((await runsResp.json()) as { workflow_runs?: WorkflowRun[] }).workflow_runs ?? [];
   const steps: PrFacts["ciSteps"] = [];
-  for (const workflow of new Set(AUTO_MERGE_REQUIRED_CI.map((r) => r.workflow))) {
+  for (const workflow of new Set((requiredCiFor(namespace) ?? []).map((r) => r.workflow))) {
     const newest = runs.filter((r) => r.path === workflow).sort((a, b) => b.id - a.id)[0];
     // No run of a required workflow leaves its steps absent, which ci_green names.
     if (!newest) continue;
@@ -478,7 +558,7 @@ async function factsForPr(
   const ci = checks.problem
     ? { conclusion: null, note: `the check-run list is incomplete (${checks.problem}), so this PR is not evaluated` }
     : ciVerdict(checks.items);
-  const steps = await ciStepsFor(env, owner, repo, pr.head.sha);
+  const steps = await ciStepsFor(env, namespace, owner, repo, pr.head.sha);
 
   return {
     number: pr.number,

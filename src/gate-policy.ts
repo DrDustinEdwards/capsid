@@ -49,7 +49,11 @@ export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   // push to a default branch. That is the shape every blocked job in this repo
   // carries, so the false positive would have refused the ordinary case while a real
   // one, a `master` in the push's OWN segment, still matches.
-  { pattern: /\bgit\s+push[^\n;&|]*\b(master|main)\b/i, why: "it pushes to a default branch" },
+  //
+  // THE `-C <path>` FORM IS MATCHED HERE TOO, and it has to be. push_branch below
+  // accepts it, so a never list that only read `git push` would have let
+  // `git -C <path> push origin master` through the one check that exists to stop it.
+  { pattern: /\bgit\s+(?:-C\s+\S+\s+)?push[^\n;&|]*\b(master|main)\b/i, why: "it pushes to a default branch" },
 ];
 
 export function deniedReason(command: string): string | null {
@@ -61,7 +65,26 @@ export function deniedReason(command: string): string | null {
 
 // The three classes. Each matches a narrow shape, because a loose matcher on this list
 // is a widening nobody reviewed.
-const PUSH_BRANCH = /^git\s+push\s+(-u\s+|--set-upstream\s+)?origin\s+[A-Za-z0-9._\/-]+\s*$/i;
+//
+// `git -C <path> push ...` IS THE SAME CLASS, and a bare `cd <path>; git push ...` is
+// still refused below. The difference is what the directory reaches. A `cd` is its own
+// segment and it moves every segment after it, so approving one approves a push, a
+// pull request and anything else that follows, in a folder this policy cannot tie to
+// the job's repository. `-C` binds the directory to this one git invocation, and the
+// segment is still wholly a branch push: the never list above rules out master, main
+// and every force spelling whatever folder it runs in, which is the whole of what
+// push_branch means. Without this the driver had no shape that both named its
+// directory and classified, so every dustinedwards block command this week wrote the
+// `cd` form and waited on a human (job_1c756c10f584, 2026-09-19).
+//
+// The path is a narrow character class rather than `\S+` on purpose: `*` and `?` are
+// glob characters, and a path carrying one would be decided by the shell when the
+// command ran rather than by what this matched.
+const REPO_PATH = /(?:-C\s+(?:"[A-Za-z0-9._~:\\/ -]+"|'[A-Za-z0-9._~:\\/ -]+'|[A-Za-z0-9._~:\\/-]+)\s+)?/;
+const PUSH_BRANCH = new RegExp(
+  `^git\\s+${REPO_PATH.source}push\\s+(-u\\s+|--set-upstream\\s+)?origin\\s+[A-Za-z0-9._/-]+\\s*$`,
+  "i"
+);
 const OPEN_PR = /^gh\s+pr\s+create\b/i;
 const MIGRATION = /\bd1\s+execute\s+\S+[^\n]*?--file[= ]\s*(\S+)/i;
 
@@ -205,11 +228,13 @@ function classifySegment(segment: string): { klass: GateClass; migrationPath?: s
   if (OPEN_PR.test(segment)) return { klass: "open_pr" };
   // A BARE `cd` STAYS REFUSED (job_94fa4387f81b). The policy has no way to tie a path
   // to the job's repository, so an approved `cd <path>; git push ...` would approve a
-  // push in whatever folder the path names. A driver runs from its job folder and
-  // blocks without the cd; a command a human relays with a cd is approved by that human.
+  // push in whatever folder the path names, and it would move every later segment
+  // there too. The directory a driver does need to name rides on the command that
+  // uses it: `git -C <path> push ...` and `gh pr create --repo <owner>/<name> ...`,
+  // both of which classify. See REPO_PATH above.
   if (/^(cd|set-location|pushd)\b/i.test(segment)) {
     return {
-      refused: `"${segment.slice(0, 80)}" changes directory, and this policy cannot tell which repository a path belongs to. Block without the cd and name the folder in the reason.`,
+      refused: `"${segment.slice(0, 80)}" changes directory, and this policy cannot tell which repository a path belongs to. Write the directory on the command instead: git -C <path> push, and gh pr create --repo <owner>/<name>.`,
     };
   }
   return { refused: `"${segment.slice(0, 80)}" matches no pre-approved class, so this command waits for the human.` };
