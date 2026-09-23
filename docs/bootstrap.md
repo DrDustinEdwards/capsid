@@ -458,6 +458,15 @@ node scripts/schedule-drivers.mjs --remove --namespace capsid --apply
 - **04:00 stays 04:00 across the daylight-saving switch**, because Task Scheduler takes
   a local wall-clock time. The Worker's own cron needs two UTC expressions and
   `chicagoHour()` to pin the same instant.
+- **The session runs in auto mode.** `claude -p` starts in Manual mode and has nobody
+  to answer a prompt, so a driver started without flags is denied its first tool call;
+  every nightly run did nothing until 2026-09-23. `driverArgs()` passes
+  `--permission-mode auto` and `--permission-prompts none`, pre-approves the Capsid
+  read tools plus `jobs` and `improve_run`, and denies `npm run ship`, `npm run deploy`,
+  `wrangler deploy`, any force push, and the claude.ai Capsid connector, which reaches
+  `/mcp` as the admin. It adds `C:\Users\email\dev\worktrees` as a working directory,
+  because a read outside the working directory is denied in a `-p` run. The scheduled
+  task's command did not change; the task picks this up from the checkout it runs.
 
 A namespace with no `~/.capsid/agent-<ns>-driver.key` is skipped by name rather than
 scheduled on whatever credential happens to be configured.

@@ -177,6 +177,80 @@ async function postLog(ns, origin, key, body, day) {
 
 // ---- run ------------------------------------------------------------------------
 
+// HOW THE DRIVER SESSION IS PERMITTED. `claude -p` starts in Manual mode on every plan
+// and has nobody to answer a prompt, so until 2026-09-23 every nightly run was denied
+// its first tool call (mcp__capsid__improve_status) and did nothing
+// (dustinedwards/jobs/nightly-2026-09-23.md). Auto mode has the classifier review what
+// no rule settles. The mode that skips permission checks is never used here: it
+// would also stop the classifier from reviewing anything no rule names.
+
+// Capsid tools pre-approved for the driver: every tool whose TOOL_GRANTS entry in
+// src/scope.ts is "read", plus the two whose requirement is per action and which the
+// /improve loop drives (jobs, improve_run). The Worker still enforces the driver's own
+// scope on each call, so this list removes a prompt and grants nothing. Every other
+// Capsid tool, the document and repo write tools included, goes to the classifier.
+export const DRIVER_CAPSID_TOOLS = [
+  "list",
+  "read",
+  "brief",
+  "backlinks",
+  "find",
+  "search",
+  "namespaces",
+  "history",
+  "list_repo_tree",
+  "read_repo_file",
+  "search_code",
+  "repo_refs",
+  "repo_history",
+  "ci_status",
+  "improve_status",
+  "improve_run",
+  "jobs",
+];
+
+// Blocked outright, in every mode. Deploys and ships are the human's gate, and a force
+// push can rewrite a branch someone else is on. Each command is listed for both shell
+// tools, and a push is listed with and without `git -C <dir>`, because the /improve
+// command's own push shape names the directory. The claude.ai Capsid connector is
+// denied whole: it reaches /mcp as the OAuth admin, and a driver session must reach
+// Capsid only as its own agent.
+const DENIED_COMMANDS = [
+  "npm run ship*",
+  "npm run deploy*",
+  "wrangler deploy*",
+  "npx wrangler deploy*",
+  "git push --force*",
+  "git push -f*",
+  "git push * --force*",
+  "git push * -f*",
+  "git -C * push --force*",
+  "git -C * push -f*",
+  "git -C * push * --force*",
+  "git -C * push * -f*",
+];
+export const DRIVER_DENIED = [
+  ...DENIED_COMMANDS.flatMap((c) => [`Bash(${c})`, `PowerShell(${c})`]),
+  "mcp__claude_ai_Capsid",
+];
+
+// Where the claude-skills and dustinedwards drivers do their work (improve.md). A read
+// outside the working directory prompts even in auto mode, and a -p run denies it.
+const WORKTREES = "C:\\Users\\email\\dev\\worktrees";
+
+export function driverArgs() {
+  return [
+    "-p", "/improve work",
+    "--permission-mode", "auto",
+    // Anything that would still fall back to a prompt is denied at once, and the model
+    // is told nobody can approve it, rather than retrying.
+    "--permission-prompts", "none",
+    "--add-dir", WORKTREES,
+    "--allowedTools", DRIVER_CAPSID_TOOLS.map((t) => `mcp__capsid__${t}`).join(","),
+    "--disallowedTools", DRIVER_DENIED.join(","),
+  ];
+}
+
 async function runOne(ns) {
   const folder = FOLDERS[ns];
   const key = process.env.CAPSID_DRIVER_KEY ?? readKey(ns);
@@ -184,14 +258,17 @@ async function runOne(ns) {
   // The driver session. Its own credential comes from the project-scoped MCP server
   // configured in that folder, not from this process: the key read above is only for
   // posting the log afterwards, so a failed run still records something.
-  const res = spawnSync("claude", ["-p", "/improve work"], {
+  // No shell: the arguments carry `*`, `(` and spaces, and passing them as an argv
+  // keeps cmd.exe from reading any of them.
+  const res = spawnSync("claude", driverArgs(), {
     cwd: folder,
     encoding: "utf8",
-    shell: true,
     timeout: 4 * 60 * 60 * 1000,
   });
   const finished = new Date().toISOString();
-  const output = `${res.stdout ?? ""}${res.stderr ?? ""}`.trim() || "(no output)";
+  // A claude that never started leaves no stdout, only res.error.
+  const spawnError = res.error ? `\n${res.error.message}` : "";
+  const output = `${res.stdout ?? ""}${res.stderr ?? ""}${spawnError}`.trim() || "(no output)";
   const exitCode = res.status ?? 1;
 
   const day = chicagoDay(new Date());
