@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error a plain .mjs script with no type declarations, imported for its pure helpers
-import { LOG_BUDGET, chicagoDay, keyPath, logPath, renderLog, selected, taskName } from "../scripts/schedule-drivers.mjs";
+import { DRIVER_CAPSID_TOOLS, DRIVER_DENIED, LOG_BUDGET, chicagoDay, driverArgs, keyPath, logPath, renderLog, selected, taskName } from "../scripts/schedule-drivers.mjs";
 import { ROSTER } from "../src/improve-schema.ts";
+import { TOOL_GRANTS } from "../src/scope.ts";
 
 // PART 3 OF THE AUTONOMY ARC, as ruled 2026-09-12: a Windows Task Scheduler task per
 // project folder rather than a cloud routine, because a routine can only reach Capsid
@@ -62,6 +63,58 @@ test("the key is read only to post the log, and every use of its VALUE is a bear
   for (const call of SOURCE.match(/console\.(log|error)\([\s\S]{0,160}?\);/g) ?? []) {
     assert.equal(/\$\{key\}/.test(call), false, `a console call interpolates the key: ${call}`);
   }
+});
+
+// ---- how the headless driver is permitted ---------------------------------------
+
+// `claude -p` starts in Manual mode and cannot answer a prompt, so a driver started
+// without these flags is denied its first tool call. Measured 2026-09-23 on the
+// dustinedwards nightly run.
+
+const flag = (args: string[], name: string) => {
+  const i = args.indexOf(name);
+  assert.ok(i >= 0 && i + 1 < args.length, `${name} is missing`);
+  return args[i + 1];
+};
+
+test("the driver runs in auto mode, and never with permission checks skipped", () => {
+  const args: string[] = driverArgs();
+  assert.equal(flag(args, "-p"), "/improve work");
+  assert.equal(flag(args, "--permission-mode"), "auto");
+  assert.equal(flag(args, "--permission-prompts"), "none");
+  assert.equal(/bypassPermissions|dangerously-skip-permissions/.test(SOURCE), false);
+});
+
+test("runOne spawns claude with driverArgs() and no shell", () => {
+  const run = /async function runOne\([\s\S]*?\n\}/.exec(SOURCE);
+  assert.ok(run, "runOne is gone");
+  assert.match(run[0], /spawnSync\("claude", driverArgs\(\),/);
+  assert.equal(/shell:\s*true/.test(run[0]), false, "a shell would reinterpret the parentheses and wildcards in the tool rules");
+});
+
+test("the pre-approved Capsid tools are exactly the read tools plus jobs and improve_run", () => {
+  // Derived from TOOL_GRANTS in both directions, so a new read tool is either added
+  // here or fails this test, and a write tool can never be pre-approved.
+  const expected = Object.entries(TOOL_GRANTS)
+    .filter(([name, grant]) => grant === "read" || name === "jobs" || name === "improve_run")
+    .map(([name]) => name)
+    .sort();
+  assert.equal(expected.length, 17, "the derived set changed size; check TOOL_GRANTS before trusting this guard");
+  assert.deepEqual([...DRIVER_CAPSID_TOOLS].sort(), expected);
+  const allowed = flag(driverArgs(), "--allowedTools").split(",");
+  assert.deepEqual(allowed.sort(), expected.map((t) => `mcp__capsid__${t}`).sort());
+});
+
+test("deploys, ships and force pushes are denied in both shells, and the admin connector is denied whole", () => {
+  const denied = flag(driverArgs(), "--disallowedTools").split(",");
+  assert.deepEqual(denied, DRIVER_DENIED);
+  for (const shell of ["Bash", "PowerShell"]) {
+    for (const command of ["npm run ship*", "wrangler deploy*", "npx wrangler deploy*", "git push --force*", "git -C * push --force*", "git -C * push * --force*"]) {
+      assert.ok(denied.includes(`${shell}(${command})`), `${shell}(${command}) is not denied`);
+    }
+  }
+  assert.ok(denied.includes("mcp__claude_ai_Capsid"));
+  for (const rule of denied) assert.equal(rule.includes(","), false, `${rule} would split the comma-separated flag`);
 });
 
 // ---- the run log ----------------------------------------------------------------
