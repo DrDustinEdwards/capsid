@@ -86,8 +86,10 @@ version and are never reset, so they cannot answer "two results at version 3", w
 the bar this document states and which is what makes the edit bound matter.
 `dueTransitions` therefore still reads only `skill_evaluations`, and
 `evaluationStatement` still has no production caller, so no candidate has yet been
-promoted. Closing that needs a ruling on where versioned attribution is stored, and the
-options are written up in the pull request for job_6464e6d62063.
+promoted. Having `dueTransitions` read wins and losses was part 3 of job_6464e6d62063,
+and Dustin dropped it on 2026-09-23. Status moves on evaluations only, and wins and
+losses are recorded but do not move a status. The options that were considered are in
+pull request #77.
 
 The console carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute
