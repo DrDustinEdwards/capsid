@@ -111,12 +111,16 @@ export interface FakeR2 {
   // array of arrays because "how many delete calls" and "which keys" are
   // different questions and the backup tests ask both.
   deleted: string[][];
+  // One entry per multipart upload started: its key, each part's size in upload
+  // order, and whether it was aborted.
+  multipart: Array<{ key: string; parts: number[]; aborted: boolean }>;
   bucket: R2Bucket;
 }
 
 export function fakeR2(seed: Record<string, string> = {}, opts: FakeR2Options = {}): FakeR2 {
   const objects = new Map<string, string>(Object.entries(seed));
   const deleted: string[][] = [];
+  const multipart: FakeR2["multipart"] = [];
   const bucket = {
     put: async (key: string, value: string) => {
       objects.set(key, value);
@@ -144,8 +148,44 @@ export function fakeR2(seed: Record<string, string> = {}, opts: FakeR2Options = 
       deleted.push(list);
       for (const key of list) objects.delete(key);
     },
+    // Multipart, for the streamed backup table. complete() enforces R2's rules
+    // rather than assuming them: every part but the last the same size and at least
+    // 5MiB, and parts numbered 1..n in order. A writer that broke either would pass
+    // against a fake that simply concatenated.
+    createMultipartUpload: async (key: string) => {
+      const uploaded = new Map<number, Uint8Array>();
+      multipart.push({ key, parts: [], aborted: false });
+      const record = multipart[multipart.length - 1];
+      return {
+        uploadPart: async (partNumber: number, value: Uint8Array) => {
+          uploaded.set(partNumber, value.slice());
+          record.parts.push(value.length);
+          return { partNumber, etag: `etag-${partNumber}` };
+        },
+        complete: async (parts: Array<{ partNumber: number }>) => {
+          const numbers = parts.map((p) => p.partNumber);
+          if (numbers.some((n, i) => n !== i + 1)) throw new Error(`parts out of order: ${numbers.join(",")}`);
+          const sizes = numbers.map((n) => uploaded.get(n)?.length ?? -1);
+          const head = sizes.slice(0, -1);
+          if (head.some((s) => s !== head[0] || s < 5 * 1024 * 1024)) {
+            throw new Error(`non-final parts must be equal and at least 5MiB: ${sizes.join(",")}`);
+          }
+          const all = new Uint8Array(sizes.reduce((a, b) => a + b, 0));
+          let at = 0;
+          for (const n of numbers) {
+            all.set(uploaded.get(n) as Uint8Array, at);
+            at += (uploaded.get(n) as Uint8Array).length;
+          }
+          objects.set(key, new TextDecoder().decode(all));
+          return {};
+        },
+        abort: async () => {
+          record.aborted = true;
+        },
+      };
+    },
   } as unknown as R2Bucket;
-  return { objects, deleted, bucket };
+  return { objects, deleted, multipart, bucket };
 }
 
 // ---- D1 ---------------------------------------------------------------------
@@ -463,6 +503,19 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (isImproveStatement(flat)) {
       const answered = improveExec(flat, params, rows);
       return answered.handled ? answered.results : [];
+    }
+    // The backup's paged table: its bound, read inside the snapshot batch, and its
+    // pages, read after it. Matched before the plain dump below, which would
+    // otherwise answer a page with every row.
+    if (/^SELECT MAX\(id\) AS max_id FROM document_versions$/i.test(flat)) {
+      return [{ max_id: rows.versions.length ? Math.max(...rows.versions.map((v) => v.id)) : null }];
+    }
+    if (/^SELECT \* FROM document_versions WHERE id > \?1 AND id <= \?2 ORDER BY id LIMIT \?3$/i.test(flat)) {
+      const [after, max, limit] = params as [number, number, number];
+      return rows.versions
+        .filter((v) => v.id > after && v.id <= max)
+        .sort((a, b) => a.id - b.id)
+        .slice(0, limit);
     }
     // The backup dump: SELECT * FROM <table>, no WHERE.
     const dump = flat.match(/^SELECT \* FROM (\w+)/i);
