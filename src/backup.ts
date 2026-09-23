@@ -51,6 +51,83 @@ function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
 }
 
+// THE TABLE THAT IS PAGED RATHER THAN READ WHOLE (2026-09-23, job_be450271dfa9).
+//
+// Reading every table in one batch held the whole database in the isolate. At 38.5MB
+// on 2026-08-17 that fit; at 96.4MB on 2026-09-23, 66.5MB of it version bodies, it
+// did not, and the cron died before its first put from 2026-09-20 on. This table is
+// read in pages of VERSION_PAGE_ROWS, bounded by a MAX(id) taken inside the snapshot
+// batch, and streamed to R2 as a multipart upload, so the object is the same
+// {exported_at, table, rows} shape as every other table and a restore reads it the
+// same way. The bound keeps the one-instant snapshot: a row above it was written
+// after the batch, and the only thing that deletes version rows is this run's own
+// prune, which runs after the export and under the lease.
+const STREAMED_TABLE = "document_versions";
+// The largest version row measured 2026-09-23 was 238KB, so a page is at most ~24MB.
+const VERSION_PAGE_ROWS = 100;
+// R2 requires every part except the last to be the same size, and at least 5MiB.
+const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
+
+// Writes {exported_at, table, rows} with the rows supplied a page at a time. The
+// bytes are identical to JSON.stringify of the whole object, held at most one part
+// and one page at a time.
+async function putJsonStreamed(
+  bucket: R2Bucket,
+  key: string,
+  head: string,
+  pages: AsyncIterable<unknown[]>
+): Promise<void> {
+  const upload = await bucket.createMultipartUpload(key, { httpMetadata: { contentType: "application/json" } });
+  const parts: R2UploadedPart[] = [];
+  const encoder = new TextEncoder();
+  let part = new Uint8Array(MULTIPART_PART_BYTES);
+  let filled = 0;
+  const flush = async () => {
+    parts.push(await upload.uploadPart(parts.length + 1, part.slice(0, filled)));
+    part = new Uint8Array(MULTIPART_PART_BYTES);
+    filled = 0;
+  };
+  const write = async (text: string) => {
+    let bytes = encoder.encode(text);
+    while (bytes.length > 0) {
+      const n = Math.min(bytes.length, MULTIPART_PART_BYTES - filled);
+      part.set(bytes.subarray(0, n), filled);
+      filled += n;
+      bytes = bytes.subarray(n);
+      if (filled === MULTIPART_PART_BYTES) await flush();
+    }
+  };
+  try {
+    await write(head);
+    let first = true;
+    for await (const rows of pages) {
+      for (const row of rows) {
+        await write((first ? "" : ",") + JSON.stringify(row));
+        first = false;
+      }
+    }
+    await write("]}");
+    if (filled > 0 || parts.length === 0) await flush();
+    await upload.complete(parts);
+  } catch (err) {
+    await upload.abort().catch(() => {});
+    throw err;
+  }
+}
+
+async function* versionPages(db: D1Database, maxId: number): AsyncGenerator<unknown[]> {
+  let after = 0;
+  while (after < maxId) {
+    const { results } = await db
+      .prepare(`SELECT * FROM ${STREAMED_TABLE} WHERE id > ?1 AND id <= ?2 ORDER BY id LIMIT ?3`)
+      .bind(after, maxId, VERSION_PAGE_ROWS)
+      .all<{ id: number }>();
+    if (results.length === 0) return;
+    yield results;
+    after = results[results.length - 1].id;
+  }
+}
+
 // Every real table in the schema. test/backup.test.ts derives this list from
 // migrations/ and fails in both directions. Excluded: documents_fts and its
 // documents_fts_* shadow tables, which the sync triggers rebuild from documents,
@@ -212,11 +289,15 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   // 2026-08-17, document_versions 25.8MB and documents 5.4MB on a 38.5MB database
   // against a 128MB isolate. Each result set is stringified, written, and dropped
   // before the next is touched, so at most one serialized copy is alive on top of
-  // the row sets. If this ever pushes an isolate over, move document_versions and
-  // audit_log to their own cadence rather than back to a dump that tears.
+  // the row sets. It did push one over on 2026-09-20, and document_versions is now
+  // paged out of the batch and streamed (STREAMED_TABLE, above).
   const jsonPrefix = `${JSON_PREFIX}${now.replace(/[:.]/g, "-")}/`;
   const jsonKeys: string[] = [];
-  const snapshot = await env.DB.batch(TABLES.map((table) => env.DB.prepare(`SELECT * FROM ${table}`)));
+  const snapshot = await env.DB.batch(
+    TABLES.map((table) =>
+      env.DB.prepare(table === STREAMED_TABLE ? `SELECT MAX(id) AS max_id FROM ${table}` : `SELECT * FROM ${table}`)
+    )
+  );
   let docs: Array<{ namespace: string; path: string; body: string | null }> = [];
   const rowsPerTable: Array<unknown[] | null> = TABLES.map((_, i) => (snapshot[i]?.results ?? []) as unknown[]);
   for (let i = 0; i < TABLES.length; i++) {
@@ -224,9 +305,15 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     const results = rowsPerTable[i] ?? [];
     if (table === "documents") docs = results as typeof docs;
     const key = `${jsonPrefix}${table}.json`;
-    await env.MEDIA.put(key, JSON.stringify({ exported_at: now, table, rows: results }), {
-      httpMetadata: { contentType: "application/json" },
-    });
+    if (table === STREAMED_TABLE) {
+      const maxId = Number((results[0] as { max_id: number | null } | undefined)?.max_id ?? 0);
+      const head = `{"exported_at":${JSON.stringify(now)},"table":${JSON.stringify(table)},"rows":[`;
+      await putJsonStreamed(env.MEDIA, key, head, versionPages(env.DB, maxId));
+    } else {
+      await env.MEDIA.put(key, JSON.stringify({ exported_at: now, table, rows: results }), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    }
     jsonKeys.push(key);
     // documents is retained: the preflight and the markdown mirror both read it.
     if (table !== "documents") rowsPerTable[i] = null;
