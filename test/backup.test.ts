@@ -378,11 +378,108 @@ test("every table is read in ONE D1 batch, not ten round trips", async () => {
 
   const exportBatch = batches.find((b) => b.includes("SELECT * FROM documents"));
   assert.ok(exportBatch, "no batch carried the export; the tables are still read one at a time");
+  // document_versions is the one table read as a BOUND inside the batch and paged
+  // after it, because reading it whole is what killed the isolate from 2026-09-20.
   assert.deepEqual(
     exportBatch,
-    TABLES.map((t) => `SELECT * FROM ${t}`),
+    TABLES.map((t) => (t === "document_versions" ? "SELECT MAX(id) AS max_id FROM document_versions" : `SELECT * FROM ${t}`)),
     "the export batch is not exactly the table list, in order"
   );
+});
+
+// ---- the streamed table (2026-09-23, job_be450271dfa9) ------------------------
+//
+// From 2026-09-20 the cron wrote nothing: 96.4MB of database, 66.5MB of it version
+// bodies, read in one batch into a 128MB isolate. document_versions is now paged
+// and written as a multipart upload. These tests hold the three things that change
+// must not lose: the file is byte-identical to the old one, no row is dropped at a
+// page or part boundary, and the snapshot is still one instant.
+
+function version(id: number, body: string) {
+  return { id, document_id: 1, namespace: "capsid", path: "core.md", title: "t", body, snapshot_at: "2026-09-01 00:00:00" };
+}
+
+test("the streamed versions dump is byte-identical to the whole-object dump, across several parts", async () => {
+  // Three 7MB bodies make a ~21MB file, which crosses two 8MiB part boundaries,
+  // one of them inside a row.
+  const versions = [1, 2, 3].map((id) => version(id, String.fromCharCode(96 + id).repeat(7 * 1024 * 1024)));
+  const { env, r2 } = makeEnv({ documents: DOCS, versions }, MIRROR);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const key = `${result.json_prefix}document_versions.json`;
+  const exportedAt = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string).exported_at;
+  assert.equal(r2.objects.get(key), JSON.stringify({ exported_at: exportedAt, table: "document_versions", rows: versions }));
+  const upload = r2.multipart.find((m) => m.key === key);
+  assert.ok(upload, "document_versions was not written as a multipart upload");
+  assert.equal(upload.parts.length, 3, `expected three parts, got ${upload.parts.join(",")}`);
+});
+
+test("the streamed versions dump pages past one page and keeps every row in id order", async () => {
+  // 250 rows is two full pages of 100 and a partial one. Seeded out of order, so a
+  // pager that did not ORDER BY id would skip rows at the boundary.
+  const versions = Array.from({ length: 250 }, (_, i) => version(250 - i, `v${250 - i}`));
+  const { env, r2 } = makeEnv({ documents: DOCS, versions }, MIRROR);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  assert.deepEqual(
+    dumped.rows.map((r: { id: number }) => r.id),
+    Array.from({ length: 250 }, (_, i) => i + 1)
+  );
+});
+
+test("an empty versions table still writes a valid dump", async () => {
+  const { env, r2 } = makeEnv({ documents: DOCS, versions: [] }, MIRROR);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  assert.equal(dumped.table, "document_versions");
+  assert.deepEqual(dumped.rows, []);
+});
+
+test("a version written after the snapshot batch is not in the dump", async () => {
+  // The bound is what keeps the dump one instant. Without it, a version written
+  // between the batch and the pages would be in the dump while the document write
+  // that caused it was not, which is the torn shape the restore rehearsal checks for.
+  const r2 = fakeR2(MIRROR);
+  const kv = fakeKv({});
+  const d1 = fakeD1({ documents: DOCS, versions: [version(1, "a"), version(2, "b")] });
+  const batch = d1.db.batch.bind(d1.db);
+  let first = true;
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+    const out = await batch(statements);
+    if (first) {
+      first = false;
+      d1.rows.versions.push(version(3, "written after the snapshot"));
+    }
+    return out;
+  }) as typeof batch;
+  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
+});
+
+test("a failed part aborts the multipart upload and fails the run", async () => {
+  const { env, r2, kv } = makeEnv({ documents: DOCS, versions: [version(1, "a")] }, MIRROR);
+  const create = r2.bucket.createMultipartUpload.bind(r2.bucket);
+  (r2.bucket as unknown as { createMultipartUpload: typeof create }).createMultipartUpload = (async (
+    ...args: Parameters<typeof create>
+  ) => {
+    const upload = await create(...args);
+    return { ...upload, uploadPart: async () => { throw new Error("part refused"); } };
+  }) as typeof create;
+  await assert.rejects(() => runBackup(env), /part refused/);
+  assert.equal(r2.multipart.at(-1)?.aborted, true, "the failed upload was left open");
+  assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a failed run stamped itself as fresh");
 });
 
 test("the dump carries the loop's KV pins, by allowlist and never by prefix sweep", async () => {
