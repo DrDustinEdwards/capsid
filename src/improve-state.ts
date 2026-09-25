@@ -1,6 +1,6 @@
 import { sha256Hex } from "./auth";
 import { normalizeDashes } from "./normalize";
-import { snapshotLive } from "./store-guards";
+import { auditStatement, snapshotLive } from "./store-guards";
 import {
   bestKey,
   BUDGET_DEFAULTS,
@@ -325,15 +325,11 @@ export async function improveDocStatements(
       .bind(doc.namespace, doc.path, title, body, doc.type, doc.tags ?? "improve", doc.status ?? "published")
   );
   statements.push(
-    db
-      .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)")
-      .bind(
-        doc.actor ?? IMPROVE_ACTOR,
-        doc.action,
-        doc.namespace,
-        doc.path,
-        JSON.stringify({ bytes: body.length, sha256: await sha256Hex(body), updated: Boolean(doc.prior) })
-      )
+    auditStatement(db, doc.actor ?? IMPROVE_ACTOR, doc.action, doc.namespace, doc.path, {
+      bytes: body.length,
+      sha256: await sha256Hex(body),
+      updated: Boolean(doc.prior),
+    })
   );
   return statements;
 }
@@ -358,7 +354,5 @@ export function improveAudit(
   namespace: string | null,
   params: unknown
 ): D1PreparedStatement {
-  return db
-    .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, NULL, ?4)")
-    .bind(IMPROVE_ACTOR, action, namespace, JSON.stringify(params));
+  return auditStatement(db, IMPROVE_ACTOR, action, namespace, null, params);
 }

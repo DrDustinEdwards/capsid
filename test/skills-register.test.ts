@@ -121,9 +121,9 @@ test("a verified job registers one candidate at version 1, with the namespace ta
   const audits = batch.filter((s) => /INSERT INTO audit_log/.test(s.sql));
   assert.equal(audits.length, 2, "one audit row for the document and one for the registration");
   for (const audit of audits) assert.equal(audit.params[0], "github:admin", "the audit row must name the caller, not the loop");
-  const registered = audits.find((s) => /'skill-registered'/.test(s.sql));
+  const registered = audits.find((s) => s.params[1] === "skill-registered");
   assert.ok(registered);
-  assert.equal(JSON.parse(String(registered.params[2])).source_job, DONE_JOB.id);
+  assert.equal(JSON.parse(String(registered.params[4])).source_job, DONE_JOB.id);
 });
 
 test("null namespaces is stored as NULL, meaning any namespace", async () => {

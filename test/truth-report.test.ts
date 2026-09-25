@@ -350,7 +350,7 @@ test("report mode STORES the report, so the trend is a document", async () => {
       "the report must go through the same upsert the write tool issues"
     );
     assert.ok(
-      flat.some((s) => /INSERT INTO audit_log .* 'lint_report'/.test(s)),
+      recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report"),
       "snapshot rule: no write path skips the audit log, and a report is not an exception"
     );
 

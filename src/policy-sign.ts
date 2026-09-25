@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { sha256Hex } from "./auth";
 import { POLICY_PREFIX } from "./improve-schema";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./improve-task";
-import { documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
+import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
 
 // ---- signing a policy document ------------------------------------------------
 //
@@ -113,17 +113,15 @@ export async function signPolicyDocument(
       requireBodyUnchanged(env.DB, namespace, path, prior.body),
       snapshotLive(env.DB, namespace, path),
       documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
-      env.DB
-        .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'policy-signed', ?2, ?3, ?4)")
-        .bind(
-          actor,
-          namespace,
-          path,
-          // The signature and the hash, not the body. What a reader of the log needs is
-          // which bytes were blessed and when, and the bytes themselves are in the
-          // document and its version snapshot.
-          JSON.stringify({ signature, sha256, bytes: signed.length, resigned: existing !== null })
-        ),
+      // The signature and the hash, not the body. What a reader of the log needs is
+      // which bytes were blessed and when, and the bytes themselves are in the
+      // document and its version snapshot.
+      auditStatement(env.DB, actor, "policy-signed", namespace, path, {
+        signature,
+        sha256,
+        bytes: signed.length,
+        resigned: existing !== null,
+      }),
     ]);
   } catch (err) {
     if (isMissingRowAbort(err)) {
