@@ -1,4 +1,5 @@
 import { hmacHex, timingSafeEqual } from "./auth";
+import type { Env } from "./env";
 
 // Distinct from the score-report and backup-credential contexts on purpose.
 // scripts/improve-derive-key.mjs must match; test/improve-derive-key.test.ts pins both.
@@ -100,3 +101,49 @@ export async function verifyTaskDoc(
   }
   return verifySignedBody(rootSecret, stored, "task document");
 }
+
+// ---- reading a signed policy document -------------------------------------------
+//
+// ONE READER FOR BOTH POLICIES. capsid/policy/auto-merge.md and capsid/policy/gates.md
+// are read, verified and parsed the same way, and each loader carried its own copy of
+// the read, the verify and the field parser. A fix to one copy (the frontmatter parse,
+// audit 2026-09-25 E2-H1) then had to be made twice. The loaders keep only what
+// differs: which document, and what its parsed lists must agree with.
+//
+// It lives in this file because this file is already on the auto-merge refused list
+// as the verifier those loaders rely on, so the reader is covered by the same entry.
+const POLICY_NAMESPACE = "capsid";
+
+/**
+ * Read capsid/<path> and return the signed body, or a refusal. `ifAbsent` finishes
+ * the sentence that reports a missing document ("so nothing is auto-merged").
+ */
+export async function readSignedPolicy(
+  env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET">,
+  path: string,
+  what: string,
+  ifAbsent: string
+): Promise<{ body: string } | { error: string }> {
+  const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
+    .bind(POLICY_NAMESPACE, path)
+    .first<{ body: string | null }>();
+  if (!row) return { error: `no ${what} at ${POLICY_NAMESPACE}/${path}, so ${ifAbsent}.` };
+  const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", what);
+  if (!verdict.ok) return { error: verdict.reason };
+  // The signed body only. The stored text also holds the unsigned frontmatter.
+  return { body: verdict.body };
+}
+
+/** The value of the first `- <name>: <value>` line in a policy body, or null. */
+export function policyField(body: string, name: string): string | null {
+  const line = body
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.toLowerCase().startsWith(`- ${name}:`));
+  return line ? line.slice(line.indexOf(":") + 1).trim() : null;
+}
+
+// A check or class id as a policy writes it: a backticked lowercase name at the head of
+// a list item. Matching the backticks rather than any list item keeps the prose around
+// the list from being read as policy.
+export const POLICY_ID_ITEM = /^- `([a-z_]+)`/;
