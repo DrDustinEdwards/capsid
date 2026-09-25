@@ -6,7 +6,7 @@ import type { Agent } from "../agents";
 import { IMPROVE_OVERRIDE_FLAGS, type ScopeNeed } from "../scope";
 import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
 import { sha256Hex } from "../auth";
-import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive } from "../store-guards";
+import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks } from "../links";
 import { validateDocStatus, validateDocType } from "../doc-meta";
@@ -654,8 +654,12 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
             .bind(namespace, path)
             .first<{ updated_at: string }>()
         : null;
-      const conflict = await commit.run(elicited, statements);
-      if (conflict) return fail(conflict);
+      const committed = await commit.run(elicited, statements);
+      if ("refusal" in committed) return fail(committed.refusal);
+      // From the snapshot statement's own result, not from the pre-read: with no guard
+      // armed, a row deleted between the pre-read and the batch is snapshotted by
+      // nothing (audit 2026-09-25, F3-8). The snapshot is statements[0] when present.
+      const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
       // Warn, do not reject, when an edge points at a document that does not exist.
       // Rejecting would block asserting an edge before its target is written, and a
       // silent dangling edge is how 23 of them accumulated before 2026-08-10.
@@ -704,7 +708,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         ...(writeMode !== "replace" && prior
           ? { bytes_before: new TextEncoder().encode(prior.body ?? "").length }
           : {}),
-        snapshotted: Boolean(prior),
+        snapshotted,
         ...(prior && if_match === undefined
           ? (() => {
               const warning = concurrentEditWarning(atCommit?.updated_at ?? prior.updated_at, Date.now());
@@ -877,8 +881,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
             JSON.stringify({ version_id, snapshot_at: version.snapshot_at, recreated: !prior, snapshotted: Boolean(prior) })
           )
       );
-      const conflict = await commit.run(elicited, statements);
-      if (conflict) return fail(conflict);
+      const committed = await commit.run(elicited, statements);
+      if ("refusal" in committed) return fail(committed.refusal);
       return ok({
         namespace,
         path,
@@ -887,7 +891,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         snapshot_at: version.snapshot_at,
         sha256: await sha256Hex(body),
         bytes: new TextEncoder().encode(body).length,
-        snapshotted: Boolean(prior),
+        // From the snapshot statement's result, as on write (audit 2026-09-25, F3-8).
+        snapshotted: Boolean(prior) && snapshotTaken(committed.results[0]),
         ...(prior ? {} : { note: "the document did not exist and was recreated; its type, status, tags and links are defaults, not the ones it had" }),
       });
     }
