@@ -148,6 +148,18 @@ async function deleteHeadBranchAfterPr(
   }
 }
 
+// A merge refused because the PR head is no longer the sha the caller named. GitHub
+// answers 409 for that case. Thrown only when an expected sha was passed, so a caller
+// that pinned the head can tell this refusal from any other merge failure.
+export class HeadMovedError extends Error {
+  readonly expectedSha: string;
+  constructor(expectedSha: string, detail: string) {
+    super(`merge refused: the PR head is no longer ${expectedSha} (409): ${detail}`);
+    this.name = "HeadMovedError";
+    this.expectedSha = expectedSha;
+  }
+}
+
 export async function managePr(
   env: Env,
   namespace: string,
@@ -155,7 +167,10 @@ export async function managePr(
   action: "merge" | "close" | "comment",
   mergeMethod: "merge" | "squash" | "rebase" = "squash",
   repoSelector?: string,
-  comment?: string
+  comment?: string,
+  // For a merge: the head sha the caller judged. Sent as `sha`, so GitHub merges only
+  // that commit and refuses with 409 if the head moved.
+  expectedSha?: string
 ) {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   // A COMMENT LEAVES THE PULL REQUEST OPEN AND CHANGES NO BRANCH. It is handled
@@ -176,8 +191,9 @@ export async function managePr(
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/merge`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ merge_method: mergeMethod }),
+      body: JSON.stringify(expectedSha ? { merge_method: mergeMethod, sha: expectedSha } : { merge_method: mergeMethod }),
     });
+    if (resp.status === 409 && expectedSha) throw new HeadMovedError(expectedSha, await resp.text());
     if (!resp.ok) throw new Error(`merge failed (${resp.status}): ${await resp.text()}`);
     const data = (await resp.json()) as { sha: string; merged: boolean; message: string };
     // A merge changes the base branch's contents, so it is a write to every path the
