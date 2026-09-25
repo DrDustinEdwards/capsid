@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { MAX_ROWS } from "../src/limits.ts";
 import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
-import { actionArgFor, defaultActionFor, repoWriteFlags, requiredGrant } from "../src/scope.ts";
+import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, reportPath } from "../src/truth-report.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
@@ -96,7 +96,11 @@ test("PLANT: an agent scoped to lint.gather may call lint with no mode at all", 
   });
   try {
     const result = await call(client, "lint", { namespace: "capsid" });
-    assert.doesNotMatch(text(result), /not scoped to/, `a gather-only caller was refused its own default mode: ${text(result)}`);
+    assert.notEqual(result.isError, true, `a gather-only caller was refused its own default mode: ${text(result)}`);
+    const packet = JSON.parse(text(result)) as { mode: string; namespace: string; core: { body?: string } | null };
+    assert.equal(packet.mode, "gather", "an omitted mode did not run gather");
+    assert.equal(packet.namespace, "capsid");
+    assert.equal(packet.core?.body, "the core", "the gather packet came back without the namespace's core document");
   } finally {
     await close();
   }
@@ -319,12 +323,5 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
 
 // ---- 8: closing a pull request deletes a branch ---------------------------------
 
-test("PLANT: a write-grant caller holding no flags is refused manage_pr close", () => {
-  // The flag through the path a caller takes, rather than the table that names it.
-  const caller = narrowedTo(["manage_pr"]);
-  const flags = repoWriteFlags("manage_pr", { action: "close" });
-  assert.ok(flags.length > 0, "close asks for no flag at all");
-  for (const flag of flags) {
-    assert.equal(caller.scopes.flags[flag], false, `a plain driver already holds ${flag}, so this proves nothing`);
-  }
-});
+// A write-grant caller holding no flags is refused manage_pr close: driven through a
+// real MCP call, both directions, as a row of PLANTS in test/blast-radius.test.ts.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "../src/console-activity.ts";
+import { activityFilterFrom, loadActivity } from "../src/console-activity.ts";
 import { fakeD1 } from "./fakes.ts";
 
 // GROUP 5: RECENT ACTIVITY.
@@ -43,24 +43,5 @@ test("the filter values are BOUND, never interpolated into the statement", async
   assert.ok(read.params.includes("agent:x"));
 });
 
-test("the read is bounded at the statement, not sliced afterwards", async () => {
-  const d1 = fakeD1();
-  await loadActivity(d1.db, { namespace: null, actor: null });
-  const read = d1.reads.find((r) => /FROM audit_log/i.test(r.sql));
-  assert.ok(read);
-  assert.match(read.sql, /LIMIT/, "an unbounded read of audit_log would grow with the table");
-  assert.ok(
-    read.params.includes(ACTIVITY_LIMIT),
-    `the limit should be bound, and should be ${ACTIVITY_LIMIT}: ${JSON.stringify(read.params)}`
-  );
-  assert.match(read.sql, /ORDER BY[\s\S]*DESC/i, "recent activity has to be the RECENT rows");
-});
-
-test("both filters narrow together, and each is its own clause", async () => {
-  const d1 = fakeD1();
-  await loadActivity(d1.db, { namespace: "capsid", actor: "github:DrDustinEdwards" });
-  const read = d1.reads.find((r) => /FROM audit_log/i.test(r.sql));
-  assert.ok(read);
-  assert.match(read.sql, /namespace = \?/);
-  assert.match(read.sql, /actor = \?/);
-});
+// The LIMIT, the newest-first order and the two filter clauses are proven by the rows
+// they return from a real audit_log: test-integration/console-activity.test.ts.

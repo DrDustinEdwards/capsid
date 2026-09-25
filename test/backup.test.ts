@@ -357,22 +357,56 @@ test("the dump prune chunks too, not just the mirror", async () => {
 // afterwards. D1's batch is one transaction, so the ten reads now agree with each
 // other by construction and `exported_at` is finally true rather than decorative.
 
-test("every table is read in ONE D1 batch, not ten round trips", async () => {
-  const { env, batches } = makeEnv({ documents: DOCS }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
+test("every table read whole is read at ONE instant, however many writes land between D1 calls", async () => {
+  // A concurrent writer adds one row to every whole-read table before EACH call the run
+  // makes to D1, tagged with a generation number. Tables read in one batch all carry
+  // the same last generation; tables read in separate round trips carry different ones.
+  // document_versions and audit_log are paged after the batch and have their own
+  // one-instant tests below.
+  const r2 = fakeR2(MIRROR);
+  const kv = fakeKv({});
+  const d1 = fakeD1({ documents: DOCS });
+  let generation = 0;
+  // Each write REPLACES the table's array rather than pushing onto it: the fake hands a
+  // read the live array, and a later push would reach into a result already returned.
+  const write = () => {
+    generation += 1;
+    const gen = `gen-${generation}`;
+    const rows = d1.rows;
+    rows.documents = [...rows.documents, { id: 1000 + generation, namespace: "capsid", path: `${gen}.md`, body: gen }];
+    rows.namespaces = [...rows.namespaces, { namespace: gen, repos: "[]" }];
+    rows.links = [...rows.links, { from_ns: "capsid", from_path: `${gen}.md`, type: "references", to_ns: "capsid", to_path: "core.md" }];
+    rows.agents = [...rows.agents, { id: gen, name: gen }];
+    rows.jobs = [...rows.jobs, { id: gen, namespace: "capsid", title: gen, status: "queued" }];
+  };
+  type Stmt = { sql: string; params: unknown[]; bind: (...a: unknown[]) => Stmt; first: () => Promise<unknown>; all: () => Promise<unknown>; run: () => Promise<unknown> };
+  const wrap = (s: Stmt): Stmt => ({
+    ...s,
+    bind: (...a: unknown[]) => wrap(s.bind(...a)),
+    first: async () => (write(), s.first()),
+    all: async () => (write(), s.all()),
+    run: async () => (write(), s.run()),
+  });
+  const db = d1.db as unknown as { prepare: (sql: string) => Stmt; batch: (s: Stmt[]) => Promise<unknown> };
+  const prepare = db.prepare.bind(db);
+  const batch = db.batch.bind(db);
+  db.prepare = (sql: string) => wrap(prepare(sql));
+  db.batch = async (statements: Stmt[]) => (write(), batch(statements));
 
-  const exportBatch = batches.find((b) => b.includes("SELECT * FROM documents"));
-  assert.ok(exportBatch, "no batch carried the export; the tables are still read one at a time");
-  // document_versions and audit_log are read as a BOUND inside the batch and paged
-  // after it, because reading a large table whole is what killed the isolate from
-  // 2026-09-20. Every other table is read whole inside the batch.
-  const paged = ["document_versions", "audit_log"];
-  assert.deepEqual(
-    exportBatch,
-    TABLES.map((t) => (paged.includes(t) ? `SELECT MAX(id) AS max_id FROM ${t}` : `SELECT * FROM ${t}`)),
-    "the export batch is not exactly the table list, in order"
-  );
+  const result = await runBackup(fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv }));
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const lastGeneration = (table: string): number => {
+    const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}${table}.json`) as string) as { rows: Array<Record<string, unknown>> };
+    const gens = dumped.rows.flatMap((r) => Object.values(r).map((v) => String(v).match(/^gen-(\d+)/)?.[1]).filter((g) => g !== undefined)).map(Number);
+    assert.ok(gens.length > 0, `${table} carries no writer row, so this compares nothing`);
+    return Math.max(...gens);
+  };
+  const whole = ["documents", "namespaces", "document_links", "agents", "jobs"];
+  assert.ok(whole.every((t) => (TABLES as readonly string[]).includes(t)), "a table this test seeds is no longer exported");
+  const seen = Object.fromEntries(whole.map((t) => [t, lastGeneration(t)]));
+  assert.equal(new Set(Object.values(seen)).size, 1, `the tables were read at different instants: ${JSON.stringify(seen)}`);
 });
 
 // ---- audit_log is paged too (audit finding F1-3, 2026-09-25) -------------------

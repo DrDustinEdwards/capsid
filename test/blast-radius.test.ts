@@ -92,6 +92,12 @@ const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknow
   },
   {
     flag: "can_merge",
+    tool: "manage_pr",
+    args: { namespace: "capsid", number: 7, action: "close" },
+    what: "a pull request close, which deletes the head branch the way a merge does",
+  },
+  {
+    flag: "can_merge",
     tool: "delete_branch",
     args: { namespace: "capsid", branch: "feature/other-agent", force: true },
     what: "a forced branch delete, which lifts the open-PR refusal and so can delete another agent's PR head",
