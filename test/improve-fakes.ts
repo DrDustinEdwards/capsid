@@ -102,6 +102,8 @@ export interface ImproveRows {
 
 export type ImproveAnswer = { handled: false } | { handled: true; results: unknown[] };
 
+import { evalCond, selectRows, splitTop, sqliteNow } from "./fake-sql.ts";
+
 const flat = (sql: string) => sql.replace(/\s+/g, " ").trim();
 
 export function isImproveStatement(sql: string): boolean {
@@ -112,13 +114,33 @@ export function isImproveStatement(sql: string): boolean {
 // the bound values by POSITION, resolved from the ?N markers rather than assumed
 // to be 1..n in order. A literal in the VALUES list (there is one, `0`) is carried
 // through as itself.
+//
+// The VALUES list is read to its BALANCED closing parenthesis and split at top-level
+// commas. It was matched with `\(([^)]+)\)` until 2026-09-25, which stopped at the `)`
+// inside `datetime('now')`: the attempt row src/improve/tick.ts dispatches got
+// dispatched_at = NaN and the datetime branch below never ran.
+function valuesList(text: string): string | undefined {
+  const open = /VALUES \(/i.exec(text);
+  if (!open) return undefined;
+  let depth = 1;
+  let quoted = false;
+  for (let i = open.index + open[0].length; i < text.length; i++) {
+    const c = text[i];
+    if (c === "'") quoted = !quoted;
+    if (quoted) continue;
+    if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) return text.slice(open.index + open[0].length, i);
+  }
+  return undefined;
+}
+
 function insertRow(sql: string, params: unknown[]): Record<string, unknown> {
   const text = flat(sql);
   const cols = /INSERT INTO \w+ \(([^)]+)\)/i.exec(text)?.[1];
-  const vals = /VALUES \(([^)]+)\)/i.exec(text)?.[1];
+  const vals = valuesList(text);
   if (!cols || !vals) throw new Error(`improve fake: could not parse the INSERT column list from: ${text}`);
   const names = cols.split(",").map((c) => c.trim());
-  const values = vals.split(",").map((v) => v.trim());
+  const values = splitTop(vals, ",");
   if (names.length !== values.length) {
     throw new Error(`improve fake: ${names.length} columns against ${values.length} values in: ${text}`);
   }
@@ -129,7 +151,8 @@ function insertRow(sql: string, params: unknown[]): Record<string, unknown> {
     if (marker) row[name] = params[Number(marker[1]) - 1];
     else if (/^'.*'$/.test(value)) row[name] = value.slice(1, -1);
     else if (value === "datetime('now')") row[name] = "2026-09-01 08:00:00";
-    else row[name] = Number(value);
+    else if (/^-?\d+(\.\d+)?$/.test(value)) row[name] = Number(value);
+    else throw new Error(`improve fake: unmodelled VALUES entry '${value}' in: ${text}`);
   });
   return row;
 }
@@ -254,7 +277,17 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     };
   }
 
+  // The per-namespace kept and reverted totals (src/agent-record.ts,
+  // src/console-reputation.ts). Until 2026-09-25 this fell to the reader below and
+  // came back as one raw row per run instead of one summed row per namespace.
+  if (/^SELECT namespace, .+ FROM improve_runs GROUP BY namespace$/i.test(text)) {
+    return { handled: true, results: selectRows(rows.improve_runs, text, params) };
+  }
+
   if (/FROM improve_runs/i.test(text)) {
+    if (/\b(GROUP BY|SUM\(|COUNT\()/i.test(text)) {
+      throw new Error(`improve fake: an unmodelled aggregate over improve_runs: ${text}`);
+    }
     let out = [...rows.improve_runs];
     if (/WHERE id = \?1/i.test(text)) out = out.filter((r) => r.id === params[0]);
     else {
@@ -278,12 +311,19 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     const [scope, jti] = params;
     const already = rows.improve_jti.some((r) => r.scope === scope && r.jti === jti);
     if (already) return { handled: true, results: [] };
-    rows.improve_jti.push({ scope, jti, seen_at: "2026-09-01 08:00:00" });
+    rows.improve_jti.push({ scope, jti, seen_at: sqliteNow() });
     return { handled: true, results: [{ jti }] };
   }
 
+  // The nightly prune, which drops only nonces older than a day. It cleared the whole
+  // table before 2026-09-25, so a nonce seen minutes ago was forgotten and a replay of
+  // it after a backup would have been accepted here while SQLite refused it.
   if (/^DELETE FROM improve_jti/i.test(text)) {
+    const where = /^DELETE FROM improve_jti WHERE (.+)$/i.exec(text)?.[1];
+    if (!where) throw new Error(`improve fake: an unfiltered DELETE on improve_jti: ${text}`);
+    const keep = rows.improve_jti.filter((row) => !evalCond(where, { params, row }));
     rows.improve_jti.length = 0;
+    rows.improve_jti.push(...keep);
     return { handled: true, results: [] };
   }
 
@@ -454,15 +494,17 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [] };
   }
 
+  // THE WHOLE WHERE CLAUSE APPLIES, including the late report's
+  // `AND status IN ('unjudged', ...)` (src/improve/ingest.ts), which this ignored until
+  // 2026-09-25 so the late-report CAS always applied.
   if (/^UPDATE improve_attempts/i.test(text)) {
-    const idMarker = /WHERE id = \?(\d+)/i.exec(text);
-    if (!idMarker) throw new Error(`improve fake: an UPDATE on improve_attempts with no id predicate: ${text}`);
-    const id = params[Number(idMarker[1]) - 1];
-    const statusGuard = /AND status = '([^']+)'/i.exec(text)?.[1];
-    const row = rows.improve_attempts.find((a) => a.id === id && (!statusGuard || a.status === statusGuard));
-    if (!row) return { handled: true, results: [] };
-    Object.assign(row, setPatch(text, params, row));
-    return { handled: true, results: [{ id: row.id }] };
+    const where = / WHERE (.+?)(?: RETURNING .+)?$/i.exec(text)?.[1];
+    if (!where || !/^id = \?\d+\b/i.test(where)) {
+      throw new Error(`improve fake: an UPDATE on improve_attempts with no id predicate: ${text}`);
+    }
+    const hits = rows.improve_attempts.filter((row) => evalCond(where, { params, row }));
+    for (const row of hits) Object.assign(row, setPatch(text, params, row));
+    return { handled: true, results: hits.map((row) => ({ id: row.id })) };
   }
 
   if (/FROM improve_attempts/i.test(text)) {
@@ -506,11 +548,18 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [] };
   }
 
+  // An existing id is updated only when the statement says ON CONFLICT(id) DO UPDATE
+  // (src/improve-skills.ts). A plain INSERT of a taken id fails the PRIMARY KEY and
+  // aborts its batch, as in SQLite; this upserted every INSERT until 2026-09-25.
   if (/^INSERT INTO improve_skills/i.test(text)) {
     const row = { ...IMPROVE_SKILL_DEFAULTS, ...insertRow(text, params) };
     const existing = rows.improve_skills.find((k) => k.id === row.id);
-    if (existing) Object.assign(existing, { title: row.title, body_ref: row.body_ref });
-    else rows.improve_skills.push(row);
+    if (existing) {
+      if (!/ ON CONFLICT\(id\) DO UPDATE SET title = \?3, body_ref = \?4$/i.test(text)) {
+        throw new Error("UNIQUE constraint failed: improve_skills.id");
+      }
+      Object.assign(existing, { title: row.title, body_ref: row.body_ref });
+    } else rows.improve_skills.push(row);
     return { handled: true, results: [] };
   }
 
@@ -525,11 +574,14 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [{ id: row.id }] };
   }
 
+  // The whole WHERE clause applies, including the version CAS in
+  // src/skills-evaluate.ts (`AND version = ?3`), which this ignored until 2026-09-25.
   if (/^UPDATE improve_skills/i.test(text)) {
-    const row = rows.improve_skills.find((k) => k.id === params[0]);
-    if (!row) return { handled: true, results: [] };
-    Object.assign(row, setPatch(text, params, row));
-    return { handled: true, results: [{ id: row.id }] };
+    const where = / WHERE (.+?)(?: RETURNING .+)?$/i.exec(text)?.[1];
+    if (!where) throw new Error(`improve fake: an unfiltered UPDATE on improve_skills: ${text}`);
+    const hits = rows.improve_skills.filter((row) => evalCond(where, { params, row }));
+    for (const row of hits) Object.assign(row, setPatch(text, params, row));
+    return { handled: true, results: hits.map((row) => ({ id: row.id })) };
   }
 
   throw new Error(
