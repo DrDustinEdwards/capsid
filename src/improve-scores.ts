@@ -1,8 +1,6 @@
 import { sha256Hex } from "./auth";
 import { anchorKey, POLICY_PREFIX, PROMPTS_PREFIX, RUN_TASK_PREFIX, SCORES_PATH, SKILLS_PREFIX } from "./improve-schema";
 
-// ---- the shapes -------------------------------------------------------------
-
 export type Direction = "maximize" | "minimize";
 
 export interface AnchorSpec {
@@ -17,9 +15,8 @@ export interface SecondarySpec {
   metric: string;
   direction: Direction;
   weight: number;
-  // A stub is parsed, listed and reported, and EXCLUDED from every comparison
-  // until a human removes the marker. It exists so a namespace can declare a
-  // metric it intends to wire without that metric silently scoring as zero.
+  // A stub is parsed and reported but excluded from every comparison, so a metric
+  // declared before it is wired never scores as zero.
   stub: boolean;
 }
 
@@ -29,26 +26,18 @@ export interface ScoresDoc {
   secondary: SecondarySpec[];
   // The exact bytes the checksum is taken over, after line-ending normalization.
   anchorBlock: string;
-  // Parse complaints. A document with problems is still returned, because the
-  // caller needs to report WHAT is wrong, not just that something is.
+  // Parse complaints. The document is still returned so the caller can report them.
   problems: string[];
 }
 
 export type MetricMap = Record<string, number | null>;
 
-// ---- parsing ----------------------------------------------------------------
-
 const ANCHOR_HEADING = /^##\s+anchors\s*$/i;
 const SECONDARY_HEADING = /^##\s+secondary\s*$/i;
 const SECTION_HEADING = /^##\s+/;
 
-// CRLF IS NORMALIZED BEFORE ANYTHING ELSE, including before the hash.
-//
-// capsid/repo-structure.md records the CRLF checkout hazard as a measured trap that
-// has produced two vacuous plants in this portfolio. A scores document reaching the
-// Worker through a repo checkout on an autocrlf host would hash differently from the
-// same document written through the MCP write path, and the pin would then mismatch
-// for a reason unrelated to anyone editing an anchor.
+// CRLF is normalized before anything else, including the hash, so a document from an
+// autocrlf checkout hashes the same as one written through MCP.
 function normalize(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
@@ -59,8 +48,7 @@ function sectionSlice(lines: string[], startIndex: number): string {
     if (SECTION_HEADING.test(lines[i])) break;
     out.push(lines[i]);
   }
-  // Trailing blank lines are dropped so a stray newline at the end of a section
-  // cannot move the hash. Interior blank lines are kept: they are content.
+  // Trailing blank lines are dropped so they cannot move the hash; interior ones are content.
   while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
   return out.join("\n");
 }
@@ -127,22 +115,14 @@ export function parseScoresDoc(namespace: string, body: string): ScoresDoc {
   return { namespace, anchors, secondary, anchorBlock, problems };
 }
 
-// ---- the checksum -----------------------------------------------------------
-
 export async function anchorChecksum(doc: ScoresDoc): Promise<string> {
   return sha256Hex(doc.anchorBlock);
 }
 
-// THE ordinary write TOOL'S IMPROVE-PATH GUARD (audit 2026-09-06). Returns a
-// caller-facing refusal when a document write would touch the improve loop's control
-// surface without explicit opt-in, or null when the write may proceed.
-//
-// The two prefixes are refused outright: nothing legitimate edits the run prompt or a
-// skill through the ordinary write tool. scores.md is subtler: its Secondary section
-// is meant to be freely editable, so only a write that CHANGES the anchor block is
-// refused, detected by comparing the anchor checksum of the stored body with that of
-// the body about to be written. Creating scores.md from nothing counts as introducing
-// an anchor block and is refused unless opted in.
+// The write tool's improve-path guard: a refusal when a document write would touch the
+// improve loop's control surface without allow_improve_paths, or null. The prefixes are
+// refused outright. For scores.md only a write that changes the anchor checksum is
+// refused (the Secondary section is freely editable); creating it counts as a change.
 export async function improveWriteRefusal(
   namespace: string,
   path: string,
@@ -151,23 +131,16 @@ export async function improveWriteRefusal(
   allow: boolean
 ): Promise<string | null> {
   if (allow) return null;
-  // THE NIGHTLY TASK DOCUMENT (audit 2026-09-07). `improve/run-<day>.md` is read by
-  // the `/improve` driver and executed as its instruction list on a machine holding
-  // five repo clones, local git and a Capsid write grant. It was the one
-  // improve-steering path the ordinary write tool did not guard: a plain write, no
-  // flag, an audit row indistinguishable from any other edit.
+  // The nightly task document is executed by the `/improve` driver on a machine with
+  // repo clones and a write grant.
   if (path.startsWith(RUN_TASK_PREFIX)) {
     return `${namespace}/${path} is an improve loop task document. The /improve driver executes it, so a write here steers a session with local shell and repo access. Pass allow_improve_paths: true to write it anyway; the flag is audit-logged. The loop writes and signs these itself.`;
   }
   if (path.startsWith(PROMPTS_PREFIX)) {
     return `${namespace}/${path} is the improve loop's run-prompt surface and the ordinary write tool refuses it. It steers the nightly attempt generator, so a write here is only accepted with allow_improve_paths: true, which is audit-logged.`;
   }
-  // THE POLICY DOCUMENTS (autonomy arc, 2026-09-12). capsid/policy/auto-merge.md says
-  // what this Worker may merge with no human, and capsid/policy/gates.md says which
-  // blocked commands the seat may approve without one. Both are read by the Worker as
-  // authority, so a write here is a ruling rather than an edit. Same treatment as the
-  // run prompt: refused outright by the ordinary write tool, accepted only with
-  // allow_improve_paths, which itself needs can_touch_protected and is audit-logged.
+  // The policy documents are read by the Worker as authority (what it may merge, which
+  // blocked commands the seat may approve), so a write here is a ruling.
   if (path.startsWith(POLICY_PREFIX)) {
     return `${namespace}/${path} is an autonomy policy document. It decides what this Worker may do without a human, so a write here is a ruling. Pass allow_improve_paths: true to write it anyway; the flag needs the can_touch_protected scope and is audit-logged.`;
   }
@@ -186,20 +159,14 @@ export async function improveWriteRefusal(
 
 export interface AnchorVerification {
   ok: boolean;
-  // The refusal, in full, or null. Written as a sentence because it is what lands
-  // in the task doc a human reads in the morning.
+  // A full sentence, because it lands in the task doc a human reads.
   refusal: string | null;
   current: string;
   pinned: string | null;
 }
 
-// FAIL CLOSED IN BOTH DIRECTIONS, which is why this is a function and not two lines
-// at the call site.
-//
-// A missing pin is a refusal, not a free pass. "Pin it on first sight" is how an
-// attacker or an accident installs its own floor: whatever the anchors happen to say
-// the first time the loop looks becomes canon. A namespace joins the loop when a
-// human pins its anchors, and never before.
+// Fails closed. A missing pin is a refusal: pinning on first sight would make whatever
+// the anchors say that day the floor. A namespace joins the loop when a human pins it.
 export async function verifyAnchors(
   kv: KVNamespace,
   namespace: string,
@@ -248,17 +215,13 @@ export async function verifyAnchors(
   return { ok: true, refusal: null, current, pinned };
 }
 
-// ---- the anchor verdict -----------------------------------------------------
-
 export interface AnchorVerdict {
   passed: boolean;
   reasons: string[];
 }
 
-// AN UNMEASURED ANCHOR IS A FAILED ANCHOR. A null here means CI did not report the
-// metric, and the arc's ruling is that any missing or unauthenticated score is treated
-// as a revert. Skipping an unreported anchor means a scorer that quietly stops running
-// the holdout suite scores exactly like one that runs it and passes.
+// An unreported anchor fails, or a scorer that stopped running the holdout suite would
+// score like one that ran it and passed.
 export function anchorVerdict(anchors: AnchorSpec[], values: MetricMap): AnchorVerdict {
   const reasons: string[] = [];
   for (const spec of anchors) {
@@ -278,10 +241,8 @@ export function anchorVerdict(anchors: AnchorSpec[], values: MetricMap): AnchorV
   return { passed: reasons.length === 0, reasons };
 }
 
-// A separate question from the verdict above: did any anchor get WORSE than the base
-// while still inside its bound. The drift gate pauses a namespace on this, because an
-// anchor sliding within tolerance is the shape of a slow regression no single attempt
-// is ever refused for.
+// Anchors that got worse than the base while still inside their bound. The drift gate
+// pauses on this, because no single attempt is refused for a slow slide.
 export function anchorRegressions(anchors: AnchorSpec[], before: MetricMap, after: MetricMap): string[] {
   const out: string[] = [];
   for (const spec of anchors) {
@@ -296,8 +257,6 @@ export function anchorRegressions(anchors: AnchorSpec[], before: MetricMap, afte
   }
   return out;
 }
-
-// ---- the secondary score ----------------------------------------------------
 
 export interface MetricDelta {
   metric: string;
@@ -315,37 +274,24 @@ export interface Comparison {
   delta: number;
   scoreBefore: number;
   scoreAfter: number;
-  // How many metrics actually had a value on BOTH sides. Zero means the
-  // comparison proved nothing, and `improved` is false in that case.
+  // Metrics with a value on both sides. Zero means `improved` is false.
   compared: number;
   details: MetricDelta[];
   reason: string;
 }
 
-// Relative improvement, clamped, so one metric measured in bytes cannot drown four
-// measured in counts.
-//
-// The denominator is max(|before|, 1) rather than |before|, which handles the two
-// cases a plain ratio does not: a base of zero (0 lint errors, where any increase
-// should register as a loss rather than a division by zero) and a base near zero (1
-// error becoming 2 is a real doubling, not an infinite one). Clamped to [-1, 1] so a
-// single metric's contribution is bounded by its weight.
+// Relative improvement, so a metric in bytes cannot drown one in counts. The
+// denominator max(|before|, 1) handles a base of zero. Clamped to [-1, 1] so one
+// metric's contribution is bounded by its weight.
 function relative(direction: Direction, before: number, after: number): number {
   const scale = Math.max(Math.abs(before), 1);
   const raw = direction === "maximize" ? (after - before) / scale : (before - after) / scale;
   return Math.max(-1, Math.min(1, raw));
 }
 
-// KEEP OR REVERT, and the default is revert.
-//
-// An attempt is kept when the anchors hold and the weighted secondary score is
-// strictly better. Strictly, not "no worse": a change that moves nothing is churn. A
-// tie reverts.
-//
-// AN UNPROVABLE COMPARISON REVERTS. If every secondary metric is a stub, or CI
-// reported none of them, `compared` is 0 and the attempt is reverted with that as its
-// reason. The cheapest way to score well is to report nothing, and a system that reads
-// silence as success rewards exactly that.
+// Kept only when the weighted secondary score is strictly better; a tie reverts. When
+// nothing could be compared (all stubs or unreported) the attempt reverts, so reporting
+// nothing is never the cheapest way to score well.
 export function compare(specs: SecondarySpec[], before: MetricMap, after: MetricMap): Comparison {
   const details: MetricDelta[] = [];
   let delta = 0;
@@ -373,9 +319,7 @@ export function compare(specs: SecondarySpec[], before: MetricMap, after: Metric
     const contribution = spec.weight * relative(spec.direction, a, b);
     compared += 1;
     delta += contribution;
-    // The absolute scores exist for the improve_attempts columns and the status tool.
-    // They are the weighted values themselves, sign-corrected so higher is better on
-    // both, which makes score_before and score_after comparable rows in a table.
+    // Absolute scores for the improve_attempts columns, sign-corrected so higher is better.
     const sign = spec.direction === "maximize" ? 1 : -1;
     scoreBefore += spec.weight * sign * a;
     scoreAfter += spec.weight * sign * b;
@@ -410,10 +354,9 @@ export function compare(specs: SecondarySpec[], before: MetricMap, after: Metric
   };
 }
 
-// NOT DEAD. Moved to test/ on 2026-09-07 as an export with no caller in src/ or
-// test/, and restored the next day: the holdout suite imports it, and the holdout
-// is structurally invisible to any scan that runs here. 28/30 without it, 30/30
-// with it, against an anchor of min 1.0. See the note in src/normalize.ts.
+// Not dead: the holdout suite imports it, and the holdout is invisible to any scan
+// that runs here, so a scan finds no caller. Without it the holdout scores 28/30
+// against an anchor of min 1.0. test/dead-exports.test.ts keeps it.
 //
 // It is also the canonical statement of what a scores document declares: every live
 // one was generated from it, and test/null-metrics.test.ts checks its Secondary list

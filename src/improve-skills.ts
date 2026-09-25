@@ -150,11 +150,7 @@ export async function candidateSkills(
     .slice(0, limit);
 }
 
-// recordSkillOutcome WAS DELETED 2026-09-16. It was a second credit system: it took
-// `kept` and nothing else, so it charged a LOSS to a skill the model was offered and
-// declined to use, which the 2026-09-12 attribution ruling says earns nothing. The one
-// writer of wins and losses is now attributionStatements in ./skills-records, which
-// applies that ruling through attribute().
+// Wins and losses have one writer: attributionStatements in ./skills-records.
 
 export async function readSkillBody(db: D1Database, skill: SkillRow): Promise<string> {
   const row = await db
