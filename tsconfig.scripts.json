@@ -22,12 +22,16 @@
     "checkJs": true,
     "types": ["node"]
   },
-  // SCOPED TO THE ONE FILE THAT IS COPIED, deliberately, and the scope is the
-  // honest part. The rest of scripts/ carries pre-existing implicit-any gaps that
-  // are real but are nobody's incident: those scripts run in one repo, under one
-  // gate, and a failure in them is loud and local. improve-report.mjs is the only
-  // file here that ships to four other repos, which is what makes a type error in
-  // it somebody else's build break. Widening this include is a fine piece of work
-  // and is recorded as a residual rather than done under a security remediation.
-  "include": ["scripts/improve-report.mjs", "scripts/improve-report.d.mts"]
+  // WIDENED ONE FILE AT A TIME. improve-report.mjs came first because it is the only
+  // file here that ships to four other repos, which makes a type error in it somebody
+  // else's build break. schedule-drivers.mjs and improve-derive-key.mjs were added on
+  // 2026-09-25 (audit item E2-31) because their type errors included real bugs. The
+  // rest of scripts/ still carries implicit-any gaps; add a file here once it checks
+  // clean.
+  "include": [
+    "scripts/improve-report.mjs",
+    "scripts/improve-report.d.mts",
+    "scripts/schedule-drivers.mjs",
+    "scripts/improve-derive-key.mjs"
+  ]
 }
