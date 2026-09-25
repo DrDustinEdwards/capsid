@@ -101,11 +101,13 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
   // Derived from TABLES in both directions: a table added to the export without an
   // object, or an object with no table, fails here. The two underscore-prefixed
   // sidecars (the KV pins and the holdout manifests) are named explicitly rather
-  // than matched by shape, so dropping one is a failure here too.
+  // than matched by shape, so dropping one is a failure here too. A clean run also
+  // writes the completion marker.
   const expected = [
     ...TABLES.map((t) => `${result.json_prefix}${t}.json`),
     `${result.json_prefix}_kv.json`,
     `${result.json_prefix}_holdout-manifests.json`,
+    `${result.json_prefix}_complete.json`,
   ].sort();
   assert.deepEqual([...result.json_keys].sort(), expected);
   assert.deepEqual([...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(), expected);
@@ -146,6 +148,8 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   // the evidence of the day the store looked empty.
   assert.equal(result.json_keys.length, TABLES.length + 2);
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
+  // A refused run is not marked complete, so it takes no slot in the retention floor.
+  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
 });
 
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {
@@ -568,4 +572,123 @@ test("the dump carries the holdout manifests, which are counts and never tests",
   assert.ok(raw, "the dump carries no holdout manifests; the hidden suites' sizes exist in one place only");
   const dumped = JSON.parse(raw as string) as { manifests: Record<string, unknown> };
   assert.equal(dumped.manifests.capsid !== undefined, true, "capsid's manifest is missing from the dump");
+});
+
+// ---- audit findings F1-7, F1-8, F1-9 (2026-09-25) ------------------------------
+
+test("an unreadable KV pin is recorded as unreadable, not as an unset null", async () => {
+  // A restore that put back a null would clear a mode that existed.
+  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR, { improve_mode: "subscription" });
+  const get = kv.kv.get.bind(kv.kv);
+  (kv.kv as unknown as { get: unknown }).get = async (key: string, ...rest: unknown[]) => {
+    if (key === "improve_mode") throw new Error("KV get timed out");
+    return (get as (k: string, ...r: unknown[]) => Promise<unknown>)(key, ...rest);
+  };
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}_kv.json`) as string) as { keys: Record<string, unknown> };
+  assert.deepEqual(dumped.keys.improve_mode, { unreadable: "KV get timed out" });
+  // An unset key is still a plain null, so the two cases stay distinguishable.
+  assert.equal(dumped.keys["improve:budget"], null);
+});
+
+// Seeds one run: every table object, plus the completion marker when `marked`.
+// A partial run carries only documents.json, the prefix a run that threw leaves.
+function seedRun(seed: Record<string, string>, id: string, shape: "marked" | "legacy" | "partial") {
+  const tables = shape === "partial" ? ["documents"] : [...TABLES];
+  for (const table of tables) seed[`backups/json/${id}/${table}.json`] = "{}";
+  if (shape === "marked") seed[`backups/json/${id}/_complete.json`] = "{}";
+}
+
+function survivingRuns(r2: { objects: Map<string, string> }, ids: string[]): string[] {
+  return ids.filter((id) => [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)));
+}
+
+const day = (month: number, d: number) => `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
+
+test("partial and refused runs take no slot in the 14-run floor", async () => {
+  // 20 complete, marked runs, then 14 newer runs that never finished. All are past
+  // the 90-day cutoff. Counting the partial runs, the floor would be 13 of them plus
+  // today's run, and every complete dump would age out.
+  const seed: Record<string, string> = { ...MIRROR };
+  const marked = Array.from({ length: 20 }, (_, i) => day(1, i + 1));
+  const partial = Array.from({ length: 14 }, (_, i) => day(2, i + 1));
+  for (const id of marked) seedRun(seed, id, "marked");
+  for (const id of partial) seedRun(seed, id, "partial");
+  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.deepEqual(survivingRuns(r2, marked), marked.slice(7), "the floor did not keep the 13 newest complete runs");
+  assert.deepEqual(survivingRuns(r2, partial), [], "an aged partial run survived by holding a floor slot");
+  assert.ok(r2.objects.has(`${result.json_prefix}_complete.json`), "today's run was not marked");
+});
+
+test("MIGRATION: runs written before the marker existed keep the floor they had", async () => {
+  // The first run after deploy sees only unmarked runs plus its own marked one. They
+  // sort before the oldest marked run, so they count exactly as the old rule counted
+  // them, and the prune is the one the old rule made: the 7 oldest of 20.
+  const seed: Record<string, string> = { ...MIRROR };
+  const legacy = Array.from({ length: 20 }, (_, i) => day(1, i + 1));
+  for (const id of legacy) seedRun(seed, id, "legacy");
+  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.equal(result.json_backups_pruned, 7);
+  assert.deepEqual(survivingRuns(r2, legacy), legacy.slice(7));
+});
+
+test("MIGRATION: legacy runs count, unmarked runs after the first marked one do not", async () => {
+  // Ten legacy runs, then five marked runs from after the deploy, then five partial
+  // runs. The floor is today's run, the five marked runs and the eight newest legacy
+  // runs. The partial runs are aged and hold no slot, so they go.
+  const seed: Record<string, string> = { ...MIRROR };
+  const legacy = Array.from({ length: 10 }, (_, i) => day(1, i + 1));
+  const marked = Array.from({ length: 5 }, (_, i) => day(1, i + 11));
+  const partial = Array.from({ length: 5 }, (_, i) => day(1, i + 16));
+  for (const id of legacy) seedRun(seed, id, "legacy");
+  for (const id of marked) seedRun(seed, id, "marked");
+  for (const id of partial) seedRun(seed, id, "partial");
+  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.deepEqual(survivingRuns(r2, marked), marked);
+  assert.deepEqual(survivingRuns(r2, legacy), legacy.slice(2));
+  assert.deepEqual(survivingRuns(r2, partial), []);
+  assert.equal(result.json_backups_pruned, 7);
+  assert.equal(result.json_backups_kept, 14);
+});
+
+test("a run whose lease was taken over does not release the new holder's lease", async () => {
+  // The first run outlived its TTL and a second run took the key. The first run's
+  // finally must leave the second run's lease in place.
+  const r2 = fakeR2(MIRROR);
+  const kv = fakeKv({});
+  const d1 = fakeD1({ documents: DOCS });
+  const batch = d1.db.batch.bind(d1.db);
+  let first = true;
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+    if (first) {
+      first = false;
+      kv.store.set("backup:lease", "2026-09-25T10:00:00.000Z another-run");
+    }
+    return batch(statements);
+  }) as typeof batch;
+  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
+  const { result, logged } = await captureErrors(() => runBackup(env));
+  assert.equal(result.ran, true);
+
+  assert.equal(kv.store.get("backup:lease"), "2026-09-25T10:00:00.000Z another-run", "the run deleted a lease it did not hold");
+  assert.equal(kv.deleted.includes("backup:lease"), false);
+  assert.ok(logged.some((line) => line.includes("BACKUP_LEASE_LOST")), logged.join("\n"));
+  // The TTL sits above the 15-minute wall limit on a cron invocation.
+  const lease = kv.puts.find((p) => p.key === "backup:lease");
+  assert.ok((lease?.ttl ?? 0) > 900, `lease ttl ${lease?.ttl} does not cover a run past the cron wall limit`);
 });
