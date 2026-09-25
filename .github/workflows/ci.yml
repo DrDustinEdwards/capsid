@@ -55,6 +55,11 @@ jobs:
   checks:
     name: checks
     runs-on: ubuntu-latest
+    # Not on the six-hourly schedule: that run tests an unchanged master head, which the
+    # push run already tested, and costs about 75s of runner time each time. The live
+    # job needs checks only for ordering, and its condition runs it when checks is
+    # skipped (see the live job).
+    if: github.event_name != 'schedule'
     # TIMEOUTS ON EVERY JOB (residual 6). Without one a job inherits GitHub's 360-minute
     # default, so a hung test or a wedged wrangler call burns six hours of the Actions
     # budget the improve loop's kill switch is metered against, and holds the
@@ -208,8 +213,8 @@ jobs:
     # Never on pull_request. A PR head sha is not deployed, so asserting anything about
     # production from one is meaningless.
     #
-    # !failure() && !cancelled() rather than always(): on a schedule run the deploy job
-    # is SKIPPED, and a plain `needs: deploy` would skip this job too, retiring the
+    # !failure() && !cancelled() rather than always(): on a schedule run the checks and
+    # deploy jobs are SKIPPED, and a plain `needs:` would skip this job too, retiring the
     # six-hourly check. This form runs when a dependency was skipped but not when one
     # failed.
     if: github.event_name != 'pull_request' && !failure() && !cancelled()
