@@ -18,15 +18,16 @@
 // here and each task reaches Capsid as exactly one driver.
 //
 // OFF BY DEFAULT, TWICE OVER. Nothing is created without --apply, and an installed
-// task is created DISABLED. Enabling it is a separate, deliberate act:
+// task is created DISABLED, from a task XML whose settings say so (taskXml), so it
+// never exists enabled. Enabling it is a separate, deliberate act:
 //
 //   schtasks /Change /TN "<task name>" /ENABLE
 //
 // A scheduler that armed itself on install would be a nightly unattended agent
 // nobody decided to switch on.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 
@@ -287,9 +288,58 @@ function readKey(ns) {
 // The script path is the capsid clone in FOLDERS, not process.cwd(). An install run
 // from another folder, or from a worktree that is later deleted, would otherwise
 // schedule a path that does not exist, and the task would fail every night.
+const installScript = () => join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
+const installArguments = (ns) => `"${installScript()}" --run --namespace ${ns}`;
+
 export function installCommand(ns) {
-  const script = join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
-  return `node "${script}" --run --namespace ${ns}`;
+  return `node ${installArguments(ns)}`;
+}
+
+const xmlEscape = (s) =>
+  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+// The task definition, for `schtasks /Create /XML`. <Settings><Enabled>false</Enabled>
+// is why this is XML: schtasks /Create has no switch for a disabled task, so creating
+// it with /TR and then running /Change /DISABLE left a window in which the task existed
+// ENABLED, and a failed /Change left it that way. Created from this document, the task
+// is disabled from the moment it exists.
+//
+// Every setting not named here takes the Task Scheduler default, which is what the
+// /TR form got. The start date is only the day the daily trigger begins counting from;
+// with no time zone the time is local wall clock (see START_TIME).
+export function taskXml(ns) {
+  return [
+    `<?xml version="1.0" encoding="UTF-16"?>`,
+    `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
+    `  <RegistrationInfo>`,
+    `    <Description>${xmlEscape(`${taskName(ns)}. Written by scripts/schedule-drivers.mjs.`)}</Description>`,
+    `  </RegistrationInfo>`,
+    `  <Triggers>`,
+    `    <CalendarTrigger>`,
+    `      <StartBoundary>2026-01-01T${START_TIME}:00</StartBoundary>`,
+    `      <ScheduleByDay>`,
+    `        <DaysInterval>1</DaysInterval>`,
+    `      </ScheduleByDay>`,
+    `    </CalendarTrigger>`,
+    `  </Triggers>`,
+    `  <Principals>`,
+    `    <Principal id="Author">`,
+    `      <LogonType>InteractiveToken</LogonType>`,
+    `      <RunLevel>LeastPrivilege</RunLevel>`,
+    `    </Principal>`,
+    `  </Principals>`,
+    `  <Settings>`,
+    `    <Enabled>false</Enabled>`,
+    `  </Settings>`,
+    `  <Actions Context="Author">`,
+    `    <Exec>`,
+    `      <Command>node</Command>`,
+    `      <Arguments>${xmlEscape(installArguments(ns))}</Arguments>`,
+    `    </Exec>`,
+    `  </Actions>`,
+    `</Task>`,
+    ``,
+  ].join("\r\n");
 }
 
 // Each returns { ok, line }. ok is false on any failure, so main exits non-zero.
@@ -297,23 +347,20 @@ export function install(ns, apply, run = schtasks) {
   const exists = taskExists(ns, run);
   const command = installCommand(ns);
   if (!apply) {
-    return { ok: true, line: `${exists ? "REPLACE" : "CREATE "} ${taskName(ns)}  daily ${START_TIME}  ${command}` };
+    return { ok: true, line: `${exists ? "REPLACE" : "CREATE "} ${taskName(ns)}  daily ${START_TIME}  ${command}  (created disabled)` };
   }
-  const created = run([
-    "/Create",
-    "/TN", taskName(ns),
-    "/TR", command,
-    "/SC", "DAILY",
-    "/ST", START_TIME,
-    "/F",
-  ]);
-  if (created.code !== 0) return { ok: false, line: `FAILED  ${taskName(ns)}: ${created.out}` };
-  // CREATED DISABLED. See the header: install is not the same act as switching on a
-  // nightly unattended agent, and conflating them is how one ends up running because
-  // somebody ran a setup script.
-  const disabled = run(["/Change", "/TN", taskName(ns), "/DISABLE"]);
-  if (disabled.code !== 0) {
-    return { ok: false, line: `FAILED  ${taskName(ns)} was CREATED ENABLED and could not be disabled: ${disabled.out}` };
+  // CREATED DISABLED, in the one call that creates it. See the header: install is not
+  // the same act as switching on a nightly unattended agent, and conflating them is how
+  // one ends up running because somebody ran a setup script. The file is UTF-16 LE with
+  // a byte-order mark, the encoding the XML declares and the one schtasks reads.
+  const dir = mkdtempSync(join(tmpdir(), "capsid-task-"));
+  const file = join(dir, "task.xml");
+  try {
+    writeFileSync(file, `﻿${taskXml(ns)}`, "utf16le");
+    const created = run(["/Create", "/XML", file, "/TN", taskName(ns), "/F"]);
+    if (created.code !== 0) return { ok: false, line: `FAILED  ${taskName(ns)}: ${created.out}` };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
   return { ok: true, line: `created ${taskName(ns)}, DISABLED. Enable with: schtasks /Change /TN "${taskName(ns)}" /ENABLE` };
 }
