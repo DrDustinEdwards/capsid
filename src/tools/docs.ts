@@ -411,7 +411,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("write"),
       description:
-        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end of the existing document, no title needed, no confirmation needed because nothing is overwritten), 'patch' (replace an anchored region: needs find and replace_with, and find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical, normalization included; use this to close a task or correct a document's type). append, patch and meta exist so amending a large document does not mean retranscribing it. Every response carries sha256 and bytes of the resulting body, so a write can be verified without reading the document back. Optional if_match: the sha256 of the body you believe is stored (the value a previous read-back or write returned). When it does not match the stored body the write is REFUSED and the error carries the current sha256, so a concurrent edit cannot be silently overwritten. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of typed outgoing edges [{\"type\":\"references\",\"to_path\":\"decisions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace). When provided it replaces this document's outgoing edges; omit it to leave edges untouched; pass [] to clear them. Read edges with backlinks.",
+        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end of the existing document, no title needed, no confirmation needed because nothing is overwritten), 'patch' (replace an anchored region: needs find and replace_with, and find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical, normalization included; use this to close a task or correct a document's type). append, patch and meta exist so amending a large document does not mean retranscribing it. Every response carries sha256 and bytes of the resulting body, so a write can be verified without reading the document back. Optional if_match: the sha256 of the body you believe is stored (the value a previous read-back or write returned). When it does not match the stored body the write is REFUSED and the error carries the current sha256, so a concurrent edit cannot be silently overwritten. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of typed outgoing edges [{\"type\":\"references\",\"to_path\":\"decisions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace). When provided it replaces this document's outgoing edges; omit it to leave edges untouched; pass [] to clear them. Read edges with backlinks. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -762,7 +762,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("restore"),
       description:
-        "Restore a document's title and body from one of its retained versions (see history). It carries the same two write-path invariants as write: the CURRENT body is snapshotted to document_versions first and the restore is appended to audit_log, so a restore is itself undoable. It is NOT the write tool's code path and differs from it deliberately: the snapshotted bytes go back exactly as they were stored, with no dash normalization, and type, status, tags and links are neither validated nor restored, because a version row does not carry them. Restoring a deleted document recreates it. Optional if_match: the sha256 of the body you believe is live now, enforced as a commit-time predicate, so a restore cannot land on a body that changed after you read it. Requires operator key and confirm: true.",
+        "Restore a document's title and body from one of its retained versions (see history). It carries the same two write-path invariants as write: the CURRENT body is snapshotted to document_versions first and the restore is appended to audit_log, so a restore is itself undoable. It is NOT the write tool's code path and differs from it deliberately: the snapshotted bytes go back exactly as they were stored, with no dash normalization, and type, status, tags and links are neither validated nor restored, because a version row does not carry them. Restoring a deleted document recreates it. Optional if_match: the sha256 of the body you believe is live now, enforced as a commit-time predicate, so a restore cannot land on a body that changed after you read it. Needs the write grant and confirm: true.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -925,7 +925,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     "delete",
     {
       annotations: hintsFor("delete"),
-      description: "Delete a document. Snapshots it first and writes an audit log entry. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true.",
+      description: "Delete a document. Snapshots it first and writes an audit log entry. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, confirm, allow_improve_paths }) => {
@@ -1027,7 +1027,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     "move",
     {
       annotations: hintsFor("move"),
-      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Requires operator key.",
+      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, new_path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
@@ -1215,7 +1215,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("register_namespace"),
       description:
-        "Register a namespace by inserting its row in the namespaces table, so repo tools and the namespaces list can see it. Give repo as 'owner/name' (label defaults to 'primary'), or pass a repos JSON array like [{\"repo\":\"owner/name\",\"label\":\"primary\"}] for a multi-repo namespace. Create-only: it will not overwrite an existing namespace. Requires operator key.",
+        "Register a namespace by inserting its row in the namespaces table, so repo tools and the namespaces list can see it. Give repo as 'owner/name' (label defaults to 'primary'), or pass a repos JSON array like [{\"repo\":\"owner/name\",\"label\":\"primary\"}] for a multi-repo namespace. Create-only: it will not overwrite an existing namespace. Admin only: an OAuth session qualifies, a minted agent holding the write grant does not.",
       inputSchema: {
         namespace: nsName,
         repo: bounded(MAX_REPO_SELECTOR).optional(),
@@ -1273,7 +1273,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("update_namespace"),
       description:
-        "Remap an existing namespace's repos. Pass repos as a JSON array like [{\"repo\":\"owner/name\",\"label\":\"primary\"},{\"repo\":\"owner/legacy\",\"label\":\"legacy\"}], with exactly one entry labeled \"primary\". The namespace must already exist (use register_namespace to create). Snapshots the prior mapping to the audit log. Does NOT rename the namespace or move its documents. Requires operator key.",
+        "Remap an existing namespace's repos. Pass repos as a JSON array like [{\"repo\":\"owner/name\",\"label\":\"primary\"},{\"repo\":\"owner/legacy\",\"label\":\"legacy\"}], with exactly one entry labeled \"primary\". The namespace must already exist (use register_namespace to create). Snapshots the prior mapping to the audit log. Does NOT rename the namespace or move its documents. Admin only: an OAuth session qualifies, a minted agent holding the write grant does not.",
       inputSchema: { namespace: nsName, repos: bounded(MAX_REPOS_JSON) },
     },
     async ({ namespace, repos }) => {
