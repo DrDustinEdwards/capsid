@@ -508,9 +508,9 @@ export async function improveControl(
   if (action === "mint_operator_key") {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    // bytesToHex, not an inline map: src/encoding.ts owns the byte encodings and
-    // test/encoding.test.ts fails the build on a second implementation. A duplicated
-    // crypto-adjacent helper is the copy nobody looked at mishandling the high byte.
+    // bytesToHex, not an inline map: src/encoding.ts owns the byte encodings. A
+    // duplicated crypto-adjacent helper is the copy nobody looked at mishandling the
+    // high byte.
     const key = `capsid_${bytesToHex(bytes)}`;
     // THE `ro:` PREFIX GOES ON THE LIST ENTRY, NOT ON THE KEY. src/auth.ts hashes the
     // presented key and compares it against each entry with the prefix stripped, so the

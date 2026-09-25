@@ -232,8 +232,7 @@ export function outsideJobNamespace(agent: Agent, namespace: string): string | n
 // addressing a job by arithmetic. 48 bits is collision-free at this volume and the
 // PRIMARY KEY refuses one anyway.
 //
-// bytesToHex, not an inline map: src/encoding.ts owns the byte encodings and
-// test/encoding.test.ts fails the build on a second implementation.
+// bytesToHex, not an inline map: src/encoding.ts owns the byte encodings.
 export function mintJobId(): string {
   return `job_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
