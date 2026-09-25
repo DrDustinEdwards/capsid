@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { verifySignedBody } from "./improve-task";
+import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./improve-task";
 
 // ---- pre-approved gates -------------------------------------------------------
 //
@@ -19,7 +19,6 @@ import { verifySignedBody } from "./improve-task";
 // push_branch, so the deny list runs before any class is tried, over the whole command
 // string.
 export const GATE_POLICY_PATH = "policy/gates.md";
-const POLICY_NAMESPACE = "capsid";
 
 export const GATE_CLASSES = ["additive_migration", "push_branch", "open_pr"] as const;
 export type GateClass = (typeof GATE_CLASSES)[number];
@@ -337,38 +336,23 @@ export interface GatePolicy {
   classes: string[];
 }
 
-function field(body: string, name: string): string | null {
-  const line = body
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.toLowerCase().startsWith(`- ${name}:`));
-  return line ? line.slice(line.indexOf(":") + 1).trim() : null;
-}
-
-const CLASS_ITEM = /^- `([a-z_]+)`/;
-
 export function parseGatePolicy(body: string): { policy: GatePolicy } | { error: string } {
-  const version = field(body, "version");
+  const version = policyField(body, "version");
   if (!version) return { error: "the gate policy names no version, so an approval against it cannot be traced to what it allowed." };
-  const enabled = field(body, "enabled");
+  const enabled = policyField(body, "enabled");
   if (enabled === null) return { error: "the gate policy does not say whether it is enabled." };
   const classes: string[] = [];
   for (const line of body.split("\n")) {
-    const match = CLASS_ITEM.exec(line.trim());
+    const match = POLICY_ID_ITEM.exec(line.trim());
     if (match) classes.push(match[1]);
   }
   return { policy: { version, enabled: enabled.toLowerCase() === "true", classes } };
 }
 
 export async function loadGatePolicy(env: Env): Promise<{ policy: GatePolicy } | { error: string }> {
-  const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-    .bind(POLICY_NAMESPACE, GATE_POLICY_PATH)
-    .first<{ body: string | null }>();
-  if (!row) return { error: `no gate policy at ${POLICY_NAMESPACE}/${GATE_POLICY_PATH}, so nothing is pre-approved.` };
-  const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", "gate policy");
-  if (!verdict.ok) return { error: verdict.reason };
-  // The signed body only. The stored text also holds the unsigned frontmatter.
-  const parsed = parseGatePolicy(verdict.body);
+  const read = await readSignedPolicy(env, GATE_POLICY_PATH, "gate policy", "nothing is pre-approved");
+  if ("error" in read) return read;
+  const parsed = parseGatePolicy(read.body);
   if ("error" in parsed) return parsed;
   const missing = GATE_CLASSES.filter((c) => !parsed.policy.classes.includes(c));
   if (missing.length > 0) {
