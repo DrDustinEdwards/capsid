@@ -11,7 +11,11 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // The states a job still holds a title slot in. The partial unique index names the
 // same values, and test/jobs.test.ts asserts they agree with the last migration that
-// defines it. Blocked is open: it is a pause, and resume takes the row back to claimed.
+// defines it: a status added here and not there would let two open jobs share a title.
+//
+// Blocked is open (migrations/0019). It is a pause with somebody waiting on it, and
+// resume takes the same row back to claimed; leaving it out would let a watcher post
+// the same finding again while the first copy waits for the seat.
 export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "blocked"];
 
 // The finished states. A job's mirror document closes on these. Superseded is finished
@@ -26,8 +30,10 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
 export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
-// Four hours. The driver heartbeats every 15 minutes, so the lease is the backstop for
-// a session that died, not the renewal path.
+// Four hours. Long enough for a driver to do a real job without heartbeating on a
+// timer, short enough that a dead session costs one afternoon rather than the queue.
+// The driver heartbeats every 15 minutes anyway, so the lease is the backstop for a
+// session that died, not the renewal path.
 export const JOB_LEASE_SECONDS = 4 * 60 * 60;
 
 export const JOBS_ROWS_MAX = 100;
@@ -100,11 +106,15 @@ export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// A requirement that cannot be read is corrupt, not absent: a garbled "needs
-// can_merge" is not "needs nothing". post validates both fields, so an unreadable
-// value comes from a write that bypassed post. The claim marks such a job failed;
-// resume refuses and leaves it blocked. null, undefined, "" and an object without the
-// field are no requirement.
+// A requirement that cannot be read is corrupt, not absent. Failing open would lease a
+// job whose requirement had been damaged to any driver at all, and a garbled "needs
+// can_merge" is not the same statement as "needs nothing". post validates both fields
+// before it writes them, so an unreadable value only comes from a write that bypassed
+// post, which is the row that should not be handed out.
+//
+// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it
+// failed with the field named, as it does a bad signature; resume refuses and leaves
+// it blocked. null, undefined, "" and an object without the field are no requirement.
 export type ParsedRequirement<T> = { ok: true; value: T } | { ok: false; problem: string };
 
 function parseObject(field: string, json: string): ParsedRequirement<Record<string, unknown>> {
