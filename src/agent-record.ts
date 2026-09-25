@@ -1,24 +1,15 @@
-// WHAT A CREDENTIAL HAS ACTUALLY DONE, from the outcome rows rather than from prose.
+// What a credential has actually done, from the outcome rows.
 //
-// COUNTS AND RATES, NEVER A SCORE. A composite number needs a weighting, a weighting
-// is an opinion, and an opinion about how far to trust a credential is not something
-// a Worker should be computing on a reader's behalf. Every field here is a count with
-// a name on it or a rate with a stated denominator, and a reader who wants to know
-// whether a driver is behaving reads them and decides. The moment this returns a
-// single number, somebody will gate on it, and the gate will be an opinion nobody
-// wrote down.
+// COUNTS AND RATES, NEVER A SCORE. A composite number needs a weighting, which is an
+// opinion, and a single number invites a gate nobody wrote down. Every field is a
+// named count or a rate with a stated denominator.
 //
-// A RATE WITH NO DENOMINATOR IS NULL, NOT ZERO. An agent that has opened no pull
-// requests has no merge rate; reporting 0% would put it below an agent that opened
-// ten and merged one, which is backwards. Every rate here carries the count it was
-// computed from for the same reason.
+// A rate with no denominator is null, not zero: an agent that opened no pull
+// requests has no merge rate, and 0% would rank it below one that merged one in ten.
 
 import { agentActor } from "./agents-schema";
 
-// WHAT THIS MODULE NEEDS TO KNOW ABOUT A CREDENTIAL, and no more. Deliberately NOT
-// `AgentSummary` from improve-run.ts: that module builds the summaries and then asks
-// for the records, so importing its type here would make the two files import each
-// other. Three fields is also the honest statement of the dependency.
+// Not `AgentSummary` from improve-run.ts, which imports this module.
 export interface RecordSubject {
   name: string;
   kind: string;
@@ -26,13 +17,12 @@ export interface RecordSubject {
 }
 
 export interface AgentRecord {
-  // THE ACTOR STRING this record was built from, so a reader can see what was
-  // matched. `agent:<name>` is what jobs.claimed_by and job_outcomes.agent carry.
+  // The actor string matched: `agent:<name>`, as jobs.claimed_by and
+  // job_outcomes.agent carry it.
   actor: string;
   jobs_done: number;
   jobs_failed: number;
-  // A job currently sitting at a gate. Read off the jobs table rather than the
-  // outcomes, because a blocked job has not ended and so has no outcome row.
+  // From the jobs table: a blocked job has not ended, so it has no outcome row.
   jobs_blocked: number;
   // How many times this agent's jobs hit a gate, and how many times one was sent back
   // in. Totals across finished jobs, not a count of jobs.
@@ -43,19 +33,14 @@ export interface AgentRecord {
   // prs_merged / prs_opened, 0 to 1, rounded to three places. null when this agent
   // has opened none.
   pr_merge_rate: number | null;
-  // The share of finished jobs whose CI conclusion the Worker actually checked and
-  // found green. DENOMINATOR IS ci_checked, not jobs_done: a job that produced no
-  // pull request has no CI to be green, and counting it as a miss would punish a
-  // documentation job for not having a build.
+  // Share of CI conclusions the Worker checked and found green. The denominator is
+  // ci_checked, not jobs_done: a job with no pull request has no CI.
   ci_checked: number;
   ci_green_rate: number | null;
-  // Whole minutes, the median over finished jobs that recorded a duration. Median
-  // rather than mean because one job that sat open over a weekend moves a mean and
-  // says nothing about the others.
+  // Whole minutes, median (one job left open over a weekend skews a mean).
   median_duration_minutes: number | null;
-  // THE IMPROVE LOOP'S SIDE OF THE LEDGER, for drivers only. null for every other
-  // kind: an attempt belongs to a namespace's runs, and crediting a seat that merely
-  // reads there with them would attribute one credential's work to another.
+  // Improve-loop attempts, for drivers only; null for other kinds, which only read
+  // the namespace's runs.
   attempts_kept: number | null;
   attempts_reverted: number | null;
 }
@@ -74,8 +59,7 @@ export interface RecordRows {
     duration_minutes: number | null;
     verified: string;
   }>;
-  // One row per (claimed_by, status) from jobs, which is where a job that has not
-  // ended is visible at all.
+  // One row per (claimed_by, status) from jobs.
   jobs: Array<{ actor: string; status: string; n: number }>;
   // One row per namespace from improve_runs.
   runs: Array<{ namespace: string; kept: number; reverts: number }>;
@@ -90,26 +74,19 @@ function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  // An even count averages the two middles and rounds, so the answer stays a whole
-  // number of minutes like every other duration here.
+  // An even count averages the two middles and rounds to whole minutes.
   return sorted.length % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
-// ONLY A VERIFIED FIELD COUNTS TOWARD A RATE.
-//
-// This is the point of the whole arc. prs_opened and prs_merged are stored whether or
-// not the Worker could check them, because an unverified count is still better than
-// nothing on the row itself. A RATE is different: it is a claim about a credential
-// that a reader will act on, and one built partly from numbers the credential
-// reported about itself is a credential grading its own work. So the rates here read
-// only the rows whose `verified` object says this Worker checked that field.
+// Only a verified field counts toward a rate. Counts are stored whether or not the
+// Worker could check them, but a rate built from numbers a credential reported about
+// itself is that credential grading its own work.
 function verifiedFields(json: string): Record<string, boolean> {
   try {
     const parsed = JSON.parse(json);
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, boolean>) : {};
   } catch {
-    // A corrupt verified column counts as nothing verified, which is the fail-closed
-    // direction: it withholds a rate rather than inventing one.
+    // Corrupt means nothing verified: a rate is withheld, not invented.
     return {};
   }
 }
@@ -122,9 +99,8 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
   // Every outcome row carries the counts; only the verified ones feed the rates.
   const prVerified = mine.filter((o) => verifiedFields(o.verified).prs_opened === true);
   const prsOpened = prVerified.reduce((total, o) => total + (o.prs_opened ?? 0), 0);
-  // The merge rate reads only rows where BOTH counts were verified. A row with its
-  // opened count verified and its merged count not added to the denominator only,
-  // which understated the rate (audit 2026-09-25, E2-L12).
+  // The merge rate reads only rows where both counts were verified, or a row verified
+  // on one side only would skew it.
   const mergeVerified = prVerified.filter((o) => verifiedFields(o.verified).prs_merged === true);
   const prsMerged = mergeVerified.reduce((total, o) => total + (o.prs_merged ?? 0), 0);
   const prsOpenedForRate = mergeVerified.reduce((total, o) => total + (o.prs_opened ?? 0), 0);
@@ -136,9 +112,7 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
 
   return {
     actor,
-    // DONE AND FAILED COME FROM THE OUTCOME ROWS' SIBLING STATUSES IN `jobs`, not from
-    // counting outcomes: an outcome is written for both, so counting them would give
-    // one number where the reader wants two.
+    // From job statuses, not outcome rows: both done and failed write an outcome.
     jobs_done: jobsByStatus("done"),
     jobs_failed: jobsByStatus("failed"),
     jobs_blocked: jobsByStatus("blocked"),
@@ -155,9 +129,8 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
   };
 }
 
-// One record per credential in the inventory. The improve-loop columns are filled for
-// drivers and null for everything else, which is what passing `null` for namespaces
-// means here.
+// One record per credential. Passing null for namespaces leaves the improve-loop
+// columns null, for every kind but driver.
 export function recordsFrom(agents: RecordSubject[], rows: RecordRows): Record<string, AgentRecord> {
   const out: Record<string, AgentRecord> = Object.create(null);
   for (const agent of agents) {
@@ -166,19 +139,12 @@ export function recordsFrom(agents: RecordSubject[], rows: RecordRows): Record<s
   return out;
 }
 
-// ---- the queries ---------------------------------------------------------------
-
 export async function loadRecordRows(db: D1Database): Promise<RecordRows> {
-  // The outcome rows are read whole rather than aggregated in SQL: the rates need to
-  // know which FIELDS of each row were verified, and that lives in a JSON column no
-  // GROUP BY can read. One row per finished job is a small table, and reading it here
-  // keeps the aggregation a pure function that can be checked against fixtures rather
-  // than against a fake that would agree with whatever it was handed.
+  // Read whole rather than aggregated in SQL: which fields were verified lives in a
+  // JSON column no GROUP BY can read, and the aggregation stays a pure function.
   //
-  // A SUPERSEDED JOB'S ROW IS LEFT OUT (migrations/0020). The jobs that 0020 relabelled
-  // were claimed and failed to close them, so each wrote an outcome row, and those rows
-  // are kept rather than deleted. Nothing was attempted on any of them, so counting
-  // them would put failures on the record that the status now says did not happen.
+  // A superseded job's outcome row is left out: nothing was attempted on it, so it
+  // would record a failure that did not happen.
   const outcomes = await db
     .prepare(
       `SELECT agent, prs_opened, prs_merged, ci_green, blocked_count, resumed_count, duration_minutes, verified

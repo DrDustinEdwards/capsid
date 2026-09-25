@@ -33,8 +33,6 @@ export interface RepoRef {
   full: string;
 }
 
-// ---- base64url + key handling ------------------------------------------------
-
 let cachedKey: { pem: string; key: CryptoKey } | null = null;
 
 async function importPrivateKey(pem: string): Promise<CryptoKey> {
@@ -68,8 +66,6 @@ async function createAppJwt(env: Env): Promise<string> {
   return `${signingInput}.${b64urlFromBytes(new Uint8Array(signature))}`;
 }
 
-// ---- installation token ------------------------------------------------------
-
 async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
   const jwt = await createAppJwt(env);
   return fetch(`${GH}${path}`, {
@@ -84,9 +80,8 @@ async function getInstallationId(env: Env, owner: string, repo: string): Promise
   if (cached) return cached;
   const resp = await appFetch(env, `/repos/${owner}/${repo}/installation`);
   if (!resp.ok) {
-    // A valid App JWT with no installation covering the repo answers 404; a bad JWT
-    // answers 401 (measured 2026-07-06). So a 404 means the credentials are fine and
-    // the App is not installed on that repo.
+    // A bad JWT answers 401; a valid one with no installation covering the repo
+    // answers 404.
     throw new Error(
       `could not resolve GitHub App installation for ${owner}/${repo} (${resp.status}): ${await resp.text()}` +
         (resp.status === 404 ? " (404 means the App is not installed on this repo; the credentials are fine)" : "")
@@ -103,10 +98,8 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
   const cached = await env.APP_KV.get(cacheKey);
   if (cached) return cached;
   const installationId = await getInstallationId(env, owner, repo);
-  // SCOPED TO THE ONE REPO BEING ASKED ABOUT (audit 2026-09-06, Grok MAJOR 10). An
-  // access_tokens POST with no body mints a token for every repo the installation
-  // covers, and that token then sits in APP_KV. With `repositories` it holds exactly
-  // the repo the caller resolved.
+  // Scoped to the one repo asked about. With no `repositories` the token covers every
+  // repo the installation reaches, and it sits in APP_KV.
   const resp = await appFetch(env, `/app/installations/${installationId}/access_tokens`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -118,21 +111,9 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
   return data.token;
 }
 
-// One installation covers every repo under a single owner, but each minted token is
-// scoped to one repo, so the cache is per owner+repo to match.
-
-// THE URL BUILT FOR A REPO CALL CANNOT ESCAPE /repos/<owner>/<repo>/ (audit
-// 2026-09-06, CRITICAL). Every ghFetch and cachedGet path in this module is under
-// that prefix; a "../.." smuggled through a file path or branch used to normalize
-// out of it once fetch() parsed the string as a URL. This check runs AFTER assembly
-// and AFTER WHATWG normalization, so it sees the escape the input-level
-// repoPathProblem guard is also there to stop. owner and repo come from the
-// namespace mapping (REPO_SHAPE excludes "." and ".."), so the expected base is
-// itself traversal-free.
-//
-// It builds the same URL new URL() will, which is why a fake fetch keyed on the raw
-// concatenated string cannot substitute for this guard: the raw string still
-// contains the "..", the parsed pathname does not.
+// The URL built for a repo call cannot escape /repos/<owner>/<repo>/. Checked after
+// assembly and after WHATWG normalization, so a "../.." in a path or branch that
+// passed the input guards is still caught once new URL() resolves it.
 function repoApiUrl(owner: string, repo: string, path: string): string {
   const url = `${GH}${path}`;
   const base = `/repos/${owner}/${repo}`;
@@ -158,9 +139,8 @@ export async function ghFetch(env: Env, owner: string, repo: string, path: strin
   return resp;
 }
 
-// The cache key is the full API path, which already carries owner, repo, the file
-// path and the ref as the literal ?ref= query, so entries for different refs are
-// different keys. What was missing was deletion.
+// The cache key is the full API path, including ?ref=, so different refs are
+// different keys.
 export async function cachedGet(env: Env, owner: string, repo: string, path: string): Promise<Response> {
   // Assert the URL is in-bounds before it is ever used as a cache key, so a
   // traversal path cannot be stored under a key the invalidator will not find.
@@ -176,16 +156,10 @@ export async function cachedGet(env: Env, owner: string, repo: string, path: str
   return new Response(body, { status: resp.status });
 }
 
-// INVALIDATION AFTER A WRITE. Nothing deleted these entries, so for up to
-// READ_CACHE_TTL_SECONDS after a commit a read returned the body the write
-// replaced. Capsid writes and then reads back, so this is the ordinary path.
-//
-// Swept by REPO PREFIX rather than by computed key. A key-precise invalidation has
-// to reproduce the exact spelling of every affected entry (the encoded path, the
-// parent listing, the root listing's trailing slash, each in both the no-ref and the
-// ?ref= spelling), and one missed spelling is a stale read. The prefix sweep matches
-// the SHAPE, and it covers a merge, whose affected paths are not known here. It
-// over-invalidates by one GitHub GET.
+// Invalidation after a write, so a read-back does not return the replaced body.
+// Swept by repo prefix rather than by computed key: a key-precise sweep would have to
+// reproduce every spelling of every affected entry, and a merge's affected paths are
+// not known here.
 export async function invalidateRepoReads(env: Env, owner: string, repo: string): Promise<number> {
   const prefix = readPrefix(owner, repo);
   let cursor: string | undefined;
@@ -193,10 +167,8 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
   try {
     do {
       const page = await env.APP_KV.list({ prefix, cursor });
-      // Per PAGE, not per key (quality audit 9.4). Deletes within a page are
-      // independent and this runs on the write path where a caller is waiting. Pages
-      // stay sequential because the next cursor is only known once the current page
-      // returns.
+      // Deletes within a page run in parallel; pages stay sequential because the next
+      // cursor is only known once the current page returns.
       await Promise.all(page.keys.map((key) => env.APP_KV.delete(key.name)));
       deleted += page.keys.length;
       cursor = page.list_complete ? undefined : page.cursor;
@@ -212,17 +184,10 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
   return deleted;
 }
 
-// ---- repo resolution ---------------------------------------------------------
-
-// The shape of a single repos entry: "owner/name". Tightened 2026-09-06 from
-// /^[^/\s]+\/[^/\s]+$/, which admitted "../other" as a legal mapping and made the
-// authorization boundary traversable. GitHub owner and repo names are drawn from
-// [A-Za-z0-9._-]; a segment that is exactly "." or ".." is additionally rejected by
-// repoTokenOk below, because the charset alone still matches "..".
+// The shape of a single repos entry: "owner/name", from GitHub's name charset. The
+// charset still matches "..", so repoTokenOk below also rejects "." and "..".
 export const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
-// Neither side of an owner/name may be "." or "..": those are the tokens that walk
-// a URL out of /repos/<owner>/<repo>/ even though they satisfy the charset.
 export function repoTokenOk(repoFull: string): boolean {
   if (!REPO_SHAPE.test(repoFull)) return false;
   const [owner, name] = repoFull.split("/");
@@ -265,15 +230,10 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
   return primaries === 1 ? null : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// ---- pull request URLs -------------------------------------------------------------
-//
-// https://github.com/<owner>/<repo>/pull/<number>, which is what open_pr returns and
-// what a driver pastes. ONE SPELLING for every site that reads one: the review gate,
-// the evidence verifier and the prose scan in outcome-prs.ts each had their own, with
-// different character classes, so the gate accepted owner/repo strings the verifier
-// refused (audit 2026-09-25, F4-1). The owner and repo this returns are what the URL
-// says, not what the namespace maps: a caller that reaches GitHub with them resolves
-// them through resolveRepo first.
+// https://github.com/<owner>/<repo>/pull/<number>, as open_pr returns it. The one
+// spelling for every site that reads one (review gate, evidence verifier, prose
+// scan), so they cannot disagree. The owner and repo are what the URL says, not what
+// the namespace maps: resolve them through resolveRepo before reaching GitHub.
 export const PR_URL_SOURCE = String.raw`https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)`;
 const PR_URL_EXACT = new RegExp(`^${PR_URL_SOURCE}(?:[/?#].*)?$`);
 
@@ -302,10 +262,8 @@ export async function resolveRepo(env: Env, namespace: string, selector?: string
     .bind(namespace)
     .first<{ repos: string }>();
   if (!row) throw new Error(`unknown namespace: ${namespace}`);
-  // FAILS CLOSED (audit 2, F25). A corrupt repos column used to be swallowed into an
-  // empty array and reported as "has no repo mapping". That is a different fact with
-  // a different fix, and indistinguishable to the caller, so the damage read as an
-  // unconfigured namespace and got "fixed" by overwriting the mapping.
+  // Fails closed: a corrupt repos column is reported as corrupt, not as "no repo
+  // mapping", which has a different fix.
   let list: Array<{ repo: string; label?: string }>;
   try {
     list = JSON.parse(row.repos || "[]");
@@ -336,11 +294,8 @@ export async function resolveRepo(env: Env, namespace: string, selector?: string
   return { owner, repo, full: chosen.repo };
 }
 
-// encodePath preserves the "/" between segments, so it cannot stop traversal on its
-// own: that is why "../../x" survived as real slashes plus real "..". It refuses a
-// "." or ".." segment as an inner guard, and repoApiUrl asserts the assembled URL as
-// the outer one. Both are kept: this gives a clear caller-facing error, that catches
-// anything this misses. Exported for the traversal test.
+// encodePath keeps the "/" between segments, so it refuses a "." or ".." segment
+// itself (a clear caller-facing error); repoApiUrl is the outer guard.
 export function encodePath(path: string): string {
   return path
     .split("/")
@@ -384,14 +339,8 @@ export async function getFileSha(env: Env, owner: string, repo: string, path: st
   return data.sha;
 }
 
-// THE DEFAULT BRANCH'S HEAD COMMIT SHA, which the improve loop needs. It read
-// `(await listRepoTree(...)).sha`, and listRepoTree returns { repo, path, entries }
-// with no top-level sha: the shas it carries are per-entry BLOB shas. So the
-// expression was always undefined, defaultSha was always null, and selectBase always
-// fell through to "no base could be resolved" with no best record and no kept
-// attempt, which is a namespace's FIRST EVER run. Found 2026-09-06.
-//
-// The two halves already existed here as private helpers and were never composed.
+// The default branch's head commit sha, for the improve loop. listRepoTree has no
+// top-level sha (its shas are per-entry blob shas), so it cannot stand in for this.
 export async function defaultBranchSha(env: Env, namespace: string, repoSelector?: string): Promise<string> {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const branch = await getDefaultBranch(env, owner, repo);

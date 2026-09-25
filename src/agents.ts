@@ -11,29 +11,15 @@ import {
   type ScopeFlag,
 } from "./agents-schema";
 
-// AGENTS AS USERS: a bearer resolves to a CALLER, not to a tier.
+// A bearer resolves to a caller, not to a tier. Three kinds, in this order:
 //
-// Before this module, `operatorIdentity` answered "write" or "read" plus twelve hex
-// of the presented key's digest, and every headless caller in the portfolio spoke
-// that two-word vocabulary. The audit log could say that a write happened and could
-// not say whose credential did it beyond a fingerprint somebody had to recognise,
-// and there was no way to hand the queue driver a credential that could work a job
-// without also being able to merge a pull request into a repo that deploys on push.
-//
-// THREE KINDS OF CALLER RESOLVE HERE, and the order is load-bearing:
-//
-//   1. A MINTED AGENT (a row in `agents`), which carries exactly the scopes its row
-//      says and nothing else. Checked FIRST, so a key that is somehow both an agent
-//      and an OPERATOR_KEY_HASH entry gets the narrower authority rather than the
-//      wider one.
-//   2. A LEGACY OPERATOR KEY, which keeps the authority it has today: a plain entry
-//      is write with every flag, an `ro:` entry is read with none. This is what lets
-//      the table land without breaking the credential that would have to be used to
-//      mint the first agent. It stops working when Dustin revokes it, not when this
-//      code deploys.
-//   3. THE OAUTH ADMIN SESSION, resolved in src/index.ts rather than here because
-//      the provider has already done the work: it is the synthetic agent "admin",
-//      holding every scope.
+//   1. A minted agent (a row in `agents`), with exactly its row's scopes. Checked
+//      first, so a key that is also an OPERATOR_KEY_HASH entry gets the narrower
+//      authority.
+//   2. A legacy operator key: a plain entry is write with every flag, an `ro:` entry
+//      is read with none. It stops working when its hash is removed.
+//   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent
+//      "admin", holding every scope.
 
 export interface Agent {
   // The agents.id for a minted agent. For a synthetic one, its actor string, so a
@@ -43,16 +29,12 @@ export interface Agent {
   // row's unique name for a minted agent.
   name: string;
   kind: AgentKind;
-  // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
-  // agent; the existing `github:<login>` and `opkey:<fingerprint>` for the two
-  // identities that predate the table, because those are more specific than the
-  // synthetic name and every audit query already reads them.
+  // What lands in audit_log.actor and jobs.claimed_by: `agent:<name>`,
+  // `github:<login>` or `opkey:<fingerprint>`.
   actor: string;
   scopes: AgentScopes;
-  // May this caller mint, revoke and re-scope other agents? TRUE only for the two
-  // identities that predate the table (the OAuth admin and a legacy write key), so a
-  // minted agent can never mint a wider one than itself. There is no flag for this:
-  // a flag would be settable by update_scopes, which is the escalation this refuses.
+  // May this caller mint, revoke and re-scope other agents? True only for the OAuth
+  // admin and a legacy write key. Not a flag, because update_scopes can set flags.
   admin: boolean;
   // A row-backed agent, as opposed to a synthetic one. What last_seen is written for.
   row: AgentRow | null;
@@ -64,8 +46,7 @@ function flagsAll(value: boolean): Record<ScopeFlag, boolean> {
   return flags;
 }
 
-// Every namespace, every repo, every tool, both grants, every flag. What the two
-// identities that predate the agents table have always had.
+// Every namespace, repo, tool, grant and flag.
 function unrestrictedScopes(): AgentScopes {
   return { namespaces: "*", repos: "*", tools: "*", grants: [...AGENT_GRANTS], flags: flagsAll(true) };
 }
@@ -74,9 +55,8 @@ function readEverythingScopes(): AgentScopes {
   return { namespaces: "*", repos: "*", tools: "*", grants: ["read"], flags: flagsAll(false) };
 }
 
-// THE OAUTH ADMIN SESSION. The provider has already checked the GitHub login against
-// ADMIN_GITHUB_LOGIN twice by the time this is called (once at consent, once per
-// request as defence in depth), so this function grants rather than decides.
+// The OAuth admin session. The provider has already checked the login against
+// ADMIN_GITHUB_LOGIN, so this function grants rather than decides.
 export function adminAgent(login: string): Agent {
   return {
     id: `github:${login}`,
@@ -89,11 +69,8 @@ export function adminAgent(login: string): Agent {
   };
 }
 
-// THE LEGACY VOCABULARY AS A CALLER. A bare grant plus an actor string is what this
-// Worker understood before the agents table, and expressing it as an Agent is what
-// lets the one enforcement point be the only enforcement point: the fallback path
-// and every existing test build a caller the same way the new path does, instead of
-// there being a second code path where scopes do not apply.
+// A legacy grant and actor expressed as an Agent, so checkScope is the only
+// enforcement path for every caller.
 export function legacyAgent(grant: AgentGrant, actor: string): Agent {
   return {
     id: actor,
@@ -101,8 +78,6 @@ export function legacyAgent(grant: AgentGrant, actor: string): Agent {
     kind: "session",
     actor,
     scopes: grant === "write" ? unrestrictedScopes() : readEverythingScopes(),
-    // A write-grant operator key is what mints the first agents; a read-only one is
-    // not.
     admin: grant === "write",
     row: null,
   };
@@ -122,9 +97,8 @@ function agentFromRow(row: AgentRow): Agent {
 
 export interface ResolvedAgent {
   agent: Agent;
-  // last_seen, written best effort AFTER the answer. Separate from resolution so the
-  // request path is a read: a resolver that wrote on every call would put a D1 write
-  // in front of every tool call, and a failed write would look like a failed auth.
+  // last_seen, written best effort after the answer, so resolution stays a read and a
+  // failed write cannot look like a failed auth.
   touch: () => Promise<void>;
 }
 
@@ -135,12 +109,8 @@ function bearerToken(request: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
-// The lookup is an indexed equality on the digest, and the answer is then CONFIRMED
-// with a constant-time compare. The index is what makes this O(1) as the table grows;
-// the compare is what keeps the guarantee if that query is ever loosened (a LIKE, a
-// case fold, a fake in a test). Neither leaks anything useful on its own: what is
-// compared is a sha256 of the presented key against a sha256 the presenter would have
-// to already hold to learn anything from the timing.
+// An indexed equality on the digest, confirmed with a constant-time compare so the
+// guarantee holds if the query is ever loosened.
 async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow | null> {
   const row = await db
     .prepare("SELECT * FROM agents WHERE key_hash = ?1 AND revoked_at IS NULL")
@@ -150,11 +120,8 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
   return timingSafeEqual(row.key_hash, hash) ? row : null;
 }
 
-// A REVOKED AGENT DOES NOT FALL THROUGH. Its key stops resolving here and is not
-// then offered to OPERATOR_KEY_HASH, because a key that was minted as an agent is
-// not an operator key and the fallback is for credentials that predate the table.
-// Falling through would make revocation depend on the key never having matched
-// anything else.
+// A revoked agent does not fall through to OPERATOR_KEY_HASH, so revocation does not
+// depend on the key never having matched anything else.
 export async function resolveAgent(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH?: string }): Promise<ResolvedAgent | null> {
   const token = bearerToken(request);
   if (!token) return null;
@@ -171,8 +138,8 @@ export async function resolveAgent(request: Request, env: { DB: D1Database; OPER
   return { agent: legacyAgent(grant, `opkey:${fingerprint}`), touch: async () => {} };
 }
 
-// Best effort by design. A failure here means one stale last_seen, and last_seen is
-// how an unused credential is noticed, not how a request is authorized.
+// Best effort: last_seen is how an unused credential is noticed, not how a request
+// is authorized.
 async function touchLastSeen(db: D1Database, agent: Agent): Promise<void> {
   if (!agent.row) return;
   try {
