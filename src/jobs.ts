@@ -210,8 +210,7 @@ async function mirrorStatements(db: D1Database, job: JobRow, action: string, act
     // `job.status === "done"` until 2026-09-12, so a failed job's mirror stayed
     // `active` forever and brief kept carrying it as open work; three capsid job
     // documents sat that way. isTerminalJobStatus is the one statement of which
-    // statuses are finished, and test/jobs.test.ts classifies every status in the
-    // vocabulary so a new one cannot land unclassified.
+    // statuses are finished.
     status: isTerminalJobStatus(job.status) ? "closed" : "active",
     tags: "jobs",
     prior,
@@ -467,7 +466,7 @@ export async function postJob(
 // prompt queued in it. The columns are named so the body never leaves D1 for a list;
 // claim returns it, and so does list when `withBody` is set, which the tool sets only
 // for a single named id and a caller holding write.
-export const JOB_LIST_COLUMNS = [
+const JOB_LIST_COLUMNS = [
   "id",
   "namespace",
   "title",

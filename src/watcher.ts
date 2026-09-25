@@ -29,7 +29,7 @@ import { OPEN_JOB_STATUSES } from "./jobs-schema";
 export const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
 
-export const WATCHER_CADENCE_KEY = "watcher:cadence-minutes";
+const WATCHER_CADENCE_KEY = "watcher:cadence-minutes";
 export const WATCHER_LAST_KEY = "watcher:last";
 
 // HALF AN HOUR BY DEFAULT, KV-configurable. The tick runs every five minutes, so this
@@ -40,7 +40,7 @@ export const DEFAULT_CADENCE_MINUTES = 30;
 // The floor. Zero or a negative number would run every check on every tick, which is
 // the one setting that turns a bounded cost into an unbounded one, so an unusable
 // value falls back rather than being obeyed.
-export const MIN_CADENCE_MINUTES = 5;
+const MIN_CADENCE_MINUTES = 5;
 
 // A blocked job nobody has looked at in a day. Long enough that an ordinary gate
 // cleared the same afternoon never trips it.
