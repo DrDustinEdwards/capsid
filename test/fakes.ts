@@ -23,6 +23,7 @@
 // THE IMPROVE TABLES live in their own dialect module, delegated to below. Still
 // ONE fakeD1: this is a second SQL dialect inside the one fake, not a second fake.
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
+import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
 import {
   IMPROVE_ATTEMPT_DEFAULTS,
   IMPROVE_RUN_DEFAULTS,
@@ -306,6 +307,10 @@ export interface FakeD1 {
 // Each is an INSERT ... SELECT NULL guarded by an EXISTS clause, and each aborts the
 // batch with the same NOT NULL violation, which is what D1 does.
 const GUARD_ERROR = "NOT NULL constraint failed: document_versions.document_id";
+
+// postJob's INSERT, whose bound order is (id, namespace, title, body, priority,
+// posted_by, gate_required, required_scopes, min_record, review_required, created_at).
+const isJobInsert = (sql: string) => /^\s*INSERT INTO jobs \(/i.test(sql);
 
 // COLUMN PROJECTION. The fake used to hand back whole rows whatever the SELECT list said,
 // which made `SELECT *` and a named column list indistinguishable (quality audit 7.3 is
@@ -733,12 +738,24 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         // A guard that fires aborts the transaction, so nothing this batch would
         // have written is recorded. That is the property under test.
         if (guardFires(s.sql, s.params, rows)) throw new Error(GUARD_ERROR);
+        // jobs_open_title (migrations/0019): one open job per (namespace, title). The
+        // queue's duplicate refusal is this index firing, so a fake without it would
+        // post every duplicate.
+        if (isJobInsert(s.sql)) {
+          const [, namespace, title] = s.params as [string, string, string];
+          const taken = rows.jobs.some((j) => j.namespace === namespace && j.title === title && OPEN_JOB_STATUSES.includes(j.status as JobStatus));
+          if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
+        }
       }
       // Only once every statement has passed does anything land, which is what a
       // transaction means.
       const landed: unknown[][] = [];
       for (const s of statements) {
         recorded.push({ sql: s.sql, params: s.params, via: "batch" });
+        if (isJobInsert(s.sql)) {
+          const [id, namespace, title, body, priority, posted_by, gate_required, required_scopes, min_record, review_required, created_at] = s.params;
+          rows.jobs.push({ id, namespace, title, body, priority, status: "queued", posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at: created_at });
+        }
         const answer = isImproveStatement(s.sql) ? improveExec(s.sql, s.params, rows) : { handled: false as const };
         landed.push(answer.handled ? answer.results : []);
       }
