@@ -209,15 +209,8 @@ export function agentActor(name: string): string {
 
 // THE DRIVER BOOTSTRAP INSTRUCTION, IN ONE PLACE.
 //
-// register_namespace does NOT mint the new namespace's driver agent, and the
-// reason is a scope boundary rather than an omission. register_namespace runs on
-// a plain write grant (src/scope.ts), which every driver agent holds, while
-// minting is admin only (src/tools/agents.ts) precisely so that an agent cannot
-// widen itself. A register path that minted and returned a key would hand any
-// driver a fresh write credential for a namespace of its choosing, and every
-// scope below it would become decoration.
-//
-// So it returns the COMMAND instead. No credential crosses the tool boundary, the
+// register_namespace does NOT mint the new namespace's driver agent. It returns the
+// COMMAND instead. No credential crosses the tool boundary, the
 // admin runs one line, and the key goes from the mint response to a 0600 file
 // without passing through a chat or a terminal. test/register-namespace-mint.test.ts
 // asserts this string is parseable by the script it names.

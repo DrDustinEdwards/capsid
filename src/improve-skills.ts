@@ -1,7 +1,7 @@
 import { callModel } from "./improve-anthropic";
 import type { Env } from "./env";
 import { skillPath } from "./improve-schema";
-import { improveDocStatements, IMPROVE_ACTOR, priorDoc } from "./improve-state";
+import { improveDocStatements, priorDoc } from "./improve-state";
 
 export interface SkillRow {
   id: string;

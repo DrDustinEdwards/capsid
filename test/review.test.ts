@@ -175,7 +175,7 @@ test("readReviewComments asks the ISSUE comments endpoint, which is where the re
     );
   }) as never;
   try {
-    const comments = await readReviewComments(env, "capsid", { owner: "DrDustinEdwards", repo: "capsid-mcp", number: 27 });
+    const comments = await readReviewComments(env, { owner: "DrDustinEdwards", repo: "capsid-mcp", number: 27 });
     assert.match(asked, /\/repos\/DrDustinEdwards\/capsid-mcp\/issues\/27\/comments/);
     // The comment ID IS CARRIED, because it is what the gate matches against the
     // audit rows naming which comments Capsid posted for a reviewer. A reader that
@@ -196,7 +196,7 @@ test("a comment with no author or no body does not crash the parser", async () =
   globalThis.fetch = (async () =>
     new Response(JSON.stringify([{}, { user: {}, body: null }]), { status: 200, headers: { "Content-Type": "application/json" } })) as never;
   try {
-    const comments = await readReviewComments(env, "capsid", { owner: "o", repo: "r", number: 1 });
+    const comments = await readReviewComments(env, { owner: "o", repo: "r", number: 1 });
     assert.deepEqual(comments, [
       { id: undefined, user: "(unknown)", body: "", created_at: "" },
       { id: undefined, user: "(unknown)", body: "", created_at: "" },
