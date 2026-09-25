@@ -1077,7 +1077,7 @@ async function pinnedEnv() {
 
 test("the merge request carries the head sha the policy evaluated", async () => {
   const { env } = await pinnedEnv();
-  await withFetch(tickRoutes(["src/jobs.ts"]), async (calls) => {
+  await withFetch(tickRoutes(["src/limits.ts"]), async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
     assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
     const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
@@ -1089,7 +1089,7 @@ test("the merge request carries the head sha the policy evaluated", async () => 
 test("a head that moved before the merge (GitHub 409) is reported not merged, audited, and does not abort the tick", async () => {
   const { d1, kv, env } = await pinnedEnv();
   const routes = {
-    ...tickRoutes(["src/jobs.ts"]),
+    ...tickRoutes(["src/limits.ts"]),
     [`PUT ${OWNER}/pulls/23/merge`]: { status: 409, body: { message: "Head branch was modified. Review and try the merge again." } },
   };
   await withFetch(routes as never, async () => {
