@@ -1132,7 +1132,7 @@ test("a head that moved before the merge (GitHub 409) is reported not merged, au
   const audits = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql));
   assert.equal(audits.length, 1, "expected exactly one audit row");
   assert.equal(audits[0].params[1], "auto-merge-declined");
-  const params = JSON.parse(String(audits[0].params[3]));
+  const params = JSON.parse(String(audits[0].params[4]));
   assert.equal(params.head_sha, HEAD_SHA);
   assert.equal(params.failed, "head_moved");
   const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string);
@@ -1282,5 +1282,5 @@ test("PLANT F7-1: a PR whose body names no job is declined without reading its f
   assert.equal(report!.outcomes.find((o) => o.number === 23)?.merged, true);
   const declined = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined");
   assert.equal(declined.length, 1);
-  assert.equal(JSON.parse(String(declined[0].params[3])).head_sha, NO_JOB_SHA);
+  assert.equal(JSON.parse(String(declined[0].params[4])).head_sha, NO_JOB_SHA);
 });

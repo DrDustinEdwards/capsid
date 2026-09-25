@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { skillPath } from "./improve-schema";
 import { improveDocStatements, priorDoc } from "./improve-state";
 import { normalizeDashes } from "./normalize";
+import { auditStatement } from "./store-guards";
 import { alreadyAbstracted, shouldCreateCandidate } from "./skills-records";
 
 // ---- registering a candidate skill by hand ----------------------------------------
@@ -125,13 +126,14 @@ export async function registerSkill(env: Env, actor: string, input: SkillRegistr
         input.termination_test,
         input.composition_interface
       ),
-    env.DB
-      .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'skill-registered', 'capsid', ?2, ?3)")
-      .bind(
-        actor,
-        path,
-        JSON.stringify({ skill: input.id, source_job: job.id, source_namespace: job.namespace, namespaces, status: "candidate", version: 1 })
-      ),
+    auditStatement(env.DB, actor, "skill-registered", "capsid", path, {
+      skill: input.id,
+      source_job: job.id,
+      source_namespace: job.namespace,
+      namespaces,
+      status: "candidate",
+      version: 1,
+    }),
   ]);
 
   return {

@@ -93,7 +93,7 @@ test("ftsQuery reduces free prose to bare words, so an operator in a description
 const counterUpdates = (recorded: Array<{ sql: string; params: unknown[] }>) =>
   recorded.filter((r) => /UPDATE improve_skills SET (wins|losses)/.test(r.sql));
 const outcomeAudits = (recorded: Array<{ sql: string; params: unknown[] }>) =>
-  recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && /improve-skill-outcome/.test(r.sql));
+  recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "improve-skill-outcome");
 
 test("only used skills produce a write, and the direction follows the verifier", () => {
   const { recorded, db } = recorder();
@@ -110,7 +110,7 @@ test("only used skills produce a write, and the direction follows the verifier",
   const audits = outcomeAudits(recorded);
   assert.equal(audits.length, 2, "every credit carries its own audit row");
   assert.deepEqual(
-    audits.map((r) => JSON.parse(String(r.params[2])).skill_id),
+    audits.map((r) => JSON.parse(String(r.params[4])).skill_id),
     ["s1", "s2"]
   );
 });
@@ -132,7 +132,7 @@ test("a verified failure charges a loss to the used skill only", () => {
   assert.equal(updates[0].params[0], "s2");
   const audits = outcomeAudits(recorded);
   assert.equal(audits.length, 1);
-  assert.deepEqual(JSON.parse(String(audits[0].params[2])), {
+  assert.deepEqual(JSON.parse(String(audits[0].params[4])), {
     skill_id: "s2",
     credit: "loss",
     signal: "verified-failure",

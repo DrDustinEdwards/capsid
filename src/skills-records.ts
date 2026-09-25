@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { IMPROVE_ACTOR } from "./improve-state";
+import { auditStatement } from "./store-guards";
 import {
   attribute,
   nextStatus,
@@ -275,9 +276,12 @@ export function attributionStatements(db: D1Database, input: AttributionInput): 
       verdict.credit === "win"
         ? db.prepare("UPDATE improve_skills SET wins = wins + 1 WHERE id = ?1").bind(skill)
         : db.prepare("UPDATE improve_skills SET losses = losses + 1 WHERE id = ?1").bind(skill),
-      db
-        .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'improve-skill-outcome', ?2, NULL, ?3)")
-        .bind(IMPROVE_ACTOR, "capsid", JSON.stringify({ skill_id: skill, credit: verdict.credit, signal: input.signal, reason: verdict.reason }))
+      auditStatement(db, IMPROVE_ACTOR, "improve-skill-outcome", "capsid", null, {
+        skill_id: skill,
+        credit: verdict.credit,
+        signal: input.signal,
+        reason: verdict.reason,
+      })
     );
   }
   return statements;

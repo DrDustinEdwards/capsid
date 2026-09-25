@@ -30,6 +30,7 @@ import { repoWriteFlags } from "../scope";
 import { resolveRepo } from "../github/client";
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
+import { auditStatement } from "../store-guards";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
 // The merge response names the repo and the caller named the number, which is all a
@@ -153,10 +154,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     // INSERT inside the same batch as the mutation. GitHub cannot join that
     // transaction.
     try {
-      await db
-        .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)")
-        .bind(actor, action, namespace, path, JSON.stringify(result))
-        .run();
+      await auditStatement(db, actor, action, namespace, path, result).run();
     } catch (err) {
       console.error(`AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}`);
       return ok({
