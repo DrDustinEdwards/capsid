@@ -58,13 +58,24 @@ jobs:
             cat "${CRED_FILE}" >&2
             exit 1
           fi
-          eval "$(CRED_FILE="${CRED_FILE}" node -e '
-            const c = JSON.parse(require("fs").readFileSync(process.env.CRED_FILE, "utf8"));
-            const fields = [["AWS_ACCESS_KEY_ID", c.access_key_id], ["AWS_SECRET_ACCESS_KEY", c.secret_access_key], ["AWS_SESSION_TOKEN", c.session_token], ["DUMP_ENDPOINT", c.endpoint], ["DUMP_BUCKET", c.bucket], ["DUMP_PREFIX", c.prefix]];
-            for (const [name, value] of fields) {
-              if (!value) { console.error("missing " + name + " in the credential response"); process.exit(1); }
-              process.stdout.write("export " + name + "=" + JSON.stringify(value) + "\n");
-            }')"
+          # One field per call, assigned and then exported. No eval: `eval "$(node ...)"`
+          # discarded node's exit status, so a missing field went unnoticed, and it
+          # expanded any $ or backtick inside a credential value. `export X=$(...)` would
+          # also discard the status, which is why assignment and export are separate.
+          cred() {
+            CRED_FILE="${CRED_FILE}" FIELD="$1" node -e '
+              const c = JSON.parse(require("fs").readFileSync(process.env.CRED_FILE, "utf8"));
+              const v = c[process.env.FIELD];
+              if (typeof v !== "string" || !v) { console.error("missing " + process.env.FIELD + " in the credential response"); process.exit(1); }
+              process.stdout.write(v);'
+          }
+          AWS_ACCESS_KEY_ID=$(cred access_key_id)
+          AWS_SECRET_ACCESS_KEY=$(cred secret_access_key)
+          AWS_SESSION_TOKEN=$(cred session_token)
+          DUMP_ENDPOINT=$(cred endpoint)
+          DUMP_BUCKET=$(cred bucket)
+          DUMP_PREFIX=$(cred prefix)
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN DUMP_ENDPOINT DUMP_BUCKET DUMP_PREFIX
           # The newest run is the last prefix lexically (the keys carry an ISO
           # timestamp at a fixed offset). List one level, take the last, sync it.
           NEWEST=$(aws s3 ls "s3://${DUMP_BUCKET}/${DUMP_PREFIX}" --endpoint-url "${DUMP_ENDPOINT}" | awk '/PRE/{print $2}' | sort | tail -1)
@@ -76,5 +87,8 @@ jobs:
           mkdir -p dump
           aws s3 sync "s3://${DUMP_BUCKET}/${DUMP_PREFIX}${NEWEST}" dump/ --endpoint-url "${DUMP_ENDPOINT}"
 
+      # Also fails when the dump is older than 26 hours: the newest prefix is whatever
+      # the last successful backup wrote, so without that check a stopped backup keeps
+      # this green.
       - name: Rehearse the restore
         run: node scripts/restore-rehearsal.mjs dump

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 // @ts-expect-error the scripts/ tree is plain .mjs with no type declarations, and
 // deliberately so: the rehearsal runs in the live CI job with no npm ci and no
@@ -17,19 +18,41 @@ import { deriveTables, rehearse } from "../scripts/restore-rehearsal.mjs";
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const TABLES = deriveTables(MIGRATIONS);
 
+// Every column of every table, from the migrations, so fixture rows can be completed
+// the way SELECT * completes a real dump's rows: null columns present as null.
+const COLUMNS: Record<string, string[]> = (() => {
+  const db = new DatabaseSync(":memory:");
+  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    db.exec(readFileSync(join(MIGRATIONS, file), "utf8"));
+  }
+  const out: Record<string, string[]> = {};
+  for (const table of TABLES) {
+    out[table] = db.prepare("SELECT name FROM pragma_table_info(?)").all(table).map((c) => String((c as { name: unknown }).name));
+  }
+  db.close();
+  return out;
+})();
+
+function complete(table: string, row: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(COLUMNS[table].map((c) => [c, c in row ? row[c] : null]));
+}
+
+// One hour old: inside the 26 hour threshold, so only the age tests move it.
+const EXPORTED_AT = new Date(Date.now() - 3_600_000).toISOString();
+
 // Build a valid dump directory: one <table>.json per real table, documents
 // carrying restorable, FTS-probeable rows.
 function goodDump(): string {
   const dir = mkdtempSync(join(tmpdir(), "rehearsal-"));
   for (const table of TABLES) {
-    let rows: unknown[] = [];
+    let rows: Record<string, unknown>[] = [];
     if (table === "documents") {
       rows = [
         { id: 1, namespace: "sample", path: "core.md", title: "Sample core", body: "restore rehearsal probe body", type: "core", status: "published", created_at: "2026-09-01 00:00:00", updated_at: "2026-09-01 00:00:00" },
         { id: 2, namespace: "sample", path: "note.md", title: "Second", body: "another document with words", type: "note", status: "published", created_at: "2026-09-01 00:00:00", updated_at: "2026-09-01 00:00:00" },
       ];
     }
-    writeFileSync(join(dir, `${table}.json`), JSON.stringify({ exported_at: "2026-09-07T09:00:00Z", table, rows }));
+    writeFileSync(join(dir, `${table}.json`), JSON.stringify({ exported_at: EXPORTED_AT, table, rows: rows.map((r) => complete(table, r)) }));
   }
   // The two sidecars the dump has carried since residual 4. They are not tables
   // and are named with a leading underscore so they can never collide with one.
@@ -42,8 +65,8 @@ function goodDump(): string {
 }
 
 // Write rows into one table file of an existing dump.
-function setRows(dir: string, table: string, rows: unknown[]): void {
-  writeFileSync(join(dir, `${table}.json`), JSON.stringify({ exported_at: "2026-09-07T09:00:00Z", table, rows }));
+function setRows(dir: string, table: string, rows: Record<string, unknown>[]): void {
+  writeFileSync(join(dir, `${table}.json`), JSON.stringify({ exported_at: EXPORTED_AT, table, rows: rows.map((r) => complete(table, r)) }));
 }
 
 function withDump(fn: (dir: string) => void): void {
@@ -96,21 +119,49 @@ test("a shuffled table field is refused before any rows restore", () => {
 
 test("a zero-document restore is refused as vacuous", () => {
   withDump((dir) => {
-    writeFileSync(join(dir, "documents.json"), JSON.stringify({ table: "documents", rows: [] }));
+    writeFileSync(join(dir, "documents.json"), JSON.stringify({ exported_at: EXPORTED_AT, table: "documents", rows: [] }));
     assert.throws(() => rehearse(dir, MIGRATIONS), /zero documents.*vacuous/);
   });
 });
 
-test("a row-count mismatch is impossible to fake: dropping a column value still restores the row", () => {
-  // The count check compares restored rows to dumped rows, so it cannot be
-  // defeated by a NULL; this asserts the happy path stays green when a nullable
-  // column is absent, so the guard is not over-tight against real dumps.
+test("a row missing a column is refused, even a nullable one", () => {
+  // Before, `row[c] ?? null` restored the missing column as NULL and the rehearsal
+  // passed, so a backup.ts that stopped dumping a nullable column stayed green.
+  // src/backup.ts dumps SELECT *, so a real row carries every column.
   withDump((dir) => {
     const docs = JSON.parse(readFileSync(join(dir, "documents.json"), "utf8"));
+    assert.ok("tags" in docs.rows[0], "the fixture no longer has a tags column to drop");
     delete docs.rows[0].tags;
     writeFileSync(join(dir, "documents.json"), JSON.stringify(docs));
-    const summary = rehearse(dir, MIGRATIONS);
-    assert.equal(summary.docCount, 2);
+    assert.throws(() => rehearse(dir, MIGRATIONS), /documents\.json row 0 does not carry the table's columns \(missing: tags/);
+  });
+});
+
+test("a row carrying a column the table does not have is refused", () => {
+  withDump((dir) => {
+    const docs = JSON.parse(readFileSync(join(dir, "documents.json"), "utf8"));
+    docs.rows[1].surprise = 1;
+    writeFileSync(join(dir, "documents.json"), JSON.stringify(docs));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /row 1 .*extra: surprise/);
+  });
+});
+
+test("A STALE DUMP IS REFUSED: older than 26 hours", () => {
+  // 2026-09-21: the rehearsal passed on a 56 hour old dump during a backup outage.
+  withDump((dir) => {
+    const exported = Date.parse(EXPORTED_AT);
+    assert.throws(() => rehearse(dir, MIGRATIONS, { now: exported + 56 * 3_600_000 }), /56\.0h ago, past the 26h threshold/);
+    // 25 hours is inside the threshold.
+    assert.equal(rehearse(dir, MIGRATIONS, { now: exported + 25 * 3_600_000 }).docCount, 2);
+  });
+});
+
+test("a dump with no readable exported_at is refused, since its age is unknown", () => {
+  withDump((dir) => {
+    const docs = JSON.parse(readFileSync(join(dir, "documents.json"), "utf8"));
+    delete docs.exported_at;
+    writeFileSync(join(dir, "documents.json"), JSON.stringify(docs));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /no readable exported_at/);
   });
 });
 
@@ -157,6 +208,22 @@ test("a missing sidecar is refused: the KV pins are part of the dump now", () =>
   withDump((dir) => {
     rmSync(join(dir, "_kv.json"));
     assert.throws(() => rehearse(dir, MIGRATIONS), /_kv\.json/);
+  });
+});
+
+test("a sidecar that exists but is empty is refused", () => {
+  // Before, a sidecar only had to exist, so `{}` passed.
+  withDump((dir) => {
+    writeFileSync(join(dir, "_kv.json"), JSON.stringify({}));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /_kv\.json carries no 'keys' object/);
+  });
+  withDump((dir) => {
+    writeFileSync(join(dir, "_holdout-manifests.json"), JSON.stringify({ exported_at: EXPORTED_AT, manifests: {} }));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /_holdout-manifests\.json has an empty 'manifests' object/);
+  });
+  withDump((dir) => {
+    writeFileSync(join(dir, "_kv.json"), JSON.stringify({ exported_at: EXPORTED_AT, keys: { improve_mode: 3 } }));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /wrong shape: improve_mode/);
   });
 });
 
@@ -219,6 +286,17 @@ test("A TORN SNAPSHOT IS REFUSED: a write audited after the newest document in t
       { id: 1, actor: "human", action: "write", namespace: "sample", path: "landed-mid-dump.md", params: "{}", at: "2026-09-02 00:00:00" },
     ]);
     assert.throws(() => rehearse(dir, MIGRATIONS), /torn|inconsistent/i);
+  });
+});
+
+test("A TORN SNAPSHOT IS REFUSED: a write in the same second as the newest document", () => {
+  // Timestamps have one second resolution, so a write that landed in the same second
+  // as the newest document, after documents was read, is not "later" by a strict >.
+  withDump((dir) => {
+    setRows(dir, "audit_log", [
+      { id: 1, actor: "human", action: "write", namespace: "sample", path: "same-second.md", params: "{}", at: "2026-09-01 00:00:00" },
+    ]);
+    assert.throws(() => rehearse(dir, MIGRATIONS), /torn/i);
   });
 });
 
