@@ -1233,7 +1233,7 @@ test("a page that fails partway is refused, not judged on the pages that loaded"
 const NO_JOB_SHA = "cccc000000000000000000000000000000000000";
 
 function twoPrRoutes(mergeRoute: unknown) {
-  const base = tickRoutes(["src/jobs.ts"]);
+  const base = tickRoutes(["src/limits.ts"]);
   return {
     ...base,
     [`GET ${OWNER}/pulls`]: {
