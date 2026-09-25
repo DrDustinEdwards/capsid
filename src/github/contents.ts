@@ -377,6 +377,16 @@ async function commitOnBranch<R>(
       `refuses: ${defaultBranch} is the default branch of this server's own repo (${SELF_REPO}), and a commit landing there redeploys the Worker. Use mode "pr" with a work branch and merge through manage_pr, or name a non-default branch.`
     );
   }
+  // PR MODE NEVER COMMITS TO THE DEFAULT BRANCH, ON ANY REPO (audit 2026-09-25, F2-3).
+  // can_direct_write is required only for mode "direct" (repoWriteFlags), so a pr-mode
+  // call naming the default branch as its work branch used to commit straight onto it
+  // without that flag, and several mapped repos deploy on push to it. Refused here,
+  // before the branch step and the commit, so nothing lands.
+  if (mode === "pr" && branch === defaultBranch) {
+    throw new Error(
+      `refuses: mode "pr" with branch ${defaultBranch}, which is the default branch of ${owner}/${repo}; the commit would land on it without a pull request. Omit branch, name a work branch, or use mode "direct" (which needs can_direct_write).`
+    );
+  }
   const target =
     mode === "direct"
       ? branch || defaultBranch
