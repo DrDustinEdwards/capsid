@@ -13,6 +13,7 @@ export function requireCurrent(dir: string, ref: string, label: string): void;
 export function remoteHead(dir: string, ref: string, label: string): string;
 export function requireRemoteCurrent(dir: string, ref: string, label: string): void;
 export function requireLanded(dir: string, ref: string, runs: string, label: string): void;
+export function requireWritable(dir: string, ref: string, label: string): void;
 export interface SyncTarget {
   dir: string;
   ref: string;
@@ -21,3 +22,9 @@ export interface SyncTarget {
   label: string;
 }
 export const TARGETS: SyncTarget[];
+export function sync(opts: {
+  source: { dir: string; ref: string; label: string };
+  targets: SyncTarget[];
+  apply: boolean;
+  log?: (line: string) => void;
+}): number;
