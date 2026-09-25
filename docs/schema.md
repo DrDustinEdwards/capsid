@@ -172,6 +172,14 @@ being measured.
 
 One row per job, keyed by `job_id`, written by `complete` and by `fail` alike.
 
+A superseded job writes none. `supersede` closes a job the seat replaced before any
+work was done on it, so there is nothing to record against a driver. The jobs that
+`migrations/0020_jobs_superseded.sql` relabelled from failed to superseded had
+already written a row when they were failed; those rows are kept, and every read
+that builds a record or a count from `job_outcomes` leaves out a row whose job is
+superseded (`src/agent-record.ts`, the skill totals in `src/improve-run.ts`, and the
+pull request re-verification in `src/outcome-prs.ts`).
+
 | column | what it is |
 | --- | --- |
 | `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later lease expiry clears that column |
