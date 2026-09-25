@@ -4,8 +4,6 @@ import { anchorRegressions, type AnchorSpec, type MetricMap } from "./improve-sc
 import { DRIFT_REVERT_RATIO, DRIFT_RUN_WINDOW, protectedHits } from "./improve-schema";
 import type { RunRow } from "./improve-state";
 
-// ---- the monitor ------------------------------------------------------------
-
 export interface MonitorVerdict {
   flagged: boolean;
   reason: string | null;
@@ -136,8 +134,6 @@ export async function monitorAttempt(env: Env, input: MonitorInput): Promise<Mon
     costUsd: result.costUsd,
   };
 }
-
-// ---- the drift gate ---------------------------------------------------------
 
 export interface DriftVerdict {
   pause: boolean;

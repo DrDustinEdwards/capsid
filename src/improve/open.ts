@@ -37,12 +37,8 @@ import {
   type AttemptRow,
 } from "../improve-state";
 
-// A baseline job is dispatched under a synthetic attempt id that is deliberately
-// NOT a row in improve_attempts: it measures the base, it is not an attempt at
-// anything, and giving it a row would make every attempt count off by one.
+// A synthetic attempt id with no improve_attempts row, so attempt counts stay right.
 export const baselineId = (runIdValue: string) => `${runIdValue}-baseline`;
-
-// ---- shared reads -----------------------------------------------------------
 
 export async function readDoc(db: D1Database, namespace: string, path: string): Promise<string | null> {
   const row = await db
@@ -63,9 +59,8 @@ export async function loadScores(env: Env, namespace: string): Promise<{ doc: Sc
   return { doc, refusal: verification.refusal };
 }
 
-// The metric map for a run's baseline, or for one attempt, read back out of
-// improve_scores. One reader, so the baseline and the attempt sides of a
-// comparison can never be assembled two different ways.
+// The metric map for a run's baseline or one attempt. One reader for both sides of a
+// comparison.
 export async function metricsFor(db: D1Database, runIdValue: string, attemptIdValue: string | null): Promise<MetricMap> {
   const { results } = await db
     .prepare(
@@ -96,12 +91,8 @@ export function scoreStatements(
   );
 }
 
-// ---- the budget kill switch -------------------------------------------------
-
-// Cloudflare's budget alerts are informational and cannot stop a Worker (platform arc
-// 2026-09-06), so this is the loop's own hard stop: monthly caps on Actions minutes
-// and model spend, read from KV (changeable without a deploy, defaults 300 minutes
-// and $50), checked by the opener and the tick BEFORE they open or advance anything.
+// The loop's own hard stop, since Cloudflare's budget alerts cannot stop a Worker:
+// monthly caps from KV, checked by the opener and the tick before they act.
 export interface BudgetStatus {
   month: string;
   caps: { actions_minutes_month: number; model_usd_month: number };
@@ -133,10 +124,8 @@ export async function checkBudget(env: Env, now: Date): Promise<BudgetStatus> {
 }
 
 // Returns the refusal reason when a cap is exceeded, after pausing every roster
-// namespace with reason "loop: budget" (skipping ones already paused, so a five-minute tick
-// does not rewrite eight KV keys forever). The pause is deliberate double coverage:
-// the opener and tick refuse on their own, and the pause makes the stop visible in
-// improve_status and survives a code path that forgets to ask.
+// namespace not already paused. The pause makes the stop visible in improve_status
+// and holds against a code path that forgets to ask.
 export async function enforceBudget(env: Env, now: Date): Promise<string | null> {
   const budget = await checkBudget(env, now);
   if (!budget.exceeded) return null;
@@ -151,14 +140,11 @@ export async function enforceBudget(env: Env, now: Date): Promise<string | null>
   return budget.reason;
 }
 
-// ---- opening ----------------------------------------------------------------
-
 export interface OpenOutcome {
   namespace: string;
   opened: boolean;
   runId: string | null;
-  // The commit a run would branch from. Only the dry run sets it, because that is
-  // the question a dry run exists to answer; a real run records it on the row.
+  // The commit a run would branch from. Set by the dry run only.
   base?: string | null;
   note: string;
 }
@@ -179,12 +165,10 @@ export async function openRuns(
   condition: RunCondition = DEFAULT_CONDITION
 ): Promise<OpenSummary> {
   const { mode, reason } = await readMode(env.APP_KV);
-  // ONE BILLED NAMESPACE PER NIGHT, plus the free one. Opening all five every
-  // night costs 19.2 billed minutes per attempt; the rotation costs one
-  // namespace's worth. `only` still names a single namespace explicitly.
+  // One billed namespace per night plus the free one (scheduledFor).
   const namespaces = only ? [only] : scheduledFor(now);
 
-  // THE BUDGET COMES FIRST: an exceeded cap opens nothing anywhere.
+  // An exceeded cap opens nothing.
   const budgetReason = await enforceBudget(env, now);
   if (budgetReason) {
     return {
@@ -230,9 +214,7 @@ export async function openOne(
   const { doc, refusal } = await loadScores(env, namespace);
   if (refusal) {
     if (preview) return { namespace, opened: false, runId: null, note: `would refuse: ${refusal}` };
-    // A refusal is written where a human will see it in the morning, not only
-    // logged. capsid/conventions.md: where a check cannot run, block and NAME the
-    // reason.
+    // Written as a task document a human will see, not only logged.
     await writeTaskDoc(env, namespace, now, `# improve is blocked in ${namespace}\n\n${refusal}\n`);
     await env.DB.batch([improveAudit(env.DB, "improve-refused", namespace, { refusal })]);
     return { namespace, opened: false, runId: null, note: refusal };
@@ -276,10 +258,8 @@ export async function openOne(
          VALUES (?1, ?2, ?3, 'opening', ?4, ?5)`
       )
       .bind(runIdValue, namespace, mode, choice.sha || null, condition),
-    // THE CONDITION IS IN THE AUDIT ROW, not only in the row it describes. The ruling
-    // is that an ablation should be a query: `improve_runs` is pruned by nothing, and
-    // `audit_log` is the one place a single query answers what the loop did and under
-    // what condition.
+    // The condition is in the audit row too, so one audit_log query answers what the
+    // loop did and under which condition.
     improveAudit(env.DB, "improve-run-opened", namespace, {
       run_id: runIdValue,
       base: choice.sha,
@@ -362,17 +342,10 @@ function renderSubscriptionTask(
   ].join("\n");
 }
 
-// EVERY TASK DOCUMENT THE OPENER WRITES IS SIGNED (audit 2026-09-07). The `/improve`
-// driver executes this document as its instruction list, so it has to tell a plan the
-// Worker authored from one something else wrote. The signature covers the rendered
-// body; the frontmatter block carrying it is added on top and is not itself signed.
-// Signing happens BEFORE improveDocStatements, which normalizes wide dashes: the
-// rendered bodies contain none and normalization is idempotent, so the stored bytes
-// still verify.
-//
-// An unconfigured Worker writes the document UNSIGNED rather than not at all, and
-// the driver then refuses it by name. That is the fail-closed direction: a
-// missing secret must not silently produce a plan that looks executable.
+// Every task document is signed, because the `/improve` driver executes it and must
+// tell the Worker's plan from anything else. Signing precedes dash normalization,
+// which is safe because the rendered bodies contain no wide dashes. Without the
+// secret the document is written unsigned, and the driver refuses it by name.
 export async function writeTaskDoc(env: Env, namespace: string, now: Date, body: string): Promise<void> {
   const path = runTaskPath(chicagoDay(now));
   const prior = await priorDoc(env.DB, namespace, path);

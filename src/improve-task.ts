@@ -44,12 +44,9 @@ export async function signTaskBody(rootSecret: string, body: string): Promise<st
 // the frontmatter and the frontmatter is not signed.
 export type TaskVerification = { ok: true; body: string } | { ok: false; reason: string };
 
-// THE SIGNATURE HALF, ON ITS OWN. verifyTaskDoc adds an actor check on top of this,
-// because only the loop writes a run document. A JOB is signed by the same Worker
-// and posted by a human seat, so its audit actor is that seat and the actor check
-// does not apply: what proves a job body went through `post` is that this Worker's
-// key signed it. One implementation of the signature check, two callers, so the two
-// cannot drift on what "signed" means.
+// The signature check alone. verifyTaskDoc adds an actor check because only the loop
+// writes a run document; a job is posted by a human seat, so for a job the signature
+// alone proves it went through `post`.
 export async function verifySignedBody(
   rootSecret: string | undefined,
   stored: string,
@@ -102,16 +99,9 @@ export async function verifyTaskDoc(
   return verifySignedBody(rootSecret, stored, "task document");
 }
 
-// ---- reading a signed policy document -------------------------------------------
-//
-// ONE READER FOR BOTH POLICIES. capsid/policy/auto-merge.md and capsid/policy/gates.md
-// are read, verified and parsed the same way, and each loader carried its own copy of
-// the read, the verify and the field parser. A fix to one copy (the frontmatter parse,
-// audit 2026-09-25 E2-H1) then had to be made twice. The loaders keep only what
-// differs: which document, and what its parsed lists must agree with.
-//
-// It lives in this file because this file is already on the auto-merge refused list
-// as the verifier those loaders rely on, so the reader is covered by the same entry.
+// One reader for both signed policies (auto-merge.md and gates.md); each loader keeps
+// only what differs. It lives here because this file is already on the auto-merge
+// refused list as their verifier.
 const POLICY_NAMESPACE = "capsid";
 
 /**
@@ -136,23 +126,12 @@ export async function readSignedPolicy(
   return { body: verdict.body };
 }
 
-// ---- anti-rollback ----------------------------------------------------------------
-//
-// A SIGNATURE PROVES THE WORKER SIGNED THESE BYTES ONCE, NOT THAT THEY ARE CURRENT.
-// Every signed version of a policy stays in document_versions, and `restore` or a
-// plain write can put an older one back; its signature still verifies. So the Worker
-// records which signed body is current, in APP_KV under policyPinKey(path), and a
-// load refuses any other signed body (audit 2026-09-25, E2-2).
-//
-// WHAT IS RECORDED: the sha256 of the signed body, and its `- version:` for the
-// refusal text. The pin is the hash and not the version, because a lower version
-// signed on purpose (the seat withdrawing a change) must hold, and a higher version
-// put back after that must not.
-//
-// WHO WRITES IT: sign_policy, before it stores the signed document, so the body it
-// signs becomes the only one that loads. Re-signing the same body writes the same
-// hash. A load writes it only when there is no record yet: the first load after this
-// change deploys, when KV holds nothing, pins whatever signed body is stored then.
+// Anti-rollback. A signature proves the Worker signed these bytes once, not that they
+// are current: `restore` can put an older signed version back. So APP_KV records the
+// sha256 of the current signed body (plus its version, for the refusal text) and a
+// load refuses any other. The hash, not the version, because a lower version signed on
+// purpose must hold. sign_policy writes it before storing; a load writes it only when
+// no record exists yet.
 export const policyPinKey = (path: string): string => `policy:signed:${path}`;
 
 export interface PolicyPin {
@@ -207,7 +186,5 @@ export function policyField(body: string, name: string): string | null {
   return line ? line.slice(line.indexOf(":") + 1).trim() : null;
 }
 
-// A check or class id as a policy writes it: a backticked lowercase name at the head of
-// a list item. Matching the backticks rather than any list item keeps the prose around
-// the list from being read as policy.
+// A backticked lowercase id at the head of a list item, so prose is not read as policy.
 export const POLICY_ID_ITEM = /^- `([a-z_]+)`/;

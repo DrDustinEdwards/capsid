@@ -18,12 +18,8 @@ import {
 
 export const IMPROVE_ACTOR = "improve-loop";
 
-// ---- KV ---------------------------------------------------------------------
-
-// FAIL TO "off", ALWAYS. An unset key, an unrecognised value, or a KV that threw
-// all resolve to off. The asymmetry is deliberate: the cost of wrongly running is
-// five repos receiving machine-authored branches overnight, and the cost of
-// wrongly not running is one quiet night.
+// Unset, unrecognised or unreadable all resolve to off: wrongly running costs five
+// repos machine-authored branches, wrongly not running costs one quiet night.
 export async function readMode(kv: KVNamespace): Promise<{ mode: ImproveMode; reason: string | null }> {
   let raw: string | null;
   try {
@@ -37,8 +33,7 @@ export async function readMode(kv: KVNamespace): Promise<{ mode: ImproveMode; re
   return { mode: "off", reason: `${MODE_KEY} holds an unrecognised value; expected one of ${IMPROVE_MODES.join(", ")}` };
 }
 
-// A paused namespace is skipped. A KV error here also pauses: the same
-// asymmetry as the mode read, for the same reason.
+// A KV error also pauses, for the same reason as readMode.
 export async function pausedReason(kv: KVNamespace, namespace: string): Promise<string | null> {
   try {
     return await kv.get(pausedKey(namespace));
@@ -47,17 +42,13 @@ export async function pausedReason(kv: KVNamespace, namespace: string): Promise<
   }
 }
 
-// NO TTL. A pause is a decision that outlives any run and is cleared by a human
-// deleting the key, which is the point: an expiring pause silently resumes a
-// namespace that was stopped for a reason nobody has looked at yet.
+// No TTL: a human clears a pause, so it never resumes a namespace nobody has looked at.
 export async function pauseNamespace(kv: KVNamespace, namespace: string, reason: string): Promise<void> {
   await kv.put(pausedKey(namespace), reason);
 }
 
-// The budget caps, defaults applied per FIELD: a partial value caps what it
-// names and defaults the rest, and an unreadable or malformed key means the
-// DEFAULTS apply rather than no cap at all. Same fail-closed posture as the
-// mode read: a KV outage must not uncap the loop.
+// Defaults apply per field, and to an unreadable or malformed key, so a KV outage
+// never uncaps the loop.
 export async function readBudget(kv: KVNamespace): Promise<BudgetCaps> {
   try {
     const raw = await kv.get(BUDGET_KEY);
@@ -79,10 +70,7 @@ export async function readBudget(kv: KVNamespace): Promise<BudgetCaps> {
   }
 }
 
-// What the loop has spent since the start of the budget month, from the run
-// rows themselves: cost_usd is the model estimate the run recorded, ci_minutes
-// is the scorer-reported Actions time. Both accrue on the run row as the run
-// advances, so an in-flight run's spend counts too.
+// Spend since the budget month began, from the run rows, so an in-flight run counts.
 export async function monthSpend(
   db: D1Database,
   monthStart: string
@@ -104,9 +92,8 @@ export async function readBest(kv: KVNamespace, namespace: string): Promise<Best
     const parsed = JSON.parse(raw) as BestRecord;
     return typeof parsed?.sha === "string" && parsed.sha.length > 0 ? parsed : null;
   } catch {
-    // A corrupt best record is treated as absent rather than thrown: the run then
-    // branches from the repo's default branch, which is a worse base but a safe
-    // one. Throwing here would wedge every future run on one bad JSON value.
+    // Corrupt reads as absent, so the run branches from the default branch instead
+    // of wedging on one bad value.
     return null;
   }
 }
@@ -114,8 +101,6 @@ export async function readBest(kv: KVNamespace, namespace: string): Promise<Best
 export async function writeBest(kv: KVNamespace, namespace: string, record: BestRecord): Promise<void> {
   await kv.put(bestKey(namespace), JSON.stringify(record));
 }
-
-// ---- rows -------------------------------------------------------------------
 
 export interface RunRow {
   id: string;
@@ -130,9 +115,8 @@ export interface RunRow {
   ci_minutes: number;
   status: RunStatus;
   consecutive_reverts: number;
-  // Environment failures in a row: a scorer that never reported, a container that
-  // never finished, a hidden suite that never arrived. Kept apart from
-  // consecutive_reverts because it says nothing about the code.
+  // Environment failures in a row, kept apart from consecutive_reverts because they
+  // say nothing about the code.
   consecutive_unjudged: number;
   current_attempt: string | null;
   base_sha: string | null;
@@ -166,8 +150,7 @@ export interface AttemptRow {
   ts: string;
 }
 
-// Exported so a caller selecting run rows cannot keep its own copy of this list and
-// fall behind a migration. improve/finalize.ts held a second copy until 0018.
+// Exported so no caller keeps its own copy that falls behind a migration.
 export const RUN_COLUMNS =
   "id, namespace, mode, started, finished, attempts, kept, reverts, cost_usd, ci_minutes, status, " +
   "consecutive_reverts, consecutive_unjudged, current_attempt, base_sha, pr_url, note, condition, advanced_at";
@@ -177,8 +160,7 @@ const ATTEMPT_COLUMNS =
   "status, branch, head_sha, base_sha, flagged, flag_reason, skill_id, anchors_json, secondary_json, dispatched_at, ts";
 
 // The one active run for a namespace, or null. The partial unique index in
-// migrations/0003_improve.sql is what makes "the one" true even when two ticks
-// race; this read is the fast path, not the guarantee.
+// migrations/0003_improve.sql is the guarantee; this read is the fast path.
 export async function activeRun(db: D1Database, namespace: string): Promise<RunRow | null> {
   return db
     .prepare(
@@ -219,13 +201,10 @@ export async function attemptsForRun(db: D1Database, runId: string): Promise<Att
   return results;
 }
 
-// ---- transitions ------------------------------------------------------------
-
 export interface Transition {
   runId: string;
-  // The status the caller believes the run is in. The update only fires if it
-  // still is. Passing the wrong one is not an error, it is a no-op, which is
-  // exactly what a replayed tick should be.
+  // The update fires only if the run is still in this status; otherwise it is a
+  // no-op, which is what a replayed tick should be.
   expected: RunStatus;
   next: RunStatus;
   patch?: Partial<
@@ -247,8 +226,7 @@ export interface Transition {
   >;
 }
 
-// Returns true when THIS call moved the run. False means someone else already
-// did, which is a normal outcome and never an error.
+// True when this call moved the run. False (someone else did) is not an error.
 export async function advanceRun(db: D1Database, t: Transition): Promise<boolean> {
   const sets: string[] = ["status = ?1", "advanced_at = datetime('now')"];
   const binds: unknown[] = [t.next];
@@ -268,21 +246,9 @@ export async function advanceRun(db: D1Database, t: Transition): Promise<boolean
   return results.length === 1;
 }
 
-// ---- documents --------------------------------------------------------------
-
-// THE IMPROVE LOOP WRITES DOCUMENTS THROUGH THE SAME TWO INVARIANTS AS EVERY
-// OTHER WRITE PATH IN THIS WORKER: the prior row is snapshotted into
-// document_versions and a row is appended to audit_log, both in the SAME BATCH as
-// the write, so either all three land or none do.
-//
-// This is the snapshot rule in CLAUDE.md, and it applies here even though nothing the loop
-// writes is canon: an archive doc that overwrites a previous archive doc with no
-// snapshot is exactly the unrecoverable state the rule exists to prevent, and
-// "the loop's own documents do not matter" is the sentence that precedes finding
-// out they did.
-//
-// Returns STATEMENTS rather than executing, so a caller can batch a document
-// write together with the row update it belongs to.
+// The prior row is snapshotted into document_versions and audit_log gets a row, in the
+// same batch as the write (CLAUDE.md, snapshot rule), even for the loop's own
+// documents. Returns statements so a caller can batch them with its row update.
 export async function improveDocStatements(
   db: D1Database,
   doc: {
@@ -295,23 +261,18 @@ export async function improveDocStatements(
     tags?: string;
     prior: { id: number; title: string | null; body: string | null } | null;
     action: string;
-    // Who the audit row names. Defaults to the loop, which is every improve caller.
-    // The work queue passes the job's own actor, because a job document written by
-    // an operator key must not read as the loop's work: audit_log is the one place
-    // that answers who did it.
+    // Who the audit row names. Defaults to the loop; the work queue passes the job's
+    // actor so its documents do not read as the loop's work.
     actor?: string;
   }
 ): Promise<D1PreparedStatement[]> {
-  // Server-side dash normalization, the same as the write tool applies. A
-  // document written by a model is the single most likely source of an em dash
-  // in this store, so the normalizer matters more here than anywhere else.
+  // Server-side dash normalization, as the write tool applies.
   const body = normalizeDashes(doc.body, "prose");
   const title = normalizeDashes(doc.title, "title");
 
-  // The snapshot SELECTs the live row inside the batch rather than binding doc.prior,
-  // which was read earlier: a write landing in between (the job claim path waits on
-  // GitHub there) would otherwise be overwritten with no snapshot of it. It is added
-  // whether or not prior was found, and inserts nothing when there is no row.
+  // The snapshot selects the live row inside the batch rather than binding doc.prior,
+  // so a write landing since that read is still snapshotted. With no row it inserts
+  // nothing.
   const statements: D1PreparedStatement[] = [snapshotLive(db, doc.namespace, doc.path)];
   statements.push(
     db
@@ -345,9 +306,7 @@ export async function priorDoc(
     .first<{ id: number; title: string | null; body: string | null }>();
 }
 
-// An audit row for something that is not a document write: a run opening, a
-// namespace pausing, a scorer dispatch. Same actor, same table, so one query
-// answers "what did the loop do last night".
+// An audit row for a loop action that is not a document write, under the same actor.
 export function improveAudit(
   db: D1Database,
   action: string,
