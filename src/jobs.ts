@@ -211,6 +211,46 @@ async function readJob(db: D1Database, id: string): Promise<JobRow | null> {
   return db.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<JobRow>();
 }
 
+// THE ONE "MARK THIS JOB FAILED" PATH for a job that cannot be handed over: a corrupt
+// requirement or a bad signature at claim, a bad signature at resume (audit 2026-09-25,
+// F3-4 and F4-2). There were three copies, and all three ignored the RETURNING row, so
+// when the job had moved (another driver claimed it) the mirror was still rewritten as
+// failed and closed and an audit row said it was failed while the row was claimed.
+// Now the mirror and the audit row are written only when the UPDATE moved the row,
+// and otherwise the caller gets the row as it now is, to refuse with.
+async function markJobFailed(
+  env: Env,
+  job: JobRow,
+  fromStatus: "queued" | "blocked",
+  summary: string,
+  auditAction: string,
+  actor: string,
+  auditParams: Record<string, unknown>,
+  now: Date
+): Promise<{ failed: true } | { failed: false; current: JobRow | null }> {
+  const moved = await env.DB.prepare(
+    `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+     WHERE id = ?1 AND status = ?4 RETURNING id`
+  )
+    .bind(job.id, summary, now.toISOString(), fromStatus)
+    .first<{ id: string }>();
+  if (!moved) return { failed: false, current: await readJob(env.DB, job.id) };
+  const failed = { ...job, status: "failed" as const, result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
+  await env.DB.batch([
+    ...(await mirrorStatements(env.DB, failed, auditAction, actor)),
+    auditStatement(env.DB, actor, auditAction, failed, auditParams),
+  ]);
+  return { failed: true };
+}
+
+/** The refusal for a job markJobFailed found had already moved. */
+function movedBeforeFailing(action: string, id: string, current: JobRow | null, why: string): JobResult {
+  return refuse(
+    action,
+    `${id} ${why}, but it changed before it could be marked failed: it is now ${current?.status ?? "gone"}${current?.claimed_by ? `, held by ${current.claimed_by}` : ""}. Nothing was written.`
+  );
+}
+
 // THE TRACK-RECORD BAR, CHECKED AT THE CLAIM (migrations/0011).
 //
 // READ ONLY WHEN A JOB ASKS FOR ONE, which is almost never. The record is computed
@@ -514,17 +554,8 @@ export async function claimJob(
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
     const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not leased.`;
-    await env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
-       WHERE id = ?1 AND status = 'queued' RETURNING id`
-    )
-      .bind(candidate.id, reason, now.toISOString())
-      .first<{ id: string }>();
-    const failed = { ...candidate, status: "failed" as const, result_summary: reason, updated_at: now.toISOString() };
-    await env.DB.batch([
-      ...(await mirrorStatements(env.DB, failed, "job-requirement-corrupt", actor)),
-      auditStatement(env.DB, actor, "job-requirement-corrupt", failed, { reason: corrupt }),
-    ]);
+    const marked = await markJobFailed(env, candidate, "queued", reason, "job-requirement-corrupt", actor, { reason: corrupt }, now);
+    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "has a corrupt requirement");
     return refuse("claim", `${reason} It has been marked failed.`);
   }
 
@@ -546,17 +577,8 @@ export async function claimJob(
 
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
-    await env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
-       WHERE id = ?1 AND status = 'queued' RETURNING id`
-    )
-      .bind(candidate.id, verdict.reason, now.toISOString())
-      .first<{ id: string }>();
-    const failed = { ...candidate, status: "failed" as const, result_summary: verdict.reason, updated_at: now.toISOString() };
-    await env.DB.batch([
-      ...(await mirrorStatements(env.DB, failed, "job-signature-refused", actor)),
-      auditStatement(env.DB, actor, "job-signature-refused", failed, { reason: verdict.reason }),
-    ]);
+    const marked = await markJobFailed(env, candidate, "queued", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason }, now);
+    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "failed its signature check");
     return refuse("claim", `${candidate.id} failed its signature check and has been marked failed: ${verdict.reason}`);
   }
 
@@ -861,12 +883,12 @@ async function reviewRefusal(
     // it and recursing.
     const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
     if (atCorrectionCap(spentOnWork)) {
-      return blockJob(env, agent, now, id, {
+      return endedElsewhere(action, await blockJob(env, agent, now, id, {
         reason:
           `review by ${review.by}: CHANGES.${said} This is correction ${spentOnWork + 1} against this work, past the cap of ${CORRECTION_CAP}: ` +
           `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
         fromReview: true,
-      });
+      }));
     }
     // BACK TO THE DRIVER, and it spends a correction from the same budget the retry
     // cap bounds. A review sending work round forever is the loop that cap exists for,
@@ -895,7 +917,25 @@ async function reviewRefusal(
   // HALT. Blocked for the seat, with the objection as the reason, through the ordinary
   // block path so the gate counter and the mirror document behave exactly as they do
   // for any other block.
-  return blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true });
+  return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true }));
+}
+
+// A TRANSITION THAT ENDED SOMEWHERE OTHER THAN ASKED IS NOT A SUCCESS (audit
+// 2026-09-25, F3-3). A complete or fail that met a reviewer BLOCK, or a CHANGES at the
+// correction cap, blocks the job instead, and returning blockJob's result said ok: true
+// with action "block" to a driver that had asked for something else. The block is
+// recorded either way; this says so as a refusal of the caller's own action, with the
+// job as it now stands. A caller that asked to block got a block, so its result passes.
+function endedElsewhere(action: string, result: JobResult): JobResult {
+  if (!result.ok || action === result.action) return result;
+  return {
+    ok: false,
+    action,
+    ...(result.job ? { job: result.job } : {}),
+    refusal:
+      `${result.job?.id ?? "the job"} was not ${action === "complete" ? "completed" : `${action}ed`}: the reviewer's verdict blocked it for the seat instead, and that block is recorded. ` +
+      `${result.job?.result_summary ?? ""}`.trim(),
+  };
 }
 
 /**
@@ -1371,17 +1411,8 @@ export async function resumeJob(
 
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, current.body, "job body");
   if (!verdict.ok) {
-    await env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
-       WHERE id = ?1 AND status = 'blocked' RETURNING id`
-    )
-      .bind(id, verdict.reason, now.toISOString())
-      .first<{ id: string }>();
-    const failed = { ...current, status: "failed" as const, result_summary: verdict.reason, updated_at: now.toISOString() };
-    await env.DB.batch([
-      ...(await mirrorStatements(env.DB, failed, "job-signature-refused", actor)),
-      auditStatement(env.DB, actor, "job-signature-refused", failed, { reason: verdict.reason, at: "resume" }),
-    ]);
+    const marked = await markJobFailed(env, current, "blocked", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason, at: "resume" }, now);
+    if (!marked.failed) return movedBeforeFailing("resume", id, marked.current, "failed its signature check");
     return refuse("resume", `${id} failed its signature check and has been marked failed: ${verdict.reason}`);
   }
 

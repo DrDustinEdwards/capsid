@@ -4,7 +4,7 @@ import { z } from "zod";
 import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from "../limits";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
-import { blockJob, claimJob, completeJob, failJob, heartbeatJob, listJobs, postJob, resumeJob, supersedeJob } from "../jobs";
+import { blockJob, claimJob, completeJob, failJob, heartbeatJob, listJobs, postJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
 import { parseEvidence } from "../job-outcomes";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -14,6 +14,14 @@ const MAX_JOB_ID = 64;
 // inside `complete`, so the bound is what stops a single call fanning out into an
 // unbounded number of them. Ten is more than any job this queue has run produced.
 const MAX_EVIDENCE_PRS = 10;
+
+// A REFUSAL IS AN ERROR TO THE CLIENT (audit 2026-09-25, F3-7). Every JobResult went
+// through ok(), so a result with ok: false still had isError false and a client that
+// keys on isError read a refusal as success. The body is the same JSON either way, so
+// a caller reading `refusal` and `job` still finds them.
+function reply(result: JobResult) {
+  return result.ok ? ok(result) : { ...ok(result), isError: true };
+}
 
 export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
   const { env, db, agent } = ctx;
@@ -155,7 +163,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             if (!args.namespace || !args.title || !args.body) {
               return fail("post needs namespace, title and body.");
             }
-            return ok(
+            return reply(
               await postJob(env, agent, now, {
                 namespace: args.namespace,
                 title: args.title,
@@ -169,10 +177,10 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             );
           }
           case "claim":
-            return ok(await claimJob(env, agent, now, { namespace: args.namespace, id: args.id }));
+            return reply(await claimJob(env, agent, now, { namespace: args.namespace, id: args.id }));
           case "heartbeat": {
             if (!args.id) return fail("heartbeat needs the job id.");
-            return ok(await heartbeatJob(env, agent, now, args.id));
+            return reply(await heartbeatJob(env, agent, now, args.id));
           }
           case "complete": {
             if (!args.id) return fail("complete needs the job id.");
@@ -182,7 +190,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             const parsed = parseEvidence(args.evidence);
             if ("error" in parsed) return fail(parsed.error);
             const parsedEvidence = parsed.evidence;
-            return ok(
+            return reply(
               await completeJob(env, agent, now, args.id, {
                 result_summary: args.result_summary ?? "",
                 result_ref: args.result_ref,
@@ -193,15 +201,15 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           }
           case "fail": {
             if (!args.id) return fail("fail needs the job id.");
-            return ok(await failJob(env, agent, now, args.id, args.reason ?? "", args.skills));
+            return reply(await failJob(env, agent, now, args.id, args.reason ?? "", args.skills));
           }
           case "block": {
             if (!args.id) return fail("block needs the job id.");
-            return ok(await blockJob(env, agent, now, args.id, { reason: args.reason ?? "", command: args.command }));
+            return reply(await blockJob(env, agent, now, args.id, { reason: args.reason ?? "", command: args.command }));
           }
           case "resume": {
             if (!args.id) return fail("resume needs the job id.");
-            return ok(await resumeJob(env, agent, now, args.id, args.reason ?? "", {
+            return reply(await resumeJob(env, agent, now, args.id, args.reason ?? "", {
                 approvedByPolicy: args.approved_by_policy,
                 take: args.take,
                 correction: args.correction,
@@ -210,7 +218,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           }
           case "supersede": {
             if (!args.id) return fail("supersede needs the job id.");
-            return ok(await supersedeJob(env, agent, now, args.id, { reason: args.reason ?? "", replaced_by: args.replaced_by }));
+            return reply(await supersedeJob(env, agent, now, args.id, { reason: args.reason ?? "", replaced_by: args.replaced_by }));
           }
         }
         return fail(`unknown jobs action '${args.action}'.`);
