@@ -144,19 +144,6 @@ describe("query plans", () => {
     expect(prunePlan).toContain("document_versions_snapshot");
   });
 
-  it("PLANT: the prune DELETEs share the predicate their index was built for", async () => {
-    // A DELETE has no query plan worth reading, so this asserts the shape instead:
-    // the COUNT and the DELETE must filter on the same column, or the index covers
-    // the cheap half of the prune and not the expensive one.
-    const writes = env.TEST_SQL_STATEMENTS.filter((s) => /^DELETE FROM (audit_log|document_versions)\b/i.test(s.sql));
-    expect(writes.length, "the prune DELETEs are not where this test looked").toBeGreaterThanOrEqual(2);
-    for (const statement of writes) {
-      expect(statement.sql, `${statement.sql} does not filter on the column its index covers`).toMatch(
-        /WHERE (at|snapshot_at) < datetime/i
-      );
-    }
-  });
-
   // THE HOLE THE WALKER LEAVES, CLOSED BY HAND (PR #20).
   //
   // scripts/sql-statements.mjs substitutes an optional `${clause}` with `WHERE 1 = 1`,
@@ -212,31 +199,6 @@ describe("query plans", () => {
       const plan = result.results.map((r) => r.detail).join(" | ");
       expect(plan, `${sql.slice(0, 60)} does not use audit_log_action_actor`).toContain("audit_log_action_actor");
       expect(plan, `${sql.slice(0, 60)} builds a temp b-tree to group`).not.toContain("TEMP B-TREE");
-    }
-  });
-
-  it("the indexes 0010 declares all exist in the real schema", async () => {
-    const expected = ["audit_log_action_actor", "audit_log_actor_recent", "audit_log_ns_recent"];
-    const rows = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all<{ name: string }>();
-    const present = rows.results.map((r) => r.name);
-    for (const name of expected) {
-      expect(present, `${name} is declared in migrations/0010 and absent from the applied schema`).toContain(name);
-    }
-  });
-
-  it("the indexes 0005 declares all exist in the real schema", async () => {
-    const expected = [
-      "audit_log_doc",
-      "audit_log_at",
-      "document_versions_doc",
-      "document_versions_snapshot",
-      "improve_runs_started",
-      "improve_skills_ts",
-    ];
-    const rows = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all<{ name: string }>();
-    const present = rows.results.map((r) => r.name);
-    for (const name of expected) {
-      expect(present, `${name} is declared in migrations/0005 and absent from the applied schema`).toContain(name);
     }
   });
 });

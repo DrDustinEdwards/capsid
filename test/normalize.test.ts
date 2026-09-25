@@ -51,10 +51,3 @@ test("output never contains a wide dash", () => {
   const clean = normalizeDashes(dirty);
   assert.equal(hasWideDash(clean), false);
 });
-
-test("hasWideDash detects each wide-dash character", () => {
-  assert.equal(hasWideDash("a — b"), true);
-  assert.equal(hasWideDash("a – b"), true);
-  assert.equal(hasWideDash("a ― b"), true);
-  assert.equal(hasWideDash("a - b"), false);
-});

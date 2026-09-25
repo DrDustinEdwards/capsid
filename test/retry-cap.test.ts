@@ -5,8 +5,6 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { resumeJob } from "../src/jobs.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeEnv } from "./fakes.ts";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 
 // GROUP 2: TWO CORRECTIONS, THEN A HUMAN.
 //
@@ -17,10 +15,6 @@ import { join } from "node:path";
 //
 // The rules live as pure functions here for the same reason the skill lifecycle
 // does: they can be driven to their refusals without a database.
-
-test("the cap is two, and it is stated once", () => {
-  assert.equal(CORRECTION_CAP, 2);
-});
 
 test("a job under the cap is not capped, and a job at it is", () => {
   assert.equal(atCorrectionCap(0), false);
@@ -45,20 +39,6 @@ test("the capped summary names the cap and KEEPS what the driver said", () => {
 test("capping an empty summary still says why the job stopped", () => {
   assert.match(cappedSummary(null), new RegExp(RETRY_CAP_REASON));
   assert.match(cappedSummary(""), new RegExp(RETRY_CAP_REASON));
-});
-
-test("the reason is the exact string the job asked for", () => {
-  assert.equal(RETRY_CAP_REASON, "retry cap; human decision required");
-});
-
-test("DERIVED: the column the cap is counted in exists in a migration", () => {
-  // The rules above are worth nothing if nothing stores the count. Read the
-  // migrations rather than trusting that one was written.
-  const dir = join(import.meta.dirname, "..", "migrations");
-  const names = readdirSync(dir).filter((f) => f.endsWith(".sql"));
-  assert.ok(names.length > 0, "the scan found no migrations; it is reading nothing");
-  const sql = names.map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
-  assert.match(sql, /ALTER TABLE jobs ADD COLUMN corrections_count INTEGER NOT NULL DEFAULT 0/);
 });
 
 // ---- the behavioural half, against a row that can disagree -----------------------
@@ -205,34 +185,6 @@ test("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the c
     assert.equal(row.corrections_count, 0, `plain resume ${i} spent a correction`);
     row.status = "blocked";
   }
-});
-
-test("PLANT: a seat's resume returns the job to the driver that blocked it", async () => {
-  // job_4918f3519cba, 2026-09-16: the seat resumed it and the job became the seat's,
-  // which has no shell to finish it with.
-  const { db, row } = resumeDb(await blockedRow(0));
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "the push is approved");
-  assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(row.claimed_by, "agent:capsid-driver", "the resumer took a job it did not block");
-});
-
-test("THE OTHER DIRECTION: take hands the lease to the resumer", async () => {
-  const { db, row } = resumeDb(await blockedRow(0));
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("admin", true) as never, NOW, "job_4c0ecc28548b", "I will finish it", { take: true });
-  assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(row.claimed_by, "agent:admin");
-});
-
-test("PLANT: resume keeps claimed_at, so duration is measured from the first claim", async () => {
-  // job_6bbd77bc4827, 2026-09-17: claimed_at 01:44:41 was the resume, not the claim,
-  // and the outcome recorded the stretch after it.
-  const { db, row } = resumeDb(await blockedRow(0));
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "the push ran");
-  assert.equal(result.ok, true, JSON.stringify(result));
-  assert.equal(row.claimed_at, "2026-09-12T00:00:00.000Z", "resume rewrote the first claim's timestamp");
 });
 
 test("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {

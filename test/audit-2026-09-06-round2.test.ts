@@ -54,7 +54,6 @@ test("ci_dispatch refuses improve-score.yml before any network call", async () =
 // spelling it out. A hardcoded copy is what made the improve fixtures land one
 // word away from the real mapping and test nothing (see self-repo-attempt.test.ts);
 // the 2026-09-12 rename to DrDustinEdwards/capsid would have done it again.
-// The literal value is pinned once, in repo-name.test.ts.
 test("write_repo_file mode direct against the server's own repo is refused, with no network", async () => {
   await withFetch({}, async (calls) => {
     await assert.rejects(

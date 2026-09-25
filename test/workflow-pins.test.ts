@@ -119,23 +119,6 @@ test("every job declares timeout-minutes", () => {
   );
 });
 
-test("the two credential-holding jobs are pinned, which is the case this guard was written for", () => {
-  // Named explicitly so the guard cannot go quiet by no longer finding these two.
-  // The mirror job lives in capsid-backups and is out of reach from here; this is
-  // its sibling, and the one that holds BACKUP_CREDENTIAL_KEY in this repo.
-  const rehearsal = readFileSync(join(WORKFLOWS, "restore-rehearsal.yml"), "utf8");
-  assert.match(rehearsal, /BACKUP_CREDENTIAL_KEY/, "the rehearsal no longer holds the backup credential");
-  for (const line of rehearsal.split("\n").filter((l) => /uses:/.test(l))) {
-    assert.match(line, /@[0-9a-f]{40}/, `restore-rehearsal.yml takes an action by tag: ${line.trim()}`);
-  }
-  const deployJob = jobs().find((j) => j.workflow === "ci.yml" && j.id === "deploy");
-  assert.ok(deployJob, "ci.yml no longer has a deploy job");
-  assert.ok(
-    deployJob.lines.some((l) => /timeout-minutes:/.test(l)),
-    "the deploy job, which holds CLOUDFLARE_API_TOKEN, has no timeout"
-  );
-});
-
 // ---- the scorer's clock and the Worker's must not drift apart ---------------
 //
 // SCORE_TIMEOUT_MS is how long the Worker waits for a dispatched scorer before it

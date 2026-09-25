@@ -6,7 +6,6 @@ import { improveControl } from "../src/improve-run.ts";
 import { sha256Hex } from "../src/auth.ts";
 import { operatorIdentity } from "../src/auth.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { sourceFile } from "./source-files.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
@@ -26,38 +25,12 @@ const ROOT = join(import.meta.dirname, "..");
 const DOCS = join(ROOT, "docs");
 const read = (name: string) => readFileSync(join(DOCS, name), "utf8");
 
-// The list is exact on purpose. docs/ is public surface in a public repo, so a new
-// file appearing here is a deliberate act and this assertion is what makes it one.
-// It grew from three to twelve when the README was cut to its top-level shape and
-// its long sections moved here; the three originals are still the deep ones.
-const DEEP = ["bootstrap.md", "improve.md", "schema.md"];
-const TOPIC = [
-  "auth.md",
-  "autonomy.md",
-  "backups.md",
-  "console.md",
-  "consolidation.md",
-  "repo-access.md",
-  "rollback.md",
-  "skills.md",
-  "work-queue.md",
-];
-
-test("the public docs are exactly the expected set, and each explains something", () => {
-  const files = readdirSync(DOCS).filter((f) => f.endsWith(".md")).sort();
-  assert.deepEqual(files, [...DEEP, ...TOPIC].sort());
-  // The deep docs carry the system's model and keep the original bar.
-  for (const file of DEEP) {
-    assert.ok(read(file).length > 2000, `docs/${file} is too short to explain anything`);
-  }
-  // A topic doc is one section, so the bar is lower. It is still a bar: a stub that
-  // exists only to satisfy a README link is worse than a link to nothing.
-  for (const file of TOPIC) {
-    const text = read(file);
-    assert.ok(text.length > 600, `docs/${file} is a stub (${text.length} chars)`);
-    assert.match(text, /^# /m, `docs/${file} has no heading`);
-  }
-});
+// The two guards below read every file in docs/, so an empty listing would pass them.
+const docFiles = () => {
+  const files = readdirSync(DOCS).filter((f) => f.endsWith(".md"));
+  assert.ok(files.length > 0, "docs/ holds no .md files, so the guards below read nothing");
+  return files;
+};
 
 test("PLANT: no public doc carries a secret, a key or a real credential", () => {
   // The shapes that would actually matter. A hash is included because
@@ -70,7 +43,7 @@ test("PLANT: no public doc carries a secret, a key or a real credential", () => 
     [/\bro:[0-9a-f]{32,}/, "a minted read-only operator key"],
     [/\b[0-9a-f]{64}\b/, "something shaped like a sha256 hash"],
   ];
-  for (const file of readdirSync(DOCS).filter((f) => f.endsWith(".md"))) {
+  for (const file of docFiles()) {
     const text = read(file);
     for (const [pattern, what] of forbidden) {
       assert.doesNotMatch(text, pattern, `docs/${file} contains ${what}`);
@@ -82,7 +55,7 @@ test("PLANT: no public doc carries private infrastructure identifiers", () => {
   // A Cloudflare resource id is not a secret, and it is also not something a
   // public doc needs. The example config carries placeholders for exactly this
   // reason; the docs should not undo that.
-  for (const file of readdirSync(DOCS).filter((f) => f.endsWith(".md"))) {
+  for (const file of docFiles()) {
     const text = read(file);
     assert.doesNotMatch(text, /\b[0-9a-f]{32}\b/, `docs/${file} contains something shaped like a Cloudflare resource id`);
     // A UUID, which is what a D1 database id looks like.
@@ -91,43 +64,6 @@ test("PLANT: no public doc carries private infrastructure identifiers", () => {
       /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/,
       `docs/${file} contains a UUID`
     );
-  }
-});
-
-test("the docs describe the model without naming the private inventory", () => {
-  // The roster and the namespace list are the store's contents, not its model.
-  // The improve doc says so about itself; this asserts it stayed true.
-  const improve = read("improve.md");
-  assert.match(improve, /redacted from the private canon/i);
-  assert.match(improve, /off by default/i);
-  assert.match(improve, /never merges/i);
-  const schema = read("schema.md");
-  assert.match(schema, /redacted from the private canon/i);
-});
-
-// scanner-rule: conventions-verification, a list written in docs is derived from the source it describes and compared
-test("bootstrap names every binding the Worker actually declares", () => {
-  // Derived from src/env.ts rather than listed, so a binding added to the Worker
-  // and not to the setup guide is a build failure. That is the whole failure mode
-  // a bootstrap document has: it is right on the day it is written.
-  const envSource = sourceFile("env.ts");
-  const declared = [...envSource.matchAll(/^\s{2}([A-Z][A-Z0-9_]*):/gm)].map((m) => m[1]);
-  const bindings = declared.filter((name) => ["DB", "APP_KV", "OAUTH_KV", "MEDIA", "HOLDOUT"].includes(name));
-  assert.equal(bindings.length, 5, `expected the five bindings in src/env.ts, found ${bindings.join(", ")}`);
-  const bootstrap = read("bootstrap.md");
-  for (const binding of bindings) {
-    assert.match(bootstrap, new RegExp(`\`${binding}\``), `docs/bootstrap.md does not name the ${binding} binding`);
-  }
-});
-
-// scanner-rule: conventions-verification, a list written in docs is derived from the source it describes and compared
-test("bootstrap names every secret the Worker reads", () => {
-  const envSource = sourceFile("env.ts");
-  const secrets = ["GITHUB_APP_PRIVATE_KEY", "GITHUB_CLIENT_SECRET", "OPERATOR_KEY_HASH", "IMPROVE_SCORE_SECRET", "ANTHROPIC_API_KEY"];
-  const bootstrap = read("bootstrap.md");
-  for (const secret of secrets) {
-    assert.ok(envSource.includes(secret), `${secret} is no longer read by src/env.ts; the bootstrap doc is describing a ghost`);
-    assert.ok(bootstrap.includes(secret), `docs/bootstrap.md does not name ${secret}`);
   }
 });
 

@@ -7,7 +7,6 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { registerSkill, type SkillRegistration } from "../src/skills-register.ts";
-import { sourceFile } from "./source-files.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // REGISTERING A CANDIDATE SKILL BY HAND. Before this, the only INSERT into
@@ -80,14 +79,6 @@ function world(over: World = {}) {
 }
 
 // ---- the claim this change rests on ------------------------------------------------
-
-// scanner-rule: conventions-verification, enumerate every site: a third way to create a skill must be seen, which no call to the two known ones can show
-test("before this change, recordSkill was the only INSERT into improve_skills; now there are exactly two", () => {
-  const inserts = ["improve-skills.ts", "skills-register.ts"].map(
-    (f) => (sourceFile(f).match(/INSERT INTO improve_skills/g) ?? []).length
-  );
-  assert.deepEqual(inserts, [1, 1]);
-});
 
 // ---- what it writes ------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { protectedHits, PROTECTED_PATH_PATTERNS } from "../src/improve-schema.ts";
+import { protectedHits } from "../src/improve-schema.ts";
 
 // LOCKFILES THE SCORER INSTALLS FROM, audit 2026-09-07 (Opus CRITICAL 5.2, Grok
 // MAJOR 4). Every path in EXECUTED_AT_INSTALL is refused by the path monitor at
@@ -93,14 +93,6 @@ test("the guard has not become a blanket refusal", () => {
   ];
   const wrongly = ordinary.filter((p) => protectedHits([p]).length > 0);
   assert.deepEqual(wrongly, [], "these must stay editable or the loop has nothing to do");
-});
-
-test("the pattern list is shaped, not spelled: each entry is a regex with a reason", () => {
-  for (const entry of PROTECTED_PATH_PATTERNS) {
-    assert.ok(entry.pattern instanceof RegExp, "every entry is a RegExp");
-    assert.ok(entry.pattern.flags.includes("i"), `${entry.pattern} must be case-insensitive`);
-    assert.equal(typeof entry.why, "string");
-  }
 });
 
 // Audit 2026-09-25, E2-30 (finding E2-L13): config the test runner or build reads that

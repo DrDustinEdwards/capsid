@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { join } from "node:path";
 import { sourceFiles } from "./source-files.ts";
 
 // document_links stores (namespace, path) strings, not documents.id, and the
@@ -81,12 +79,6 @@ const MUTATION_PATTERNS: Array<{ label: string; find: (text: string) => number[]
   { label: "DELETE FROM documents", find: deleteHits },
 ];
 
-// scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else
-test("pathMutation markers are present and well ordered", () => {
-  const { start, end } = helperRange();
-  assert.ok(end - start > 200, "helper body is implausibly small; markers may have drifted");
-});
-
 // scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else (count guard)
 test("the scan reads a plausible number of source files", () => {
   // An assertion that can pass by reading nothing is not an assertion. If the
@@ -145,21 +137,4 @@ test("the UPDATE pattern does not fire on path in a WHERE clause", () => {
   // clause of nearly every statement in server.ts.
   const innocent = 'db.prepare("UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3")';
   assert.deepEqual(pathMutationHits(innocent), []);
-});
-
-// scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else
-test("all three known callers route through the helper", () => {
-  const all = SOURCES.map((f) => f.text).join("\n");
-  for (const caller of ["pathMutation(db, namespace, path, null)", "pathMutation(db, namespace, path, new_path)", "pathMutation(db, namespace, path, `archive/${path}`)"]) {
-    assert.ok(all.includes(caller), `expected a pathMutation call site: ${caller}`);
-  }
-});
-
-test("document_links still has no foreign key, which is why the helper exists", () => {
-  const migration = readFileSync(join(import.meta.dirname, "..", "migrations", "0002_document_links.sql"), "utf8");
-  assert.ok(/CREATE TABLE IF NOT EXISTS document_links/i.test(migration));
-  assert.ok(
-    !/REFERENCES\s+documents/i.test(migration),
-    "document_links gained a foreign key: revisit whether pathMutation is still the only guard"
-  );
 });

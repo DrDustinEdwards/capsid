@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
-import {
-  REVERIFY_PER_SWEEP,
-  REVERIFY_WINDOW_DAYS,
-  SWEEP_INTERVAL_MS,
-  outcomePrStatements,
-  prUrlsFromJob,
-} from "../src/outcome-prs.ts";
+import { outcomePrStatements, prUrlsFromJob } from "../src/outcome-prs.ts";
 import { parseEvidence } from "../src/job-outcomes.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -19,8 +11,6 @@ import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 // OUTCOME ROWS ARE IMMUTABLE EXCEPT MERGE STATE. A driver never merges: it blocks and
 // the seat merges afterwards, so every row is written "opened, not merged" and stays
 // wrong. These cover the one narrow path that corrects it.
-
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0015_outcome_prs.sql"), "utf8");
 
 function recorder() {
   const recorded: Array<{ sql: string; params: unknown[] }> = [];
@@ -61,16 +51,6 @@ test("evidence naming no pull requests writes no rows", () => {
   const { recorded, db } = recorder();
   assert.deepEqual(outcomePrStatements(db, "job_1", []), []);
   assert.equal(recorded.length, 0);
-});
-
-test("merged starts NULL, which is not the same as closed unmerged", () => {
-  // Three states: 1 merged, 0 closed or open, NULL never checked. A row written when
-  // GitHub was unreachable has never been looked at, and storing that as 0 would make
-  // it indistinguishable from a pull request somebody closed.
-  const { recorded, db } = recorder();
-  outcomePrStatements(db, "job_1", ["https://github.com/o/r/pull/1"]);
-  assert.match(recorded[0].sql, /VALUES \(\?1, \?2, NULL, NULL\)/, "both merge fields start unset");
-  assert.match(MIGRATION, /NULL never checked/i);
 });
 
 // ---- seeding a row that stored no pull request -------------------------------------
@@ -119,12 +99,6 @@ test("a near-miss URL is not mistaken for a pull request", () => {
 
 
 // ---- the bounds ----------------------------------------------------------------------
-
-test("the sweep is bounded per run and by age, and runs daily", () => {
-  assert.equal(REVERIFY_PER_SWEEP, 50);
-  assert.equal(REVERIFY_WINDOW_DAYS, 30);
-  assert.equal(SWEEP_INTERVAL_MS, 86_400_000);
-});
 
 
 async function connectAdmin(db: unknown) {

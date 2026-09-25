@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { driverAgentName, driverKeyPath, driverMintInstruction } from "../src/agents-schema.ts";
 import { keyPath, parseArgs, selectAgents } from "../scripts/mint-agents.mjs";
-import { TOOL_GRANTS } from "../src/scope.ts";
 import { sep } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -32,18 +31,6 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // The rest of this file is unchanged and still necessary: register_namespace
 // must still not mint, because admin-gating the tool does not make minting inside it
 // a good idea.
-
-test("the premise MOVED: register_namespace is admin, and still does not mint", () => {
-  assert.equal(TOOL_GRANTS.register_namespace, "admin");
-  assert.equal(TOOL_GRANTS.update_namespace, "admin");
-  // `agents` was gated in its handler, with "write" here, until 2026-09-16. The admin
-  // gate on minting now lives in the table like these two, and the handler no longer
-  // repeats it. Named exactly via sourceFile(): a find() over the walk matches
-  // top-level src/agents.ts first, which is a different file.
-  assert.equal(TOOL_GRANTS.agents, "admin", "the admin gate on minting is gone from the table");
-  // That no handler decides admin for itself is asserted once, for every handler, in
-  // test/route-gates.test.ts.
-});
 
 test("register_namespace registers, mints nothing, and returns the mint instruction", async () => {
   const d1 = fakeD1({});

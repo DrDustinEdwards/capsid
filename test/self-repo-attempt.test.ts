@@ -29,8 +29,7 @@ import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 // TAKEN FROM SELF_REPO, NOT SPELLED OUT. A hardcoded copy here is the same
 // defect this file was written about: the rename on 2026-09-12 would have put
 // this constant one word away from the real mapping again, and every assertion
-// below would have gone quiet rather than red. The literal value is pinned in
-// exactly one place, repo-name.test.ts.
+// below would have gone quiet rather than red.
 const SELF = SELF_REPO;
 
 function selfRepoEnv() {

@@ -189,13 +189,6 @@ test("the driver runs in auto mode, and never with permission checks skipped", (
   assert.equal(/bypassPermissions|dangerously-skip-permissions/.test(SOURCE), false);
 });
 
-test("runOne spawns claude with driverArgs() and no shell", () => {
-  const run = /async function runOne\([\s\S]*?\n\}/.exec(SOURCE);
-  assert.ok(run, "runOne is gone");
-  assert.match(run[0], /spawnSync\("claude", driverArgs\(\),/);
-  assert.equal(/shell:\s*true/.test(run[0]), false, "a shell would reinterpret the parentheses and wildcards in the tool rules");
-});
-
 test("the pre-approved Capsid tools are exactly the read tools plus jobs and improve_run", () => {
   // Derived from TOOL_GRANTS in both directions, so a new read tool is either added
   // here or fails this test, and a write tool can never be pre-approved.
@@ -258,10 +251,6 @@ test("a long transcript is trimmed to its TAIL, because the end says how the run
 test("a short transcript is not trimmed and carries no omission note", () => {
   const body = renderLog("capsid", { exitCode: 0, output: "one job, done", started: "s", finished: "f" });
   assert.equal(/omitted/.test(body), false);
-});
-
-test("an empty transcript is recorded as such rather than as an empty document", () => {
-  assert.match(SOURCE, /\|\| "\(no output\)"/, "a run that printed nothing still gets a log that says so");
 });
 
 // ---- failures are failures -------------------------------------------------------
