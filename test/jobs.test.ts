@@ -11,6 +11,7 @@ import { sourceFile } from "./source-files.ts";
 import { completeJob, failJob, postJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 
 // THE WORK QUEUE'S VOCABULARY, DERIVED FROM THE MIGRATION.
 //
@@ -294,6 +295,21 @@ test("every parameter name the guard knows is one the tool serves", async () => 
   const served = Object.keys(tools.find((tool) => tool.name === "jobs")?.inputSchema.properties ?? {});
   const missing = JOB_PARAM_NAMES.filter((name) => !served.includes(name));
   assert.deepEqual(missing, [], `the jobs tool serves no parameter named: ${missing.join(", ")}`);
+});
+
+test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RESUME_NOTE", async () => {
+  // The seat's full approval (requested 2026-09-25). reason stays at MAX_TITLE; note
+  // is the field that carries the rulings, so the served schema has to admit them.
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "jobs-note", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  const props = (tools.find((tool) => tool.name === "jobs")?.inputSchema.properties ?? {}) as Record<string, { maxLength?: number }>;
+  assert.equal(props.note?.maxLength, MAX_RESUME_NOTE, "the jobs tool serves no note bounded by MAX_RESUME_NOTE");
+  assert.equal(props.reason?.maxLength, MAX_TITLE, "reason's bound moved");
+  assert.ok(MAX_RESUME_NOTE > MAX_TITLE * 10, "the note is not bounded well above the reason");
 });
 
 test("ordinary prose is not refused, including prose ABOUT the pattern", () => {
