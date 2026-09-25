@@ -4,7 +4,7 @@ import { HeadMovedError, managePr } from "./github/refs";
 import { improveAudit } from "./improve-state";
 import { onRoster } from "./improve-schema";
 import { isMoneyPath } from "./scope";
-import { verifySignedBody } from "./improve-task";
+import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./improve-task";
 
 // ---- the policy document ------------------------------------------------------
 //
@@ -27,7 +27,6 @@ import { verifySignedBody } from "./improve-task";
 // has no copy to compare it with, so it is a value the signature governs, and a
 // document without one does not load.
 export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
-const POLICY_NAMESPACE = "capsid";
 
 // Every check, in the order evaluated. Each one refuses on its own. The three path
 // checks run first because they are the never-list: a change to one of those paths
@@ -192,18 +191,7 @@ export interface MergePolicy {
   requiredCi: string[];
 }
 
-function field(body: string, name: string): string | null {
-  const line = body
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.toLowerCase().startsWith(`- ${name}:`));
-  return line ? line.slice(line.indexOf(":") + 1).trim() : null;
-}
-
-// A check id as the document writes it: a backticked lowercase name at the head of a
-// list item. Matching the backticks rather than any list item keeps the prose around
-// the list from being read as policy.
-const CHECK_ITEM = /^- `([a-z_]+)`/;
+// A check id is read with POLICY_ID_ITEM, the pattern the gate policy's class ids use.
 // A refused path and a required CI step, written as `- path `<source>`` and
 // `- step `<workflow> / <job> / <step>``. The leading word keeps them from being
 // read as check ids.
@@ -218,13 +206,13 @@ const CI_HEADING = /^##\s+Required CI,\s*([a-z0-9-]+)\s*$/i;
 
 /** Parse the policy body below its frontmatter. Returns the policy or a refusal. */
 export function parseMergePolicy(body: string): { policy: MergePolicy } | { error: string } {
-  const version = field(body, "version");
+  const version = policyField(body, "version");
   if (!version) {
     return { error: "the policy document names no version. A merge audited against an unnamed policy cannot be traced to what it allowed." };
   }
-  const enabled = field(body, "enabled");
+  const enabled = policyField(body, "enabled");
   if (enabled === null) return { error: "the policy document does not say whether it is enabled." };
-  const namespaces = (field(body, "namespaces") ?? "")
+  const namespaces = (policyField(body, "namespaces") ?? "")
     .split(",")
     .map((n) => n.trim())
     .filter(Boolean);
@@ -249,7 +237,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
       ciNamespace = heading ? heading[1] : null;
       continue;
     }
-    const check = CHECK_ITEM.exec(trimmed);
+    const check = POLICY_ID_ITEM.exec(trimmed);
     if (check) checks.push(check[1]);
     const path = PATH_ITEM.exec(trimmed);
     if (path) refusedPaths.push(path[1]);
@@ -284,14 +272,9 @@ function listDisagreement(what: string, documented: string[], enforced: string[]
 
 /** Read and verify the policy. A missing, unsigned or tampered document merges nothing. */
 export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy } | { error: string }> {
-  const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
-    .bind(POLICY_NAMESPACE, AUTO_MERGE_POLICY_PATH)
-    .first<{ body: string | null }>();
-  if (!row) return { error: `no merge policy at ${POLICY_NAMESPACE}/${AUTO_MERGE_POLICY_PATH}, so nothing is auto-merged.` };
-  const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", "merge policy");
-  if (!verdict.ok) return { error: verdict.reason };
-  // The signed body only. The stored text also holds the unsigned frontmatter.
-  const parsed = parseMergePolicy(verdict.body);
+  const read = await readSignedPolicy(env, AUTO_MERGE_POLICY_PATH, "merge policy", "nothing is auto-merged");
+  if ("error" in read) return read;
+  const parsed = parseMergePolicy(read.body);
   if ("error" in parsed) return parsed;
   const missing = POLICY_CHECKS.filter((c) => !parsed.policy.checks.includes(c));
   if (missing.length > 0) {
