@@ -43,6 +43,15 @@ function jobsDb(job: Record<string, unknown>, opts: { failConsoleAudit?: boolean
         if (/SELECT \* FROM jobs WHERE status = 'claimed' AND claimed_by/i.test(flat)) return null;
         if (/SELECT \* FROM jobs WHERE id = \?1/i.test(flat)) return params[0] === row.id ? { ...row } : null;
         if (/SELECT id, title, body FROM documents/i.test(flat)) return null;
+        // The transition's guard (requireJobUnchanged), first in the batch: it aborts the
+        // whole batch unless the row is in the state the caller read.
+        if (/WHERE NOT EXISTS \(SELECT 1 FROM jobs/i.test(flat)) {
+          const [id, status, claimedBy, updatedAt] = params;
+          if (row.id !== id || row.status !== status || (row.claimed_by ?? null) !== claimedBy || row.updated_at !== updatedAt) {
+            throw new Error("NOT NULL constraint failed: document_versions.document_id");
+          }
+          return null;
+        }
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id) return null;
@@ -68,6 +77,8 @@ function jobsDb(job: Record<string, unknown>, opts: { failConsoleAudit?: boolean
     row,
     db: {
       prepare: (sql: string) => stmt(sql),
+      // Each statement runs through first(), in order, so the UPDATE the batch carries
+      // moves the row and the guard in front of it can abort the batch.
       batch: async (statements: unknown[]) => {
         // The console's own audit row fails AFTER the transition has committed.
         if (
@@ -76,6 +87,7 @@ function jobsDb(job: Record<string, unknown>, opts: { failConsoleAudit?: boolean
         ) {
           throw new Error("D1_ERROR: simulated audit insert failure");
         }
+        for (const s of statements) await (s as D1PreparedStatement).first();
         for (const s of statements) recorded.push(s as Recorded);
         return [];
       },

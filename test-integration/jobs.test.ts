@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob, supersedeJob } from "../src/jobs";
+import { adminFailJob, blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob, supersedeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
@@ -55,6 +55,26 @@ async function auditActions(id: string): Promise<string[]> {
     .bind(`%${id}%`)
     .all<{ action: string }>();
   return (results ?? []).map((r) => r.action);
+}
+
+// AN ENV WHOSE FIRST BATCH RUNS `between` FIRST, against the real D1. Every job
+// transition now reads the row and then commits one guarded batch, so this puts a
+// competing write exactly in the gap the guard exists for.
+function racingEnv(between: () => Promise<void>) {
+  let armed = true;
+  return {
+    ...jobsEnv(),
+    DB: {
+      prepare: (sql: string) => env.DB.prepare(sql),
+      batch: async (statements: D1PreparedStatement[]) => {
+        if (armed) {
+          armed = false;
+          await between();
+        }
+        return env.DB.batch(statements);
+      },
+    },
+  } as unknown as Parameters<typeof postJob>[0];
 }
 
 async function post(over: Partial<{ namespace: string; title: string; body: string; priority: number; gate_required: boolean }> = {}) {
@@ -430,37 +450,17 @@ describe("resume", () => {
   });
 
   it("PLANT: a job that leaves blocked while resume is deciding is not taken back", async () => {
-    // resume reads the row, checks it, then moves it with a keyed UPDATE. A human who
-    // fails the job between the read and the UPDATE must win: the UPDATE is keyed on
-    // status = 'blocked', and only SQLite can show the key holding.
+    // resume reads the row, checks it, then moves it in one guarded batch with its
+    // records. A human who fails the job between the read and the batch must win, and
+    // the resume must leave no record: only SQLite can show the guard holding.
     const id = await blockedJob("resume race");
-    const base = jobsEnv() as unknown as { DB: D1Database };
-    const racing = {
-      ...base,
-      DB: {
-        prepare(sql: string) {
-          if (/UPDATE jobs SET status = 'claimed'/.test(sql)) {
-            const real = base.DB.prepare(sql);
-            return {
-              bind: (...args: unknown[]) => {
-                const bound = real.bind(...args);
-                return {
-                  first: async () => {
-                    await base.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(id).run();
-                    return bound.first();
-                  },
-                };
-              },
-            };
-          }
-          return base.DB.prepare(sql);
-        },
-        batch: (statements: D1PreparedStatement[]) => base.DB.batch(statements),
-      },
-    } as unknown as Parameters<typeof resumeJob>[0];
+    const racing = racingEnv(async () => {
+      await env.DB.prepare("UPDATE jobs SET status = 'failed', updated_at = ?2 WHERE id = ?1").bind(id, "2026-09-10T12:00:01.000Z").run();
+    });
     const resumed = await resumeJob(racing, legacyAgent("write", SEAT), NOW, id, "the human approved it");
     expect(resumed.ok).toBe(false);
     expect((await row(id))?.status).toBe("failed");
+    expect(await auditActions(id)).not.toContain("job-resumed");
   });
 
   it("a blocked job cannot be claimed, so resume is the only way out of blocked", async () => {
@@ -1153,5 +1153,96 @@ describe("migrations/0020, the relabel", () => {
     });
     // A summary that names the replacing job keeps naming it.
     expect((await row("job_repost00000"))?.result_summary).toContain("job_aaaaaaaaaaaa");
+  });
+});
+
+// ---- audit 2026-09-25, F1-1: every transition is one guarded batch --------------------
+//
+// Each case puts a competing write between the transition's read and its batch, through
+// racingEnv, and checks two things only SQLite can show: the competing write wins, and
+// the losing transition left no audit row and no moved row behind.
+
+async function actorAudits(actor: string, action: string): Promise<number> {
+  const found = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor = ?1 AND action = ?2")
+    .bind(actor, action)
+    .first<{ n: number }>();
+  return found?.n ?? 0;
+}
+
+describe("every transition is one guarded batch", () => {
+  it("PLANT: a claim that loses the race between its read and its batch records nothing", async () => {
+    const id = (await post({ title: "claim race" })).job!.id;
+    const racing = racingEnv(async () => {
+      const other = await claimJob(jobsEnv(), OTHER, NOW, { id });
+      expect(other.ok, other.refusal).toBe(true);
+    });
+    const lost = await claimJob(racing, DRIVER, NOW, { id });
+    expect(lost.ok).toBe(false);
+    expect(lost.refusal).toMatch(/claimed by someone else/);
+    expect((await row(id))?.claimed_by).toBe(OTHER_ACTOR);
+    expect(await actorAudits(DRIVER_ACTOR, "job-claimed")).toBe(0);
+  });
+
+  it("PLANT: a claim whose records fail does not move the row, because they are one transaction", async () => {
+    const id = (await post({ title: "claim atomic" })).job!.id;
+    const failing = {
+      ...jobsEnv(),
+      DB: {
+        prepare: (sql: string) => env.DB.prepare(sql),
+        batch: (statements: D1PreparedStatement[]) => env.DB.batch([...statements, env.DB.prepare("INSERT INTO no_such_table VALUES (1)")]),
+      },
+    } as unknown as Parameters<typeof postJob>[0];
+    await expect(claimJob(failing, DRIVER, NOW, { id })).rejects.toThrow(/no_such_table/);
+    expect((await row(id))?.status).toBe("queued");
+    expect(await actorAudits(DRIVER_ACTOR, "job-claimed")).toBe(0);
+  });
+
+  it("PLANT: an admin fail that loses the race to the driver's complete records nothing", async () => {
+    const id = (await post({ title: "admin fail race" })).job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    const racing = racingEnv(async () => {
+      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
+      expect(done.ok, done.refusal).toBe(true);
+    });
+    const failed = await adminFailJob(racing, legacyAgent("write", SEAT), NOW, id, "driver went away");
+    expect(failed.ok).toBe(false);
+    expect(failed.refusal).toMatch(/changed between reading it and failing it: it is now done/);
+    expect((await row(id))?.status).toBe("done");
+    expect(await auditActions(id)).not.toContain("job-admin-fail");
+  });
+
+  it("PLANT: a supersede that loses the race to a claim records nothing", async () => {
+    const id = (await post({ title: "supersede race" })).job!.id;
+    const racing = racingEnv(async () => {
+      await claimJob(jobsEnv(), OTHER, NOW, { id });
+    });
+    const superseded = await supersedeJob(racing, DRIVER, NOW, id, { reason: "reposted" });
+    expect(superseded.ok).toBe(false);
+    expect(superseded.refusal).toMatch(/changed between reading it and superseding it/);
+    expect((await row(id))?.status).toBe("claimed");
+    expect(await auditActions(id)).not.toContain("job-superseded");
+  });
+
+  it("PLANT: the lease sweep leaves a job whose driver heartbeat between the read and the batch", async () => {
+    const id = (await post({ title: "sweep race" })).job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
+    const racing = racingEnv(async () => {
+      const beat = await heartbeatJob(jobsEnv(), DRIVER, later, id);
+      expect(beat.ok, beat.refusal).toBe(true);
+    });
+    const swept = await expireJobLeases(racing, later);
+    expect(swept.requeued).toEqual([]);
+    expect((await row(id))?.status).toBe("claimed");
+    expect(await auditActions(id)).not.toContain("job-lease-expired");
+  });
+
+  it("the sweep still requeues an expired job no one touched, with its record", async () => {
+    const id = (await post({ title: "sweep plain" })).job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
+    expect((await expireJobLeases(jobsEnv(), later)).requeued).toEqual([id]);
+    expect((await row(id))?.status).toBe("queued");
+    expect(await auditActions(id)).toContain("job-lease-expired");
   });
 });
