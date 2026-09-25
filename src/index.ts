@@ -23,7 +23,7 @@ export const IMPROVE_TICK_CRON = "*/5 * * * *";
 export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
 // 03:00 America/Chicago, per the arc.
-export const IMPROVE_OPEN_HOUR_CT = 3;
+const IMPROVE_OPEN_HOUR_CT = 3;
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

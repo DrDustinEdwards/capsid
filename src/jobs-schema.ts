@@ -29,7 +29,7 @@ export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "bl
 // withdrawal. Until it existed the only way to close one was to claim it and fail it,
 // so the job history carried failures that never happened. It writes no outcome row,
 // so no record, rate or skill score counts it.
-export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
+const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);

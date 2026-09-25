@@ -13,7 +13,6 @@ export {
   REPO_BATCH_MAX_FILES,
   REPO_FILE_BUDGET,
   SELF_REPO,
-  WORKFLOW_DIR,
   deleteRepoFile,
   listRepoTree,
   readRepoFile,

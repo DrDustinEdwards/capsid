@@ -276,7 +276,7 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
 // WHY EACH ADMIN-ONLY THING IS ADMIN ONLY, so the refusal a caller reads names its
 // own reason rather than another tool's. A requirement of "admin" with no entry here
 // fails the test that reads this table, rather than shipping a refusal with no reason.
-export const ADMIN_REASON: Record<string, string> = {
+const ADMIN_REASON: Record<string, string> = {
   register_namespace:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
   update_namespace:
