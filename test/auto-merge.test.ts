@@ -537,7 +537,7 @@ async function envWithPolicy(body: string | null) {
   const { db } = fakeD1({
     documents: body === null ? [] : [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body }],
   });
-  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 }
 
 test("loadMergePolicy refuses a policy that is absent, unsigned, or edited after signing", async () => {

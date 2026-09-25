@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { signPolicyDocument } from "../src/policy-sign.ts";
 import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge.ts";
-import { fakeD1, fakeEnv, type DocRow, type FakeD1Options } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
 // Audit 2026-09-25, item E1-6. Two of its three findings are driven here against the
 // node fake: dash normalization on append and patch (F1-6), and the body guard on
@@ -80,7 +80,7 @@ test("sign_policy refuses and writes nothing when the policy changes between its
       row.body = "# policy\n\n- version: 2\n";
     },
   });
-  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: "test-improve-secret" });
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: "test-improve-secret", APP_KV: fakeKv().kv });
   const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
   assert.equal(result.ok, false, "the signer overwrote a policy edit with the signed older body");
   assert.match(result.ok ? "" : result.error, /changed or was removed after sign_policy read it/);

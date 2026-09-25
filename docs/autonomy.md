@@ -59,6 +59,15 @@ only under `policy/`. A minted agent is refused outright. Turning a policy on is
 two acts: editing the document, which is on the ordinary write tool's refusal list and
 needs `allow_improve_paths` plus `can_touch_protected`, and signing it again afterwards.
 
+**Only the body signed last loads.** `sign_policy` records the sha256 and version of the
+body it signs in APP_KV under `policy:signed:<path>` before it stores the document, and
+both loaders refuse a signed body with any other hash. An older signed version put back
+with `restore` or a write is refused until it is signed again. Re-signing the same body
+writes the same record. When the key is absent (the first load after this shipped, or
+after the key is deleted), the load records whatever signed body is stored at that
+moment. The key is not in the backup's KV pins: after a D1 restore to an older policy,
+the loaders refuse it until the seat signs it again.
+
 **The nightly driver runs on this machine, not in the cloud.** `scripts/schedule-drivers.mjs`
 installs one Windows Task Scheduler task per project folder, each invoking `/improve work`
 in that folder at 04:00 America/Chicago, so each task reaches Capsid as exactly one

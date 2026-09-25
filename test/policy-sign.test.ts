@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
-import { splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
+import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
 import {
   loadMergePolicy,
   AUTO_MERGE_POLICY_PATH,
@@ -12,7 +12,7 @@ import {
 } from "../src/auto-merge.ts";
 import { adminAgent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // THE ONE THING THAT MINTS POLICY AUTHORITY. Before this, verifySignedBody had no
 // counterpart that could produce what it verifies, so both policies were inert. The
@@ -54,7 +54,7 @@ function signedBodyFrom(recorded: Array<{ sql: string; params: unknown[] }>): st
 
 function envWith(documents: Array<{ namespace: string; path: string; title: string; body: string }>, secret = SECRET) {
   const fake = fakeD1({ documents });
-  return { fake, env: fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: secret }) };
+  return { fake, env: fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: secret, APP_KV: fakeKv().kv }) };
 }
 
 // ---- what it refuses to sign ----------------------------------------------------
@@ -210,4 +210,94 @@ type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const SIGNER_ARITY_IS_FOUR: Exactly<Parameters<typeof signPolicyDocument>["length"], 4> = true;
 test("the signer takes exactly env, actor, namespace and path", () => {
   assert.equal(SIGNER_ARITY_IS_FOUR, true);
+});
+
+// ---- anti-rollback (audit 2026-09-25, E2-2) ------------------------------------------
+//
+// Every signed version stays in document_versions and still verifies, so putting an
+// older one back used to reload it. sign_policy now records which body is current, and
+// the loader refuses any other. The fake does not apply upserts to its rows, so each
+// test copies the signed text into the row by hand, as D1 would.
+
+function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
+  const fake = fakeD1({ documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }] });
+  const kv = fakeKv(kvOpts);
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: kv.kv });
+  const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!;
+  // Sign whatever the row holds, and store the signed text the way the upsert would.
+  const sign = async (): Promise<string> => {
+    const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+    assert.equal(result.ok, true, result.ok ? "" : result.error);
+    const upserts = fake.recorded.filter((r) => /INSERT INTO documents/i.test(r.sql));
+    row.body = String(upserts[upserts.length - 1].params[3]);
+    return row.body;
+  };
+  return { fake, kv, env, row, sign };
+}
+
+const VERSION_2 = POLICY_BODY.replace("- version: 1", "- version: 2");
+
+test("PLANT: an older signed policy put back after a newer one was signed does not load", async () => {
+  const { env, row, sign } = pinnedStore();
+  const signedV1 = await sign();
+  row.body = VERSION_2;
+  const signedV2 = await sign();
+  const current = await loadMergePolicy(env);
+  assert.equal("policy" in current && current.policy.version, "2");
+
+  // What `restore` of the earlier version writes: the version 1 text, signature and all.
+  row.body = signedV1;
+  const rolledBack = await loadMergePolicy(env);
+  assert.ok("error" in rolledBack, "an older signed policy put back in place loaded");
+  assert.match(rolledBack.error, /version 1, .* not the one last signed \(version 2,/);
+
+  // The seat means it: signing version 1 again makes it current, and version 2 put
+  // back after that is refused although its number is higher.
+  await sign();
+  const resigned = await loadMergePolicy(env);
+  assert.equal("policy" in resigned && resigned.policy.version, "1");
+  row.body = signedV2;
+  const newerPutBack = await loadMergePolicy(env);
+  assert.ok("error" in newerPutBack, "a withdrawn version 2 put back loaded");
+  assert.match(newerPutBack.error, /version 2, .* not the one last signed \(version 1,/);
+});
+
+test("the seat re-signing the same body keeps it loading", async () => {
+  const { env, kv, sign } = pinnedStore();
+  await sign();
+  assert.ok("policy" in (await loadMergePolicy(env)));
+  await sign();
+  const again = await loadMergePolicy(env);
+  assert.ok("policy" in again, "error" in again ? again.error : "");
+  const pins = kv.puts.filter((p) => p.key === "policy:signed:policy/auto-merge.md");
+  assert.equal(pins.length, 2);
+  assert.equal(pins[0].value, pins[1].value, "a re-sign of the same body recorded a different pin");
+});
+
+test("the first load with no record pins the signed policy it finds, and refuses a different one after", async () => {
+  const { env, kv, row } = pinnedStore();
+  row.body = await signTaskBody(SECRET, VERSION_2);
+  const first = await loadMergePolicy(env);
+  assert.ok("policy" in first, "error" in first ? first.error : "");
+  assert.equal(JSON.parse(kv.store.get("policy:signed:policy/auto-merge.md") ?? "{}").version, "2");
+  row.body = await signTaskBody(SECRET, POLICY_BODY);
+  const other = await loadMergePolicy(env);
+  assert.ok("error" in other);
+  assert.match(other.error, /not the one last signed/);
+});
+
+test("a load whose record cannot be read is refused", async () => {
+  const { env, row } = pinnedStore({ failGet: true });
+  row.body = await signTaskBody(SECRET, POLICY_BODY);
+  const loaded = await loadMergePolicy(env);
+  assert.ok("error" in loaded);
+  assert.match(loaded.error, /anti-rollback record .* could not be read/);
+});
+
+test("sign_policy stores nothing when the record cannot be written", async () => {
+  const { env, fake } = pinnedStore({ failPut: true });
+  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.error, /anti-rollback record .* could not be written/);
+  assert.deepEqual(fake.recorded, []);
 });
