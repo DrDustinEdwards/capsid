@@ -1013,6 +1013,35 @@ test("PLANT v5: a PR touching src/jobs.ts is refused by the tick", async () => {
   assert.match(outcome.why ?? "", /src\/jobs\.ts/);
 });
 
+test("PLANT: a PR that renames a refused file to an ordinary path is refused by the tick", async () => {
+  // GitHub lists a rename once, under the new name, with the old one in
+  // previous_filename. Judging only the new name let src/auto-merge.ts be moved away
+  // (removing it from where the Worker loads it) on green CI.
+  const routes = {
+    ...tickRoutes([]),
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: [
+        { filename: "src/limits.ts" },
+        { filename: "src/old-merge.ts", previous_filename: "src/auto-merge.ts", status: "renamed" },
+      ],
+    },
+  };
+  const { outcome, merges } = await tickWith(await enabledEnv(), routes);
+  assert.equal(merges, 0, "a rename out of a refused path was auto-merged");
+  assert.equal(outcome.failed, "paths_not_refused");
+  assert.match(outcome.why ?? "", /src\/auto-merge\.ts/);
+});
+
+test("PLANT: a PR that renames an ordinary file to another ordinary path is still merged by the tick", async () => {
+  const routes = {
+    ...tickRoutes([]),
+    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/new-name.md", previous_filename: "docs/old-name.md", status: "renamed" }] },
+  };
+  const { outcome, merges } = await tickWith(await enabledEnv(), routes);
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+  assert.equal(merges, 1);
+});
+
 test("PLANT F2-1: a fork PR naming a done driver job is refused by the tick", async () => {
   // The job even records this PR's URL; the head is still on a fork.
   const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["src/limits.ts"], "attacker/capsid"));
