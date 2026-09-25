@@ -1,30 +1,21 @@
 import { bytesToHex } from "./encoding";
 
-// THE VOCABULARY OF A SCOPED CREDENTIAL, in one module so the table
-// (migrations/0008_agents.sql), the tool (src/tools/agents.ts) and the one
-// enforcement point (src/scope.ts) cannot disagree about it. Same reasoning as
-// jobs-schema.ts and improve-schema.ts: a list spelled twice is a list that drifts,
-// and the copy nobody looked at is the one that checks five flags out of six.
-//
-// Kept free of Worker and MCP imports so the scope logic is unit-testable under
-// node, the way src/auth.ts is.
+// The vocabulary of a scoped credential, in one module so the table
+// (migrations/0008_agents.sql), the tool (src/tools/agents.ts) and the enforcement
+// point (src/scope.ts) cannot disagree about it: a list spelled twice drifts, and the
+// copy nobody looks at ends up checking five flags out of six. Free of Worker and MCP
+// imports so the scope logic is unit-testable under node.
 
 // Descriptive, not authorizing. What an agent may do lives in its scopes and
 // nowhere else, so a kind cannot quietly become a second permission system.
 export const AGENT_KINDS = ["session", "driver", "seat", "cron"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
-// The two grants this Worker has always had. `ro:` operator keys were "read" and a
-// plain entry was "write"; an agent says the same thing as a list.
 export const AGENT_GRANTS = ["read", "write"] as const;
 export type AgentGrant = (typeof AGENT_GRANTS)[number];
 
-// THE FLAGS ARE THE BLAST RADIUS, not the day-to-day grant. Each one names an action
-// whose consequence leaves this Worker: a merge can trigger a deploy on a repo that
-// deploys on push, a direct write lands on a default branch with no review, a
-// dispatch spends CI minutes, a workflow write edits what MEASURES the code, a
-// protected path is what the improve loop may never touch, and a money path is a
-// billing surface. `write` is not enough for any of them.
+// Each flag names an action whose consequence leaves this Worker, so the write grant
+// alone is not enough for any of them. The reasons are FLAG_REASON in src/scope.ts.
 export const SCOPE_FLAGS = [
   "can_merge",
   "can_direct_write",
@@ -32,18 +23,15 @@ export const SCOPE_FLAGS = [
   "can_write_workflows",
   "can_touch_protected",
   "money_paths",
-  // A REVIEWER WRITES ONE THING AND IT IS NOT CODE. Commenting on a pull request
-  // goes through manage_pr, which is a write tool, so a reviewer needs the write
+  // Commenting goes through manage_pr, a write tool, so a reviewer holds the write
   // grant; without a flag of its own that grant would also let it merge and close.
-  // The flag is what makes "may say something about this PR" smaller than "may
-  // decide this PR". Added with the roles arc, 2026-09-12.
+  // This flag makes "may comment on this PR" smaller than "may decide this PR".
   "can_comment_pr",
 ] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
 
-// A list of names, or "*" for every name. The string "*" INSIDE a list is not a
-// wildcard: it is a list of one oddly named thing, and treating it as a wildcard
-// would make a typo in a mint command grant everything.
+// A list of names, or "*" for every name. "*" inside a list is not a wildcard, so a
+// typo in a mint command cannot grant everything.
 export type ScopeList = "*" | string[];
 
 export interface AgentScopes {
@@ -71,23 +59,21 @@ export function isAgentKind(value: unknown): value is AgentKind {
 }
 
 export function noFlags(): Record<ScopeFlag, boolean> {
-  // Built fresh each time. A shared frozen object would be one mutation away from
-  // handing every agent in the isolate a flag somebody set on one of them.
+  // Built fresh each time, so a flag set on one agent cannot leak to another.
   const flags = {} as Record<ScopeFlag, boolean>;
   for (const flag of SCOPE_FLAGS) flags[flag] = false;
   return flags;
 }
 
-// EVERY FLAG OFF, NOTHING ALLOWED. The value parseScopes falls back to, and the
-// reason a corrupt row is harmless rather than dangerous.
+// Nothing allowed: what parseScopes falls back to on a corrupt row.
 function emptyScopes(): AgentScopes {
   return { namespaces: [], repos: [], tools: [], grants: [], flags: noFlags() };
 }
 
-// THE DEFAULT FOR A NEW AGENT: read, on the namespaces it was named for, and no
-// flags. Tools and repos are unrestricted because the grant already holds the line
-// (a read grant cannot reach a write tool, and a repo read is a read); the axes that
-// have to be narrowed at mint time are the ones the mint command asks for.
+// The default for a new agent: read, on the namespaces it was named for, and no
+// flags. Tools and repos are unrestricted because the grant already limits them (a
+// read grant cannot reach a write tool, and a repo read is a read); the axes that
+// must be narrowed at mint time are the ones the mint command asks for.
 export function defaultScopes(namespaces: string[]): AgentScopes {
   return { namespaces: [...namespaces], repos: "*", tools: "*", grants: ["read"], flags: noFlags() };
 }
@@ -98,12 +84,9 @@ function parseList(value: unknown): ScopeList {
   return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
 }
 
-// FAILS CLOSED, and that is the whole point of this function. A scopes column that is
-// null, empty, truncated, an array, a bare string or an object with none of the keys
-// resolves to emptyScopes(): no namespaces, no tools, no repos, no grants, no flags.
-// A permissive parse of a corrupt row is indistinguishable from a working one right
-// up until the row is corrupt, which is the shape of failure this Worker has already
-// paid for twice (the tsconfig no-op, the backup table list).
+// Fails closed: a scopes column that is null, empty, truncated, an array, a bare
+// string or an object with none of the keys resolves to emptyScopes(). A permissive
+// parse of a corrupt row looks like a working one until the row is corrupt.
 export function parseScopes(json: string | null | undefined): AgentScopes {
   if (!json) return emptyScopes();
   let raw: unknown;
@@ -118,9 +101,8 @@ export function parseScopes(json: string | null | undefined): AgentScopes {
     ? (record.grants.filter((g): g is AgentGrant => (AGENT_GRANTS as readonly unknown[]).includes(g)) as AgentGrant[])
     : [];
   const flags = noFlags();
-  // Only the flags this system has, and only the boolean true. A string "yes" is not
-  // a flag, and an invented name does not survive the parse, so a scopes blob written
-  // by hand cannot smuggle in an axis the enforcement point has never heard of.
+  // Only the flags this system has, and only the boolean true, so a hand-written
+  // scopes blob cannot add an axis the enforcement point does not know.
   const rawFlags = typeof record.flags === "object" && record.flags !== null ? (record.flags as Record<string, unknown>) : {};
   for (const flag of SCOPE_FLAGS) flags[flag] = rawFlags[flag] === true;
   return {
@@ -142,47 +124,36 @@ export function allowsScope(list: ScopeList, value: string): boolean {
   return list === "*" ? true : list.includes(value);
 }
 
-// THE SAME COMPARISON, FOR A TOOL WHOSE ACTION DECIDES WHAT IT DOES.
+// The same comparison for a tool whose action decides what it does (jobs: "may post
+// a job" and "may claim one" are different authorities). An entry may be qualified,
+// `jobs.post`, and the rule is:
 //
-// The tools axis names tools, and for almost every tool that is the whole question.
-// `jobs` is the exception the watcher role exposed: one tool with a read action and
-// seven write ones, where "may post a job" and "may claim, complete and resume one"
-// are different authorities that the tool name cannot separate.
-//
-// So an entry may be QUALIFIED, `jobs.post`, and the rule is:
-//
-//   - "*" allows everything, so every agent minted before this change is untouched.
-//   - A list naming at least one action OF THIS TOOL is narrowed to the actions it
+//   - "*" allows everything.
+//   - A list naming at least one action of this tool is narrowed to the actions it
 //     names. Anything else of that tool is refused.
-//   - A bare tool name with no qualified sibling keeps meaning the whole tool, which
-//     is what it has always meant. Narrowing is opted into, never inherited.
-//   - The narrowing reaches ONLY the tool it names: `jobs.post` says nothing about
-//     `lint`.
+//   - A bare tool name with no qualified sibling means the whole tool.
+//   - The narrowing reaches only the tool it names.
 //
 // Kept beside allowsScope rather than in the enforcement point so the rule is one
-// pure function the tests can drive to every corner without an agent or a server.
+// pure function the tests can drive without an agent or a server.
 export function allowsToolAction(list: ScopeList, tool: string, action: string | undefined): boolean {
   if (list === "*") return true;
   if (!list.includes(tool)) return false;
   const prefix = `${tool}.`;
   const qualified = list.some((entry) => entry.startsWith(prefix));
   if (!qualified) return true;
-  // AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, not waved through as "the whole
-  // tool". Reading undefined as the whole tool is what made this narrowing decorative
-  // for every tool but jobs: the registrar passed no action, so a reviewer minted
-  // ["manage_pr", "manage_pr.comment"] could close a pull request, and three tests
-  // over this function could not see it because they always passed an action.
+  // An unknown action on a narrowed tool is refused, not read as the whole tool:
+  // otherwise a reviewer minted ["manage_pr", "manage_pr.comment"] could close a pull
+  // request through a call path that names no action.
   //
-  // The rule stays opt-in in the direction that matters: a list with no qualified
-  // sibling for this tool is untouched, so every agent minted before the qualifier
-  // existed behaves exactly as it did. What changed is that OPTING IN now means the
-  // call path has to say what it is doing, and a path that cannot is refused.
+  // It stays opt-in: a list with no qualified sibling for this tool is untouched.
+  // Opting in means the call path has to say what it is doing, and a path that cannot
+  // is refused.
   if (action === undefined) return false;
   return list.includes(`${prefix}${action}`);
 }
 
-// How a scope list reads in a refusal. A refusal that says "not in scope" without
-// saying what the scope IS costs the reader a round trip.
+// How a scope list reads in a refusal, so the refusal says what the scope is.
 export function describeScope(list: ScopeList): string {
   if (list === "*") return "*";
   return list.length === 0 ? "(none)" : list.join(", ");
@@ -207,13 +178,9 @@ export function agentActor(name: string): string {
   return `agent:${name}`;
 }
 
-// THE DRIVER BOOTSTRAP INSTRUCTION, IN ONE PLACE.
-//
-// register_namespace does NOT mint the new namespace's driver agent. It returns the
-// COMMAND instead. No credential crosses the tool boundary, the
-// admin runs one line, and the key goes from the mint response to a 0600 file
-// without passing through a chat or a terminal. test/register-namespace-mint.test.ts
-// asserts this string is parseable by the script it names.
+// The driver bootstrap instruction. register_namespace returns the mint command
+// rather than minting, so no credential crosses the tool boundary.
+// test/register-namespace-mint.test.ts asserts the script it names can parse it.
 export function driverAgentName(namespace: string): string {
   return `${namespace}-driver`;
 }
@@ -226,11 +193,8 @@ export function driverMintInstruction(namespace: string): string {
   return (
     `Mint its driver agent as the admin: node scripts/mint-agents.mjs --namespace ${namespace} --apply. ` +
     `The key is returned once and lands in ${driverKeyPath(namespace)} at mode 0600. ` +
-    // "and this tool takes a plain write grant" until 2026-09-17, which had been
-    // false since register_namespace became admin only on 2026-09-13. The sentence
-    // cannot import TOOL_GRANTS, because src/scope.ts imports this module and the
-    // cycle would run at load time; test/audit-2026-09-16.test.ts holds the two
-    // together instead, and fails when the table moves.
+    // Cannot import TOOL_GRANTS (src/scope.ts imports this module), so
+    // test/audit-2026-09-16.test.ts holds the sentence and the table together.
     `register_namespace does not mint it: minting is admin only, and register_namespace is itself admin only.`
   );
 }

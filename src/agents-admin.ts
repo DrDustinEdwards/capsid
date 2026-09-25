@@ -16,17 +16,12 @@ import {
 } from "./agents-schema";
 import { auditStatement } from "./store-guards";
 
-// THE CONTROL PLANE FOR CREDENTIALS: mint, list, revoke, re-scope.
+// The control plane for credentials: mint, list, revoke, re-scope. Admin only (see
+// ADMIN_REASON in src/scope.ts): an agent that could mint another could widen itself.
 //
-// ADMIN ONLY, all four, enforced by the tool in src/tools/agents.ts. A minted agent
-// that can mint another has a privilege escalation with no ceiling: a driver scoped
-// to one namespace mints itself a seat scoped to all of them, and every scope below
-// that becomes decoration. `admin` is deliberately NOT a flag, because a flag is
-// settable by update_scopes, which is the same escalation one step further out.
-//
-// Separate from src/agents.ts, which is the RESOLVER. The resolver runs on every
-// request and reads; this runs when a human changes the credential inventory and
-// writes. Keeping them apart is what lets the resolver stay a read.
+// Separate from src/agents.ts, the resolver. The resolver runs on every request and
+// reads; this runs when a human changes the credential inventory and writes. Keeping
+// them apart lets the resolver stay a read.
 
 export interface AgentResult {
   ok: boolean;
@@ -39,10 +34,9 @@ export interface AgentResult {
   refusal?: string;
 }
 
-// What an agent looks like to a reader. The stored verifier never appears: what is
-// shown instead is the first twelve hex of it, the same shape the operator-key
-// fingerprint has, so an agent can be matched against an audit row without the
-// database handing out the thing it authenticates with.
+// What an agent looks like to a reader. The stored hash never appears, only its
+// first twelve hex, the same shape as an operator-key fingerprint, so an agent can be
+// matched against an audit row without handing out what it authenticates with.
 export interface PublicAgent {
   id: string;
   name: string;
@@ -74,9 +68,8 @@ function refuse(action: string, refusal: string): AgentResult {
 }
 
 function agentAudit(db: D1Database, actor: string, action: string, name: string, params: Record<string, unknown>) {
-  // namespace and path are the audit table's addressing columns, and an agent is not
-  // a document, so the agent's NAME goes in the path slot under a fixed "agents"
-  // namespace. One audit table rather than a second log nobody reads.
+  // An agent is not a document, so its name goes in the path slot under a fixed
+  // "agents" namespace: one audit table rather than a second log nobody reads.
   return auditStatement(db, actor, action, "agents", name, params);
 }
 
@@ -92,16 +85,16 @@ export interface ScopeArgs {
   flags?: Record<string, unknown>;
 }
 
-// A list of exactly ["*"] is the wildcard; anything else is a list of names. Spelled
-// once, because a mint and a re-scope both accept it and disagreeing about it would
-// mean one of them silently narrowing a caller to a namespace literally named "*".
+// A list of exactly ["*"] is the wildcard; anything else is a list of names. Shared
+// by mint and re-scope, because a disagreement would mean one of them silently
+// narrowing a caller to a namespace literally named "*".
 function scopeList(names: string[]): "*" | string[] {
   return names.length === 1 && names[0] === "*" ? "*" : [...names];
 }
 
-// Applies the narrowing a mint or a re-scope asked for, on top of a base. EVERY AXIS
-// IS OPTIONAL AND AN OMITTED AXIS KEEPS ITS BASE VALUE, so a call naming one flag
-// does not silently clear the others, and a call naming none cannot widen anything.
+// Applies the narrowing asked for on top of a base. An omitted axis keeps its base
+// value, so naming one flag does not clear the others, and a call naming none
+// cannot widen anything.
 function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   const scopes: AgentScopes = { ...base, flags: { ...base.flags } };
   if (args.namespaces) scopes.namespaces = scopeList(args.namespaces);
@@ -116,26 +109,17 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
   return scopes;
 }
 
-// THE REPOS AXIS A MINT GETS WHEN THE CALLER NAMES NONE.
+// The repos axis a mint gets when the caller names none: every repo the named
+// namespaces map. Starting from defaultScopes (repos "*") would give every agent
+// minted through MCP every repo in the portfolio, while scripts/mint-agents.mjs
+// derives a narrow list; two mint paths must agree about the default.
 //
-// scripts/mint-agents.mjs already derives this for a driver on the --apply path, and
-// the tool's own description already promised it ("Defaults to every repo of the
-// namespaces it is scoped to"). The handler did not do it: it started from
-// defaultScopes, whose repos is "*", so every agent minted through MCP was born
-// reaching every repo in the portfolio while the script's agents were narrow (audit
-// 2026-09-13, finding 3). Two mint paths that disagree about the default is the same
-// class of defect as a guard with no caller: the narrow one is the one nobody uses in
-// a hurry.
+// Derived from the live namespaces mapping, the same table resolveRepo reads and the
+// repos axis is compared against, so the two cannot drift apart.
 //
-// Derived from the live namespaces mapping, which is the same table resolveRepo reads
-// and the same one the repos axis is compared against, so the two cannot drift apart
-// by construction.
-//
-// A namespace scope of "*" derives "*": an agent that may reach every namespace may
-// reach every namespace's repos, and enumerating today's mapping would silently
-// exclude a namespace registered tomorrow. A namespace with NO mapped repo refuses
-// rather than falling back to the wildcard, exactly as reposForNamespace does in the
-// script.
+// A namespace scope of "*" derives "*": enumerating today's mapping would silently
+// exclude a namespace registered later. A namespace with no mapped repo refuses
+// rather than falling back to the wildcard, as the script does.
 async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): Promise<{ repos: "*" | string[] } | { error: string }> {
   if (namespaces === "*") return { repos: "*" };
   const repos: string[] = [];
@@ -180,16 +164,15 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
       "mint needs at least one namespace. A new agent is scoped to the namespaces it was named for, so minting one with none creates a credential that reaches nothing and says nothing about what it was for. Pass the single entry * deliberately if every namespace is what you mean."
     );
   }
-  // NAMES ARE NEVER REUSED, revoked ones included, so the check is over every row
-  // rather than the live ones. An audit row saying agent:capsid-driver has to mean
-  // one credential forever, or the log stops being able to answer who did something.
+  // Names are never reused, revoked ones included, so the check is over every row.
+  // An audit actor has to mean one credential forever, or the log cannot answer who
+  // did something.
   const existing = await db.prepare("SELECT id FROM agents WHERE name = ?1").bind(name).first<{ id: string }>();
   if (existing) {
     return refuse("mint", `an agent named '${name}' already exists (${existing.id}). A name is an audit identity and is never reused, including after a revoke.`);
   }
   const named = scopeList(args.namespaces);
-  // Derived only when the caller named none. An explicit repos list, including the
-  // single entry "*", is still exactly what the caller asked for.
+  // Derived only when the caller named none; an explicit list, "*" included, is kept.
   let derived: "*" | string[] | undefined;
   if (!args.repos) {
     const answer = await reposForNamespaces(db, named);
@@ -200,8 +183,7 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
     { ...defaultScopes([]), namespaces: named, ...(derived === undefined ? {} : { repos: derived }) },
     { ...args, namespaces: undefined }
   );
-  // THE KEY EXISTS IN THIS FUNCTION AND NOWHERE ELSE. It is returned once; what is
-  // stored, logged and read back is its sha256.
+  // The key is returned once; only its sha256 is stored or logged.
   const key = mintAgentKey();
   const keyHash = await sha256Hex(key);
   const row: AgentRow = {
@@ -232,9 +214,8 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
 }
 
 export async function listAgents(db: D1Database): Promise<AgentResult> {
-  // REVOKED ROWS ARE INCLUDED. A credential that was revoked is exactly what an
-  // inventory is read for, and hiding it would make "revoked" and "never existed"
-  // look the same to whoever is auditing.
+  // Revoked rows are included: a revoked credential is exactly what an inventory is
+  // read for, and hiding it would make "revoked" and "never existed" look the same.
   const { results } = await db.prepare("SELECT * FROM agents ORDER BY created_at DESC, name").all<AgentRow>();
   return { ok: true, action: "list", agents: (results ?? []).map(publicAgent) };
 }
@@ -242,9 +223,8 @@ export async function listAgents(db: D1Database): Promise<AgentResult> {
 export async function revokeAgent(db: D1Database, actor: string, name: string): Promise<AgentResult> {
   const row = await liveAgentByName(db, name);
   if (!row) return refuse("revoke", `no live agent named '${name}'. Call list to see the inventory, revoked ones included.`);
-  // A keyed UPDATE with RETURNING, the rule the queue and the improve state machine
-  // already run on: no row back means somebody else got there first, and reporting
-  // success over that would be a lie about a credential.
+  // Keyed UPDATE with RETURNING: no row back means somebody else got there first,
+  // and reporting success over that would be false.
   const won = await db
     .prepare("UPDATE agents SET revoked_at = datetime('now') WHERE id = ?1 AND revoked_at IS NULL RETURNING id")
     .bind(row.id)
@@ -264,9 +244,8 @@ export async function updateAgentScopes(db: D1Database, actor: string, name: str
     .bind(row.id, serializeScopes(scopes))
     .first<{ id: string }>();
   if (!won) return refuse("update_scopes", `'${name}' was revoked between reading it and re-scoping it.`);
-  // BOTH SIDES IN THE AUDIT ROW. "What are this agent's scopes now" is answerable
-  // from the table. "What were they yesterday, and who widened them" is answerable
-  // only if the row that changed them recorded what it changed from.
+  // Both sides go in the audit row. The current scopes are answerable from the table;
+  // what they were before, and who widened them, only from the row that changed them.
   await db.batch([agentAudit(db, actor, "agent-rescoped", name, { id: row.id, before, after: scopes })]);
   return { ok: true, action: "update_scopes", agent: { ...publicAgent(row), scopes }, scopes };
 }

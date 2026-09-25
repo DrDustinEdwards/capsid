@@ -1,24 +1,11 @@
-// THE WEEKLY SKILLS REFRESH.
+// The weekly skills refresh. It fetches each model's prompting guide, and when one
+// moved it posts a job: the driver runs the `model-refresh` skill in
+// DrDustinEdwards/claude-skills and opens a pull request. Nothing applies without
+// the merge. A cron, not a tool (CLAUDE.md, tool surface rule).
 //
-// Vendors change model behavior faster than a prompt library gets reread, so a
-// rule written to hold down an old model's habit becomes a rule that fights the
-// new one. This fetches each model's prompting guide once a week, and when one
-// moved it posts a job. The driver claims it, runs the `model-refresh` skill in
-// DrDustinEdwards/claude-skills, and opens a pull request. NOTHING APPLIES
-// WITHOUT THE MERGE.
-//
-// A FOURTH CRON, as a ruled exception to the tool surface rule (CLAUDE.md),
-// approved 2026-09-11. It adds no tool: the surface stays at 32. The reasoning is
-// the same one that admitted improve_run, that a cron-only subsystem is one
-// nobody can inspect by hand, plus the specific point that the thing being kept
-// current is the steering layer itself, which no repo gate can see.
-//
-// WHY THIS MAY PROPOSE EDITS TO .claude/** WHEN THE IMPROVE LOOP MAY NOT.
-// The improve loop's ban on .claude/** and CLAUDE.md is UNCHANGED and this does
-// not touch it. That ban exists because the loop scores its own attempts, so a
-// loop that can edit what measures it has no measurement. This is a different
-// mechanism: it proposes to a separate repo, as a gated job, and a human merges.
-// It never scores anything and it never writes to the repos the loop improves.
+// It may propose edits to .claude/** where the improve loop may not, because the
+// loop scores its own attempts and this scores nothing: it proposes to a separate
+// repo as a gated job, and a human merges.
 
 import type { Env } from "./env";
 import type { Agent } from "./agents";
@@ -35,15 +22,12 @@ export const SKILLS_REFRESH_ACTOR = "agent:skills-refresh";
 export const SCHEDULE_KEY = "skills:refresh:schedule";
 export const guideKey = (slug: string) => `skills:guides:${slug}`;
 
-// Monday. Cloudflare fires the cron daily at 09:30 UTC and this decides whether
-// today is the day, so changing the day is a KV edit rather than a redeploy.
-// That is what "KV-configurable" has to mean here: the expression itself lives in
-// wrangler.jsonc and cannot be read from KV at all.
+// Monday. The cron fires daily and this decides whether today is the day, so
+// changing the day is a KV edit rather than a redeploy.
 export const DEFAULT_DAY_UTC = 1;
 
-// Same shape as the models overview uses. Kept in sync with the repo's own
-// scripts/model-guides.mjs by test/skills-refresh.test.ts, which asserts the two
-// patterns agree rather than trusting that nobody edited one of them.
+// test/skills-refresh.test.ts asserts this matches scripts/model-guides.mjs in the
+// claude-skills repo.
 const MODEL_ID = /\bclaude-(fable|mythos|opus|sonnet|haiku)-\d[a-z0-9-]*/g;
 const DATED_SUFFIX = /-\d{8}$/;
 
@@ -63,15 +47,9 @@ export interface Schedule {
   reason: string | null;
 }
 
-// UNSET TAKES THE DOCUMENTED DEFAULT; A KV ERROR DISABLES.
-//
-// Deliberately NOT readMode's fail-to-off, and the difference is blast radius
-// rather than mood. A wrong improve run writes machine-authored branches to five
-// repos overnight; a wrong run here posts one queued job that a human still has
-// to claim, work and merge, and postJob's partial unique index refuses a
-// duplicate while one is open, so a repeat cannot flood. The feature is useless
-// switched off by default, so an unset key runs it. A KV that THREW is a
-// different thing: that is a fault, and a fault does not get to start work.
+// Unset takes the default and runs; a KV error disables. Unlike readMode's
+// fail-to-off, because a wrong run here posts one gated job (a duplicate is refused
+// while one is open), not branches to five repos.
 export async function readSchedule(kv: KVNamespace): Promise<Schedule> {
   let raw: string | null;
   try {
@@ -122,9 +100,7 @@ export function skillsRefreshAgent(): Agent {
       repos: [],
       tools: ["jobs"],
       grants: ["write"],
-      // DERIVED, never spelled out. This object listed the six flags by hand and
-      // went stale the moment a seventh was added, which is the drift the rest of
-      // this codebase keeps a single list to avoid.
+      // Derived, so a new flag cannot be missed.
       flags: noFlags(),
     },
     admin: false,
@@ -192,9 +168,8 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
     if (prior === hash) continue;
     changed.push(slug);
 
-    // The KV write lands only after the job is queued. A hash stored before a
-    // failed post would mark the guide seen and never refresh it again, which is
-    // exactly the silent-skip shape this repo keeps ruling against.
+    // The hash is stored only after the job is queued, or a failed post would mark
+    // the guide seen and never refresh it.
     const result = await postJob(env, agent, now, {
       namespace: SKILLS_NAMESPACE,
       title: `skills: refresh for ${slug}`,
@@ -206,9 +181,8 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
       posted.push(slug);
       await env.APP_KV.put(guideKey(slug), hash);
     } else {
-      // A duplicate open job is the queue working, not a failure: the previous
-      // week's refresh has not been finished yet. Record the new hash anyway so
-      // the next real change is what re-posts, rather than this same one.
+      // A duplicate open job means last week's refresh is unfinished. Record the hash
+      // so the next real change is what re-posts.
       const reason = result.refusal ?? "refused";
       refused.push({ slug, reason });
       if (/already has an open job/i.test(reason)) await env.APP_KV.put(guideKey(slug), hash);
