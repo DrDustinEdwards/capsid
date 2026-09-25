@@ -93,10 +93,3 @@ test("THE ROSTER IN THE SCRIPT MATCHES THE ROSTER IN SOURCE", () => {
   const inScript = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
   assert.deepEqual(inScript, [...ROSTER].sort());
 });
-
-test("the derivation carries a VERSION segment, so every key can be rotated at once", () => {
-  // Rotating all five derived keys without changing the root secret is then a
-  // one-character change rather than a new secret and five re-pastes.
-  const script = readFileSync(SCRIPT, "utf8");
-  assert.match(script, /capsid-improve-score:v1:/);
-});

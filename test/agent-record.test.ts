@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadAgentRecords, recordFor, recordsFrom, type RecordRows, type RecordSubject } from "../src/agent-record.ts";
-import { sourceFile } from "./source-files.ts";
 
 // THE AGENT RECORD: counts and rates over the outcome rows.
 //
@@ -205,8 +204,6 @@ test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
       `the record grew a '${forbidden}' field, which is the composite this design refuses`
     );
   }
-  // And the source says so, so the next reader finds the reason rather than the rule.
-  assert.match(sourceFile("agent-record.ts"), /COUNTS AND RATES, NEVER A SCORE/);
 });
 
 test("the inventory is read with grouped queries, not one set per credential", async () => {

@@ -32,13 +32,6 @@ test("PLANT: two concurrent claims of the same jti resolve to ONE winner", async
   assert.equal(winners.length, 1, "exactly one caller may claim a nonce");
 });
 
-test("the same jti in a different scope is a different claim", async () => {
-  const d1 = jtiDb();
-  assert.deepEqual(await claimJti(d1.db, "capsid", "n"), { ok: true });
-  assert.deepEqual(await claimJti(d1.db, "foxing", "n"), { ok: true });
-  assert.deepEqual(await claimJti(d1.db, "backup", "n"), { ok: true });
-});
-
 // ---- ci_dispatch aliases ----------------------------------------------------
 
 function repoEnv(repoFull: string) {

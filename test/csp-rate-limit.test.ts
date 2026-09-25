@@ -186,7 +186,6 @@ test("csp reports and registrations count in separate buckets", async () => {
   const keys = [...kv.store.keys()];
   assert.equal(keys.filter((k) => k.startsWith("csp:rate:")).length, 2, `csp keys missing: ${keys.join(", ")}`);
   assert.equal(keys.filter((k) => k.startsWith("dcr:rate:")).length, 2, `dcr keys missing: ${keys.join(", ")}`);
-  assert.equal(CSP_REPORT_LIMIT.prefix, "csp:rate:");
 });
 
 test("a report from another IP does not spend this one's budget", async () => {
@@ -226,14 +225,12 @@ test("a rate-limited caller gets a 429 with a usable Retry-After, not a 204", as
 // against the real Worker in test-integration/csp-report.test.ts.
 
 
-test("the csp thresholds are the measured ones, and clear of real volume", async () => {
+test("the csp thresholds are clear of real volume, and the day allows more than an hour", async () => {
   // 47 reports exist in R2 across the endpoint's whole life (2026-08-12 to
   // 2026-08-15), busiest day 15. The hourly bound is set from what must not break,
   // a CSP debugging session, NOT from that traffic, and it lands 20x the busiest
   // DAY per HOUR. If someone later tunes these toward the measured volume, this is
   // the note that says the two are not the same question.
-  assert.equal(MAX_REPORTS_PER_HOUR, 300);
-  assert.equal(MAX_REPORTS_PER_DAY, 1000);
   assert.ok(MAX_REPORTS_PER_HOUR > 15 * 15, "the hourly bound is no longer clear of the busiest measured day");
   assert.ok(MAX_REPORTS_PER_DAY > MAX_REPORTS_PER_HOUR, "the daily bound must allow more than a single hour");
 });

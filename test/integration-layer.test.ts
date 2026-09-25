@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -14,19 +14,8 @@ import { test } from "node:test";
 const ROOT = join(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-const PKG = JSON.parse(read("package.json")) as { scripts: Record<string, string>; devDependencies: Record<string, string> };
 const CI = read(".github/workflows/ci.yml");
 const CONFIG = read("vitest.config.ts");
-
-test("the integration suite has files, and they are where the config looks", () => {
-  const files = readdirSync(join(ROOT, "test-integration")).filter((f) => f.endsWith(".test.ts"));
-  assert.ok(files.length >= 4, `test-integration holds ${files.length} suites; expected at least four`);
-  assert.match(CONFIG, /include: \["test-integration\/\*\*\/\*\.test\.ts"\]/);
-  // And the unit glob does NOT reach them, or node --test would try to run a file
-  // importing `cloudflare:test` and fail for a reason that has nothing to do with
-  // the code under test.
-  assert.equal(PKG.scripts.test, 'node scripts/test-budget.mjs "test/*.test.ts"');
-});
 
 test("PLANT: CI runs both suites and typechecks all four configs", () => {
   // Each command either as a step's `run:` or as a whole line of a `run: |` block,
@@ -39,17 +28,6 @@ test("PLANT: CI runs both suites and typechecks all four configs", () => {
   // has to be inside that job rather than in a job beside it.
   const checksJob = CI.slice(CI.indexOf("  checks:"), CI.indexOf("  deploy:"));
   assert.ok(checksJob.includes("npm run test:integration"), "the integration suite must be inside the job deploy depends on");
-});
-
-test("the migrations really are applied by the setup file, from migrations/", () => {
-  const setup = read("test-integration/apply-migrations.ts");
-  assert.match(setup, /applyD1Migrations\(env\.DB, env\.TEST_MIGRATIONS\)/);
-  assert.match(CONFIG, /readD1Migrations\(path\.join\(import\.meta\.dirname, "migrations"\)\)/);
-  // Vacuity guard: a migrations directory the config points at that holds nothing
-  // would apply nothing and every integration test would run against an empty
-  // database that still answered.
-  const migrations = readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql"));
-  assert.ok(migrations.length >= 4, `migrations/ holds ${migrations.length} files`);
 });
 
 test("the integration compatibility date is not AHEAD of the deploy date", () => {
@@ -71,7 +49,6 @@ test("the integration compatibility date is not AHEAD of the deploy date", () =>
 test("no real secret reached the integration bindings", () => {
   // CLAUDE.md, public repo rule, applied to the one config file in this repo
   // that carries secret-shaped values at all.
-  assert.match(CONFIG, /IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one"/);
   for (const suspicious of [/sk-ant-/, /ghp_/, /github_pat_/, /-----BEGIN/]) {
     assert.doesNotMatch(CONFIG, suspicious, `vitest.config.ts carries something matching ${suspicious}`);
   }

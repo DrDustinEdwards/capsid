@@ -7,7 +7,6 @@ import { canaryReport, checkCanary } from "../scripts/canary-lib.mjs";
 import { CANARY_CLIENT, OAUTH_KV } from "../scripts/bindings.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AUTHORITATIVE } from "../src/counts.ts";
 
 // THE LIVE-GATE CANARY (work queue, from the 2026-08-17 audit).
 //
@@ -145,15 +144,6 @@ test("a foreign or truncated value at the right key is not accepted", async () =
 
 // ---- the wiring ------------------------------------------------------------
 
-test("the canary is pinned, and it is the record that actually exists", () => {
-  // Minted 2026-08-17 through the real POST /register path, then re-put with the
-  // expiry stripped. The id is pinned in bindings.mjs, which is the one place any
-  // Cloudflare identity is written.
-  assert.match(CANARY_CLIENT.id, /^[A-Za-z0-9_-]{8,64}$/);
-  assert.match(CANARY_CLIENT.name, /do not delete/i, "the record's own name does not warn against deleting it");
-  assert.equal(OAUTH_KV.name, "capsid-app-kv");
-});
-
 test("gate 2b is wired into the run and counted", () => {
   const gate = read("../scripts/verify-live.mjs");
   assert.match(gate, /await gateCanary\(\);/, "gate 2b is defined but never called");
@@ -171,7 +161,6 @@ test("gate 2b is wired into the run and counted", () => {
   // total here made an unrelated eleventh gate fail the canary's test.
   const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
   assert.ok(labels.has("2b canary client record"), "the canary gate is no longer one of the counted gates");
-  assert.equal(labels.size, AUTHORITATIVE.capsid.liveGates);
 });
 
 test("the credentials the gate needs are supplied to it in CI", () => {

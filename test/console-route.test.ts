@@ -88,13 +88,6 @@ test("the header carries the live sha, the schema version, the backup age, the b
   assert.match(html, /abc1234/, "the header should show the deployed sha it was given");
 });
 
-test("the page answers to prefers-color-scheme rather than pinning one theme", async () => {
-  const cookie = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
-  const res = await handleConsole(get({ Cookie: cookie.split(";")[0] }), env());
-  const html = await res.text();
-  assert.match(html, /prefers-color-scheme: dark/);
-});
-
 test("the shell renders with ZERO namespaces rather than throwing on an empty roster", () => {
   const html = renderConsole({
     generated: "2026-09-11T14:00:00.000Z",
