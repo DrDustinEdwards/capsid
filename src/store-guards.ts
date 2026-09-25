@@ -179,10 +179,8 @@ export function documentUpsert(
     .bind(namespace, path, title, body, type, tags, status);
 }
 
-// THE AUDIT ROW, ONE SPELLING (audit 2026-09-25, E1-24). Every write path appends one
-// (the snapshot rule in CLAUDE.md), and the INSERT was spelled out at about fifteen
-// sites. params is
-// stored as JSON. An audit row whose params come from inside the batch (delete's
+// The audit row, spelled once. Every write path appends one (CLAUDE.md, snapshot
+// rule). params is stored as JSON. An audit row whose params come from inside the batch (delete's
 // edges, a skill transition guarded by its new status) is an INSERT ... SELECT and
 // keeps its own statement.
 export function auditStatement(
