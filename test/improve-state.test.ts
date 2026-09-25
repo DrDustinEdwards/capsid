@@ -278,12 +278,16 @@ test("AN IMPROVE DOCUMENT WRITE SNAPSHOTS AND AUDITS, like every other write pat
   assert.equal(statements.length, 3);
 });
 
-test("a NEW document skips the snapshot, because there is nothing to snapshot", async () => {
+test("the snapshot SELECTs the live row even when the pre-read found none", async () => {
+  // A row created between the caller's pre-read and the batch is still snapshotted
+  // (audit 2026-09-25, E1-2). The INSERT ... SELECT inserts nothing when there is no
+  // row; test-integration/improve-doc-snapshot.test.ts runs it against real SQLite.
   const { db } = fakeD1();
   const statements = await improveDocStatements(db, { ...DOC, prior: null });
-  const sql = statements.map(sqlOf).join("\n");
-  assert.equal(/INSERT INTO document_versions/.test(sql), false);
-  assert.match(sql, /INSERT INTO audit_log/);
+  const snapshot = statements.find((s) => /INSERT INTO document_versions/.test(sqlOf(s)));
+  assert.ok(snapshot, "no snapshot statement");
+  assert.match(sqlOf(snapshot).replace(/\s+/g, " "), /SELECT id, namespace, path, title, body FROM documents/);
+  assert.deepEqual(paramsOf(snapshot), [DOC.namespace, DOC.path]);
 });
 
 test("an improve document write NORMALISES WIDE DASHES", async () => {

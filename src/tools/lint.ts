@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { repoBlobPaths, resolveRepo } from "../github";
-import { documentUpsert, isMissingRowAbort, requireExists } from "../store-guards";
+import { documentUpsert, isMissingRowAbort, requireExists, snapshotLive } from "../store-guards";
 import { authoritativeFor, scanCountClaims } from "../counts";
 import { buildTruthReport, isUnscanned, renderTruthReport, reportPath, type ReportDoc, type ReportEdge } from "../truth-report";
 import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
@@ -306,13 +306,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         }
         const statements = [];
         if (prior) {
-          statements.push(
-            db
-              .prepare(
-                "INSERT INTO document_versions (document_id, namespace, path, title, body) SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2"
-              )
-              .bind(namespace, path)
-          );
+          statements.push(snapshotLive(db, namespace, path));
         }
         // The same upsert the `write` tool issues, from the one helper both call.
         statements.push(documentUpsert(db, namespace, path, title, body, "reference", null, "published"));

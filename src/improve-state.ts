@@ -1,6 +1,7 @@
 import { sha256Hex } from "./auth";
 import type { Env } from "./env";
 import { normalizeDashes } from "./normalize";
+import { snapshotLive } from "./store-guards";
 import {
   bestKey,
   BUDGET_DEFAULTS,
@@ -308,16 +309,11 @@ export async function improveDocStatements(
   const body = normalizeDashes(doc.body, "prose");
   const title = normalizeDashes(doc.title, "title");
 
-  const statements: D1PreparedStatement[] = [];
-  if (doc.prior) {
-    statements.push(
-      db
-        .prepare(
-          "INSERT INTO document_versions (document_id, namespace, path, title, body) VALUES (?1, ?2, ?3, ?4, ?5)"
-        )
-        .bind(doc.prior.id, doc.namespace, doc.path, doc.prior.title, doc.prior.body)
-    );
-  }
+  // The snapshot SELECTs the live row inside the batch rather than binding doc.prior,
+  // which was read earlier: a write landing in between (the job claim path waits on
+  // GitHub there) would otherwise be overwritten with no snapshot of it. It is added
+  // whether or not prior was found, and inserts nothing when there is no row.
+  const statements: D1PreparedStatement[] = [snapshotLive(db, doc.namespace, doc.path)];
   statements.push(
     db
       .prepare(
