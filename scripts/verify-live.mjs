@@ -235,9 +235,11 @@ async function gateCanary() {
     auth: { Authorization: `Bearer ${token}` },
   });
   const { passed, detail } = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
-  // UNREACHABLE means KV could not be read, which says nothing about this deploy. It
-  // stays red, but as could-not-run, so it does not roll the deploy back.
-  record("2b canary client record", result.outcome === "unreachable" ? COULD_NOT_RUN : passed, detail);
+  // UNREACHABLE means KV could not be read, and TTL-UNVERIFIED (from a separate change
+  // to canary-lib.mjs) means its key list could not be. Neither says anything about
+  // this deploy. They stay red, but as could-not-run, so they do not roll it back.
+  const unread = result.outcome === "unreachable" || result.outcome === "ttl-unverified";
+  record("2b canary client record", unread ? COULD_NOT_RUN : passed, detail);
 }
 
 // Gate 1b: the store is bound and the FTS index is intact.
