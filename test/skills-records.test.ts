@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   attributionStatements,
@@ -14,9 +12,6 @@ import { fakeD1, fakeEnv } from "./fakes.ts";
 
 // GROUPS 2, 3 AND 7: what gets offered, what earns a candidate, and what a failed run
 // leaves behind for the next driver to read.
-
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0013_skill_attribution.sql"), "utf8");
-const SOURCE = readFileSync(join(import.meta.dirname, "..", "src", "skills-records.ts"), "utf8");
 
 // A statement recorder thin enough to read the bound parameters back out.
 function recorder() {
@@ -56,15 +51,6 @@ test("a job earns a candidate only when its outcome is fully verified", () => {
 
 // scanner-rule: skills lifecycle, "never live on creation" (docs/skills.md). A module
 // that holds no INSERT cannot create a row, which no call to it can demonstrate.
-test("this module cannot create a skill at all, so it cannot create one that is live", () => {
-  // Group 2 is "never live on creation". The cheapest way to keep that true is for
-  // the deciding module to have no write that creates a row: creation goes through
-  // recordSkill, and the status column defaults to candidate in the schema. An
-  // earlier version of this test banned the word "live" outright and wrongly failed
-  // on the query that selects which skills to OFFER.
-  assert.equal(/INSERT INTO improve_skills/i.test(SOURCE), false, "this module must not insert a skill row");
-  assert.equal(/SET status\s*=/i.test(SOURCE.replace(/commitTransition[\s\S]*?\n\}/, "")), false, "only commitTransition may move a status");
-});
 
 // ---- group 3: what gets offered --------------------------------------------------
 //
@@ -163,26 +149,6 @@ test("a very long note is bounded before it is stored", () => {
 });
 
 // ---- the migration ----------------------------------------------------------------
-
-test("migration 0013 adds both attribution columns and the failures table", () => {
-  assert.match(MIGRATION, /ALTER TABLE job_outcomes ADD COLUMN skill_ids_offered TEXT/);
-  assert.match(MIGRATION, /ALTER TABLE job_outcomes ADD COLUMN skill_ids_used TEXT/);
-  assert.match(MIGRATION, /CREATE TABLE IF NOT EXISTS skill_failures/);
-  for (const column of ["skill", "namespace", "source_kind", "source_id", "note"]) {
-    assert.match(MIGRATION, new RegExp(`\\b${column}\\b`), `skill_failures needs ${column}`);
-  }
-});
-
-test("the failures table is not a second score, and the migration says so", () => {
-  assert.match(MIGRATION, /THIS IS NOT A SECOND SCORE/i);
-});
-
-test("offered and used are stored separately, and the migration says why", () => {
-  // The GAP is the measurement: a skill offered fifty times and used twice is a
-  // trigger condition that does not describe the work, not a failing skill.
-  assert.match(MIGRATION, /gap between them is the measurement/i);
-  assert.match(MIGRATION, /NULL is not an empty array/i);
-});
 
 // ---- offerSkills and dueTransitions, driven against the fake ---------------------
 

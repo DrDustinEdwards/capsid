@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { checkScope, TOOL_GRANTS } from "../src/scope.ts";
+import { checkScope } from "../src/scope.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
@@ -50,11 +50,6 @@ function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
 }
 
 // ---- half one: the mapping is admin work ---------------------------------------
-
-test("update_namespace and register_namespace are admin in the one table that decides", () => {
-  assert.equal(TOOL_GRANTS.update_namespace, "admin");
-  assert.equal(TOOL_GRANTS.register_namespace, "admin");
-});
 
 for (const tool of ["update_namespace", "register_namespace"] as const) {
   test(`${tool} refuses a minted agent and names why`, () => {

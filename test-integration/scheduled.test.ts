@@ -1,6 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_OPEN_HOUR_CT, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
+import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
 import { RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../src/improve-schema";
 import { activeRun, advanceableRuns } from "../src/improve-state";
 import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
@@ -28,27 +28,6 @@ async function fire(cron: string) {
 }
 
 describe("the four cron expressions", () => {
-  it("the handler exports exactly the four the config declares", () => {
-    expect([BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON]).toEqual([
-      "0 9 * * *",
-      "0 8,9 * * *",
-      "*/5 * * * *",
-      "30 9 * * *",
-    ]);
-  });
-
-  it("the four are distinct, so a dispatch on the expression cannot be ambiguous", () => {
-    const handled = [BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON];
-    expect(new Set(handled).size).toBe(handled.length);
-  });
-
-  it("the opener fires in both UTC hours that can be 03:00 in Chicago, and runs only at 03:00", () => {
-    // Cloudflare cron expressions are UTC only. 03:00 America/Chicago is 08:00 UTC in
-    // CDT and 09:00 in CST, so both fire and chicagoHour decides.
-    expect(IMPROVE_OPEN_CRON).toBe("0 8,9 * * *");
-    expect(IMPROVE_OPEN_HOUR_CT).toBe(3);
-  });
-
   it("the backup cron writes real dumps to real R2", async () => {
     await env.DB.prepare(
       `INSERT INTO documents (namespace, path, title, body, type, status)

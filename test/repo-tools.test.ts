@@ -14,7 +14,7 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
+import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // KV, Env and the HTTP stub all come from ./fakes.ts now (quality audit 6.2).
 // This file's local KV was the only one that parsed the "json" get type, seeded a
@@ -665,56 +665,7 @@ test("ci_status still withholds the log tail from a read-only key", async () => 
   );
 });
 
-// THE TIMESTAMP WINDOW (group 6, the fixture the earlier work left untested). The
-// failing step is found by name in the metadata but its log region is found by the
-// step's started_at/completed_at, because Actions labels each group `Run <command>`
-// and not by step name (measured on dustinedwards-info run 34002625535). JOBS_OK
-// above carries no timestamps, so it only ever exercised the named fallback; this
-// gives the failing step a real window and proves the in-window lines are returned
-// and the out-of-window setup and cleanup lines are not.
-const JOBS_WINDOWED = {
-  jobs: [
-    {
-      id: 9,
-      name: "checks",
-      conclusion: "failure",
-      steps: [
-        { name: "Typecheck", conclusion: "success", started_at: "2026-08-17T00:00:00Z", completed_at: "2026-08-17T00:00:30Z" },
-        { name: "Tests", conclusion: "failure", started_at: "2026-08-17T00:01:00Z", completed_at: "2026-08-17T00:02:00Z" },
-      ],
-    },
-  ],
-};
-const WINDOWED_LOG = [
-  "2026-08-17T00:00:15Z ##[group]Run npm run check",
-  "2026-08-17T00:00:20Z setup output before the failing step",
-  "2026-08-17T00:01:15Z not ok 3 - the assertion that failed",
-  "2026-08-17T00:01:45Z FAILED with exit code 1",
-  "2026-08-17T00:03:00Z ##[group]Run git config --unset-all (cleanup)",
-].join("\n");
-
-test("ci_status returns the failing step's log by its timestamp window, not the whole job", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
-      "GET /repos/o/r/actions/runs/42/jobs": { body: JOBS_WINDOWED },
-      "GET /repos/o/r/actions/jobs/9/logs": { text: WINDOWED_LOG },
-    },
-    async () => {
-      const result = await ciStatus(makeEnv(ONE_REPO), "ns", undefined, { logTail: true });
-      const failed = result.failed_run as FailedRun;
-      assert.equal(failed.failing_step, "Tests");
-      assert.match(failed.log_region ?? "", /by timestamp window/);
-      // The in-window failure lines are present.
-      assert.match(failed.log ?? "", /not ok 3 - the assertion that failed/);
-      assert.match(failed.log ?? "", /FAILED with exit code 1/);
-      // The before-window setup and the after-window cleanup are excluded: the cleanup
-      // line is what the old whole-job tail returned.
-      assert.doesNotMatch(failed.log ?? "", /setup output before the failing step/);
-      assert.doesNotMatch(failed.log ?? "", /git config --unset-all/);
-    }
-  );
-});
+// The timestamp window is tested in test/repo-fallthrough.test.ts.
 
 // THE WIRING, not just the function (quality audit 2.2, found by a plant).
 //

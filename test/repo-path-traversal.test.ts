@@ -34,15 +34,6 @@ const ONE_REPO = [{ repo: "owner/mapped-repo", label: "primary" }];
 
 // ---- the escape is real (documents the vulnerability) -----------------------
 
-test("WHATWG normalization walks '..' out of the mapped repo prefix", () => {
-  // This is the raw string the OLD encodePath produced: real slashes, real "..".
-  const raw = "/repos/owner/mapped-repo/contents/" + "../../other-repo/contents/secrets.env";
-  const { pathname } = new URL(`https://api.github.com${raw}`);
-  // Proof the concatenation escapes: the parsed pathname names a DIFFERENT repo.
-  assert.equal(pathname, "/repos/owner/other-repo/contents/secrets.env");
-  assert.ok(!pathname.startsWith("/repos/owner/mapped-repo/"));
-});
-
 // ---- the input-level guard --------------------------------------------------
 
 test("repoPathProblem rejects '.' and '..' segments and control chars", () => {

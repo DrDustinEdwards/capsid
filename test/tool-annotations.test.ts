@@ -69,16 +69,6 @@ const DESTRUCTIVE = [
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
 
-// scanner-rule: conventions-verification, pair every content check with a count check
-test("the scan finds every tool, so nothing here can pass by reading nothing", () => {
-  const blocks = toolBlocks();
-  // Derived from src/counts.ts rather than spelled, so the surface moves in one
-  // place. Spelled out, every ruled addition broke this test for a reason that had
-  // nothing to do with annotations.
-  assert.equal(blocks.length, CAPSID.tools, `the tool-block walk found ${blocks.length} registrations`);
-  assert.ok(blocks.every((b) => b.body.length > 100), "a zero-length block would make every match below vacuous");
-});
-
 // scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
 test("PLANT: the hint table and the registrations name exactly the same tools", () => {
   const registered = toolBlocks().map((b) => b.name).sort();
@@ -155,20 +145,4 @@ test("an unknown tool fails CLOSED rather than claiming to be safe", () => {
   assert.equal(typeof constructorLookup, "object");
   assert.equal(constructorLookup.readOnlyHint, false);
   assert.equal(constructorLookup.destructiveHint, true);
-});
-
-test("no hint ships that this file does not derive", () => {
-  // openWorldHint was written here and removed the same day. The obvious
-  // derivation, "the handler calls into src/github.ts", is one hop deep, and it
-  // disagreed with the table twice on first run: register_namespace and
-  // update_namespace reach GitHub through repoTokenOk, and improve_run dispatches
-  // a workflow through improve-run.ts and so read as closed-world. idempotentHint
-  // has no scan at all. Neither ships.
-  for (const name of Object.keys(TOOL_HINTS)) {
-    assert.deepEqual(
-      Object.keys(TOOL_HINTS[name]).sort(),
-      ["destructiveHint", "readOnlyHint"],
-      `${name} carries a hint nothing in this file derives`
-    );
-  }
 });

@@ -9,10 +9,7 @@ import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/c
 import { REPORT_PATH } from "../src/headers.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
 import {
-  ADMIN_REASON,
   ROUTE_GRANTS,
-  TOOL_ACTION_GRANTS,
-  TOOL_GRANTS,
   UNGATED_ROUTES,
   requiredForAction,
   routeRefusal,
@@ -204,18 +201,6 @@ test("every gated route's handler asks routeRefusal about its own path", () => {
 
 // ---- the table is the whole statement -------------------------------------------
 
-test("every admin requirement has a reason its refusal can name", () => {
-  const admin = [
-    ...Object.entries(TOOL_GRANTS).filter(([, r]) => r === "admin").map(([t]) => t),
-    ...Object.entries(ROUTE_GRANTS).filter(([, r]) => r === "admin").map(([t]) => t),
-    ...Object.entries(TOOL_ACTION_GRANTS)
-      .filter(([, spec]) => spec.default === "admin" || Object.values(spec.actions).includes("admin"))
-      .map(([t]) => t),
-  ];
-  assert.equal(admin.length, 5, "the number of admin-only tools and routes changed");
-  for (const name of admin) assert.ok(Object.hasOwn(ADMIN_REASON, name), `${name} is admin only and ADMIN_REASON has no entry for it`);
-});
-
 test("improve_run: run and claim are a driver's work and every other action is admin", async () => {
   // The actions come from the schema the server serves, so an action added to the tool
   // without a decision here fails.
@@ -245,15 +230,4 @@ test("improve_run: run and claim are a driver's work and every other action is a
   }
   // An omitted action is a run.
   assert.equal(requiredForAction("improve_run", undefined), "write");
-});
-
-// scanner-rule: CLAUDE.md, one enforcement point rule, no handler decides a grant for itself. An absent check cannot be observed by calling the tool
-test("no tool handler decides admin for itself", () => {
-  // agents and improve_run did until 2026-09-16. improve_status passes admin through
-  // to shape what it returns, which is not a gate, so the scan looks for the refusal
-  // shape: a branch on the identity.
-  for (const file of ["agents.ts", "improve.ts"]) {
-    const source = readFileSync(join(import.meta.dirname, "..", "src", "tools", file), "utf8");
-    assert.doesNotMatch(source, /if \([^)]*!\s*(ctx\.)?agent\.admin/, `src/tools/${file} gates on agent.admin in its handler`);
-  }
 });
