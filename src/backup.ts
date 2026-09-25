@@ -51,20 +51,31 @@ function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
 }
 
-// THE TABLE THAT IS PAGED RATHER THAN READ WHOLE (2026-09-23, job_be450271dfa9).
+// THE TABLES THAT ARE PAGED RATHER THAN READ WHOLE (2026-09-23, job_be450271dfa9;
+// audit_log added 2026-09-25, audit finding F1-3).
 //
 // Reading every table in one batch held the whole database in the isolate. At 38.5MB
 // on 2026-08-17 that fit; at 96.4MB on 2026-09-23, 66.5MB of it version bodies, it
-// did not, and the cron died before its first put from 2026-09-20 on. This table is
-// read in pages of VERSION_PAGE_ROWS, bounded by a MAX(id) taken inside the snapshot
-// batch, and streamed to R2 as a multipart upload, so the object is the same
+// did not, and the cron died before its first put from 2026-09-20 on. These tables
+// are read in pages, bounded by a MAX(id) taken inside the snapshot batch, and
+// streamed to R2 as a multipart upload, so each object is the same
 // {exported_at, table, rows} shape as every other table and a restore reads it the
-// same way. The bound keeps the one-instant snapshot: a row above it was written
-// after the batch, and the only thing that deletes version rows is this run's own
-// prune, which runs after the export and under the lease.
-const STREAMED_TABLE = "document_versions";
-// The largest version row measured 2026-09-23 was 238KB, so a page is at most ~24MB.
-const VERSION_PAGE_ROWS = 100;
+// same way.
+//
+// A table qualifies ONLY if it is append-only with an AUTOINCREMENT id. Then the
+// bound keeps the one-instant snapshot: a row above it was written after the batch,
+// a row at or below it cannot have changed, and the only thing that deletes these
+// rows is this run's own prune, which runs after the export and under the lease.
+// documents and jobs are UPDATEd in place, so a page read after the batch would
+// carry a state newer than the rest of the dump; they stay in the batch.
+//
+// The value is the page size in rows. The largest version row measured 2026-09-23
+// was 238KB, so a version page is at most ~24MB. An audit row carries a short JSON
+// params object and no document body.
+const PAGED_TABLES: ReadonlyMap<string, number> = new Map([
+  ["document_versions", 100],
+  ["audit_log", 1000],
+]);
 // R2 requires every part except the last to be the same size, and at least 5MiB.
 const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
 
@@ -115,12 +126,12 @@ async function putJsonStreamed(
   }
 }
 
-async function* versionPages(db: D1Database, maxId: number): AsyncGenerator<unknown[]> {
+async function* tablePages(db: D1Database, table: string, maxId: number, pageRows: number): AsyncGenerator<unknown[]> {
   let after = 0;
   while (after < maxId) {
     const { results } = await db
-      .prepare(`SELECT * FROM ${STREAMED_TABLE} WHERE id > ?1 AND id <= ?2 ORDER BY id LIMIT ?3`)
-      .bind(after, maxId, VERSION_PAGE_ROWS)
+      .prepare(`SELECT * FROM ${table} WHERE id > ?1 AND id <= ?2 ORDER BY id LIMIT ?3`)
+      .bind(after, maxId, pageRows)
       .all<{ id: number }>();
     if (results.length === 0) return;
     yield results;
@@ -289,13 +300,13 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   // 2026-08-17, document_versions 25.8MB and documents 5.4MB on a 38.5MB database
   // against a 128MB isolate. Each result set is stringified, written, and dropped
   // before the next is touched, so at most one serialized copy is alive on top of
-  // the row sets. It did push one over on 2026-09-20, and document_versions is now
-  // paged out of the batch and streamed (STREAMED_TABLE, above).
+  // the row sets. It did push one over on 2026-09-20, and document_versions and
+  // audit_log are now paged out of the batch and streamed (PAGED_TABLES, above).
   const jsonPrefix = `${JSON_PREFIX}${now.replace(/[:.]/g, "-")}/`;
   const jsonKeys: string[] = [];
   const snapshot = await env.DB.batch(
     TABLES.map((table) =>
-      env.DB.prepare(table === STREAMED_TABLE ? `SELECT MAX(id) AS max_id FROM ${table}` : `SELECT * FROM ${table}`)
+      env.DB.prepare(PAGED_TABLES.has(table) ? `SELECT MAX(id) AS max_id FROM ${table}` : `SELECT * FROM ${table}`)
     )
   );
   let docs: Array<{ namespace: string; path: string; body: string | null }> = [];
@@ -305,10 +316,11 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     const results = rowsPerTable[i] ?? [];
     if (table === "documents") docs = results as typeof docs;
     const key = `${jsonPrefix}${table}.json`;
-    if (table === STREAMED_TABLE) {
+    const pageRows = PAGED_TABLES.get(table);
+    if (pageRows !== undefined) {
       const maxId = Number((results[0] as { max_id: number | null } | undefined)?.max_id ?? 0);
       const head = `{"exported_at":${JSON.stringify(now)},"table":${JSON.stringify(table)},"rows":[`;
-      await putJsonStreamed(env.MEDIA, key, head, versionPages(env.DB, maxId));
+      await putJsonStreamed(env.MEDIA, key, head, tablePages(env.DB, table, maxId, pageRows));
     } else {
       await env.MEDIA.put(key, JSON.stringify({ exported_at: now, table, rows: results }), {
         httpMetadata: { contentType: "application/json" },
