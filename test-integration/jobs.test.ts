@@ -921,6 +921,113 @@ describe("the retry cap, where the block is written", () => {
   });
 });
 
+describe("the retry cap, where resume reads it", () => {
+  // Moved from test/retry-cap.test.ts (audit 2026-09-25, item C2-15). Those tests drove
+  // resumeJob against a fake that matched SQL by regex and applied the UPDATE's
+  // correction increment from params[4]. Here SQLite applies the increment and sums
+  // corrections_count over every row that shares (namespace, title).
+  //
+  // Named agents rather than the legacy key: a legacy write key resolves to the admin,
+  // and the admin is the one caller the cap lets through.
+  function agentNamed(name: string, admin = false): Agent {
+    const scopes = defaultScopes(["capsid"]);
+    scopes.grants = ["read", "write"];
+    return { id: "agent_aaaabbbbcccc", name, kind: admin ? "seat" : "driver", actor: `agent:${name}`, scopes, admin, row: null };
+  }
+  const CLAIMANT = agentNamed("capsid-driver");
+  const OTHER_DRIVER = agentNamed("other-driver");
+
+  async function blockedAt(corrections: number, title: string): Promise<string> {
+    const posted = await post({ title, gate_required: true });
+    expect(posted.ok, posted.refusal).toBe(true);
+    const id = posted.job!.id;
+    const claimed = await claimJob(jobsEnv(), CLAIMANT, NOW, { id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
+    const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, { reason: "stopped at the push", command: "git push -u origin feat/x" });
+    expect(blocked.ok, blocked.refusal).toBe(true);
+    return id;
+  }
+
+  it("the first two corrections are allowed, and each one spends the budget", async () => {
+    for (const corrections of [0, 1]) {
+      const id = await blockedAt(corrections, `correction ${corrections + 1}`);
+      const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "fix the review findings", { correction: true });
+      expect(result.ok, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`).toBe(true);
+      expect((await row(id))?.corrections_count, "a correction that does not spend the budget can never reach the cap").toBe(corrections + 1);
+      await env.DB.prepare("DELETE FROM jobs").run();
+    }
+  });
+
+  it("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the cap", async () => {
+    // job_466d6472511e, 2026-09-16: three ordinary pushes, each one blocked and resumed,
+    // put the job at corrections_count 2 and the next resume was refused as a retry
+    // loop. Nothing had been corrected.
+    const id = await blockedAt(0, "three ordinary pushes");
+    for (let i = 1; i <= 3; i++) {
+      const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, `push ${i} ran`);
+      expect(result.ok, `plain resume ${i} refused: ${JSON.stringify(result)}`).toBe(true);
+      expect((await row(id))?.corrections_count, `plain resume ${i} spent a correction`).toBe(0);
+      const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, { reason: `push ${i + 1}`, command: "git push -u origin feat/x" });
+      expect(blocked.ok, blocked.refusal).toBe(true);
+    }
+  });
+
+  it("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {
+    const id = await blockedAt(CORRECTION_CAP, "at the cap already");
+    const before = await row(id);
+    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "one more go");
+    expect(result.ok).toBe(false);
+    expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
+    expect(result.refusal, "a refusal that does not say who CAN act leaves the job stuck").toMatch(/admin caller may resume it/);
+    expect(await row(id), "a refused resume must leave the job exactly as it was, budget included").toEqual(before);
+  });
+
+  it("PLANT: re-posting the same work does NOT reset the correction budget", async () => {
+    // Audit 2026-09-13, finding 9. Failing a job frees (namespace, title) to be posted
+    // again on a fresh row at corrections_count 0. The cap is counted per
+    // (namespace, title), so the fresh row inherits what its predecessor spent.
+    const first = await blockedAt(CORRECTION_CAP, "the same work");
+    await env.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(first).run();
+    const id = await blockedAt(0, "the same work");
+    expect(id).not.toBe(first);
+    const before = await row(id);
+    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "posting it again");
+    expect(result.ok, "a fresh row for the same work reset the cap").toBe(false);
+    expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
+    expect(result.refusal, "the refusal must say why re-posting did not help").toMatch(/per \(namespace, title\) rather than per row/);
+    expect(await row(id)).toEqual(before);
+  });
+
+  it("THE INNOCENT DIRECTION: work whose siblings spent nothing still resumes", async () => {
+    const first = await blockedAt(0, "unspent work");
+    await env.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(first).run();
+    const id = await blockedAt(0, "unspent work");
+    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "first go");
+    expect(result.ok, `an unspent budget was refused: ${JSON.stringify(result)}`).toBe(true);
+    expect((await row(id))?.status).toBe("claimed");
+  });
+
+  it("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", async () => {
+    const id = await blockedAt(CORRECTION_CAP, "the seat at the cap");
+    const result = await resumeJob(jobsEnv(), agentNamed("seat"), NOW, id, "the seat says go");
+    expect(result.ok).toBe(false);
+    expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
+    expect((await row(id))?.status).toBe("blocked");
+  });
+
+  it("AN ADMIN RESUME IS ALLOWED at the cap, and does not spend the budget", async () => {
+    const id = await blockedAt(CORRECTION_CAP, "the admin at the cap");
+    // Passed as a correction, so the exemption is what keeps the budget still rather
+    // than the absence of a correction.
+    const result = await resumeJob(jobsEnv(), agentNamed("admin", true), NOW, id, "I looked at it and it is fine", { correction: true });
+    expect(result.ok, `an admin resume was refused: ${JSON.stringify(result)}`).toBe(true);
+    const stored = await row(id);
+    expect(stored?.status).toBe("claimed");
+    expect(stored?.corrections_count, "an admin resume must not spend the budget it just cleared").toBe(CORRECTION_CAP);
+  });
+});
+
 describe("supersede", () => {
   // A job the seat replaced before any work was done on it. Every property here is a
   // property of the keyed UPDATE and the batch, so it is driven against the real D1.

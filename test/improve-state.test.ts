@@ -6,8 +6,6 @@ import {
   advanceRun,
   advanceableRuns,
   attemptsForRun,
-  improveDocStatements,
-  IMPROVE_ACTOR,
   pauseNamespace,
   pausedReason,
   readBest,
@@ -19,15 +17,8 @@ import { fakeD1, fakeKv } from "./fakes.ts";
 
 // THE MODE SWITCH, THE PAUSE KEY, AND THE IDEMPOTENT TRANSITION.
 //
-// THE WIDE DASHES BELOW ARE BUILT FROM CODE POINTS, never written as literals.
-// capsid/conventions.md bans the characters from source and this repo's own
-// PreToolUse hook enforces it, including in a fixture whose whole purpose is to
-// prove the normalizer strips them. Building them with String.fromCharCode keeps
-// the file clean and greppable, which is the reason the rule gives.
-const EM_DASH = String.fromCharCode(0x2014);
-const EN_DASH = String.fromCharCode(0x2013);
-const HORIZONTAL_BAR = String.fromCharCode(0x2015);
-const WIDE_DASH = new RegExp(`[${EN_DASH}${EM_DASH}${HORIZONTAL_BAR}]`);
+// The improve document write (snapshot, audit row, actor, dash normalization) is
+// driven against a real D1 in test-integration/improve-doc-snapshot.test.ts.
 
 // ---- the mode switch --------------------------------------------------------
 
@@ -250,68 +241,4 @@ test("runById and attemptsForRun resolve their binds, so a wrong id gets nothing
   assert.equal(await runById(db, "nope"), null);
   assert.deepEqual((await attemptsForRun(db, "capsid-r1")).map((a) => a.id), ["a1", "a2"]);
   assert.deepEqual(await attemptsForRun(db, "nope"), []);
-});
-
-// ---- the write-path invariants -----------------------------------------------
-
-const DOC = {
-  namespace: "capsid",
-  path: "improve/archive/r/a.md",
-  title: "attempt",
-  body: "body",
-  type: "reference",
-  action: "improve-attempt",
-};
-
-const sqlOf = (statement: unknown) => (statement as { sql: string }).sql;
-const paramsOf = (statement: unknown) => (statement as { params: unknown[] }).params;
-
-test("AN IMPROVE DOCUMENT WRITE SNAPSHOTS AND AUDITS, like every other write path", async () => {
-  // CLAUDE.md, snapshot rule, and it applies here even though nothing the loop writes
-  // is canon. "The loop's own documents do not matter" is the sentence that
-  // precedes finding out they did.
-  const { db } = fakeD1();
-  const statements = await improveDocStatements(db, { ...DOC, prior: { id: 7, title: "old", body: "old body" } });
-  const sql = statements.map((s) => sqlOf(s).replace(/\s+/g, " ")).join("\n");
-  assert.match(sql, /INSERT INTO document_versions/);
-  assert.match(sql, /INSERT INTO documents/);
-  assert.match(sql, /INSERT INTO audit_log/);
-  assert.equal(statements.length, 3);
-});
-
-test("the snapshot SELECTs the live row even when the pre-read found none", async () => {
-  // A row created between the caller's pre-read and the batch is still snapshotted
-  // (audit 2026-09-25, E1-2). The INSERT ... SELECT inserts nothing when there is no
-  // row; test-integration/improve-doc-snapshot.test.ts runs it against real SQLite.
-  const { db } = fakeD1();
-  const statements = await improveDocStatements(db, { ...DOC, prior: null });
-  const snapshot = statements.find((s) => /INSERT INTO document_versions/.test(sqlOf(s)));
-  assert.ok(snapshot, "no snapshot statement");
-  assert.match(sqlOf(snapshot).replace(/\s+/g, " "), /SELECT id, namespace, path, title, body FROM documents/);
-  assert.deepEqual(paramsOf(snapshot), [DOC.namespace, DOC.path]);
-});
-
-test("an improve document write NORMALISES WIDE DASHES", async () => {
-  // A document written by a model is the most likely source of a wide dash in this
-  // store, so the normalizer matters more here than anywhere else.
-  const { db } = fakeD1();
-  const title = `a ${EM_DASH} title`;
-  const body = `a body ${EM_DASH} with a wide dash, and an ${EN_DASH} en dash`;
-  // Vacuity guard FIRST: the fixture really does carry the characters, so a
-  // normalizer that stopped running is caught rather than passing over clean text.
-  assert.match(title, WIDE_DASH);
-  assert.match(body, WIDE_DASH);
-
-  const statements = await improveDocStatements(db, { ...DOC, title, body, prior: null });
-  const insert = statements.find((s) => sqlOf(s).includes("INSERT INTO documents"));
-  const params = paramsOf(insert);
-  assert.equal(WIDE_DASH.test(String(params[2])), false, "the title kept a wide dash");
-  assert.equal(WIDE_DASH.test(String(params[3])), false, "the body kept a wide dash");
-});
-
-test("every improve audit row carries the one actor spelling", async () => {
-  const { db } = fakeD1();
-  const statements = await improveDocStatements(db, { ...DOC, prior: null });
-  const audit = statements.find((s) => sqlOf(s).includes("audit_log"));
-  assert.equal(paramsOf(audit)[0], IMPROVE_ACTOR);
 });

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
 import { RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../src/improve-schema";
 import { activeRun, advanceableRuns } from "../src/improve-state";
+import { claimJti } from "../src/improve-scorer";
 import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
 
 // THE SCHEDULED HANDLER, ALL FOUR CRONS, AGAINST REAL BINDINGS.
@@ -108,6 +109,30 @@ describe("the four cron expressions", () => {
     await fire("0 0 1 1 *");
     expect((await env.MEDIA.list()).objects.length).toBe(before);
   });
+
+  it("PLANT: a cron branch that throws stays inside its own waitUntil, and the next cron still runs", async () => {
+    // Moved from test/improve-cron.test.ts (audit 2026-09-25, item C1-12), which
+    // counted ctx.waitUntil( and .catch((err) in the source. Here the backup branch
+    // throws on a real invocation: the handler still returns, the failure is logged
+    // under its own name rather than swallowed, and a later cron runs normally.
+    const planted = new Error("planted MEDIA failure");
+    const brokenMedia = new Proxy({}, { get: () => async () => { throw planted; } });
+    const broken = { ...env, MEDIA: brokenMedia } as typeof env;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const ctx = createExecutionContext();
+      expect(() => worker.scheduled?.(controller(BACKUP_CRON), broken, ctx)).not.toThrow();
+      await waitOnExecutionContext(ctx).catch(() => {});
+      const lines = logged.mock.calls.map((args) => args.map(String).join(" "));
+      expect(lines.some((l) => l.includes("BACKUP_CRON_THREW") && l.includes("planted MEDIA failure")), lines.join(" | ")).toBe(true);
+    } finally {
+      logged.mockRestore();
+    }
+
+    await fire(IMPROVE_TICK_CRON);
+    const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
+    expect(runs?.n).toBe(0);
+  });
 });
 
 describe("the improve schema is real", () => {
@@ -124,6 +149,20 @@ describe("the improve schema is real", () => {
       "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
     ).first<{ jti: string }>();
     expect(second, "the second claim must return nothing; if it returns a row the replay cache is decorative").toBeNull();
+  });
+
+  it("PLANT: concurrent claimJti calls for one jti resolve to ONE winner", async () => {
+    // Moved from test/ingest-hardening.test.ts (audit 2026-09-25, item C1-12), where
+    // the race ran against a synchronous fake that agreed with itself. The KV version
+    // this replaced was get-then-put: both callers read absent, both wrote, both
+    // proceeded. A PRIMARY KEY has no such window, and only SQLite can show it.
+    const results = await Promise.all([
+      claimJti(env.DB, "capsid", "raced"),
+      claimJti(env.DB, "capsid", "raced"),
+      claimJti(env.DB, "capsid", "raced"),
+    ]);
+    expect(results.filter((r) => r.ok), "exactly one caller may claim a nonce").toHaveLength(1);
+    expect(results.filter((r) => !r.ok).map((r) => (r.ok ? 0 : r.status))).toEqual([409, 409]);
   });
 
   it("the one-active-run partial unique index really refuses a second open run", async () => {

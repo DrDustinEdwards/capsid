@@ -61,24 +61,9 @@ test("a real proposal path IS allowed, so the gate is not a blanket refusal", ()
   assert.equal(assertProposalTarget({ namespace: "capsid", path: `${PROPOSAL_PREFIX}anything.md` }), null);
 });
 
-// scanner-rule: capsid/decisions.md 2026-09-04: the meta-loop writes only under capsid/improve/proposals/
-test("EVERY WRITE IN THE MODULE PASSES THROUGH THE GATE", () => {
-  // A source guard, because the behavioural half cannot prove a path that does not
-  // exist yet. If a second write is ever added here without a check in front of
-  // it, this fails.
-  const meta = sourceFile("improve-meta.ts");
-  const writes = meta.split("improveDocStatements(").length - 1;
-  const checks = meta.split("assertProposalTarget(").length - 1;
-  assert.ok(writes >= 1, "the meta-loop no longer writes anything; this guard is now vacuous");
-  // One definition plus one call site per write.
-  assert.ok(
-    checks >= writes + 1,
-    `the meta-loop makes ${writes} document write(s) and calls assertProposalTarget ${checks - 1} time(s); every write needs one in front of it`
-  );
-  // And the status it writes with says the proposal is not in force.
-  assert.match(meta, /status: "draft"/);
-  assert.match(meta, /\*\*NOT APPLIED\.\*\*/);
-});
+// That a meta-loop run writes one draft under the proposals prefix, marked NOT
+// APPLIED, and leaves the run prompt and the scores document untouched, is driven
+// against a real D1 in test-integration/improve-meta.test.ts.
 
 // scanner-rule: capsid/decisions.md 2026-09-04: the meta-loop writes only under capsid/improve/proposals/
 test("the module does not import anything that could apply a proposal", () => {

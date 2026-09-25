@@ -12,7 +12,6 @@ import {
 import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } from "../src/jobs-schema.ts";
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
-import { sourceFile } from "./source-files.ts";
 
 // JOBS AS EVIDENCE: the recording half.
 //
@@ -359,16 +358,8 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   assert.match(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!, /1 merged pull request\b/);
 });
 
-// scanner-rule: conventions-verification, enumerate every site: every path that hands out a lease checks the record bar
-test("the claim and the resume both ask the record question", () => {
-  // Enumerate every site: resume hands a caller a lease exactly as claim does, so a
-  // driver that could not have claimed a job must not acquire it by resuming one.
-  const source = sourceFile("jobs.ts");
-  const calls = [...source.matchAll(/recordShortfall\(/g)];
-  assert.ok(calls.length >= 3, `recordShortfall is called ${calls.length - 1} times; claim and resume both need it`);
-  assert.match(source, /const shortfall = await recordShortfall/, "claim does not check the record bar");
-  assert.match(source, /const resumeShortfall = await recordShortfall/, "resume does not check the record bar");
-});
+// That the claim and a resume with take both ask the record question is driven against
+// a real D1 in test-integration/job-outcomes.test.ts, one plant per path.
 
 // ---- the skills a job was offered and used --------------------------------------
 //
