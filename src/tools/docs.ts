@@ -140,8 +140,10 @@ export async function requireConfirmation(
   return { ok: false, message: verdict === "declined" ? messages.declined : messages.unsupported };
 }
 
-// The grant, not a boolean: a read-only ro: key is also an operator. src/auth.ts
-// resolves a key to exactly this union.
+// The grant, not a boolean. A boolean misread at every call site:
+// `buildServer(env, true, ...)` looks like "this is the operator server" when it
+// means "this grant may write", and a read-only ro: key is also an operator.
+// src/auth.ts resolves a key to exactly this union.
 export type ToolGrant = "write" | "read";
 
 export interface ToolCtx {
@@ -164,11 +166,12 @@ export interface ToolCtx {
   lastActor: (ns: string, path: string) => Promise<string | null>;
 }
 
-// The improve control-surface check for write, restore, delete and move. The
-// allow_improve_paths override is itself scoped (IMPROVE_OVERRIDE_FLAGS in
-// src/scope.ts); then improveWriteRefusal runs on every path the call changes, as
-// what the path holds now against what it would hold. Returns the first refusal, or
-// null.
+// The improve control-surface check for write, restore, delete and move. First the
+// override is itself scoped: allow_improve_paths is how a caller writes the loop's
+// own control surface (its run documents, prompts, skills and anchors), and it is the
+// document-side twin of the repo-side protected-path flag, so it asks for the same
+// one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). Then improveWriteRefusal runs on every path the call changes, as what the path
+// holds now against what it would hold. Returns the first refusal, or null.
 async function improvePathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -275,7 +278,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         doc(namespace, "core.md"),
       ]);
       // Not filtered on status (beyond 'closed' below): status records editorial
-      // state and does not mark a task done. archive/ is the only other exclusion.
+      // state and does not mark a task done, so filtering on 'published' would hide
+      // most open task docs. archive/ is the only other exclusion.
       //
       // The four remaining reads run together: none depends on another's result.
       const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] = await Promise.all([
@@ -286,7 +290,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
             // status is NOT NULL, so the comparison cannot swallow a row via NULL.
             //
             // test/doc-meta.test.ts asserts this predicate appears exactly once in
-            // this file, so the lint loop can never grow one.
+            // this file, so the lint loop can never grow one. Only the archive/
+            // prefix takes a document out of memory.
             "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC"
           )
           .bind(namespace)
@@ -409,7 +414,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         path: docPath,
         // title and body are required for mode 'replace' and validated as such below.
         // They are optional in the schema because append needs no title and patch
-        // needs neither.
+        // needs neither. Requiring them here would force a caller to resupply a title
+        // it is not changing.
         title: bounded(MAX_TITLE).optional(),
         body: bounded(MAX_BODY).optional(),
         mode: z.enum(["replace", "append", "patch", "meta"]).optional(),
@@ -444,10 +450,12 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .first<{ id: number; title: string | null; body: string | null; type: string | null; status: string | null; tags: string | null; updated_at: string }>();
 
       // Optimistic concurrency. if_match is the sha256 of the body the caller believes
-      // is stored, which every write already returns. A lost update otherwise leaves no
-      // trace in the result. On mismatch nothing is written and the error carries the
-      // current sha so the caller can rebase and retry. Opt-in, because requiring it
-      // would break append, which is safe by construction.
+      // is stored, which every write already returns. A lost update otherwise leaves
+      // no trace in the result: the write succeeds, the prior body is snapshotted, and
+      // nothing says anything went wrong. Fail closed, the same shape as a patch
+      // anchor: on mismatch nothing is written and the error carries the current sha
+      // so the caller can rebase and retry. Opt-in, because requiring it would break
+      // append, which is safe by construction.
       const commit = guardedCommit({
         db,
         namespace,
@@ -486,7 +494,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       if (replace_with !== undefined) replace_with = normalizeDashes(replace_with, "prose");
 
       // Body assembly, per mode (./write-modes). Every mode returns the full new body,
-      // so the version snapshot and audit row apply identically.
+      // so the write path below is the same for all of them and the version snapshot
+      // and audit row apply identically. meta returns the stored body byte-identical.
       const assembled = assembleBody({
         mode: writeMode,
         exists: Boolean(prior),
@@ -502,15 +511,21 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
       }
 
-      // Computed on the final assembled body, so a patch or append that changes
-      // scores.md's anchor block is caught the same as a full replace.
+      // The improve control-surface guard, computed on the final assembled and
+      // normalized body so it sees exactly what would be stored: a patch or append that
+      // changes scores.md's anchor block is caught the same as a full replace. Refused
+      // unless allow_improve_paths was passed.
       const improveRefusal = await improvePathsRefusal(ctx, "write", namespace, allow_improve_paths, [
         { path, before: prior?.body ?? null, after: body as string },
       ]);
       if (improveRefusal) return fail(improveRefusal);
 
-      // append and meta are exempt from confirmation: neither destroys existing text.
-      // `elicited` arms the commit-time body guard (see requireConfirmation).
+      // append and meta are exempt from confirmation. Confirmation exists to stop an
+      // accidental clobber of existing text, and an append destroys none: the prior
+      // body is still snapshotted and the addition goes after it. Requiring a confirm
+      // there would put more friction on the safe operation than on the dangerous one.
+      // patch and replace both mutate existing text and are not exempt. `elicited` is whether a human answered a prompt. It arms the commit-time body
+      // guard; why that consent goes stale is stated on requireConfirmation.
       let elicited = false;
       if (prior && confirm !== true && writeMode !== "append" && writeMode !== "meta") {
         const refusal = await requireConfirmation(server, confirm, {
@@ -524,14 +539,19 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // The guard itself is armed by commit.run() below, from this same pre-read.
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // Snapshot from the live row, inside the batch, so the snapshot records what
-        // the table held at commit rather than what this handler read earlier.
+        // Snapshot from the live row, inside the batch. Binding the pre-read body would
+        // file what this handler read, not what the table held at commit: on an
+        // unguarded update, a body written in the gap would be overwritten while the
+        // snapshot recorded its predecessor. The SELECT runs in the same transaction as
+        // the overwrite.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(documentUpsert(db, namespace, path, title ?? null, body, type ?? null, tags ?? null, status ?? null));
       // The prior type, status, tags and title go into the audit params whenever a
       // write changes any of them, and this is the only place they survive:
-      // document_versions snapshots title and body only.
+      // document_versions snapshots title and body only. The snapshot schema stays
+      // title plus body, because widening a version row would mean a migration plus a
+      // rewrite of every restore path to answer a question the log already answers.
       const metaChanged = title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
         auditStatement(db, actor, "write", namespace, path, {
@@ -565,7 +585,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         statements.push(auditStatement(db, actor, "links", namespace, path, { edges: parsedLinks.edges.length }));
       }
       // The warning is computed from a read taken here, not from the pre-read: this
-      // handler may have sat in a 90 second elicitation in between.
+      // handler may have sat in a 90 second elicitation in between, which is when a
+      // racing write is most likely to have landed. Reading it late costs one SELECT.
       const atCommit = prior
         ? await db
             .prepare("SELECT updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
@@ -578,9 +599,10 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // armed, a row deleted between the pre-read and the batch is snapshotted by
       // nothing. The snapshot is statements[0] when present.
       const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
-      // Warn, do not reject, when an edge points at a document that does not exist:
-      // rejecting would block asserting an edge before its target is written. The lint
-      // loop reports the same thing per namespace.
+      // Warn, do not reject, when an edge points at a document that does not exist.
+      // Rejecting would block asserting an edge before its target is written, and a
+      // silent dangling edge is how they accumulate unnoticed. The lint loop reports
+      // these per namespace; this is the same check when the edge is created.
       let danglingTargets: string[] = [];
       if (parsedLinks && "edges" in parsedLinks && parsedLinks.edges.length > 0) {
         // This read runs after the commit, so a failure here must not be reported as a
@@ -601,8 +623,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         }
       }
       // The read-back: sha256 and byte length of the body now stored, so a caller can
-      // verify the write without fetching the document. Hashes the assembled body,
-      // since D1 stores exactly what was bound.
+      // verify the write without fetching the document and comparing it by eye. That
+      // second read would itself be a transcription, with its own chance of error.
+      // Hashes the assembled body, since D1 stores exactly what was bound.
       const bodySha = await sha256Hex(body);
       const bodyBytes = new TextEncoder().encode(body).length;
 
@@ -708,7 +731,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       // The improve control-surface guard (see improvePathsRefusal): restoring an old
-      // improve/prompts/run.md installs an older prompt.
+      // improve/prompts/run.md installs an older system prompt for the attempt
+      // generator. Same call shape as write: what is stored now, against what would be
+      // stored.
       const restoreImproveRefusal = await improvePathsRefusal(ctx, "restore", namespace, allow_improve_paths, [
         { path, before: prior?.body ?? null, after: version.body ?? "" },
       ]);
@@ -750,7 +775,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const body = version.body ?? "";
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // Snapshot from the live row, inside the batch, as on write.
+        // Snapshot from the live row, inside the batch, as on write. Restore elicits a
+        // confirmation, so the gap between the read and the commit can be the full 90
+        // second prompt.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
@@ -830,8 +857,11 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      // The improve control-surface guard (see improvePathsRefusal): removing a prompt
-      // or skill is a steering change. The "" is the resulting body.
+      // The improve control-surface guard (see improvePathsRefusal). Removing
+      // improve/prompts/run.md drops the loop back to the hardcoded default prompt and
+      // removing a skill retires it, so a delete is a steering change even though it
+      // installs nothing. The "" is the resulting body: for the two prefixes that is a
+      // prefix match, and for scores.md an anchor block going from something to nothing.
       const deleteImproveRefusal = await improvePathsRefusal(ctx, "delete", namespace, allow_improve_paths, [
         { path, before: prior.body, after: "" },
       ]);
@@ -849,9 +879,11 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // are no edges), and RETURNING hands the list back for the count.
       //
       // The guard is not redundant with the `prior` read, which is a separate
-      // transaction: a delete matching zero rows would otherwise answer "deleted"
-      // having removed nothing. After an elicitation the guard is the body one, since
-      // the human consented to deleting the body they were shown.
+      // transaction: a delete matching zero rows would otherwise snapshot a body, write
+      // an audit row saying 'delete', and answer "deleted" having removed nothing.
+      // After an elicitation the guard is the body one: the human consented to deleting
+      // the body they were shown, so a body written in that window must abort the
+      // delete. The snapshot itself SELECTs the live row inside the batch.
       let edgesRemoved = 0;
       try {
         const results = await db.batch([
@@ -909,9 +941,11 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      // The improve control-surface guard on both ends (see improvePathsRefusal):
-      // either path can steer the loop. The source is emptied and the destination
-      // filled with the moved body.
+      // The improve control-surface guard on both ends (see improvePathsRefusal).
+      // Either path can steer the loop: moving a document into improve/skills/ installs
+      // a skill other namespaces' runs re-inject, and moving run.md out of
+      // improve/prompts/ drops the attempt generator to its hardcoded default. The
+      // source is emptied, the destination is filled with the moved body.
       const moved = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
@@ -1037,8 +1071,10 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         )
         .all();
       // Filtered to the caller's own namespaces. This tool takes no arguments, so
-      // namespaceRefusal at the registrar has nothing to fire on, and the mapping is
-      // the boundary a narrowed caller sits behind.
+      // namespaceRefusal at the registrar has nothing to fire on. The mapping is what
+      // scripts/mint-agents.mjs uses to set the repos axis and what resolveRepo
+      // resolves through, so handing it to a narrowed caller hands it the shape of the
+      // boundary it sits behind.
       const scoped = ctx.agent.scopes.namespaces;
       const visible = scoped === "*" ? results : results.filter((row) => scoped.includes(String((row as { namespace: string }).namespace)));
       return ok(visible);
@@ -1076,8 +1112,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         }
         list = [{ repo, label: (label ?? "primary").trim() || "primary" }];
       }
-      // The same single-primary requirement as update_namespace: two primaries or none
-      // would make every repo tool resolve by accident.
+      // The same single-primary requirement as update_namespace. Two primaries or none
+      // would make every repo tool resolve by accident, and update would refuse to fix
+      // it in place.
       const primaryError = requireSinglePrimary(list);
       if (primaryError) return fail(primaryError);
       const existing = await db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(ns).first();

@@ -22,7 +22,8 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
   // tools, then calls finalize to archive what it consumed.
   //
   // The report's checks are named by their response ids, not paraphrased, so a test
-  // can derive this list from the report itself.
+  // can derive this list from the report itself. A description that miscounts what
+  // sits beside it is the defect the count lint exists for.
   server.registerTool(
     "lint",
     {
@@ -49,7 +50,9 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         rows.filter((e) => reaches(String(e.from_ns)) && reaches(String(e.to_ns)));
       if (action === "gather") {
         // Gather needs the read grant. lint is an "action" tool, so the registrar names
-        // no grant, and gather returns before the write-grant check below.
+        // no grant and leaves it to the handler, where the mode is known, and gather
+        // returns before the write-grant check below. Without this, gather would ask
+        // for no grant at all.
         const gatherRefusal = ctx.scope({ tool: "lint", action: "gather", grant: "read", namespace });
         if (gatherRefusal) return fail(gatherRefusal);
         const core = await db
@@ -83,9 +86,11 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         const rules = await db
           .prepare("SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('schema.md', 'conventions.md') ORDER BY path")
           .all();
-        // Typed edges whose endpoint no longer exists, reported and never
-        // auto-repaired: whether to repoint or drop the edge is the client's call.
-        // Both endpoints are checked. An edge whose other end is in a
+        // Typed edges whose endpoint no longer exists. Gather is read-only and the
+        // client judges, so these are reported, never auto-repaired: a dangling edge
+        // usually means the target was renamed by hand or removed before delete
+        // cascaded, and which of those decides whether the fix is repointing the edge
+        // or dropping it. Both endpoints are checked. An edge whose other end is in a
         // namespace this caller is not scoped to is dropped: whether that document
         // exists is a fact about the other namespace.
         const danglingEdges = await db
@@ -102,10 +107,12 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           )
           .bind(namespace)
           .all<ReportEdge>();
-        // Bounded to GATHER_BUDGET. The wiki is the largest section and the most
+        // Bounded to GATHER_BUDGET. Trim order follows what gather is for. The client needs core (the thing
+        // being updated), the unconsolidated docs (the input being compiled), and the
+        // wiki (current state). The wiki is the largest section and the most
         // re-readable one document at a time, so it stubs first. Unconsolidated bodies
         // are held back last, oldest kept, because oldest-first is the compile order.
-        // core and rules are never trimmed.
+        // core and rules are never trimmed: they are the rules of the job.
         type PacketRow = { namespace?: unknown; path?: unknown; body?: unknown };
         const bodyChars = (row: unknown) => String((row as PacketRow | null)?.body ?? "").length;
         const sumChars = (rows: unknown[]) => rows.reduce<number>((sum, r) => sum + bodyChars(r), 0);
@@ -178,8 +185,9 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
       if (modeRefusal) return fail(modeRefusal);
 
       // mode "report" measures the store and stores the result, so the trend is a
-      // document. One document per namespace per day: a second run the same date
-      // overwrites it.
+      // document (capsid/conventions.md: a number that lives only here can be wrong
+      // forever and nothing notices). One document per namespace per day: a second
+      // run the same date overwrites it.
       if (mode === "report") {
         const now = new Date();
         const docs = await db
@@ -249,7 +257,9 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           .first<{ id: number; title: string | null; body: string | null }>();
         const title = `Truth report - ${namespace} - ${path.slice("reports/lint-".length, -3)}`;
         // The same confirmation `write` asks for, since a second run the same date
-        // overwrites the first. A first report for the date needs none.
+        // overwrites the first. The prior body is snapshotted either way, but without
+        // asking, the caller gets no say and the response never mentions that a report
+        // was replaced. A first report for the date needs none.
         if (prior) {
           const overwrite = await requireConfirmation(server, confirm, {
             prompt: `Overwrite the truth report at ${namespace}/${path}? The current version will be snapshotted to document_versions first.`,
@@ -288,9 +298,12 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         }
       }
       if (problems.length > 0) return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
-      // The improve control-surface guard. Reachable despite the type gate: a document
-      // written to an improve path with the opt-in flag can carry type 'source'. No
-      // opt-in here: archiving the loop's control surface is never right.
+      // The improve control-surface guard. finalize is type-gated to episodic and
+      // source documents and improve documents are task, prompt and reference, so this
+      // looks unreachable. It is not: a document written to an improve path with the
+      // opt-in flag can carry type 'source', and finalize would then archive the run
+      // prompt out from under the loop. No opt-in here: archiving the loop's control
+      // surface is never right.
       const consumedImproveRefusals = (
         await Promise.all(paths.map((consumedPath) => improveWriteRefusal(namespace, consumedPath, null, "", false)))
       ).filter((r): r is string => r !== null);
@@ -308,7 +321,8 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
       // move and drags its edges along for the same reason.
       //
       // Each path carries its own in-batch existence guard, because the loop above
-      // read each path in a separate transaction.
+      // read each path in a separate transaction, and a partial archive would silently
+      // drop documents out of the lint loop's view.
       const statements = paths.flatMap((path) => [
         requireExists(db, namespace, path),
         ...pathMutation(db, namespace, path, `archive/${path}`),
