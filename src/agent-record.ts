@@ -171,10 +171,16 @@ export async function loadRecordRows(db: D1Database): Promise<RecordRows> {
   // GROUP BY can read. One row per finished job is a small table, and reading it here
   // keeps the aggregation a pure function that can be checked against fixtures rather
   // than against a fake that would agree with whatever it was handed.
+  //
+  // A SUPERSEDED JOB'S ROW IS LEFT OUT (migrations/0020). The jobs that 0020 relabelled
+  // were claimed and failed to close them, so each wrote an outcome row, and those rows
+  // are kept rather than deleted. Nothing was attempted on any of them, so counting
+  // them would put failures on the record that the status now says did not happen.
   const outcomes = await db
     .prepare(
       `SELECT agent, prs_opened, prs_merged, ci_green, blocked_count, resumed_count, duration_minutes, verified
-       FROM job_outcomes`
+       FROM job_outcomes o
+       WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = o.job_id AND j.status = 'superseded')`
     )
     .all<RecordRows["outcomes"][number]>();
   const jobs = await db

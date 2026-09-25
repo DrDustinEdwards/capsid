@@ -6,7 +6,7 @@ import { checkScope } from "./scope";
 // The work queue's vocabulary, in one place so the table, the tool and the driver
 // cannot disagree about it.
 
-export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked"] as const;
+export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked", "superseded"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // The states a job is still holding a slot in. The partial unique index names the
@@ -23,13 +23,19 @@ export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "bl
 // stays active on the rest, so `brief` and `search` stop carrying finished work as
 // open. `blocked` is deliberately not here: it is a pause a human clears, and
 // `resume` takes it back to claimed, so it is still open work while it waits.
-export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed"];
+//
+// SUPERSEDED IS FINISHED BUT IS NOT A FAILURE (migrations/0020). It is a job the seat
+// replaced before any work was done on it: a corrected or reposted body, a reorder, a
+// withdrawal. Until it existed the only way to close one was to claim it and fail it,
+// so the job history carried failures that never happened. It writes no outcome row,
+// so no record, rate or skill score counts it.
+export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // FOUR HOURS. Long enough for a driver to do a real job without heartbeating on a
@@ -306,6 +312,7 @@ export const JOB_PARAM_NAMES = [
   "result_summary",
   "result_ref",
   "reason",
+  "replaced_by",
   "command",
   "evidence",
 ] as const;

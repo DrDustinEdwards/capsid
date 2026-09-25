@@ -93,12 +93,15 @@ async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsS
   // Counted from the outcome rows rather than from a counter, so the numbers cannot
   // drift from the jobs they describe. json_array_length over a NULL column is NULL,
   // and SUM skips NULLs, which is the behaviour wanted: a job that recorded nothing
-  // contributes to neither total.
+  // contributes to neither total. A superseded job's row is left out: nothing was
+  // attempted on it (migrations/0020), so it offered and used nothing that counts.
   const gap = await db
     .prepare(
       `SELECT COALESCE(SUM(json_array_length(skill_ids_offered)), 0) AS offered,
               COALESCE(SUM(json_array_length(skill_ids_used)), 0) AS used
-       FROM job_outcomes WHERE namespace = ?1`
+       FROM job_outcomes o
+       WHERE o.namespace = ?1
+         AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = o.job_id AND j.status = 'superseded')`
     )
     .bind(namespace)
     .first<{ offered: number; used: number }>();

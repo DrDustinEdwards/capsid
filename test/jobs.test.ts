@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
-import { completeJob, failJob, postJob } from "../src/jobs.ts";
+import { completeJob, failJob, postJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -74,13 +74,43 @@ test("BLOCKED IS AN OPEN STATUS, in the code and in the index the database ends 
   assert.ok(effective.statuses.includes("blocked"), `${effective.file} does not count a blocked job as open`);
 });
 
-test("every status the code knows is a status the migration's comment declares", () => {
-  // The column is a bare TEXT with no CHECK, so the migration's own comment is the
-  // schema's statement of the vocabulary. Asserting against it keeps that comment
+/** Every statement of the status vocabulary across migrations/, in the order wrangler
+ *  applies them. The NEWEST is the one the code must match: migrations/0020 added
+ *  superseded and restated the list, and a guard pinned to 0006 would go on asserting
+ *  the older one. */
+function vocabularyDeclarations(): { file: string; statuses: string[] }[] {
+  const found: { file: string; statuses: string[] }[] = [];
+  for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+    const declared = /--\s+(queued(?: \| [a-z]+)+)\./.exec(sql);
+    if (declared) found.push({ file, statuses: declared[1].split(" | ").sort() });
+  }
+  return found;
+}
+
+test("every status the code knows is a status the newest migration comment declares", () => {
+  // The column is a bare TEXT with no CHECK, so the migrations' own comments are the
+  // schema's statement of the vocabulary. Asserting against them keeps those comments
   // honest rather than decorative.
-  const declared = /-- (queued \| claimed \| done \| failed \| blocked)\./.exec(MIGRATION);
-  assert.ok(declared, "migrations/0006_jobs.sql no longer declares the status vocabulary");
-  assert.deepEqual(declared[1].split(" | ").sort(), [...JOB_STATUSES].sort());
+  const declarations = vocabularyDeclarations();
+  // TWO today: 0006 declared it and 0020 added superseded. Stated as a list so a
+  // regex that stops matching fails here rather than passing over an empty one.
+  assert.deepEqual(
+    declarations.map((d) => d.file),
+    ["0006_jobs.sql", "0020_jobs_superseded.sql"],
+    "the status vocabulary is declared in an unexpected set of migrations"
+  );
+  const newest = declarations[declarations.length - 1];
+  assert.deepEqual(newest.statuses, [...JOB_STATUSES].sort(), `${newest.file} disagrees with JOB_STATUSES`);
+});
+
+test("SUPERSEDED IS FINISHED, IS NOT OPEN, AND IS NOT A FAILURE", () => {
+  // It closes the mirror like done and failed, holds no title like them, and is its
+  // own status so nothing that counts failures counts it.
+  assert.ok(isJobStatus("superseded"));
+  assert.equal(isTerminalJobStatus("superseded"), true);
+  assert.equal(OPEN_JOB_STATUSES.includes("superseded"), false);
+  assert.ok(JOB_ACTIONS.includes("supersede"));
 });
 
 test("every status in the vocabulary is classified terminal or not, and the two do not overlap", () => {
@@ -95,7 +125,7 @@ test("every status in the vocabulary is classified terminal or not, and the two 
       `${status} is not classified by isTerminalJobStatus`
     );
   }
-  assert.deepEqual([...TERMINAL_JOB_STATUSES].sort(), ["done", "failed"]);
+  assert.deepEqual([...TERMINAL_JOB_STATUSES].sort(), ["done", "failed", "superseded"]);
   // Both directions: a terminal status is a real status, and the open ones are not
   // terminal. `blocked` is in neither list and that is deliberate, so it is named.
   for (const status of TERMINAL_JOB_STATUSES) assert.ok(isJobStatus(status));
@@ -105,6 +135,32 @@ test("every status in the vocabulary is classified terminal or not, and the two 
 
 // Proven against a real D1 in test-integration/jobs.test.ts: "PLANT: a failed job's document is closed too" and "a blocked job's document stays active".
 
+
+test("supersede refuses a missing reason and a swallowed tag before it reads anything", async () => {
+  // fakeEnv with no DB, so a refusal that reached the database would throw rather
+  // than pass quietly.
+  const agent = legacyAgent("write", "github:DrDustinEdwards");
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const blank = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "  " });
+  assert.equal(blank.ok, false);
+  assert.match(blank.refusal ?? "", /supersede needs a reason/);
+  const swallowed = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "reposted</replaced_by>" });
+  assert.equal(swallowed.ok, false);
+  assert.match(swallowed.refusal ?? "", /^reason contains the literal text '<\/replaced_by>'\./);
+});
+
+// scanner-rule: a superseded job was never worked, so its transition must not write the evidence tables. The integration suite drives it; this reads that no call site exists
+test("supersedeJob writes no outcome row, no outcome PR rows and no skill attribution", () => {
+  const jobs = sourceFile("jobs.ts");
+  const start = jobs.indexOf("export async function supersedeJob(");
+  assert.ok(start > 0, "supersedeJob is gone from src/jobs.ts; the scan is broken");
+  const end = jobs.indexOf("\n}\n", start);
+  const body = jobs.slice(start, end);
+  assert.ok(body.includes("job-superseded"), "the slice does not cover supersedeJob's batch");
+  for (const writer of ["outcomeStatement(", "outcomePrStatements(", "attributionStatements(", "INSERT INTO job_outcomes"]) {
+    assert.equal(body.includes(writer), false, `supersedeJob calls ${writer}`);
+  }
+});
 
 test("isJobStatus refuses anything that is not one of them", () => {
   for (const status of JOB_STATUSES) assert.ok(isJobStatus(status));
