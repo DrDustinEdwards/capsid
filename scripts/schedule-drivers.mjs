@@ -35,6 +35,7 @@ const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
 
 // The namespace to repo-folder map, the same one .claude/commands/improve.md carries.
 // A namespace with no folder here is not schedulable from this machine.
+/** @type {Record<string, string>} */
 const FOLDERS = {
   capsid: "C:\\Users\\email\\dev\\capsid-mcp",
   dustinedwards: "C:\\Users\\email\\dev\\dustinedwards-info",
@@ -50,14 +51,23 @@ const FOLDERS = {
 // expressions and chicagoHour() to pin the same instant.
 const START_TIME = "04:00";
 
+/** @param {string} ns */
 export const taskName = (ns) => `Capsid improve driver (${ns})`;
+/** @param {string} ns */
 export const keyPath = (ns) => join(homedir(), ".capsid", `agent-${ns}-driver.key`);
 
+/**
+ * @param {string[]} argv
+ * @returns {{ mode: "install" | "remove" | "run" | "list"; namespace: string | undefined; apply: boolean }}
+ */
 export function parseArgs(argv) {
+  /** @type {{ mode: "install" | "remove" | "run" | "list" | null; namespace: string | undefined; apply: boolean }} */
   const out = { mode: null, namespace: undefined, apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--install" || arg === "--remove" || arg === "--run" || arg === "--list") out.mode = arg.slice(2);
+    if (arg === "--install" || arg === "--remove" || arg === "--run" || arg === "--list") {
+      out.mode = /** @type {"install" | "remove" | "run" | "list"} */ (arg.slice(2));
+    }
     else if (arg === "--apply") out.apply = true;
     else if (arg === "--namespace") {
       // A value-less flag used to leave the namespace undefined, which selects all five.
@@ -72,18 +82,27 @@ export function parseArgs(argv) {
   if (out.namespace !== undefined && !Object.hasOwn(FOLDERS, out.namespace)) {
     throw new Error(`'${out.namespace}' has no repo folder on this machine. Known: ${Object.keys(FOLDERS).join(", ")}`);
   }
-  return out;
+  return { ...out, mode: out.mode };
 }
 
+/** @param {string | undefined} namespace */
 export function selected(namespace) {
   return namespace ? [namespace] : Object.keys(FOLDERS);
 }
 
+/**
+ * @param {string[]} args
+ * @returns {{ code: number; out: string }}
+ */
 export function schtasks(args) {
   const res = spawnSync("schtasks", args, { encoding: "utf8" });
   return { code: res.status ?? 1, out: `${res.stdout ?? ""}${res.stderr ?? ""}`.trim() };
 }
 
+/**
+ * @param {string} ns
+ * @param {typeof schtasks} [run]
+ */
 export function taskExists(ns, run = schtasks) {
   return run(["/Query", "/TN", taskName(ns)]).code === 0;
 }
@@ -101,6 +120,7 @@ export function chicagoDay(now = new Date()) {
   }).format(now);
 }
 
+/** @param {string} day */
 export const logPath = (day) => `jobs/nightly-${day}.md`;
 
 // Bounded, because a driver session's transcript is unbounded and this lands in a
@@ -108,6 +128,10 @@ export const logPath = (day) => `jobs/nightly-${day}.md`;
 // with is what says whether it finished, blocked, or died.
 export const LOG_BUDGET = 24_000;
 
+/**
+ * @param {string} ns
+ * @param {{ exitCode: number; output: string; started: string; finished: string }} run
+ */
 export function renderLog(ns, { exitCode, output, started, finished }) {
   const trimmed =
     output.length > LOG_BUDGET
@@ -133,6 +157,12 @@ export function renderLog(ns, { exitCode, output, started, finished }) {
 }
 
 // Throws when the write tool refuses, so a refused log is never reported as posted.
+/**
+ * @param {string} ns
+ * @param {{ tool(name: string, args: object): Promise<string> }} client
+ * @param {string} body
+ * @param {string} day
+ */
 export async function postLog(ns, client, body, day) {
   return client.tool("write", {
     namespace: ns,
@@ -230,6 +260,7 @@ export function driverArgs() {
   ];
 }
 
+/** @param {string} ns */
 async function runOne(ns) {
   const folder = FOLDERS[ns];
   const key = process.env.CAPSID_DRIVER_KEY ?? readKey(ns);
@@ -264,7 +295,7 @@ async function runOne(ns) {
   } catch (err) {
     // A log that could not be posted does not change what the run did. It goes to
     // stdout, which Task Scheduler keeps, rather than being lost.
-    console.error(`could not post the run log for ${ns}: ${err.message}`);
+    console.error(`could not post the run log for ${ns}: ${err instanceof Error ? err.message : String(err)}`);
     console.log(body);
   }
   return exitCode;
@@ -273,6 +304,7 @@ async function runOne(ns) {
 // The key is read to POST the run log and for nothing else; the driver session gets
 // its own credential from the project-scoped MCP server in that folder. It is never
 // printed, on the same rule as scripts/mint-agents.mjs.
+/** @param {string} ns */
 function readKey(ns) {
   const path = keyPath(ns);
   if (!existsSync(path)) return null;
@@ -290,12 +322,15 @@ function readKey(ns) {
 // schedule a path that does not exist, and the task would fail every night.
 // win32.join, because the task runs on Windows whatever platform builds its XML.
 const installScript = () => win32.join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
+/** @param {string} ns */
 const installArguments = (ns) => `"${installScript()}" --run --namespace ${ns}`;
 
+/** @param {string} ns */
 export function installCommand(ns) {
   return `node ${installArguments(ns)}`;
 }
 
+/** @param {unknown} s */
 const xmlEscape = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
@@ -308,6 +343,7 @@ const xmlEscape = (s) =>
 // Every setting not named here takes the Task Scheduler default, which is what the
 // /TR form got. The start date is only the day the daily trigger begins counting from;
 // with no time zone the time is local wall clock (see START_TIME).
+/** @param {string} ns */
 export function taskXml(ns) {
   return [
     `<?xml version="1.0" encoding="UTF-16"?>`,
@@ -344,6 +380,12 @@ export function taskXml(ns) {
 }
 
 // Each returns { ok, line }. ok is false on any failure, so main exits non-zero.
+/**
+ * @param {string} ns
+ * @param {boolean} apply
+ * @param {typeof schtasks} [run]
+ * @returns {{ ok: boolean; line: string }}
+ */
 export function install(ns, apply, run = schtasks) {
   const exists = taskExists(ns, run);
   const command = installCommand(ns);
@@ -366,6 +408,12 @@ export function install(ns, apply, run = schtasks) {
   return { ok: true, line: `created ${taskName(ns)}, DISABLED. Enable with: schtasks /Change /TN "${taskName(ns)}" /ENABLE` };
 }
 
+/**
+ * @param {string} ns
+ * @param {boolean} apply
+ * @param {typeof schtasks} [run]
+ * @returns {{ ok: boolean; line: string }}
+ */
 export function remove(ns, apply, run = schtasks) {
   if (!taskExists(ns, run)) return { ok: true, line: `absent  ${taskName(ns)}` };
   if (!apply) return { ok: true, line: `DELETE  ${taskName(ns)}` };
@@ -376,6 +424,12 @@ export function remove(ns, apply, run = schtasks) {
 // Install needs the key file, because the task it creates posts its log with it.
 // REMOVE DOES NOT: a task whose key was revoked and deleted must still be removable,
 // and requiring the file left exactly that task running every night.
+/**
+ * @param {string} mode
+ * @param {string[]} targets
+ * @param {boolean} apply
+ * @param {{ run?: typeof schtasks; hasKey?: (ns: string) => boolean; log?: (line: string) => void }} [deps]
+ */
 export function manage(mode, targets, apply, { run = schtasks, hasKey = (ns) => existsSync(keyPath(ns)), log = console.log } = {}) {
   let failed = 0;
   for (const ns of targets) {
@@ -401,7 +455,7 @@ function list() {
 async function main() {
   const { mode, namespace, apply } = parseArgs(process.argv.slice(2));
   if (mode === "list") return list();
-  if (mode === "run") process.exit(await runOne(namespace));
+  if (mode === "run") process.exit(await runOne(/** @type {string} */ (namespace)));
 
   const failed = manage(mode, selected(namespace), apply);
   if (!apply) console.log("\nDry run. Re-run with --apply to change anything.");
@@ -414,7 +468,7 @@ async function main() {
 // Only when executed, so the pure helpers above are importable by the test suite.
 if (process.argv[1] && process.argv[1].endsWith("schedule-drivers.mjs")) {
   main().catch((err) => {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   });
 }
