@@ -247,7 +247,10 @@ async function dispatchBaseline(env: Env, run: RunRow, now: Date): Promise<TickO
   await pushAttempt(env, { namespace: run.namespace, branch, baseSha: run.base_sha, summary: "baseline", files: [] });
   const refused = await dispatchScorer(env, run, branch, id, now);
   if (refused) {
-    return { runId: run.id, namespace: run.namespace, from: "opening", to: run.status, note: refused };
+    // The run ends here with the refusal as its note. Left in awaiting-score, the
+    // stale guard would later record it as a baseline that never reported.
+    await advanceRun(env.DB, { runId: run.id, expected: "awaiting-score", next: "finalizing", patch: { current_attempt: null, note: refused } });
+    return { runId: run.id, namespace: run.namespace, from: "opening", to: "finalizing", note: refused };
   }
   return { runId: run.id, namespace: run.namespace, from: "opening", to: "awaiting-score", note: `baseline dispatched on ${branch}` };
 }
@@ -424,7 +427,21 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
     cost_usd: run.cost_usd + proposal.costUsd,
   });
   if (refusedAttempt) {
-    return { runId: run.id, namespace: run.namespace, from: "attempting", to: run.status, note: refusedAttempt };
+    // THE BUDGET STOPPED THE DISPATCH AFTER THE PUSH. The attempt is marked for what
+    // happened and the run ends. Left in awaiting-score, the stale guard would later
+    // mark it timed-out and count it as an environment failure.
+    await env.DB.batch([
+      env.DB
+        .prepare("UPDATE improve_attempts SET status = 'refused-budget', kept = 0, reason = ?2 WHERE id = ?1 AND status = 'awaiting-score'")
+        .bind(id, refusedAttempt),
+    ]);
+    await advanceRun(env.DB, {
+      runId: run.id,
+      expected: "awaiting-score",
+      next: "finalizing",
+      patch: { attempts: run.attempts + 1, cost_usd: run.cost_usd + proposal.costUsd, current_attempt: null, note: refusedAttempt },
+    });
+    return { runId: run.id, namespace: run.namespace, from: "attempting", to: "finalizing", note: refusedAttempt };
   }
   return { runId: run.id, namespace: run.namespace, from: "attempting", to: "awaiting-score", note: `attempt ${index} dispatched on ${branch}` };
 }

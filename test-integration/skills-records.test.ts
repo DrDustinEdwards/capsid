@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { alreadyAbstracted, FAILURE_NOTES_PER_SKILL, failureNoteStatements, MAX_OFFERED, offerSkills } from "../src/skills-records";
+import { alreadyAbstracted, commitTransition, FAILURE_NOTES_PER_SKILL, failureNoteStatements, MAX_OFFERED, offerSkills } from "../src/skills-records";
+import { candidateSkills } from "../src/improve-skills";
 
 // THE SKILL QUERIES, AGAINST A REAL D1 AND A REAL FTS5 INDEX (job_3e1596235513).
 //
@@ -101,5 +102,45 @@ describe("failureNoteStatements", () => {
     expect(after).toEqual(before);
     const notes = await env.DB.prepare("SELECT note FROM skill_failures WHERE skill = 'steady'").all<{ note: string }>();
     expect(notes.results.map((n) => n.note)).toEqual(["it failed"]);
+  });
+});
+
+describe("commitTransition", () => {
+  const audits = async () =>
+    (
+      await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'skill-status-changed' ORDER BY id").all<{ params: string }>()
+    ).results.map((r) => JSON.parse(r.params) as { skill: string; to: string });
+
+  it("moves the status and writes its audit row in one batch", async () => {
+    await env.DB.prepare("DELETE FROM audit_log").run();
+    await skill("fading", { status: "live" });
+    expect(await commitTransition(ENV, "fading", "live", "retired", new Date("2026-09-25T00:00:00Z"), "two negatives")).toBe(true);
+    const row = await env.DB.prepare("SELECT status, retired_at FROM improve_skills WHERE id = 'fading'").first<{ status: string; retired_at: string }>();
+    expect(row?.status).toBe("retired");
+    expect(await audits()).toEqual([expect.objectContaining({ skill: "fading", to: "retired" })]);
+  });
+
+  it("writes no audit row when the status moved underneath it", async () => {
+    await env.DB.prepare("DELETE FROM audit_log").run();
+    await skill("moved", { status: "candidate" });
+    expect(await commitTransition(ENV, "moved", "live", "retired", new Date("2026-09-25T00:00:00Z"), "stale read")).toBe(false);
+    expect(await audits()).toEqual([]);
+  });
+});
+
+describe("candidateSkills", () => {
+  it("offers only candidate or live skills that claim the namespace or none", async () => {
+    for (const [id, status, namespaces] of [
+      ["retired", "retired", null],
+      ["foxing-only", "live", '["foxing"]'],
+      ["anywhere", "candidate", null],
+      ["here-too", "live", '["capsid","foxing"]'],
+    ] as const) {
+      await skill(id, { status });
+      await env.DB.prepare("UPDATE improve_skills SET namespaces = ?2 WHERE id = ?1").bind(id, namespaces).run();
+    }
+    // skill() writes source_namespace 'sample', so 'capsid' sees them as another namespace's skills.
+    const offered = await candidateSkills(env.DB, "capsid", 10);
+    expect(offered.map((s) => s.id).sort()).toEqual(["anywhere", "here-too"]);
   });
 });

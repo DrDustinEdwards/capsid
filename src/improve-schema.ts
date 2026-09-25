@@ -23,6 +23,10 @@ export const DEFAULT_MODE: ImproveMode = "off";
 export const MODE_KEY = "improve_mode";
 export const bestKey = (namespace: string) => `improve:best:${namespace}`;
 export const pausedKey = (namespace: string) => `improve:paused:${namespace}`;
+// A pause the loop sets on itself carries this prefix, so the watcher can tell it
+// from a pause a human set without matching words in the reason.
+export const LOOP_PAUSE_PREFIX = "loop: ";
+export const loopPauseReason = (reason: string) => `${LOOP_PAUSE_PREFIX}${reason}`;
 export const anchorKey = (namespace: string) => `improve:anchor:${namespace}`;
 // The meta-loop's weekly cadence marker. One key, not one per namespace: the
 // meta-loop reasons across all of them at once.
@@ -136,6 +140,9 @@ export const ATTEMPT_STATUSES = [
   "reverted",
   "flagged",
   "timed-out",
+  // Pushed, then the budget cap refused the scorer dispatch. Never measured, and not
+  // an environment failure either.
+  "refused-budget",
 ] as const;
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 

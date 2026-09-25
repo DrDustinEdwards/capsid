@@ -4,6 +4,9 @@ import { ROLES } from "../scripts/mint-agents.mjs";
 import { allowsToolAction } from "../src/agents-schema.ts";
 import { OPEN_JOB_STATUSES } from "../src/jobs-schema.ts";
 import { checkScope } from "../src/scope.ts";
+import { anchorDriftVerdict, driftVerdict } from "../src/improve-gates.ts";
+import { loopPauseReason } from "../src/improve-schema.ts";
+import type { RunRow } from "../src/improve-state.ts";
 import {
   BLOCKED_STALE_HOURS,
   BUDGET_WARN_FRACTION,
@@ -12,6 +15,7 @@ import {
   MAX_FINDINGS_PER_PASS,
   MIN_CADENCE_MINUTES,
   WATCHER_ACTOR,
+  WATCHER_CHECKS,
   WATCHER_CADENCE_KEY,
   WATCHER_LAST_KEY,
   WATCHER_NAME,
@@ -19,6 +23,7 @@ import {
   ciFindings,
   clearFinding,
   newestMigration,
+  owningCheck,
   openWatcherFingerprints,
   readStaleBlocked,
   healthFindings,
@@ -26,6 +31,8 @@ import {
   runPass,
   staleBlockedFindings,
   statusFindings,
+  identityFindings,
+  mirrorFindings,
   watcherAgent,
   type Finding,
 } from "../src/watcher.ts";
@@ -175,8 +182,32 @@ test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
     );
   assert.deepEqual(report("Dustin is rewriting the scorer"), []);
   assert.deepEqual(report(null), []);
-  assert.deepEqual(report("budget exceeded for 2026-09").map((f) => f.fingerprint), ["paused-foxing"]);
-  assert.deepEqual(report("anchor checksum drift").map((f) => f.fingerprint), ["paused-foxing"]);
+  // A human reason that happens to mention budget or drift is still a human pause.
+  assert.deepEqual(report("waiting on the budget review"), []);
+  assert.deepEqual(report(loopPauseReason("budget")).map((f) => f.fingerprint), ["paused-foxing"]);
+  // The bare value written before the prefix existed, which may still be in KV.
+  assert.deepEqual(report("budget").map((f) => f.fingerprint), ["paused-foxing"]);
+});
+
+// DERIVED FROM THE GATES, not from a hand-written reason. Until 2026-09-25 the
+// match was /budget|drift/ and neither gate's reason contains either word, so a
+// namespace the drift gate paused was never reported.
+test("a pause set by either drift gate is a finding", () => {
+  const run = (attempts: number, reverts: number) => ({ ...({} as RunRow), attempts, reverts });
+  const drift = driftVerdict([run(4, 4), run(4, 4), run(4, 4)]);
+  const anchor = anchorDriftVerdict([{ metric: "build_passes", direction: "higher", bound: 1 }] as never, { build_passes: 1 }, { build_passes: 0.5 });
+  assert.ok(drift.pause && drift.reason, "the revert-ratio gate did not pause, so this proves nothing");
+  assert.ok(anchor.pause && anchor.reason, "the anchor gate did not pause, so this proves nothing");
+  for (const reason of [drift.reason, anchor.reason]) {
+    const found = statusFindings(
+      {
+        budget: { month: "2026-09", caps: {}, spend: {}, exceeded: false, reason: null },
+        namespaces: [{ namespace: "foxing", paused: loopPauseReason(reason) }],
+      } as never,
+      NOW
+    );
+    assert.deepEqual(found.map((f) => f.fingerprint), ["paused-foxing"], `not reported: ${reason}`);
+  }
 });
 
 test("a budget over the warning fraction is a finding, per cap", () => {
@@ -235,7 +266,7 @@ function harness(found: Finding[], open: Map<string, string>) {
     posted,
     cleared,
     readers: {
-      findings: async () => found,
+      findings: async () => ({ findings: found, ran: new Set(WATCHER_CHECKS) }),
       open: async () => open,
       clear: async (id: string) => {
         cleared.push(id);
@@ -270,6 +301,48 @@ test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not
   assert.deepEqual(h.cleared, ["job_2"], "a finding that is still being found must keep its job");
 });
 
+test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
+  // improve_status and the roster CI reads failed this pass, so their findings are
+  // absent. That says nothing about whether the problems went away.
+  const open = new Map([["ci-red-abc1234", "job_1"], ["paused-foxing", "job_2"], ["backup-stale", "job_3"]]);
+  const cleared: string[] = [];
+  const result = await runPass({
+    findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "improve_status")) }),
+    open: async () => open,
+    clear: async (id) => {
+      cleared.push(id);
+      return true;
+    },
+    post: async () => ({ ok: true }),
+  });
+  assert.deepEqual(result.cleared, ["backup-stale"], "only a job whose check ran may be cleared");
+  assert.deepEqual(cleared, ["job_3"]);
+});
+
+test("every fingerprint the checks produce has an owning check", () => {
+  const stale = new Date(NOW.getTime() - 999 * 3_600_000);
+  const all: Finding[] = [
+    ...healthFindings({ ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: 99 } }, "0360787", "0099_x.sql", "capsid"),
+    ...staleBlockedFindings([{ id: "job_z", namespace: "foxing", title: "t", result_summary: null, updated_at: hoursAgo(99) }], NOW),
+    ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
+    ...statusFindings(
+      {
+        budget: { month: "2026-09", caps: { actions_minutes_month: 10, model_usd_month: 10 }, spend: { ci_minutes: 10, cost_usd: 10 }, exceeded: true, reason: null },
+        namespaces: [{ namespace: "foxing", paused: loopPauseReason("budget") }],
+      } as never,
+      NOW
+    ),
+    ...mirrorFindings("capsid", null, [], NOW),
+    ...mirrorFindings("capsid", stale, [], NOW),
+    ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "failure" }], NOW),
+    ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "success" }], NOW),
+    ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }], ["foxing"], []),
+    ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }, { namespace: "foxing", block: "b", report: "a" }], [], []),
+  ];
+  assert.equal(all.length, 17, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
+  for (const f of all) assert.ok(owningCheck(f.fingerprint), `${f.fingerprint} has no owning check, so a failed read would clear it`);
+});
+
 test("A HEALTHY PASS POSTS NOTHING AND CLOSES NOTHING", async () => {
   const h = harness([], new Map());
   const result = await runPass(h.readers);
@@ -281,7 +354,7 @@ test("clearing runs BEFORE posting, so a finding that flickers is not refused as
   // whose job was about to be closed would be refused as a duplicate of it.
   const order: string[] = [];
   await runPass({
-    findings: async () => [fakeFinding("b")],
+    findings: async () => ({ findings: [fakeFinding("b")], ran: new Set(WATCHER_CHECKS) }),
     open: async () => new Map([["a", "job_a"]]),
     clear: async (id) => {
       order.push(`clear:${id}`);
@@ -305,7 +378,7 @@ test("a pass posts at most its bound, and the rest are found again next time", a
 test("a refused post is logged and does not stop the rest of the pass", async () => {
   const posted: string[] = [];
   const result = await runPass({
-    findings: async () => [fakeFinding("first"), fakeFinding("second")],
+    findings: async () => ({ findings: [fakeFinding("first"), fakeFinding("second")], ran: new Set(WATCHER_CHECKS) }),
     open: async () => new Map(),
     clear: async () => true,
     post: async (f) => {
