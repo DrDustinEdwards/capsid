@@ -11,13 +11,19 @@ import {
   type ScopeFlag,
 } from "./agents-schema";
 
-// A bearer resolves to a caller, not to a tier. Three kinds, in this order:
+// A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
+// fingerprint cannot say whose credential did something, and cannot give a queue
+// driver a credential that works a job without also being able to merge a pull
+// request into a repo that deploys on push.
+//
+// Three kinds of caller resolve here, and the order matters:
 //
 //   1. A minted agent (a row in `agents`), with exactly its row's scopes. Checked
 //      first, so a key that is also an OPERATOR_KEY_HASH entry gets the narrower
 //      authority.
 //   2. A legacy operator key: a plain entry is write with every flag, an `ro:` entry
-//      is read with none. It stops working when its hash is removed.
+//      is read with none. This lets the table exist without breaking the credential
+//      used to mint the first agent. It stops working when its hash is removed.
 //   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent
 //      "admin", holding every scope.
 
@@ -29,12 +35,15 @@ export interface Agent {
   // row's unique name for a minted agent.
   name: string;
   kind: AgentKind;
-  // What lands in audit_log.actor and jobs.claimed_by: `agent:<name>`,
-  // `github:<login>` or `opkey:<fingerprint>`.
+  // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
+  // agent; `github:<login>` and `opkey:<fingerprint>` for the two identities that
+  // predate the table, because those are more specific than a synthetic name and
+  // every audit query already reads them.
   actor: string;
   scopes: AgentScopes;
   // May this caller mint, revoke and re-scope other agents? True only for the OAuth
-  // admin and a legacy write key. Not a flag, because update_scopes can set flags.
+  // admin and a legacy write key, so a minted agent can never mint a wider one than
+  // itself. Not a flag, because update_scopes can set flags.
   admin: boolean;
   // A row-backed agent, as opposed to a synthetic one. What last_seen is written for.
   row: AgentRow | null;
@@ -56,7 +65,8 @@ function readEverythingScopes(): AgentScopes {
 }
 
 // The OAuth admin session. The provider has already checked the login against
-// ADMIN_GITHUB_LOGIN, so this function grants rather than decides.
+// ADMIN_GITHUB_LOGIN (once at consent, once per request), so this function grants
+// rather than decides.
 export function adminAgent(login: string): Agent {
   return {
     id: `github:${login}`,
@@ -70,7 +80,8 @@ export function adminAgent(login: string): Agent {
 }
 
 // A legacy grant and actor expressed as an Agent, so checkScope is the only
-// enforcement path for every caller.
+// enforcement path: the fallback path and every test build a caller the same way,
+// and there is no second code path where scopes do not apply.
 export function legacyAgent(grant: AgentGrant, actor: string): Agent {
   return {
     id: actor,
@@ -109,8 +120,9 @@ function bearerToken(request: Request): string | null {
   return token.length > 0 ? token : null;
 }
 
-// An indexed equality on the digest, confirmed with a constant-time compare so the
-// guarantee holds if the query is ever loosened.
+// An indexed equality on the digest, confirmed with a constant-time compare. The
+// index keeps the lookup O(1) as the table grows; the compare keeps the guarantee if
+// the query is ever loosened (a LIKE, a case fold, a fake in a test).
 async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow | null> {
   const row = await db
     .prepare("SELECT * FROM agents WHERE key_hash = ?1 AND revoked_at IS NULL")
@@ -120,8 +132,9 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
   return timingSafeEqual(row.key_hash, hash) ? row : null;
 }
 
-// A revoked agent does not fall through to OPERATOR_KEY_HASH, so revocation does not
-// depend on the key never having matched anything else.
+// A revoked agent does not fall through to OPERATOR_KEY_HASH: a key minted as an
+// agent is not an operator key, and falling through would make revocation depend on
+// the key never having matched anything else.
 export async function resolveAgent(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH?: string }): Promise<ResolvedAgent | null> {
   const token = bearerToken(request);
   if (!token) return null;
