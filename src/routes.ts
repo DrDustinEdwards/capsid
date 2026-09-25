@@ -6,7 +6,7 @@ import { resolveAgent } from "./agents";
 import { runBackup } from "./backup";
 import { routeRefusal } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
-import { REPORT_PATH, REPORT_PREFIX } from "./headers";
+import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
 import type { Env } from "./env";
 import { buildServer } from "./server";
@@ -129,27 +129,9 @@ ${othersHtml}
   return new Response(html, {
     status: 200,
     headers: {
-      "Content-Type": "text/html;charset=utf-8",
-      // The dialog has an inline <style> and posts a form back to /authorize. No
-      // scripts or images, so everything else is locked down.
-      //
-      // form-action is deliberately absent. Approving submits this form into a four
-      // hop redirect chain: POST /authorize, 302 to github.com, 302 back to
-      // /callback, 302 out to the client's registered redirect_uri. Chrome enforces
-      // form-action against every hop and a blocked hop aborts the navigation
-      // silently while that response's Set-Cookie still lands. The terminal hop is a
-      // dynamically registered client redirect_uri and any client may register one
-      // via /register, so no static allowlist can be correct. Adding github.com and
-      // claude.ai alongside 'self' was rejected: it holds until the next client
-      // registers.
-      //
-      // `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days,
-      // undetected because the approvedClients fast path 302s out of the GET and
-      // never submits a form.
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-      "X-Frame-Options": "DENY",
+      // The static headers, and why form-action is absent from the CSP: see
+      // CONSENT_DIALOG_HEADERS in ./headers.
+      ...CONSENT_DIALOG_HEADERS,
       "Set-Cookie": `${CSRF_COOKIE}=${csrf}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${STATE_TTL_SECONDS}`,
     },
   });

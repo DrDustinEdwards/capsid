@@ -10,7 +10,7 @@ import { adminAgent } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
-import { securityHeadersFor } from "../src/headers.ts";
+import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/headers.ts";
 // FIXTURES DERIVE THE TOOL COUNT, they do not spell it. Six of these tests
 // hardcoded 24 and all six broke when the surface moved to 26, for a reason that
 // had nothing to do with what any of them checks. That is the same drift the
@@ -73,23 +73,11 @@ const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Set-Cookie", "Location", 
 const isEnforcedSecurityHeader = (name: string) =>
   !NOT_SECURITY_HEADERS.has(name) && !/-Report-Only$/i.test(name);
 
-// The header names the consent dialog sets on its own Response, read from source.
-// Scoped to renderApprovalDialog so no other Response in the file can leak in.
-function consentDialogHeaders(): string[] {
-  const src = read("../src/routes.ts");
-  const start = src.indexOf("function renderApprovalDialog");
-  assert.ok(start !== -1, "renderApprovalDialog is gone; this derivation needs rewriting");
-  const end = src.indexOf("async function startGithubFlow", start);
-  assert.ok(end > start, "could not bound renderApprovalDialog");
-  const block = src.slice(start, end);
-  const headers = [...block.matchAll(/^\s{6}"([A-Za-z-]+)":/gm)].map((m) => m[1]);
-  // Vacuity guard: an extraction that matched nothing would make every assertion
-  // below pass over an empty list.
-  assert.ok(headers.length >= 4, `parsed only ${headers.length} consent dialog headers: ${headers.join(", ")}`);
-  return headers;
-}
+// The header names the consent dialog sets on its own Response. CONSENT_DIALOG_HEADERS
+// is the object routes.ts spreads into that Response, so it is read directly rather
+// than parsed out of routes.ts; the per-request Set-Cookie is not a security header.
+const consentDialogHeaders = (): string[] => Object.keys(CONSENT_DIALOG_HEADERS);
 
-// scanner-rule: quality audit 5.2, header counts derived from what is emitted. The consent dialog is in src/routes.ts, which node --test cannot load
 test("header counts match what the header layer and the consent dialog actually emit", () => {
   const html = securityHeadersFor("html");
   const fromLayer = Object.keys(html).filter(isEnforcedSecurityHeader);

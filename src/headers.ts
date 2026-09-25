@@ -18,6 +18,33 @@ export const CSP_REPORT_ONLY_NON_HTML =
 
 export const COOP_REPORT_ONLY = "same-origin";
 
+// The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
+// its per-request Set-Cookie. Kept here so node can import them: routes.ts cannot load
+// under node --test, and test/counts.test.ts derives the enforced header count from
+// this object.
+//
+// The dialog has an inline <style> and posts a form back to /authorize. No scripts or
+// images, so everything else is locked down.
+//
+// form-action is deliberately absent. Approving submits this form into a four hop
+// redirect chain: POST /authorize, 302 to github.com, 302 back to /callback, 302 out
+// to the client's registered redirect_uri. Chrome enforces form-action against every
+// hop and a blocked hop aborts the navigation silently while that response's
+// Set-Cookie still lands. The terminal hop is a dynamically registered client
+// redirect_uri and any client may register one via /register, so no static allowlist
+// can be correct. Adding github.com and claude.ai alongside 'self' was rejected: it
+// holds until the next client registers.
+//
+// `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days, undetected
+// because the approvedClients fast path 302s out of the GET and never submits a form.
+export const CONSENT_DIALOG_HEADERS: Readonly<Record<string, string>> = {
+  "Content-Type": "text/html;charset=utf-8",
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+};
+
 // No Origin passes, same-origin passes, claude.ai passes. Everything else is refused.
 const MCP_BROWSER_ORIGINS = new Set(["https://claude.ai"]);
 

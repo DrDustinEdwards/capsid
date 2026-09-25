@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  BACKUP_CREDENTIAL_PATH,
   deriveBackupCredentialKey,
   deriveScoreKey,
   mintBackupCredential,
@@ -131,11 +130,15 @@ test("ONLY src/improve-scorer.ts names the backup parent key id", () => {
   assert.deepEqual(offenders.map((o) => `src/${o.file}:${o.line}`), []);
 });
 
-test("the endpoint path is fixed and the derive script offers the flag", () => {
-  assert.equal(BACKUP_CREDENTIAL_PATH, "/backup/credential");
-  // That routes.ts serves the path is asserted by test/route-gates.test.ts, which requires
-  // every listed route to be dispatched.
-  const script = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "improve-derive-key.mjs"), "utf8");
-  assert.match(script, /--backup-credential/, "the derive script cannot produce the backup credential key");
-  assert.match(script, /capsid-backup-credential:v1/, "the script and the Worker disagree on the derivation context");
+test("the derive script's --backup-credential key is exactly the key the Worker verifies", async () => {
+  // The script is a plain .mjs that restates the derivation, so the two are compared
+  // by running it, as test/improve-derive-key.test.ts does for the score keys.
+  const root = "a-test-root-secret";
+  const script = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "improve-derive-key.mjs");
+  const result = spawnSync(process.execPath, [script, "--backup-credential"], {
+    encoding: "utf8",
+    env: { ...process.env, IMPROVE_SCORE_SECRET: root },
+  });
+  assert.equal(result.status, 0, `the script refused the flag: ${result.stderr}`);
+  assert.equal(result.stdout, `${await deriveBackupCredentialKey(root)}\n`, "the script and src/improve-scorer.ts derive different backup keys");
 });
