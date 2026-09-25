@@ -2,7 +2,8 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
-import { legacyAgent } from "../src/agents";
+import { legacyAgent, type Agent } from "../src/agents";
+import { defaultScopes } from "../src/agents-schema";
 import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
 import { splitSignedTask, verifyTaskDoc } from "../src/improve-task";
 
@@ -505,6 +506,90 @@ describe("resume", () => {
     const id = await blockedJob("untampered resume");
     const resumed = await resumeJob(jobsEnv(), DRIVER, NOW, id, "approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
+  });
+});
+
+// THE APPROVAL REACHES WHOEVER HOLDS THE JOB NEXT (job_6aef1c672fc3). The resume
+// reason was written only to the audit row, which no tool returns to a driver, so on
+// 2026-09-24 a dustinedwards driver twice picked a resumed job back up without the
+// seat's answers and had to ask again.
+describe("the resume note", () => {
+  const SEAT_AGENT = legacyAgent("write", SEAT);
+  // A driver as the roster mints one: its own namespace, write, and no flags.
+  function agentDriver(): Agent {
+    const scopes = defaultScopes(["capsid"]);
+    scopes.grants = ["read", "write"];
+    return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
+  }
+
+  async function blockedJob(title: string) {
+    const posted = await post({ title, gate_required: true });
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "two questions for the seat", command: "git push origin feat/x" });
+    return id;
+  }
+
+  it("the seat resumes, the lease lapses, and a driver's claim carries the seat's note", async () => {
+    const id = await blockedJob("note reaches the next claim");
+    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "answers: use option B; batches 1 and 2 approved");
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect(resumed.resume_note?.reason).toBe("answers: use option B; batches 1 and 2 approved");
+    expect(resumed.resume_note?.by).toBe(SEAT);
+
+    const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
+    expect((await expireJobLeases(jobsEnv(), later)).requeued).toEqual([id]);
+
+    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    expect(claimed.resume_note?.reason).toBe("answers: use option B; batches 1 and 2 approved");
+    expect(claimed.resume_note?.by).toBe(SEAT);
+  });
+
+  it("the driver the job went back to reads the note from its heartbeat and from list", async () => {
+    const id = await blockedJob("note reaches the holder");
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "ruling: keep the old route");
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(beat.ok, beat.refusal).toBe(true);
+    expect(beat.resume_note?.reason).toBe("ruling: keep the old route");
+
+    const listed = await listJobs(jobsEnv(), { namespace: "capsid", id });
+    expect(listed.resume_note?.reason).toBe("ruling: keep the old route");
+  });
+
+  it("the mirrored document carries it, so brief does", async () => {
+    const id = await blockedJob("note in the mirror");
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the migration");
+    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
+    expect(doc?.body).toContain(`last resume, by ${SEAT}`);
+    expect(doc?.body).toContain("approved the migration");
+
+    // And a later transition, which reads the note back rather than being handed it,
+    // keeps the line.
+    await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    const after = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
+    expect(after?.body).toContain("approved the migration");
+  });
+
+  it("the newest resume wins", async () => {
+    const id = await blockedJob("two resumes");
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "first answer");
+    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "a second question", command: "git push origin feat/y" });
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "second answer");
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(beat.resume_note?.reason).toBe("second answer");
+  });
+
+  it("a job never resumed carries no note", async () => {
+    const posted = await post({ title: "never resumed" });
+    const claimed = await claimJob(jobsEnv(), agentDriver(), NOW, { id: posted.job!.id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    expect(claimed.resume_note).toBeUndefined();
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id: posted.job!.id })).resume_note).toBeUndefined();
   });
 });
 

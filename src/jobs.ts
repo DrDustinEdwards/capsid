@@ -76,6 +76,57 @@ export interface JobResult {
   // every verification that could not run, which is the difference between a count
   // nobody checked and a count nobody tried to check.
   outcome?: { row: JobOutcomeRow; notes: string[] };
+  // THE LATEST RESUME'S REASON, for a job that has been resumed at least once. See
+  // latestResumeNote below.
+  resume_note?: ResumeNote;
+}
+
+// WHAT THE LAST RESUME APPROVED, handed to whoever holds the job next.
+//
+// The reason a resume takes was written only to the audit row, and no tool returns
+// audit params to a driver. The job row, its mirror document, and the claim and list
+// responses carried nothing, so a driver picking a resumed job back up could not read
+// what the seat had approved. On 2026-09-24 that lost the seat's answers twice in
+// dustinedwards (job_5588145f7aaa, job_acaa730fcbc8) and the driver had to ask again
+// (job_6aef1c672fc3). The audit row stays the one record; this reads it back.
+export interface ResumeNote {
+  reason: string;
+  by: string;
+  at: string;
+  approved_by_policy?: string;
+  policy_class?: string;
+  correction?: true;
+}
+
+// Served by audit_log_doc (namespace, path, id DESC), the index every job audit row
+// already falls under because it is written against the job's mirror path.
+async function latestResumeNote(
+  db: D1Database,
+  job: Pick<JobRow, "id" | "namespace" | "resumed_count">
+): Promise<ResumeNote | null> {
+  if (!job.resumed_count) return null;
+  const row = await db
+    .prepare(
+      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1"
+    )
+    .bind(job.namespace, jobDocPath(job.id))
+    .first<{ actor: string | null; params: string | null; at: string }>();
+  if (!row?.params) return null;
+  let params: Record<string, unknown>;
+  try {
+    params = JSON.parse(row.params) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (typeof params.approved !== "string") return null;
+  return {
+    reason: params.approved,
+    by: row.actor ?? "(unknown)",
+    at: row.at,
+    ...(typeof params.approved_by_policy === "string" ? { approved_by_policy: params.approved_by_policy } : {}),
+    ...(typeof params.policy_class === "string" ? { policy_class: params.policy_class } : {}),
+    ...(params.correction === true ? { correction: true as const } : {}),
+  };
 }
 
 function refuse(action: string, refusal: string): JobResult {
@@ -86,7 +137,7 @@ const leaseUntil = (now: Date) => new Date(now.getTime() + JOB_LEASE_SECONDS * 1
 
 // The document a job mirrors to. The prompt is the SIGNED body, byte for byte, so a
 // driver that reads the document rather than the row still verifies the same bytes.
-function renderJobDoc(job: JobRow): string {
+function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
   const lines = [
     `# ${job.title}`,
     "",
@@ -103,20 +154,26 @@ function renderJobDoc(job: JobRow): string {
   // Only once it has happened. A job that has never hit a gate should not carry a
   // line of zeroes explaining that it has not.
   if (job.blocked_count > 0) lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
+  // The brief carries open job documents, so this line is how brief hands the
+  // approval to a driver.
+  if (note) lines.push(`- last resume, by ${note.by} at ${note.at}: ${note.reason}`);
   if (job.result_summary) lines.push(`- result: ${job.result_summary}`);
   if (job.result_ref) lines.push(`- result ref: ${job.result_ref}`);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
 }
 
-async function mirrorStatements(db: D1Database, job: JobRow, action: string, actor: string) {
+// `note` is passed by resume, whose audit row is written in the same batch as this
+// mirror and so cannot be read back yet. Every other transition reads it.
+async function mirrorStatements(db: D1Database, job: JobRow, action: string, actor: string, note?: ResumeNote) {
   const path = jobDocPath(job.id);
   const prior = await priorDoc(db, job.namespace, path);
+  const resumeNote = note ?? (await latestResumeNote(db, job));
   return improveDocStatements(db, {
     namespace: job.namespace,
     path,
     title: `Job: ${job.title}`,
-    body: renderJobDoc(job),
+    body: renderJobDoc(job, resumeNote),
     type: "task",
     // CLOSED ON A FINISHED ROW, and `failed` is as finished as `done`. This read
     // `job.status === "done"` until 2026-09-12, so a failed job's mirror stayed
@@ -362,9 +419,13 @@ export async function listJobs(
   // One extra row asked for, so "exactly the page" is distinguishable from "there
   // are more". Same shape as every other bounded read here.
   const truncated = rows.length > JOBS_ROWS_MAX;
+  // One named job carries its latest resume note. Not every row of a wide list,
+  // which would cost one read per resumed job.
+  const listNote = args.id && rows.length === 1 ? await latestResumeNote(env.DB, rows[0]) : null;
   return {
     ok: true,
     action: "list",
+    ...(listNote ? { resume_note: listNote } : {}),
     jobs: truncated ? rows.slice(0, JOBS_ROWS_MAX) : rows,
     ...(truncated ? { truncated: true, note: `more than ${JOBS_ROWS_MAX} jobs match; narrow by namespace or status.` } : {}),
   };
@@ -510,7 +571,10 @@ export async function claimJob(
     ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),
     auditStatement(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
   ]);
-  return { ok: true, action: "claim", job: claimed };
+  // A job that went back to the queue after a resume (an expired lease) reaches its
+  // next driver here, so the approval has to come with it.
+  const claimNote = await latestResumeNote(env.DB, claimed);
+  return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}) };
 }
 
 // ---- the transitions a holder makes -------------------------------------------
@@ -617,7 +681,10 @@ async function holderTransition(
     );
   }
   await env.DB.batch(statements);
-  return { ok: true, action, job, ...(outcome ? { outcome } : {}) };
+  // The driver a resume returned the job to is already holding it and learns of the
+  // resume by its next call, which is usually a heartbeat.
+  const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env.DB, job) : null;
+  return { ok: true, action, job, ...(outcome ? { outcome } : {}), ...(heartbeatNote ? { resume_note: heartbeatNote } : {}) };
 }
 
 export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {
@@ -1198,8 +1265,15 @@ export async function resumeJob(
   }
 
   const job = (await readJob(env.DB, id)) as JobRow;
+  const resumeNote: ResumeNote = {
+    reason,
+    by: actor,
+    at: now.toISOString(),
+    ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
+    ...(spend ? { correction: true as const } : {}),
+  };
   await env.DB.batch([
-    ...(await mirrorStatements(env.DB, job, "job-resumed", actor)),
+    ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
     auditStatement(env.DB, actor, "job-resumed", job, {
       approved: reason,
       held_by: holder,
@@ -1217,7 +1291,7 @@ export async function resumeJob(
         : {}),
     }),
   ]);
-  return { ok: true, action: "resume", job };
+  return { ok: true, action: "resume", job, resume_note: resumeNote };
 }
 
 // ---- the lease sweep ----------------------------------------------------------
