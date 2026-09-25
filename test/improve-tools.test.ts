@@ -3,10 +3,9 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer, type ToolGrant } from "../src/server.ts";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // THE TWO TOOLS, over a real MCP connection.
 //

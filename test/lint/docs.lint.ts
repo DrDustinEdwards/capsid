@@ -2,25 +2,26 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { TABLES } from "../src/backup.ts";
-import { AUTHORITATIVE } from "../src/counts.ts";
+import { TABLES } from "../../src/backup.ts";
+import { AUTHORITATIVE } from "../../src/counts.ts";
 
-// GROUP 5 (docs). The repo's own README and CLAUDE.md carried counts the code had
-// moved past: five backup tables when there are nine, 26 tools when there are 30.
-// The Capsid count linter guards the store's documents; nothing guarded these two
-// repo files, which is exactly how they drifted. These guards tie each stale-prone
-// number to its source of truth (TABLES, counts.ts) so the next drift fails here.
+// THE DOC-DRIFT LINT. Run by `npm run lint:docs` (and `npm run lint`), in the checks
+// job of .github/workflows/ci.yml; not part of `npm test` (audit 2026-09-25, C1-6).
+// These read prose, so they fail when a document falls behind the code rather than
+// when the Worker misbehaves. Each count is derived from its source of truth (TABLES,
+// migrations/, docs/, src/counts.ts), so the next drift fails here.
 //
-// The restore runbook moved to docs/backups.md and the rollback section to
-// docs/rollback.md when the README was cut to its top-level shape. These guards
-// follow the content rather than the filename: what they assert is unchanged.
+// The repo's README and docs carried counts the code had moved past: five backup
+// tables when there were nine, 26 tools when there were 30. The Capsid count linter
+// guards the store's documents; nothing guarded these repo files, which is how they
+// drifted.
 
-const ROOT = join(import.meta.dirname, "..");
+const ROOT = join(import.meta.dirname, "..", "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 // The runbook is the Restore section of docs/backups.md, which runs to the end of
-// that file. Resolved through a helper so a further move is one edit, and asserted
-// non-empty so a renamed heading fails loudly instead of scanning an empty string.
+// that file. Asserted non-empty so a renamed heading fails loudly instead of
+// scanning an empty string.
 function restoreRunbook(): string {
   const doc = read("docs/backups.md");
   const from = doc.indexOf("## Restore");
@@ -32,6 +33,7 @@ function restoreRunbook(): string {
 
 test("the restore runbook names every backed-up table", () => {
   const restore = restoreRunbook();
+  assert.ok(TABLES.length >= 9, `TABLES lists only ${TABLES.length} tables`);
   for (const table of TABLES) {
     assert.match(restore, new RegExp(`\\b${table}\\b`), `the restore runbook never names ${table}`);
   }
@@ -41,8 +43,6 @@ test("the restore runbook names every backed-up table", () => {
   assert.doesNotMatch(restore, /The five tables are\b/i, "the runbook still enumerates only five tables");
 });
 
-// ---- the dump's real shape, and every migration (residual 14) ----------------
-
 test("the restore runbook states the table count TABLES actually has", () => {
   const restore = restoreRunbook();
   // The count is spelled out in prose in three places and drifted twice already:
@@ -51,6 +51,7 @@ test("the restore runbook states the table count TABLES actually has", () => {
   // rather than being found during a restore.
   const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"];
   const correct = words[TABLES.length - 5];
+  assert.ok(correct, `TABLES has ${TABLES.length} entries, outside the words this check can spell`);
   for (const [i, word] of words.entries()) {
     if (i === TABLES.length - 5) continue;
     assert.doesNotMatch(
@@ -81,8 +82,6 @@ test("the restore runbook names the two dump sidecars", () => {
   assert.match(restore, /_holdout-manifests\.json/, "the runbook does not mention the holdout manifests sidecar");
 });
 
-// ---- the README is an index, and an index that loses an entry reads as deleted
-
 test("the README links every document under docs/", () => {
   // The README was cut from 460 lines to its top-level shape by moving sections
   // into docs/. The failure that move can produce is a file nobody links, which
@@ -97,8 +96,7 @@ test("the README links every document under docs/", () => {
 });
 
 test("the README states the authoritative tool count", () => {
-  // The count lives in src/counts.ts and the README quotes it. CLAUDE.md was
-  // already guarded above; the README said 32 with nothing checking it.
+  // The count lives in src/counts.ts and the README quotes it.
   const readme = read("README.md");
   assert.match(
     readme,

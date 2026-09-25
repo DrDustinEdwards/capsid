@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   CASE_MARKER,
@@ -33,17 +31,10 @@ import {
 //      attempt code rewrote it from process.on('exit') after the reporter flushed.
 //      Stopped by there being no destination file: TAP is a stdout pipe out of a
 //      --network none --read-only container.
-
-const WORKFLOW = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "improve-score.yml"), "utf8");
-
-// A COMMENT IS NOT A COMMAND. The header above quotes the old attack verbatim
-// ("cp -r attempt/code/. ."), and a scan that counted prose would go red on the
-// day the fix is best documented. Same exclusion test/improve-holdout.test.ts
-// applies to its binding scan. Strips YAML comments and shell comments inside
-// run: blocks alike, since both start a line with '#'.
-const EXECUTABLE = WORKFLOW.split("\n")
-  .filter((line) => !line.trimStart().startsWith("#"))
-  .join("\n");
+//
+// This file drives the scorer's stream parser. The checks on improve-score.yml
+// that stop attacks 1 and 2 and the container half of attack 3 are in
+// test/workflow-policy.test.ts.
 
 // ---- attack 3: forging results through a test's own stdout ------------------
 
@@ -140,147 +131,4 @@ test("holdoutFilePassed keeps its single-report contract", () => {
   assert.equal(holdoutFilePassed("ok 1 - x\n1..1"), true);
   assert.equal(holdoutFilePassed("not ok 1 - x\n1..1"), false);
   assert.equal(holdoutFilePassed(""), false, "silence is not a pass");
-});
-
-// ---- attack 1: replacing the trusted script through the overlay -------------
-
-test("PLANT: Job B never overlays attempt code onto the runner", () => {
-  assert.ok(
-    !/cp -r attempt\/code\/\.\s/.test(EXECUTABLE),
-    "the whole-tree overlay `cp -r attempt/code/. .` is what let an attempt replace scripts/improve-report.mjs; it must not exist"
-  );
-  assert.ok(
-    !/Overlay the attempt source/.test(EXECUTABLE),
-    "the overlay step must be gone entirely, not renamed"
-  );
-});
-
-test("the trusted scorer is stashed outside the workspace and only that copy is invoked", () => {
-  assert.match(
-    WORKFLOW,
-    /cp scripts\/improve-report\.mjs "\$\{RUNNER_TEMP\}\/trusted\/improve-report\.mjs"/,
-    "the trusted script must be copied out before anything untrusted lands"
-  );
-  // Every invocation in the score job must go through the stash.
-  const scoreJob = WORKFLOW.slice(WORKFLOW.indexOf("  score:"));
-  const invocations = [...scoreJob.matchAll(/improve-report\.mjs/g)];
-  assert.ok(invocations.length >= 3, "expected the stash copy plus at least two uses");
-  const workspaceInvocation = /\bnode\s+scripts\/improve-report\.mjs/.test(scoreJob);
-  assert.ok(!workspaceInvocation, "the score job must never invoke the workspace copy of the scorer script");
-});
-
-test("Job A wipes the staging directory before staging", () => {
-  const buildJob = WORKFLOW.slice(WORKFLOW.indexOf("  build:"), WORKFLOW.indexOf("  score:"));
-  assert.match(
-    buildJob,
-    /rm -rf code\s*\n\s*mkdir -p code/,
-    "without `rm -rf code` first, attempt code that created code/scripts during the test step rides into the artifact"
-  );
-});
-
-// ---- attack 2: padding the holdout -----------------------------------------
-
-test("the holdout directory is wiped before the sync and lives outside the workspace", () => {
-  assert.match(WORKFLOW, /rm -rf "\$\{RUNNER_TEMP\}\/holdout"/, "a stale or planted case file must not survive into the count");
-  assert.match(WORKFLOW, /aws s3 sync "s3:\/\/\$\{HOLDOUT_BUCKET\}\/\$\{HOLDOUT_PREFIX\}" "\$\{RUNNER_TEMP\}\/holdout\/"/);
-  assert.ok(
-    !/aws s3 sync .* \.improve-holdout/.test(EXECUTABLE),
-    "the holdout must not be synced into the workspace, where an overlay could reach it"
-  );
-});
-
-// ---- the container contract -------------------------------------------------
-
-test("attempt code runs only inside a network-less, read-only, digest-pinned container", () => {
-  assert.match(WORKFLOW, /docker run --rm/, "the holdout must run in a container");
-  assert.match(WORKFLOW, /--network none/, "no network: nothing the attempt learns can leave");
-  assert.match(WORKFLOW, /--read-only/, "read-only root: bind mounts stay immutable");
-  assert.match(WORKFLOW, /--tmpfs \/work:rw/, "the only writable surface is scratch that dies with the run");
-  assert.match(
-    WORKFLOW,
-    /node:24\.14\.1-bookworm@sha256:[0-9a-f]{64}/,
-    "the image must be pinned by digest, not by tag"
-  );
-  // THE FULL IMAGE, NOT slim, because it carries git. A foxhound test shells out
-  // to git and slim answered "git: not found", failing one file of 255. Ruled
-  // 2026-09-08: add the tool rather than exclude the file, and there is no second
-  // way in because apt-get cannot run behind --network none.
-  assert.ok(!/node:[\d.]+-bookworm-slim/.test(EXECUTABLE), "slim carries no git, and a test that shells out to it fails for the environment");
-  // GLIBC, NOT MUSL, and it is a measurement. The container mounts node_modules
-  // installed by the runner, which is Ubuntu. On Alpine every package with a
-  // platform-specific native binary asks for its musl build and finds only the gnu
-  // one: rollup threw in native.js and took vitest with it, biome could not resolve
-  // its binary, and three repos reported a null test_pass_rate while capsid-mcp,
-  // whose tooling is pure JS, measured clean.
-  assert.ok(!/node:[\d.]+-alpine/.test(EXECUTABLE), "an Alpine image cannot load the runner's native modules");
-  for (const mount of [
-    /-v "\$\{RUNNER_TEMP\}\/attempt\/code:\/attempt:ro"/,
-    /-v "\$\{RUNNER_TEMP\}\/holdout:\/holdout:ro"/,
-    /-v "\$\{RUNNER_TEMP\}\/trusted:\/trusted:ro"/,
-    // The whole default-branch checkout, read-only, since 2026-09-07: the sandbox
-    // now runs the repo's OWN test and lint commands, which need its tests,
-    // configs and node_modules. Those are all protected paths, so taking them
-    // from the trusted checkout rather than the artifact is the stronger reading
-    // of the same rule the narrower /nm and /trusted-test mounts expressed.
-    /-v "\$\{GITHUB_WORKSPACE\}:\/repo:ro"/,
-  ]) {
-    assert.match(WORKFLOW, mount, `every bind mount must be read-only: ${mount}`);
-  }
-  assert.ok(
-    !/-v "\$\{GITHUB_WORKSPACE\}:\/[a-z-]+"(?!:ro)/.test(EXECUTABLE),
-    "no writable workspace mount"
-  );
-});
-
-test("the holdout TAP has no seekable destination the attempt can rewrite", () => {
-  assert.ok(
-    !/--test-reporter-destination/.test(EXECUTABLE.slice(EXECUTABLE.indexOf("  score:"))),
-    "a destination file inside the attempt's filesystem is what attack 3 rewrote; results must come out as a pipe"
-  );
-  assert.match(WORKFLOW, /> "\$\{RUNNER_TEMP\}\/holdout\.tap"/, "the pipe is captured outside the container");
-  assert.match(WORKFLOW, /--holdout-stream "\$\{RUNNER_TEMP\}\/holdout\.tap"/, "and counted by the trusted stash copy");
-});
-
-// ---- the anchor does not come from the artifact -----------------------------
-
-test("PLANT: a rewritten metrics.json cannot set the build_passes anchor", async () => {
-  // The artifact is written on a runner that has already executed attempt code.
-  // build_passes must come from Job A's job output, which the Actions runner sets
-  // from the build step's own outcome.
-  assert.match(
-    WORKFLOW,
-    /build_passes: \$\{\{ steps\.build\.outcome == 'success' && '1' \|\| '0' \}\}/,
-    "Job A must export build_passes as a job output from the step outcome"
-  );
-  assert.match(
-    WORKFLOW,
-    /BUILD_PASSES: \$\{\{ needs\.build\.outputs\.build_passes \}\}/,
-    "the Post step must read the anchor from the job output"
-  );
-  const report = readFileSync(join(import.meta.dirname, "..", "scripts", "improve-report.mjs"), "utf8");
-  assert.match(
-    report,
-    /process\.env\.BUILD_PASSES === "1" \? 1 : 0/,
-    "the body builder must take the anchor from the environment, never from the parsed artifact"
-  );
-  assert.ok(
-    !/m\.build_passes/.test(report),
-    "metrics.json's build_passes field must no longer be read at all"
-  );
-});
-
-test("no step but the signing step and the credential mint sees the key", () => {
-  const scoreJob = WORKFLOW.slice(WORKFLOW.indexOf("  score:"));
-  const keyUses = [...scoreJob.matchAll(/IMPROVE_SCORE_KEY: \$\{\{ secrets\.IMPROVE_SCORE_KEY \}\}/g)];
-  assert.equal(keyUses.length, 2, "exactly two steps may carry the key: the mint and the post");
-  const containerStep = scoreJob.slice(scoreJob.indexOf("Run the holdout suite in an isolated container"));
-  const containerBlock = containerStep.slice(0, containerStep.indexOf("- name: Count the holdout result"));
-  assert.ok(!/IMPROVE_SCORE_KEY/.test(containerBlock), "the step that runs attempt code must not hold the key");
-});
-
-test("node and curl are absolute-pathed in every credentialed step", () => {
-  const scoreJob = WORKFLOW.slice(WORKFLOW.indexOf("  score:"));
-  assert.ok(!/\bcurl --silent/.test(scoreJob.replace(/\/usr\/bin\/curl --silent/g, "")), "curl must be absolute-pathed");
-  assert.match(WORKFLOW, /echo "node=\$\(command -v node\)" >> "\$GITHUB_OUTPUT"/, "node is resolved once, in a trusted step");
-  assert.match(WORKFLOW, /NODE_BIN: \$\{\{ steps\.trusted\.outputs\.node \}\}/, "and passed to the steps that need it");
 });

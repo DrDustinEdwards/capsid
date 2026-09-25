@@ -15,7 +15,7 @@ const NOW = new Date("2026-08-17T14:30:00.000Z");
 const HOUR_KEY = "dcr:rate:h:1.2.3.4:2026-08-17T14";
 const DAY_KEY = "dcr:rate:d:1.2.3.4:2026-08-17";
 
-// ---- 3. the /register rate limit --------------------------------------------
+// ---- the /register rate limit -----------------------------------------------
 
 test("a first registration is allowed and both counters start at 1", async () => {
   const kv = fakeKv();
@@ -100,24 +100,15 @@ test("callerIp reads CF-Connecting-IP and falls back off the edge", () => {
   assert.equal(callerIp(new Request("https://x/")), "unknown");
 });
 
-// The wiring of this limiter into the provider's registration callback is driven in
-// test-integration/oauth-flow.test.ts: a caller over the limit gets 429 from /register.
+// Driven in test-integration/oauth-flow.test.ts rather than here: the wiring of this
+// limiter into the registration callback (a caller over the limit gets 429 from
+// /register); the callback's state handling (a failed token exchange leaves the state
+// in place, and a corrupt stored state answers 403, is removed, and never reaches
+// GitHub); and the approval cookie's lifetime, its binding to one redirect, the dialog
+// listing every registered redirect, and a stale approval for a client that no longer
+// resolves.
 
-// ---- 1. F18: the state is consumed after the exchange, not before ------------
-
-// The callback's state handling is driven in test-integration/oauth-flow.test.ts: a
-// failed token exchange leaves the state in place, and a corrupt stored state answers
-// 403, is removed, and never reaches GitHub.
-
-
-// ---- 2. the approval cookie -------------------------------------------------
-
-// The approval cookie's lifetime, its binding to one redirect, the dialog listing every
-// registered redirect, and a stale approval for a client that no longer resolves are
-// driven in test-integration/oauth-flow.test.ts.
-
-
-
+// ---- the approval cookie ----------------------------------------------------
 
 // The REAL function, not a copy of it: this is the security property of the cookie.
 test("the tag binds one redirect URI, so approving one does not authorize a sibling", async () => {
@@ -138,12 +129,7 @@ test("the tag binds one redirect URI, so approving one does not authorize a sibl
   assert.equal(await approvalTag("abc", undefined), await approvalTag("abc", ""));
 });
 
-// scanner-rule: defence in depth behind the OAuth provider. parseAuthRequest already refuses
-// a client that does not resolve, so the handler's own order cannot be observed through the
-// Worker: a plant that moved the cookie check first left test-integration/oauth-flow.test.ts
-// green. src/routes.ts cannot load under node --test, so the order is read as text.
-
-// ---- Fix 4: DCR redirect cap and resource pinning ---------------------------
+// ---- the DCR redirect cap ---------------------------------------------------
 
 test("dcrRedirectRefusal refuses more than one non-loopback redirect (old code had no such check)", () => {
   // One non-loopback plus any number of loopbacks: allowed (native client).

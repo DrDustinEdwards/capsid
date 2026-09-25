@@ -15,6 +15,9 @@
     "test:integration": "vitest run",
     "check:integration": "tsc --noEmit -p test-integration/tsconfig.json",
     "check:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "lint": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
+    "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
+    "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
     "sync:scorer": "node scripts/sync-scorer.mjs"
   },
   "devDependencies": {

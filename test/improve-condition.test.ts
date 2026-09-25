@@ -14,9 +14,8 @@ import { adminAgent } from "../src/agents.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, IMPROVE_SKILL_DEFAULTS, sseMessage } from "./improve-fakes.ts";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // improve_runs.condition, from the arc's third ruling.
 //

@@ -6,7 +6,7 @@ Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting. They 
 
 ## Commands
 
-- Before any push: `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm test`. CI runs the same five, and auto-merge requires them.
+- Before any push: `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run lint`, `npm test`. CI runs the same six, and auto-merge requires them (the lint step runs before Tests, so a lint failure skips a required step).
 - `npm run test:integration` runs the Worker in workerd. `npm run deploy`, then `EXPECT_SHA=<sha> npm run verify:live`.
 - Secrets: `npx wrangler secret put KEY`.
 
