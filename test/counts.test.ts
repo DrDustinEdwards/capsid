@@ -342,3 +342,11 @@ test("N of M is checked for internal consistency even when M is right", () => {
   assert.match(claims[0].authoritative, /cannot exceed/);
   assert.match(claims[0].note ?? "", /internal contradiction/);
 });
+
+// Audit 2026-09-25, E2-30 (finding E2-L14). "3 of 12 gates" was flagged twice: once by
+// the of-form pass and again by the plain-form pass reading "12 gates".
+test("a wrong 'N of M gates' claim is flagged once, not by both gate passes", () => {
+  const wrong = CAPSID.liveGates + 5;
+  const claims = scanCountClaims([{ path: "core.md", type: "core", body: `3 of ${wrong} gates are live.` }], "capsid");
+  assert.equal(claims.filter((c) => c.noun === "live gates").length, 1, JSON.stringify(claims));
+});
