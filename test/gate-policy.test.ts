@@ -558,14 +558,59 @@ test("a SEAT's policy approval returns the job to the driver that blocked it", a
   assert.equal(row.claimed_by, "agent:capsid-driver", "the seat took the job it approved");
 });
 
-test("A DRIVER MAY STILL RESUME WITHOUT THE POLICY, because a human saying yes is the ordinary path", async () => {
-  // The check is on approving, not on resuming. Refusing this would mean a human who
-  // cleared a gate could not hand the job back to the driver that blocked on it.
+// ---- audit 2026-09-25, finding F2-6: the claimant's own plain resume ----------------
+//
+// A plain resume records "approved: <reason>" in the audit row. The driver that blocked
+// the job could write that row for itself, on a deploy, a secret or a force push, and
+// it read as a human approval. The claimant's plain resume is now refused unless it is
+// the admin or holds can_merge; everyone else who could resume before still can.
+
+async function plainResume(agent: unknown, command: string, opts: { take?: boolean } = {}) {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
-  const { db } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, driverAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "the human ran it");
-  assert.equal(result.ok, true, `an ordinary resume was refused: ${JSON.stringify(result)}`);
+  const fake = resumeDb(await blockedJob(command), policy);
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET });
+  const result = await resumeJob(env, agent as never, new Date("2026-09-25T03:00:00Z"), "job_4c0ecc28548b", "the human ran it", { take: opts.take });
+  return { result, ...fake };
+}
+
+test("PLANT: a DRIVER may not resume its own blocked job with a plain resume", async () => {
+  for (const command of ["npm run deploy", "npx wrangler secret put IMPROVE_SCORE_SECRET", "git push --force origin feat/x", "git push -u origin feat/x"]) {
+    for (const take of [false, true]) {
+      const { result, recorded, row } = await plainResume(driverAgent(), command, { take });
+      assert.equal(result.ok, false, `the claimant resumed its own block on '${command}' (take: ${take})`);
+      assert.match(String(result.refusal), /cannot approve its own gate/);
+      assert.match(String(result.refusal), /admin or can_merge/, "the refusal must say who can resume it");
+      assert.equal(row.status, "blocked");
+      assert.equal(auditRow(recorded, "job-resumed"), null, "a refused resume wrote an approval row");
+      assert.equal(recorded.some((r) => /^UPDATE jobs SET/i.test(r.sql)), false);
+    }
+  }
+});
+
+test("the SEAT and the ADMIN may resume the driver's job, and it goes back to the driver", async () => {
+  const admin = { ...seatAgent(), name: "admin", kind: "seat", actor: "github:DrDustinEdwards", admin: true };
+  admin.scopes = defaultScopes(["capsid"]);
+  admin.scopes.grants = ["read", "write"];
+  for (const agent of [seatAgent(), admin]) {
+    const { result, row, recorded } = await plainResume(agent, "npm run deploy");
+    assert.equal(result.ok, true, `${agent.actor} was refused: ${JSON.stringify(result)}`);
+    assert.equal(row.claimed_by, "agent:capsid-driver");
+    assert.equal(auditRow(recorded, "job-resumed")?.approved, "the human ran it");
+  }
+});
+
+test("a SEAT or ADMIN that is itself the claimant may still resume its own job", async () => {
+  // The exception is for the caller that can approve gates in the first place.
+  const seat = { ...seatAgent(), actor: "agent:capsid-driver" };
+  const { result } = await plainResume(seat, "npm run deploy");
+  assert.equal(result.ok, true, `a can_merge claimant was refused: ${JSON.stringify(result)}`);
+});
+
+test("a DIFFERENT write-grant caller may still resume, and the job goes back to its claimant", async () => {
+  const other = { ...driverAgent(), name: "other-driver", actor: "agent:other-driver" };
+  const { result, row } = await plainResume(other, "npm run deploy");
+  assert.equal(result.ok, true, `another write-grant caller was refused: ${JSON.stringify(result)}`);
+  assert.equal(row.claimed_by, "agent:capsid-driver");
 });
 
 test("PLANT: an approved class cannot carry a passenger", () => {

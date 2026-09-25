@@ -1230,6 +1230,13 @@ export async function blockJob(
 // the session that blocked. The reason is required and lands in the audit row, so
 // what was approved is recorded rather than implied.
 //
+// EXCEPT THE CLAIMANT ITSELF, on a plain resume (audit 2026-09-25, finding F2-6). A
+// driver that blocked a job on a deploy, a secret or a force push could resume it with
+// any reason, and the audit row then read "approved: <reason>" as though a human had
+// said yes. The policy path was closed for the same reason on 2026-09-13; this closes
+// the plain path. The claimant may still resume its own job if it is the admin or
+// holds can_merge, or through approved_by_policy for a branch push or a pull request.
+//
 // WHO HOLDS IT AFTERWARDS: the driver that blocked it, not the caller that resumed
 // it (ruled 2026-09-16). A blocked row keeps claimed_by, and the lease goes back to
 // that claimant. Until then the resumer took the lease, so the seat's resume of
@@ -1285,6 +1292,19 @@ export async function resumeJob(
     return refuse(
       "resume",
       `${id} is ${current.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`
+    );
+  }
+
+  // THE SEAT IS IDENTIFIED BY admin OR can_merge, as it is for supersede and for the
+  // policy path below. A plain resume is a record that somebody approved the gate, and
+  // the claimant approving its own gate is no approval. `take` does not change who the
+  // claimant is, so a claimant passing take is refused the same way.
+  const isSeat = agent.admin || agent.scopes.flags.can_merge;
+  if (approvedByPolicy === undefined && !isSeat && current.claimed_by === actor) {
+    return refuse(
+      "resume",
+      `${actor} blocked ${id} and cannot approve its own gate with a plain resume. The seat (admin or can_merge) resumes it once the command is approved, ` +
+        `or, for a branch push or a pull request only, resume with approved_by_policy. It stays blocked.`
     );
   }
 
@@ -1388,7 +1408,6 @@ export async function resumeJob(
     // every class the command matched is in DRIVER_SELF_APPROVED. The classification is
     // still the Worker's, through the same approveByPolicy call the seat's approval
     // makes, so the never list still runs first and a force push still waits.
-    const isSeat = agent.admin || agent.scopes.flags.can_merge;
     if (!isSeat && (current.claimed_by !== actor || take)) {
       return refuse(
         "resume",
