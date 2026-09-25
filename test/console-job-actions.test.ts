@@ -26,7 +26,7 @@ interface Recorded {
   params: unknown[];
 }
 
-function jobsDb(job: Record<string, unknown>) {
+function jobsDb(job: Record<string, unknown>, opts: { failConsoleAudit?: boolean } = {}) {
   const recorded: Recorded[] = [];
   const row = { ...job };
   const stmt = (sql: string, params: unknown[] = []): D1PreparedStatement => {
@@ -69,6 +69,13 @@ function jobsDb(job: Record<string, unknown>) {
     db: {
       prepare: (sql: string) => stmt(sql),
       batch: async (statements: unknown[]) => {
+        // The console's own audit row fails AFTER the transition has committed.
+        if (
+          opts.failConsoleAudit &&
+          statements.some((s) => (s as Recorded).params.some((p) => typeof p === "string" && p.startsWith("console-")))
+        ) {
+          throw new Error("D1_ERROR: simulated audit insert failure");
+        }
         for (const s of statements) recorded.push(s as Recorded);
         return [];
       },
@@ -197,6 +204,44 @@ test("resume_job needs an approval reason, and says why", async () => {
   assert.equal(res.status, 400);
   assert.match(await res.text(), /what you approved/i);
   assert.deepEqual(auditRows(recorded), []);
+});
+
+test("the resume confirmation says the job goes back to the driver that blocked it, not to the admin", async () => {
+  // resumeJob is called without take, so the lease returns to the blocked job's own
+  // claimant. The consent text must describe that, not a lease the admin never gets.
+  const { db, recorded } = jobsDb(await blockedJob());
+  const session = (await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, NOW)).split(";")[0];
+  const res = await handleConsoleAction(
+    new Request("https://capsid.example/console", {
+      method: "POST",
+      headers: {
+        Cookie: `${session}; capsid_console_csrf=${CSRF}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ action: "resume_job", id: "job_1", reason: "approved", csrf: CSRF }).toString(),
+    }),
+    env(db),
+    NOW
+  );
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.doesNotMatch(html, /takes the lease|under your own login/i);
+  assert.match(html, /driver that blocked it/i);
+  assert.deepEqual(recorded, [], "the confirmation step wrote something");
+});
+
+test("a failed click audit AFTER the resume committed redirects with a warning, not a 400 saying nothing changed", async () => {
+  const { db, row } = jobsDb(await blockedJob(), { failConsoleAudit: true });
+  const res = await handleConsoleAction(
+    await post({ action: "resume_job", id: "job_1", reason: "approved" }),
+    env(db),
+    NOW
+  );
+  assert.equal(row.status, "claimed", "the resume should have committed");
+  assert.equal(res.status, 303, `a committed action must not report failure: ${res.status}`);
+  assert.equal(res.headers.get("Location"), "/console");
+  assert.match(res.headers.get("X-Capsid-Warning") ?? "", /audit/i);
+  assert.match(await res.text(), /resume_job completed/);
 });
 
 test("fail_job needs a reason too", async () => {
