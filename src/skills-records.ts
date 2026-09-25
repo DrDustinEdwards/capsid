@@ -189,17 +189,34 @@ export function failureNoteStatements(
  * Apply what the rules decided, as a keyed UPDATE so a status that moved underneath
  * this read does not get overwritten. Returns whether it landed.
  *
+ * THE AUDIT ROW IS IN THE SAME BATCH. When it was a second batch, a failure there
+ * left the status moved with no audit row, and the next pass could not write one
+ * because the keyed UPDATE no longer matched. The INSERT selects only when the row
+ * now holds the new status, so a transition that did not land records nothing.
+ *
  * The transition itself is decided by ./skills-lifecycle and never here: this is the
  * write, and splitting them is what lets the rules be tested without a database.
  */
-export async function commitTransition(env: Env, skill: string, from: SkillStatus, to: SkillStatus, now: Date): Promise<boolean> {
-  const won = await env.DB.prepare(
-    `UPDATE improve_skills SET status = ?3, retired_at = CASE WHEN ?3 = 'retired' THEN ?4 ELSE retired_at END
-     WHERE id = ?1 AND status = ?2 RETURNING id`
-  )
-    .bind(skill, from, to, now.toISOString())
-    .first<{ id: string }>();
-  return won !== null;
+export async function commitTransition(
+  env: Env,
+  skill: string,
+  from: SkillStatus,
+  to: SkillStatus,
+  now: Date,
+  reason: string
+): Promise<boolean> {
+  const [moved] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE improve_skills SET status = ?3, retired_at = CASE WHEN ?3 = 'retired' THEN ?4 ELSE retired_at END
+       WHERE id = ?1 AND status = ?2 RETURNING id`
+    ).bind(skill, from, to, now.toISOString()),
+    env.DB.prepare(
+      `INSERT INTO audit_log (actor, action, namespace, path, params)
+       SELECT ?1, 'skill-status-changed', NULL, NULL, ?2
+       WHERE EXISTS (SELECT 1 FROM improve_skills WHERE id = ?3 AND status = ?4)`
+    ).bind(IMPROVE_ACTOR, JSON.stringify({ skill, from, to, reason, at: now.toISOString() }), skill, to),
+  ]);
+  return (moved?.results?.length ?? 0) === 1;
 }
 
 /** Every candidate and live skill's transition verdict, from its stored evaluations. */

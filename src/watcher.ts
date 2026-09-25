@@ -4,7 +4,7 @@ import { noFlags } from "./agents-schema";
 import { BACKUP_STALE_HOURS, healthReport, type HealthReport } from "./health";
 import { ciStatus, defaultBranchSha, listRepoTree, readRepoFile } from "./github";
 import { improveStatus, type StatusReport } from "./improve-run";
-import { ROSTER } from "./improve-schema";
+import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
@@ -244,9 +244,10 @@ export function statusFindings(status: StatusReport, now: Date): Finding[] {
 
   for (const ns of status.namespaces ?? []) {
     // A PAUSE IS NOT A PROBLEM. A human pausing a namespace is the system working, so
-    // only the two machine-set reasons are reported: the loop paused itself and
-    // nobody has looked.
-    if (ns.paused && /budget|drift/i.test(ns.paused)) {
+    // only a pause the loop set on itself is reported. Those carry LOOP_PAUSE_PREFIX.
+    // A bare "budget" is the value written before the prefix existed and may still be
+    // in KV.
+    if (ns.paused && (ns.paused.startsWith(LOOP_PAUSE_PREFIX) || ns.paused === "budget")) {
       out.push(
         finding(ns.namespace, `paused-${ns.namespace}`, `${ns.namespace} is paused by the loop itself`, [
           `reason: ${ns.paused}`,
@@ -518,21 +519,65 @@ export async function clearFinding(env: Env, id: string, now: Date): Promise<boo
 // post what is new. Clearing first matters: a finding that flickers off and on would
 // otherwise be refused as a duplicate of the job about to be closed.
 
+// WHICH CHECK PRODUCES EACH FINGERPRINT. A pass clears an open job only when the
+// check that would have found it again actually ran. A read that failed is not
+// evidence that the problem went away, and clearing on it would record "cleared"
+// for a finding that was only unreadable. A fingerprint no check owns can never be
+// found again, so it is cleared as before.
+export const WATCHER_CHECKS = [
+  "health",
+  "master head",
+  "migrations",
+  "improve_status",
+  "blocked jobs",
+  "mirror dumps",
+  "mirror runs",
+  "scorer identity",
+  "scorer surface",
+  "ci",
+] as const;
+export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
+
+const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
+  [/^(health-degraded|backup-stale|backup-never)$/, "health"],
+  [/^deploy-drift-/, "master head"],
+  [/^schema-behind-/, "migrations"],
+  [/^(budget-|paused-)/, "improve_status"],
+  [/^blocked-/, "blocked jobs"],
+  [/^mirror-no-dump$/, "mirror dumps"],
+  [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "mirror runs"],
+  [/^scorer-unread-/, "scorer identity"],
+  [/^(scorer-diverged-|scorer-identity-unknown$)/, "scorer surface"],
+  [/^ci-red-/, "ci"],
+];
+
+export function owningCheck(fingerprint: string): WatcherCheck | null {
+  return OWNERS.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? null;
+}
+
+export interface Gathered {
+  findings: Finding[];
+  // The checks whose reads all succeeded this pass.
+  ran: ReadonlySet<WatcherCheck>;
+}
+
 export interface PassReaders {
-  findings: () => Promise<Finding[]>;
+  findings: () => Promise<Gathered>;
   open: () => Promise<Map<string, string>>;
   clear: (id: string) => Promise<boolean>;
   post: (f: Finding) => Promise<{ ok: boolean; refusal?: string }>;
 }
 
 export async function runPass(readers: PassReaders): Promise<{ posted: string[]; cleared: string[] }> {
-  const found = await readers.findings();
+  const { findings: found, ran } = await readers.findings();
   const byFingerprint = new Map(found.map((f) => [f.fingerprint, f]));
   const open = await readers.open();
 
   const cleared: string[] = [];
   for (const [fingerprint, id] of open) {
     if (byFingerprint.has(fingerprint)) continue;
+    const owner = owningCheck(fingerprint);
+    if (owner && !ran.has(owner)) continue;
     if (await readers.clear(id)) cleared.push(fingerprint);
   }
 
@@ -551,7 +596,7 @@ export async function runPass(readers: PassReaders): Promise<{ posted: string[];
 
 /** The step the five-minute tick calls. Gates on its own cadence first, so all but
  *  one invocation in six returns after a single KV read. */
-export async function watcherTick(env: Env, now: Date, gather: () => Promise<Finding[]>): Promise<WatcherReport> {
+export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>): Promise<WatcherReport> {
   const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);
   const due = passDue(last, minutes, now);
@@ -726,8 +771,9 @@ export function identityFindings(read: ScorerSurface[], unreadable: string[], ma
   return out;
 }
 
-export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
+export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
   const out: Finding[] = [];
+  const ran = new Set<WatcherCheck>();
 
   // NO CASTS ON A REPO READER'S RESULT. Until 2026-09-17 both reads below went
   // through one: the head read called repoHistory with no ref, which throws, and the
@@ -737,19 +783,30 @@ export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
   // `npm run check`; test/watcher-gather.test.ts drives both reads end to end.
   const health = await attempt("health", () => healthReport(env));
   if (health) {
+    ran.add("health");
     const head = await attempt("master head", () => defaultBranchSha(env, "capsid"));
+    if (head !== null) ran.add("master head");
+    // Wrapped in an object so a tree with no migrations (null) is told apart from a
+    // read that failed (also null from attempt).
     const migrations = await attempt("migrations", async () => {
       const tree = await listRepoTree(env, "capsid", "migrations");
-      return newestMigration(tree.entries.map((e) => basename(e.path)));
+      return { newest: newestMigration(tree.entries.map((e) => basename(e.path))) };
     });
-    out.push(...healthFindings(health, head ?? null, migrations ?? null, "capsid"));
+    if (migrations !== null) ran.add("migrations");
+    out.push(...healthFindings(health, head ?? null, migrations?.newest ?? null, "capsid"));
   }
 
   const status = await attempt("improve_status", () => improveStatus(env));
-  if (status) out.push(...statusFindings(status, now));
+  if (status) {
+    ran.add("improve_status");
+    out.push(...statusFindings(status, now));
+  }
 
   const blocked = await attempt("blocked jobs", () => readStaleBlocked(env, now));
-  if (blocked) out.push(...staleBlockedFindings(blocked, now));
+  if (blocked) {
+    ran.add("blocked jobs");
+    out.push(...staleBlockedFindings(blocked, now));
+  }
 
   // THE OFF-ACCOUNT MIRROR. Resolved through the namespace mapping like every other
   // repo call: capsid, selector "backups". Nothing is hardcoded here and no agent
@@ -768,17 +825,33 @@ export async function gatherFindings(env: Env, now: Date): Promise<Finding[]> {
     return tree.entries;
   });
   if (dumps) {
-    const runs: MirrorRun[] =
-      (await attempt("mirror runs", async () => (await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 })).runs)) ?? [];
-    out.push(...mirrorFindings("capsid", newestDump(dumps), runs, now));
+    ran.add("mirror dumps");
+    const runs: MirrorRun[] | null = await attempt("mirror runs", async () => (await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 })).runs);
+    if (runs) ran.add("mirror runs");
+    out.push(...mirrorFindings("capsid", newestDump(dumps), runs ?? [], now));
   }
 
-  out.push(...((await attempt("scorer identity", () => scorerIdentityFindings(env))) ?? []));
+  const scorer = await attempt("scorer identity", () => scorerIdentityFindings(env));
+  if (scorer) {
+    ran.add("scorer identity");
+    // A comparison over fewer than all five repos says nothing about the ones it
+    // could not read, so the identity findings are only cleared on a full read.
+    if (!scorer.some((f) => owningCheck(f.fingerprint) === "scorer identity")) ran.add("scorer surface");
+    out.push(...scorer);
+  }
 
+  // The open-job map is keyed by fingerprint alone, and a ci-red fingerprint does
+  // not name its namespace, so the ci check counts as run only when every roster
+  // repo was read.
+  let ciRead = 0;
   for (const namespace of ROSTER) {
     const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);
-    if (runs) out.push(...ciFindings(namespace, runs, now));
+    if (runs) {
+      ciRead++;
+      out.push(...ciFindings(namespace, runs, now));
+    }
   }
+  if (ciRead === ROSTER.length) ran.add("ci");
 
-  return out;
+  return { findings: out, ran };
 }

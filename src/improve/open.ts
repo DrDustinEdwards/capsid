@@ -14,6 +14,7 @@ import {
   ROSTER,
   SCORES_PATH,
   chicagoDay,
+  loopPauseReason,
   runId as makeRunId,
   runTaskPath,
   type ImproveMode,
@@ -132,7 +133,7 @@ export async function checkBudget(env: Env, now: Date): Promise<BudgetStatus> {
 }
 
 // Returns the refusal reason when a cap is exceeded, after pausing every roster
-// namespace with reason "budget" (skipping ones already paused, so a five-minute tick
+// namespace with reason "loop: budget" (skipping ones already paused, so a five-minute tick
 // does not rewrite eight KV keys forever). The pause is deliberate double coverage:
 // the opener and tick refuse on their own, and the pause makes the stop visible in
 // improve_status and survives a code path that forgets to ask.
@@ -144,7 +145,7 @@ export async function enforceBudget(env: Env, now: Date): Promise<string | null>
   );
   for (const namespace of ROSTER) {
     if (!(await pausedReason(env.APP_KV, namespace))) {
-      await pauseNamespace(env.APP_KV, namespace, "budget");
+      await pauseNamespace(env.APP_KV, namespace, loopPauseReason("budget"));
     }
   }
   return budget.reason;

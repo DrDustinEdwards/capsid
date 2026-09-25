@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUDGET_DEFAULTS, ROSTER } from "../src/improve-schema.ts";
+import { BUDGET_DEFAULTS, loopPauseReason, ROSTER } from "../src/improve-schema.ts";
 import { checkBudget, improveStatus, openRuns, tickRuns } from "../src/improve-run.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
@@ -76,7 +76,7 @@ test("an exceeded Actions-minutes cap opens NOTHING and pauses every roster name
     assert.match(summary.outcomes[0].note, /budget exceeded/);
     assert.match(summary.outcomes[0].note, /301\.0 of 300 Actions minutes/);
     for (const namespace of ROSTER) {
-      assert.equal(kv.store.get(`improve:paused:${namespace}`), "budget", `${namespace} was not paused`);
+      assert.equal(kv.store.get(`improve:paused:${namespace}`), loopPauseReason("budget"), `${namespace} was not paused`);
     }
   });
 });

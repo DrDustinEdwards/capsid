@@ -1,5 +1,4 @@
 import type { Env } from "./env";
-import { improveAudit } from "./improve-state";
 import {
   acceptEdit,
   shouldProposeMerge,
@@ -100,18 +99,9 @@ export async function runEvaluationCycle(env: Env, now: Date): Promise<CycleRepo
   const transitions: CycleReport["transitions"] = [];
   for (const { skill, verdict: decision } of await dueTransitions(env)) {
     if (!decision.change) continue;
-    const landed = await commitTransition(env, skill, decision.from, decision.to, now);
+    const landed = await commitTransition(env, skill, decision.from, decision.to, now, decision.reason);
     if (!landed) continue;
     transitions.push({ skill, from: decision.from, to: decision.to, reason: decision.reason });
-    await env.DB.batch([
-      improveAudit(env.DB, "skill-status-changed", null, {
-        skill,
-        from: decision.from,
-        to: decision.to,
-        reason: decision.reason,
-        at: now.toISOString(),
-      }),
-    ]);
   }
 
   await env.APP_KV.put(LAST_CYCLE_KEY, now.toISOString());
