@@ -251,7 +251,8 @@ export interface FakeD1Options {
   improveSkills?: Array<Record<string, unknown>>;
   // Seed audit_log rows so the read/brief provenance lookup (last_actor) can be
   // driven. Later entries win, matching ORDER BY id DESC. Absent by default.
-  auditLog?: Array<{ namespace: string; path: string; actor: string | null }>;
+  // An id is optional; the backup's paged export reads it.
+  auditLog?: Array<{ id?: number; namespace: string; path: string; actor: string | null }>;
   // Applied migration names in apply order, so /health's schema_version query
   // (SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1) has something to
   // answer. Absent by default; a health test seeds them.
@@ -284,7 +285,7 @@ export interface FakeD1Rows {
   skill_evaluations: Array<Record<string, unknown>>;
   skill_edits: Array<Record<string, unknown>>;
   skill_failures: Array<Record<string, unknown>>;
-  audit_log: Array<{ namespace: string; path: string; actor: string | null }>;
+  audit_log: Array<{ id?: number; namespace: string; path: string; actor: string | null }>;
   agents: Array<Record<string, unknown>>;
   jobs: Array<Record<string, unknown>>;
   job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
@@ -513,17 +514,24 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
       return rows.job_outcome_prs.filter((r) => r.job_id === params[0]).map((r) => ({ pr_url: r.pr_url }));
     }
-    // The backup's paged table: its bound, read inside the snapshot batch, and its
+    // The backup's paged tables: the bound, read inside the snapshot batch, and the
     // pages, read after it. Matched before the plain dump below, which would
-    // otherwise answer a page with every row.
-    if (/^SELECT MAX\(id\) AS max_id FROM document_versions$/i.test(flat)) {
-      return [{ max_id: rows.versions.length ? Math.max(...rows.versions.map((v) => v.id)) : null }];
+    // otherwise answer a page with every row. An audit row seeded without an id
+    // counts as id 0, so it is below every bound and never paged.
+    const pagedRows = (table: string): Array<{ id?: number }> | null =>
+      table === "document_versions" ? rows.versions : table === "audit_log" ? rows.audit_log : null;
+    const maxIdOf = flat.match(/^SELECT MAX\(id\) AS max_id FROM (\w+)$/i);
+    const maxIdRows = maxIdOf ? pagedRows(maxIdOf[1]) : null;
+    if (maxIdRows) {
+      return [{ max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null }];
     }
-    if (/^SELECT \* FROM document_versions WHERE id > \?1 AND id <= \?2 ORDER BY id LIMIT \?3$/i.test(flat)) {
+    const pageOf = flat.match(/^SELECT \* FROM (\w+) WHERE id > \?1 AND id <= \?2 ORDER BY id LIMIT \?3$/i);
+    const pageRows = pageOf ? pagedRows(pageOf[1]) : null;
+    if (pageRows) {
       const [after, max, limit] = params as [number, number, number];
-      return rows.versions
-        .filter((v) => v.id > after && v.id <= max)
-        .sort((a, b) => a.id - b.id)
+      return pageRows
+        .filter((r) => (r.id ?? 0) > after && (r.id ?? 0) <= max)
+        .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
         .slice(0, limit);
     }
     // The backup dump: SELECT * FROM <table>, no WHERE.
