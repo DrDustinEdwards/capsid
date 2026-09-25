@@ -1,15 +1,10 @@
 // Re-copy the byte-identical scorer surface from this repo to the four roster repos.
+// The score job and scripts/improve-report.mjs must be byte-identical across all
+// five, and an edit to either here (comments included) diverges the other four
+// until this runs.
 //
-// WHY THIS EXISTS. The score job and scripts/improve-report.mjs are byte-identical
-// across all five roster repos, and nothing enforced that. On 2026-09-10 a comment
-// pass (PR #10) rewrote both here and the four copies silently diverged; the same
-// pass also deleted four executable diagnostics from the score job, which is why a
-// "comment sync" is not a thing anyone should do by hand.
-//
-// CROSS-REPO IDENTITY CANNOT BE ASSERTED BY AN OFFLINE TEST. The other four repos
-// are not on this disk in CI, so test/sync-scorer.test.ts checks the half that can
-// run here (the marker is unique, the split is lossless, the hash is stable) and
-// the dry run below checks the half that needs the clones.
+// The other four repos are not on disk in CI, so test/sync-scorer.test.ts checks
+// the split and the hash, and the dry run below does the cross-repo comparison.
 //
 //   node scripts/sync-scorer.mjs           report what would change, write nothing
 //   node scripts/sync-scorer.mjs --apply   write the files into each clone
@@ -28,55 +23,23 @@ export const REPORT = "scripts/improve-report.mjs";
 
 const DEV = join(import.meta.dirname, "..", "..");
 
-// THE SOURCE IS THIS REPO, RESOLVED FROM THIS FILE RATHER THAN NAMED.
-//
-// It was a hardcoded folder name, and 4c1a089 rewrote it along with every other
-// mention of the renamed repository. The REPOSITORY is capsid; the clone on this
-// machine deliberately keeps its pre-rename folder name, as capsid/core.md says,
-// so the rename pointed this at a directory that does not exist and the copier
-// threw on its first git call ever after. Nothing caught it because nothing had
-// run it and no test resolved the path. The folder is not named here on purpose:
-// deriving the path means no spelling is needed at all.
-//
-// Deriving it from import.meta.dirname removes the class rather than correcting
-// the spelling: this file lives in the source repo, so the source is wherever
-// this file is, whatever anyone renames.
+// The source is this repo, resolved from this file's location rather than named: the
+// local clone's folder name differs from the repository name, and a hardcoded name
+// breaks on any rename.
 export const SOURCE_ROOT = join(import.meta.dirname, "..");
 const SOURCE = { dir: SOURCE_ROOT, ref: "master", label: basename(SOURCE_ROOT) };
 
-// EVERY TARGET IS AN ABSOLUTE PATH, and dustinedwards-info is NOT its clone.
+// Every target is an absolute path. dustinedwards-info is written in
+// dev/worktrees/capsid on branch improve/capsid, never in its own clone, because
+// another session owns that clone and its main.
 //
-// Ruling 60 (dustinedwards/decisions-vol-18.md, 2026-09-11): every rollout the
-// Capsid seat makes to dustinedwards-info runs in dev/worktrees/capsid on branch
-// improve/capsid, never in dev/dustinedwards-info, because the site session owns
-// that clone and main. This list named the clone, so running --apply would have
-// written into it. The job that ordered this rollout says the same thing in its
-// own words, which is what surfaced the conflict.
+// `ref` is where the copier WRITES. `runs` is what the repo RUNS: its default branch,
+// the ref CI reads and the watcher hashes. They differ only for dustinedwards-info.
+// Comparing against the rollout branch instead would compare the copier's last output
+// with itself and hide drift on the default branch.
 //
-// A ROLLOUT BRANCH IS NOT WHAT THE REPO RUNS, and comparing against one hides drift.
-//
-// `ref` is where the copier WRITES. `runs` is what the repo actually RUNS: its
-// default branch, the ref CI reads and the one the watcher hashes. They are the same
-// everywhere except dustinedwards-info, where ruling 60 sends the write to a rollout
-// branch in the worktree.
-//
-// Measured 2026-09-18, job_3bde47744566. improve/capsid carried this copier's own
-// last output, synced on 2026-09-16 and never landed. main did not: 748f859 that
-// morning recut the comment headers of 93 files repo-wide, scripts/improve-report.mjs
-// among them, leaving a696dd63 against this repo's 6ab6cc8c. The executable lines
-// were byte-identical and 352 comment lines were not. The watcher reads default
-// branches and reported the drift; the copier read the rollout branch, compared its
-// own last output with itself, and printed identical.
-//
-// A report of agreement that does not exist is the same defect as a report of drift
-// that does not exist, which is what capsid/decisions.md ruled on 2026-09-16 and what
-// the stale-clone fix in PR #78 corrected the same morning. This is that defect one
-// ref further out: the clone was current, and the ref was not the one that matters.
-//
-// `runs` is read from the REMOTE-TRACKING ref, never the local branch, because capsid
-// may require nothing of a local branch it does not own. main in that repository is
-// checked out in dev/dustinedwards-info and belongs to the site session, so no fetch
-// run from the worktree can move it.
+// `runs` is read from the remote-tracking ref, never the local branch, because the
+// local main there belongs to another session and no fetch from the worktree moves it.
 export const TARGETS = [
   {
     dir: join(DEV, "worktrees", "capsid"),
@@ -89,35 +52,13 @@ export const TARGETS = [
   { dir: join(DEV, "germomics"), ref: "main", label: "germomics" },
 ];
 
-// A REF BEHIND ITS REMOTE IS A REFUSAL, and this is the one that nearly shipped.
+// A ref behind its remote is a refusal. The copier reads `git show <ref>:<path>`,
+// which is whatever the LOCAL ref points at, so a stale ref reports false agreement
+// or false drift and --apply writes stale bytes.
 //
-// The copier reads `git show <ref>:<path>`, which is whatever the LOCAL ref points
-// at. On 2026-09-16 this repo's local master was 26 commits behind origin and did
-// not contain the Job B cache the rollout existed to propagate. The dry run duly
-// reported three of four targets as "identical", because they matched a source
-// that was stale, and --apply would have written the PRE-cache block into all of
-// them while printing that nothing needed to change.
-//
-// IT ASKS THE REMOTE, AND AN UNREACHABLE REMOTE IS A REFUSAL.
-//
-// This used to compare the local ref to its own remote-tracking branch and go no
-// further, on the reasoning that a copier reaching the network can fail for reasons
-// unrelated to the copy. That check cannot see the case it exists for: when the
-// remote-tracking ref is ITSELF stale, both sides are the same old commit and the
-// check passes.
-//
-// Measured 2026-09-18 on foxhound. Its clone had never been fetched, so `main` and
-// `origin/main` were both 826b67f while the real remote was 3360275, seven days and
-// one merged sync PR ahead. The check passed, the copier read the stale blobs, and
-// the dry run reported foxhound's scorer as diverged from capsid's. It was not:
-// every one of the five repos was byte-identical on its actual remote. A report of
-// drift that does not exist is the same defect as a report of agreement that does
-// not exist, which is what capsid/decisions.md ruled on 2026-09-16; this one cost
-// job_63f96b1d1a32, which was posted to investigate a divergence that was never there.
-//
-// So `git ls-remote` is asked, and the original concern is answered by failing
-// CLOSED: a remote that cannot be reached refuses the run and says so, rather than
-// falling back to comparing two local refs that agree with each other and nothing else.
+// It asks the remote with `git ls-remote`, because comparing the local ref to its
+// remote-tracking ref passes when both are stale. An unreachable remote refuses the
+// run rather than falling back to local refs.
 export function requireCurrent(dir, ref, label) {
   const at = (/** @type {string} */ r) =>
     execFileSync("git", ["-C", dir, "rev-parse", r], { encoding: "utf8" }).trim();
@@ -206,8 +147,7 @@ export function requireRemoteCurrent(dir, ref, label) {
  * writes into the rollout branch's tree. That is only sound while the rollout branch
  * contains the default branch: otherwise the file is correct and everything around it
  * is however many commits stale, and the pull request carries that difference as well
- * as the fix. improve/capsid was 64 commits behind main when this was written, which
- * is how a committed rollout sat unlanded for two days.
+ * as the fix.
  * @param {string} dir
  * @param {string} ref
  * @param {string} runs
@@ -225,9 +165,8 @@ export function requireLanded(dir, ref, runs, label) {
   }
 }
 
-// A MISSING CLONE IS A NAMED REFUSAL, not a git stack trace. The failure this
-// replaces printed "cannot change to ..." from deep inside execFileSync, which
-// reads as a broken script rather than as a machine that is not provisioned.
+// A missing clone is a named refusal rather than a git stack trace, so it reads as
+// a machine that is not provisioned rather than a broken script.
 function requireRepo(dir, label) {
   if (!existsSync(join(dir, ".git"))) {
     throw new Error(
@@ -267,23 +206,11 @@ export function splitBlock(text, label) {
 // ---- pinned actions: the SHA is shared, the version comment is not -----------
 //
 // A pinned step is `uses: owner/action@<40 hex> # v5`. The SHA is the security
-// property and is compared STRICTLY. The trailing comment is an annotation, and
-// Renovate rewrites it per repository on its own schedule: on 2026-09-14 it
-// expanded `# v5` to `# v5.1.0` in dustinedwards-info and nowhere else, which made
-// three of 400 lines differ and read as divergence. Measured the same week: the
-// SHAs were byte-identical across all five.
-//
-// So the comment is normalized out of the comparison, and PRESERVED on write. If
-// the copier overwrote it, Renovate would re-add it and open a pull request every
-// cycle, and a diff that is noise every time is a diff a reader learns to skip.
-// That is the habit this guard exists to protect.
-//
-// ONE PLACE UPGRADES THESE ACTIONS, and it is capsid. Renovate runs only here and
-// in dustinedwards-info; the other three targets have no config, so they change
-// only through this copier. When a real bump lands, the SHA changes and the strict
-// comparison fires. THAT IS THE GUARD WORKING, not routine drift: a SHA that
-// differs between repos means one of them is running an action version nobody
-// reviewed, and it is worth stopping for.
+// property and is compared strictly: a SHA that differs between repos means one of
+// them runs an action version nobody reviewed. The trailing comment is an annotation
+// Renovate rewrites per repository, so it is left out of the comparison and
+// preserved on write; overwriting it would make Renovate open a pull request every
+// cycle.
 const PIN_LINE = /^(\s*-?\s*uses:\s*[^\s@]+@[0-9a-f]{40})(\s*#.*)?\s*$/;
 
 /**
@@ -433,8 +360,7 @@ export function sync({ source, targets, apply, log = console.log }) {
     const wfDrift = short(normalizePins(cur.tail)) !== short(srcCompare);
     const rpDrift = short(curReport) !== short(srcReport);
 
-    // The ref that was COMPARED is printed, not the one that will be written, because
-    // a line naming the wrong ref is how this went unnoticed for two days.
+    // The ref that was COMPARED is printed, not the one that will be written.
     log(`${t.label}@${read}${t.runs ? ` (writes ${t.ref})` : ""}`);
     log(`  score block  ${short(normalizePins(cur.tail))} -> ${short(srcCompare)}  ${wfDrift ? "CHANGES" : "identical"}`);
     log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
