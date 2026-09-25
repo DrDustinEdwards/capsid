@@ -62,12 +62,30 @@ jobs:
     # job's observed run.
     timeout-minutes: 20
     steps:
+      # Full history, so the trailer check below can read every commit in the range
+      # a push or pull request adds. The default depth of 1 holds only the tip.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      # CLAUDE.md, no AI trailer rule. Fails when a commit this push or pull request
+      # adds carries Co-Authored-By naming Claude, "Generated with Claude Code", a
+      # Claude-Session link, or any other trailer naming Claude. Older commits are not
+      # checked (no history rewrite, ruled 2026-09-25). A schedule or dispatch run adds
+      # no commits and checks nothing. Needs no install, so it runs first.
+      - name: No AI trailer on new commits
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: node scripts/check-commit-trailers.mjs
 
       # Verified on a fresh clone 2026-08-11: npm ci, npm run check and npm test all
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
