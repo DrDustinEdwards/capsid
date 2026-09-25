@@ -10,13 +10,23 @@ const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
 // KV lease is best-effort (no CAS). Export before prune. Dump TTL 90 days by age.
+//
+// The lease value carries a per-run token, and a run releases the lease only while
+// the value is still its own, so a run that outlived its TTL cannot delete the lease
+// of the run that started after it (audit finding F1-9, 2026-09-25). The TTL is an
+// hour: above the 15-minute wall limit on a cron invocation, with room for an
+// /ops/backup run, which has no wall limit. A lease left by an isolate that died
+// mid-run then blocks backups for at most an hour of a daily schedule.
 const LEASE_KEY = "backup:lease";
-const LEASE_TTL_SECONDS = 900;
+const LEASE_TTL_SECONDS = 3600;
 
 const JSON_RETENTION_DAYS = 90;
 // A floor under the age rule. If the cron stops for months every dump ages out,
 // so the newest N survive regardless of age.
 const JSON_MIN_KEPT = 14;
+// Written last into a run's prefix by a run whose dump is complete and whose
+// preflight passed. Underscore-prefixed like the sidecars.
+const COMPLETE_MARKER = "_complete.json";
 // Retention for the history tables. Both are covered by the dump shelf life above.
 const VERSION_RETENTION_DAYS = 90;
 const AUDIT_RETENTION_DAYS = 180;
@@ -35,7 +45,8 @@ function isOlderThan(key: string, prefix: string, cutoffDay: string): boolean {
 
 // Retention operates on the dump, never on the object (audit 2, F33 light). A dump
 // is a key PREFIX holding one object per table, so keys are grouped by run id (the
-// segment after backups/json/), the newest JSON_MIN_KEPT RUNS are the floor, and an
+// segment after backups/json/), the newest JSON_MIN_KEPT complete RUNS are the floor
+// (COMPLETE_MARKER), and an
 // aged-out run is deleted whole. Counting objects would cut the floor to 2.8 dumps.
 //
 // A run id begins with its own ISO day, which is why the age test below passes an
@@ -249,13 +260,18 @@ export async function runBackup(env: Env): Promise<BackupResult> {
     return { ran: false, skipped: "lease-held" };
   }
   const now = new Date().toISOString();
-  await env.APP_KV.put(LEASE_KEY, now, { expirationTtl: LEASE_TTL_SECONDS });
+  const lease = `${now} ${crypto.randomUUID()}`;
+  await env.APP_KV.put(LEASE_KEY, lease, { expirationTtl: LEASE_TTL_SECONDS });
   try {
     return await exportAndPrune(env, now);
   } finally {
     // Release on the way out, success or throw, so the TTL only has to cover an
-    // isolate that died mid-run.
-    await env.APP_KV.delete(LEASE_KEY);
+    // isolate that died mid-run. Only this run's own lease is released: if the TTL
+    // lapsed and another run took the key, deleting it would let a third run start
+    // beside that one.
+    const current = await env.APP_KV.get(LEASE_KEY);
+    if (current === lease) await env.APP_KV.delete(LEASE_KEY);
+    else console.error(`BACKUP_LEASE_LOST ${LEASE_KEY} is no longer this run's (now ${current}); left in place`);
   }
 }
 
@@ -273,15 +289,20 @@ function kvPinKeys(): string[] {
   return keys;
 }
 
-async function readKvPins(env: Env): Promise<Record<string, string | null>> {
-  const pins: Record<string, string | null> = {};
+// null means the key was unset. A key that could not be read is recorded as
+// { unreadable: reason } instead, because restoring a null for it would clear a mode
+// or a pause that existed (audit finding F1-7, 2026-09-25).
+type KvPin = string | null | { unreadable: string };
+
+async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
+  const pins: Record<string, KvPin> = {};
   for (const key of kvPinKeys()) {
     try {
       pins[key] = await env.APP_KV.get(key);
-    } catch {
-      // An unreadable key is a null beside the others. The D1 dump is the half that
-      // must not be lost to a KV hiccup.
-      pins[key] = null;
+    } catch (err) {
+      // An unreadable key does not fail the run. The D1 dump is the half that must
+      // not be lost to a KV hiccup.
+      pins[key] = { unreadable: err instanceof Error ? err.message : String(err) };
     }
   }
   return pins;
@@ -388,6 +409,16 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     };
   }
 
+  // THE COMPLETION MARKER (audit finding F1-8, 2026-09-25). Written after every table
+  // object and both sidecars, and only once the preflight passed, so a run that threw
+  // mid-export and a refused run carry none. Only a marked run counts toward the
+  // retention floor below. It lists the objects it vouches for.
+  const completeKey = `${jsonPrefix}${COMPLETE_MARKER}`;
+  await env.MEDIA.put(completeKey, JSON.stringify({ exported_at: now, keys: jsonKeys }), {
+    httpMetadata: { contentType: "application/json" },
+  });
+  jsonKeys.push(completeKey);
+
   const currentKeys = new Set<string>();
   for (let i = 0; i < docs.length; i += PUT_CONCURRENCY) {
     await Promise.all(
@@ -413,7 +444,16 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   }
   const runIds = [...runs.keys()].sort().reverse();
   const dumpCutoff = cutoffDay(new Date(now), JSON_RETENTION_DAYS);
-  const staleRunIds = runIds.slice(JSON_MIN_KEPT).filter((id) => isOlderThan(id, "", dumpCutoff));
+  // The floor is the newest JSON_MIN_KEPT COUNTED runs. A marked run counts. An
+  // unmarked run counts only if it sorts before the oldest marked run: it was written
+  // before the marker existed, and the old rule counted it, so a deploy of the marker
+  // prunes nothing the old rule kept. An unmarked run newer than that is partial or
+  // refused; it holds no floor slot and ages out on the 90-day rule like any run.
+  const isMarked = (id: string) => (runs.get(id) ?? []).includes(`${JSON_PREFIX}${id}/${COMPLETE_MARKER}`);
+  const oldestMarked = runIds.filter(isMarked).at(-1);
+  const counted = runIds.filter((id) => isMarked(id) || oldestMarked === undefined || id < oldestMarked);
+  const floor = new Set(counted.slice(0, JSON_MIN_KEPT));
+  const staleRunIds = runIds.filter((id) => !floor.has(id) && isOlderThan(id, "", dumpCutoff));
   const staleDumpKeys = staleRunIds.flatMap((id) => runs.get(id) ?? []);
   if (staleDumpKeys.length > 0) await deleteInChunks(env.MEDIA, staleDumpKeys);
 
