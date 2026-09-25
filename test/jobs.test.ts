@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
-import { completeJob, failJob, postJob, supersedeJob } from "../src/jobs.ts";
+import { claimJob, completeJob, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
@@ -418,4 +418,121 @@ test("naming no skills at all is not a refusal: most jobs have no recommend step
   // It refuses for an unrelated reason (no such job in this fake) or succeeds, but it
   // must not refuse ON THE SKILLS.
   assert.equal(/skill/i.test(out.refusal ?? ""), false, `refused on skills when none were named: ${out.refusal}`);
+});
+
+// ---- audit 2026-09-25, F3-7: a refusal is an error to the MCP client -------------------
+
+test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
+  // Every JobResult went through ok(), so ok: false came back with isError false and a
+  // client keying on isError read the refusal as success.
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "jobs-iserror", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = (await client.callTool({ name: "jobs", arguments: { action: "complete", id: "job_abc123abc123" } })) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
+    assert.equal(result.isError, true, `a refusal read as success: ${result.content[0].text}`);
+    const body = JSON.parse(result.content[0].text) as { ok: boolean; action: string; refusal?: string };
+    assert.equal(body.ok, false);
+    assert.equal(body.action, "complete");
+    assert.match(body.refusal ?? "", /needs a result_summary/);
+  } finally {
+    await client.close();
+  }
+});
+
+// ---- audit 2026-09-25, F3-4: marking a job failed checks that the row moved ------------
+//
+// A job that failed its signature check is marked failed with a keyed UPDATE. When the
+// row had moved first (another driver claimed it), the three copies of this path still
+// rewrote the mirror as failed and wrote an audit row saying so. This fake answers the
+// UPDATE with no row, as D1 does when the WHERE no longer matches, and records every
+// batch.
+function movedJobDb(before: Record<string, unknown>, after: Record<string, unknown>) {
+  const batches: unknown[][] = [];
+  const updates: string[] = [];
+  let reads = 0;
+  const stmt = (sql: string) => {
+    const flat = sql.replace(/\s+/g, " ").trim();
+    const s = {
+      bind: () => s,
+      first: async () => {
+        if (/SELECT \* FROM jobs WHERE id = \?1/.test(flat)) return reads++ === 0 ? { ...before } : { ...after };
+        if (/^UPDATE jobs SET/.test(flat)) {
+          updates.push(flat);
+          return null;
+        }
+        return null;
+      },
+      all: async () => ({ results: [] }),
+      run: async () => ({}),
+    };
+    return s;
+  };
+  const db = {
+    prepare: (sql: string) => stmt(sql),
+    batch: async (statements: unknown[]) => {
+      batches.push(statements);
+      return [];
+    },
+  };
+  return { db: db as unknown as D1Database, batches, updates };
+}
+
+const MOVED_JOB = {
+  id: "job_abc123abc123",
+  namespace: "capsid",
+  title: "a job",
+  body: "not signed",
+  priority: 0,
+  posted_by: "github:DrDustinEdwards",
+  claimed_at: null,
+  lease_expires: null,
+  result_ref: null,
+  result_summary: null,
+  gate_required: 0,
+  required_scopes: null,
+  min_record: null,
+  blocked_count: 0,
+  resumed_count: 0,
+  corrections_count: 0,
+  review_required: 0,
+  created_at: "2026-09-25T08:00:00.000Z",
+  updated_at: "2026-09-25T08:00:00.000Z",
+};
+
+test("PLANT: a claim whose bad-signature job moved first writes no mirror and no audit row", async () => {
+  const { db, batches, updates } = movedJobDb(
+    { ...MOVED_JOB, status: "queued", claimed_by: null },
+    { ...MOVED_JOB, status: "claimed", claimed_by: "agent:other-driver" }
+  );
+  const out = await claimJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), legacyAgent("write", "agent:capsid-driver"), new Date("2026-09-25T09:00:00Z"), {
+    id: "job_abc123abc123",
+  });
+  assert.equal(updates.length, 1, "the job was never offered the failed UPDATE");
+  assert.equal(out.ok, false);
+  assert.deepEqual(batches, [], "a job that moved was still mirrored and audited as failed");
+  assert.match(out.refusal ?? "", /now claimed, held by agent:other-driver/);
+  assert.doesNotMatch(out.refusal ?? "", /has been marked failed/);
+});
+
+test("PLANT: a resume whose bad-signature job moved first writes no mirror and no audit row", async () => {
+  const { db, batches, updates } = movedJobDb(
+    { ...MOVED_JOB, status: "blocked", claimed_by: "agent:capsid-driver", blocked_count: 1 },
+    { ...MOVED_JOB, status: "failed", claimed_by: "agent:capsid-driver", blocked_count: 1 }
+  );
+  const out = await resumeJob(
+    fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }),
+    adminAgent("DrDustinEdwards"),
+    new Date("2026-09-25T09:00:00Z"),
+    "job_abc123abc123",
+    "ran it"
+  );
+  assert.equal(updates.length, 1, "the job was never offered the failed UPDATE");
+  assert.equal(out.ok, false);
+  assert.deepEqual(batches, [], "a job that moved was still mirrored and audited as failed");
+  assert.match(out.refusal ?? "", /now failed/);
 });

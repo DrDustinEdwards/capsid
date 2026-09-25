@@ -240,9 +240,14 @@ test("PLANT: AT the cap, a further CHANGES BLOCKS for the seat instead of going 
   // 2026-09-13, finding 8). Driven through completeJob, the path a driver calls.
   const { db, row } = queueDb(claimedRow({ corrections_count: 2 }));
   await withComments(["REVIEW: still not right. CHANGES"], async () => {
-    // A BLOCK IS A SUCCESSFUL OUTCOME, so the call reports ok: the job stopped for the
-    // seat rather than failing. What this test is about is the row, not the return.
-    await finish(db);
+    // THE DRIVER ASKED TO COMPLETE AND THE JOB WAS BLOCKED, so the call is a refusal of
+    // the complete with the block recorded (audit 2026-09-25, F3-3). It returned ok:
+    // true with action "block", which a driver checking ok read as success.
+    const result = await finish(db);
+    assert.equal(result.ok, false, "a complete that ended blocked reported success");
+    assert.equal(result.action, "complete");
+    assert.equal(result.job?.status, "blocked");
+    assert.match(String(result.refusal), /blocked it for the seat/);
     assert.equal(row.status, "blocked", "a review loop past the cap sent the work back to the driver again");
     assert.equal(row.corrections_count, 2, "a blocked-for-the-seat job must not also spend another correction");
     assert.match(String(row.result_summary), /retry cap; human decision required/);
@@ -264,11 +269,26 @@ test("THE INNOCENT DIRECTION: below the cap, CHANGES still goes back to the driv
 test("BLOCK: the job is blocked for the seat, carrying the objection", async () => {
   const { db, row } = queueDb(claimedRow());
   await withComments(["REVIEW: this changes the auth model and needs a ruling. BLOCK"], async () => {
-    await finish(db);
+    const result = await finish(db);
+    assert.equal(result.ok, false, "a complete that ended blocked reported success");
+    assert.equal(result.action, "complete");
+    assert.equal(result.job?.status, "blocked");
+    assert.match(String(result.refusal), /needs a ruling/, "the refusal must carry the reviewer's objection");
     assert.equal(row.status, "blocked");
     assert.match(String(row.result_summary), /BLOCK/);
     assert.match(String(row.result_summary), /needs a ruling/);
     assert.equal(row.corrections_count, 0, "a BLOCK is not a correction; nobody is being asked to fix anything");
+  });
+});
+
+test("A BLOCK THAT MEETS A REVIEWER BLOCK ended where it asked, so it reports ok", async () => {
+  // The innocent direction for the refusal above: a caller that asked to block got a block.
+  const { db, row } = queueDb(claimedRow());
+  await withComments(["REVIEW: needs a ruling. BLOCK"], async () => {
+    const result = await blockJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", { reason: "stopping" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.action, "block");
+    assert.equal(row.status, "blocked");
   });
 });
 
