@@ -68,6 +68,8 @@ async function resumedAudit(id: string) {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
   await env.DB.prepare("DELETE FROM job_outcomes").run();
+  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%' OR path = ?1").bind(GATE_POLICY_PATH).run();
   await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', ?1, 'gates', ?2, 'procedural', 'published')")

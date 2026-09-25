@@ -19,7 +19,7 @@ import {
 import { commandFromSummary, RESUME_MARKER, resumeJob } from "../src/jobs.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { signTaskBody } from "../src/improve-task.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // PART 2 OF THE AUTONOMY ARC. The seat may send a blocked job back in on the signed
 // gate policy instead of on a human saying yes, and only for a command that matches a
@@ -332,6 +332,10 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
           return params[1] === GATE_POLICY_PATH ? { body: policyBody } : null;
         }
         if (/SELECT id, title, body FROM documents/i.test(flat)) return null;
+        // The namespace mapping a migration read resolves the job's pull request through.
+        if (/SELECT repos FROM namespaces/i.test(flat)) {
+          return params[0] === "capsid" ? { repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }]) } : null;
+        }
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id || row.status !== "blocked") return null;
@@ -890,4 +894,104 @@ test("THE DANGEROUS DIRECTION: -C carries no default-branch push and no force fl
 test("a -C path carrying a glob is not a path this policy reads", () => {
   const match = classifyCommand("git -C C:\\Users\\email\\dev\\* push -u origin fix/x");
   assert.ok("refused" in match, "a glob would let the shell pick the directory when the command ran");
+});
+
+// ---- audit 2026-09-25, F2-7: the migration class is anchored, and reads the job's head --
+
+test("PLANT: a d1 execute segment carrying extra arguments is not a migration this policy covers", () => {
+  // The matcher was an unanchored search, so everything else in the segment rode along
+  // with the one file it checked.
+  for (const cmd of [
+    "npx wrangler d1 execute capsid --remote --file migrations/0012_skills.sql --file scratch/drop.sql",
+    "npx wrangler d1 execute capsid other-db --remote --file migrations/0012_skills.sql",
+    "npx wrangler d1 execute capsid --remote --file migrations/0012_skills.sql --env production",
+    "npx wrangler d1 execute capsid --remote --local --file migrations/0012_skills.sql",
+  ]) {
+    const match = classifyCommand(cmd);
+    assert.ok("refused" in match, `${cmd} classified as a migration`);
+  }
+});
+
+test("THE INNOCENT DIRECTION: the migration spellings a driver writes still classify", () => {
+  for (const cmd of [
+    MIGRATION_CMD,
+    "wrangler d1 execute capsid --remote --file=migrations/0012_skills.sql",
+    "npx wrangler d1 execute capsid --file migrations/0012_skills.sql --remote",
+    "npx wrangler d1 execute capsid --local --file \"migrations/0012_skills.sql\"",
+    "npx wrangler d1 execute capsid --file migrations/0012_skills.sql",
+  ]) {
+    const match = classifyCommand(cmd);
+    assert.ok("klasses" in match, `${cmd} was refused: ${JSON.stringify(match)}`);
+    assert.deepEqual("klasses" in match ? match.migrationPaths : [], ["migrations/0012_skills.sql"]);
+  }
+});
+
+const JOB_PR = "https://github.com/DrDustinEdwards/capsid-mcp/pull/40";
+const JOB_HEAD = "1234567890abcdef1234567890abcdef12345678";
+const MIGRATION_19 = "npx wrangler d1 execute capsid --remote --file migrations/0019_x.sql";
+
+// A fake GitHub holding the file at two places: the job's pull request head and the
+// default branch. Records every contents read, with its ref.
+async function withMigrationAt<T>(files: { head: string | null; defaultBranch: string | null }, fn: (reads: string[]) => Promise<T>): Promise<T> {
+  const original = globalThis.fetch;
+  const reads: string[] = [];
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  globalThis.fetch = (async (input: string) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/repos/DrDustinEdwards/capsid-mcp/pulls/40") return json({ head: { sha: JOB_HEAD } });
+    if (url.pathname === "/repos/DrDustinEdwards/capsid-mcp/contents/migrations/0019_x.sql") {
+      const ref = url.searchParams.get("ref");
+      reads.push(ref ?? "(default branch)");
+      const body = ref === JOB_HEAD ? files.head : ref === null ? files.defaultBranch : null;
+      if (body === null) return json({ message: "Not Found" }, 404);
+      return json({ type: "file", encoding: "base64", content: Buffer.from(body).toString("base64"), size: body.length, sha: "f".repeat(40) });
+    }
+    return new Response("not modelled", { status: 404 });
+  }) as never;
+  try {
+    return await fn(reads);
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+async function seatMigrationResume(resultRef: string | null) {
+  const policy = await signTaskBody(SECRET, GOOD_POLICY);
+  const job = await blockedJob(MIGRATION_19);
+  job.result_ref = resultRef as never;
+  const fake = resumeDb(job, policy);
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv({ seedToken: true }).kv });
+  const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-25T03:00:00Z"), "job_4c0ecc28548b", "additive", { approvedByPolicy: "1" });
+  return { result, ...fake };
+}
+
+test("PLANT: a migration that exists only on the job's branch is read there and approved", async () => {
+  // Absent from the default branch, which is the normal state of a new migration. Read
+  // from the default branch, it was refused as unreadable.
+  await withMigrationAt({ head: "CREATE TABLE IF NOT EXISTS x (a TEXT);", defaultBranch: null }, async (reads) => {
+    const { result, row } = await seatMigrationResume(JOB_PR);
+    assert.equal(result.ok, true, `the job's own migration was refused: ${JSON.stringify(result)}`);
+    assert.equal(row.status, "claimed");
+    assert.deepEqual(reads, [JOB_HEAD]);
+  });
+});
+
+test("PLANT: a same-named migration on the default branch does not approve the one at the job's head", async () => {
+  await withMigrationAt({ head: "DROP TABLE jobs;", defaultBranch: "CREATE TABLE IF NOT EXISTS x (a TEXT);" }, async (reads) => {
+    const { result, row } = await seatMigrationResume(JOB_PR);
+    assert.equal(result.ok, false, "the default branch's file approved the job's destructive one");
+    assert.match(String(result.refusal), /does not call additive/);
+    assert.equal(row.status, "blocked");
+    assert.deepEqual(reads, [JOB_HEAD]);
+  });
+});
+
+test("a migration resume on a job that records no pull request is refused and says why", async () => {
+  await withMigrationAt({ head: null, defaultBranch: "CREATE TABLE IF NOT EXISTS x (a TEXT);" }, async (reads) => {
+    const { result, row } = await seatMigrationResume(null);
+    assert.equal(result.ok, false);
+    assert.match(String(result.refusal), /records no pull request/);
+    assert.equal(row.status, "blocked");
+    assert.deepEqual(reads, [], "the default branch was read anyway");
+  });
 });
