@@ -225,7 +225,7 @@ export function healthFindings(
 
 /** What improve_status says that should not be true. Per namespace, because the job
  *  each finding becomes belongs to the namespace it is about. */
-export function statusFindings(status: StatusReport, now: Date): Finding[] {
+export function statusFindings(status: StatusReport): Finding[] {
   const out: Finding[] = [];
   const budget = status.budget;
   for (const key of ["model_usd_month", "actions_minutes_month"] as const) {
@@ -800,7 +800,7 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
   const status = await attempt("improve_status", () => improveStatus(env));
   if (status) {
     ran.add("improve_status");
-    out.push(...statusFindings(status, now));
+    out.push(...statusFindings(status));
   }
 
   const blocked = await attempt("blocked jobs", () => readStaleBlocked(env, now));

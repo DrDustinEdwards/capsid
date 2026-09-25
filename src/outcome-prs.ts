@@ -62,15 +62,6 @@ export interface ReverifyOutcome {
   changed: boolean;
 }
 
-/**
- * Re-read one pull request and write what GitHub says, for every outcome row that
- * named it.
- *
- * WHAT IT TOUCHES: the join row's merged flag and timestamp, and the outcome's
- * prs_merged recomputed as a COUNT over the join rows rather than incremented. A
- * count cannot drift; an increment run twice can, and this path runs on a merge AND
- * on a sweep, so it will be run twice on the same pull request eventually.
- */
 /** The two statements that record one pull request's merge state against one outcome.
  *
  *  Exported as a builder, the way outcomePrStatements is, so the integration suite can
@@ -119,6 +110,15 @@ export function reverifyStatements(db: D1Database, jobId: string, prUrl: string,
   ];
 }
 
+/**
+ * Re-read one pull request and write what GitHub says, for every outcome row that
+ * named it.
+ *
+ * WHAT IT TOUCHES: the join row's merged flag and timestamp, and the outcome's
+ * prs_merged recomputed as a COUNT over the join rows rather than incremented. A
+ * count cannot drift; an increment run twice can, and this path runs on a merge AND
+ * on a sweep, so it will be run twice on the same pull request eventually.
+ */
 export async function reverifyPr(
   env: Env,
   namespace: string,

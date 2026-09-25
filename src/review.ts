@@ -144,7 +144,6 @@ export function outcomeOf(review: Review | null): ReviewOutcome {
  *  on a review that was posted. */
 export async function readReviewComments(
   env: Env,
-  namespace: string,
   pr: PrUrl
 ): Promise<ReviewComment[]> {
   const resp = await ghFetch(env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments?per_page=100`);
@@ -328,7 +327,7 @@ export async function reviewGate(
         `Name a pull request in a repo that namespace ${job.namespace} maps.`,
     };
   }
-  const comments = await readReviewComments(env, job.namespace, target);
+  const comments = await readReviewComments(env, target);
   const eligible = await reviewerCommentIds(env.DB, job.namespace);
   const review = decidingReview(comments.filter((c) => c.id !== undefined && eligible.has(c.id)));
   // AN APPROVE COUNTS ONLY FOR THE HEAD IT QUOTES (ruled 2026-09-25). The review must

@@ -155,8 +155,6 @@ export type ToolGrant = "write" | "read";
 export interface ToolCtx {
   env: Env;
   db: D1Database;
-  grant: ToolGrant;
-  mayWrite: boolean;
   // `actor` is the principal recorded on every audit_log row. It replaced a hardcoded
   // 'operator' string at all eight audit write sites, which left the column answering
   // "what happened" and never "who did it".
@@ -167,9 +165,9 @@ export interface ToolCtx {
   // full hash in audit_log would copy it into the database the audit log holds to
   // account. Rows written before the change keep their literal 'operator' value.
   actor: string;
-  // THE CALLER, resolved once per request (src/agents.ts). `grant`, `mayWrite` and
-  // `actor` are all projections of it, kept as their own fields so the tool modules
-  // read unchanged; the scope checks that need more than a grant read this.
+  // THE CALLER, resolved once per request (src/agents.ts). `actor` is a projection of
+  // it, kept as its own field so the tool modules read unchanged; the scope checks
+  // read this.
   agent: Agent;
   // THE ONE CHECK, bound to this caller (src/scope.ts). Returns a refusal naming the
   // missing scope, or null. The registrar has already checked the tool, the grant,
