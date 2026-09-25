@@ -30,6 +30,7 @@ import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { readRepoFile } from "./github/contents";
+import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { signTaskBody, verifySignedBody } from "./improve-task";
 import { attributionStatements } from "./skills-records";
 import { loadRecordRows, recordFor } from "./agent-record";
@@ -339,6 +340,16 @@ export async function postJob(
   // driver runs whatever survived.
   const postSwallowed = swallowedParamTag(args.body);
   if (postSwallowed) return refuse("post", swallowedTagRefusal("body", postSwallowed));
+  // A REGISTERED NAMESPACE, as write requires for a document (audit 2026-09-25, F2-8).
+  // A caller scoped to * could post into a namespace that does not exist, and the job's
+  // mirror document landed there although write refuses the same path.
+  const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(args.namespace).first();
+  if (!registered) {
+    return refuse(
+      "post",
+      `unknown namespace '${args.namespace}'. Nothing was written. A job and its mirror document live in a registered namespace; check the spelling against the namespaces tool, or create it with register_namespace.`
+    );
+  }
 
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET, args.body);
   const job: JobRow = {
@@ -1307,6 +1318,35 @@ export interface ResumeOptions {
 // never list are the policy's own; this only narrows which of them a driver may use.
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
+/** The head commit of the job's own pull request, and the mapped repo it is on.
+ *  The pull request is the one the job records: its result_ref, or its job_outcome_prs
+ *  rows. Throws with the reason when there is none, more than one, one outside the
+ *  namespace's mapping, or one GitHub cannot read. */
+async function jobBranchHead(env: Env, job: JobRow): Promise<{ repo: string; sha: string }> {
+  const recorded = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1")
+    .bind(job.id)
+    .all<{ pr_url: string }>();
+  const byKey = new Map<string, PrUrl>();
+  for (const ref of [job.result_ref, ...(recorded.results ?? []).map((r) => r.pr_url)]) {
+    const pr = parsePrUrl(ref);
+    if (pr) byKey.set(`${pr.owner}/${pr.repo}#${pr.number}`.toLowerCase(), pr);
+  }
+  if (byKey.size === 0) {
+    throw new Error(`${job.id} records no pull request, so there is no branch head to read the migration at`);
+  }
+  if (byKey.size > 1) {
+    throw new Error(`${job.id} records more than one pull request (${[...byKey.keys()].join(", ")}), so which head runs the migration is not known`);
+  }
+  const [pr] = [...byKey.values()];
+  // resolveRepo refuses a repo the namespace does not map, before GitHub is asked.
+  const { owner, repo, full } = await resolveRepo(env, job.namespace, `${pr.owner}/${pr.repo}`);
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}`);
+  if (!resp.ok) throw new Error(`reading pull request #${pr.number} failed (${resp.status})`);
+  const sha = ((await resp.json()) as { head?: { sha?: string } }).head?.sha ?? "";
+  if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error(`pull request #${pr.number} reported no head commit`);
+  return { repo: full, sha };
+}
+
 export async function resumeJob(
   env: Env,
   agent: Agent,
@@ -1463,13 +1503,18 @@ export async function resumeJob(
         );
       }
     }
+    // THE MIGRATION IS READ AT THE JOB'S BRANCH HEAD, not on the default branch (audit
+    // 2026-09-25, F2-7). The approved command runs the file in the driver's checkout, so
+    // a new migration was absent from the default branch and refused, and a same-named
+    // file already there was approved on content other than what runs. Read once, and
+    // only when the command names a migration. A read that fails throws its reason,
+    // which approveByPolicy puts in the refusal.
+    let head: Promise<{ repo: string; sha: string }> | null = null;
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
-      try {
-        const file = await readRepoFile(env, current.namespace, path);
-        return (file as { content?: string }).content ?? null;
-      } catch {
-        return null;
-      }
+      head ??= jobBranchHead(env, current);
+      const at = await head;
+      const file = await readRepoFile(env, current.namespace, path, at.sha, at.repo);
+      return (file as { content?: string }).content ?? null;
     });
     if (!verdict.approved) {
       return refuse("resume", id + " is not pre-approved: " + verdict.reason);

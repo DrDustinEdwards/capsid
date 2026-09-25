@@ -57,6 +57,8 @@ describe("required_scopes on the real queue transitions", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
+    // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   });
 
   it("PLANT: a job naming a flag is not leased to a driver without it, and STAYS QUEUED", async () => {
@@ -131,6 +133,8 @@ describe("a corrupt job requirement fails closed at the claim", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
+    // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   });
 
   for (const [field, value] of [

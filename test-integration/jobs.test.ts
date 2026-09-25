@@ -70,6 +70,9 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }])).run();
 });
 
 describe("the lifecycle", () => {
