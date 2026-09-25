@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ROLES } from "../scripts/mint-agents.mjs";
 import { allowsToolAction } from "../src/agents-schema.ts";
-import { OPEN_JOB_STATUSES } from "../src/jobs-schema.ts";
 import { checkScope } from "../src/scope.ts";
 import { anchorDriftVerdict, driftVerdict } from "../src/improve-gates.ts";
 import { loopPauseReason } from "../src/improve-schema.ts";
@@ -17,11 +16,8 @@ import {
   WATCHER_CHECKS,
   cadenceMinutes,
   ciFindings,
-  clearFinding,
   newestMigration,
   owningCheck,
-  openWatcherFingerprints,
-  readStaleBlocked,
   healthFindings,
   passDue,
   runPass,
@@ -438,90 +434,5 @@ test("newestMigration takes the last by name, and ignores what is not a migratio
   assert.equal(newestMigration([]), null);
 });
 
-test("openWatcherFingerprints reads every OPEN job the watcher itself posted", async () => {
-  // Queued alone was the watcher's half of the 2026-09-18 duplicate: this map is what
-  // the pass skips on, so a claimed or blocked copy was invisible to it. Closing
-  // somebody else's job is still impossible, because clearFinding's UPDATE is keyed on
-  // queued; the test below this one pins that.
-  const seen: unknown[][] = [];
-  const env = {
-    DB: {
-      prepare: (sql: string) => {
-        const flat = sql.replace(/\s+/g, " ");
-        assert.match(flat, /posted_by = \?1/, "a read that is not keyed on the watcher would adopt other people's jobs");
-        assert.match(flat, /status IN \(\?2, \?3, \?4\)/, "the skip must see every open status, or a blocked finding posts twice");
-        return {
-          bind: (...b: unknown[]) => {
-            seen.push(b);
-            return {
-              all: async () => ({
-                results: [
-                  { id: "job_1", title: "Watcher: something [ci-red-abc]" },
-                  { id: "job_2", title: "a job with no fingerprint" },
-                ],
-              }),
-            };
-          },
-        };
-      },
-    },
-  } as never;
-  const open = await openWatcherFingerprints(env);
-  assert.deepEqual(seen, [[WATCHER_ACTOR, ...OPEN_JOB_STATUSES]]);
-  assert.deepEqual([...open.entries()], [["ci-red-abc", "job_1"]], "a title with no fingerprint is not a watcher finding");
-});
-
-test("clearFinding is a keyed UPDATE that cannot close somebody else's job", async () => {
-  let bound: unknown[] = [];
-  let flat = "";
-  const env = {
-    DB: {
-      prepare: (sql: string) => {
-        flat = sql.replace(/\s+/g, " ");
-        return {
-          bind: (...b: unknown[]) => {
-            bound = b;
-            return { first: async () => ({ id: "job_1" }) };
-          },
-        };
-      },
-    },
-  } as never;
-  assert.equal(await clearFinding(env, "job_1", NOW), true);
-  assert.match(flat, /status = 'queued'/, "a claimed job must not be closed underneath its driver");
-  assert.match(flat, /posted_by = \?4/);
-  assert.match(flat, /RETURNING id/, "D1's meta.changes is inflated by the FTS triggers and cannot count what this moved");
-  assert.equal(bound[1], "cleared", "the reason is the honest word: nobody did the work, it stopped being true");
-  assert.equal(bound[3], WATCHER_ACTOR);
-});
-
-test("clearFinding reports FALSE when it moved nothing, so a race is visible", async () => {
-  const env = {
-    DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) },
-  } as never;
-  assert.equal(await clearFinding(env, "job_1", NOW), false);
-});
-
-test("readStaleBlocked asks for blocked jobs older than the window, bounded", async () => {
-  let flat = "";
-  let bound: unknown[] = [];
-  const env = {
-    DB: {
-      prepare: (sql: string) => {
-        flat = sql.replace(/\s+/g, " ");
-        return {
-          bind: (...b: unknown[]) => {
-            bound = b;
-            return { all: async () => ({ results: [] }) };
-          },
-        };
-      },
-    },
-  } as never;
-  await readStaleBlocked(env, NOW);
-  assert.match(flat, /status = 'blocked'/);
-  assert.match(flat, /updated_at < \?1/);
-  assert.match(flat, /LIMIT 20/, "an unbounded read is one that times out on the day it matters");
-  const cutoff = Date.parse(String(bound[0]));
-  assert.equal(NOW.getTime() - cutoff, BLOCKED_STALE_HOURS * 3_600_000);
-});
+// openWatcherFingerprints, clearFinding and readStaleBlocked are driven against seeded
+// jobs rows on a real D1 in test-integration/watcher.test.ts.

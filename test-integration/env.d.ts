@@ -16,6 +16,9 @@ declare global {
       TEST_SQL_SKIPPED: { file: string; sql: string }[];
       // Every src/ file containing `.prepare(`, from a separate fs walk.
       TEST_SQL_PREPARE_FILES: string[];
+      // Two fake legacy operator keys whose hashes vitest.config.ts puts in
+      // OPERATOR_KEY_HASH: write is the admin, read is read-only.
+      TEST_OPERATOR_KEYS: { write: string; read: string };
     }
   }
 }

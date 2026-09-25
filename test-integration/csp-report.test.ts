@@ -1,4 +1,5 @@
-import { env, SELF } from "cloudflare:test";
+import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
+import worker, { BACKUP_CRON } from "../src/index";
 import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
 import { REPORT_PREFIX } from "../src/headers";
 import { describe, expect, it } from "vitest";
@@ -109,5 +110,48 @@ describe("/csp-report is rate limited before it reads or stores anything", () =>
     expect(valid.status).toBe(429);
     expect(await valid.text()).toMatch(/^too many reports:/);
     expect(await stored()).toBe(before);
+  });
+});
+
+describe("a stored report is reaped by the backup cron once it ages past the window", () => {
+  // Replaces a unit test that checked src/ for a second definition of the report
+  // prefix and that backup.ts and routes.ts both mentioned REPORT_PREFIX (audit
+  // 2026-09-25, item C2-21). The property that test stood for is that the sink and the
+  // prune agree on where reports live, or reports accumulate under a prefix nothing
+  // reaps. Here the sink stores a real report, a copy of it is aged by rewriting only
+  // the date segment of the key the sink chose, and the real backup cron runs.
+  it("the aged copy is deleted and the fresh report is kept", async () => {
+    const posted = await SELF.fetch(`${ORIGIN}/csp-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": "203.0.113.90" },
+      body: report("stored by the sink"),
+    });
+    expect(posted.status).toBeLessThan(300);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const stored = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key).filter((k) => k.includes(today));
+    expect(stored.length, "the sink stored nothing under the report prefix, so this proves nothing").toBeGreaterThan(0);
+    const fresh = stored[0];
+
+    // Same key, dated 40 days ago: past the 30-day retention the prune applies.
+    const agedDay = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
+    const aged = fresh.replace(today, agedDay);
+    expect(aged).not.toBe(fresh);
+    await env.MEDIA.put(aged, "{}");
+
+    // The backup refuses every prune when the store looks empty or the pinned FTS probe
+    // misses, so the probe document /health also reads is seeded first.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO documents (namespace, path, title, body, type, status)
+       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`
+    ).run();
+
+    const ctx = createExecutionContext();
+    await worker.scheduled?.({ cron: BACKUP_CRON, scheduledTime: Date.now(), noRetry() {} } as unknown as ScheduledController, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const after = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key);
+    expect(after, "the prune did not reap an aged report the sink's prefix holds").not.toContain(aged);
+    expect(after, "the prune reaped a fresh report").toContain(fresh);
   });
 });

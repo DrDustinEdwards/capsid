@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ciDispatch } from "../src/github.ts";
-import { claimJti } from "../src/improve-scorer.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
 // INGEST HARDENING, audit 2026-09-07 (Grok MAJOR 3, 5, 6 and section 23 item 7;
@@ -12,25 +11,9 @@ import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 // kept. Each assertion below fails against 3763d95.
 
 // ---- the replay cache is now atomic ----------------------------------------
-
-function jtiDb() {
-  return fakeD1({});
-}
-
-test("PLANT: two concurrent claims of the same jti resolve to ONE winner", async () => {
-  // The KV version was get-then-put: both callers read absent, both wrote, both
-  // proceeded. A captured signed request could therefore be replayed for the
-  // whole 30-minute window by racing it against itself. A PRIMARY KEY has no
-  // such window.
-  const d1 = jtiDb();
-  const results = await Promise.all([
-    claimJti(d1.db, "capsid", "raced"),
-    claimJti(d1.db, "capsid", "raced"),
-    claimJti(d1.db, "capsid", "raced"),
-  ]);
-  const winners = results.filter((r) => r.ok);
-  assert.equal(winners.length, 1, "exactly one caller may claim a nonce");
-});
+//
+// That concurrent claims of one jti resolve to one winner is a property of SQLite's
+// PRIMARY KEY, so it is driven against a real D1 in test-integration/scheduled.test.ts.
 
 // ---- ci_dispatch aliases ----------------------------------------------------
 
