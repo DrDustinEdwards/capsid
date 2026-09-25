@@ -3,29 +3,17 @@ import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { clearStateCookie, completeGithubLogin, type GithubLoginFlow, startGithubLogin } from "./github-login";
 
-// THE CONSOLE'S OWN SESSION, and why it needs one.
+// The console's own session. The OAuth provider mints tokens for MCP clients, and a
+// browser opening /console has nothing to present, so the console uses the same
+// GitHub OAuth app and admin check (isAdminUser) and turns the result into a signed
+// cookie. It does not go through the MCP provider, whose flow ends at a client
+// redirect_uri.
 //
-// The OAuth provider in src/index.ts mints tokens for MCP CLIENTS. There is no
-// browser session anywhere in this Worker: /authorize exists to hand a token to
-// claude.ai, and the only cookie it leaves is the per-client approval. A human
-// opening /console in a browser has nothing to present.
-//
-// So the console rides the SAME GitHub OAuth app and the SAME admin check
-// (isAdminUser against ADMIN_GITHUB_LOGIN), and turns the result into a signed
-// cookie. What it deliberately does NOT do is go through the MCP provider: that
-// flow ends by redirecting to a registered client redirect_uri with an
-// authorization code, which is the wrong shape for a page a person reads.
-//
-// THE COOKIE IS A SIGNED ASSERTION, NOT A SESSION RECORD. Same construction as the
-// approval cookie: an HMAC over a base64url payload, with the login and an expiry
-// inside. No server-side session table, so nothing to reap. The cost of that choice
-// is stated rather than hidden: a cookie cannot be revoked before it expires, which
-// is why the TTL is twelve hours and why the admin check runs again on every request
-// rather than being trusted from the payload.
+// The cookie is a signed assertion (HMAC over a base64url payload with the login and
+// an expiry), not a session record. It cannot be revoked before it expires, so the
+// TTL is twelve hours and the admin check runs again on every request.
 
 const CONSOLE_SESSION_COOKIE = "capsid_console";
-// Read by the action handler and written by the page render, so it lives with the
-// other cookie names rather than in whichever module happened to need it first.
 export const CONSOLE_CSRF_COOKIE = "capsid_console_csrf";
 export const CONSOLE_SESSION_TTL_SECONDS = 12 * 60 * 60;
 
@@ -59,10 +47,8 @@ export async function consoleSessionCookie(user: ConsoleUser, secret: string, no
   return `${CONSOLE_SESSION_COOKIE}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=${CONSOLE_SESSION_TTL_SECONDS}`;
 }
 
-// Returns the session's user, or null for anything that does not verify: no cookie,
-// a bad signature, an unreadable payload, an expired one, or a login that is no
-// longer the configured admin. That last check is what matters after the fact:
-// changing ADMIN_GITHUB_LOGIN invalidates every outstanding console cookie.
+// The session's user, or null for anything that does not verify. The admin check
+// means changing ADMIN_GITHUB_LOGIN invalidates every outstanding console cookie.
 export async function readConsoleSession(request: Request, env: Env, now: Date): Promise<ConsoleUser | null> {
   const raw = getCookie(request, CONSOLE_SESSION_COOKIE);
   if (!raw) return null;
@@ -83,8 +69,6 @@ export async function readConsoleSession(request: Request, env: Env, now: Date):
   return { login: payload.login, id: payload.id };
 }
 
-// ---- the login round trip ----------------------------------------------------
-
 export function startConsoleLogin(request: Request, env: Env, returnTo: string): Promise<Response> {
   return startGithubLogin(request, env, CONSOLE_LOGIN, returnTo);
 }
@@ -94,9 +78,8 @@ export async function handleConsoleCallback(request: Request, env: Env, now: Dat
   if (!login.ok) return login.response;
   const { user, state: returnTo } = login;
 
-  // A relative console path only, checked here rather than trusted from KV: the value
-  // was written by this Worker, and treating it as a URL anyway would leave an open
-  // redirect one bad write away.
+  // A relative console path only, checked rather than trusted from KV, so a bad
+  // write cannot become an open redirect.
   const safeReturn = returnTo.startsWith("/console") ? returnTo : "/console";
   const headers = new Headers({ Location: safeReturn });
   headers.append("Set-Cookie", await consoleSessionCookie(user, env.COOKIE_ENCRYPTION_KEY, now));

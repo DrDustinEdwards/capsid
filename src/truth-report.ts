@@ -47,9 +47,8 @@ export interface ReportEdge {
   target_missing?: number;
 }
 
-// The shape src/counts.ts already returns. Mirrored rather than imported so this
-// module stays a pure function over plain data, which is what makes it testable
-// without a database.
+// The shape src/counts.ts returns, mirrored so this module stays a pure function
+// over plain data.
 export interface ReportCountClaim {
   path: string;
   noun: string;
@@ -65,38 +64,29 @@ export interface TruthInput {
   edges: ReportEdge[];
   danglingEdges: ReportEdge[];
   countClaims: ReportCountClaim[];
-  // Repo paths that exist on the default branch. Undefined when the repo could
-  // not be read, which makes the drift check UNRUN rather than clean: a check
-  // that reports zero findings because it could not look is the exact failure
-  // capsid/conventions.md names ("an assertion that can pass by reading nothing").
+  // Repo paths on the default branch. Undefined when the repo could not be read,
+  // which makes the drift check unrun rather than clean.
   repoPaths?: Set<string>;
 }
 
-// A decision older than this, still `published`, is stale enough to be worth
-// re-reading. Not a defect: a ruling can be right for years. It is a prompt.
+// A published decision older than this is worth re-reading. A prompt, not a defect.
 export const STALE_DECISION_DAYS = 180;
 
 // The lint cadence in capsid/conventions.md: consolidate at roughly five.
 export const UNCONSOLIDATED_CADENCE = 5;
 
 // Matches a repo path in prose: at least one slash, a file extension, and no
-// spaces. Deliberately narrow. `src/server.ts` and `.github/workflows/ci.yml`
-// match; `capsid/conventions.md` matches too and is excluded below, because a
-// Capsid document path is not a repo path and confusing the two would report the
-// whole canon as drift.
+// spaces. `capsid/conventions.md` matches too and is excluded below, because a
+// Capsid document path is not a repo path.
 //
-// THE LEADING DOT IS PART OF THE PATH. This opened on a word boundary, which does
-// not fall between a space and a dot, so every match started one character late:
-// `.github/workflows/ci.yml` was captured as `github/workflows/ci.yml` and
-// reported absent from a repo that has it. Measured 2026-09-12: five of the
-// report's 79 drift findings were dotfiles that all exist, and they are the paths
-// canon names most, because `.github/**` and `.claude/**` are the protected ones.
-// The lookbehind replaces the boundary so the dot is reachable, and it also stops
-// the same path matching a second time starting after the dot.
+// The lookbehind, not a word boundary. A word boundary does not fall between a space
+// and a dot, so a match would start one character late: `.github/workflows/ci.yml`
+// would be captured as `github/workflows/ci.yml` and reported absent from a repo that
+// has it, and the dotted paths are the ones canon names most. The lookbehind also
+// stops the same path matching again after the dot.
 //
-// The extension must START WITH A LETTER, which is what throws out an audit
-// section number: `2/2.1` and `5a-1/5a-3/1.5` are two slashes and a dot, and
-// nothing about them is a file.
+// The extension must start with a letter, which excludes section numbers such as
+// `2/2.1` and `5a-1/5a-3/1.5`: two slashes and a dot, and not a file.
 const REPO_PATH = /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
 
 // Namespace prefixes that mean "a Capsid document", not "a file in the repo".
@@ -106,17 +96,13 @@ const NAMESPACE_PREFIXES = ["capsid/", "germomics/", "foxing/", "foxhound/", "du
 // The stored report's path prefix.
 export const REPORTS_PREFIX = "reports/";
 
-// PREFIXES THAT ARE NOT SUBJECTS OF THE REPORT.
-//
-// `archive/` is consumed history and was always excluded. `reports/` joined it
-// 2026-09-12, because `report` stores its result as an ordinary document and the
-// next run reads that document back: every finding it wrote becomes a finding it
-// finds. Two runs in one session took integrity 76.3 to 71.5 while the store got
-// strictly better, the quote describing a FIXED contradiction was re-parsed as
-// two fresh ones, and roughly forty drift paths were re-attributed to the report
-// that had merely listed them. Left alone it ratchets: each run adds its own text
-// to the corpus the next run reads. A report is an observation of the store and
-// not a member of it.
+// Prefixes that are not subjects of the report. `archive/` is consumed history.
+// `reports/` holds earlier reports: `report` stores its result as an ordinary
+// document, and the next run would read it back, so every finding it wrote becomes a
+// finding it finds, a quote describing a fixed contradiction is parsed as a fresh
+// one, and drift paths are attributed to the report that merely listed them. Left
+// alone it ratchets integrity down on every run while the store improves. A report is
+// an observation of the store, not a member of it.
 const UNSCANNED_PREFIXES = ["archive/", REPORTS_PREFIX];
 
 export function isUnscanned(path: string): boolean {
@@ -141,9 +127,8 @@ const isArchived = (doc: ReportDoc) => doc.path.startsWith("archive/");
 
 export function buildTruthReport(input: TruthInput): TruthReport {
   const { namespace, now, docs } = input;
-  // Held to every check below. archive/ and reports/ are excluded, and `archived`
-  // is counted on its own rather than as "everything not standing", so excluding a
-  // second prefix does not silently inflate the archived number.
+  // `archived` is counted on its own, not as "everything not standing", so the
+  // reports/ exclusion does not inflate it.
   const standing = docs.filter((d) => !isUnscanned(d.path));
   const archived = docs.filter(isArchived).length;
 
@@ -155,12 +140,9 @@ export function buildTruthReport(input: TruthInput): TruthReport {
 
   const checks: TruthCheck[] = [];
 
-  // 1. CONTRADICTIONS: a fact stated differently in two places. The store has one
-  //    mechanical form of this and it is the count claim: prose asserting a number
-  //    that the artifact disagrees with. src/counts.ts already finds them; this is
-  //    what turns "the packet listed some claims" into "N of M claims are wrong".
-  // A claim quoted by an excluded document is not a claim the store is making.
-  // The caller filters too; this is the half that holds when it does not.
+  // 1. Contradictions: the count claim, prose asserting a number the artifact
+  //    disagrees with (src/counts.ts). A claim in an excluded document is dropped
+  //    here as well as by the caller.
   const countClaims = input.countClaims.filter((claim) => !isUnscanned(claim.path));
   checks.push({
     check: "contradictions",
@@ -172,10 +154,8 @@ export function buildTruthReport(input: TruthInput): TruthReport {
       detail: `states ${claim.states} ${claim.noun}; the artifact says ${claim.authoritative}. In: ${claim.quote}`,
     })),
   });
-  // Every claim the scanner returns is a MISMATCH, so subjects is the mismatch
-  // count and there is no clean population to divide by. Counting the whole
-  // standing corpus as the population instead: a claim is a property of a
-  // document, and the question is what fraction of documents carry a wrong one.
+  // Every claim returned is a mismatch, so the population is the standing documents:
+  // what fraction carry a wrong claim.
   const contradicting = new Set(countClaims.map((c) => c.path));
   checks[0] = {
     check: "contradictions",
@@ -184,10 +164,9 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     findings: checks[0].findings,
   };
 
-  // 2. STALE DECISIONS. A decision document nobody has touched in half a year,
-  //    still published. capsid/conventions.md: "a state claim older than the last
-  //    session close is re-verified against live code before it is acted on". A
-  //    reader cannot apply that rule to a document whose age they cannot see.
+  // 2. Stale decisions: published and untouched in half a year. A state claim is
+  //    re-verified before it is acted on, and a reader cannot apply that rule to a
+  //    document whose age they cannot see.
   const decisions = standing.filter((d) => d.type === "decision" && (d.status ?? "published") === "published");
   const staleDecisions = decisions.filter((d) => {
     const stamp = parseStamp(d.updated_at);
@@ -204,10 +183,8 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 3. UNBOUND SPECS. A spec document with no typed edge in either direction is a
-  //    document nothing points at and that points at nothing: it was written, and
-  //    then the work either happened somewhere else or did not happen. Either way
-  //    a reader has no way to find out from the store.
+  // 3. Unbound specs: no typed edge in either direction, so a reader cannot find
+  //    from the store whether the work happened.
   const specs = standing.filter((d) => d.type === "spec" || d.type === "protocol" || d.type === "procedural");
   const bound = new Set<string>();
   for (const edge of input.edges) {
@@ -226,8 +203,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 4. BROKEN LINKS. Already computed by gather; counted here against the whole
-  //    edge population so the number means something.
+  // 4. Broken links, from gather, counted against the whole edge population.
   const namespaceEdges = input.edges.filter((e) => e.from_ns === namespace || e.to_ns === namespace);
   checks.push({
     check: "broken_links",
@@ -240,28 +216,22 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     })),
   });
 
-  // 5. DOC-VS-CODE DRIFT. A repo path named in canon that is not in the repo any
-  //    more. This is the check that answers the mechanism the conventions state:
-  //    the repo is gated and the store is not, so the store is where a path rots.
-  //
-  //    UNRUN IS NOT CLEAN. When the repo could not be read the check reports zero
-  //    subjects and is excluded from integrity, rather than reporting zero
-  //    findings, which would read as perfect.
+  // 5. Doc-vs-code drift: a repo path named in canon that is no longer in the repo.
+  //    The repo is gated and the store is not, so the store is where a path rots.
+  //    Unrun is not clean: when the repo could not be read the check has zero
+  //    subjects and is excluded from integrity, rather than reporting zero findings,
+  //    which would read as perfect.
   if (input.repoPaths) {
-    // A CANDIDATE IS A REPO PATH ONLY WHEN IT RESOLVES AGAINST THIS NAMESPACE'S
-    // MAPPED REPO, and resolving means its first segment is a real top-level entry
-    // of that tree. That is what separates `src/gone.ts`, which this repo could
-    // genuinely be missing, from `apps/web/test/auth-config.test.ts` (foxing's) and
-    // `capsid-backups/.github/workflows/mirror.yml` (another repo entirely). Both
-    // were reported as drift on 2026-09-12 against a repo that was never meant to
-    // hold them.
+    // A candidate counts only when its first segment is a top-level entry of this
+    // namespace's mapped repo. That separates `src/gone.ts`, which this repo could
+    // really be missing, from `apps/web/...` in another portfolio repo or a path in
+    // another repo entirely, which are not drift here.
     const repoRoots = new Set([...input.repoPaths].map((p) => p.split("/")[0]));
-    // And a document in THIS namespace is a store address, whatever it looks like.
-    // The prefix list cannot reach these: the Worker writes `jobs/<id>.md` itself,
-    // and `improve/` is both a store prefix and a real directory in this repo, so
-    // the root check would pass it through. A document describing store contents
-    // was being penalised for naming them accurately. Every document counts here,
-    // excluded ones included, because an address does not stop being an address.
+    // A document path in this namespace is a store address, whatever it looks like.
+    // The prefix list cannot reach these: the Worker writes `jobs/<id>.md` itself, and
+    // `improve/` is both a store prefix and a real directory, so the root check would
+    // pass it through. Every document counts, excluded ones included, because an
+    // address does not stop being an address.
     const documentPaths = new Set(docs.map((d) => d.path));
     const cited = new Map<string, Set<string>>();
     for (const doc of standing) {
@@ -300,11 +270,8 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     });
   }
 
-  // 6. UNCONSOLIDATED. Not a defect, a backlog: conventions puts the lint cadence
-  //    at roughly five. Counted so the trend is visible beside the rest. A backlog
-  //    at or under the cadence is not a finding, so it does not lower integrity
-  //    either: a report reading "Findings: None" at under 100% would be a number
-  //    nobody can trace to a cause.
+  // 6. Unconsolidated: a backlog, not a defect. At or under the cadence it is not a
+  //    finding and does not lower integrity, so integrity always traces to a finding.
   const unconsolidated = standing.filter((d) => d.type === "episodic" || d.type === "source");
   const overCadence = unconsolidated.length > UNCONSOLIDATED_CADENCE;
   checks.push({
@@ -343,20 +310,18 @@ export function buildTruthReport(input: TruthInput): TruthReport {
   };
 }
 
-// The stored document. The integrity line is FIRST and in a fixed shape, because
-// `improve_status` parses it back out: a number a program has to find in prose is
-// a number that will one day be in different prose.
+// The integrity line is first and in a fixed shape, because `improve_status` parses
+// it back out.
 export const INTEGRITY_LINE = /^integrity:\s*([0-9]+(?:\.[0-9]+)?)%\s*$/m;
 
 export function renderTruthReport(report: TruthReport): string {
   const lines: string[] = [];
   lines.push(`# Truth report - ${report.namespace} - ${report.generated.slice(0, 10)}`);
   lines.push("");
-  // NOT MEASURED IS NOT ZERO (audit 2026-09-16, defect 4). `integrity` is null when
-  // no check had a subject to judge, and this line rendered that as "integrity: 0%",
-  // which reads as a store in the worst state it can be in. INTEGRITY_LINE does not
-  // match the words, so integrityOf returns null and improve_status reports it as no
-  // report, which is the same answer a missing document gets.
+  // Not measured is not zero. `integrity` is null when no check had a subject, and
+  // "0%" would read as a store in the worst state it can be in. INTEGRITY_LINE does
+  // not match the words, so integrityOf returns null and improve_status reports no
+  // report, the same answer a missing document gets.
   lines.push(`integrity: ${report.integrity === null ? "not measured" : `${report.integrity}%`}`);
   lines.push("");
   lines.push(
@@ -403,8 +368,7 @@ export function renderTruthReport(report: TruthReport): string {
   return lines.join("\n");
 }
 
-// One document per namespace per day, so a second run the same day overwrites
-// rather than accumulating: the series is daily, not per-invocation.
+// One document per namespace per day; a second run the same day overwrites.
 export function reportPath(date: Date): string {
   return `${REPORTS_PREFIX}lint-${date.toISOString().slice(0, 10)}.md`;
 }

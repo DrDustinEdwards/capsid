@@ -27,9 +27,9 @@ const CONCURRENT_EDIT_WINDOW_MS = 60 * 60 * 1000;
 
 export function concurrentEditWarning(updatedAt: string | null | undefined, now: number): string | null {
   if (!updatedAt) return null;
-  // D1 stores datetime('now') as "YYYY-MM-DD HH:MM:SS" in UTC, which Date.parse reads
-  // as LOCAL time unless the zone is made explicit. Getting that wrong would silence
-  // the warning on a machine behind UTC and fire it constantly on one ahead.
+  // D1 stores datetime('now') in UTC with no zone, which Date.parse reads as local.
+  // That would silence the warning on a machine behind UTC and fire it constantly on
+  // one ahead.
   const parsed = Date.parse(`${updatedAt.replace(" ", "T")}Z`);
   if (Number.isNaN(parsed)) return null;
   const age = now - parsed;
@@ -41,21 +41,19 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
   );
 }
 
-// THE CALLER IS AN AGENT (src/agents.ts). The legacy shape, a bare grant plus an
-// actor string, is still accepted and means exactly what it always did: an
-// unrestricted caller at that grant. That is not a convenience for the tests, it is
-// the OPERATOR_KEY_HASH fallback itself, expressed once so there is no second code
-// path where scopes do not apply.
+// The caller is an agent (src/agents.ts). A bare grant plus an actor string means an
+// unrestricted caller at that grant: the OPERATOR_KEY_HASH fallback, expressed once so
+// there is no second code path where scopes do not apply.
 export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): McpServer {
   const agent = typeof caller === "string" ? legacyAgent(caller, actor) : caller;
   const server = new McpServer(SERVER_INFO);
   const db = env.DB;
 
-  // PROVENANCE (audit 2026-09-06). The actor from the most recent audit_log entry for
-  // a document, surfaced by read and brief so a session can tell who wrote what it is
-  // about to treat as context. A document another client wrote is untrusted input.
-  // Kept as a separate read rather than a joined subquery so the document read stays
-  // a plain named-column projection. Null when the document has no audit history.
+  // Provenance: the actor from a document's latest audit_log entry, surfaced by read
+  // and brief so a session can tell who wrote what it treats as context: a document
+  // another client wrote is untrusted input. A separate read rather than a joined
+  // subquery, so the document read stays a named-column projection. Null when the
+  // document has no audit history.
   const lastActor = async (ns: string, path: string): Promise<string | null> => {
     const row = await db
       .prepare("SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1")
@@ -69,16 +67,13 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     db,
     actor: agent.actor,
     agent,
-    // The handler half of the one enforcement point. The registrar below covers what
-    // is knowable before a handler runs; this is what an "action" tool and every repo
-    // mutation call at the point where the action, the mode and the path are known.
+    // The handler half of the one enforcement point, for checks that need the action,
+    // mode or path.
     scope: (need) => checkScope(agent, need),
     lastActor,
   };
 
-  // BEFORE ANY REGISTRATION. Every server.registerTool call below this line is
-  // wrapped, whether or not its author thought about scopes, which is the property
-  // the per-tool gate it replaces could not have.
+  // Before any registration, so every tool registered below is wrapped.
   guardRegistrations(server, agent);
 
   registerDocTools(server, ctx);
@@ -88,47 +83,34 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   registerJobTools(server, ctx);
   registerAgentTools(server, ctx);
 
-  // ---- SCOPES FOR RESOURCES AND PROMPTS ------------------------------------------
-  //
-  // guardRegistrations wraps registerTool and nothing else, so the four protocol
-  // handlers below sat outside the one enforcement point entirely: an agent bearer on
-  // /ops/mcp could read every document in every namespace by URI, and list every
-  // prompt in the store, while the `read` tool refused it (audit 2026-09-13,
-  // finding 6). Spelled here rather than in the registrar because a raw request
-  // handler is not a registration and the registrar cannot see one.
-  //
-  // Checked as the `read` tool, because that is what these are: the resource comment
-  // above has said "same visibility as the read tool" since they were added, and this
-  // makes the sentence true. An agent narrowed away from `read` loses both, which is
-  // the answer that keeps the two surfaces from disagreeing.
+  // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
+  // a raw request handler is not a registration, so these handlers check scope here.
+  // Without it, an agent bearer on /ops/mcp could read every document by URI and list
+  // every prompt while the `read` tool refused it.
+  // They are checked as the `read` tool, so an agent narrowed away from `read` loses
+  // both and the two surfaces cannot disagree.
   const resourceRefusal = (namespace: string): string | null => checkScope(agent, { tool: "read", grant: "read", namespace });
 
-  // The namespaces a listing may show. A listing FILTERS rather than refusing: a
-  // caller asking what it can see should be told what it can see, and refusing the
-  // whole call would leak that there is more.
+  // A listing filters rather than refusing, which would leak that there is more.
   const visibleNamespaces = agent.scopes.namespaces;
   const namespaceFilter = <T extends { namespace: string }>(rows: T[]): T[] =>
     visibleNamespaces === "*" ? rows : rows.filter((row) => visibleNamespaces.includes(row.namespace));
 
-  // Template metadata spreads onto every listed resource, so it is stated ONCE and
-  // applied by both the read registration and the list handler below.
+  // Stated once, used by the read registration and the list handler below. It spreads
+  // onto every listed resource, so keep it to fields true of every document.
   const RESOURCE_METADATA = { title: "Capsid documents", mimeType: "text/markdown" };
 
   // Resources: every document is addressable context at capsid://<namespace>/<path>.
-  // Read-only, same visibility as the read tool. The D1 queries run lazily, only
-  // when a client actually calls resources/list or resources/read.
+  // Read-only, same visibility as the read tool.
   server.registerResource(
     "document",
     new ResourceTemplate("capsid://{namespace}/{+path}", {
-      // LISTING IS SERVED BY THE RAW HANDLER BELOW. McpServer builds its
-      // ListResources reply as `{ resources: [...] }` and discards every other field
-      // the callback returns, including _meta AND nextCursor, so a list callback
-      // cannot say it was truncated. Capping it here would make document 501
-      // unreachable with nothing in the response admitting it.
+      // Listing is served by the raw handler below: McpServer discards _meta and
+      // nextCursor from a list callback, so a callback cannot say it was truncated,
+      // and capping it here would make document 501 unreachable with nothing in the
+      // response admitting it.
       list: undefined,
     }),
-    // Keep RESOURCE_METADATA to fields that are true per document: it spreads onto
-    // every listed resource.
     RESOURCE_METADATA,
     async (uri, variables) => {
       const namespace = String(variables.namespace);
@@ -144,22 +126,16 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     }
   );
 
-  // resources/list, served directly for the same reason prompts are: the request
-  // itself is needed and the McpServer wrapper does not pass it through. Here that
-  // request carries the CURSOR, which is what makes the bound safe rather than a
-  // ceiling on what the store can expose.
+  // resources/list, served directly because the request carries the cursor and the
+  // McpServer wrapper does not pass it through.
   //
-  // Keyset pagination, not OFFSET: the cursor names the last (namespace, path)
-  // returned and the next page asks for rows after it, compared as a TUPLE. A single
-  // concatenated key would be wrong: 'a-x' sorts before 'a' once a separator is glued
-  // on ('-' is below '/') and rows would be skipped.
+  // Keyset pagination compared as a tuple: a concatenated key would skip rows ('-'
+  // sorts below '/').
   //
-  // This overrides the handler McpServer installs. It is safe only while every
-  // resource is served by the one template below; a statically registered resource
-  // would be silently dropped. test/bounded-reads.test.ts pins that.
+  // This overrides McpServer's handler, which is safe only while every resource is
+  // served by the one template above. test/bounded-reads.test.ts pins that.
   server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-    // The grant, before the query. A caller with no read grant lists nothing rather
-    // than listing everything.
+    // The grant, before the query.
     if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
     if (!agent.scopes.grants.includes("read")) {
       throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
@@ -176,20 +152,14 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
         throw new McpError(ErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
       }
     }
-    // FILTERED IN THE QUERY, so the LIMIT bounds what this caller can SEE rather than
-    // what the store holds. The comment here claimed that for months while the filter
-    // ran in JS over an already-cut page (audit 2026-09-16, defect 6): a caller scoped
-    // to a namespace that sorts late got 501 rows it may not see, an empty page after
-    // filtering, and NO CURSOR, so the walk ended on page one and its own documents
-    // were unreachable. The keyset cursor still names the last row RETURNED, which is
-    // what keeps the walk correct now that the page is whole.
+    // Filtered in the query, so the LIMIT bounds what this caller can see rather than
+    // what the store holds. A filter after the LIMIT gives a caller scoped to a
+    // namespace that sorts late a page of rows it may not see, an empty page after
+    // filtering and no cursor, so its own documents are unreachable. The keyset
+    // cursor names the last row returned, which keeps the walk correct.
     //
-    // ONE BOUND PARAMETER RATHER THAN A SPLICED CLAUSE, so the statement is the same
-    // text on every call: scripts/sql-statements.mjs walks src/ for prepared
-    // statements and test-integration/query-plans.test.ts plans each one against the
-    // real schema, and a statement assembled per caller is one it reports as
-    // unreconstructable and cannot check. json_each turns the JSON array into rows.
-    // Null is the unscoped caller, and the predicate is then a constant.
+    // One bound parameter rather than a spliced clause, so the statement text is fixed
+    // and test-integration/query-plans.test.ts can plan it. Null is the unscoped caller.
     const visible = visibleNamespaces === "*" ? null : JSON.stringify(visibleNamespaces);
     const { results } = await db
       .prepare(
@@ -201,16 +171,14 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
       )
       .bind(afterNs, afterPath, MAX_ROWS + 1, visible)
       .all<{ namespace: string; path: string; title: string | null }>();
-    // Kept as a second pass on purpose: it is a no-op against the query above, and it
-    // is what still holds if a later edit loses the predicate.
+    // A no-op second pass that still holds if an edit loses the predicate.
     const scoped = namespaceFilter(results);
     const more = scoped.length > MAX_ROWS;
     const kept = more ? scoped.slice(0, MAX_ROWS) : scoped;
     const last = kept[kept.length - 1];
     return {
       resources: kept.map((row) => ({
-        // Template metadata first, per-document fields second: the same order the
-        // McpServer wrapper used, so a document's own title still wins.
+        // Template metadata first, so a document's own title wins.
         ...RESOURCE_METADATA,
         uri: `capsid://${row.namespace}/${row.path}`,
         name: `${row.namespace}/${row.path}`,
@@ -227,16 +195,13 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   // prompts/list and prompts/get.
   //
   // A prompt is named "<namespace>/<path without .md>", the way every other tool
-  // addresses a document. It used to be the bare path, which is not a document key:
-  // two namespaces can both hold prompts/brief.md and the lookup ended in `LIMIT 1`.
-  // One prompt document exists today, so this collides with nothing yet.
+  // addresses a document. A bare path is not a document key: two namespaces can both
+  // hold prompts/brief.md.
   const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
   const promptVariables = (body: string) => [...new Set([...body.matchAll(PLACEHOLDER)].map((m) => m[1]))];
-  // TITLES ARE STORED TEXT AND REACH THE CLIENT'S MODEL AS A DESCRIPTION (audit
-  // 2026-09-06, Grok MAJOR 8). A description is trusted UI text the way a tool
-  // description is, and a D1 row is writable by any write-grant session, so the title
-  // passes a CHARACTER ALLOWLIST: no backticks, no braces, no control characters,
-  // capped well under the title bound.
+  // A title reaches the client's model as a description, which it trusts like a tool
+  // description, and any write-grant session can write it, so it passes a character
+  // allowlist (no backticks, braces or control characters) and a length cap.
   const PROMPT_TITLE_DISALLOWED = /[^A-Za-z0-9 ,.;:()'"!?_/-]+/g;
   const promptSafeTitle = (title: string | null): string | undefined => {
     if (!title) return undefined;
@@ -296,11 +261,10 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
     }
     return {
       description: promptSafeTitle(row.title),
-      // THE BODY IS DATA, NOT THE USER'S OWN WORDS (audit 2026-09-06, Grok MAJOR 8;
-      // the Fable audit's "prompts/get as role:user"). A document body is writable by
-      // any write-grant session, and returning it as plain user text hands whoever
-      // last wrote the row a message the client's model reads as its human speaking.
-      // An embedded resource is the protocol's shape for content from a store.
+      // The body is data, not the user's own words. Any write-grant session can write
+      // it, and returning it as plain user text would hand whoever last wrote the row
+      // a message the client's model reads as its human speaking. An embedded
+      // resource is the protocol's shape for content from a store.
       messages: [
         {
           role: "user" as const,

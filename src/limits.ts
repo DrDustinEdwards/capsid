@@ -23,10 +23,9 @@ export const MAX_PR_BODY = 65_536;
 // A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
 // a paragraph, and GitHub's own comment ceiling is 65_536 either way.
 export const MAX_PR_COMMENT = 16_384;
-// The seat's note on a jobs resume: rulings, an ordered plan, several paragraphs.
-// The one that prompted it was about 1,400 characters, past the 1,024 `reason` takes.
-// Not MAX_BODY: the note is stored in an audit row and rendered into the job's
-// mirror document beside the signed prompt, which can already be MAX_BODY on its own.
+// The seat's note on a jobs resume: rulings and a plan, longer than `reason` allows.
+// Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror
+// document beside the signed prompt, which can already be MAX_BODY on its own.
 export const MAX_RESUME_NOTE = 16_384;
 
 export const MAX_ROWS = 500;
@@ -88,16 +87,9 @@ export const bounded = (max: number) => z.string().max(max);
 
 export const nsName = bounded(MAX_NAMESPACE);
 
-// A job's result_ref is "where the work landed", and that is two different kinds
-// of thing: a document key inside the store, or a pull request URL outside it.
-// It was wired to docPath, which refuses every URL on the '//' after the scheme,
-// so the field was unusable for one of the two shapes its own description
-// advertises. Two jobs recorded their PR link in result_summary prose instead.
-//
-// The URL half is deliberately narrow. This value is rendered into the job's
-// mirror document as a link a human may click, so the scheme is pinned to https
-// (the old grammar accepted "javascript:alert(1)" as a path) and embedded
-// credentials are refused, being a phishing shape rather than a reference.
+// A job's result_ref is where the work landed: a document key inside the store, or
+// a pull request URL outside it. The URL is rendered as a link a human may click, so
+// the scheme is pinned to https and embedded credentials are refused.
 export function resultRefProblem(value: string): string | null {
   if (value.length === 0) return "result ref must not be empty";
   if (value.length > MAX_PATH) return `result ref is longer than ${MAX_PATH} characters`;

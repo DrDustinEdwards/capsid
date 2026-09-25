@@ -4,21 +4,19 @@ export interface RateLimitPolicy {
   perHour: number;
   perDay: number;
   label: string;
-  // WHAT AN UNREADABLE COUNTER MEANS HERE, per endpoint (audit 2026-09-16, defect 7).
-  // Every KV failure returned `allowed` for both endpoints, which is one answer to
-  // two different questions. Stated on the policy rather than decided in the limiter,
-  // so the reasoning sits next to the endpoint it is a judgement about.
+  // What an unreadable counter means, decided per endpoint. Allowing on every KV
+  // failure gives one answer to two different questions, so the judgement is stated
+  // on the policy, next to the endpoint it is about, not in the limiter.
   onUnavailable: "allow" | "refuse";
 }
 
 export const MAX_PER_HOUR = 30;
 export const MAX_PER_DAY = 100;
 
-// FAIL OPEN, DELIBERATELY. /register is how a client is enrolled, and the only
-// person who enrolls one here is the owner. A KV outage that refused registrations
-// would lock Dustin out of reconnecting his own server at exactly the moment the
-// platform is already unwell, and the cost of letting a few extra registrations
-// through during an outage is a few extra KV rows.
+// Fail open. /register is how a client is enrolled, and only the owner enrolls one.
+// Refusing registrations during a KV outage would lock the owner out of reconnecting
+// at the moment the platform is already unwell, and a few extra registrations cost a
+// few KV rows.
 export const REGISTRATION_LIMIT: RateLimitPolicy = {
   prefix: "dcr:rate:",
   perHour: MAX_PER_HOUR,
@@ -34,8 +32,7 @@ export function isLoopbackRedirect(uri: string): boolean {
     const host = new URL(uri).hostname.toLowerCase();
     return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
   } catch {
-    // An unparseable URI counts as non-loopback, so a malformed entry cannot slip
-    // the cap.
+    // Non-loopback, so a malformed entry cannot slip the cap.
     return false;
   }
 }
@@ -63,13 +60,9 @@ export function dcrRedirectRefusal(clientMetadata: unknown): DcrRefusal | null {
 export const MAX_REPORTS_PER_HOUR = 300;
 export const MAX_REPORTS_PER_DAY = 1000;
 
-// FAIL CLOSED, and this REVERSES the rule this module shipped with. The old comment
-// argued that the thing guarded is hearing about violations, so every failure had to
-// let the report through. The trade is the other way round: /csp-report is
-// unauthenticated and every accepted report becomes an R2 object, so a KV outage that
-// fails open hands an unauthenticated caller an unbounded write path to R2, while a
-// report dropped during an outage costs one browser diagnostic nobody was waiting on.
-// Ruled 2026-09-16 (audit defect 7).
+// Fail closed: /csp-report is unauthenticated and every accepted report is an R2
+// object, so failing open would give anyone an unbounded write path during an outage.
+// A dropped report costs one browser diagnostic.
 export const CSP_REPORT_LIMIT: RateLimitPolicy = {
   prefix: "csp:rate:",
   perHour: MAX_REPORTS_PER_HOUR,
@@ -78,9 +71,8 @@ export const CSP_REPORT_LIMIT: RateLimitPolicy = {
   onUnavailable: "refuse",
 };
 
-// A refusal is either a spent budget or a budget nobody could read. The second
-// carries "unavailable" in the same field, so every reader has to say which it is
-// rather than printing a count that was never measured.
+// A refusal is a spent budget or an unreadable one ("unavailable"), and every reader
+// must say which rather than print a count that was never measured.
 export type RateRefusal =
   | { allowed: false; window: "hour" | "day"; count: number; limit: number }
   | { allowed: false; window: "unavailable"; detail: string };
@@ -92,10 +84,8 @@ function windowKeys(prefix: string, ip: string, now: Date): { hour: string; day:
   return { hour: `${prefix}h:${ip}:${iso.slice(0, 13)}`, day: `${prefix}d:${ip}:${iso.slice(0, 10)}` };
 }
 
-// WHAT A FAILURE MEANS IS THE POLICY'S CALL, not this function's. Every path that
-// cannot read or advance a counter ends here, and the endpoint's own `onUnavailable`
-// decides. The log line is written either way, because on the allow side it is the
-// only output there is.
+// Every path that cannot read or advance a counter ends here, and the policy's
+// `onUnavailable` decides. The log line is the only output on the allow side.
 function unavailable(policy: RateLimitPolicy, ip: string, detail: string): RateVerdict {
   console.error(`${policy.label}_RATE_LIMIT_UNAVAILABLE ${detail} for ${ip}, ${policy.onUnavailable === "allow" ? "allowing" : "refusing"}`);
   return policy.onUnavailable === "allow" ? { allowed: true } : { allowed: false, window: "unavailable", detail };
@@ -107,8 +97,7 @@ export async function checkRate(
   now: Date,
   policy: RateLimitPolicy
 ): Promise<RateVerdict> {
-  // Named separately from a read failure: this one is a deploy missing APP_KV, and
-  // reporting it as a KV read error sends the reader to KV health instead.
+  // A deploy missing APP_KV, named apart from a read failure.
   if (!kv) return unavailable(policy, ip, "no KV binding");
 
   const keys = windowKeys(policy.prefix, ip, now);
@@ -133,9 +122,7 @@ export async function checkRate(
       kv.put(keys.day, String(dayCount + 1), { expirationTtl: 86_400 }),
     ]);
   } catch (err) {
-    // A write that did not land means the counter does not advance, so the ceiling
-    // stops being a ceiling for the rest of the window. Same question, same answer:
-    // the endpoint's policy decides.
+    // A counter that does not advance is no ceiling, so the policy decides.
     return unavailable(policy, ip, `write failed: ${err instanceof Error ? err.message : String(err)}`);
   }
   return { allowed: true };
@@ -145,9 +132,8 @@ export function callerIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP") ?? "unknown";
 }
 
-// 429, not 204: a dropped report must not look stored. 503 for the other refusal,
-// because "we could not measure your rate" is a server problem and a 429 would tell
-// the caller it had sent too many when nobody counted.
+// 429, not 204: a dropped report must not look stored. 503 when the rate could not
+// be measured, which is a server problem.
 export function rateLimitedResponse(verdict: RateRefusal): Response {
   if (verdict.window === "unavailable") {
     return new Response(`rate limiting is unavailable, so reports are refused: ${verdict.detail}`, {

@@ -3,56 +3,40 @@ import type { Agent } from "./agents";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./improve-schema";
 
-// ONE ENFORCEMENT POINT. Every tool call, and every repo mutation inside one, is
+// The one enforcement point. Every tool call, and every repo mutation inside one, is
 // checked here and nowhere else.
 //
-// WHAT THIS REPLACES. Each write tool carried its own `if (!mayWrite) return
-// fail(DENIED)`, and `mayWrite` was a boolean computed from a two-value grant. That
-// shape had three problems and only the first was visible:
+// A per-tool gate in each handler has three failure modes: a new tool can simply
+// omit the line, and a scan for mutating SQL cannot see a tool whose writes happen a
+// module away (the queue, the improve loop, every repo write); a bare "may write"
+// says nothing about which namespace, which repo, or whether the caller may merge
+// into a repo that deploys on push; and a check spelled N times has to be widened at
+// N sites, which is how a fix lands in all but one of them.
 //
-//   1. A NEW TOOL COULD SIMPLY NOT HAVE THE LINE. test/invariants.test.ts caught the
-//      case where the handler contained mutating SQL, which is the common case and
-//      not the dangerous one: a tool whose writes happen a module away (the queue,
-//      the improve loop, every repo write) was invisible to that scan and had to be
-//      named in it by hand.
-//   2. THE GATE WAS THE WHOLE VOCABULARY. "May write" said nothing about WHICH
-//      namespace, which repo, or whether this caller should be able to merge a pull
-//      request into a repo that deploys on push.
-//   3. IT WAS SPELLED N TIMES, so widening it meant finding N sites, which is the
-//      failure mode capsid/conventions.md calls "a fix that lands in all but one
-//      affected site".
+// `checkScope` returns a refusal string naming the missing scope, or null. It is
+// called from two places, split by where the information is:
 //
-// THE SHAPE. `checkScope` answers one question and returns a REFUSAL STRING naming
-// the missing scope, or null. It is called from two places, and the split is not a
-// compromise, it is where the information is:
-//
-//   - THE REGISTRAR (`guardRegistrations`), before any handler runs, for what is
+//   - The registrar (`guardRegistrations`), before any handler runs, for what is
 //     knowable from the tool and its arguments: the tool allowlist, the grant, the
 //     namespace and the repo selector.
-//   - THE HANDLER, for the FLAGS, which depend on what the call is actually asking
-//     to do. `mode: "direct"` needs can_direct_write and `mode: "pr"` does not, and
-//     no wrapper can know that before reading the arguments.
+//   - The handler, for the flags, which depend on what the call asks to do.
+//     `mode: "direct"` needs can_direct_write and `mode: "pr"` does not, and no
+//     wrapper can know that before reading the arguments.
 
-// WHAT EACH TOOL REQUIRES, stated once. This is the artifact the registrar enforces
-// and the artifact src/tool-annotations.ts's readOnlyHint is derived from, so the
-// two cannot disagree about whether a tool writes.
+// What each tool requires, stated once. The registrar enforces this table and
+// src/tool-annotations.ts derives readOnlyHint from it, so the two cannot disagree.
 //
-// "action" means the requirement depends on the action argument. Three tools are
-// like this. `improve_run` states its per-action requirements in TOOL_ACTION_GRANTS
-// below, and the registrar reads them, because the requirement does not depend on
-// anything but the action. `jobs` (list reads) and `lint` (gather reads) also depend
-// on a namespace the handler resolves, so their handlers call checkScope at the point
-// where both are known.
+// "action" means the requirement depends on the action argument. `improve_run` states
+// its per-action requirements in TOOL_ACTION_GRANTS below, and the registrar reads
+// them, because the requirement depends on nothing but the action. `jobs` (list
+// reads) and `lint` (gather reads) also depend on a namespace the handler resolves,
+// so their handlers call checkScope at the point where both are known.
 //
-// "admin" is write PLUS the admin identity, for a tool that edits the authorization
-// boundary itself. It lives here rather than in the handler because these tools are
-// admin-only in WHOLE, which the registrar can decide from the tool name alone, and
-// because rule 6 of CLAUDE.md says this table is the one statement of what each tool
-// requires.
-//
-// Until 2026-09-16 two tools gated admin inside their handlers, which is the shape
-// rule 6 forbids: `agents` (every action) and `improve_run` (every action but run and
-// claim). Both are now stated here and no handler decides a grant for itself.
+// "admin" is write plus the admin identity, for a tool that edits the authorization
+// boundary itself. It lives here, not in a handler, because these tools are
+// admin-only in whole, which the registrar can decide from the tool name alone, and
+// because under the one enforcement point rule (CLAUDE.md) this table is the one
+// statement of what each tool requires. No handler decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin";
 
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
@@ -69,11 +53,9 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   delete: "write",
   move: "write",
   restore: "write",
-  // THE NAMESPACE-TO-REPO MAPPING IS THE AUTHORIZATION BOUNDARY, so editing it is
-  // admin work. Both were "write" until 2026-09-13, which meant any namespace-scoped
-  // driver holding write could remap its own namespace onto any repo the App reaches
-  // and, with a repos axis of "*", immediately read and write it. Found by a driver
-  // refusing a job whose own body told it to do exactly that.
+  // The namespace-to-repo mapping is the authorization boundary. A write-grant driver
+  // that could edit it could remap its own namespace onto any repo the App reaches
+  // and, with a repos axis of "*", immediately read and write it.
   register_namespace: "admin",
   update_namespace: "admin",
   // gather reads, finalize archives.
@@ -101,27 +83,22 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // list reads; every other action changes the queue.
   jobs: "action",
 
-  // The credential control plane. Admin in WHOLE: an agent that could mint, revoke or
-  // re-scope another could widen itself. This was "write" here with the admin check in
-  // the handler until 2026-09-16, which is a private grant check rule 6 forbids.
+  // The credential control plane. Admin in whole: an agent that could mint, revoke or
+  // re-scope another could widen itself.
   agents: "admin",
 };
 
-// FAIL CLOSED. A tool with no entry requires the write grant, so a tool added
-// without touching this table is refused for a read-only caller rather than being
-// waved through. test/scope.test.ts asserts the table and the registrations name the
-// same set, so the fallback is a backstop and not the normal path.
+// Fail closed: a tool with no entry requires the write grant, so a tool added without
+// touching this table is refused to a read-only caller rather than waved through.
+// test/invariants.test.ts asserts the table and the registrations name the same set,
+// so the fallback is a backstop and not the normal path.
 export function requiredGrant(tool: string): ToolRequirement {
   return Object.hasOwn(TOOL_GRANTS, tool) ? TOOL_GRANTS[tool] : "write";
 }
 
-// WHAT EACH ACTION REQUIRES, for a tool whose TOOL_GRANTS entry is "action" and whose
-// requirement depends on nothing but the action. The registrar reads this table, so
-// the requirement is written here and no handler repeats it.
-//
-// FAIL CLOSED on an action nobody listed: it takes `default`, which for improve_run is
-// admin, so an action added to the tool without touching this table is refused to a
-// driver rather than handed to it.
+// What each action requires, for an "action" tool whose requirement depends on nothing
+// but the action. The registrar reads this table. An unlisted action takes `default`
+// (admin for improve_run), so a new action is refused to a driver until listed.
 export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {
   improve_run: {
     // mode switches the whole loop off, pause stops a namespace, budget moves the spend
@@ -129,10 +106,10 @@ export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; acti
     // this Worker may merge without a human. None of those is a driver's work.
     default: "admin",
     actions: {
-      // A missing action is a run: see the handler's own branch for it.
+      // A missing action is a run.
       run: "write",
-      // Taking and releasing the driver lease is exactly what a driver does, every
-      // run, and it is the key that stops two of them working one namespace.
+      // Taking and releasing the driver lease is what a driver does every run, and it
+      // is what stops two drivers working one namespace.
       claim: "write",
     },
   },
@@ -153,16 +130,13 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
   return { grant: requirement };
 }
 
-// ---- routes ---------------------------------------------------------------------
-//
-// THE HTTP ROUTES THE REGISTRAR NEVER SEES. guardRegistrations wraps MCP tools, and a
-// plain route in src/routes.ts is outside it by construction. /ops/backup sat there
-// until 2026-09-16 checking only for the write grant, so a driver minted for one
-// namespace could run a full backup and prune across all of them.
+// HTTP routes, which guardRegistrations never sees: it wraps MCP tools, and a plain
+// route in src/routes.ts is outside it by construction. A route checked only for the
+// write grant would let a driver minted for one namespace act across all of them.
 //
 // Every route in defaultHandler is in exactly one of these two tables, and
 // test/route-gates.test.ts fails when one is in neither, so a new route is a decision
-// somebody made rather than a gap nobody saw.
+// rather than a gap.
 
 // A route that goes through checkScope, and what it requires.
 export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
@@ -193,23 +167,19 @@ export function routeRefusal(path: string, agent: Agent): string | null {
 
 export interface ScopeNeed {
   tool: string;
-  // The action, for a tool whose action decides what it does. Passed by the two
-  // "action" tools at the point where the action is known, and by nothing else.
-  // Present means the tools axis may narrow this call to the actions it names; see
-  // allowsToolAction in agents-schema.ts for the rule.
+  // The action, for a tool whose action decides what it does. Present means the tools
+  // axis may narrow this call to the actions it names (allowsToolAction).
   action?: string;
-  // The namespace this call touches, when it names one. `undefined` means the call
-  // does not name one; see namespaceRequired below for why that is not the same as
-  // "allowed".
+  // The namespace this call touches. `undefined` means the call names none, which is
+  // not the same as "allowed" (see namespaceRefusal).
   namespace?: string;
-  // THE RESOLVED REPO, "owner/name", never the selector the caller passed.
+  // The resolved repo, "owner/name", never the selector the caller passed.
   //
-  // The `repo` tool argument is a SELECTOR: a label ("primary", "legacy") or a full
+  // The `repo` argument is a selector: a label ("primary", "legacy") or a full
   // owner/name that the namespace maps. The repos axis holds owner/name entries, so
-  // comparing the selector to the axis got both directions wrong at once: the
-  // legitimate label "primary" was refused, and OMITTING the argument (the default,
-  // and therefore almost every call) skipped the axis entirely while resolveRepo
-  // picked the namespace primary. Resolve first, then ask.
+  // comparing the selector to the axis gets both directions wrong: the legitimate
+  // label "primary" is refused, and omitting the argument (almost every call) skips
+  // the axis while resolveRepo picks the namespace primary. Resolve first, then ask.
   repo?: string;
   grant?: AgentGrant;
   // The caller must be the admin identity, not merely hold the write grant. Set by
@@ -220,8 +190,7 @@ export interface ScopeNeed {
   flags?: readonly ScopeFlag[];
 }
 
-// WHY A FLAG IS NEEDED, in one sentence each, so a refusal tells the caller what to
-// ask for rather than only what it lacks.
+// Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
   can_direct_write: "a direct-mode commit lands on the default branch with no review",
@@ -232,17 +201,14 @@ const FLAG_REASON: Record<ScopeFlag, string> = {
   can_comment_pr: "commenting on a pull request writes to a repo, and a reviewer that may comment must not thereby be able to merge or close",
 };
 
-// THE ONE CHECK. Returns a refusal naming the missing scope, or null.
-//
-// Order is deliberate: tool, then grant, then namespace, then repo, then flags. A
-// caller that cannot use the tool at all should be told that rather than being told
-// its namespace is out of scope, which would leak which namespaces exist.
+// Order is deliberate: tool, grant, admin, namespace, repo, flags. A caller that
+// cannot use the tool is told that, not that its namespace is out of scope, which
+// would leak which namespaces exist.
 export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   const scopes = agent.scopes;
   if (!allowsToolAction(scopes.tools, need.tool, need.action)) {
-    // The refusal names the QUALIFIED thing that failed. A watcher told it is "not
-    // scoped to the 'jobs' tool" after being minted with jobs in its list would go
-    // looking for the wrong bug.
+    // Name the qualified tool.action that failed. A caller told it is not scoped to
+    // 'jobs' after being minted with jobs in its list would look for the wrong bug.
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
   }
@@ -252,9 +218,8 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
       `A read-only caller can use the read tools and nothing else.`
     );
   }
-  // BEFORE the namespace check, deliberately. A driver calling an admin-only tool on
-  // its OWN namespace would otherwise pass every remaining check, and the refusal it
-  // needs to read is "this tool is admin only", not silence.
+  // Before the namespace check, so a driver calling an admin-only tool on its own
+  // namespace is told the tool is admin only.
   if (need.admin && !agent.admin) {
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: '${asked}' is admin only and ${agent.actor} is not the admin. ${adminReason(need.tool)} Ask the admin to do it.`;
@@ -273,9 +238,8 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   return null;
 }
 
-// WHY EACH ADMIN-ONLY THING IS ADMIN ONLY, so the refusal a caller reads names its
-// own reason rather than another tool's. A requirement of "admin" with no entry here
-// fails the test that reads this table, rather than shipping a refusal with no reason.
+// Why each admin-only thing is admin only, for the refusal. An "admin" requirement
+// with no entry here fails the test that reads this table.
 const ADMIN_REASON: Record<string, string> = {
   register_namespace:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
@@ -291,31 +255,24 @@ function adminReason(tool: string): string {
   return Object.hasOwn(ADMIN_REASON, tool) ? ADMIN_REASON[tool] : "It acts on more than one namespace's scope.";
 }
 
-// THE DOCUMENT-SIDE TWIN OF THE PROTECTED-PATH FLAG. `allow_improve_paths` is how a
-// caller writes the improve loop's own control surface (its run documents, its
-// prompts, its skills, its anchors), and before agents it was open to anything
-// holding the write grant. Named here rather than in the tool module so the flag
-// vocabulary stays inside the enforcement point.
+// The improve override is itself scoped: `allow_improve_paths`, which lets a document
+// write reach the improve loop's control surface (its runs, prompts, skills and
+// anchors), needs these flags. The document tools check this list; it is named here so
+// the flag vocabulary stays inside the enforcement point.
 export const IMPROVE_OVERRIDE_FLAGS = ["can_touch_protected"] as const;
 
-// THE MCP REFUSAL SHAPE. tools/docs.ts has fail() for a handler's own errors; this
-// is the same shape spelled here so the enforcement point does not import the tool
-// modules it guards, which would be a cycle.
+// The same shape as fail() in tools/docs.ts, spelled here so the enforcement point
+// does not import the tool modules it guards (a cycle).
 function deny(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-// A NAMED NAMESPACE THAT IS OMITTED IS NOT THE SAME AS AN ALLOWED ONE.
-//
-// Several tools take an optional namespace and mean "every namespace" when it is
-// left out: list, search, find, improve_status, jobs list. For a caller scoped to
-// "*" that is unchanged. For a NARROWED caller it would be a hole with no check in
-// it at all, and the hole would be invisible because the tool works.
-//
-// So a namespace-restricted caller that omits the namespace on a tool that accepts
-// one is refused, and told to name it. Derived from the tool's OWN input schema
-// rather than from a list kept here, so a tool that gains a namespace argument is
-// covered without anybody remembering to add it.
+// An omitted namespace means "every namespace" on tools such as list, search, find,
+// improve_status and jobs list. For a caller scoped to "*" that changes nothing. For a
+// narrowed caller it would be a hole with no check in it, invisible because the tool
+// works. So a namespace-restricted caller that omits it is refused and told to name
+// it. Whether a tool takes a namespace is read from its own input schema, so a tool
+// that gains the argument is covered without anybody remembering to add it.
 function namespaceRefusal(agent: Agent, tool: string): string | null {
   if (agent.scopes.namespaces === "*") return null;
   return (
@@ -330,19 +287,12 @@ interface RegisteredConfig {
 
 type ToolHandler = (...args: unknown[]) => unknown;
 
-// WHICH ARGUMENT NAMES WHAT A TOOL IS BEING ASKED TO DO.
-//
-// Almost every action tool spells it `action`; lint spells it `mode`, because its
-// modes are what separate a read (gather) from two writes (report, finalize). Named
-// here, in the enforcement point, for the same reason TOOL_GRANTS is: the registrar
-// has to know it to populate need.action, and a per-tool answer scattered across the
-// handlers is how the qualifier ended up unwired everywhere but jobs.
-//
-// A tool absent from this table has no action, and the tools axis cannot narrow it
-// below the tool name. `mode` on write, write_repo_file and delete_repo_file is
-// deliberately NOT an action: those modes already decide a FLAG (can_direct_write),
-// which is the stronger check, and promoting them here would give one setting two
-// different authorities to disagree about.
+// Which argument names what a tool is asked to do. lint spells it `mode`, because its
+// modes separate a read (gather) from two writes. The registrar needs this to populate
+// need.action, and a per-tool answer scattered across the handlers leaves the
+// qualifier unwired. A tool absent here cannot be narrowed below the tool name. `mode` on
+// write, write_repo_file and delete_repo_file is not an action: it already decides a
+// flag (can_direct_write), and one setting should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
   agents: "action",
   improve_run: "action",
@@ -352,16 +302,12 @@ const ACTION_ARG: Record<string, string> = {
 };
 
 // The action a tool falls back to when the caller omits an optional one, so a
-// narrowed list does not refuse the tool's own default.
-//
-// AN ENTRY HERE IS REQUIRED WHEREVER THE HANDLER HAS A DEFAULT. Since 2026-09-13 an
-// unknown action on a narrowed tool is refused rather than read as the whole tool
-// (allowsToolAction), so a handler default this table does not know about becomes a
-// refusal: `lint` was missing until 2026-09-17, and an agent minted
-// ["lint", "lint.gather"] was refused its own default mode because the registrar saw
-// no action where the handler would have read "gather". test/audit-2026-09-16.test.ts
-// derives the requirement from the served schemas: an action argument the tool marks
-// optional is a handler default, and needs a line here.
+// narrowed list does not refuse the tool's own default. Every handler default needs
+// an entry: an unknown action on a narrowed tool is refused (allowsToolAction), so an
+// agent minted ["lint", "lint.gather"] would be refused its own default mode if the
+// registrar saw no action where the handler reads "gather".
+// test/audit-2026-09-16.test.ts derives the required entries from the served schemas:
+// an action argument a tool marks optional is a handler default.
 const DEFAULT_ACTION: Record<string, string> = { improve_run: "run", lint: "gather" };
 
 /** The action a call means when the caller omits the argument, or undefined. */
@@ -373,9 +319,8 @@ export function actionArgFor(tool: string): string | undefined {
   return Object.hasOwn(ACTION_ARG, tool) ? ACTION_ARG[tool] : undefined;
 }
 
-// The action this call is asking for, or undefined when the tool has none. Read off
-// the tool's OWN declared argument rather than off any property spelled "action", so
-// a tool that happens to take an unrelated one cannot be narrowed by accident.
+// The action this call asks for, read off the tool's own declared argument so an
+// unrelated property spelled "action" cannot narrow it.
 function actionOf(tool: string, config: RegisteredConfig, args: Record<string, unknown>): string | undefined {
   const key = actionArgFor(tool);
   if (!key) return undefined;
@@ -385,19 +330,15 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
   return defaultActionFor(tool);
 }
 
-// THE REGISTRAR GATE. Wraps the registration method ONCE, before any tool module
+// The registrar gate. Wraps the registration method once, before any tool module
 // runs, so every registration that follows is guarded whether or not its author
-// thought about it. That is the property the old per-tool line could not have: this
-// cannot be forgotten by a new tool, because a new tool has to be registered to
-// exist.
+// thought about scopes. A new tool cannot forget it, because a tool has to be
+// registered to exist.
 //
-// It wraps the server rather than replacing the call sites deliberately. Every
-// registration stays a literal call on the server object, which is what the source
-// guards read (test/invariants.test.ts, test/tool-annotations.test.ts and
-// test/counts.test.ts all parse those calls by that exact spelling), so the
-// enforcement point lands without blinding the scanners that check the surface it
-// enforces over. This module must never spell that call itself, for the same reason:
-// a scanner counting registrations would count this one.
+// It wraps the server rather than replacing the call sites so every registration
+// stays a literal call on the server object, which test/invariants.test.ts,
+// test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
+// module must never spell that call itself, or those scanners would count it.
 export function guardRegistrations(server: McpServer, agent: Agent): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
@@ -405,10 +346,8 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
     const guarded: ToolHandler = (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
-      // A SELECTOR IS NOT A SCOPE VALUE. Only a fully qualified owner/name can be
-      // compared to the axis here; a label is resolved against the namespace mapping
-      // by the repo tools, which then ask this same function about the result. See
-      // scopedRepo in src/tools/repo.ts.
+      // Only a full owner/name can be compared to the axis here; the repo tools
+      // resolve a label and check the result (scopedRepo in src/tools/repo.ts).
       const selector = typeof args.repo === "string" ? args.repo : undefined;
       const repo = selector?.includes("/") ? selector : undefined;
       const action = actionOf(name, config, args);
@@ -417,10 +356,8 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
         namespace,
         repo,
         action,
-        // A tool in TOOL_ACTION_GRANTS is decided here per action, because the action
-        // is already known. An "action" tool outside it (jobs, lint) is checked by its
-        // handler, where the namespace is known, so the registrar names no grant. An
-        // "admin" requirement needs the write grant AND the admin identity.
+        // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
+        // handler, where the namespace is known, so the registrar names no grant.
         ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return deny(refusal);
@@ -435,30 +372,19 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
   (server as unknown as { registerTool: unknown }).registerTool = patched;
 }
 
-// MONEY PATHS. A repo path that names a billing or payment surface, matched by NAME,
-// which is exactly as strong as that sounds: it is a tripwire on the paths where a
-// mistake costs real money, not an authorization boundary. The boundary is the
-// namespace-to-repo mapping and the flags beside this one.
-//
-// Broad on purpose. A false positive costs one refusal that names the flag to ask
-// for; a false negative is a payment file edited by a credential nobody scoped for
-// it. foxhound is the namespace this exists for and the patterns are portfolio-wide,
-// because a payment path is not less dangerous in a repo nobody expected one in.
-//
-// THE RESIDUAL, STATED RATHER THAN GLOSSED: a word separator counts as a boundary, so
-// `stripe-client.ts` trips it and so would `subscription-less.ts`. That is the trade
-// taken deliberately, because the common spelling of a real payment file is the
-// hyphenated one. The cost is a refusal naming the flag to ask for, which is the
-// cheap direction.
+// Money paths: a repo path that names a billing or payment surface, matched by name.
+// A tripwire, not an authorization boundary. Broad on purpose and portfolio-wide: a
+// false positive costs one refusal naming the flag, a false negative is a payment
+// file edited by a credential nobody scoped for it. A word separator counts as a
+// boundary, so `stripe-client.ts` trips it (and so would `subscription-less.ts`).
 const MONEY_PATH = /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
 
 export function isMoneyPath(path: string): boolean {
   return MONEY_PATH.test(path);
 }
 
-// EVERY FLAG A REPO MUTATION NEEDS, derived from the call rather than from the tool
-// name, and computed in ONE function so write_repo_file, delete_repo_file, manage_pr,
-// ci_dispatch and delete_branch cannot each decide a different answer.
+// Every flag a repo mutation needs, derived from the call, in one function so the
+// repo write tools cannot each decide a different answer.
 export function repoWriteFlags(
   tool: string,
   args: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean }
@@ -466,30 +392,20 @@ export function repoWriteFlags(
   const flags: ScopeFlag[] = [];
   if (args.mode === "direct") flags.push("can_direct_write");
   if (args.allow_workflow_write === true) flags.push("can_write_workflows");
-  // CLOSE IS HELD TO THE SAME FLAG AS MERGE (audit 2026-09-16, defect 8), because
-  // close DELETES THE HEAD BRANCH: manage_pr has deleted it on both actions since
-  // 2026-09-06, so a plain write grant could destroy the only copy of a branch
-  // somebody else pushed. That is the same blast radius as merging it, and a write
-  // grant is not the credential that should carry it. The alternative was to stop
-  // deleting on close, which would put back the invisible litter the deletion was
-  // added to clear.
+  // close deletes the head branch, so a plain write grant could destroy the only copy
+  // of a branch somebody else pushed. That is the same blast radius as merge, so it
+  // needs can_merge too. Not deleting on close would leave stale branches behind.
   if (tool === "manage_pr" && (args.action === "merge" || args.action === "close")) flags.push("can_merge");
-  // A FORCED BRANCH DELETE IS HELD TO THE SAME FLAG, for the same reason (audit
-  // 2026-09-25, F2-5). force lifts the open-PR refusal, so on the write grant alone it
-  // could delete another agent's open PR head, which is what close was moved to
-  // can_merge to prevent. A delete without force still refuses an open PR's head and
-  // needs no flag.
+  // A forced branch delete too: force lifts the open-PR refusal, so it could delete
+  // another agent's open PR head. A delete without force needs no flag.
   if (tool === "delete_branch" && args.force === true) flags.push("can_merge");
-  // A COMMENT IS A WRITE, AND IT IS THE SMALLEST ONE THIS TOOL MAKES. Separated from
-  // can_merge rather than folded into it so the reviewer role can hold one without
-  // the other, which is the whole reason the role exists.
+  // Separate from can_merge so the reviewer role can comment without merging.
   if (tool === "manage_pr" && args.action === "comment") flags.push("can_comment_pr");
   if (tool === "ci_dispatch") flags.push("can_dispatch");
-  // THE SAME PROTECTED LIST THE IMPROVE LOOP ENFORCES (src/improve-schema.ts), not a
-  // second copy of it. Those paths are what MEASURE a repo: its tests, its CI, its
-  // lint and compiler config, its lockfiles and manifests, its agent steering layer
-  // and its migrations. The loop may never touch them at all; a scoped caller may,
-  // and only while holding the flag that says so.
+  // The same protected list the improve loop enforces (src/improve-schema.ts), not a
+  // second copy. Those paths are what measure a repo: its tests, CI, lint and compiler
+  // config, lockfiles and manifests, agent steering layer and migrations. The loop may
+  // never touch them; a scoped caller may, holding this flag.
   if (args.path && protectedHits([args.path]).length > 0) flags.push("can_touch_protected");
   if (args.path && isMoneyPath(args.path)) flags.push("money_paths");
   return flags;

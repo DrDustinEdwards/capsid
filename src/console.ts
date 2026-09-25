@@ -13,29 +13,18 @@ import { loadReputation, type AgentReputation } from "./console-reputation";
 import { WATCHER_LAST_KEY, WATCHER_NAME } from "./watcher";
 import { activityFilterFrom, loadActivity, ACTIVITY_LIMIT, type ActivityFilter, type ActivityRow } from "./console-activity";
 
-// THE CONSOLE: one page that answers "what is the state of every namespace" without
-// asking a chat.
-//
-// READ-MOSTLY BY DESIGN. It renders what improve_status and jobs already compute and
-// offers a short list of control actions over them. It NEVER merges a pull request
-// and NEVER mints a credential: a merge can trigger a CI deploy in two of these
-// repos, and a mint hands out a key, so both stay where they are (manage_pr and the
-// agents tool), behind a caller that had to be given the scope for them.
-//
-// NO SECOND QUERY PATH. Every number here comes from the same function the MCP tool
-// calls. The whole point of the page is to agree with the tool, and a page with its
-// own SELECT is a page that can disagree with the thing it is reporting on.
+// The console: one page showing the state of every namespace. It renders what
+// improve_status and jobs compute, through the same functions the tools call so the
+// two cannot disagree, and offers a short list of control actions. It never merges a
+// pull request or mints a credential: those stay behind manage_pr and agents.
 
 export const CONSOLE_PATH = "/console";
 export const CONSOLE_JSON_PATH = "/console.json";
 export const CONSOLE_CALLBACK_PATH = "/console/callback";
 
-// AS STRICT AS /authorize, plus one directive that page cannot carry. Everything is
-// denied by default, the only relaxation is the inline <style> the page ships with,
-// and `form-action 'self'` is safe HERE because a console form posts back to this
-// origin and gets a redirect to this origin: no hop leaves. The consent dialog has to
-// omit form-action because approving it starts a four hop chain that ends at a
-// dynamically registered client redirect_uri, which no static list can name.
+// As strict as /authorize, plus `form-action 'self'`, which is safe here because a
+// console form posts to this origin and redirects to this origin. The consent dialog
+// must omit it (see renderApprovalDialog in routes.ts).
 export const CONSOLE_CSP =
   "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
@@ -47,9 +36,8 @@ export interface ConsoleData {
   agents: AgentReputation[];
   activity: ActivityRow[];
   activity_filter: ActivityFilter;
-  // THE WATCHER'S LAST PASS, from the stamp watcherTick writes. The minted `watcher`
-  // row's last_seen cannot answer this: the tick runs as a synthetic identity and
-  // presents no key, so that column only says whether the minted key was ever used.
+  // The watcher's last pass, from watcherTick's stamp. The tick presents no key, so
+  // the minted row's last_seen cannot answer this.
   watcher_last: string | null;
 }
 
@@ -65,12 +53,9 @@ export async function consoleData(
     viewer,
     health: await healthReport(env),
     improve,
-    // The inventory improve_status already resolved, with what each credential did
-    // counted against it. Passed in rather than re-read, so the panel cannot list an
-    // agent the rest of the page does not.
-    // The console runs as the admin, so improveStatus always attaches the inventory
-    // here; the ?? [] is the type falling in line with the scoped case rather than a
-    // real branch.
+    // The inventory improve_status resolved, passed in so the panel cannot list an
+    // agent the rest of the page does not. The console runs as admin, so ?? [] is for
+    // the type only.
     agents: await loadReputation(env.DB, improve.agents ?? []),
     activity: await loadActivity(env.DB, filter),
     activity_filter: filter,
@@ -78,13 +63,10 @@ export async function consoleData(
   };
 }
 
-// ---- the gate ----------------------------------------------------------------
-
-// A BEARER TOKEN IS REFUSED, NOT REDIRECTED. An agent key or an operator key
-// presented to /console is a caller that cannot follow a login redirect and must not
-// be treated as an anonymous browser: answering 302 would send a machine to GitHub
-// and look, from its side, like the console being unavailable. The refusal names what
-// was presented and what the page admits instead.
+// A bearer token is refused, not redirected. An agent or operator key presented to
+// /console is a caller that cannot follow a login redirect: a 302 would send a
+// machine to GitHub and look, from its side, like the console being down. The
+// refusal names what was presented and what the page admits instead.
 const BEARER_REFUSAL =
   "forbidden: /console admits the GitHub admin session only. An operator key or an agent key authenticates to /ops/mcp, not to this page; the same state is served by the improve_status and jobs tools there. Open /console in a browser to sign in as the administrator.";
 
@@ -106,9 +88,9 @@ export async function handleConsole(request: Request, env: Env, now: Date = new 
   const gate = await consoleGate(request, env, now, CONSOLE_PATH);
   if (!gate.ok) return gate.response;
   const data = await consoleData(env, gate.user.login, now, activityFilterFrom(new URL(request.url)));
-  // A FRESH TOKEN PER RENDER, set as a cookie and embedded in every form on the page.
-  // Double submit: the action handler compares the two with a constant-time compare,
-  // and a cross-site POST can carry neither.
+  // Double-submit CSRF: a fresh token per render, as a cookie and in every form. The
+  // action handler compares the two in constant time, and a cross-site POST can carry
+  // neither.
   const csrf = crypto.randomUUID();
   return new Response(renderConsole(data, csrf), {
     status: 200,
@@ -127,8 +109,6 @@ export async function handleConsoleJson(request: Request, env: Env, now: Date = 
   if (!gate.ok) return gate.response;
   return Response.json(await consoleData(env, gate.user.login, now, activityFilterFrom(new URL(request.url))));
 }
-
-// ---- rendering ---------------------------------------------------------------
 
 const STYLE = `
 :root { color-scheme: light dark; --bg: #fbfbfa; --fg: #1a1a1a; --muted: #5a5a5a; --line: #dcdcd8; --card: #fff; --warn: #8a4b00; --bad: #9b1c1c; --good: #1a7f37; }
@@ -199,11 +179,9 @@ function headerFacts(data: ConsoleData): string {
   ].join("");
 }
 
-// THE DRIVER FOR A NAMESPACE IS `<ns>-driver`, resolved out of the inventory
-// improve_status already returns rather than queried again. Matched on the exact
-// name: a prefix match would let foxing-driver answer for foxing-legacy, and the
-// last_seen a person reads off this row is how they decide whether a namespace has
-// a driver that still connects.
+// The driver for a namespace is `<ns>-driver`, matched exactly: a prefix match would
+// let foxing-driver answer for foxing-legacy, and the last_seen read off this row is
+// how a person decides whether a namespace has a driver that still connects.
 function driverFor(data: ConsoleData, namespace: string) {
   return data.agents.find((a) => a.name === `${namespace}-driver`) ?? null;
 }
@@ -211,9 +189,9 @@ function driverFor(data: ConsoleData, namespace: string) {
 function blockedJob(job: NamespaceStatus["jobs"]["blocked_jobs"][number], csrf: string): string {
   const times = job.blocked_times === 1 ? "blocked once" : `blocked ${job.blocked_times} times`;
   const resumed = job.resumed > 0 ? `, resumed ${job.resumed}` : "";
-  // The summary is rendered in a <pre> because block() writes the command into it on
-  // its own indented line, and a command a human has to retype is a command that gets
-  // retyped wrong. Escaped, like everything else that came out of the database.
+  // A <pre>, so the command block() wrote on its own line can be copied exactly; a
+  // command a human retypes gets retyped wrong. Escaped like everything else read
+  // from the database.
   const waiting = job.waiting_on
     ? `<pre>${escapeHtml(job.waiting_on)}</pre>`
     : `<p class="empty">This job recorded no command. Read the job document for what it was doing.</p>`;
@@ -247,8 +225,7 @@ function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): str
   facts.push(
     ns.latest_report && ns.latest_report.integrity !== null
       ? fact("integrity", `${ns.latest_report.integrity}%`)
-      : // A namespace with no report is NOT an integrity of zero, and rendering it as a
-        // number would make "never measured" and "measured badly" look the same.
+      : // No report is not an integrity of zero.
         fact("integrity", "no truth report", "warn")
   );
   facts.push(
@@ -274,9 +251,8 @@ function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): str
     ? `<h4>Blocked jobs, and what each waits on</h4><ul class="blocked-list">${ns.jobs.blocked_jobs.map((j) => blockedJob(j, csrf)).join("")}</ul>`
     : "";
 
-  // THE SKILLS PANEL. Three numbers and a gap, because the gap is the one a reader
-  // cannot compute from the others: a skill offered often and used rarely is a trigger
-  // condition that does not describe the work, not a failing skill.
+  // A skill offered often and used rarely has a trigger condition that does not
+  // describe the work, so the use rate is shown.
   const s = ns.skills;
   const total = s.candidate + s.live + s.retired;
   const skills =
@@ -313,10 +289,8 @@ ${skills}
 </section>`;
 }
 
-// EVERY FORM CARRIES THE SAME TWO HIDDEN FIELDS: the action and the CSRF token. The
-// confirm is NOT among them, deliberately. Posting without it renders the
-// confirmation page, which is what makes the confirm a decision rather than a field
-// the browser fills in on the reader's behalf.
+// Every form carries the action and the CSRF token, never the confirm: posting
+// without it renders the confirmation page.
 function form(csrf: string, action: string, fields: Record<string, string>, label: string, extra = ""): string {
   const hidden = Object.entries(fields)
     .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`)
@@ -338,16 +312,13 @@ function modeForms(data: ConsoleData, csrf: string): string {
   return `<div class="acts">${modes.map((m) => form(csrf, "mode", { value: m }, `Set mode: ${m}`)).join("")}</div>`;
 }
 
-// A RATE AS A PERCENTAGE, or a dash when there is no denominator to divide by.
+// A dash when there is no denominator.
 function pct(value: number | null): string {
   return value === null ? "-" : `${Math.round(value * 100)}%`;
 }
 
-// THE WATCHER ROW SHOWS THE PASS, NOT ONLY THE KEY. last_seen moves only when a key is
-// presented, and the Worker runs the watcher without one, so for this row "never
-// connected" was true of the key and false of the watcher. The tick does not touch
-// last_seen for it either: that column is how an unused credential is noticed, and a
-// minted key nothing presents should keep reading as unused.
+// The watcher row shows the last pass as well as the key: the tick presents no key,
+// and it does not touch last_seen, which is how an unused credential is noticed.
 function lastSeenCell(agent: AgentReputation, watcherLast: string | null): string {
   const key = escapeHtml(agent.last_seen ?? "never connected");
   if (agent.name !== WATCHER_NAME) return key;
@@ -367,16 +338,11 @@ function agentRow(agent: AgentReputation, csrf: string, watcherLast: string | nu
   const state = agent.revoked_at
     ? `<span class="bad">revoked ${escapeHtml(agent.revoked_at)}</span>`
     : lastSeenCell(agent, watcherLast);
-  // THE VERIFIED COLUMN, and it is deliberately not the same numbers as the one
-  // beside it. "PRs opened / merged" counts what this credential DID through this
-  // Worker, from audit_log. These three come from job_outcomes and only from the
-  // fields the Worker checked against GitHub itself, which is why a driver can show
-  // pull requests in one column and a dash in this one: it opened them without
-  // naming them as evidence on a job.
-  //
-  // A DASH IS NOT A ZERO. A rate with no denominator is null and reads as "-",
-  // because 0% would sort an agent that has done nothing below one that has done
-  // something imperfectly.
+  // The verified column comes from job_outcomes, only the fields the Worker checked
+  // against GitHub; "PRs opened / merged" beside it comes from audit_log. A driver can
+  // show pull requests in one column and a dash in the other when it opened them
+  // without naming them as evidence on a job. A null rate reads "-", not 0%, because
+  // 0% would sort an agent that has done nothing below one that did imperfect work.
   const verified = `${pct(agent.record.pr_merge_rate)} / ${pct(agent.record.ci_green_rate)} / ${
     agent.record.median_duration_minutes === null ? "-" : `${agent.record.median_duration_minutes}m`
   }`;
@@ -409,8 +375,7 @@ function agentsPanel(data: ConsoleData, csrf: string): string {
 
 function activityPanel(data: ConsoleData): string {
   const f = data.activity_filter;
-  // A GET form, so a filtered view is a URL somebody can keep. No CSRF on it, because
-  // it reads and changes nothing; the action forms are the ones that mutate.
+  // A GET form with no CSRF: it changes nothing.
   const filterForm = `<form method="get" action="${CONSOLE_PATH}" class="act">
 <input type="text" name="namespace" placeholder="namespace" value="${escapeHtml(f.namespace ?? "")}" maxlength="64">
 <input type="text" name="actor" placeholder="actor" value="${escapeHtml(f.actor ?? "")}" maxlength="128">
