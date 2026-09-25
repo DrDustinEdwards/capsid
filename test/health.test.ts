@@ -79,6 +79,67 @@ test("a missing backup stamp warns rather than throwing", async () => {
   assert.match(String(backup.warning), /no successful backup/i);
 });
 
+test("an unparseable backup stamp warns instead of reporting no warning", async () => {
+  // Date.parse gives NaN, and NaN > limit is false, so before this the stamp read as
+  // fresh: no warning and an age_hours of null.
+  const env = healthEnv({
+    DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
+    APP_KV: fakeKv({ seed: { "backup:last-ok": "not a date" } }).kv,
+  });
+  const resp = await handleHealth(env);
+  const body = await bodyOf(resp);
+  assert.equal(resp.status, 200, "an unreadable stamp is a warning, not a health failure");
+  const backup = body.backup as { last_ok: string | null; age_hours: number | null; warning?: string };
+  assert.equal(backup.last_ok, "not a date");
+  assert.equal(backup.age_hours, null);
+  assert.match(String(backup.warning), /not a parseable time/i);
+});
+
+// A bucket stub with only the call the probe makes.
+function media(head: () => Promise<unknown>) {
+  return { head } as unknown as R2Bucket;
+}
+
+test("MEDIA and APP_KV are probed and reported as fields", async () => {
+  const env = healthEnv({
+    DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
+    APP_KV: fakeKv({ seed: { "backup:last-ok": new Date().toISOString() } }).kv,
+    MEDIA: media(async () => null),
+  });
+  const resp = await handleHealth(env);
+  const body = await bodyOf(resp);
+  assert.equal(resp.status, 200);
+  assert.deepEqual(body.bindings, { media: "ok", app_kv: "ok" });
+});
+
+test("a missing or failing MEDIA or APP_KV is reported, and does not change status", async () => {
+  // Status stays about the store (D1 and FTS): the live gate polls status until it
+  // reads ok, and these two bindings are reported for a person or the watcher to read.
+  const unbound = healthEnv({
+    DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
+    APP_KV: fakeKv({ failGet: true }).kv,
+  });
+  const a = await handleHealth(unbound);
+  const aBody = await bodyOf(a);
+  assert.equal(a.status, 200);
+  assert.equal(aBody.status, "ok");
+  const aBindings = aBody.bindings as { media: string; app_kv: string };
+  assert.equal(aBindings.media, "unbound");
+  assert.match(aBindings.app_kv, /^error: KV get exploded/);
+
+  const failing = healthEnv({
+    DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
+    APP_KV: fakeKv({}).kv,
+    MEDIA: media(async () => {
+      throw new Error("R2 head exploded");
+    }),
+  });
+  const bBody = await bodyOf(await handleHealth(failing));
+  const bBindings = bBody.bindings as { media: string; app_kv: string };
+  assert.match(bBindings.media, /^error: R2 head exploded/);
+  assert.equal(bBindings.app_kv, "ok");
+});
+
 test("a degraded store still reports, and the backup read failing does not mask it", async () => {
   const env = healthEnv({
     DB: fakeD1({ ftsHit: false, migrations: ["0001_init.sql"] }).db,

@@ -106,6 +106,7 @@ test("the shell renders with ZERO namespaces rather than throwing on an empty ro
       builtAt: "2026-09-11T13:00:00.000Z",
       schema_version: "0009_jobs_required_scopes.sql",
       store: { d1: "ok", fts: "ok" },
+      bindings: { media: "ok", app_kv: "ok" },
       backup: { last_ok: "2026-09-11T09:00:00.000Z", age_hours: 5 },
     },
     improve: {
