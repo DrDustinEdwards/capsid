@@ -23,6 +23,7 @@
 // ONE fakeD1: this is a second SQL dialect inside the one fake, not a second fake.
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
+import { applyWrite, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
 import {
   IMPROVE_ATTEMPT_DEFAULTS,
   IMPROVE_RUN_DEFAULTS,
@@ -245,6 +246,8 @@ export interface FakeD1Options {
   // The PR URLs an outcome named (migrations/0015), for auto-merge's check that a PR
   // was recorded against the job its body names. Absent by default.
   jobOutcomePrs?: Array<{ job_id: string; pr_url: string }>;
+  // Recorded job outcomes (migrations/0011). Absent by default.
+  jobOutcomes?: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1Rows {
@@ -266,6 +269,7 @@ export interface FakeD1Rows {
   agents: Array<Record<string, unknown>>;
   jobs: Array<Record<string, unknown>>;
   job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
+  job_outcomes: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1 {
@@ -322,6 +326,15 @@ function globMatch(pattern: string, value: string): boolean {
 function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   const flat = sql.replace(/\s+/g, " ");
   if (!/INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat)) return false;
+  // requireJobUnchanged: fires unless the job still has the status, holder and
+  // updated_at the caller read. Until 2026-09-25 this fell through to the documents
+  // lookup below, found no document named after the job id, and fired every time.
+  if (/SELECT NULL, 'jobs', \?1/i.test(flat)) {
+    const [id, status, claimedBy, updatedAt] = params;
+    return !rows.jobs.some(
+      (j) => j.id === id && j.status === status && (j.claimed_by ?? null) === (claimedBy ?? null) && j.updated_at === updatedAt
+    );
+  }
   const [namespace, path] = params as [string, string];
   const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
   // requireBodyUnchanged: fires unless the row exists AND its body is the expected one.
@@ -332,19 +345,76 @@ function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   return !row;
 }
 
-// snapshotLive (src/store-guards.ts) answers RETURNING id with the row it copied, or
-// nothing when the documents row is gone at batch time. write and restore report
-// `snapshotted` from this result, so a fake answering [] would make every snapshot
-// read as not taken.
-function liveSnapshotReturning(sql: string, params: unknown[], rows: FakeD1Rows): unknown[] {
-  const flat = sql.replace(/\s+/g, " ");
-  if (!/^\s*INSERT INTO document_versions \(document_id, namespace, path, title, body\) SELECT id, namespace, path, title, body FROM documents WHERE namespace = \?1 AND path = \?2 RETURNING id/i.test(flat)) {
-    return [];
-  }
+// snapshotLive (src/store-guards.ts) copies the live row into document_versions and
+// answers RETURNING id with the new version's id, or nothing when the documents row is
+// gone at batch time. write and restore report `snapshotted` from this result, so a
+// fake answering [] would make every snapshot read as not taken. The version row lands,
+// so a test can read the prior body back from rows.versions.
+const SNAPSHOT_LIVE =
+  /^INSERT INTO document_versions \(document_id, namespace, path, title, body\) SELECT id, namespace, path, title, body FROM documents WHERE namespace = \?1 AND path = \?2 RETURNING id$/i;
+
+function landSnapshot(params: unknown[], rows: FakeD1Rows): WriteResult {
   const [namespace, path] = params as [string, string];
-  const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
-  return row ? [{ id: row.id }] : [];
+  const doc = rows.documents.find((d) => d.namespace === namespace && d.path === path);
+  if (!doc) return { changes: 0, returning: [] };
+  const id = rows.versions.reduce((max, v) => Math.max(max, v.id), 0) + 1;
+  rows.versions.push({
+    id,
+    document_id: doc.id ?? 0,
+    namespace,
+    path,
+    title: doc.title ?? null,
+    body: doc.body ?? null,
+    snapshot_at: sqliteNow(),
+  });
+  return { changes: 1, returning: [{ id }] };
 }
+
+// delete's audit row, whose params are the edges it removes, built inside the batch
+// by json_group_array. An aggregate over no edges still answers one row, so the audit
+// row lands with an empty list, as it does in SQLite.
+const DELETE_AUDIT_EDGES =
+  /^INSERT INTO audit_log \(actor, action, namespace, path, params\) SELECT \?1, 'delete', \?2, \?3, json_object\('edges_removed', json_group_array\( json_object\('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path\)\)\) FROM document_links WHERE \(from_ns = \?2 AND from_path = \?3\) OR \(to_ns = \?2 AND to_path = \?3\) RETURNING params$/i;
+
+function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
+  const [actor, namespace, path] = params as [string, string, string];
+  const edges = rows.links
+    .filter((l) => (l.from_ns === namespace && l.from_path === path) || (l.to_ns === namespace && l.to_path === path))
+    .map((l) => ({ from_ns: l.from_ns, from_path: l.from_path, type: l.type, to_ns: l.to_ns, to_path: l.to_path }));
+  const auditParams = JSON.stringify({ edges_removed: edges });
+  const id = rows.audit_log.reduce((max, a) => Math.max(max, a.id ?? 0), 0) + 1;
+  (rows.audit_log as Row[]).push({ id, actor, action: "delete", namespace, path, params: auditParams, at: sqliteNow() });
+  return { changes: 1, returning: [{ params: auditParams }] };
+}
+
+// The column defaults migrations 0006 to 0020 give a jobs row.
+const jobDefaults = (): Row => ({
+  priority: 0,
+  status: "queued",
+  claimed_by: null,
+  claimed_at: null,
+  lease_expires: null,
+  result_ref: null,
+  result_summary: null,
+  gate_required: 0,
+  resumed_count: 0,
+  blocked_count: 0,
+  required_scopes: null,
+  corrections_count: 0,
+  review_required: 0,
+  min_record: null,
+  created_at: sqliteNow(),
+  updated_at: sqliteNow(),
+});
+
+// The table a SELECT reads, from its first FROM.
+const mainTable = (flat: string): string | undefined => /^SELECT .+? FROM (\w+)/is.exec(flat.trim())?.[1];
+
+// recordFor's and the skills summary's read of job_outcomes, which excludes outcomes
+// whose job was superseded with a NOT EXISTS subquery. The subquery is resolved here
+// against rows.jobs and the rest of the statement goes through selectRows.
+const NOT_SUPERSEDED =
+  / (WHERE|AND) NOT EXISTS \(SELECT 1 FROM jobs j WHERE j\.id = o\.job_id AND j\.status = 'superseded'\)/i;
 
 export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   const rows: FakeD1Rows = {
@@ -363,9 +433,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       publish_at: null,
       ...d,
     })),
-    versions: opts.versions ?? [],
-    namespaces: opts.namespaces ?? [{ namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }],
-    links: opts.links ?? [],
+    // Seeded rows are COPIED, because writes now land: a fixture array shared between
+    // tests would otherwise carry one test's writes into the next.
+    versions: (opts.versions ?? []).map((v) => ({ ...v })),
+    namespaces: (opts.namespaces ?? [{ namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }]).map((n) => ({ ...n })),
+    links: (opts.links ?? []).map((l) => ({ ...l })),
     improve_runs: (opts.improveRuns ?? []).map((r) => ({ ...IMPROVE_RUN_DEFAULTS, ...r })),
     improve_attempts: (opts.improveAttempts ?? []).map((a) => ({ ...IMPROVE_ATTEMPT_DEFAULTS, ...a })),
     improve_scores: opts.improveScores ?? [],
@@ -374,10 +446,81 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     skill_evaluations: [],
     skill_edits: [],
     skill_failures: [],
-    audit_log: opts.auditLog ?? [],
-    agents: opts.agents ?? [],
-    jobs: opts.jobs ?? [],
-    job_outcome_prs: opts.jobOutcomePrs ?? [],
+    audit_log: (opts.auditLog ?? []).map((a) => ({ ...a })),
+    agents: [...(opts.agents ?? [])],
+    jobs: (opts.jobs ?? []).map((j) => ({ ...jobDefaults(), ...j })),
+    job_outcome_prs: (opts.jobOutcomePrs ?? []).map((p) => ({ ...p })),
+    job_outcomes: (opts.jobOutcomes ?? []).map((o) => ({ ...o })),
+  };
+  // THE TABLES A WRITE LANDS IN (C1-17). Until 2026-09-25 a write outside the improve
+  // tables was recorded and never applied, so a test could only read back the params it
+  // sent, and a write whose WHERE matched nothing looked the same as one that landed.
+  const tables: Record<string, TableSpec> = {
+    documents: {
+      rows: rows.documents as unknown as Row[],
+      unique: [["namespace", "path"]],
+      autoId: true,
+      defaults: () => ({ title: null, body: null, type: "note", status: "published", tags: null, frontmatter: null, publish_at: null, created_at: sqliteNow(), updated_at: sqliteNow() }),
+    },
+    document_versions: { rows: rows.versions as unknown as Row[], unique: [], autoId: true, defaults: () => ({ snapshot_at: sqliteNow() }) },
+    document_links: { rows: rows.links, unique: [["from_ns", "from_path", "type", "to_ns", "to_path"]], autoId: true, defaults: () => ({ created_at: sqliteNow() }) },
+    namespaces: { rows: rows.namespaces as Row[], unique: [["namespace"]], defaults: () => ({ repos: null, created_at: sqliteNow() }) },
+    audit_log: { rows: rows.audit_log as Row[], unique: [], autoId: true, defaults: () => ({ at: sqliteNow() }) },
+    agents: { rows: rows.agents, unique: [["id"], ["name"], ["key_hash"]], defaults: () => ({ created_at: sqliteNow(), revoked_at: null, last_seen: null }) },
+    jobs: { rows: rows.jobs, unique: [["id"]], defaults: jobDefaults },
+    job_outcomes: { rows: rows.job_outcomes, unique: [["job_id"]], defaults: () => ({ recorded_at: sqliteNow() }) },
+    job_outcome_prs: { rows: rows.job_outcome_prs as Row[], unique: [["job_id", "pr_url"]], defaults: () => ({ merged: null, merge_verified_at: null, recorded_at: sqliteNow() }) },
+  };
+
+  // ONE WRITE, applied to the rows. A statement this fake does not model throws rather
+  // than being recorded and ignored.
+  const write = (sql: string, params: unknown[]): WriteResult => {
+    const flat = sql.replace(/\s+/g, " ").trim();
+    if (isImproveStatement(flat)) {
+      const answered = improveExec(flat, params, rows);
+      const results = (answered.handled ? answered.results : []) as Row[];
+      // The improve dialect answers a keyed UPDATE with the row it moved and a plain
+      // INSERT with nothing, so an INSERT that did not throw wrote one row.
+      const changes = /^INSERT/i.test(flat) && !/\bRETURNING\b/i.test(flat) ? 1 : results.length;
+      return { changes, returning: results };
+    }
+    if (/^INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat)) {
+      if (guardFires(flat, params, rows)) throw new Error(GUARD_ERROR);
+      return { changes: 0, returning: [] };
+    }
+    if (SNAPSHOT_LIVE.test(flat)) return landSnapshot(params, rows);
+    if (DELETE_AUDIT_EDGES.test(flat)) return landDeleteAudit(params, rows);
+    // jobs_open_title (migrations/0019): one open job per (namespace, title). The
+    // queue's duplicate refusal is this index firing, so a fake without it would
+    // post every duplicate.
+    if (isJobInsert(flat)) {
+      const [, namespace, title] = params as [string, string, string];
+      const taken = rows.jobs.some((j) => j.namespace === namespace && j.title === title && OPEN_JOB_STATUSES.includes(j.status as JobStatus));
+      if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
+    }
+    const result = applyWrite(tables, flat, params);
+    if (!result) throw new Error(`fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`);
+    return result;
+  };
+  const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
+
+  // Reads of jobs, job_outcomes and job_outcome_prs, and every COUNT, resolved through the
+  // whole statement rather than one or two of its filters. Null when the statement is
+  // for another branch.
+  const tableSelect = (flat: string, params: unknown[]): Row[] | null => {
+    const main = mainTable(flat);
+    if (main === "job_outcomes") {
+      let pool = rows.job_outcomes;
+      let text = flat;
+      if (NOT_SUPERSEDED.test(text)) {
+        pool = pool.filter((o) => !rows.jobs.some((j) => j.id === o.job_id && j.status === "superseded"));
+        text = text.replace(NOT_SUPERSEDED, (_m, keyword: string) => (keyword.toUpperCase() === "WHERE" ? " WHERE 1 = 1" : ""));
+      }
+      return selectRows(pool, text.replace(/ FROM job_outcomes o\b/i, " FROM job_outcomes"), params);
+    }
+    if (main === "jobs" || main === "job_outcome_prs") return selectRows(tables[main].rows, flat, params);
+    if (main && tables[main] && /^SELECT COUNT\(\*\) AS n FROM/i.test(flat.trim())) return selectRows(tables[main].rows, flat, params);
+    return null;
   };
   const recorded: Recorded[] = [];
   // READS are logged SEPARATELY from writes. `recorded` means "what this handler
@@ -432,16 +575,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // Queue rows for the readers that LOOK a job up rather than transition it.
     // auto-merge asks which agent claimed the job a pull request closes, and that read
     // had no answer here, so the tick could never reach its merging path in a test.
-    if (/FROM jobs/i.test(flat)) {
-      const byId = flat.includes("WHERE id = ?1");
-      const byNs = flat.includes("namespace = ?2");
-      const match = rows.jobs.find((j) => {
-        if (byId && j.id !== params[0]) return false;
-        if (byNs && j.namespace !== params[1]) return false;
-        return true;
-      });
-      return match ? project(flat, { ...match }) : null;
-    }
+    // Every filter in the statement applies, and a COUNT counts, where this read only
+    // `id = ?1` and `namespace = ?2` before and answered a COUNT over jobs with a raw row.
+    const selected = tableSelect(flat, params);
+    if (selected) return selected[0] ?? null;
     // null here or the fake would grant what the database refuses.
     if (/FROM agents/i.test(flat)) {
       const live = /revoked_at IS NULL/i.test(flat);
@@ -457,7 +594,6 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       });
       return match ? project(flat, { ...match }) : null;
     }
-    if (/SELECT COUNT\(\*\) AS n/i.test(flat)) return { n: 0 };
     // /health's D1 liveness probe: a bare SELECT 1, no table. The `... FROM
     // documents` form below is a different query (does this row exist).
     if (/^SELECT 1 AS ok$/i.test(flat.trim())) return { ok: 1 };
@@ -466,20 +602,17 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const names = opts.migrations ?? [];
       return names.length ? { name: names[names.length - 1] } : null;
     }
-    if (/FROM documents/i.test(flat)) {
+    if (/FROM documents\b/i.test(flat)) {
       const [namespace, boundPath] = params as [string, string];
-      // gather's core lookup binds only the namespace and writes path = 'core.md'
-      // as a literal. Read it, or the fake answers null and gather looks like it
-      // lost the one document it is built around.
+      // The (namespace, path) the race hook is told about. gather's core lookup writes
+      // path = 'core.md' as a literal and binds only the namespace.
       const literalPath = flat.match(/path = '([^']+)'/i);
       const path = literalPath ? literalPath[1] : boundPath;
-      // prompts/get binds the path WITHOUT the extension and lets SQL try both:
-      // `path = ?2 OR path = ?2 || '.md'`. A fake that only matched the first answered
-      // null for every prompt document, so the whole prompts surface was untestable
-      // through the real handler.
-      const suffixed = /\|\| '\.md'/.test(flat);
-      const row =
-        rows.documents.find((d) => d.namespace === namespace && (d.path === path || (suffixed && d.path === `${path}.md`))) ?? null;
+      // THE WHOLE WHERE CLAUSE APPLIES (C1-17), including literals such as
+      // `namespace = 'capsid'` or `type = 'prompt'` and prompts/get's
+      // `path = ?2 OR path = ?2 || '.md'`. This matched namespace and path alone before,
+      // and read the namespace from ?1 even where the statement wrote it as a literal.
+      const row = (selectRows(tables.documents.rows, flat.replace(/^\s*SELECT .+? FROM /i, "SELECT * FROM "), params)[0] ?? null) as unknown as DocRow | null;
       const asOk = /SELECT 1 AS ok FROM documents/i.test(flat);
       // The commit-time read of updated_at is NOT the pre-read, so the racing writer lands
       // between them.
@@ -529,8 +662,9 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
         .slice(0, limit);
     }
-    // The backup dump: SELECT * FROM <table>, no WHERE.
-    const dump = flat.match(/^SELECT \* FROM (\w+)/i);
+    // The backup dump: SELECT * FROM <table>, no WHERE. Anchored at the end, or a
+    // `SELECT * FROM jobs WHERE ...` read is answered with every row.
+    const dump = flat.trim().match(/^SELECT \* FROM (\w+)$/i);
     if (dump) {
       const table = dump[1];
       if (table === "documents") return rows.documents;
@@ -689,6 +823,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         return { ns, path, actor: matches.length ? matches[matches.length - 1].actor : null };
       });
     }
+    const selected = tableSelect(flat, params);
+    if (selected) return selected;
     const single = answerFirst(sql, params);
     return single ? [single] : [];
   };
@@ -699,6 +835,14 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     params,
     bind: (...bound: unknown[]) => stmt(sql, bound),
     first: async () => {
+      // A WRITE ISSUED THROUGH first(), which is how a keyed UPDATE ... RETURNING is
+      // read. It lands and answers with the row it moved, or null when its WHERE matched
+      // nothing. The agents control plane's UPDATEs keep their own branch in answerFirst.
+      if (isWrite(sql) && !/^\s*UPDATE agents SET/i.test(sql)) {
+        const result = write(sql, params);
+        recorded.push({ sql, params, via: "direct" });
+        return result.returning[0] ?? null;
+      }
       reads.push({ sql, params, via: "direct" });
       if (/FROM documents_fts/i.test(sql)) {
         return opts.ftsHit === false ? null : { path: "conventions.md" };
@@ -710,63 +854,58 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       return { results: answerAll(sql, params), meta: { changes: 0 } };
     },
     run: async () => {
+      // THE ROWS THE WRITE ACTUALLY MOVED, not an unconditional 1, so a 0-row write
+      // outside a batch no longer reads as success.
+      const result = write(sql, params);
       recorded.push({ sql, params, via: "direct" });
-      // An improve mutation issued outside a batch still has to LAND, or a test
-      // that writes then reads gets a stale answer and the failure looks like the
-      // handler's rather than the fake's.
-      if (isImproveStatement(sql)) improveExec(sql, params, rows);
-      return { meta: { changes: 1 } };
+      return { meta: { changes: result.changes } };
     },
   });
+
+  // Put every table back as it was before a batch that threw. The arrays keep their
+  // identity, because tests hold fake.rows.<table>.
+  const restore = (saved: FakeD1Rows) => {
+    for (const key of Object.keys(rows) as Array<keyof FakeD1Rows>) {
+      const live = rows[key] as unknown[];
+      live.length = 0;
+      live.push(...(saved[key] as unknown[]));
+    }
+  };
 
   const db = {
     prepare: (sql: string) => stmt(sql),
     batch: async (statements: Array<{ sql: string; params: unknown[] }>) => {
       batches.push(statements.map((s) => s.sql.replace(/\s+/g, " ").trim()));
-      for (const s of statements) {
-        if (opts.failBatchMatching?.test(s.sql)) throw new Error("D1_ERROR: database is locked");
-        // A guard that fires aborts the transaction, so nothing this batch would
-        // have written is recorded. That is the property under test.
-        if (guardFires(s.sql, s.params, rows)) throw new Error(GUARD_ERROR);
-        // jobs_open_title (migrations/0019): one open job per (namespace, title). The
-        // queue's duplicate refusal is this index firing, so a fake without it would
-        // post every duplicate.
-        if (isJobInsert(s.sql)) {
-          const [, namespace, title] = s.params as [string, string, string];
-          const taken = rows.jobs.some((j) => j.namespace === namespace && j.title === title && OPEN_JOB_STATUSES.includes(j.status as JobStatus));
-          if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
+      // ONE TRANSACTION. The statements run in order, so a read or a guard later in the
+      // batch sees the writes before it, and if any statement throws (a guard, a UNIQUE
+      // constraint, an injected failure) every table goes back to where it was and
+      // nothing is recorded, which is what D1 does.
+      const saved = structuredClone(rows);
+      const answers: unknown[][] = [];
+      try {
+        for (const s of statements) {
+          if (opts.failBatchMatching?.test(s.sql)) throw new Error("D1_ERROR: database is locked");
+          if (!/^\s*SELECT/i.test(s.sql)) {
+            answers.push(write(s.sql, s.params).returning);
+            continue;
+          }
+          // dueCounts, when a test sets it, drives the backup prune's counters
+          // directly; otherwise a COUNT counts the rows.
+          answers.push(/SELECT COUNT/i.test(s.sql) && opts.dueCounts ? [{ n: opts.dueCounts[countCall++] ?? 0 }] : answerAll(s.sql, s.params));
         }
+      } catch (err) {
+        restore(saved);
+        throw err;
       }
-      // Only once every statement has passed does anything land, which is what a
-      // transaction means.
-      const landed: unknown[][] = [];
-      for (const s of statements) {
-        recorded.push({ sql: s.sql, params: s.params, via: "batch" });
-        if (isJobInsert(s.sql)) {
-          const [id, namespace, title, body, priority, posted_by, gate_required, required_scopes, min_record, review_required, created_at] = s.params;
-          rows.jobs.push({ id, namespace, title, body, priority, status: "queued", posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at: created_at });
-        }
-        const answer = isImproveStatement(s.sql) ? improveExec(s.sql, s.params, rows) : { handled: false as const };
-        landed.push(answer.handled ? answer.results : liveSnapshotReturning(s.sql, s.params, rows));
-      }
+      for (const s of statements) recorded.push({ sql: s.sql, params: s.params, via: "batch" });
       return statements.map((s, i) => ({
         // Inflated on purpose: FTS5 triggers inflate meta.changes on this schema,
         // which is why the code counts with a SELECT instead of reading it.
         meta: { changes: 999 },
-        // A BATCHED READ ANSWERS FROM THE ROWS, like a direct one. Added when the backup
-        // export moved into a single batch (residual 4): a batch returning [] for every
-        // SELECT would make "the dump is one snapshot" pass against a dump with no rows
-        // in it. COUNT keeps its own branch, because dueCounts drives the prune's
-        // counters.
-        // A batched improve write with RETURNING answers with the rows it moved, as D1
-        // does, so a caller reading that result can see a 0-row UPDATE.
-        results: /SELECT COUNT/i.test(s.sql)
-          ? [{ n: opts.dueCounts?.[countCall++] ?? 0 }]
-          : /^\s*SELECT/i.test(s.sql)
-            ? answerAll(s.sql, s.params)
-            : /\bRETURNING\b/i.test(s.sql)
-              ? landed[i]
-              : [],
+        // A batched read answers from the rows, like a direct one, and a batched write
+        // with RETURNING answers with the rows it moved, as D1 does, so a caller reading
+        // that result can see a 0-row UPDATE.
+        results: /^\s*SELECT/i.test(s.sql) || /\bRETURNING\b/i.test(s.sql) ? answers[i] : [],
       }));
     },
   } as unknown as D1Database;
