@@ -12,13 +12,15 @@
 // resolved, nothing is verified, and the pinned ids are substituted for the example's
 // placeholders.
 //
-// IT MUST NEVER BE USED TO DEPLOY. It writes to its own filename and the deploy path
-// does not read it.
+// IT MUST NEVER BE USED TO DEPLOY. It writes wrangler.dryrun.jsonc, which the deploy
+// path does not read; the dry run names it with --config. It used to write
+// wrangler.jsonc, the file deploy reads, so running it locally replaced the real
+// gitignored config with the example plus pins, with no backup.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2 } from "./bindings.mjs";
 
-const OUT = "wrangler.jsonc";
+const OUT = "wrangler.dryrun.jsonc";
 
 const example = readFileSync("wrangler.jsonc.example", "utf8");
 

@@ -3,6 +3,8 @@ node_modules/
 .env
 .wrangler/
 wrangler.jsonc
+# Written by scripts/dry-run-config.mjs for the scorer's bundle-size dry run.
+wrangler.dryrun.jsonc
 .tmp-*
 
 # The holdout suite is pulled into here by improve-score.yml and must NEVER be
