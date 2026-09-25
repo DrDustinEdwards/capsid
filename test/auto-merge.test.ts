@@ -53,9 +53,12 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     ciNote: "3 check(s) green",
     ciSteps: CAPSID_CI.map((r) => ({ ...r, conclusion: "success" })),
     ciStepsProblem: null,
+    headRepo: "DrDustinEdwards/capsid-mcp",
     jobId: "job_4c0ecc28548b",
     jobClaimedBy: "agent:capsid-driver",
+    jobStatus: "done",
     driverAgent: { name: "capsid-driver", kind: "driver", revoked: false },
+    jobPrUrls: ["https://github.com/DrDustinEdwards/capsid-mcp/pull/23"],
     ...over,
   };
 }
@@ -110,6 +113,44 @@ test("author_is_driver: a claim by an opkey rather than an agent never merges", 
   const verdict = evaluatePolicy(greenPr({ jobClaimedBy: "opkey:9f2c1a", driverAgent: null }));
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
+});
+
+// ---- audit 2026-09-25, finding F2-1: the PR itself, not only the job it names ------
+
+test("head_in_base_repo: a fork's PR never merges, nor one whose fork GitHub no longer reports", () => {
+  for (const headRepo of ["someone-else/capsid-mcp", null]) {
+    const verdict = evaluatePolicy(greenPr({ headRepo }));
+    assert.equal(verdict.merge, false, `head on ${headRepo} merged`);
+    assert.equal(verdict.merge === false && verdict.failed, "head_in_base_repo");
+  }
+  // Owner and repo names are case-insensitive on GitHub.
+  assert.equal(evaluatePolicy(greenPr({ headRepo: "drdustinedwards/Capsid-MCP" })).merge, true);
+});
+
+test("job_handed_on: a job that has not handed a PR on never merges", () => {
+  for (const jobStatus of ["queued", "claimed", "failed", "superseded", null]) {
+    const verdict = evaluatePolicy(greenPr({ jobStatus }));
+    assert.equal(verdict.merge, false, `a ${jobStatus} job's PR merged`);
+    assert.equal(verdict.merge === false && verdict.failed, "job_handed_on");
+  }
+  assert.equal(evaluatePolicy(greenPr({ jobStatus: "blocked" })).merge, true, "a blocked job that recorded its PR is handed on");
+});
+
+test("pr_recorded_for_job: a PR the job's holder never recorded never merges", () => {
+  const cases: Array<[string, string[]]> = [
+    ["no record at all", []],
+    ["another PR in the same repo", ["https://github.com/DrDustinEdwards/capsid-mcp/pull/22"]],
+    ["a PR number that only starts the same", ["https://github.com/DrDustinEdwards/capsid-mcp/pull/234"]],
+    ["the same number in another repo", ["https://github.com/DrDustinEdwards/foxhound/pull/23"]],
+    ["a document key", ["capsid/notes/done.md"]],
+  ];
+  for (const [label, jobPrUrls] of cases) {
+    const verdict = evaluatePolicy(greenPr({ jobPrUrls }));
+    assert.equal(verdict.merge, false, `${label}: merged`);
+    assert.equal(verdict.merge === false && verdict.failed, "pr_recorded_for_job", label);
+  }
+  // The same URL in another case, or with a trailing slash, is still this PR.
+  assert.equal(evaluatePolicy(greenPr({ jobPrUrls: ["https://github.com/drdustinedwards/capsid-mcp/pull/23/"] })).merge, true);
 });
 
 test("base_is_default_branch: a PR onto a side branch never merges", () => {
@@ -335,9 +376,10 @@ test("ci_green: steps that could not be read never merge", () => {
 test("a failing check reports only the checks that actually passed before it", () => {
   const verdict = evaluatePolicy(greenPr({ ciConclusion: "failure", ciNote: "checks=failure" }));
   assert.equal(verdict.merge, false);
-  // ci_green sits last, so exactly the six before it passed. An audit row that
+  // ci_green sits last, so exactly the checks before it passed. An audit row that
   // claimed a later check passed would be claiming a check that never ran.
-  assert.deepEqual(verdict.merge === false ? verdict.passed : [], POLICY_CHECKS.slice(0, 6));
+  assert.equal(POLICY_CHECKS[POLICY_CHECKS.length - 1], "ci_green");
+  assert.deepEqual(verdict.merge === false ? verdict.passed : [], POLICY_CHECKS.slice(0, -1));
   const early = evaluatePolicy(greenPr({ changedPaths: ["src/gate-policy.ts"], ciConclusion: "failure" }));
   assert.deepEqual(early.merge === false ? early.passed : null, [], "the never-list is checked first");
 });
@@ -519,7 +561,7 @@ test("the shipped policy document names exactly the checks the code enforces", (
   );
   assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
   assert.deepEqual(parsed.policy.requiredCi, namespacedCiLabels());
-  assert.equal(parsed.policy.version, "4");
+  assert.equal(parsed.policy.version, "5");
   assert.equal(parsed.policy.enabled, true);
 });
 
@@ -558,8 +600,11 @@ test("the decline audit row names the policy version, the PR, the failing check 
       "paths_not_refused",
       "paths_not_money",
       "no_migration_workflow_lockfile",
+      "head_in_base_repo",
       "body_names_job",
       "author_is_driver",
+      "job_handed_on",
+      "pr_recorded_for_job",
       "base_is_default_branch",
     ],
     at: "2026-09-12T03:00:00.000Z",
@@ -645,11 +690,20 @@ test("PLANT: no policy document at all makes the tick reach GitHub not once", as
 const OWNER = "/repos/DrDustinEdwards/capsid";
 const HEAD_SHA = "bfae8ca9012345678901234567890123456789ab";
 
-function tickRoutes(changedFiles: string[]) {
+const PR_URL = "https://github.com/DrDustinEdwards/capsid/pull/23";
+
+function tickRoutes(changedFiles: string[], headRepo: string | null = "DrDustinEdwards/capsid") {
   return {
     [`GET ${OWNER}`]: { body: { default_branch: "master" } },
     [`GET ${OWNER}/pulls`]: {
-      body: [{ number: 23, body: "Closes job_4c0ecc28548b.", head: { sha: HEAD_SHA }, base: { ref: "master" } }],
+      body: [
+        {
+          number: 23,
+          body: "Closes job_4c0ecc28548b.",
+          head: { sha: HEAD_SHA, repo: headRepo === null ? null : { full_name: headRepo } },
+          base: { ref: "master" },
+        },
+      ],
     },
     [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename })) },
     [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
@@ -689,9 +743,23 @@ function ciRunRoutes(steps: string[]) {
   };
 }
 
-async function enabledEnv(claimedBy = "agent:capsid-driver") {
+// The job as a driver leaves it: completed, with the PR it opened as its result_ref.
+async function enabledEnv(
+  claimedBy = "agent:capsid-driver",
+  job: { status?: string; result_ref?: string | null } = {},
+  jobOutcomePrs: Array<{ job_id: string; pr_url: string }> = []
+) {
   return tickEnv(await signTaskBody(SECRET, GOOD_POLICY), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: claimedBy, status: "claimed" }],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: claimedBy,
+        status: job.status ?? "done",
+        result_ref: job.result_ref === undefined ? PR_URL : job.result_ref,
+      },
+    ],
+    jobOutcomePrs,
     agents: [
       { name: "capsid-driver", kind: "driver", revoked_at: null },
       { name: "seat", kind: "seat", revoked_at: null },
@@ -777,6 +845,56 @@ test("PLANT v2: a PR from the seat's job is refused by the tick", async () => {
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "author_is_driver");
   assert.match(outcome.why ?? "", /kind 'seat', not a driver/);
+});
+
+// ---- audit 2026-09-25, finding F2-1, through the tick ------------------------------
+//
+// Before version 5 the tick read only number, body, base and head sha of each open PR,
+// and judged the job the body named. Each plant below names a finished driver job with
+// green CI and src/-only changes, which is everything version 4 asked for.
+
+async function tickWith(env: Awaited<ReturnType<typeof enabledEnv>>, routes: Record<string, unknown>) {
+  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
+  await withFetch(routes as never, async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.ran, true, report.note);
+    assert.equal(report.outcomes.length, 1);
+    out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+  });
+  return out!;
+}
+
+test("PLANT F2-1: a fork PR naming a done driver job is refused by the tick", async () => {
+  // The job even records this PR's URL; the head is still on a fork.
+  const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["src/jobs.ts"], "attacker/capsid"));
+  assert.equal(merges, 0, "a fork PR was auto-merged");
+  assert.equal(outcome.failed, "head_in_base_repo");
+  assert.match(outcome.why ?? "", /attacker\/capsid/);
+});
+
+test("PLANT F2-1: a same-repo PR naming a done driver job that never recorded it is refused by the tick", async () => {
+  // The driver's job is done and names ANOTHER PR, which is what a finished job whose
+  // id somebody copied into their own PR body looks like.
+  const env = await enabledEnv("agent:capsid-driver", { result_ref: "https://github.com/DrDustinEdwards/capsid/pull/22" }, [
+    { job_id: "job_4c0ecc28548b", pr_url: "https://github.com/DrDustinEdwards/capsid/pull/22" },
+  ]);
+  const { outcome, merges } = await tickWith(env, tickRoutes(["src/jobs.ts"]));
+  assert.equal(merges, 0, "a PR the job never recorded was auto-merged");
+  assert.equal(outcome.failed, "pr_recorded_for_job");
+});
+
+test("PLANT F2-1: a PR naming a driver job still claimed is refused by the tick", async () => {
+  const { outcome, merges } = await tickWith(await enabledEnv("agent:capsid-driver", { status: "claimed", result_ref: null }), tickRoutes(["src/jobs.ts"]));
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "job_handed_on");
+});
+
+test("F2-1: a PR recorded only in job_outcome_prs, from evidence.prs, still merges", async () => {
+  const env = await enabledEnv("agent:capsid-driver", { result_ref: "capsid/notes/done.md" }, [{ job_id: "job_4c0ecc28548b", pr_url: PR_URL }]);
+  const { outcome, merges } = await tickWith(env, tickRoutes(["src/jobs.ts"]));
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+  assert.equal(merges, 1);
+  assert.deepEqual(outcome.passed, [...POLICY_CHECKS]);
 });
 
 test("the tick refuses when the Actions run list cannot be read", async () => {

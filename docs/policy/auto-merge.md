@@ -6,7 +6,7 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 4
+- version: 5
 - enabled: true
 - namespaces: capsid, dustinedwards
 
@@ -14,6 +14,19 @@ This file ships the value that is signed, so `enabled` reads `true` here because
 policy is on. Turning it on or off is a ruling, and the document is on the ordinary
 write tool's refusal list, so changing it needs `allow_improve_paths: true` and the
 `can_touch_protected` flag, and lands in the audit log.
+
+Version 5 adds three checks: `head_in_base_repo`, `job_handed_on` and
+`pr_recorded_for_job` (audit 2026-09-25, finding F2-1). Up to version 4 the Worker
+judged the job a pull request's body named and never the pull request itself. It read
+who claimed that job, in any status, and did not check where the head branch lived or
+whether the job's driver had ever named this pull request. Job ids are public, in
+commit subjects and pull request bodies, so a fork pull request, or one opened by any
+credential holding `open_pr`, that named a finished driver job merged on green CI.
+
+Version 5 does not check the GitHub account that opened the pull request. Measured
+2026-09-25: every merged capsid pull request from #47 to #86 was opened by the
+`DrDustinEdwards` user account, because drivers run `gh pr create` locally, so a rule
+that required the GitHub App's bot account would refuse every real driver pull request.
 
 Version 4 adds dustinedwards and makes the required CI steps per namespace. The step
 list was one array of capsid's own step names, so naming a second namespace in it
@@ -54,11 +67,19 @@ are the never-list.
 - `no_migration_workflow_lockfile` No changed path is a migration, a workflow, or a
   lockfile. The refused list also covers migrations and the scorer workflow. Stating
   them again means removing a pattern from one list does not open the other.
+- `head_in_base_repo` The PR's head branch is on the same repo as its base. A PR from
+  a fork, or one whose fork GitHub no longer reports, is left for the seat.
 - `body_names_job` The PR body carries the id of the job the work came from, so a
   merged change traces back to a request somebody made.
 - `author_is_driver` That job was claimed by a minted agent whose kind is `driver` and
-  which has not been revoked. A PR from a seat, a cron agent, an operator key or a
-  person is left for the seat.
+  which has not been revoked. A job claimed by a seat, a cron agent, an operator key or
+  a person is left for the seat.
+- `job_handed_on` That job is `blocked` or `done`. A queued, claimed, failed or
+  superseded job has not handed a PR on.
+- `pr_recorded_for_job` The job's holder recorded this PR against the job: the job's
+  `result_ref`, or one of its `job_outcome_prs` rows, names this PR's URL in this repo.
+  Both are written by the transition keyed on the job's holder. Naming a job id in a
+  PR body does not make the PR that job's work.
 - `base_is_default_branch` The PR targets the repo's default branch. A PR onto a
   release or staging branch is somebody's sequencing decision, not this policy's.
 - `ci_green` Every check run on the head sha has completed and concluded success,
@@ -163,4 +184,6 @@ more than the code enforces: a check, refused path or required step on which the
 disagree is refused at load time. That is also what closes the window on every version
 bump: a version 2 document lists five fewer refused paths than this code enforces, so
 it loads nothing here, and between this code deploying and version 3 being signed
-nothing is auto-merged. The same was true of version 1 against the version 2 code.
+nothing is auto-merged. The same was true of version 1 against the version 2 code, and
+of version 4 against the version 5 code, whose document does not name the three checks
+version 5 added.
