@@ -77,9 +77,16 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   // Reported through console rather than in TickOutcome, which describes improve
   // RUNS. A requeued job is not a run transition and folding it into that shape
   // would make the loop's own outcome list lie about what it advanced.
-  const expired = await expireJobLeases(env, now);
-  if (expired.requeued.length > 0) {
-    console.log(`JOB_LEASE_EXPIRED returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`);
+  //
+  // Wrapped like the steps below it (audit 2026-09-25, F1-4): a throw here stopped
+  // auto-merge, the skill cycle and every run transition for the tick.
+  try {
+    const expired = await expireJobLeases(env, now);
+    if (expired.requeued.length > 0) {
+      console.log(`JOB_LEASE_EXPIRED returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`);
+    }
+  } catch (err) {
+    console.error(`JOB_LEASE_SWEEP_THREW: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // AUTO-MERGE RIDES THIS TICK TOO, on the same reasoning as the lease sweep and with
