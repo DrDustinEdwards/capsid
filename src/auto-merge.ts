@@ -22,6 +22,10 @@ import { verifySignedBody } from "./improve-task";
 // check added in code and not written down fails the build, and loadMergePolicy
 // refuses at run time as well, because the test proves the pair in the repo and the
 // document actually lives in the database.
+//
+// ONE LIST LIVES ONLY IN THE DOCUMENT: the PR author allowlist (version 5). The code
+// has no copy to compare it with, so it is a value the signature governs, and a
+// document without one does not load.
 export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 const POLICY_NAMESPACE = "capsid";
 
@@ -35,12 +39,17 @@ const POLICY_NAMESPACE = "capsid";
 // green CI. Job ids are public, in commit subjects and PR bodies. head_in_base_repo
 // refuses a fork head, job_handed_on refuses a job that is not blocked or done, and
 // pr_recorded_for_job refuses a PR the driver never recorded against that job.
+//
+// pr_author_allowed (ruled 2026-09-25) refuses a PR whose GitHub author login is not
+// on the allowlist the signed document carries. The list is in the document and not
+// here, so changing who may author an unattended merge is a signed act.
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
   "no_migration_workflow_lockfile",
   "head_in_base_repo",
   "body_names_job",
+  "pr_author_allowed",
   "author_is_driver",
   "job_handed_on",
   "pr_recorded_for_job",
@@ -101,6 +110,12 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)vitest\.config\.[cm]?[jt]s$/i, why: "the integration suite's configuration" },
   { pattern: /^scripts\/test-budget\.mjs$/i, why: "the runner behind npm test" },
   { pattern: /^scripts\/verify-live\.mjs$/i, why: "the live gate, whose rollback is the backstop for an unattended merge" },
+  // ADDED IN VERSION 5 (ruled 2026-09-25). pr_recorded_for_job trusts result_ref and
+  // job_outcome_prs because only the job's holder writes them. These two sources are
+  // what writes them, so a green PR that loosened either could record any PR against
+  // any job.
+  { pattern: /^src\/jobs\.ts$/i, why: "the job transitions that write result_ref, which pr_recorded_for_job reads" },
+  { pattern: /^src\/outcome-prs\.ts$/i, why: "the writer of job_outcome_prs, which pr_recorded_for_job reads" },
 ];
 
 function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> {
@@ -132,7 +147,9 @@ export interface RequiredStep {
 const ciStep = (job: string) => (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
 
 export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
-  capsid: ["Typecheck", "Typecheck tests", "Typecheck integration tests", "Typecheck the copied scorer script", "Tests", "Integration tests"].map(
+  // Version 5 merged the four typecheck steps into one step that still runs all four
+  // configs (audit 2026-09-25, B1).
+  capsid: ["Typecheck src, tests, integration tests and the copied scorer script", "Tests", "Integration tests"].map(
     ciStep("checks")
   ),
   // Every step of dustinedwards-info's one job, ruled 2026-09-19. Install and the build
@@ -165,6 +182,9 @@ export interface MergePolicy {
   namespaces: string[];
   checks: string[];
   refusedPaths: string[];
+  // The GitHub logins whose pull requests may be merged without a human. Read from the
+  // document only; parseMergePolicy refuses a document that names none.
+  authors: string[];
   // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
   // the step was written under. One flat list keeps the load-time agreement check a
   // single comparison in both directions, so a namespace section present in the code
@@ -189,6 +209,8 @@ const CHECK_ITEM = /^- `([a-z_]+)`/;
 // read as check ids.
 const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
+// An allowed PR author, written as `- author `<login>``.
+const AUTHOR_ITEM = /^- author `([^`]+)`/;
 // The heading a required step is filed under: `## Required CI, <namespace>`. A step
 // written before any such heading is a refusal rather than a step belonging to
 // whichever namespace came first.
@@ -215,6 +237,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   }
   const checks: string[] = [];
   const refusedPaths: string[] = [];
+  const authors: string[] = [];
   const requiredCi: string[] = [];
   let ciNamespace: string | null = null;
   for (const line of body.split("\n")) {
@@ -230,6 +253,8 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     if (check) checks.push(check[1]);
     const path = PATH_ITEM.exec(trimmed);
     if (path) refusedPaths.push(path[1]);
+    const author = AUTHOR_ITEM.exec(trimmed);
+    if (author) authors.push(author[1]);
     const step = STEP_ITEM.exec(trimmed);
     if (step) {
       if (!ciNamespace) {
@@ -238,7 +263,12 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
       requiredCi.push(`${ciNamespace} / ${step[1]}`);
     }
   }
-  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, requiredCi } };
+  // FAIL CLOSED. The allowlist is only in the document, so a document without one has
+  // no statement of whose PRs it covers and loads nothing.
+  if (authors.length === 0) {
+    return { error: "the policy document names no PR author, so it authorises no pull request. Refusing rather than merging with no author allowlist." };
+  }
+  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, authors, requiredCi } };
 }
 
 // Both directions: what the document lists and the code does not, and the reverse.
@@ -314,6 +344,9 @@ export interface PrFacts {
   // The owner/name of the repo the PR's head branch lives on, as GitHub reports it, or
   // null when GitHub reports none (a fork that was deleted).
   headRepo: string | null;
+  // The login of the GitHub account that opened the PR (pr.user.login), or null when
+  // GitHub reports none.
+  prAuthor: string | null;
   // Resolved from the job id in the PR body.
   jobId: string | null;
   jobClaimedBy: string | null;
@@ -367,8 +400,11 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   },
 ];
 
-/** The whole policy, as a pure function of facts. Every check refuses on its own. */
-export function evaluatePolicy(facts: PrFacts): PolicyVerdict {
+/**
+ * The whole policy, as a pure function of facts and the signed document's author
+ * allowlist. Every check refuses on its own.
+ */
+export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): PolicyVerdict {
   const passed: PolicyCheck[] = [];
   const no = (failed: PolicyCheck, why: string): PolicyVerdict => ({ merge: false, failed, why, passed: [...passed] });
 
@@ -407,6 +443,17 @@ export function evaluatePolicy(facts: PrFacts): PolicyVerdict {
     return no("body_names_job", "the PR body names no job id, so there is no request this change can be traced back to.");
   }
   passed.push("body_names_job");
+
+  // Logins are compared case-insensitively because GitHub treats them that way. An
+  // empty allowlist matches nobody.
+  const author = facts.prAuthor?.toLowerCase() ?? null;
+  if (!author || !allowedAuthors.some((a) => a.toLowerCase() === author)) {
+    return no(
+      "pr_author_allowed",
+      `the PR was opened by ${facts.prAuthor ?? "no account GitHub reports"}, which is not on the policy's author allowlist (${allowedAuthors.join(", ") || "empty"}).`
+    );
+  }
+  passed.push("pr_author_allowed");
 
   if (!facts.jobClaimedBy) {
     return no("author_is_driver", `the PR body names ${facts.jobId}, but no such job is recorded in this namespace.`);
@@ -474,6 +521,7 @@ interface OpenPr {
   base: { ref: string };
   // repo is null when the head was on a fork that has since been deleted.
   head: { sha: string; repo?: { full_name?: string } | null };
+  user?: { login?: string } | null;
 }
 
 // Every completed check run must have concluded success, skipped or neutral, and at
@@ -645,6 +693,7 @@ async function factsForPr(
     ciSteps: steps.steps,
     ciStepsProblem: steps.problem,
     headRepo: pr.head.repo?.full_name ?? null,
+    prAuthor: pr.user?.login ?? null,
     jobId,
     jobClaimedBy,
     jobStatus,
@@ -764,7 +813,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
 
     for (const pr of prs) {
       const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
-      const verdict = evaluatePolicy(facts);
+      const verdict = evaluatePolicy(facts, policy.authors);
       if (!verdict.merge) {
         outcomes.push({
           namespace,

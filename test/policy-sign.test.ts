@@ -32,6 +32,8 @@ const POLICY_BODY = [
   "",
   ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
   "",
+  "- author `DrDustinEdwards`",
+  "",
   ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
   ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
     `## Required CI, ${ns}`,
