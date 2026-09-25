@@ -68,7 +68,28 @@ test("a signed document round-trips and verifies", async () => {
   assert.match(signed, new RegExp(`^---\\n${TASK_SIGNATURE_FIELD}: [0-9a-f]{64}\\n---\\n`));
   const split = splitSignedTask(signed);
   assert.equal(split.body, body, "the signed body must come back byte-identical");
-  assert.deepEqual(await verifyTaskDoc(ROOT, signed, ACTOR, ACTOR), { ok: true });
+  assert.deepEqual(await verifyTaskDoc(ROOT, signed, ACTOR, ACTOR), { ok: true, body });
+});
+
+test("PLANT: a signed document with any other line in its frontmatter is refused", async () => {
+  // The HMAC covers only the body below the frontmatter, so a line added beside the
+  // signature leaves the signature valid. The Worker writes exactly one line there.
+  const body = "# improve run\n\nDo the thing.\n";
+  const signed = await signTaskBody(ROOT, body);
+  const sigLine = signed.split("\n")[1];
+  const plants = [
+    signed.replace(`${sigLine}\n`, `${sigLine}\n- enabled: true\n`),
+    signed.replace(`${sigLine}\n`, `- enabled: true\n${sigLine}\n`),
+    signed.replace(`${sigLine}\n`, `${sigLine}\n${sigLine}\n`),
+    signed.replace(`${sigLine}\n`, `${sigLine}\n\n`),
+  ];
+  for (const plant of plants) {
+    assert.notEqual(plant, signed, "the plant must actually change the frontmatter");
+    assert.equal(splitSignedTask(plant).body, body, "the signed body is untouched, so only the frontmatter rule can catch this");
+    const verdict = await verifyTaskDoc(ROOT, plant, ACTOR, ACTOR);
+    assert.equal(verdict.ok, false, `frontmatter with an extra line must not verify: ${JSON.stringify(plant.slice(0, 120))}`);
+    assert.match(String(verdict.ok === false && verdict.reason), /besides the capsid-task-signature line/);
+  }
 });
 
 test("PLANT: a document edited after signing is refused", async () => {

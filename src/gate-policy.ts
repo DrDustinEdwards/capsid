@@ -367,7 +367,8 @@ export async function loadGatePolicy(env: Env): Promise<{ policy: GatePolicy } |
   if (!row) return { error: `no gate policy at ${POLICY_NAMESPACE}/${GATE_POLICY_PATH}, so nothing is pre-approved.` };
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", "gate policy");
   if (!verdict.ok) return { error: verdict.reason };
-  const parsed = parseGatePolicy(row.body ?? "");
+  // The signed body only. The stored text also holds the unsigned frontmatter.
+  const parsed = parseGatePolicy(verdict.body);
   if ("error" in parsed) return parsed;
   const missing = GATE_CLASSES.filter((c) => !parsed.policy.classes.includes(c));
   if (missing.length > 0) {

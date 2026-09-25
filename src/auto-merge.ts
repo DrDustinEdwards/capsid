@@ -260,7 +260,8 @@ export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy }
   if (!row) return { error: `no merge policy at ${POLICY_NAMESPACE}/${AUTO_MERGE_POLICY_PATH}, so nothing is auto-merged.` };
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", "merge policy");
   if (!verdict.ok) return { error: verdict.reason };
-  const parsed = parseMergePolicy(row.body ?? "");
+  // The signed body only. The stored text also holds the unsigned frontmatter.
+  const parsed = parseMergePolicy(verdict.body);
   if ("error" in parsed) return parsed;
   const missing = POLICY_CHECKS.filter((c) => !parsed.policy.checks.includes(c));
   if (missing.length > 0) {
