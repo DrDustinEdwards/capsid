@@ -20,11 +20,11 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("agents"),
       description:
-        `Scoped credentials: one row per caller, with its own key, its own scopes and its own audit identity. ADMIN ONLY, every action: a minted agent cannot mint, revoke or re-scope another, because an agent that can widen itself has no scope. The admin is an OAuth session on /mcp or a write-grant OPERATOR_KEY_HASH entry on /ops/mcp. action "mint" creates an agent and RETURNS ITS KEY ONCE: the key is stored nowhere, the table holds its sha256, and a lost key is replaced by revoking and minting again. It takes name (unique forever, revoked names included, because it is the audit identity), kind (${AGENT_KINDS.join(" | ")}), namespaces (the list it may reach, or the single entry * for all), and optionally repos, tools, grants and flags. A new agent defaults to READ on its named namespaces with no flags; widen it deliberately. The flags are the blast radius, each naming an action whose consequence leaves this Worker: ${SCOPE_FLAGS.join(", ")}. action "list" is the inventory, REVOKED ROWS INCLUDED, with each agent's scopes, last_seen and a 12-hex fingerprint of its key digest; the stored verifier is never returned. action "revoke" sets revoked_at rather than deleting, so the audit rows an agent wrote still resolve to what it was allowed to do, and its key stops resolving immediately. action "update_scopes" replaces named axes and leaves the rest: a call naming one flag does not clear the others. Minting and re-scoping are audit-logged with the scopes and, for a mint, the key's fingerprint. Never the key.`,
+        `Scoped credentials: one row per caller, with its own key, scopes and audit identity (agent:<name>). Admin only, every action: a minted agent cannot mint, revoke or re-scope. The admin is an OAuth session on /mcp or a write-grant OPERATOR_KEY_HASH entry on /ops/mcp. action "mint" creates an agent and returns its key once; only its sha256 is stored, so a lost key is replaced by revoking and minting again. It takes name (unique, revoked names included), kind (${AGENT_KINDS.join(" | ")}), namespaces (a list, or the single entry "*"), and optionally repos, tools, grants and flags. A new agent defaults to read on its namespaces with no flags. The flags are ${SCOPE_FLAGS.join(", ")}. action "list" returns every agent, revoked ones included, with its scopes, last_seen and a 12-hex fingerprint of its key digest; never the stored verifier. action "revoke" sets revoked_at, keeps the row, and the key stops resolving immediately. action "update_scopes" replaces only the axes named: a call naming one flag leaves the others. Mint, revoke and update_scopes are audit-logged, never with the key.`,
       inputSchema: {
         action: z.enum(AGENT_ACTIONS).describe("mint | list | revoke | update_scopes."),
-        name: bounded(64).optional().describe("For mint, revoke and update_scopes: the agent's name, which is its audit identity (agent:<name>)."),
-        kind: bounded(MAX_DOC_TYPE).optional().describe(`For mint: ${AGENT_KINDS.join(" | ")}. Descriptive, not authorizing: what an agent may do is in its scopes.`),
+        name: bounded(64).optional().describe("For mint, revoke and update_scopes: the agent's name."),
+        kind: bounded(MAX_DOC_TYPE).optional().describe(`For mint: ${AGENT_KINDS.join(" | ")}. Grants nothing by itself.`),
         namespaces: z
           .array(nsName)
           .optional()
@@ -33,14 +33,14 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
           .array(bounded(128))
           .optional()
           .describe(
-            'The repos this agent may reach, as "owner/name" entries, or the single entry "*". Omit it and the mint DERIVES the list from the live mapping of the namespaces it is scoped to, so the axis names real repos rather than the wildcard; a namespace that maps none refuses the mint instead of widening it. A namespace scope of "*" derives "*".'
+            'The repos this agent may reach, as "owner/name" entries, or the single entry "*". Omitted, the mint derives it from the namespaces\' repo mapping, and refuses when a namespace maps no repo. A namespace scope of "*" derives "*".'
           ),
-        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry may be qualified as "tool.action" (for example "manage_pr.comment"), which narrows that tool to the actions named and refuses its others.'),
+        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry "tool.action" (for example "manage_pr.comment") narrows that tool to the actions named.'),
         grants: z.array(z.enum(AGENT_GRANTS)).optional().describe(`read, or read and write. A new agent gets read.`),
         flags: z
           .object(Object.fromEntries(SCOPE_FLAGS.map((flag) => [flag, z.boolean().optional()])))
           .optional()
-          .describe(`The blast-radius flags: ${SCOPE_FLAGS.join(", ")}. Absent means unchanged, never cleared. Every one defaults to false at mint.`),
+          .describe(`${SCOPE_FLAGS.join(", ")}. An absent flag is left unchanged. Each defaults to false at mint.`),
       },
     },
     async (args) => {
