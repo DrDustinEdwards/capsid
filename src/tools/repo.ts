@@ -92,7 +92,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     // registrar has already checked the tool, the grant, the namespace and the repo
     // selector by now; a wrapper could not have checked these, because `mode:
     // "direct"` needs can_direct_write and `mode: "pr"` does not.
-    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; repo?: string } = {}
+    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean; repo?: string } = {}
   ) => {
     // EVERY REPO MUTATION FUNNELS THROUGH HERE, which is why the flag check is here
     // and not in each of the seven tools: this is the one place that already sees
@@ -470,19 +470,19 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("delete_branch"),
       description:
-        "Delete a branch in a namespace's GitHub repo. REFUSES, naming which refusal it is: the repo's default branch, ALWAYS, and force does not lift that one; a branch under the improve loop's branch prefix, because it may be an attempt the loop still needs; and a branch with an open pull request. The last two are lifted by force:true. Also refuses a branch that does not exist rather than reporting a no-op as success. Requires an operator key with the write grant; audit-logged.",
+        "Delete a branch in a namespace's GitHub repo. REFUSES, naming which refusal it is: the repo's default branch, ALWAYS, and force does not lift that one; a branch under the improve loop's branch prefix, because it may be an attempt the loop still needs; and a branch with an open pull request. The last two are lifted by force:true, which also requires the can_merge flag, because it can delete another agent's open PR head. Also refuses a branch that does not exist rather than reporting a no-op as success. Requires an operator key with the write grant; audit-logged.",
       inputSchema: {
         namespace: nsName,
         branch: bounded(MAX_REF),
         force: z
           .boolean()
           .optional()
-          .describe("Lift the improve-prefix and open-PR refusals. Does NOT lift the default-branch refusal."),
+          .describe("Lift the improve-prefix and open-PR refusals. Requires the can_merge flag. Does NOT lift the default-branch refusal."),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
       },
     },
     ({ namespace, branch, force, repo }) =>
-      guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo), { repo })
+      guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo), { force, repo })
   );
 
   server.registerTool(
