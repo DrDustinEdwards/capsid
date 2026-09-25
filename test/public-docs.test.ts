@@ -211,7 +211,7 @@ test("two mints are different keys", async () => {
 });
 
 test("the mint is a control action on the existing tool, not a new tool", async () => {
-  // Hard rule 1: the surface stays small. The tool count is asserted against the
+  // CLAUDE.md, tool surface rule: the surface stays small. The tool count is asserted against the
   // served tools in test/counts.test.ts; this checks the mint is an action of
   // improve_run rather than a tool of its own.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));

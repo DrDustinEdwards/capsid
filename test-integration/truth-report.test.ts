@@ -61,7 +61,7 @@ describe("lint mode report", () => {
       ).first<{ n: number }>();
       expect(indexed?.n).toBeGreaterThan(0);
 
-      // And the audit row landed in the same batch. Hard rule 5.
+      // And the audit row landed in the same batch. CLAUDE.md, snapshot rule.
       const audit = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lint_report' AND namespace = 'capsid'"
       ).first<{ n: number }>();
@@ -91,7 +91,7 @@ describe("lint mode report", () => {
       expect(reports?.n, "one document per namespace per day, not one per invocation").toBe(1);
 
       // The overwrite went through document_versions, like every other overwrite
-      // in this store. A write path that skips the snapshot is hard rule 5.
+      // in this store. A write path that skips the snapshot breaks the snapshot rule.
       const versions = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'"
       ).first<{ n: number }>();

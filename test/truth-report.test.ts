@@ -351,7 +351,7 @@ test("report mode STORES the report, so the trend is a document", async () => {
     );
     assert.ok(
       flat.some((s) => /INSERT INTO audit_log .* 'lint_report'/.test(s)),
-      "hard rule 5: no write path skips the audit log, and a report is not an exception"
+      "snapshot rule: no write path skips the audit log, and a report is not an exception"
     );
 
     // The body it wrote is the rendered report, and the number in it is the number
