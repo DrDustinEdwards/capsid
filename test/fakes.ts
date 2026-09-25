@@ -264,6 +264,9 @@ export interface FakeD1Options {
   // Absent by default; the queue's own transitions are driven against the real
   // table in test-integration.
   jobs?: Array<Record<string, unknown>>;
+  // The PR URLs an outcome named (migrations/0015), for auto-merge's check that a PR
+  // was recorded against the job its body names. Absent by default.
+  jobOutcomePrs?: Array<{ job_id: string; pr_url: string }>;
 }
 
 export interface FakeD1Rows {
@@ -284,6 +287,7 @@ export interface FakeD1Rows {
   audit_log: Array<{ namespace: string; path: string; actor: string | null }>;
   agents: Array<Record<string, unknown>>;
   jobs: Array<Record<string, unknown>>;
+  job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
 }
 
 export interface FakeD1 {
@@ -377,6 +381,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     audit_log: opts.auditLog ?? [],
     agents: opts.agents ?? [],
     jobs: opts.jobs ?? [],
+    job_outcome_prs: opts.jobOutcomePrs ?? [],
   };
   const recorded: Recorded[] = [];
   // READS are logged SEPARATELY from writes. `recorded` means "what this handler
@@ -503,6 +508,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (isImproveStatement(flat)) {
       const answered = improveExec(flat, params, rows);
       return answered.handled ? answered.results : [];
+    }
+    // auto-merge's read of the PR URLs recorded against one job.
+    if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
+      return rows.job_outcome_prs.filter((r) => r.job_id === params[0]).map((r) => ({ pr_url: r.pr_url }));
     }
     // The backup's paged table: its bound, read inside the snapshot batch, and its
     // pages, read after it. Matched before the plain dump below, which would

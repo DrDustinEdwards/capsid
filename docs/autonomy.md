@@ -6,7 +6,7 @@ Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13
 
 **Auto-merge** (`docs/policy/auto-merge.md`, read from `capsid/policy/auto-merge.md`).
 The five-minute tick walks every open pull request on the namespaces the policy names
-and merges only those that pass all seven checks, evaluated in order, each refusing on
+and merges only those that pass all ten checks, evaluated in order, each refusing on
 its own. **A merge is a deploy on any repo that deploys on merge to its default branch,
 capsid included**, so passing these checks ships to production with no human:
 
@@ -15,8 +15,11 @@ capsid included**, so passing these checks ships to production with no human:
 | `paths_not_refused` | the changed-file list was read whole, and no path matches the policy's refused paths: the scorer and its scripts, the holdout suite, the policy and signer sources, the protected path list, migrations, wrangler config, secrets, and the files that define the checks |
 | `paths_not_money` | no changed path names a billing or payment surface |
 | `no_migration_workflow_lockfile` | no changed path is a migration, a workflow or a lockfile |
+| `head_in_base_repo` | the PR's head branch is on the base repo, not a fork |
 | `body_names_job` | the PR body carries the id of the job the work came from |
 | `author_is_driver` | that job was claimed by a minted, unrevoked agent of kind `driver` |
+| `job_handed_on` | that job is `blocked` or `done` |
+| `pr_recorded_for_job` | the job's `result_ref` or one of its `job_outcome_prs` rows names this PR |
 | `base_is_default_branch` | the PR targets the repo's default branch |
 | `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the unit suite, the four typechecks and the integration suite to success |
 
