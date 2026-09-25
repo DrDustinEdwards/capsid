@@ -174,6 +174,7 @@ test("gather trims an oversized packet and names what it dropped", async () => {
 
   // The wiki stubs first, and every stub says where to read the real thing.
   assert.match(out.trimmed.join(" | "), /wiki bodies/);
+  assert.ok(out.wiki.length > 0, "the packet carries no wiki rows, so the stub check below checks nothing");
   for (const row of out.wiki) {
     assert.match(row.body, /^\(trimmed for size: read capsid\/concept-\d\.md\)$/);
   }

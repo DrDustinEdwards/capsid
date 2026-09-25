@@ -5,6 +5,9 @@ import { improveStatus } from "../src/improve-run";
 import { reverifyStatements } from "../src/outcome-prs";
 import { outcomeStatement } from "../src/job-outcomes";
 import { legacyAgent } from "../src/agents";
+import { buildServer } from "../src/server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 // JOBS AS EVIDENCE, AGAINST A REAL D1 (migrations/0011).
 //
@@ -145,6 +148,32 @@ describe("job outcomes", () => {
     const row = await outcomeRow(id);
     expect(row?.tests_added).toBe(0);
     expect(row?.commits).toBeNull();
+  });
+
+  it("the jobs tool takes evidence as an object and as a JSON string, and both land in the row", async () => {
+    // Some MCP clients send an object argument as a JSON string. Both forms are
+    // accepted at the tool's schema; this proves each one reaches the outcome row
+    // rather than only that neither was refused.
+    const server = buildServer(jobsEnv() as never, DRIVER);
+    const client = new Client({ name: "evidence-forms", version: "1.0.0" });
+    const [c, s] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(s), client.connect(c)]);
+    try {
+      const evidence = { tests_added: 3 };
+      for (const [form, sent] of [["object", evidence], ["string", JSON.stringify(evidence)]] as const) {
+        const id = (await post({ title: `evidence as ${form}` })).job!.id;
+        expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+        const result = (await client.callTool({
+          name: "jobs",
+          arguments: { action: "complete", namespace: "capsid", id, result_summary: "done", evidence: sent },
+        })) as { isError?: boolean; content: Array<{ text: string }> };
+        expect(result.isError, `${form}: ${result.content[0]?.text}`).toBeFalsy();
+        expect((await jobRow(id))?.status, form).toBe("done");
+        expect((await outcomeRow(id))?.tests_added, `evidence as a JSON ${form} did not reach the outcome row`).toBe(3);
+      }
+    } finally {
+      await client.close();
+    }
   });
 
   it("A FAILED JOB IS RECORDED TOO, because a record of successes only is not a record", async () => {
