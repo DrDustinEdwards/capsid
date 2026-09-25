@@ -180,7 +180,8 @@ test("PLANT: a lease sweep that throws does not stop the rest of the tick", asyn
     const prepare = d1.db.prepare.bind(d1.db);
     let swept = 0;
     (d1.db as { prepare: unknown }).prepare = (sql: string) => {
-      if (/UPDATE jobs SET status = 'queued'/.test(sql)) {
+      // The sweep's first statement: the read of expired leases.
+      if (/FROM jobs WHERE status = 'claimed' AND lease_expires/.test(sql)) {
         swept++;
         const failing = { bind: () => failing, all: async () => { throw new Error("D1_ERROR: database is locked"); } };
         return failing;

@@ -336,6 +336,15 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
         if (/SELECT repos FROM namespaces/i.test(flat)) {
           return params[0] === "capsid" ? { repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }]) } : null;
         }
+        // The transition's guard (requireJobUnchanged), first in the batch: it aborts the
+        // whole batch unless the row is in the state the caller read.
+        if (/WHERE NOT EXISTS \(SELECT 1 FROM jobs/i.test(flat)) {
+          const [id, status, claimedBy, updatedAt] = params;
+          if (row.id !== id || row.status !== status || (row.claimed_by ?? null) !== claimedBy || row.updated_at !== updatedAt) {
+            throw new Error("NOT NULL constraint failed: document_versions.document_id");
+          }
+          return null;
+        }
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id || row.status !== "blocked") return null;
@@ -343,6 +352,10 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
           // Who holds it afterwards, from the BOUND param, so a resume that hands
           // the lease to the wrong caller is visible on the row.
           row.claimed_by = params[1];
+          // updated_at from the bound param the statement names, so a guard built from
+          // this write's result matches the row it left.
+          const stamp = /updated_at = \?(\d+)/.exec(flat);
+          if (stamp) row.updated_at = params[Number(stamp[1]) - 1];
           return { id: row.id };
         }
         return null;
@@ -357,7 +370,10 @@ function resumeDb(job: Record<string, unknown>, policyBody: string) {
     row,
     db: {
       prepare: (sql: string) => stmt(sql),
+      // Each statement runs through first(), in order, so the UPDATE the batch carries
+      // moves the row and the guard in front of it can abort the batch.
       batch: async (statements: unknown[]) => {
+        for (const s of statements) await (s as D1PreparedStatement).first();
         for (const s of statements) recorded.push(s as Recorded);
         return [];
       },
