@@ -1,13 +1,10 @@
 import { getCookie, isAdminUser, sha256Hex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
 
-// THE GITHUB LOGIN ROUND TRIP, shared by the MCP authorization flow (src/routes.ts,
-// /authorize to /callback) and the console login (src/console-auth.ts, /console to
-// /console/callback). Both use the same GitHub OAuth app and the same admin check.
-// What differs between them is passed in as a GithubLoginFlow: the callback path,
-// the state cookie's name and Path, the KV prefix for the state, and the sentence
-// that tells the user how to restart. What each caller stores against the state and
-// what it does with the admitted user stays in the caller.
+// The GitHub login round trip, shared by the MCP authorization flow (src/routes.ts)
+// and the console login (src/console-auth.ts). What differs between them is passed
+// in as a GithubLoginFlow; what each stores and does with the admitted user stays in
+// the caller.
 
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -96,8 +93,7 @@ export async function completeGithubLogin<T>(
   const stateKey = `${flow.kvPrefix}${stateToken}`;
   const stored = await env.OAUTH_KV.get(stateKey);
   if (!stored) return fail(`state expired or already used. ${flow.restartHint}`, 403);
-  // A corrupt stored payload is a 403 with an instruction, not a thrown handler
-  // (audit 2, F18). Whatever wrote it, the caller's move is the same: start again.
+  // A corrupt stored payload is a 403 telling the user to start again, not a throw.
   let state: T;
   try {
     state = parse(stored);
@@ -119,14 +115,9 @@ export async function completeGithubLogin<T>(
   if (!tokenResp.ok) return fail("github token exchange failed", 502);
   const tokenData = (await tokenResp.json()) as { access_token?: string };
   if (!tokenData.access_token) return fail("github token exchange failed: no access token returned", 502);
-  // THE STATE IS CONSUMED HERE, not before the exchange (audit 2, F18). Deleting it
-  // three network calls early meant a transient GitHub 502 burned it: the browser
-  // sat on the callback holding a code GitHub never processed, and a reload answered
-  // "state expired or already used". The reload now works inside the 600 second TTL.
-  //
-  // Replay is bounded by GitHub rather than by this delete. The extra window is one
-  // HTTP round trip, and reaching it needs the state token AND the HttpOnly state
-  // cookie AND an unused code, which GitHub honours once.
+  // The state is consumed after the exchange, so a transient GitHub error does not
+  // burn it and a reload still works. Replay is bounded by GitHub, which honours a
+  // code once.
   await env.OAUTH_KV.delete(stateKey);
 
   const userResp = await fetch(GITHUB_USER_URL, {

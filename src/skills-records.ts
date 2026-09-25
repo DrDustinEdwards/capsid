@@ -10,15 +10,11 @@ import {
   type Transition,
 } from "./skills-lifecycle";
 
-// ---- offering, creating, and remembering failures ------------------------------
-//
-// The lifecycle rules in ./skills-lifecycle are pure. This is the half that touches
-// rows: which skills to offer a driver, how a candidate comes into existence, what a
-// failed run leaves behind, and how a transition is committed.
+// The half of the skill lifecycle that touches rows; the rules in ./skills-lifecycle
+// are pure.
 
-// AT MOST THREE. A recommend step that returned ten would be handing a driver a
-// reading list rather than a suggestion, and the offered-but-not-used rate, which is
-// how the recommend step itself is judged, would stop meaning anything.
+// At most three, so the offered-but-not-used rate that judges the recommend step
+// still means something.
 export const MAX_OFFERED = 3;
 
 // How many failure notes ride along with each offered skill.
@@ -31,29 +27,23 @@ export interface OfferedSkill {
   version: number;
   trigger_condition: string | null;
   body_ref: string;
-  // The most recent failures recorded against this skill, newest first. A driver
-  // about to follow a skill sees how it went wrong the last two times first.
+  // The most recent failures recorded against this skill, newest first.
   recent_failures: Array<{ note: string; source_kind: string; source_id: string; created_at: string }>;
 }
 
 /**
  * The skills worth offering for one piece of work.
  *
- * CANDIDATE AND LIVE ONLY. A retired skill is a record of something that did not
- * work, kept so it is not regenerated, and offering it would be recommending the
- * thing the evidence retired.
- *
- * Matched on trigger_condition through FTS. A skill with no trigger condition is
- * never offered: the rows that predate migration 0012 have none, and matching them on
- * title instead would be inventing the field the match runs on.
+ * Candidate and live only: a retired skill is kept so it is not regenerated, not to
+ * be offered. Matched on trigger_condition through FTS; a skill with none is never
+ * offered.
  */
 export async function offerSkills(env: Env, namespace: string, work: string): Promise<OfferedSkill[]> {
   const terms = ftsQuery(work);
   if (!terms) return [];
 
-  // The FTS index covers documents, and a skill's prose lives at improve/skills/<id>.md,
-  // so the match runs there and resolves back to the row. That keeps one index rather
-  // than adding a second over a column.
+  // The FTS index covers documents, and a skill's prose lives at
+  // improve/skills/<id>.md, so the match runs there and resolves back to the row.
   const matched = await env.DB.prepare(
     `SELECT s.id, s.title, s.status, s.version, s.trigger_condition, s.body_ref
      FROM improve_skills s
@@ -91,10 +81,8 @@ export async function offerSkills(env: Env, namespace: string, work: string): Pr
   return out;
 }
 
-// FTS5 takes a query language, and work descriptions are free prose that regularly
-// contains its operators. Reduced to bare words joined by OR, so a description
-// containing a quote or a NEAR does not become a syntax error or, worse, a query that
-// means something other than it says.
+// Reduced to bare words joined by OR, so FTS5 operators in free prose (a quote, a
+// NEAR) cannot change what the query means.
 export function ftsQuery(work: string): string | null {
   const words = work
     .toLowerCase()
@@ -104,13 +92,10 @@ export function ftsQuery(work: string): string | null {
   return words.length > 0 ? words.join(" OR ") : null;
 }
 
-// ---- creating a candidate -------------------------------------------------------
-
 export interface CandidateSource {
   kind: "attempt" | "job";
   id: string;
-  // For a job: the outcome row's verified counts. A candidate is written from a job
-  // only when the outcome was FULLY verified, which is the job's own bar.
+  // For a job: the outcome row's verified counts.
   prsMerged?: number | null;
   ciGreen?: number | null;
   kept?: boolean;
@@ -121,10 +106,8 @@ export type CreateVerdict = { create: true; reason: string } | { create: false; 
 /**
  * Whether a source has earned a candidate skill.
  *
- * A kept attempt, or a job whose outcome is verified with a merged pull request and
- * green CI. Both bars are about the WORK having landed, not about the skill being
- * good: nothing here decides that, which is why the result is always a candidate and
- * never live.
+ * A kept attempt, or a job verified with a merged pull request and green CI. Both
+ * bars say the work landed, not that the skill is good, so the result is a candidate.
  */
 export function shouldCreateCandidate(source: CandidateSource): CreateVerdict {
   if (source.kind === "attempt") {
@@ -144,15 +127,11 @@ export function shouldCreateCandidate(source: CandidateSource): CreateVerdict {
 /**
  * Whether this source has already produced a skill, retired ones included.
  *
- * RETIRED COUNTS, and that is the point of the check. A skill retired for not helping
- * would otherwise be abstracted again from the same attempt on the next pass, evaluated
- * again, and retired again, forever.
+ * Retired counts, or a retired skill would be abstracted again from the same source.
  */
 export async function alreadyAbstracted(env: Env, source: CandidateSource): Promise<{ skill: string; status: string } | null> {
-  // TWO SPELLED-OUT STATEMENTS rather than one with the column interpolated. A query
-  // assembled by string concatenation cannot be reconstructed and checked by the
-  // integration suite's query-plan guard, and that guard is the only thing that reads
-  // every statement this Worker issues.
+  // Two spelled-out statements rather than an interpolated column, so the integration
+  // suite's query-plan guard can read them.
   const row =
     source.kind === "attempt"
       ? await env.DB.prepare("SELECT id, status FROM improve_skills WHERE source_attempt = ?1 LIMIT 1")
@@ -163,8 +142,6 @@ export async function alreadyAbstracted(env: Env, source: CandidateSource): Prom
           .first<{ id: string; status: string }>();
   return row ? { skill: row.id, status: row.status } : null;
 }
-
-// ---- failure memory -------------------------------------------------------------
 
 /** One note per skill that was in use when a run failed or was reverted. */
 export function failureNoteStatements(
@@ -184,19 +161,11 @@ export function failureNoteStatements(
   );
 }
 
-// ---- committing a transition ----------------------------------------------------
-
 /**
- * Apply what the rules decided, as a keyed UPDATE so a status that moved underneath
- * this read does not get overwritten. Returns whether it landed.
- *
- * THE AUDIT ROW IS IN THE SAME BATCH. When it was a second batch, a failure there
- * left the status moved with no audit row, and the next pass could not write one
- * because the keyed UPDATE no longer matched. The INSERT selects only when the row
- * now holds the new status, so a transition that did not land records nothing.
- *
- * The transition itself is decided by ./skills-lifecycle and never here: this is the
- * write, and splitting them is what lets the rules be tested without a database.
+ * Apply what ./skills-lifecycle decided, as a keyed UPDATE so a status that moved
+ * underneath this read is not overwritten. Returns whether it landed. The audit row
+ * is in the same batch and inserts only when the row now holds the new status, so a
+ * transition that did not land records nothing.
  */
 export async function commitTransition(
   env: Env,
@@ -242,8 +211,6 @@ export async function dueTransitions(env: Env): Promise<Array<{ skill: string; v
   return out;
 }
 
-// ---- attribution, applied -------------------------------------------------------
-
 export interface AttributionInput {
   offered: readonly string[];
   used: readonly string[];
@@ -251,19 +218,9 @@ export interface AttributionInput {
 }
 
 /**
- * What one finished run does to each skill it was offered. Returns a statement per
- * skill that actually moves, and nothing for the ones that do not: a skill offered and
- * not used produces no write at all, so the table does not fill up with rows recording
- * that nothing happened.
- *
- * THIS IS THE ONLY WRITER OF wins AND losses, since 2026-09-16. The improve loop used
- * to call recordSkillOutcome(db, id, kept), a second credit system that knew only
- * "kept" and therefore charged a LOSS to a skill the model was offered and declined to
- * use. Two systems disagreeing about what a loss means is one too many, and the one
- * that implements the ruling won.
- *
- * Each credit carries its own audit row, as recordSkillOutcome's did, so a counter can
- * be traced back to the run that moved it and the reason attribute() gave.
+ * What one finished run does to each skill it was offered: statements only for the
+ * skills that move. The only writer of wins and losses. Each credit carries an audit
+ * row, so a counter traces back to the run and the reason attribute() gave.
  */
 export function attributionStatements(db: D1Database, input: AttributionInput): D1PreparedStatement[] {
   const used = new Set(input.used);
@@ -271,7 +228,7 @@ export function attributionStatements(db: D1Database, input: AttributionInput): 
   for (const skill of input.offered) {
     const verdict = attribute(used.has(skill), input.signal);
     if (verdict.credit === "none") continue;
-    // Spelled out for the same reason as above.
+    // Spelled out for the query-plan guard, as in alreadyAbstracted.
     statements.push(
       verdict.credit === "win"
         ? db.prepare("UPDATE improve_skills SET wins = wins + 1 WHERE id = ?1").bind(skill)

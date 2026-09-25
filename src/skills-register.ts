@@ -5,26 +5,15 @@ import { normalizeDashes } from "./normalize";
 import { auditStatement } from "./store-guards";
 import { alreadyAbstracted, shouldCreateCandidate } from "./skills-records";
 
-// ---- registering a candidate skill by hand ----------------------------------------
+// Registering a candidate skill by hand, beside recordSkill in ./improve-skills,
+// which runs only when an improve attempt is kept.
 //
-// THE SECOND WAY A SKILL COMES INTO EXISTENCE. Until this, recordSkill in
-// ./improve-skills was the only INSERT into improve_skills, and it runs only when an
-// improve-loop attempt is kept. With the loop off, the store held no skill, so the
-// evaluation cycle had nothing to evaluate and attribution had nothing to credit.
+// Admin only (improve_run's default in TOOL_ACTION_GRANTS, src/scope.ts): a driver
+// registering its own skill would be judging its own run.
 //
-// ADMIN ONLY, stated in TOOL_ACTION_GRANTS in src/scope.ts (register_skill is not
-// listed there, so it takes improve_run's admin default). A driver that could
-// register its own skill would be judging its own run, which the 2026-09-12 rule
-// forbids.
-//
-// THE SOURCE IS A JOB, and the job row decides the rest. The namespace is read from
-// the job rather than taken from the caller, and the job's outcome must pass the same
-// bar the lifecycle already states for a job-born candidate (shouldCreateCandidate):
-// one merged pull request with green CI, as the Worker verified it. A job that has
-// already produced a skill, retired ones included, is refused (alreadyAbstracted).
-//
-// The result is ALWAYS a candidate at version 1. Registration says the work landed;
-// only evaluations say the written skill helps.
+// The source is a job, and the job row decides the rest: the namespace comes from
+// the job, its outcome must pass shouldCreateCandidate, and a job that already
+// produced a skill is refused. The result is always a candidate at version 1.
 
 const SKILL_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 
@@ -36,8 +25,7 @@ export interface SkillRegistration {
   composition_interface: string;
   // NULL means any namespace, the same as the column.
   namespaces: string[] | null;
-  // The instruction body, stored verbatim (after dash normalization) as the document
-  // at improve/skills/<id>.md, because that document is what an edit is bounded against.
+  // Stored as the document improve/skills/<id>.md, which edits are bounded against.
   body: string;
   source_job: string;
 }

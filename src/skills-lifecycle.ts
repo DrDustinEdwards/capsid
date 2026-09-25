@@ -1,14 +1,8 @@
-// ---- the skill lifecycle, as pure rules ---------------------------------------
-//
-// THE RULE THE ARC RESTS ON: a skill's status changes on EVALUATION EVIDENCE and
-// never on a driver's judgement of its own run. Everything in this module is a pure
-// function of rows, so the rules can be driven to their refusals in a test without a
-// database, a sandbox or a model.
-//
-// Two published results shape it, both named in the job. SkillOpt (arXiv 2605.23904):
-// enough evidence before an edit, bounded edits, rejected edits kept as negative
-// feedback, slow update, optimizer memory. SkillsVote (arXiv 2605.18401): credit a
-// skill only when it was used AND the verifier says the run succeeded.
+// The skill lifecycle as pure rules. A skill's status changes on evaluation evidence,
+// never on a driver's judgement of its own run. Based on SkillOpt (arXiv 2605.23904:
+// enough evidence before an edit, bounded edits, slow update) and SkillsVote (arXiv
+// 2605.18401: credit a skill only when it was used and the verifier says the run
+// succeeded).
 
 const SKILL_STATUSES = ["candidate", "live", "retired"] as const;
 export type SkillStatus = (typeof SKILL_STATUSES)[number];
@@ -16,13 +10,11 @@ export type SkillStatus = (typeof SKILL_STATUSES)[number];
 const VERDICTS = ["positive", "neutral", "negative"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
-// MINIMUM EVIDENCE FOR ANY STATUS CHANGE, in either direction. One evaluation is a
-// sample: a system that promoted on one would spend its life promoting and retiring
-// the same skill on noise.
+// Minimum evidence for any status change, in either direction. One evaluation is a
+// sample, and acting on it would promote and retire the same skill on noise.
 const MIN_EVALUATIONS = 2;
 
-// A delta at or below this counts as no improvement. Stated as a constant rather than
-// a bare zero so the tie case is visible: a tie is NOT an improvement.
+// A delta at or below this counts as no improvement: a tie is not an improvement.
 const POSITIVE_DELTA = 0;
 
 export interface Evaluation {
@@ -36,9 +28,8 @@ export interface Evaluation {
   evaluated_at: string;
 }
 
-/** Whether a stored string is a status this code knows. A row carrying anything else
- *  is refused rather than coerced: an unknown status silently read as "candidate"
- *  would promote a retired skill. */
+/** Whether a stored string is a status this code knows. Anything else is refused
+ *  rather than coerced. */
 export function isSkillStatus(value: string): value is SkillStatus {
   return (SKILL_STATUSES as readonly string[]).includes(value);
 }
@@ -62,15 +53,13 @@ export type Transition =
 /**
  * What a skill's evaluations say its status should be.
  *
- * Candidate to live needs two POSITIVE evaluations. Live to retired needs two
- * CONSECUTIVE non-positive ones, which is a different shape on purpose: promotion
- * asks for a pattern of help, retirement asks for a run of not helping, and a live
- * skill that alternates positive and neutral is doing something.
+ * Candidate to live needs two positive evaluations. Live to retired needs two
+ * consecutive non-positive ones, so a live skill alternating positive and neutral
+ * stays live.
  *
- * Evaluations are counted at ONE version and ONE probe set version. An evaluation of
- * version 2 says nothing about version 3, and a delta against a different probe set
- * is not comparable, so both are filtered before anything is counted. That is the
- * slow-update rule: an accepted edit costs the skill its accumulated evidence.
+ * Evaluations are counted at one version and one probe set version, since deltas
+ * across either are not comparable. An accepted edit therefore costs the skill its
+ * accumulated evidence.
  */
 export function nextStatus(
   current: SkillStatus,
@@ -133,11 +122,8 @@ export function nextStatus(
   return { change: false, reason: `the most recent evaluations of version ${version} are not ${MIN_EVALUATIONS} consecutive non-positive ones.` };
 }
 
-// ---- bounded edits --------------------------------------------------------------
-
-// AT MOST THIS FRACTION OF L2 LINES PER EDIT. An optimizer that could rewrite a skill
-// wholesale is not editing it, it is replacing it, and the accumulated evaluations
-// would then describe a document that no longer exists.
+// At most this fraction of L2 lines per edit. A wholesale rewrite would replace the
+// skill, and its accumulated evaluations would describe a document that is gone.
 const MAX_EDIT_FRACTION = 0.2;
 
 export type EditOp =
@@ -147,16 +133,12 @@ export type EditOp =
 
 export type EditVerdict = { ok: true; touched: number; allowed: number } | { ok: false; reason: string };
 
-/**
- * Whether a set of operations stays inside the bound. Counts DISTINCT lines touched,
- * so three operations on one line is one line, and the allowance is computed from the
- * body the edit starts from.
- */
+/** Whether a set of operations stays inside the bound. Counts distinct lines touched,
+ *  against the body the edit starts from. */
 export function withinEditBound(l2: string, ops: readonly EditOp[]): EditVerdict {
   const lines = l2.split("\n").length;
   if (ops.length === 0) return { ok: false, reason: "an edit with no operations changes nothing and is not evaluated." };
-  // At least one line is always allowed, so a short skill is editable at all. Floor
-  // rather than round: 20 percent of 9 lines is one line, not two.
+  // At least one line, so a short skill is editable; floor, not round.
   const allowed = Math.max(1, Math.floor(lines * MAX_EDIT_FRACTION));
   const touched = new Set(ops.map((o) => o.line)).size;
   const outOfRange = ops.filter((o) => o.line < 1 || o.line > lines);
@@ -172,11 +154,8 @@ export function withinEditBound(l2: string, ops: readonly EditOp[]): EditVerdict
   return { ok: true, touched, allowed };
 }
 
-/**
- * Whether an evaluated edit is accepted. STRICT improvement only: a tie is a
- * rejection, because an edit that changes nothing measurable still costs the skill
- * every evaluation it had accumulated.
- */
+/** Whether an evaluated edit is accepted. Strict improvement only: a tie still costs
+ *  the skill its evaluation history. */
 export function acceptEdit(deltaBefore: number, deltaAfter: number): { accepted: boolean; reason: string } {
   if (deltaAfter > deltaBefore) {
     return { accepted: true, reason: `the edited version scored ${deltaAfter} against ${deltaBefore} for the current one.` };
@@ -190,11 +169,8 @@ export function acceptEdit(deltaBefore: number, deltaAfter: number): { accepted:
   return { accepted: false, reason: `the edited version scored ${deltaAfter} against ${deltaBefore} for the current one.` };
 }
 
-// ---- attribution ----------------------------------------------------------------
-
-// Why a run ended, from the verifier rather than from the driver. `improvised` is the
-// case SkillsVote exists to separate out: the run succeeded and the offered skill was
-// never used, so the success is not the skill's.
+// Why a run ended, from the verifier rather than the driver. `improvised`: the run
+// succeeded without using the offered skill.
 export type RunSignal = "verified-success" | "verified-failure" | "improvised" | "environment-failure";
 
 export type Attribution = { credit: "win" | "loss" | "none"; reason: string };
@@ -202,10 +178,8 @@ export type Attribution = { credit: "win" | "loss" | "none"; reason: string };
 /**
  * Whether one offered skill earns anything from one run.
  *
- * A skill moves only when it was USED and the verifier reported on the work itself.
- * An offered-but-unused skill earns nothing in either direction, and neither does a
- * run that died on the environment: charging a loss for a checkout that failed would
- * retire skills for being present during an outage.
+ * A skill moves only when it was used and the verifier reported on the work itself,
+ * not on an environment failure.
  */
 export function attribute(used: boolean, signal: RunSignal): Attribution {
   if (!used) {
@@ -225,8 +199,6 @@ export function attribute(used: boolean, signal: RunSignal): Attribution {
       };
   }
 }
-
-// ---- merging two live skills ----------------------------------------------------
 
 // Below this fraction of differing lines, two live skills with overlapping triggers
 // are near-duplicates and a merge is proposed.
@@ -263,9 +235,8 @@ export function shouldProposeMerge(
   return { merge: true, reason: `two live skills with overlapping triggers whose bodies differ by ${Math.round(difference * 100)} percent.` };
 }
 
-// Word overlap rather than string equality: two triggers describing the same
-// situation are rarely spelled the same. Deliberately crude, because the output is a
-// PROPOSAL a human reviews rather than an automatic merge.
+// Word overlap rather than string equality. Crude on purpose: the output is a
+// proposal a human reviews.
 const STOP_WORDS = new Set(["a", "an", "the", "is", "are", "of", "to", "in", "on", "and", "or", "for", "when", "with", "that", "this", "it"]);
 
 export function triggersOverlap(a: string, b: string): boolean {
