@@ -1,10 +1,9 @@
 // THE IMPROVE LOOP HARNESS, shared by test/improve-run.test.ts and
 // test/improve-unjudged.test.ts. It used to be copied between the two files (audit
 // item C1-13), so a fixture fixed in one stayed wrong in the other.
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import type { ScoreReport } from "../src/improve-scorer.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 export const NOW = new Date("2026-09-04T08:05:00Z");
 export const SCORES = seedScoresDoc("capsid");
