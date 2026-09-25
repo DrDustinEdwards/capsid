@@ -1,12 +1,9 @@
 // REFUSES A COMMIT WHOSE MESSAGE CARRIES AN AI ATTRIBUTION TRAILER.
 //
-// CLAUDE.md, no AI trailer rule. A session harness has instructed these trailers in
-// before, in the tool that does the work, and a session followed it. The global
-// attribution setting covers two of the three forms and nothing covered the third,
-// so this is the repo's own check.
+// CLAUDE.md, no AI trailer rule. The global attribution setting covers two of the three
+// forms, so this is the repo's own check.
 //
-// Only the commits a push or pull request adds are checked. Older commits on master
-// that carry a trailer stay as they are (ruled 2026-09-25: no history rewrite).
+// Only the commits a push or pull request adds are checked; history is not rewritten.
 //
 // Usage:
 //   node scripts/check-commit-trailers.mjs <base> <head>   checks base..head

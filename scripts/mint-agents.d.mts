@@ -1,10 +1,8 @@
 // Types for the agent minter, so test/mint-agents.test.ts type-checks under
 // tsconfig.test.json (noImplicitAny). The runtime is scripts/mint-agents.mjs.
 export const ORIGIN_DEFAULT: string;
-// `repos` is OPTIONAL on an AGENTS entry and required on the wire. It is absent in
-// the list and filled in by main() from the live namespace mapping before anything
-// is minted, because a repos axis copied into this file would be a second copy of
-// the authorization boundary. See parseNamespaceRepos.
+// `repos` is OPTIONAL on an AGENTS entry and required on the wire: main() fills it
+// from the live namespace mapping before anything is minted. See parseNamespaceRepos.
 export const AGENTS: Array<{
   name: string;
   kind: string;
@@ -29,12 +27,9 @@ export const ROLES: Array<{
   what: string;
 }>;
 export function roleMintCommand(role: (typeof ROLES)[number]): string;
-// `registered` is the namespaces the Capsid store actually knows, fetched by the
-// caller and passed in so selection stays pure. Omitting it keeps the old
-// behaviour: only AGENTS matches, which is the direction that cannot widen a mint.
-// `role` selects by name from ROLES instead, and the return type is the union
-// because the two lists are different shapes and pretending otherwise would hide a
-// missing axis at the call site that mints.
+// `registered` is the namespaces the Capsid store knows, passed in so selection stays
+// pure; omitted, only AGENTS matches. `role` selects by name from ROLES instead, and
+// the return type is the union because the two lists are different shapes.
 export function selectAgents(
   namespace?: string,
   registered?: string[],

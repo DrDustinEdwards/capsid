@@ -1,10 +1,8 @@
 // A wrangler.jsonc good enough for `wrangler deploy --dry-run`, built OFFLINE.
 //
-// bundle_size_bytes came back null on every capsid score, because the scorer's build job
-// runs `wrangler deploy --dry-run --outdir` and this repo gitignores the real
-// wrangler.jsonc under the public-repo hygiene rule. The job holds no credential and
-// cannot run scripts/ci-config.mjs, which resolves every binding by name against the
-// account API, so the metric was structurally unmeasurable. Ruled 2026-09-08.
+// The scorer's build job measures bundle_size_bytes with `wrangler deploy --dry-run
+// --outdir`, but the real wrangler.jsonc is gitignored and the job holds no credential
+// to run scripts/ci-config.mjs.
 //
 // THIS IS NOT ci-config.mjs. That script makes a DEPLOY safe: it resolves each binding
 // by name and refuses if the resolved id disagrees with the pinned one. This one is for
@@ -13,9 +11,8 @@
 // placeholders.
 //
 // IT MUST NEVER BE USED TO DEPLOY. It writes wrangler.dryrun.jsonc, which the deploy
-// path does not read; the dry run names it with --config. It used to write
-// wrangler.jsonc, the file deploy reads, so running it locally replaced the real
-// gitignored config with the example plus pins, with no backup.
+// path does not read; the dry run names it with --config. Writing wrangler.jsonc would
+// overwrite a developer's real gitignored config.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2 } from "./bindings.mjs";

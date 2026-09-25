@@ -3,10 +3,8 @@
 //
 // What the canary is and why it has no expiry: scripts/bindings.mjs, CANARY_CLIENT.
 //
-// IT READS KV DIRECTLY RATHER THAN ASKING THE WORKER. Driving /authorize with the canary
-// id would be more end-to-end and a worse signal: a missing client and a KV outage are
-// the same error page, so the gate could not say which it saw. The REST API answers with
-// a STATUS, and the status IS the distinction.
+// It reads KV directly rather than driving /authorize, where a missing client and a KV
+// outage are the same error page. The REST API's status is the distinction.
 
 /**
  * @returns {Promise<{ outcome: "present"|"missing"|"unreachable"|"corrupt"|"has-ttl"|"ttl-unverified", detail?: string, expiration?: number }>}
@@ -46,10 +44,8 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   // the 90 day clientRegistrationTTL back, and a canary that can expire on its own has a
   // second legitimate reason to be absent.
   //
-  // An unreadable key LIST is not treated as a TTL, and it is not treated as "no TTL"
-  // either: absence of evidence about the expiry is evidence of nothing. It used to
-  // fall through to "present, non-expiring", a TTL this never checked. It is now its
-  // own failing outcome.
+  // An unreadable key LIST is neither a TTL nor "no TTL"; it is its own failing
+  // outcome.
   let entry;
   try {
     const listed = await fetchImpl(`${base}/keys?prefix=${encodeURIComponent(key)}`, { headers: auth });

@@ -5,9 +5,8 @@ export function parseTestReport(text: string): { pass: number; fail: number };
 export function testPassRate(text: string): number | null;
 export function holdoutFilePassed(text: string): boolean;
 
-// The stream surface, added 2026-09-07 with the container-isolated scorer. The
-// holdout no longer writes a seekable report file the attempt can rewrite; the
-// container emits one TAP stream on stdout with a trusted marker per case.
+// The stream surface: the container emits one TAP stream on stdout with a trusted
+// marker per case.
 export const CASE_MARKER: string;
 export function parseHoldoutStream(
   text: string,
@@ -18,9 +17,9 @@ export function parseHoldoutStream(
 };
 export function holdoutPassCount(text: string, nonce?: string): number;
 
-// The secondaries-in-the-container surface, added 2026-09-07. test_pass_rate and
-// lint_count are recomputed inside the sandbox from the repo's own commands, so
-// metrics.json is read for bundle_size_bytes and nothing else.
+// The secondaries-in-the-container surface. test_pass_rate and lint_count are
+// recomputed inside the sandbox from the repo's own commands, so metrics.json is read
+// for bundle_size_bytes and nothing else.
 export interface SecondarySpec {
   trees: string[];
   test: string | null;
@@ -30,9 +29,7 @@ export interface SecondarySpec {
 }
 export const SECONDARY_COMMANDS: Record<string, SecondarySpec>;
 
-// The secondary metrics this scorer reports, in report order. Three since
-// 2026-09-07: error_count and p95_latency_ms were removed because nothing ever
-// measured them.
+// The secondary metrics this scorer reports, in report order.
 export const REPORTED_SECONDARY: string[];
 export function markers(nonce?: string): {
   case: string;
@@ -55,7 +52,7 @@ export function secondaryFromStream(
   nonce?: string
 ): { test_pass_rate: number | null; lint_count: number | null };
 
-// The holdout import manifest (2026-09-08). improve/holdout/<ns>/imports.txt lists
+// The holdout import manifest. improve/holdout/<ns>/imports.txt lists
 // every name the hidden suite imports out of the repo's own source. Committed and
 // not secret; enforced in both directions, by the dead-export check here and by
 // the scorer's Job B over the synced suite.

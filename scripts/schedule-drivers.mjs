@@ -7,24 +7,15 @@
 //   node scripts/schedule-drivers.mjs --remove --namespace capsid --apply
 //   node scripts/schedule-drivers.mjs --run --namespace capsid       # what the task invokes
 //
-// WHY A LOCAL TASK AND NOT A CLOUD ROUTINE. Ruled 2026-09-12 after measuring the
-// routine API (capsid/autonomy-part3-routines.md). A Claude Code cloud routine can
-// only attach claude.ai connectors, and the registered Capsid connector points at
-// /mcp, the OAuth admin path. A nightly routine would therefore run the whole queue
-// as the admin, with every namespace and every blast-radius flag, which is the wide
-// credential the per-namespace driver agents were minted to replace. There is also
-// no verified way to hand a routine a secret. On this machine the per-namespace key
-// files already exist and the credential model already holds, so the scheduler runs
-// here and each task reaches Capsid as exactly one driver.
+// A local task rather than a cloud routine: a cloud routine can only attach
+// claude.ai connectors, which reach /mcp as the OAuth admin, so it would run the
+// queue with every namespace and flag. Here each task reaches Capsid as exactly one
+// per-namespace driver, using the key file on this machine.
 //
-// OFF BY DEFAULT, TWICE OVER. Nothing is created without --apply, and an installed
-// task is created DISABLED, from a task XML whose settings say so (taskXml), so it
-// never exists enabled. Enabling it is a separate, deliberate act:
+// Off by default: nothing is created without --apply, and an installed task is
+// created DISABLED (taskXml). Enabling it is a separate act:
 //
 //   schtasks /Change /TN "<task name>" /ENABLE
-//
-// A scheduler that armed itself on install would be a nightly unattended agent
-// nobody decided to switch on.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -44,11 +35,8 @@ const FOLDERS = {
   germomics: "C:\\Users\\email\\dev\\germomics",
 };
 
-// 04:00 America/Chicago. schtasks takes a LOCAL wall-clock time and the machine is
-// already on America/Chicago, so this is 04:00 all year and the task does not drift
-// across the daylight-saving switch the way a UTC cron expression would. That is the
-// one thing a local scheduler does better than the Worker's own cron, which needs two
-// expressions and chicagoHour() to pin the same instant.
+// 04:00 America/Chicago. schtasks takes local wall-clock time and the machine is on
+// America/Chicago, so the time does not move across the daylight-saving switch.
 const START_TIME = "04:00";
 
 /** @param {string} ns */
@@ -70,7 +58,7 @@ export function parseArgs(argv) {
     }
     else if (arg === "--apply") out.apply = true;
     else if (arg === "--namespace") {
-      // A value-less flag used to leave the namespace undefined, which selects all five.
+      // A value-less flag would leave the namespace undefined, which selects all five.
       const value = argv[++i];
       if (!value || value.startsWith("--")) throw new Error("--namespace needs a value, for example --namespace capsid.");
       out.namespace = value;
@@ -177,12 +165,9 @@ export async function postLog(ns, client, body, day) {
 
 // ---- run ------------------------------------------------------------------------
 
-// HOW THE DRIVER SESSION IS PERMITTED. `claude -p` starts in Manual mode on every plan
-// and has nobody to answer a prompt, so until 2026-09-23 every nightly run was denied
-// its first tool call (mcp__capsid__improve_status) and did nothing
-// (dustinedwards/jobs/nightly-2026-09-23.md). Auto mode has the classifier review what
-// no rule settles. The mode that skips permission checks is never used here: it
-// would also stop the classifier from reviewing anything no rule names.
+// HOW THE DRIVER SESSION IS PERMITTED. `claude -p` has nobody to answer a prompt, so
+// it runs in auto mode, where the classifier reviews what no rule settles. The mode
+// that skips permission checks is never used: it would also skip the classifier.
 
 // Capsid tools pre-approved for the driver: every tool whose TOOL_GRANTS entry in
 // src/scope.ts is "read", plus the two whose requirement is per action and which the
@@ -209,12 +194,10 @@ export const DRIVER_CAPSID_TOOLS = [
   "jobs",
 ];
 
-// Blocked outright, in every mode. Deploys and ships are the human's gate, and a force
-// push can rewrite a branch someone else is on. Each command is listed for both shell
-// tools, and a push is listed with and without `git -C <dir>`, because the /improve
-// command's own push shape names the directory. The claude.ai Capsid connector is
-// denied whole: it reaches /mcp as the OAuth admin, and a driver session must reach
-// Capsid only as its own agent.
+// Blocked outright, in every mode: deploys are the human's gate, and a force push can
+// rewrite a branch someone else is on. Listed for both shell tools, and with and
+// without `git -C <dir>`. The claude.ai Capsid connector is denied whole: it reaches
+// /mcp as the OAuth admin, and a driver must reach Capsid only as its own agent.
 const DENIED_COMMANDS = [
   "npm run ship*",
   "npm run deploy*",
@@ -265,11 +248,8 @@ async function runOne(ns) {
   const folder = FOLDERS[ns];
   const key = process.env.CAPSID_DRIVER_KEY ?? readKey(ns);
   const started = new Date().toISOString();
-  // The driver session. Its own credential comes from the project-scoped MCP server
-  // configured in that folder, not from this process: the key read above is only for
-  // posting the log afterwards, so a failed run still records something.
-  // No shell: the arguments carry `*`, `(` and spaces, and passing them as an argv
-  // keeps cmd.exe from reading any of them.
+  // The driver session (see readKey for its credential). No shell: the arguments carry
+  // `*`, `(` and spaces, and an argv keeps cmd.exe from reading any of them.
   const res = spawnSync("claude", driverArgs(), {
     cwd: folder,
     encoding: "utf8",
@@ -313,14 +293,10 @@ function readKey(ns) {
 
 // ---- install and remove ---------------------------------------------------------
 
-// The task runs THIS script in --run mode. A task that invoked `claude` directly
-// could not post a log for a session that died, which is the run whose log matters
-// most.
-//
-// The script path is the capsid clone in FOLDERS, not process.cwd(). An install run
-// from another folder, or from a worktree that is later deleted, would otherwise
-// schedule a path that does not exist, and the task would fail every night.
-// win32.join, because the task runs on Windows whatever platform builds its XML.
+// The task runs THIS script in --run mode, so a session that died still gets a log.
+// The script path is the capsid clone in FOLDERS, not process.cwd(), so an install run
+// from a worktree that is later deleted does not schedule a missing path. win32.join,
+// because the task runs on Windows whatever platform builds its XML.
 const installScript = () => win32.join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
 /** @param {string} ns */
 const installArguments = (ns) => `"${installScript()}" --run --namespace ${ns}`;
@@ -334,15 +310,11 @@ export function installCommand(ns) {
 const xmlEscape = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
-// The task definition, for `schtasks /Create /XML`. <Settings><Enabled>false</Enabled>
-// is why this is XML: schtasks /Create has no switch for a disabled task, so creating
-// it with /TR and then running /Change /DISABLE left a window in which the task existed
-// ENABLED, and a failed /Change left it that way. Created from this document, the task
-// is disabled from the moment it exists.
-//
-// Every setting not named here takes the Task Scheduler default, which is what the
-// /TR form got. The start date is only the day the daily trigger begins counting from;
-// with no time zone the time is local wall clock (see START_TIME).
+// The task definition, for `schtasks /Create /XML`. XML because schtasks /Create has
+// no switch for a disabled task, and create-then-disable leaves a window in which the
+// task exists enabled. Settings not named here take the Task Scheduler defaults. The
+// start date is only where the daily trigger begins counting; with no time zone the
+// time is local wall clock (see START_TIME).
 /** @param {string} ns */
 export function taskXml(ns) {
   return [
@@ -392,10 +364,8 @@ export function install(ns, apply, run = schtasks) {
   if (!apply) {
     return { ok: true, line: `${exists ? "REPLACE" : "CREATE "} ${taskName(ns)}  daily ${START_TIME}  ${command}  (created disabled)` };
   }
-  // CREATED DISABLED, in the one call that creates it. See the header: install is not
-  // the same act as switching on a nightly unattended agent, and conflating them is how
-  // one ends up running because somebody ran a setup script. The file is UTF-16 LE with
-  // a byte-order mark, the encoding the XML declares and the one schtasks reads.
+  // Created disabled, in the one call that creates it (see the header). The file is
+  // UTF-16 LE with a byte-order mark, the encoding the XML declares and schtasks reads.
   const dir = mkdtempSync(join(tmpdir(), "capsid-task-"));
   const file = join(dir, "task.xml");
   try {
@@ -422,8 +392,7 @@ export function remove(ns, apply, run = schtasks) {
 }
 
 // Install needs the key file, because the task it creates posts its log with it.
-// REMOVE DOES NOT: a task whose key was revoked and deleted must still be removable,
-// and requiring the file left exactly that task running every night.
+// Remove does not: a task whose key was revoked and deleted must still be removable.
 /**
  * @param {string} mode
  * @param {string[]} targets

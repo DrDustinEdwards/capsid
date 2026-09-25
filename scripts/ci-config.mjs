@@ -2,17 +2,13 @@
 // Reconstructs wrangler.jsonc on a CI runner. Never run locally: it writes the
 // gitignored config file, and a developer machine already has the real one.
 //
-// wrangler.jsonc is gitignored under the public-repo hygiene rule, so a checkout
-// carries only wrangler.jsonc.example with placeholder ids and CI cannot deploy
-// without this step. Committing the real config was ruled against: the copies
-// committed in foxhound, germomics, txasm and bsw are the deviation, and capsid is a
-// public repo.
+// wrangler.jsonc is gitignored because this is a public repo, so a checkout carries
+// only wrangler.jsonc.example with placeholder ids and CI cannot deploy without this
+// step.
 //
-// RESOLVE BY NAME, VERIFY BY ID, FAIL CLOSED ON DISAGREEMENT. Resolving purely by name
-// is a documented trap in this portfolio: the database named "foxhound-staging" IS
-// production, and a "foxhound-production" database exists and is EMPTY. A rename, a
-// duplicate, or a second account would silently rebind this Worker to the wrong data
-// and the deploy would look green.
+// RESOLVE BY NAME, VERIFY BY ID, FAIL CLOSED ON DISAGREEMENT. A rename, a duplicate or
+// a second account would otherwise silently rebind this Worker to the wrong data and
+// the deploy would look green.
 //
 // The pinned ids are published in capsid/core.md and are inert without an API token.
 // They are an assertion, not a credential.
@@ -21,10 +17,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2 } from "./bindings.mjs";
 
-// Pinned in scripts/bindings.mjs, the ONE place a binding id is written (quality audit
-// 5.1). Imported rather than repeated because scripts/reap-probe-clients.mjs needs the
-// same OAuth KV id, and two copies meant a rotation could update the deploy assertion
-// and leave the live job's cleanup deleting from the old keyspace.
+// Pinned in scripts/bindings.mjs, the one place a binding id is written.
 const EXPECTED = {
   d1: D1,
   appKv: APP_KV,
@@ -118,49 +111,21 @@ if (appKv.id === oauthKv.id) {
 
 // R2 is asserted against the COMMITTED CONFIG, not against the account.
 //
-// Unlike D1 and KV, an R2 binding carries no id: it names a bucket and that name is a
-// literal in wrangler.jsonc.example, so there is nothing to resolve and "resolve by
-// name, verify by id" has no R2 form. The account-side existence check that used to sit
-// here needed R2 read on the API token, which the deploy token did not carry: it failed
-// in CI on 2026-08-13 with Authentication error 10000 AFTER D1 and KV had resolved and
-// matched their pins.
+// An R2 binding carries no id, only a bucket name that is a literal in
+// wrangler.jsonc.example, so there is nothing to resolve by name and verify by id. The
+// check here is config-side: the pin must be set and not a placeholder. A bucket
+// missing from the account is caught by `wrangler deploy` in the next step.
 //
-// What remains is a config-side assertion: the example must still name the bucket this
-// script expects. That catches the example being edited to point somewhere else. A
-// bucket missing from the account is caught by `wrangler deploy` in the next step.
+// The deploy token needs Workers R2 Storage EDIT, not Read: wrangler checks R2
+// permission only for bindings that are new relative to the deployed version, and
+// fails with Authentication error 10000 without Edit.
 //
-// MEASURED 2026-09-05. The token now carries Workers R2 Storage EDIT, added that day
-// because `wrangler deploy` FAILED three times with the same Authentication error 10000
-// the moment a SECOND R2 binding (HOLDOUT) was declared. Two findings:
-//
-//   1. READ IS NOT ENOUGH. R2 Read was added first, on the reasoning that the failing
-//      call (`GET /accounts/<id>/r2/buckets/<name>`) is a lookup. The deploy failed
-//      again, byte-identical. Cloudflare's Workers-builds token spec lists
-//      `Workers R2 Storage (edit)`. Inferring the verb from the URL path was diagnosing
-//      from first principles, which capsid/conventions.md warns against.
-//   2. WRANGLER ONLY CHECKS BINDINGS THAT ARE NEW relative to the deployed version.
-//      MEDIA had been bound for months and no deploy had needed R2 permission; adding
-//      HOLDOUT surfaced the gap. This failure mode waits for the next new R2 binding.
-//
-// HOLDOUT READ ACCESS IS BY ONE SHARED TOKEN, ruled 2026-09-05. `capsid-holdout-read`
-// is read-only and set in all five roster repos as IMPROVE_HOLDOUT_R2_ACCESS_KEY_ID and
-// IMPROVE_HOLDOUT_R2_SECRET_ACCESS_KEY. It is NOT scoped per namespace prefix, so the
-// credential does not decide which suite a job can read. What does:
-//
-//   - the manifest total, checked by src/improve-scorer.ts against the namespace the
-//     report is SIGNED as, so a mistyped IMPROVE_NAMESPACE fails closed at the Worker;
-//   - step scoping in improve-score.yml, where the three R2 secrets are `env:` on the
-//     pull step alone and no attempt code runs in that step.
-//
-// These guard different things and the manifest never provided what prefix scoping did.
-// The accepted risk is BLAST RADIUS: one leaked token exposes all five suites where a
-// scoped one exposed one. Unchanged and load-bearing: the separate bucket, AttemptEnv =
-// Omit<Env, "HOLDOUT">, and the source scan in test/improve-holdout.test.ts. This token
-// is a REPO secret and must never become a Worker binding or a var here.
-//
-// The bucket must also EXIST first. With Edit in place the account-side
-// `wrangler r2 bucket list` probe could be restored here, which would catch this at the
-// config step with a named reason. Not done: a separate change.
+// Holdout reads in CI use one shared read-only token (`capsid-holdout-read`), set in
+// all five roster repos. It is not scoped per namespace prefix, so one leaked token
+// exposes all five suites. Which suite a job counts is decided by the manifest total,
+// checked by src/improve-scorer.ts against the namespace the report is signed as, and
+// by step scoping in improve-score.yml. This token is a REPO secret and must never
+// become a Worker binding or a var here.
 for (const [label, pin] of [
   ["MEDIA", EXPECTED.r2],
   ["HOLDOUT", EXPECTED.holdoutR2],
@@ -171,10 +136,8 @@ for (const [label, pin] of [
   console.log(`ci-config: R2 ${label} ${pin.name} pinned by name, existence is enforced by the deploy step`);
 }
 
-// THE TWO BUCKETS MUST BE DIFFERENT BUCKETS. Pointing HOLDOUT at capsid-media would
-// satisfy every other check here and silently undo the isolation: attempt code holds
-// MEDIA, so a shared bucket means attempt code can reach the hidden suite. Same shape as
-// the APP_KV/OAUTH_KV assertion above.
+// THE TWO BUCKETS MUST BE DIFFERENT BUCKETS: attempt code holds MEDIA, so a shared
+// bucket means attempt code can reach the hidden suite.
 if (EXPECTED.r2.name === EXPECTED.holdoutR2.name) {
   die(
     `MEDIA and HOLDOUT are pinned to the SAME bucket (${EXPECTED.r2.name}). ` +

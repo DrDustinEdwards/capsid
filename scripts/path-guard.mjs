@@ -1,15 +1,11 @@
-// THE DETERMINISTIC PATH GUARD, FOR THE SUBSCRIPTION-MODE DRIVER (residual 10).
+// THE DETERMINISTIC PATH GUARD, FOR THE SUBSCRIPTION-MODE DRIVER.
 //
 // In API mode the Worker runs pathMonitor() over an attempt's changed paths and reverts
 // anything touching a test, a workflow, a lockfile or the loop's own source.
-// Subscription mode never enters that code: the driver is a Claude Code session on a
-// laptop with five clones and local credentials, the mode with the most reach and the
-// least checking.
-//
-// This is that guard, runnable from a clone with no install. It carries NO copy of the
-// pattern list: the driver fetches `protected_paths` from improve_status and passes it
-// in, so the rules it applies are the rules the Worker holds. A copy here would be
-// correct on the day it was written and wrong the first time a pattern was added.
+// Subscription mode never enters that code, so this is the same guard, runnable from a
+// clone with no install. It carries NO copy of the pattern list: the driver fetches
+// `protected_paths` from improve_status and passes it in, so the rules it applies are
+// the rules the Worker holds.
 //
 // Usage, from the driver, run inside the clone being checked:
 //
@@ -20,12 +16,9 @@
 // printed with the reason the Worker gives for it. Exit 2 means the guard could not run,
 // which is NOT a pass.
 //
-// The guard runs the diff itself. It used to read a file the driver wrote with
-// `git diff --name-only <base>..HEAD > changed.txt`, and three inputs got past it that
-// way: a rename printed only its new path, so a file moved out of test/ was never
-// checked; core.quotePath printed a non-ASCII path in C quotes, so no anchored pattern
-// matched it; and a failed diff still created an empty file, which read as "changed
-// no files". A PowerShell 5.1 redirect also writes UTF-16LE, which matches nothing.
+// The guard runs the diff itself rather than reading a file the driver wrote: a
+// redirected diff can miss a rename's old path, C-quote a non-ASCII path, be empty
+// after a failed diff, or be UTF-16LE from PowerShell 5.1 (see changedPaths).
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

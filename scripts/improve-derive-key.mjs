@@ -65,7 +65,7 @@ if (!root) {
   );
 }
 
-// The off-account backup mirror's key (session 3): the same root, a different
+// The off-account backup mirror's key: the same root, a different
 // context string. Must match deriveBackupCredentialKey in src/improve-scorer.ts
 // exactly, version segment included; test/backup-credential.test.ts pins the
 // context string in both places.
