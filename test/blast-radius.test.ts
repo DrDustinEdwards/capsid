@@ -91,6 +91,12 @@ const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknow
     what: "a merge, which can trigger a deploy on a repo that deploys on push",
   },
   {
+    flag: "can_merge",
+    tool: "delete_branch",
+    args: { namespace: "capsid", branch: "feature/other-agent", force: true },
+    what: "a forced branch delete, which lifts the open-PR refusal and so can delete another agent's PR head",
+  },
+  {
     flag: "can_comment_pr",
     tool: "manage_pr",
     args: { namespace: "capsid", number: 7, action: "comment", comment: "REVIEW: looks fine. APPROVE" },
@@ -163,6 +169,19 @@ test("PLANT: a driver IS allowed the pull-request path, which is the whole point
     });
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /unauthorized:/, `a pr-mode write was refused for a driver: ${text}`);
+    assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the guard");
+  });
+});
+
+test("PLANT: a driver IS allowed a branch delete without force, which still refuses an open PR's head", async () => {
+  // The unforced delete keeps its own open-PR refusal in src/github/refs.ts, so it
+  // needs no flag. Holding it to can_merge would take branch cleanup away from every
+  // driver.
+  await withFetch({}, async (calls) => {
+    const result = await callAs(driver(), "delete_branch", { namespace: "capsid", branch: "feature/mine" });
+    const text = result.content[0]?.text ?? "";
+    assert.doesNotMatch(text, /needs the .* flag/, `an unforced delete_branch was refused a flag for a driver: ${text}`);
+    assert.doesNotMatch(text, /unauthorized:/, `an unforced delete_branch was refused for a driver: ${text}`);
     assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the guard");
   });
 });
@@ -273,7 +292,7 @@ test("every flag is required by some path, so none of them is decoration", () =>
   // document-side override, which is the only other place a flag is required.
   const produced = new Set<ScopeFlag>();
   for (const plant of PLANTS) {
-    for (const flag of repoWriteFlags(plant.tool, plant.args as { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean })) {
+    for (const flag of repoWriteFlags(plant.tool, plant.args as { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean })) {
       produced.add(flag);
     }
   }

@@ -16,6 +16,6 @@ In `mode: "pr"` a caller may name the work branch with `branch`. Two cases are r
 
 The open-pull-request check is one uncached GitHub call. If it fails, the write is refused rather than treated as "no open pull request".
 
-`manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch.
+`manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too.
 
 `search_code` is a server-side tree walk (a recursive Git Trees listing, then bounded content scans), not GitHub's code search API, which returns empty results for private repositories under an App installation token. Use `path_prefix` to narrow large repos.
