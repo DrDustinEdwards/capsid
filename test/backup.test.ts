@@ -378,13 +378,64 @@ test("every table is read in ONE D1 batch, not ten round trips", async () => {
 
   const exportBatch = batches.find((b) => b.includes("SELECT * FROM documents"));
   assert.ok(exportBatch, "no batch carried the export; the tables are still read one at a time");
-  // document_versions is the one table read as a BOUND inside the batch and paged
-  // after it, because reading it whole is what killed the isolate from 2026-09-20.
+  // document_versions and audit_log are read as a BOUND inside the batch and paged
+  // after it, because reading a large table whole is what killed the isolate from
+  // 2026-09-20. Every other table is read whole inside the batch.
+  const paged = ["document_versions", "audit_log"];
   assert.deepEqual(
     exportBatch,
-    TABLES.map((t) => (t === "document_versions" ? "SELECT MAX(id) AS max_id FROM document_versions" : `SELECT * FROM ${t}`)),
+    TABLES.map((t) => (paged.includes(t) ? `SELECT MAX(id) AS max_id FROM ${t}` : `SELECT * FROM ${t}`)),
     "the export batch is not exactly the table list, in order"
   );
+});
+
+// ---- audit_log is paged too (audit finding F1-3, 2026-09-25) -------------------
+//
+// audit_log is kept 180 days and was the next table read whole. It is append-only with
+// an AUTOINCREMENT id, so the same MAX(id) bound keeps the snapshot one instant.
+
+function auditRow(id: number) {
+  return { id, namespace: "capsid", path: "core.md", actor: "operator", action: "write", params: "{}", at: "2026-09-01 00:00:00" };
+}
+
+test("audit_log is streamed in pages, every row once and in id order, in the same file shape", async () => {
+  // 2500 rows is two full pages of 1000 and a partial one, seeded out of order.
+  const audit = Array.from({ length: 2500 }, (_, i) => auditRow(2500 - i));
+  const { env, r2, batches } = makeEnv({ documents: DOCS, auditLog: audit }, MIRROR);
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const key = `${result.json_prefix}audit_log.json`;
+  assert.ok(r2.multipart.some((m) => m.key === key), "audit_log was not written as a multipart upload");
+  const exportedAt = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string).exported_at;
+  const sorted = [...audit].sort((a, b) => a.id - b.id);
+  assert.equal(r2.objects.get(key), JSON.stringify({ exported_at: exportedAt, table: "audit_log", rows: sorted }));
+  const exportBatch = batches.find((b) => b.includes("SELECT * FROM documents"));
+  assert.ok(exportBatch && !exportBatch.includes("SELECT * FROM audit_log"), "audit_log was read whole inside the batch");
+});
+
+test("an audit row written after the snapshot batch is not in the dump", async () => {
+  const r2 = fakeR2(MIRROR);
+  const kv = fakeKv({});
+  const d1 = fakeD1({ documents: DOCS, auditLog: [auditRow(1), auditRow(2)] });
+  const batch = d1.db.batch.bind(d1.db);
+  let first = true;
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+    const out = await batch(statements);
+    if (first) {
+      first = false;
+      d1.rows.audit_log.push(auditRow(3));
+    }
+    return out;
+  }) as typeof batch;
+  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}audit_log.json`) as string);
+  assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
 });
 
 // ---- the streamed table (2026-09-23, job_be450271dfa9) ------------------------
