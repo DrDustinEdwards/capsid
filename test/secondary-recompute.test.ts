@@ -20,13 +20,14 @@ import { SECONDARY_COMMANDS, markers, secondaryFromStream, secondaryScripts, spl
 // written to FAIL against the scorer as it stood at b464cd8, which is the standard
 // capsid/conventions.md sets: a guard that has never been observed failing has not
 // been verified.
+//
+// This file runs the scorer script as a process. The checks that improve-score.yml
+// runs the sandbox the way these tests assume (nonce framing, the quoting of the
+// container script, the git sandbox, copy rather than symlink) are in
+// test/workflow-policy.test.ts.
 
 const ROOT = join(import.meta.dirname, "..");
 const SCORER = join(ROOT, "scripts", "improve-report.mjs");
-const WORKFLOW = readFileSync(join(ROOT, ".github", "workflows", "improve-score.yml"), "utf8");
-const EXECUTABLE = WORKFLOW.split("\n")
-  .filter((line) => !line.trimStart().startsWith("#"))
-  .join("\n");
 
 const NONCE = "d34db33f";
 const M = markers(NONCE);
@@ -278,102 +279,4 @@ test("an unterminated stream measures nothing", () => {
   const result = secondaryFromStream(killed, "capsid", NONCE);
   assert.equal(result.test_pass_rate, null, "a container killed mid-run is a failed measurement, not a good one");
   assert.equal(result.lint_count, null);
-});
-
-// ---- the workflow contract --------------------------------------------------
-
-test("the sandbox runs the secondary phases, framed by the nonce", () => {
-  assert.match(WORKFLOW, /--secondary-scripts "\$\{IMPROVE_NAMESPACE\}" "\$\{RUNNER_TEMP\}\/trusted"/);
-  assert.match(WORKFLOW, /M="##CAPSID-\$\{CAPSID_NONCE\}"/, "the container builds its marker prefix from the nonce");
-  assert.match(WORKFLOW, /unset CAPSID_NONCE/, "and drops it from the environment before any attempt code runs");
-  assert.match(WORKFLOW, /sh \/trusted\/secondary-test\.sh 2>&1/, "the test phase runs inside the container");
-  assert.match(WORKFLOW, /sh \/trusted\/secondary-lint\.sh 2>&1/, "so does the lint phase");
-  assert.match(WORKFLOW, /--secondary \\\n\s+"\$\{RUNNER_TEMP\}\/holdout\.tap"/, "and the trusted copy parses the stream");
-  assert.match(
-    WORKFLOW,
-    /SECONDARY_TEST_PASS_RATE: \$\{\{ steps\.secondary\.outputs\.test_pass_rate \}\}/,
-    "the signing step reads the recomputed value from a step output"
-  );
-  assert.match(WORKFLOW, /SECONDARY_LINT_COUNT: \$\{\{ steps\.secondary\.outputs\.lint_count \}\}/);
-});
-
-test("PLANT: the container script carries no apostrophe, comments included", () => {
-  // Run 34168919050 died at `cd: /repo: No such file or directory` because a
-  // comment inside the container script said "a test file's REAL path". The whole
-  // script is ONE single-quoted shell argument: one apostrophe ends it and every
-  // line after it runs on the runner, outside the container, with the workspace
-  // writable and the step still reporting a container. A quoting slip in this one
-  // string is an isolation failure, so it gets an assertion rather than care.
-  const open = WORKFLOW.indexOf("--entrypoint /bin/sh");
-  assert.ok(open > 0, "the container invocation moved; this scan is reading nothing");
-  const scriptStart = WORKFLOW.indexOf("-c '", open);
-  const scriptEnd = WORKFLOW.indexOf("\n            ' >", scriptStart);
-  assert.ok(scriptStart > 0 && scriptEnd > scriptStart, "could not bound the container script");
-  const script = WORKFLOW.slice(scriptStart + 4, scriptEnd);
-  assert.ok(script.includes("docker") === false, "the slice is the script body, not the docker line");
-  assert.ok(script.length > 500, `the container script sliced to ${script.length} characters; the bounds are wrong`);
-  const offenders = script
-    .split("\n")
-    .map((line, i) => ({ line, i }))
-    .filter(({ line }) => line.includes("'"));
-  assert.deepEqual(
-    offenders.map((o) => o.line.trim()),
-    [],
-    "an apostrophe anywhere in this script closes the shell argument early"
-  );
-});
-
-test("PLANT: the sandbox is a real git repository, with one commit and no history", () => {
-  // Adding the git BINARY was not enough. The sandbox assembles its tree by
-  // copying, deliberately without .git, so foxhound went from "git: not found"
-  // to "not a git repository" with the same file still failing. Ruled 2026-09-08:
-  // one commit of the assembled tree, so rev-parse and status answer.
-  const container = EXECUTABLE.slice(EXECUTABLE.indexOf("docker run --rm"));
-  assert.match(container, /git init -q/, "the sandbox must be a repository, not just a machine with git on it");
-  assert.match(container, /git commit -q -m sandbox/, "one commit, so HEAD exists");
-  assert.match(
-    container,
-    /printf "node_modules\\n\.holdout\\n" > \/work\/\.git\/info\/exclude/,
-    "node_modules and the holdout stay out of the index, so it is the source tree and nothing else"
-  );
-  // NO REAL HISTORY AND NO REMOTE. The commit exists to answer a question, not to
-  // tell an attempt anything about the actual repository.
-  assert.ok(!/git remote add/.test(container), "the sandbox must have no remote");
-  assert.ok(!/git fetch|git clone|git pull/.test(container), "and no network operation, behind --network none");
-  // It runs BEFORE the phases that might ask, and the holdout is not in the tree yet, so
-  // the exclude entry is a second check rather than the fix.
-  assert.ok(
-    container.indexOf("git init") < container.indexOf("secondary-test.sh"),
-    "the repository must exist before any repo command runs"
-  );
-});
-
-test("PLANT: the trusted tree is COPIED into the sandbox, not symlinked", () => {
-  // Run 34168480470 is the plant that found this. The sandbox symlinked /work/test
-  // at /repo/test, which made a test file's REAL path /repo/test/x.test.ts, so node
-  // resolved its `../src` import against /repo. The sandbox measured the default
-  // branch against itself and reported test_pass_rate 1 for an attempt that broke
-  // two tests. The whole recompute was decorative until this was fixed.
-  const container = EXECUTABLE.slice(EXECUTABLE.indexOf("docker run --rm"));
-  assert.ok(
-    !/ln -s "\$e" "\/work\/\$b"/.test(container),
-    "blanket-symlinking the trusted tree into /work is what made relative imports resolve outside the sandbox"
-  );
-  assert.match(container, /find \. -path \.\/\.git -prune -o -name node_modules -prune -o -type f -print/, "source files are copied");
-  // node_modules is the ONE thing not copied: it is a real directory in the tmpfs
-  // whose entries are symlinks to the read-only originals. A symlink to the
-  // DIRECTORY was the previous form and it broke vite, which writes
-  // node_modules/.vite-temp before it loads a config. One level of symlinks keeps
-  // every package read-only while leaving the directory itself writable.
-  assert.match(container, /find \. -path \.\/\.git -prune -o -name node_modules -print -prune/, "the relink must prune");
-  assert.match(container, /mkdir -p "\/work\/\$rel"/, "node_modules is a real directory, so a tool can write inside it");
-  assert.match(container, /ln -s "\$e" "\/work\/\$rel\/\$\{e##\*\/\}"/, "and its entries are symlinks to the read-only originals");
-  assert.ok(
-    !/ln -s "\/repo\/\$\{d#\.\/\}" "\/work\/\$d"/.test(container),
-    "symlinking the node_modules DIRECTORY makes it read-only, which is what broke vite"
-  );
-  assert.ok(
-    !/-name node_modules -print \|/.test(container),
-    "the relink must prune, or it walks the whole dependency tree it just made read-only"
-  );
 });

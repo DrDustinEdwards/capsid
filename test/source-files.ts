@@ -84,6 +84,25 @@ export function sourceFile(name: string): string {
   return found.text;
 }
 
+export interface SourceExport {
+  file: string;
+  name: string;
+}
+
+// Every exported binding in src/, by name. Functions, consts and classes; types
+// and interfaces are deliberately excluded, because a type has no runtime caller
+// to find and removing one is a compile error rather than a silent hole. Read by
+// test/dead-exports.test.ts and test/lint/dead-exports.lint.ts.
+export function exportsOfSrc(): SourceExport[] {
+  const out: SourceExport[] = [];
+  for (const file of sourceFiles()) {
+    for (const m of file.text.matchAll(/^export (?:async )?(?:function|const|class) ([A-Za-z0-9_]+)/gm)) {
+      out.push({ file: file.name, name: m[1] });
+    }
+  }
+  return out;
+}
+
 export interface ToolBlock {
   name: string;
   body: string;
