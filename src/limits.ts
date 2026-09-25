@@ -23,6 +23,11 @@ export const MAX_PR_BODY = 65_536;
 // A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
 // a paragraph, and GitHub's own comment ceiling is 65_536 either way.
 export const MAX_PR_COMMENT = 16_384;
+// The seat's note on a jobs resume: rulings, an ordered plan, several paragraphs.
+// The one that prompted it was about 1,400 characters, past the 1,024 `reason` takes.
+// Not MAX_BODY: the note is stored in an audit row and rendered into the job's
+// mirror document beside the signed prompt, which can already be MAX_BODY on its own.
+export const MAX_RESUME_NOTE = 16_384;
 
 export const MAX_ROWS = 500;
 export const SEARCH_ROWS = 25;
