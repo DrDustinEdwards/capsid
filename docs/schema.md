@@ -83,7 +83,9 @@ Four invariants, each enforced in code rather than by discipline:
    instead of reporting success. Row counts from the database cannot be used for
    this: the FTS triggers inflate them.
 3. **Writes normalize wide dashes to ASCII server-side**, so no client can store
-   an em dash regardless of what it sends. Scope: document writes only. Repository
+   an em dash regardless of what it sends. Only the text the caller supplies is
+   normalized: an append or a patch leaves the stored text around it as it was.
+   Scope: document writes only. Repository
    writes pass content through verbatim, which is a known and deliberate gap.
 4. **An optional `if_match` is enforced at commit time**, inside the mutation
    batch, against the body itself rather than a stored hash. A mismatch aborts the
