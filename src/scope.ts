@@ -461,7 +461,7 @@ export function isMoneyPath(path: string): boolean {
 // ci_dispatch and delete_branch cannot each decide a different answer.
 export function repoWriteFlags(
   tool: string,
-  args: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean }
+  args: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean }
 ): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
   if (args.mode === "direct") flags.push("can_direct_write");
@@ -474,6 +474,12 @@ export function repoWriteFlags(
   // deleting on close, which would put back the invisible litter the deletion was
   // added to clear.
   if (tool === "manage_pr" && (args.action === "merge" || args.action === "close")) flags.push("can_merge");
+  // A FORCED BRANCH DELETE IS HELD TO THE SAME FLAG, for the same reason (audit
+  // 2026-09-25, F2-5). force lifts the open-PR refusal, so on the write grant alone it
+  // could delete another agent's open PR head, which is what close was moved to
+  // can_merge to prevent. A delete without force still refuses an open PR's head and
+  // needs no flag.
+  if (tool === "delete_branch" && args.force === true) flags.push("can_merge");
   // A COMMENT IS A WRITE, AND IT IS THE SMALLEST ONE THIS TOOL MAKES. Separated from
   // can_merge rather than folded into it so the reviewer role can hold one without
   // the other, which is the whole reason the role exists.

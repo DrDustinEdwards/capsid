@@ -6,7 +6,7 @@ Scopes are five axes. `namespaces` and `repos` are a list or `*`. `tools` is an 
 
 | flag | what it gates |
 | --- | --- |
-| `can_merge` | merging a pull request, which can trigger a deploy on a repo that deploys on push. CLOSING one needs it too, since 2026-09-16: close deletes the head branch, which is the same destruction. |
+| `can_merge` | merging a pull request, which can trigger a deploy on a repo that deploys on push. CLOSING one needs it too, since 2026-09-16: close deletes the head branch, which is the same destruction. So does `delete_branch` with `force: true`, since 2026-09-25, because force lifts its open-PR refusal. |
 | `can_direct_write` | a `mode: "direct"` commit, which lands on a default branch with no review |
 | `can_dispatch` | dispatching a workflow, which spends CI minutes and runs code with that repo's secrets in scope |
 | `can_write_workflows` | writing under `.github/workflows/` |
