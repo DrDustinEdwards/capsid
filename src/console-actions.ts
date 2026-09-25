@@ -30,7 +30,7 @@ import { auditStatement } from "./store-guards";
 // first POST renders what will happen and changes nothing; the second, carrying the
 // same CSRF, performs it.
 
-export const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "revoke_agent"] as const;
+const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 
 function isConsoleAction(value: string): value is ConsoleAction {

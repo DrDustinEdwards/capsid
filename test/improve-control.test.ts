@@ -3,21 +3,13 @@ import { test } from "node:test";
 import { improveControl, improveStatus } from "../src/improve-run.ts";
 import { BUDGET_KEY, MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema.ts";
 import { pausedReason, readBudget, readMode } from "../src/improve-state.ts";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { audited, controlHarness as harness } from "./improve-harness.ts";
 
 // GROUP: improve_run's control actions. Each writes ONE KV value, audits it, and
 // reads it back, so a test proves three things per action: the value landed in KV,
 // an audit_log row was written, and the returned value is the read-back (not just
 // the input echoed). Every path is write-gated at the tool boundary; that gate is
 // the mayWrite check shared with the run path and is asserted in improve-tools.
-
-function harness(seed: Record<string, string> = {}) {
-  const kv = fakeKv({ seed });
-  const d1 = fakeD1();
-  return { env: fakeEnv({ APP_KV: kv.kv, DB: d1.db }), kv, d1 };
-}
-
-const audited = (d1: ReturnType<typeof fakeD1>) => d1.batches.some((b) => b.some((s) => /INSERT INTO audit_log/.test(s)));
 
 test("mode sets improve_mode, audits, and reads it back", async () => {
   const { env, kv, d1 } = harness();

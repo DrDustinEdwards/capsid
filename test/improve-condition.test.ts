@@ -8,13 +8,12 @@ import {
 } from "../src/improve-schema.ts";
 import { improveRunManual, openRuns } from "../src/improve-run.ts";
 import { tickRuns } from "../src/improve/tick.ts";
-import { finalizeRun } from "../src/improve/finalize.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { IMPROVE_RUN_DEFAULTS, sseMessage } from "./improve-fakes.ts";
+import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, IMPROVE_SKILL_DEFAULTS, sseMessage } from "./improve-fakes.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
@@ -97,56 +96,64 @@ test("THE CONDITION IS IN THE OPENING AUDIT ROW, not only on the row it describe
   });
 });
 
-test("the FINISHING audit row and the run summary both carry it, so one query covers a run's whole life", async () => {
-  await withFetch({}, async () => {
-    const { d1, env } = await harness();
-    d1.rows.improve_runs.push({ ...IMPROVE_RUN_DEFAULTS, status: "finalizing", condition: "no-memory", ...FRESH });
-    await finalizeRun(env, d1.rows.improve_runs[0] as unknown as RunRow, NOW);
-    const finished = auditRows(d1.recorded).find((a) => a.action === "improve-run-finished");
-    assert.ok(finished, "no improve-run-finished audit row was written");
-    assert.equal(finished.params.condition, "no-memory");
-    const summary = d1.recorded.find((r) => r.sql.includes("INSERT INTO documents") && String(r.params[1]).endsWith("run-summary.md"));
-    assert.ok(summary, "no run summary document was written");
-    assert.match(String(summary.params[3]), /^- condition: no-memory$/m);
-  });
-});
+// The FINISHING audit row and the stored run summary both carry the condition, so one
+// query covers a run's whole life: read back from a real D1 in
+// test-integration/improve-finalize.test.ts.
 
 // ---- each condition switches something off ----------------------------------
 
-// One attempt under a condition, returning which inputs the attempt read. The model
-// proposes nothing, so the attempt ends right after the reads under test.
-async function attemptReads(condition: string) {
+// One attempt under a condition, over a store holding a kept attempt from an earlier
+// run (lineage) and a skill from another project (transfer), each carrying text or a
+// sha nothing else in the fixture has. Returns the attempt row the tick wrote and the
+// request body the model received. The model proposes nothing, so the attempt ends
+// right after the inputs under test were used.
+const LINEAGE = { id: "run-0-a01", run_id: "run-0", status: "kept", kept: 1, head_sha: "lineage-head-sha", score_after: 0.9, ts: "2026-09-04 08:00:00" };
+const SKILL = { id: "skill-canary", source_namespace: "foxing", title: "SKILL-CANARY-TITLE", status: "candidate", body_ref: "improve/skills/skill-canary.md" };
+
+async function attemptUnder(condition: string) {
   const route = {
     "POST /v1/messages": {
       contentType: "text/event-stream",
       text: sseMessage(JSON.stringify({ summary: "s", reasoning: "r", files: [] })),
     },
   };
-  let reads: string[] = [];
+  let attempt: Record<string, unknown> | undefined;
+  let prompt = "";
   await withFetch(route, async (calls) => {
     const { d1, env } = await harness();
-    d1.rows.improve_runs.push({ ...IMPROVE_RUN_DEFAULTS, status: "attempting", condition, ...FRESH });
+    d1.rows.improve_attempts.push({ ...IMPROVE_ATTEMPT_DEFAULTS, ...LINEAGE });
+    d1.rows.improve_skills.push({ ...IMPROVE_SKILL_DEFAULTS, ...SKILL });
+    d1.rows.improve_runs.push({ ...IMPROVE_RUN_DEFAULTS, status: "attempting", condition, base_sha: "run-base-sha", ...FRESH });
     const outcomes = await tickRuns(env, NOW);
     assert.match(outcomes[0]?.note ?? "", /proposed no file changes/, `the attempt under ${condition} did not reach the model`);
-    assert.equal(calls.filter((c) => c.path === "/v1/messages").length, 1);
-    reads = d1.reads.map((r) => r.sql);
+    const model = calls.filter((c) => c.path === "/v1/messages");
+    assert.equal(model.length, 1);
+    prompt = JSON.stringify(model[0].body);
+    attempt = d1.rows.improve_attempts.find((a) => a.run_id === IMPROVE_RUN_DEFAULTS.id);
   });
-  return {
-    lineage: reads.some((sql) => /FROM improve_attempts WHERE namespace = \?1 ORDER BY ts DESC/.test(sql)),
-    skills: reads.some((sql) => /FROM improve_skills s/.test(sql)),
-  };
+  assert.ok(attempt, `the tick under ${condition} wrote no attempt row`);
+  return { attempt, prompt };
 }
 
 test("'no-memory' WITHHOLDS LINEAGE HISTORY from base selection", async () => {
   // The ablation is only real if the input is actually withheld. A condition that
-  // reached selectBase with the full history would be a label that lies.
-  assert.equal((await attemptReads("full")).lineage, true, "a full run did not read lineage, so this test proves nothing");
-  assert.equal((await attemptReads("no-memory")).lineage, false, "'no-memory' still reads lineage history");
+  // reached selectBase with the full history would be a label that lies. With the
+  // history, the kept attempt is the best base; without it, the run's own base is.
+  const full = (await attemptUnder("full")).attempt;
+  assert.equal(full.base_sha, LINEAGE.head_sha, "a full run did not branch from the kept attempt, so this test proves nothing");
+  assert.equal(full.lineage_parent, LINEAGE.id);
+  const ablated = (await attemptUnder("no-memory")).attempt;
+  assert.equal(ablated.base_sha, "run-base-sha", "'no-memory' still branched from lineage history");
+  assert.equal(ablated.lineage_parent, null);
 });
 
 test("'no-transfer' OFFERS NO cross-project skill", async () => {
-  assert.equal((await attemptReads("full")).skills, true, "a full run did not look for a skill, so this test proves nothing");
-  assert.equal((await attemptReads("no-transfer")).skills, false, "'no-transfer' still looks for a transferred skill");
+  const full = await attemptUnder("full");
+  assert.match(full.prompt, /SKILL-CANARY-TITLE/, "a full run was not offered the skill, so this test proves nothing");
+  assert.equal(full.attempt.skill_id, SKILL.id);
+  const ablated = await attemptUnder("no-transfer");
+  assert.doesNotMatch(ablated.prompt, /SKILL-CANARY/, "'no-transfer' still handed the model another project's skill");
+  assert.equal(ablated.attempt.skill_id, null);
 });
 
 // scanner-rule: the improve arc's condition ruling (capsid/decisions.md), a condition that

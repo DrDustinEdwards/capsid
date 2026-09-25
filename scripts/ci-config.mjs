@@ -15,7 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2 } from "./bindings.mjs";
+import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2, sharedBucketProblem } from "./bindings.mjs";
 
 // Pinned in scripts/bindings.mjs, the one place a binding id is written.
 const EXPECTED = {
@@ -136,14 +136,9 @@ for (const [label, pin] of [
   console.log(`ci-config: R2 ${label} ${pin.name} pinned by name, existence is enforced by the deploy step`);
 }
 
-// THE TWO BUCKETS MUST BE DIFFERENT BUCKETS: attempt code holds MEDIA, so a shared
-// bucket means attempt code can reach the hidden suite.
-if (EXPECTED.r2.name === EXPECTED.holdoutR2.name) {
-  die(
-    `MEDIA and HOLDOUT are pinned to the SAME bucket (${EXPECTED.r2.name}). ` +
-      `Attempt code holds MEDIA, so this would give it read access to the hidden holdout suite. Nothing was deployed.`
-  );
-}
+// THE TWO BUCKETS MUST BE DIFFERENT BUCKETS: see sharedBucketProblem in ./bindings.mjs.
+const bucketProblem = sharedBucketProblem(EXPECTED.r2, EXPECTED.holdoutR2);
+if (bucketProblem) die(bucketProblem);
 
 // Render the example into a real config.
 let config = readFileSync("wrangler.jsonc.example", "utf8");

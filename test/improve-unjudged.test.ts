@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { MAX_CONSECUTIVE_REVERTS, MAX_CONSECUTIVE_UNJUDGED, SCORE_TIMEOUT_MS } from "../src/improve-schema.ts";
 import { ingestScore, tickRuns } from "../src/improve-run.ts";
 import type { ScoreReport } from "../src/improve-scorer.ts";
-import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
+import { withFetch } from "./fakes.ts";
+import { ARCHIVE_DOC, ATTEMPT, AWAITING, BASELINE, harness, MODEL_ROUTE, NOW, report as baseReport } from "./improve-harness.ts";
 
 // A BROKEN MACHINE IS NOT A BAD CHANGE.
 //
@@ -25,145 +24,12 @@ import { seedScoresDoc } from "./seed-scores.ts";
 // nothing, so anything that can be provoked by the attempt itself must stay a
 // revert.
 
-const NOW = new Date("2026-09-04T08:05:00Z");
-const SCORES = seedScoresDoc("capsid");
 const LATE = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60_000);
 
-async function pin(): Promise<string> {
-  return anchorChecksum(parseScoresDoc("capsid", SCORES));
-}
-
-const BASELINE = [
-  { run_id: "capsid-r1", namespace: "capsid", metric: "build_passes", value: 1, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "holdout_pass_rate", value: 1, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "test_pass_rate", value: 0.9, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "lint_count", value: 10, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "error_count", value: 4, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "p95_latency_ms", value: 200, attempt_id: null },
-  { run_id: "capsid-r1", namespace: "capsid", metric: "bundle_size_bytes", value: 100_000, attempt_id: null },
-];
-
-function report(over: Partial<ScoreReport> = {}): ScoreReport {
-  return {
-    namespace: "capsid",
-    run_id: "capsid-r1",
-    attempt_id: "capsid-r1-a01",
-    head_sha: "head01",
-    jti: "jti-run-01",
-    anchors: { build_passes: 1 },
-    secondary: {
-      test_pass_rate: 0.9,
-      lint_count: 5,
-      error_count: 4,
-      p95_latency_ms: 200,
-      bundle_size_bytes: 100_000,
-    },
-    holdout: { total: 11, passed: 11 },
-    environment: { ok: true, reason: null },
-    ci_minutes: 3,
-    ...over,
-  };
-}
-
-const CLEAN_CHANGE = "=== src/format.ts (42 bytes, complete new contents) ===\nexport const x = 1;\n";
-
-const AWAITING = {
-  id: "capsid-r1",
-  namespace: "capsid",
-  started: "2026-09-04 08:00:00",
-  status: "awaiting-score",
-  attempts: 1,
-  current_attempt: "capsid-r1-a01",
-  base_sha: "base000",
-  advanced_at: "2026-09-04 08:04:00",
-};
-
-const ATTEMPT = {
-  id: "capsid-r1-a01",
-  namespace: "capsid",
-  run_id: "capsid-r1",
-  status: "awaiting-score",
-  change_summary: "drop a dead branch",
-  diff_ref: "improve/archive/capsid-r1/capsid-r1-a01.md",
-  branch: "improve/capsid-r1-a01",
-  head_sha: "head01",
-  base_sha: "base000",
-  dispatched_at: "2026-09-04 08:04:00",
-};
-
-const ARCHIVE_DOC = {
-  namespace: "capsid",
-  path: "improve/archive/capsid-r1/capsid-r1-a01.md",
-  title: "improve attempt capsid-r1-a01",
-  body: CLEAN_CHANGE,
-  type: "reference",
-};
-
-const MODEL_ROUTE = {
-  "POST /v1/messages": (body: unknown) => {
-    const model = String((body as { model?: string })?.model ?? "");
-    const payload = model.includes("haiku")
-      ? JSON.stringify({ reward_hacking: false, reason: "" })
-      : JSON.stringify({ transferable: false, title: "", body: "" });
-    return {
-      body: {
-        id: "msg_1",
-        type: "message",
-        role: "assistant",
-        model,
-        content: [{ type: "text", text: payload }],
-        stop_reason: "end_turn",
-        stop_details: null,
-        usage: { input_tokens: 100, output_tokens: 20 },
-      },
-    };
-  },
-};
-
-async function harness(opts: {
-  documents?: FakeD1Options["documents"];
-  improveRuns?: FakeD1Options["improveRuns"];
-  improveAttempts?: FakeD1Options["improveAttempts"];
-  improveScores?: FakeD1Options["improveScores"];
-  improveSkills?: FakeD1Options["improveSkills"];
-  kv?: Record<string, string>;
-  holdoutTotal?: number | null;
-  apiKey?: string;
-}) {
-  const d1 = fakeD1({
-    documents: [
-      { namespace: "capsid", path: "improve/scores.md", title: "scores", body: SCORES, type: "reference" },
-      ...(opts.documents ?? []),
-    ],
-    namespaces: [{ namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }]) }],
-    improveRuns: opts.improveRuns,
-    improveAttempts: opts.improveAttempts,
-    improveScores: opts.improveScores,
-    improveSkills: opts.improveSkills,
-  });
-  const kv = fakeKv({ seed: { improve_mode: "api", "improve:anchor:capsid": await pin(), ...(opts.kv ?? {}) }, seedToken: true });
-  const holdout = fakeR2(
-    opts.holdoutTotal === null
-      ? {}
-      : {
-          "improve/holdout/capsid/manifest.json": JSON.stringify({
-            namespace: "capsid",
-            total: opts.holdoutTotal ?? 11,
-            updated_at: "2026-09-01T00:00:00Z",
-          }),
-        }
-  );
-  const env = fakeEnv({
-    DB: d1.db,
-    APP_KV: kv.kv,
-    HOLDOUT: holdout.bucket,
-    MEDIA: fakeR2().bucket,
-    ...(opts.apiKey === undefined ? {} : { ANTHROPIC_API_KEY: opts.apiKey }),
-    GITHUB_APP_CLIENT_ID: "x",
-    GITHUB_APP_PRIVATE_KEY: "x",
-  });
-  return { d1, kv, holdout, env };
-}
+// The unjudged tests send an environment verdict on every report. The shared fixture
+// leaves it out, so improve-run.test.ts keeps covering a report without one.
+const report = (over: Partial<ScoreReport> = {}): ScoreReport =>
+  baseReport({ environment: { ok: true, reason: null }, ...over });
 
 // ---- the timeout path: a score that never arrives ---------------------------
 

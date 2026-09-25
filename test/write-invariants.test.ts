@@ -429,67 +429,36 @@ test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is
   assert.deepEqual(recorded, [], "the losing create still wrote statements");
 });
 
-// ARMING PARITY: write and restore choose the same guard under the same conditions, and
-// it leads the batch.
+// WHICH GUARD write AND restore ARM, shown by what a racing writer does to each.
 //
-// The protocol was shipped twice, and the two copies spelled the consent condition
-// differently: write kept its own `elicited` flag, restore re-derived it as
-// `confirm !== true`. Those denoted the same thing only by inference from how
-// requireConfirmation returns, so a change to that helper could have armed one path and
-// not the other. There was no shared unit to point a test at.
+// The two handlers once spelled the consent condition differently, so a change to one
+// could arm the other with a different guard. These tests used to classify the guard by
+// the SQL text of the first batch statement. They now stage the race each guard exists
+// for and assert the outcome, for both tools:
 //
-// Guard classification is by SQL, not by a flag the source exports, so this fails against
-// a handler that sets the right flag and pushes the wrong statement.
-const guardOf = (batches: string[][]): "missing" | "body" | "none" => {
-  const first = batches[0]?.[0] ?? "";
-  if (/WHERE NOT EXISTS .*body IS \?3/.test(first)) return "body";
-  if (/SELECT NULL, \?1, \?2 WHERE EXISTS/.test(first)) return "missing";
-  return "none";
-};
+//   create: a racing create wins and the handler is refused. write: "CREATE COLLISION:
+//     exactly one of two racing creates wins" above; restore: "restore recreating a
+//     deleted document refuses a racing create" below.
+//   update with if_match: a racing body change is refused. write: "PREDICATE: a body
+//     that changes after the pre-read is refused at commit" above; restore: "restore
+//     refuses at the PREDICATE when the live body changes after its pre-read" below.
+//   plain update: last writer wins, deliberately. The test below.
+test("RACE: a confirmed write and restore with no if_match both land over a body changed after the pre-read", async () => {
+  const race = (live: LiveState) => {
+    live.body = "body written by someone else";
+  };
+  const w = await connect("write", { body: "prior body", raceAfterPreRead: race });
+  const wRes = await call(w.client, "write", { namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true });
+  await w.close();
+  assert.ok(!wRes.isError, `a plain write was refused by a guard it did not ask for: ${wRes.content?.[0]?.text}`);
+  assert.match(sqlFor(w.recorded), /INSERT INTO documents/);
 
-const ARMING_CASES = [
-  // A create guards on the row still being ABSENT.
-  { name: "create", opts: { exists: false }, withIfMatch: false, expected: "missing" as const },
-  // An update the caller asked to be checked guards on the body.
-  { name: "update with if_match", opts: { body: "prior body" }, withIfMatch: true, expected: "body" as const },
-  // An unguarded update keeps last-writer-wins, deliberately.
-  { name: "plain update", opts: { body: "prior body" }, withIfMatch: false, expected: "none" as const },
-];
-
-for (const { name, opts, withIfMatch, expected } of ARMING_CASES) {
-  test(`ARMING PARITY: write and restore both arm the ${expected} guard, first, on a ${name}`, async () => {
-    const if_match = withIfMatch ? await shaOf("prior body") : undefined;
-
-    const w = await connect("write", opts);
-    const wRes = await call(w.client, "write", {
-      namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true, ...(if_match ? { if_match } : {}),
-    });
-    await w.close();
-
-    const r = await connect("write", opts);
-    const rRes = await call(r.client, "restore", {
-      namespace: "capsid", path: "doc.md", version_id: VERSION_ID, confirm: true, ...(if_match ? { if_match } : {}),
-    });
-    await r.close();
-
-    // Both landed, so the guards below are the ones a SUCCEEDING commit arms.
-    assert.ok(!wRes.isError, `write was refused: ${wRes.content?.[0]?.text}`);
-    assert.ok(!rRes.isError, `restore was refused: ${rRes.content?.[0]?.text}`);
-
-    assert.equal(guardOf(w.batches), expected, "write armed the wrong guard");
-    assert.equal(guardOf(r.batches), expected, "restore armed the wrong guard");
-    assert.equal(guardOf(w.batches), guardOf(r.batches), "write and restore have drifted apart again");
-
-    // ARMED FIRST. The abort must happen before any other statement is attempted, and the
-    // fake's batch log is the only place that order is visible: `recorded` is written
-    // only after every statement has passed.
-    if (expected !== "none") {
-      assert.equal(w.batches.length, 1);
-      assert.match(w.batches[0][0], /INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/);
-      assert.match(r.batches[0][0], /INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/);
-    }
-  });
-}
+  const r = await connect("write", { body: "prior body", raceAfterPreRead: race });
+  const rRes = await call(r.client, "restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID, confirm: true });
+  await r.close();
+  assert.ok(!rRes.isError, `a plain restore was refused by a guard it did not ask for: ${rRes.content?.[0]?.text}`);
+  assert.match(sqlFor(r.recorded), /INSERT INTO documents/);
+});
 
 test("CREATE COLLISION: an uncontested create still succeeds", async () => {
   const { client, recorded, close } = await connect("write", { exists: false });
@@ -538,26 +507,10 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
   // current title is half a restore.
   assert.ok(upsert.params.includes("Old title"), `restore did not write the version title: ${JSON.stringify(upsert.params)}`);
 
-  // And the snapshot is the mirror image: it must capture what is being replaced, or the
-  // restore is not itself undoable.
-  //
-  // ASSERTED ON THE SQL SHAPE, not on a bound value (corrected 2026-09-07, Grok MAJOR
-  // 10). This used to require the snapshot to BIND "prior body", which is the pre-read
-  // body, and passed for that reason: with a pre-read binding the bound value and the
-  // live value are the same string in this fixture, so it could not tell the fix from the
-  // bug. write and delete moved to INSERT..SELECT on 2026-09-06 and restore did not. Same
-  // form as the write and delete assertions in test/audit-2026-09-06-round2.test.ts.
-  const snapshot = recorded.find((r) => /INSERT INTO document_versions [(]/i.test(r.sql) && !/SELECT NULL/i.test(r.sql));
-  assert.ok(snapshot, "restore issued no snapshot of the live body");
-  assert.match(
-    snapshot.sql.replace(/\s+/g, " "),
-    /SELECT id, .*FROM documents/i,
-    "restore binds a pre-read body: a body written between the pre-read and the batch is lost with no version row anywhere"
-  );
-  assert.ok(
-    !snapshot.params.includes("prior body"),
-    `restore still carries the pre-read body as a bound param: ${JSON.stringify(snapshot.params)}`
-  );
+  // The snapshot is the mirror image: it must capture the LIVE row being replaced,
+  // including a body written after the pre-read, or the restore is not itself undoable.
+  // The node fake does not evaluate INSERT ... SELECT, so that is proven against real
+  // SQLite in test-integration/live-snapshot.test.ts, for write, delete and restore.
 });
 
 // ---- history, driven rather than described (quality audit 6.3) --------------
@@ -770,24 +723,85 @@ test("an accepted elicitation reaches the commit, so the arm is really reachable
   assert.match(sqlFor(recorded), /INSERT INTO documents/);
 });
 
-test("ARMING PARITY: an elicited write, restore and delete each arm the body guard first", async () => {
+test("RACE: after an elicitation, write, restore and delete each refuse a body changed while the prompt was open", async () => {
   // Consent given through elicitation is bound to the body it was about, in all three
-  // tools, and the guard leads the batch. No call passes confirm or if_match, so the
-  // elicited signal is the only thing that can arm the guard (audit MAJOR 17, and
-  // audit 2026-09-06 round 2, item 6 for delete).
+  // tools (audit MAJOR 17, and audit 2026-09-06 round 2, item 6 for delete). No call
+  // passes confirm or if_match, so the elicited signal is the only thing that can arm
+  // the body guard, and the racing writer is what the guard has to catch.
   const calls: Array<[string, Record<string, unknown>]> = [
     ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
     ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
     ["delete", { namespace: "capsid", path: "doc.md" }],
   ];
   for (const [tool, args] of calls) {
-    const { client, batches, prompts, close } = await connectEliciting({ body: "prior body" });
+    const { client, recorded, prompts, close } = await connectEliciting({
+      body: "prior body",
+      raceAfterPreRead: (live) => {
+        live.body = "body written while the prompt was up";
+      },
+    });
     const result = await call(client, tool, args);
     await close();
     assert.equal(prompts.length, 1, `${tool} did not elicit, so the elicited arm was not exercised`);
-    assert.ok(!result.isError, `${tool} was refused: ${result.content?.[0]?.text}`);
-    assert.equal(guardOf(batches), "body", `${tool} did not arm the body guard after an elicitation`);
+    assert.equal(result.isError, true, `${tool} landed on a body that changed under an open prompt`);
+    assert.deepEqual(recorded, [], `${tool} committed statements after its guard should have fired`);
   }
+  // The delete refusal says why, since a delete has no if_match to blame.
+  const { client, close } = await connectEliciting({
+    body: "prior body",
+    raceAfterPreRead: (live) => {
+      live.body = "body written while the prompt was up";
+    },
+  });
+  const refused = await call(client, "delete", { namespace: "capsid", path: "doc.md" });
+  await close();
+  assert.match(refused.content[0].text, /changed or was removed while the confirmation was open/);
+});
+
+test("RACE: after an elicitation with no race, write, restore and delete each land", async () => {
+  // The innocent direction for the test above: a body guard that fired on every call
+  // would pass it.
+  const calls: Array<[string, Record<string, unknown>]> = [
+    ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
+    ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    ["delete", { namespace: "capsid", path: "doc.md" }],
+  ];
+  for (const [tool, args] of calls) {
+    const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
+    const result = await call(client, tool, args);
+    await close();
+    assert.equal(prompts.length, 1, `${tool} did not elicit`);
+    assert.ok(!result.isError, `${tool} was refused: ${result.content?.[0]?.text}`);
+    assert.ok(recorded.length > 0, `${tool} committed nothing`);
+  }
+});
+
+test("RACE: a confirm: true delete lands over a changed body, and is refused when the row is gone", async () => {
+  // confirm: true approves deleting the path, not a particular body, so the guard is
+  // existence only. A body change in flight does not stop it; a removal does, or the
+  // delete would snapshot and audit a row it never removed.
+  const changed = await connect("write", {
+    body: "prior body",
+    raceAfterPreRead: (live) => {
+      live.body = "body written by someone else";
+    },
+  });
+  const landed = await call(changed.client, "delete", { namespace: "capsid", path: "doc.md", confirm: true });
+  await changed.close();
+  assert.ok(!landed.isError, `a confirmed delete was refused over a body change: ${landed.content?.[0]?.text}`);
+  assert.match(sqlFor(changed.recorded), /DELETE FROM documents/);
+
+  const removed = await connect("write", {
+    body: "prior body",
+    raceAfterPreRead: (live) => {
+      live.exists = false;
+    },
+  });
+  const refused = await call(removed.client, "delete", { namespace: "capsid", path: "doc.md", confirm: true });
+  await removed.close();
+  assert.equal(refused.isError, true, "a delete of a row removed in flight reported success");
+  assert.match(refused.content[0].text, /no longer exists/);
+  assert.deepEqual(removed.recorded, [], "the refused delete still committed statements");
 });
 
 test("a declined elicitation refuses, and writes nothing", async () => {

@@ -247,55 +247,13 @@ test("ci_dispatch refuses more than 10 workflow inputs at the schema", async () 
   );
 });
 
-test("the history listing query carries a LIMIT", async () => {
-  const { d1, call, close } = await serverClient({
-    documents: [{ id: 7, namespace: "capsid", path: "doc.md", body: "b" }],
-    versions: [{ id: 1, document_id: 7, namespace: "capsid", path: "doc.md", title: null, body: "old", snapshot_at: "2026-08-01 00:00:00" }],
-  });
-  await call("history", { namespace: "capsid", path: "doc.md" });
-  await close();
-  const listing = d1.reads.find((r) => /FROM document_versions WHERE namespace/i.test(r.sql.replace(/\s+/g, " ")));
-  assert.ok(listing, "history issued no listing query");
-  assert.match(listing.sql.replace(/\s+/g, " "), /LIMIT/i, "the history listing is unbounded: it returns every snapshot ever taken");
-});
-
-// ---- 6. snapshots come from documents INSIDE the batch ----------------------
-
-test("write snapshots the LIVE row via INSERT..SELECT, not the pre-read body", async () => {
-  const { d1, call, close } = await serverClient({
-    documents: [{ id: 7, namespace: "capsid", path: "doc.md", title: "T", body: "prior body" }],
-  });
-  const result = await call("write", { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true });
-  await close();
-  assert.ok(!result.isError, `write failed: ${result.content?.[0]?.text}`);
-  const snapshot = d1.recorded.find((r) =>
-    /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/i.test(r.sql.replace(/\s+/g, " "))
-  );
-  assert.ok(snapshot, "write issued no full snapshot statement");
-  assert.match(
-    snapshot.sql.replace(/\s+/g, " "),
-    /SELECT id, .*FROM documents/i,
-    "the snapshot binds a pre-read body: a body written between the pre-read and the batch is lost with no version row anywhere"
-  );
-  assert.ok(!(snapshot.params as unknown[]).includes("prior body"), "the snapshot still carries the pre-read body as a bound param");
-});
-
-test("delete snapshots the LIVE row via INSERT..SELECT inside its batch", async () => {
-  const { d1, call, close } = await serverClient({
-    documents: [{ id: 7, namespace: "capsid", path: "doc.md", title: "T", body: "prior body" }],
-  });
-  const result = await call("delete", { namespace: "capsid", path: "doc.md", confirm: true });
-  await close();
-  assert.ok(!result.isError, `delete failed: ${result.content?.[0]?.text}`);
-  const snapshot = d1.recorded.find((r) =>
-    /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/i.test(r.sql.replace(/\s+/g, " "))
-  );
-  assert.ok(snapshot, "delete issued no full snapshot statement");
-  assert.match(snapshot.sql.replace(/\s+/g, " "), /SELECT id, .*FROM documents/i);
-});
-
-// Proven with an eliciting client in test/write-invariants.test.ts: "ARMING PARITY: an
-// elicited write, restore and delete each arm the body guard first".
+// The history listing is bounded at HISTORY_ROWS, and write and delete snapshot the
+// LIVE row inside their batch rather than the pre-read body. Both are proven against
+// real SQLite in test-integration/live-snapshot.test.ts: the node fake neither honours
+// the listing's LIMIT nor evaluates INSERT ... SELECT, so a test here could only read
+// the SQL text. The elicited delete's body guard is driven with a racing writer in
+// test/write-invariants.test.ts: "RACE: after an elicitation, write, restore and
+// delete each refuse a body changed while the prompt was open".
 
 // ---- 7. prompts are data, and their titles are filtered ---------------------
 
