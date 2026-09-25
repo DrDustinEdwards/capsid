@@ -31,8 +31,8 @@ const NAMESPACES = [
   { namespace: "foxhound", repos: JSON.stringify([{ repo: "DrDustinEdwards/foxhound", label: "primary" }]) },
 ];
 
-async function connect(caller: Agent) {
-  const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES });
+async function connect(caller: Agent, jobs: Array<Record<string, unknown>> = []) {
+  const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES, jobs });
   const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }), caller);
   const client = new Client({ name: "scope-surfaces", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -190,12 +190,18 @@ test("PLANT: an agent scoped to jobs.post is REFUSED action list", async () => {
 test("THE INNOCENT DIRECTION: an agent scoped to jobs.list may list", async () => {
   const caller = driver();
   caller.scopes.tools = ["jobs", "jobs.list"];
-  const { client, close } = await connect(caller);
+  const seeded = { id: "job_listed", namespace: "capsid", title: "a listed job", status: "queued", priority: 0, posted_by: "github:seat" };
+  const { client, close } = await connect(caller, [seeded]);
   const result = (await client.callTool({ name: "jobs", arguments: { action: "list", namespace: "capsid" } })) as {
+    isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
   assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a list-scoped agent was refused list: ${result.content[0].text}`);
+  assert.notEqual(result.isError, true, result.content[0].text);
+  const listed = JSON.parse(result.content[0].text) as { ok: boolean; action: string; jobs: Array<{ id: string }> };
+  assert.equal(listed.ok, true);
+  assert.deepEqual(listed.jobs.map((j) => j.id), ["job_listed"], "the list did not return the queue");
 });
 
 test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", async () => {
@@ -249,11 +255,17 @@ test("THE INNOCENT DIRECTION: a driver may still CLAIM its own lease", async () 
   // mode, which creates no run row for the database index to catch.
   const { client, close } = await connect(driver());
   const result = (await client.callTool({ name: "improve_run", arguments: { action: "claim", namespace: "capsid" } })) as {
+    isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
   assert.doesNotMatch(result.content[0].text, /admin only/, `a driver was refused its own lease: ${result.content[0].text}`);
   assert.doesNotMatch(result.content[0].text, /unauthorized:/, result.content[0].text);
+  assert.notEqual(result.isError, true, result.content[0].text);
+  const claimed = JSON.parse(result.content[0].text) as { action: string; namespace: string; held: boolean };
+  assert.equal(claimed.action, "claim");
+  assert.equal(claimed.namespace, "capsid");
+  assert.equal(claimed.held, true, "the driver did not get the lease");
 });
 
 // ---- audit 2026-09-13, finding C2: lint gather is jobs.list's twin -----------------
@@ -289,10 +301,15 @@ test("THE INNOCENT DIRECTION: a read-grant agent may still gather", async () => 
   caller.scopes.grants = ["read"];
   const { client, close } = await connect(caller);
   const result = (await client.callTool({ name: "lint", arguments: { namespace: "capsid" } })) as {
+    isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
   assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a read agent was refused gather: ${result.content[0].text}`);
+  assert.notEqual(result.isError, true, result.content[0].text);
+  const packet = JSON.parse(result.content[0].text) as { mode: string; core: { body: string } | null };
+  assert.equal(packet.mode, "gather");
+  assert.equal(packet.core?.body, "ours", "gather did not return the caller's own core document");
 });
 
 test("THE OTHER INNOCENT DIRECTION: the write branches still take the write grant", async () => {

@@ -13,7 +13,7 @@ import { tickRuns } from "../src/improve-run.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { sseChange } from "./improve-fakes.ts";
-import { sourceFile, sourceFiles } from "./source-files.ts";
+import { sourceFiles } from "./source-files.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
 
 // THE 2026-09-06 ROUND-2 AUDIT FIXES, one block per finding. Each test was
@@ -242,7 +242,7 @@ test("ci_dispatch refuses more than 10 workflow inputs at the schema", async () 
   assert.equal(result.isError, true, "11 dispatch inputs were accepted (GitHub's own ceiling is 10)");
   assert.match(
     result.content[0].text,
-    /10|inputs/i,
+    /at most 10 workflow inputs/,
     "the refusal must come from the inputs bound, not from a later check that happened to fail"
   );
 });
@@ -342,12 +342,9 @@ test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai 
   assert.match(String(at("null")), /Origin/, "an opaque 'null' Origin was admitted to /mcp");
 });
 
-// scanner-rule: audit 2026-09-06 round 2, item 8. src/index.ts imports agents/mcp, which
-// node --test cannot load, so the wiring is only visible in its source.
-test("the /mcp Origin check is wired into the fetch handler", () => {
-  const index = sourceFile("index.ts");
-  assert.match(index, /mcpOriginProblem/, "index.ts never consults the Origin allowlist, so the check exists but guards nothing");
-});
+// The wiring into the fetch handler is driven through the whole Worker in
+// test-integration/oauth.test.ts ("F10: the Origin allowlist on /mcp"): a foreign
+// Origin gets 403 at POST /mcp, and no Origin and claude.ai do not.
 
 // ---- 9. an empty holdout manifest is a refusal ------------------------------
 

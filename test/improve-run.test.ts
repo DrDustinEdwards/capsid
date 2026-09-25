@@ -437,7 +437,9 @@ test("THE MONITOR'S VETO OUTRANKS A GOOD SCORE", async () => {
   });
 });
 
-test("A SHRUNK HOLDOUT SUITE IS REVERTED", async () => {
+// Both holdout cases below are UNJUDGED, not REVERTED: the scorer did not measure the
+// attempt, so nothing is recorded against the code (test/improve-unjudged.test.ts).
+test("A SHRUNK HOLDOUT SUITE LEAVES THE ATTEMPT UNJUDGED, not kept", async () => {
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",
@@ -450,12 +452,13 @@ test("A SHRUNK HOLDOUT SUITE IS REVERTED", async () => {
     assert.equal(result.kept, false);
     assert.match(result.message, /holdout size mismatch/);
     assert.equal(d1.rows.improve_attempts[0].kept, 0);
+    assert.equal(d1.rows.improve_attempts[0].status, "unjudged");
   });
 });
 
-test("A MISSING HOLDOUT MANIFEST IS REVERTED", async () => {
+test("A MISSING HOLDOUT MANIFEST LEAVES THE ATTEMPT UNJUDGED, not kept", async () => {
   await withFetch(MODEL_ROUTE, async () => {
-    const { env } = await harness({
+    const { d1, env } = await harness({
       apiKey: "sk-test",
       holdoutTotal: null,
       documents: [ARCHIVE_DOC],
@@ -466,6 +469,8 @@ test("A MISSING HOLDOUT MANIFEST IS REVERTED", async () => {
     const result = await ingestScore(env, report(), NOW);
     assert.equal(result.kept, false);
     assert.match(result.message, /no holdout manifest for capsid/);
+    assert.equal(d1.rows.improve_attempts[0].kept, 0);
+    assert.equal(d1.rows.improve_attempts[0].status, "unjudged");
   });
 });
 

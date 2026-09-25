@@ -26,6 +26,7 @@ test("the backup credential key derives from the root with its own context, uneq
   const backup = await deriveBackupCredentialKey(root);
   assert.match(backup, /^[0-9a-f]{64}$/);
   assert.equal(backup, await deriveBackupCredentialKey(root), "derivation must be deterministic");
+  assert.ok(ROSTER.length > 0, "the roster is empty, so no score key was compared");
   for (const namespace of ROSTER) {
     assert.notEqual(backup, await deriveScoreKey(root, namespace), `the backup key collides with the ${namespace} score key`);
   }

@@ -147,11 +147,15 @@ for (const plant of PLANTS) {
     // test above. The call is allowed to fail afterwards for its own reasons (the
     // fetch harness has no routes), which is why this asserts on the refusal TEXT
     // rather than on success: what must not appear is the scope refusal.
-    await withFetch({}, async () => {
+    await withFetch({}, async (calls) => {
       const result = await callAs(adminAgent("DrDustinEdwards"), plant.tool, plant.args);
       const text = result.content[0]?.text ?? "";
+      assert.ok(text.length > 0, "the call returned no text, so an absent refusal proves nothing");
       assert.doesNotMatch(text, /needs the .* flag/, `the admin was refused a flag it holds: ${text}`);
       assert.doesNotMatch(text, /unauthorized:/, `the admin was refused: ${text}`);
+      // Past the scope check means GitHub was asked. A call refused before the
+      // network for any other reason would otherwise pass this direction.
+      assert.ok(calls.length > 0, `${plant.tool} never reached GitHub for a caller holding ${plant.flag}: ${text}`);
     });
   });
 }
@@ -300,6 +304,8 @@ test("every flag is required by some path, so none of them is decoration", () =>
   // really required, on write, restore, delete and move, is proven by the refusal tests in
   // test/improve-protected-paths.test.ts.
   for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
+  // The loops over SCOPE_FLAGS in the agents-* tests rely on this list being non-empty.
+  assert.ok(SCOPE_FLAGS.length > 0, "SCOPE_FLAGS is empty, so no flag was checked here or in the agents tests");
   for (const flag of SCOPE_FLAGS) {
     assert.ok(produced.has(flag), `${flag} is required by no path, so holding it or not changes nothing`);
   }

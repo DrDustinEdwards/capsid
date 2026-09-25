@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONSOLE_CSP, CONSOLE_PATH, consoleData, handleConsole, renderConsole } from "../src/console.ts";
 import { consoleSessionCookie } from "../src/console-auth.ts";
+import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
+import { BUDGET_KEY, MODE_KEY, ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
 // GROUP 1: THE ROUTE AND THE SHELL.
@@ -79,13 +81,33 @@ test("the CSP is at least as strict as the consent dialog's", () => {
 });
 
 test("the header carries the live sha, the schema version, the backup age, the budget and the mode", async () => {
+  // Every value is seeded to something the defaults would not produce, so each
+  // assertion below can only pass if the header read it from where it lives.
   const cookie = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
-  const res = await handleConsole(get({ Cookie: cookie.split(";")[0] }), env());
+  const seeded = env({
+    DB: fakeD1({ migrations: ["0001_init.sql", "0042_seeded_newest.sql"] }).db,
+    APP_KV: fakeKv({
+      seed: {
+        [BACKUP_LAST_OK_KEY]: new Date(Date.now() - 5 * 3_600_000).toISOString(),
+        [MODE_KEY]: "api",
+        [BUDGET_KEY]: JSON.stringify({ actions_minutes_month: 1234, model_usd_month: 77 }),
+      },
+    }).kv,
+  });
+  const res = await handleConsole(get({ Cookie: cookie.split(";")[0] }), seeded);
+  assert.equal(res.status, 200);
   const html = await res.text();
-  for (const label of ["sha", "schema", "backup", "budget", "mode"]) {
-    assert.match(html.toLowerCase(), new RegExp(label), `the header is missing ${label}`);
-  }
-  assert.match(html, /abc1234/, "the header should show the deployed sha it was given");
+  const factValue = (key: string) => {
+    const m = new RegExp(`<span class="k">${key}</span><span class="v[^"]*">([^<]*)</span>`).exec(html);
+    assert.ok(m, `the header has no '${key}' fact`);
+    return m[1];
+  };
+  assert.equal(factValue("sha"), "abc1234");
+  assert.equal(factValue("schema version"), "0042_seeded_newest.sql");
+  assert.equal(factValue("backup age"), "5h");
+  assert.equal(factValue("improve mode"), "api");
+  assert.match(factValue("budget: ci minutes"), / of 1234$/);
+  assert.match(factValue("budget: model usd"), / of 77$/);
 });
 
 test("the shell renders with ZERO namespaces rather than throwing on an empty roster", () => {
@@ -129,11 +151,25 @@ test("the shell renders with ZERO namespaces rather than throwing on an empty ro
 });
 
 test("consoleData reads the header numbers through healthReport and improveStatus", async () => {
-  const data = await consoleData(env({ BUILD_SHA: "feedface" }), "DrDustinEdwards", new Date("2026-09-11T14:00:00Z"));
+  const kv = fakeKv({
+    seed: {
+      [MODE_KEY]: "subscription",
+      [BUDGET_KEY]: JSON.stringify({ actions_minutes_month: 321, model_usd_month: 9 }),
+    },
+  });
+  const data = await consoleData(
+    env({ BUILD_SHA: "feedface", DB: fakeD1({ migrations: ["0007_seeded.sql"] }).db, APP_KV: kv.kv }),
+    "DrDustinEdwards",
+    new Date("2026-09-11T14:00:00Z")
+  );
   assert.equal(data.viewer, "DrDustinEdwards");
   assert.equal(data.health.sha, "feedface");
+  assert.equal(data.health.schema_version, "0007_seeded.sql");
   assert.equal(data.generated, "2026-09-11T14:00:00.000Z");
   // The roster, straight from improveStatus rather than a list this module keeps.
-  assert.ok(Array.isArray(data.improve.namespaces));
-  assert.ok("budget" in data.improve && "mode" in data.improve);
+  assert.ok(ROSTER.length > 0);
+  assert.deepEqual(data.improve.namespaces.map((n) => n.namespace).sort(), [...ROSTER].sort());
+  assert.equal(data.improve.mode, "subscription");
+  assert.equal(data.improve.budget.caps.actions_minutes_month, 321);
+  assert.equal(data.improve.budget.caps.model_usd_month, 9);
 });
