@@ -281,3 +281,21 @@ test("only the watcher row changes: another agent with no last_seen still reads 
   assert.match(row, /<td>never connected<\/td>/);
   assert.doesNotMatch(html, /last pass/, "the pass stamp appeared on a row that is not the watcher's");
 });
+
+// Audit 2026-09-25, E2-30 (finding E2-L15). fact() escapes its value, and the skills
+// panel escaped last_evaluation a second time, so an ampersand reached the page as
+// &amp;amp;. The empty-state paragraph used a class STYLE does not define.
+test("the last evaluation is escaped once", () => {
+  const skills = { candidate: 1, live: 0, retired: 0, offered: 0, used: 0, use_rate: null, last_evaluation: "2026-09-10 & later" };
+  const html = renderConsole(data([namespaceStatus({ skills })]));
+  assert.match(html, /2026-09-10 &amp; later/);
+  assert.doesNotMatch(html, /&amp;amp;/, "the value was escaped twice");
+});
+
+test("the no-skills paragraph uses a class the stylesheet defines", () => {
+  const html = renderConsole(data([namespaceStatus()]));
+  const paragraph = html.match(/<p class="([^"]+)">No skills recorded/);
+  assert.ok(paragraph, "the no-skills paragraph is missing");
+  const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] ?? "";
+  assert.ok(style.includes(`.${paragraph[1]} {`), `class ${paragraph[1]} has no rule in the page's stylesheet`);
+});

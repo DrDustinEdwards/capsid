@@ -229,3 +229,16 @@ test("the inventory is read with grouped queries, not one set per credential", a
   assert.equal(await countFor(1), 3, "the loader should issue three grouped reads");
   assert.equal(await countFor(50), 3, "the query count grew with the number of credentials");
 });
+
+// Audit 2026-09-25, E2-30 (finding E2-L12). The merge rate's numerator needed both
+// counts verified and its denominator only the opened count, so a row whose merge
+// count was not yet verified pulled the rate down with nothing on top.
+test("the merge rate counts only rows where both counts were verified", () => {
+  const openedOnly = outcome({
+    prs_opened: 4,
+    prs_merged: 4,
+    verified: JSON.stringify({ prs_opened: true, prs_merged: false, commits: true, files_changed: true, ci_green: true }),
+  });
+  const record = recordFor(ACTOR, { ...EMPTY, outcomes: [verified({ prs_opened: 2, prs_merged: 2 }), openedOnly] }, null);
+  assert.equal(record.pr_merge_rate, 1, "a row with an unverified merge count lowered the rate");
+});

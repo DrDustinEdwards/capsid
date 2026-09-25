@@ -354,6 +354,14 @@ export const PROTECTED_PATH_PATTERNS: Array<{ pattern: RegExp; why: string }> = 
   { pattern: /(^|\/)\.husky\//i, why: "a git hook CI may run" },
   { pattern: /(^|\/)scripts\//i, why: "scripts CI executes" },
   { pattern: /(^|\/)Makefile$/i, why: "build glue CI executes" },
+  // Audit 2026-09-25, E2-L13: config the test runner or build reads that the patterns
+  // above missed, because they are JSON, dotfiles or have no extension.
+  { pattern: /\.(config|conf)\.json$/i, why: "a config file" },
+  { pattern: /(^|\/)\.babelrc[^/]*$/i, why: "compiler configuration" },
+  { pattern: /(^|\/)\.mocharc[^/]*$/i, why: "test runner configuration" },
+  { pattern: /(^|\/)vitest\.workspace\.[^/]+$/i, why: "test runner configuration" },
+  { pattern: /(^|\/)\.env[^/]*$/i, why: "environment the build and tests read" },
+  { pattern: /(^|\/)Dockerfile[^/]*$/i, why: "the image a build runs in" },
 ];
 
 export interface ServedProtectedPath {
