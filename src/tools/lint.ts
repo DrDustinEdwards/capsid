@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
-import { repoBlobPaths } from "../github";
+import { repoBlobPaths, resolveRepo } from "../github";
 import { documentUpsert, isMissingRowAbort, requireExists } from "../store-guards";
 import { authoritativeFor, scanCountClaims } from "../counts";
 import { buildTruthReport, isUnscanned, renderTruthReport, reportPath, type ReportDoc, type ReportEdge } from "../truth-report";
@@ -14,7 +14,7 @@ import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./doc
 // reachable by parsing the source, and a paraphrase cannot be derived from
 // anything.
 export const LINT_DESCRIPTION =
-  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns the packet a driving LLM needs to compile the wiki: current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs via write, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type, which is reported beside the checks rather than being one of them, and produces ONE integrity percentage. It STORES the result as <namespace>/reports/lint-<date>.md so the trend is a document, and improve_status surfaces the latest number per namespace. A check that could not run is excluded from integrity rather than counted as clean. finalize and report require operator key. finalize requires confirmation, and so does a report that would overwrite an existing one for the same date; both are elicited when the client supports it, otherwise pass confirm: true.";
+  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns the packet a driving LLM needs to compile the wiki: current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs via write, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type, which is reported beside the checks rather than being one of them, and produces ONE integrity percentage. It STORES the result as <namespace>/reports/lint-<date>.md so the trend is a document, and improve_status surfaces the latest number per namespace. A check that could not run is excluded from integrity rather than counted as clean. lint reads only what the caller is scoped to, with one exemption: capsid/schema.md and capsid/conventions.md are returned to every caller as its rules. An edge whose other end is in an out-of-scope namespace is left out of gather and report, and report skips the repo drift check when the namespace's repo is outside the caller's repo scope. finalize and report require operator key. finalize requires confirmation, and so does a report that would overwrite an existing one for the same date; both are elicited when the client supports it, otherwise pass confirm: true.";
 
 export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
@@ -46,7 +46,17 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     async ({ namespace, mode, consumed, confirm }) => {
-      if ((mode ?? "gather") === "gather") {
+      // LINT READS ONLY WHAT THE CALLER IS SCOPED TO (ruling E2-L16, 2026-09-25). The
+      // registrar checks the namespace argument, but gather and report also read the
+      // far end of every edge that touches this namespace, and the namespace's repo
+      // tree. Each of those is asked of the same checkScope, with this call's action,
+      // before it is read or returned; nothing here decides a grant. capsid's schema
+      // and conventions are exempt: see the rules query in gather.
+      const action = mode ?? "gather";
+      const reaches = (other: string) => ctx.scope({ tool: "lint", action, namespace: other }) === null;
+      const withinScope = <T extends { from_ns: unknown; to_ns: unknown }>(rows: T[]) =>
+        rows.filter((e) => reaches(String(e.from_ns)) && reaches(String(e.to_ns)));
+      if (action === "gather") {
         // GATHER HAS A GRANT TOO (audit 2026-09-13, finding C2). lint is an "action"
         // tool, so the registrar deliberately names no grant and leaves it to the
         // handler, where the mode is known. The handler then checked one: the write
@@ -83,6 +93,10 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           )
           .bind(namespace)
           .all();
+        // capsid/schema.md and capsid/conventions.md are EXEMPT from the namespace
+        // filter (ruling, 2026-09-25): they are the rules every caller's lint runs
+        // under, whatever its scope. The exemption is these two paths only; no other
+        // capsid document is read here.
         const rules = await db
           .prepare("SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('schema.md', 'conventions.md') ORDER BY path")
           .all();
@@ -90,7 +104,9 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         // client judges, so these are reported, never auto-repaired: a dangling edge
         // usually means the target was renamed by hand or removed before delete
         // cascaded, and which of those decides whether the fix is repointing the edge
-        // or dropping it. Both endpoints are checked.
+        // or dropping it. Both endpoints are checked. An edge whose other end is in a
+        // namespace this caller is not scoped to is dropped: whether that document
+        // exists is a fact about the other namespace.
         const danglingEdges = await db
           .prepare(
             `SELECT l.from_ns, l.from_path, l.type, l.to_ns, l.to_path,
@@ -104,7 +120,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
              ORDER BY l.from_ns, l.from_path, l.type`
           )
           .bind(namespace)
-          .all();
+          .all<ReportEdge>();
         // BOUNDED, not merely measured. This computed a size and WARNED over 150KB,
         // which is not a bound: packets measured over it routinely (recova 213KB,
         // dustinedwards 330KB on 2026-08-17), so the warning fired on the normal case
@@ -174,7 +190,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           wiki: wikiOut,
           unconsolidated: unconsolidatedOut,
           rules: rules.results,
-          dangling_edges: danglingEdges.results,
+          dangling_edges: withinScope(danglingEdges.results),
           authoritative_counts: authoritativeFor(namespace),
           count_claims: countClaims,
           packet_chars: packetChars,
@@ -236,14 +252,28 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         // NULL, NOT AN EMPTY SET, when the tree cannot be read. An empty set would
         // report every path the canon names as drift. buildTruthReport excludes the
         // check from integrity instead.
-        const repoPaths = (await repoBlobPaths(env, namespace)) ?? undefined;
+        //
+        // The tree is read only when the resolved repo is on this caller's repos
+        // axis. Out of scope, or no mapping at all, is the same NULL: the drift check
+        // did not run.
+        let repoPaths: Set<string> | undefined;
+        try {
+          const { full } = await resolveRepo(env, namespace);
+          if (ctx.scope({ tool: "lint", action, namespace, repo: full }) === null) {
+            repoPaths = (await repoBlobPaths(env, namespace, full)) ?? undefined;
+          }
+        } catch {
+          repoPaths = undefined;
+        }
 
         const report = buildTruthReport({
           namespace,
           now,
           docs: docs.results,
-          edges: edges.results,
-          danglingEdges: dangling.results,
+          // Both lists drop an edge whose other end is out of this caller's scope, so
+          // broken_links counts subjects and findings over the same edges.
+          edges: withinScope(edges.results),
+          danglingEdges: withinScope(dangling.results),
           countClaims: claims.map((c) => ({ path: c.path, noun: c.noun, states: c.states, authoritative: c.authoritative, quote: c.quote })),
           repoPaths,
         });
