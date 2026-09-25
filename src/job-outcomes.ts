@@ -4,39 +4,29 @@ import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
 import type { RunSignal } from "./skills-lifecycle";
 
-// JOBS AS EVIDENCE. One outcome row per finished job, written once, carrying counts
-// rather than prose.
+// One outcome row per finished job, written once, carrying counts.
 //
-// THE RULE THIS MODULE EXISTS TO ENFORCE: the Worker never stores a driver's count
-// for something it could have checked and did not. A driver reports what it did; this
-// Worker holds a GitHub App token that reaches every repo in the portfolio, so for
-// anything that ended in a pull request the authority is GitHub and the driver's
-// number is an opinion. Where a check ran, the stored number is GitHub's and the
-// field is marked verified. Where it could not run, the driver's number is stored
-// and the field is marked unverified. A reader can always tell which.
+// The Worker never stores a driver's count for something it could have checked.
+// Where a GitHub check ran, the stored number is GitHub's and the field is marked
+// verified; where it could not run, the driver's number is stored and marked
+// unverified.
 //
-// AND: NULL IS NOT ZERO. A field nobody reported is null. A field somebody counted
-// and found empty is 0. Collapsing those two would make "no driver reports test
-// counts" indistinguishable from "no driver adds tests", and the second is a finding.
+// Null is not zero: a field nobody reported is null, a field counted and found empty
+// is 0.
 
 export const OUTCOME_RESULT_KINDS = ["pr", "doc", "none"] as const;
 export type OutcomeResultKind = (typeof OUTCOME_RESULT_KINDS)[number];
 
-// The fields a driver may report. Every one is optional and an omitted field stays
-// null all the way to the row.
+// The fields a driver may report. An omitted field stays null in the row.
 export interface JobEvidence {
-  // Pull request URLs this job produced. The only field that unlocks verification:
-  // with a pull request the Worker can ask GitHub for the merge state, the commit
-  // count and the files touched, and for the head commit's CI conclusion.
+  // Pull request URLs: the only field that unlocks verification.
   prs?: string[];
   commits?: number;
   files_changed?: number;
   tests_added?: number;
 }
 
-// WHICH FIELDS THE WORKER CHECKED ITSELF. Stored as JSON on the row. A field absent
-// from this object was not verified, which is the same thing as false; it is written
-// out in full anyway so a reader of the raw row does not have to know that.
+// Which fields the Worker checked itself, stored as JSON on the row, written out in full.
 export interface VerifiedFields {
   prs_opened: boolean;
   prs_merged: boolean;
@@ -60,15 +50,9 @@ export interface JobOutcomeRow {
   duration_minutes: number | null;
   result_kind: OutcomeResultKind;
   verified: string;
-  // THE SKILLS THIS JOB WAS OFFERED AND THE ONES IT USED, as JSON arrays, or NULL.
-  // Migration 0013 added both columns on 2026-09-12 and nothing wrote them until
-  // 2026-09-18, so improve_status's offered-to-used rate summed NULL over every row
-  // and reported 0 of 0. That gap is how the recommend step is judged.
-  //
-  // NULL, NOT AN EMPTY ARRAY, when the job named none. improve_status sums
-  // json_array_length and SUM skips NULL, so a job that never had a recommend step
-  // contributes to neither total. An empty array would instead say "offered nothing",
-  // which is a measurement, and this is the absence of one.
+  // The skills this job was offered and used, as JSON arrays. NULL, not an empty
+  // array, when the job named none: improve_status sums json_array_length and SUM
+  // skips NULL, so such a job counts toward neither total.
   skill_ids_offered: string | null;
   skill_ids_used: string | null;
   recorded_at: string;
@@ -86,16 +70,10 @@ const skillColumn = (ids: readonly string[] | undefined): string | null =>
 
 /**
  * What one finished job says about the skills it used, as a signal attribute() reads.
- *
- * THE SIGNAL IS THE WORKER'S, NOT THE DRIVER'S (ruled 2026-09-16). A driver names
- * which skills it was offered and which it used, and nothing else it says reaches the
- * credit. The direction comes only from what this Worker read off GitHub: every named
- * pull request merged, and CI green on the head of the last one.
- *
- * UNVERIFIED IS "environment-failure", WHICH EARNS NOTHING IN EITHER DIRECTION. A job
- * that named no pull request, or one whose pull requests could not be read, says
- * nothing about a skill. Charging a loss there would retire skills for being present
- * during a GitHub outage, which is the case the 2026-09-12 ruling already decided.
+ * The direction comes only from what this Worker read off GitHub: every named pull
+ * request merged, and CI green on the head of the last one. An unverified job is
+ * "environment-failure", which earns nothing either way, so a GitHub outage cannot
+ * retire a skill.
  */
 export function signalFor(verdict: EvidenceVerdict): RunSignal {
   const checked = verdict.verified.prs_merged && verdict.verified.ci_green;
@@ -112,27 +90,17 @@ const NOTHING_VERIFIED: VerifiedFields = {
   ci_green: false,
 };
 
-// ---- what the row says about itself ------------------------------------------
-
-// DERIVED FROM result_ref, NOT DECLARED. A caller that could declare its own result
-// kind would be reporting the one thing the row can work out for itself: `resultRef`
-// in src/limits.ts already refuses anything that is neither a document path nor an
-// https URL, so the shape is decidable here.
+// Derived from result_ref, not declared: `resultRef` in src/limits.ts admits only a
+// document path or an https URL.
 export function resultKindOf(resultRef: string | null | undefined): OutcomeResultKind {
   if (!resultRef) return "none";
   return /^https:\/\//i.test(resultRef) ? "pr" : "doc";
 }
 
-// FROM THE FIRST CLAIM, in whole minutes. `resume` no longer resets claimed_at
-// (ruled 2026-09-16), so time a job spent blocked at a gate is included. The comment
-// in migrations/0011 describes the earlier rule, which measured only the stretch after
-// the last resume and so reported a job that ran for an hour across two gates as a
-// few seconds. A job the lease sweep returned to the queue is measured from its new
-// claim, because the sweep clears claimed_at.
-//
-// null rather than 0 when there is no claim timestamp to measure from, and null
-// rather than a negative number if the clocks disagree: a duration that ran backwards
-// is a fact about the clock, not about the work.
+// Whole minutes from the first claim, including time blocked at a gate; resume does
+// not reset claimed_at (migrations/0011's comment describes an earlier rule). A job the
+// lease sweep requeued is measured from its new claim. null with no claim timestamp,
+// and null rather than negative if the clocks disagree.
 export function durationMinutes(claimedAt: string | null, now: Date): number | null {
   if (!claimedAt) return null;
   const started = Date.parse(claimedAt);
@@ -142,18 +110,13 @@ export function durationMinutes(claimedAt: string | null, now: Date): number | n
   return Math.round(elapsed / 60000);
 }
 
-// ---- verification -------------------------------------------------------------
-
 interface PrFacts {
   merged: boolean;
   commits: number;
   changed_files: number;
   head_sha: string;
-  // THE REPO THIS PULL REQUEST IS ACTUALLY ON, resolved through the namespace mapping
-  // just below. It was resolved and then discarded, so the CI lookup that follows asked
-  // the namespace PRIMARY about a head sha belonging to some other mapped repo and
-  // recorded the answer as this job's CI (audit 2026-09-13, finding 11). foxhound is
-  // the namespace that has more than one, so it is the one where this was wrong.
+  // The repo this pull request is on, resolved through the namespace mapping, so the
+  // CI lookup asks that repo and not the namespace primary.
   repo: string;
 }
 
@@ -165,32 +128,23 @@ export interface EvidenceVerdict {
   tests_added: number | null;
   ci_green: number | null;
   verified: VerifiedFields;
-  // Named degradation. A verification that could not run says so rather than
-  // reporting an unverified number as though nobody had tried.
+  // Every verification that could not run, and why.
   notes: string[];
 }
 
 export async function prFacts(env: Env, namespace: string, url: string): Promise<PrFacts | string> {
-  // Anything that is not a pull request URL is reported as unresolved rather than
-  // guessed at.
   const parsed = parsePrUrl(url);
   if (!parsed) return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
   const { owner, repo, number } = parsed;
-  // THE NAMESPACE-TO-REPOS MAPPING IS THE AUTHORIZATION BOUNDARY (capsid/conventions.md),
-  // so the repo named in the URL is resolved THROUGH it rather than used directly. A
-  // driver that could hand this a repo its namespace does not map would be using the
-  // outcome recorder as an unaudited read of any repo the App can reach.
+  // Resolved through the namespace mapping, the authorization boundary, so the
+  // outcome recorder cannot read a repo the namespace does not map.
   let resolved;
   try {
     resolved = await resolveRepo(env, namespace, `${owner}/${repo}`);
   } catch (err) {
     return `${url}: ${err instanceof Error ? err.message : String(err)}`;
   }
-  // THE FETCH AND THE PARSE ARE CAUGHT TOO. ghFetch throws when the installation
-  // token cannot be minted or the request rejects, and verifyEvidence promises its
-  // callers a note rather than a throw: a throw here reached holderTransition after
-  // the job row had already moved, and ended reverifySweep early (audit 2026-09-25,
-  // F1-1 and F3-11).
+  // Caught too: verifyEvidence promises its callers a note, never a throw.
   let pr: { merged?: boolean; commits?: number; changed_files?: number; head?: { sha?: string } };
   try {
     const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`);
@@ -208,25 +162,16 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
   };
 }
 
-// CI IS GREEN ONLY WHEN IT HAS FINISHED AND EVERY RUN SUCCEEDED.
-//
-// Three answers, not two. A sha with no runs, or with a run still going, returns null
-// and verified:false, because "CI has not answered yet" is not "CI failed" and
-// recording it as a failure would libel the job. Only a completed set of runs is a
-// verdict.
-//
-// `skipped` and `neutral` do not fail: a workflow whose paths filter excluded this
-// change did not judge it.
+// CI is green only when every run has finished and none failed. No runs, or a run
+// still going, is null and unverified: not answered yet is not failed. `skipped` and
+// `neutral` do not fail, since a paths filter that excluded the change did not judge it.
 const NOT_A_FAILURE = new Set(["success", "skipped", "neutral"]);
 
 async function ciGreenForSha(env: Env, namespace: string, sha: string, repo: string): Promise<{ green: boolean | null; note?: string }> {
   if (!sha) return { green: null, note: "the pull request carried no head sha, so CI could not be looked up" };
   let status;
   try {
-    // THE REPO THE PULL REQUEST IS ON, not the namespace primary. The selector was
-    // undefined, so for a multi-repo namespace this asked the wrong repo about a sha
-    // it has never seen, got "no workflow runs", and recorded that as "CI has nothing
-    // to say" rather than as a lookup aimed at the wrong place.
+    // The repo the pull request is on, not the namespace primary.
     status = await ciStatus(env, namespace, repo, { ref: sha, limit: 20 });
   } catch (err) {
     return { green: null, note: `CI could not be read for ${sha.slice(0, 7)}: ${err instanceof Error ? err.message : String(err)}` };
@@ -239,19 +184,10 @@ async function ciGreenForSha(env: Env, namespace: string, sha: string, repo: str
   return { green: runs.every((r) => NOT_A_FAILURE.has(r.conclusion ?? "")) };
 }
 
-// EVIDENCE ARRIVES AS AN OBJECT OR AS A JSON STRING, and both are accepted.
-//
-// WHY. An MCP client caches the tool schema at connect time, so a session that
-// connected before `evidence` existed holds a schema without it and its client
-// refuses the argument locally, before the Worker ever sees it: the session reports
-// the work in prose and the outcome row stores nulls, which is the exact undercount
-// this migration's sibling exists to stop. Some clients also flatten an object
-// argument to a string rather than dropping it.
-//
-// Both are the same failure from the Worker's side: a caller that knows what it did
-// and cannot say so in the shape asked for. A string that parses to an object is
-// accepted; a string that does not parse is REFUSED rather than ignored, because
-// silently discarding evidence is how a row ends up saying nothing happened.
+// Evidence arrives as an object or as a JSON string, because some clients flatten an
+// object argument to a string, and a client with a stale cached schema may refuse
+// the object. A string that does not parse is refused, not ignored, so evidence is
+// never silently discarded.
 export type EvidenceInput = JobEvidence | string | undefined;
 
 export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | undefined } | { error: string } {
@@ -273,8 +209,7 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
     const value = row[key];
     if (value === undefined || value === null) return undefined;
     const n = Number(value);
-    // A count that is not a non-negative integer is dropped rather than coerced: a
-    // stored 0 would read as "somebody counted and the answer was none".
+    // Dropped rather than coerced: a stored 0 would read as counted and found none.
     return Number.isInteger(n) && n >= 0 ? n : undefined;
   };
   const prs = Array.isArray(row.prs) ? row.prs.filter((p): p is string => typeof p === "string") : undefined;
@@ -288,11 +223,8 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
   };
 }
 
-// BEST EFFORT, AND IT NEVER FAILS THE JOB. A driver that finished its work must be
-// able to close its job even when GitHub is unreachable: the outcome then records the
-// driver's own numbers, marked unverified, with a note saying why. Refusing the
-// `complete` instead would leave a lease on a job that is finished, which is worse
-// than an unverified count.
+// Best effort, and it never fails the job: with GitHub unreachable the outcome records
+// the driver's own numbers, marked unverified, with a note saying why.
 export async function verifyEvidence(
   env: Env,
   namespace: string,
@@ -321,10 +253,8 @@ export async function verifyEvidence(
     else facts.push(one);
   }
 
-  // PARTIAL VERIFICATION IS NOT VERIFICATION. If any named pull request could not be
-  // read, the counts stay the driver's and the flags stay false: a merged count over
-  // the subset that happened to resolve is a smaller number presented as a total,
-  // which is the one way a count can lie without anybody writing a wrong number.
+  // Partial verification is not verification: a count over the subset that resolved
+  // would be a smaller number presented as a total.
   if (facts.length !== urls.length) {
     verdict.notes.push(
       `${facts.length} of ${urls.length} named pull requests could be read, so the counts below are the driver's own and are marked unverified.`
@@ -341,9 +271,7 @@ export async function verifyEvidence(
   verdict.verified.commits = true;
   verdict.verified.files_changed = true;
 
-  // CI on the LAST pull request's head, which is the one a driver opens at the end of
-  // its work. Asking about every one of them would be a workflow-run lookup per pull
-  // request to answer a single boolean.
+  // CI on the last pull request's head, the one a driver opens at the end of its work.
   const last = facts[facts.length - 1];
   const ci = await ciGreenForSha(env, namespace, last.head_sha, last.repo);
   if (ci.note) verdict.notes.push(ci.note);
@@ -354,15 +282,11 @@ export async function verifyEvidence(
   return verdict;
 }
 
-// ---- the write ----------------------------------------------------------------
-
 export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills): JobOutcomeRow {
   return {
     job_id: job.id,
-    // claimed_by at the moment the job ended. COPIED, not joined: a later lease
-    // expiry clears that column, and an outcome whose author disappears is not a
-    // record. "unattributed" cannot happen through a holder transition, which keys on
-    // claimed_by, and is here so the NOT NULL column has no way to be violated.
+    // Copied, not joined, because a later lease expiry clears claimed_by.
+    // "unattributed" only keeps the NOT NULL column satisfied.
     agent: job.claimed_by ?? "unattributed",
     namespace: job.namespace,
     prs_opened: verdict.prs_opened,
@@ -382,11 +306,8 @@ export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, sk
   };
 }
 
-// ON CONFLICT DO NOTHING, so the FIRST record of a job stands. The primary key is
-// what makes one row per job a property of the schema rather than of this function,
-// and this clause is what stops a second terminal transition (which should not be
-// reachable: complete and fail are keyed updates out of `claimed`) from either
-// rewriting the record or aborting the batch that carries the transition itself.
+// ON CONFLICT DO NOTHING: the first record of a job stands, and a second terminal
+// transition neither rewrites it nor aborts its own batch.
 export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
   return db
     .prepare(
