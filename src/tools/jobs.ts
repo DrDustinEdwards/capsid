@@ -10,15 +10,12 @@ import { fail, ok, type ToolCtx } from "./docs";
 
 const MAX_JOB_ID = 64;
 
-// HOW MANY PULL REQUESTS ONE JOB MAY NAME AS EVIDENCE. Each one costs a GitHub read
-// inside `complete`, so the bound is what stops a single call fanning out into an
-// unbounded number of them. Ten is more than any job this queue has run produced.
+// How many pull requests one job may name as evidence. Each one costs a GitHub read
+// inside `complete`, so the bound stops one call fanning out without limit.
 const MAX_EVIDENCE_PRS = 10;
 
-// A REFUSAL IS AN ERROR TO THE CLIENT (audit 2026-09-25, F3-7). Every JobResult went
-// through ok(), so a result with ok: false still had isError false and a client that
-// keys on isError read a refusal as success. The body is the same JSON either way, so
-// a caller reading `refusal` and `job` still finds them.
+// A refusal is an error to the client (isError true), so a client that keys on
+// isError does not read it as success. The body is the same JSON either way.
 function reply(result: JobResult) {
   return result.ok ? ok(result) : { ...ok(result), isError: true };
 }
@@ -26,15 +23,9 @@ function reply(result: JobResult) {
 export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
   const { env, agent } = ctx;
 
-  // THE WORK QUEUE'S ONE TOOL, a ruled exception to hard rule 1 taking the surface
-  // from 30 to 31 (capsid/decisions.md, 2026-09-10). Seven actions on one tool
-  // rather than seven tools, for the same reason improve_run carries its control
-  // actions: they are one subsystem with one row shape, and a caller that has the
-  // tool has the whole lifecycle.
-  //
-  // The exception is the same argument as the improve loop's: a queue nobody can
-  // read from a chat is a queue that gets worked around, and the handoff it exists
-  // for is between a seat that has no shell and a driver that has no conversation.
+  // The work queue's one tool, a ruled exception to the tool surface rule (CLAUDE.md;
+  // capsid/decisions.md). Its actions share one tool because they are one subsystem
+  // with one row shape, and a caller that has the tool has the whole lifecycle.
   server.registerTool(
     "jobs",
     {
@@ -110,14 +101,10 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
               files_changed: z.number().int().nonnegative().optional(),
               tests_added: z.number().int().nonnegative().optional(),
             }),
-            // A JSON STRING IS ACCEPTED TOO, and this is not a convenience. An MCP
-            // client caches the tool schema at connect time, so a session that
-            // connected before this parameter existed refuses the object LOCALLY and
-            // the Worker never sees it; that session then reports its work in prose
-            // and the outcome row stores nulls, which is the undercount this whole
-            // change exists to stop. Some clients also flatten an object to a string
-            // rather than dropping it. Both are a caller that knows what it did and
-            // cannot say so in the shape asked for, and refusing them buys nothing.
+            // A JSON string is accepted too. An MCP client caches the tool schema at
+            // connect time, so a session that connected before this parameter existed
+            // refuses the object locally, and some clients flatten an object to a
+            // string.
             bounded(MAX_BODY),
           ])
           .optional()
@@ -130,12 +117,8 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
       const now = new Date();
       try {
         if (args.action === "list") {
-          // THE READ ACTION ASKS TOO, and it did not: this branch returned before
-          // ctx.scope, so `list` was the one action of this tool that reached no
-          // grant check at all (audit 2026-09-13, finding 5). The registrar now
-          // passes the action, which already narrows a caller minted ["jobs",
-          // "jobs.post"]; this adds the grant, so a read the caller may not make is
-          // refused for its own reason rather than by a neighbouring check.
+          // The read action needs the read grant. The registrar names no grant for
+          // an "action" tool, so it is checked here.
           const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace });
           if (listRefusal) return fail(listRefusal);
           if (args.status !== undefined && !isJobStatus(args.status)) {
@@ -148,14 +131,9 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             Boolean(args.id) && ctx.scope({ tool: "jobs", action: "list", grant: "write", namespace: args.namespace }) === null;
           return ok(await listJobs(env, { namespace: args.namespace, status: args.status, id: args.id }, { withBody }));
         }
-        // EVERYTHING ELSE CHANGES THE QUEUE, so the grant is checked here rather than
-        // at the registrar: `jobs` is one tool with a read action and seven write
-        // ones, and the registrar cannot know which this call is.
-        //
-        // The ACTION goes with it, because the same fact that makes the grant
-        // uncheckable at the registrar makes the tools axis uncheckable there: a
-        // watcher scoped to `jobs.post` may post and may not claim, and only here is
-        // it known which of those this call is.
+        // Every other action changes the queue, so it needs the write grant, checked
+        // here with the action so the tools axis can narrow it (a watcher scoped to
+        // `jobs.post` may post and may not claim).
         const refusal = ctx.scope({ tool: "jobs", action: args.action, grant: "write", namespace: args.namespace });
         if (refusal) return fail(refusal);
         switch (args.action) {
@@ -184,9 +162,8 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           }
           case "complete": {
             if (!args.id) return fail("complete needs the job id.");
-            // A string that does not parse is REFUSED rather than ignored. Silently
-            // dropping evidence is how a row ends up saying nothing happened, which is
-            // the failure this path exists to prevent.
+            // A string that does not parse is refused rather than ignored, so a row
+            // never silently says nothing happened.
             const parsed = parseEvidence(args.evidence);
             if ("error" in parsed) return fail(parsed.error);
             const parsedEvidence = parsed.evidence;
