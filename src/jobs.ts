@@ -785,30 +785,23 @@ export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string
   return holderTransition(env, agent, now, "heartbeat", id, { status: "claimed", lease_expires: leaseUntil(now) });
 }
 
-// THE REVIEW GATE, CONSULTED BY BOTH TRANSITIONS THAT HAND WORK ON.
-//
-// A gate on one of them would not be a gate: a driver that found `complete` refused
-// would simply `block` instead, and the bypass would look like ordinary use. So the
-// same function answers for both, and the answer is turned into a JobResult here so
-// the two cannot describe the same verdict differently.
-//
 // THE BUDGET IS A PROPERTY OF THE WORK, NOT OF THE ROW.
 //
-// corrections_count lives on a row, and the unique open-title index only covers
-// `queued` and `claimed`, so a job that was failed, or one still sitting `blocked`,
+// corrections_count lives on a row, and the unique open-title index covers `queued`,
+// `claimed` and `blocked` (migrations/0019) but not `failed`, so a job that was failed
 // leaves (namespace, title) free to be posted again. The new row starts at 0 and the
 // ceiling resets, which made the cap a property of how many times a row existed
 // rather than of how many times the work had been sent back (audit 2026-09-13,
 // finding 9).
 //
-// Ruled 2026-09-13: count per (namespace, title) and leave the index alone. The
-// alternative was widening the unique index to include `blocked`, which needs a
-// migration and would also refuse a legitimate re-post of work that stopped at a gate.
+// Ruled 2026-09-13: count per (namespace, title). The index was widened to `blocked`
+// later (migrations/0019), which still leaves failed rows outside it, so the sum is
+// still needed.
 //
 // Summed across every row for that work, whatever its status, and the current row is
 // one of them. Unindexed on purpose: jobs is a single-user queue of a few hundred rows
-// at most, and the only index that could serve this is the partial one this ruling
-// declined to widen.
+// at most, and the only index on (namespace, title) is the partial one, which does not
+// cover finished rows.
 //
 // FAILS CLOSED. A read that throws, or a SUM that comes back as anything but a finite
 // number, returns NaN, and atCorrectionCap treats a budget it cannot read as a budget
@@ -827,6 +820,13 @@ async function correctionsForWork(db: D1Database, namespace: string, title: stri
   }
 }
 
+// THE REVIEW GATE, CONSULTED BY BOTH TRANSITIONS THAT HAND WORK ON.
+//
+// A gate on one of them would not be a gate: a driver that found `complete` refused
+// would simply `block` instead, and the bypass would look like ordinary use. So the
+// same function answers for both, and the answer is turned into a JobResult here so
+// the two cannot describe the same verdict differently.
+//
 // Returns null when the gate does not apply: no review_required, or no pull request on
 // a transition that does not demand one. That is the normal path for almost every job.
 async function reviewRefusal(
