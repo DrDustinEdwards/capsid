@@ -55,7 +55,8 @@ function substitute(sql) {
  * RECURSIVE, because src/ has subdirectories. The 2026-09-10 split moved the tool,
  * github and improve modules under src/tools, src/github and src/improve, and a flat
  * readdirSync silently stopped seeing them: the statement count fell from over 80 to 41.
- * query-plans.test.ts has a floor assertion that caught it. Names are returned relative
+ * A floor assertion in query-plans.test.ts caught it; that test now checks that every
+ * file calling `.prepare(` yielded a statement. Names are returned relative
  * to srcDir with forward slashes, so a top-level file keeps its basename (backup.ts,
  * which the ALLOW list keys on) and a nested one is addressable as github/client.ts.
  *
