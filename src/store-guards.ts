@@ -70,13 +70,21 @@ function requireMissing(db: D1Database, namespace: string, path: string): D1Prep
 // row the table holds when the batch runs, not a body the caller read earlier, so a
 // write landing between a pre-read and the batch is snapshotted rather than lost. It
 // inserts nothing when no row exists, so a caller can add it unconditionally.
+// RETURNING id tells a caller whether a snapshot was taken (see snapshotTaken).
 export function snapshotLive(db: D1Database, namespace: string, path: string): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path, title, body)
-       SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
+       SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2
+       RETURNING id`
     )
     .bind(namespace, path);
+}
+
+// Whether a snapshotLive statement inserted a row, from its batch result. Read from
+// RETURNING rather than meta.changes, which the FTS5 triggers inflate.
+export function snapshotTaken(result: D1Result | undefined): boolean {
+  return (result?.results?.length ?? 0) > 0;
 }
 
 type WriteGuard = "none" | "body" | "missing";
@@ -107,7 +115,13 @@ export function guardedCommit(opts: {
       const passed = if_match.trim().toLowerCase();
       return currentSha === passed ? null : refusals.ifMatchMismatch(currentSha, passed);
     },
-    async run(elicited: boolean, statements: D1PreparedStatement[]): Promise<string | null> {
+    // Either the refusal, or the batch results of the caller's own statements in the
+    // order given (the armed guard's result is dropped), so a caller can report what a
+    // statement with RETURNING did.
+    async run(
+      elicited: boolean,
+      statements: D1PreparedStatement[]
+    ): Promise<{ refusal: string } | { results: D1Result[] }> {
       let guard: WriteGuard = "none";
       const armed: D1PreparedStatement[] = [];
       if (!prior) {
@@ -118,19 +132,19 @@ export function guardedCommit(opts: {
         armed.push(requireBodyUnchanged(db, namespace, path, prior.body));
       }
       try {
-        await db.batch([...armed, ...statements]);
-        return null;
+        const results = await db.batch([...armed, ...statements]);
+        return { results: results.slice(armed.length) };
       } catch (err) {
         if (!isMissingRowAbort(err)) {
-          return refusals.batchFailed(err instanceof Error ? err.message : String(err));
+          return { refusal: refusals.batchFailed(err instanceof Error ? err.message : String(err)) };
         }
-        if (guard === "missing") return refusals.createCollision;
+        if (guard === "missing") return { refusal: refusals.createCollision };
         const current = await db
           .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
           .bind(namespace, path)
           .first<{ body: string | null }>();
-        if (!current) return refusals.deletedInFlight;
-        return refusals.bodyChanged(await sha256Hex(current.body ?? ""), elicited);
+        if (!current) return { refusal: refusals.deletedInFlight };
+        return { refusal: refusals.bodyChanged(await sha256Hex(current.body ?? ""), elicited) };
       }
     },
   };

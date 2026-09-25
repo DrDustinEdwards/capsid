@@ -6,7 +6,7 @@ import type { Agent } from "../agents";
 import { IMPROVE_OVERRIDE_FLAGS, type ScopeNeed } from "../scope";
 import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
 import { sha256Hex } from "../auth";
-import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive } from "../store-guards";
+import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks } from "../links";
 import { validateDocStatus, validateDocType } from "../doc-meta";
@@ -177,6 +177,37 @@ export interface ToolCtx {
   // handler knows: an action tool's action, and the flags a repo mutation needs.
   scope: (need: ScopeNeed) => string | null;
   lastActor: (ns: string, path: string) => Promise<string | null>;
+}
+
+// THE IMPROVE CONTROL-SURFACE CHECK, ONE SPELLING, for write, restore, delete and move.
+//
+// First the override is itself scoped. allow_improve_paths is how a caller writes the
+// loop's own control surface (its run documents, its prompts, its skills, its
+// anchors), and before agents it was open to anything holding the write grant. It is
+// the document-side twin of the repo-side protected-path flag, so it asks for the same
+// one (audit 2026-09-13, finding C1, extended it from write and restore to delete and
+// move).
+//
+// Then improveWriteRefusal on every path the call changes, as what the path holds now
+// against what it would hold (audit 2026-09-07, Opus MAJOR 5.4). Returns the first
+// refusal, or null.
+async function improvePathsRefusal(
+  ctx: ToolCtx,
+  tool: "write" | "restore" | "delete" | "move",
+  namespace: string,
+  allowImprovePaths: boolean | undefined,
+  changes: Array<{ path: string; before: string | null; after: string }>
+): Promise<string | null> {
+  const allow = allowImprovePaths === true;
+  if (allow) {
+    const overrideRefusal = ctx.scope({ tool, namespace, flags: IMPROVE_OVERRIDE_FLAGS });
+    if (overrideRefusal) return overrideRefusal;
+  }
+  for (const change of changes) {
+    const refusal = await improveWriteRefusal(namespace, change.path, change.before, change.after, allow);
+    if (refusal) return refusal;
+  }
+  return null;
 }
 
 export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
@@ -524,20 +555,13 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
       }
 
-      // THE OVERRIDE IS ITSELF SCOPED. allow_improve_paths is how a caller writes the
-      // loop's own control surface (its run documents, its prompts, its skills, its
-      // anchors), and before agents it was open to anything holding the write grant.
-      // It is the document-side twin of the repo-side protected-path flag, so it asks
-      // for the same one.
-      if (allow_improve_paths === true) {
-        const overrideRefusal = ctx.scope({ tool: "write", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
-        if (overrideRefusal) return fail(overrideRefusal);
-      }
       // IMPROVE CONTROL-SURFACE GUARD (audit 2026-09-06). Computed on the final
       // assembled and normalized body, so it sees exactly what would be stored: a
       // patch or append that ends up changing scores.md's anchor block is caught the
       // same as a full replace. Refused unless allow_improve_paths was passed.
-      const improveRefusal = await improveWriteRefusal(namespace, path, prior?.body ?? null, body as string, allow_improve_paths === true);
+      const improveRefusal = await improvePathsRefusal(ctx, "write", namespace, allow_improve_paths, [
+        { path, before: prior?.body ?? null, after: body as string },
+      ]);
       if (improveRefusal) return fail(improveRefusal);
 
       // append is exempt from confirmation. Confirmation exists to stop an accidental
@@ -630,8 +654,12 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
             .bind(namespace, path)
             .first<{ updated_at: string }>()
         : null;
-      const conflict = await commit.run(elicited, statements);
-      if (conflict) return fail(conflict);
+      const committed = await commit.run(elicited, statements);
+      if ("refusal" in committed) return fail(committed.refusal);
+      // From the snapshot statement's own result, not from the pre-read: with no guard
+      // armed, a row deleted between the pre-read and the batch is snapshotted by
+      // nothing (audit 2026-09-25, F3-8). The snapshot is statements[0] when present.
+      const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
       // Warn, do not reject, when an edge points at a document that does not exist.
       // Rejecting would block asserting an edge before its target is written, and a
       // silent dangling edge is how 23 of them accumulated before 2026-08-10.
@@ -680,7 +708,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         ...(writeMode !== "replace" && prior
           ? { bytes_before: new TextEncoder().encode(prior.body ?? "").length }
           : {}),
-        snapshotted: Boolean(prior),
+        snapshotted,
         ...(prior && if_match === undefined
           ? (() => {
               const warning = concurrentEditWarning(atCommit?.updated_at ?? prior.updated_at, Date.now());
@@ -777,27 +805,14 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
-      // THE OVERRIDE IS ITSELF SCOPED. allow_improve_paths is how a caller writes the
-      // loop's own control surface (its run documents, its prompts, its skills, its
-      // anchors), and before agents it was open to anything holding the write grant.
-      // It is the document-side twin of the repo-side protected-path flag, so it asks
-      // for the same one.
-      if (allow_improve_paths === true) {
-        const overrideRefusal = ctx.scope({ tool: "restore", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
-        if (overrideRefusal) return fail(overrideRefusal);
-      }
       // THE IMPROVE CONTROL-SURFACE GUARD, on restore too (audit 2026-09-07, Opus
       // MAJOR 5.4). The guard shipped on `write` alone, so restoring
       // improve/prompts/run.md to an earlier version installed an older system prompt
       // for the nightly attempt generator with no flag and no marked audit row. Same
       // call shape as write: what is stored now, against what would be stored.
-      const restoreImproveRefusal = await improveWriteRefusal(
-        namespace,
-        path,
-        prior?.body ?? null,
-        version.body ?? "",
-        allow_improve_paths === true
-      );
+      const restoreImproveRefusal = await improvePathsRefusal(ctx, "restore", namespace, allow_improve_paths, [
+        { path, before: prior?.body ?? null, after: version.body ?? "" },
+      ]);
       if (restoreImproveRefusal) return fail(restoreImproveRefusal);
       // The same protocol the write tool runs, with restore's wordings. On the
       // recreate path the guard is the ABSENCE of a row: the snapshot statement is
@@ -866,8 +881,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
             JSON.stringify({ version_id, snapshot_at: version.snapshot_at, recreated: !prior, snapshotted: Boolean(prior) })
           )
       );
-      const conflict = await commit.run(elicited, statements);
-      if (conflict) return fail(conflict);
+      const committed = await commit.run(elicited, statements);
+      if ("refusal" in committed) return fail(committed.refusal);
       return ok({
         namespace,
         path,
@@ -876,7 +891,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         snapshot_at: version.snapshot_at,
         sha256: await sha256Hex(body),
         bytes: new TextEncoder().encode(body).length,
-        snapshotted: Boolean(prior),
+        // From the snapshot statement's result, as on write (audit 2026-09-25, F3-8).
+        snapshotted: Boolean(prior) && snapshotTaken(committed.results[0]),
         ...(prior ? {} : { note: "the document did not exist and was recreated; its type, status, tags and links are defaults, not the ones it had" }),
       });
     }
@@ -922,28 +938,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      // THE OVERRIDE IS ITSELF SCOPED, on delete too (audit 2026-09-13, finding C1).
-      // write and restore asked for the flag and delete and move did not, so the opt-in
-      // alone was enough and the caller is the one who chooses the opt-in. A driver
-      // holding write and not one flag could delete improve/prompts/run.md, the loop's
-      // own instruction file. Same block as write and restore, naming this tool.
-      if (allow_improve_paths === true) {
-        const overrideRefusal = ctx.scope({ tool: "delete", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
-        if (overrideRefusal) return fail(overrideRefusal);
-      }
       // THE IMPROVE CONTROL-SURFACE GUARD, on delete too (audit 2026-09-07, Opus MAJOR
       // 5.4). Removing improve/prompts/run.md drops the loop back to the hardcoded
       // default prompt and removing a skill retires it, so a delete is a steering
       // change even though it installs nothing. The "" is the resulting body: for the
       // two prefixes that is a prefix match, and for scores.md an anchor block going
       // from something to nothing.
-      const deleteImproveRefusal = await improveWriteRefusal(
-        namespace,
-        path,
-        prior.body,
-        "",
-        allow_improve_paths === true
-      );
+      const deleteImproveRefusal = await improvePathsRefusal(ctx, "delete", namespace, allow_improve_paths, [
+        { path, before: prior.body, after: "" },
+      ]);
       if (deleteImproveRefusal) return fail(deleteImproveRefusal);
       const deleteRefusal = await requireConfirmation(server, confirm, {
         prompt: `Delete ${namespace}/${path}? It will be snapshotted to document_versions first, so it can be recovered.`,
@@ -1024,32 +1027,24 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      // THE OVERRIDE IS ITSELF SCOPED, on move too (audit 2026-09-13, finding C1). The
-      // reasoning is the delete handler's: the opt-in is the caller's to pass, so the
-      // flag is what bounds it. Checked once for the move rather than per end, because
-      // one call moves one document and the refusal is about the caller, not the path.
-      if (allow_improve_paths === true) {
-        const overrideRefusal = ctx.scope({ tool: "move", namespace, flags: IMPROVE_OVERRIDE_FLAGS });
-        if (overrideRefusal) return fail(overrideRefusal);
-      }
       // THE IMPROVE CONTROL-SURFACE GUARD, BOTH ENDS (audit 2026-09-07, Opus MAJOR
       // 5.4). A move touches two paths and either can steer the loop: moving a document
       // INTO improve/skills/ installs a skill other namespaces' runs re-inject, and
       // moving run.md OUT of improve/prompts/ drops the attempt generator to its
       // hardcoded default. Checked as what each path ends up holding: the source is
-      // emptied, the destination is filled with the moved body.
+      // emptied, the destination is filled with the moved body. The override flag is
+      // checked once for the move rather than per end, because the refusal is about
+      // the caller, not the path.
       const moved = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ body: string | null }>();
       const movedBody = moved?.body ?? "";
-      for (const [checkPath, before, after] of [
-        [path, movedBody, ""],
-        [new_path, null, movedBody],
-      ] as Array<[string, string | null, string]>) {
-        const refusal = await improveWriteRefusal(namespace, checkPath, before, after, allow_improve_paths === true);
-        if (refusal) return fail(refusal);
-      }
+      const moveImproveRefusal = await improvePathsRefusal(ctx, "move", namespace, allow_improve_paths, [
+        { path, before: movedBody, after: "" },
+        { path: new_path, before: null, after: movedBody },
+      ]);
+      if (moveImproveRefusal) return fail(moveImproveRefusal);
       // move JOINS the confirmation as of 2026-08-17 (audit 2, F25 ruling). It is
       // destructive-class and had none: it renames a document and repoints every edge
       // touching it, and unlike delete it leaves no snapshot of the old path, only an
