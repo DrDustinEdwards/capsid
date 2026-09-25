@@ -1,23 +1,11 @@
 // SHOULD THE LIVE GATE'S ROLLBACK ACTUALLY ROLL ANYTHING BACK?
 //
 // The rollback step exists to undo THE DEPLOY THIS RUN SHIPPED when the live gate
-// refuses it. Its `if:` condition could not express that, and on 2026-09-18 that cost
-// this repo an unintended production change.
-//
-// What happened, measured from run 35300342260 and `wrangler deployments list`:
-//
-//   02:43:31  attempt 1 deploys 4df1274
-//   02:43:59  attempt 1's gate crashes on a transient ECONNRESET; rollback #1 runs and
-//             lands ede77f4e (376eecb3), the previous good version
-//   02:48:09  the seat reruns ONLY the failed live job. `needs.deploy.result` is still
-//             'success' from attempt 1, so the condition holds and rollback #2 runs.
-//             "The previous version" is now 32920323, which is the 4df1274 build the
-//             first rollback had just backed out. Production moved FORWARD onto the
-//             commit the gate had refused.
-//
-// A rollback of a deploy that is no longer live is wrong by definition, whichever
-// direction it happens to move production. So the decision is made here, against what
-// /health actually reports, rather than against a job result that a rerun preserves.
+// refuses it. A workflow `if:` on `needs.deploy.result` cannot express that: a rerun of
+// only the live job keeps attempt 1's 'success', so a second rollback would move
+// production onto whatever "the previous version" now is, which can be the refused
+// commit. A rollback of a deploy that is no longer live is wrong in either direction,
+// so the decision is made here, against what /health reports.
 //
 // Usage from the workflow:
 //
@@ -52,12 +40,10 @@ export function shouldRollBack(liveSha, runSha, attempts = {}) {
   if (!SHA.test(mine)) {
     return { roll: false, reason: "this run's own commit was not supplied as a sha, so there is nothing to compare the live sha against." };
   }
-  // UNREADABLE: /health did not answer, did not parse, or carried no sha. The
-  // 2026-09-18 incident was a rollback in a RERUN: the deploy had happened in an
-  // earlier attempt and was already gone. When the deploy job ran in this same attempt,
-  // that cannot be the case, because this attempt shipped the version now serving, and
-  // a deploy that broke /health is one that most needs rolling back. In a rerun, or
-  // when the attempts are not supplied, it still refuses and leaves it to a human.
+  // UNREADABLE: /health did not answer, did not parse, or carried no sha. When the
+  // deploy job ran in this same attempt, this attempt shipped the version now serving,
+  // and a deploy that broke /health most needs rolling back. In a rerun, or when the
+  // attempts are not supplied, it refuses and leaves it to a human.
   if (!SHA.test(live)) {
     const deploy = String(attempts.deployAttempt ?? "").trim();
     const current = String(attempts.runAttempt ?? "").trim();

@@ -5,23 +5,18 @@
 // Usage: node scripts/verify-live.mjs [origin]
 //        npm run verify:live
 //
-// On 2026-08-09 the consent flow was found broken for 26 days. A "form-action 'self'"
-// CSP landed as a side change in 423bbd6 and blocked the form submission's redirect to
-// github.com. tsc and node --test never touch a live surface.
+// tsc and node --test never touch a live surface; this does.
 //
 // Two hard requirements. Violating either makes this gate pass against a fully broken
 // server:
 //
 //   1. FRESH CLIENT EVERY RUN. handleAuthorizeGet short-circuits for a client id
 //      already in the capsid_approved cookie and 302s straight out of the GET, never
-//      rendering a form. That fast path hid the bug: grant WiEb7bF_80YyO88H kept
-//      refreshing normally the whole time. This registers a new client per run and
-//      asserts the consent FORM renders. A 302 at gate 3 means the fast path was hit
-//      and the run is VOID, not green.
+//      rendering a form. This registers a new client per run and asserts the consent
+//      FORM renders. A 302 at gate 3 means the fast path was hit and the run is VOID.
 //
-//   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read
-//      returned the previous CSP and would have produced a false pass. Cloudflare
-//      propagation is not instant. Gate 4 polls to an expected value.
+//   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
+//      return the previous version's headers.
 
 import { writeFileSync } from "node:fs";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
@@ -29,19 +24,16 @@ import { canaryReport, checkCanary } from "./canary-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 
 const ORIGIN = (process.argv[2] ?? "https://capsid.dustin-edwards.workers.dev").replace(/\/$/, "");
-// Overridable because CI needs a longer budget than an interactive run: the sha gate
-// there waits on a rollout that has only just been triggered, and a budget that expires
-// early reports a correct deploy as a failure.
+// Overridable because CI's sha gate waits on a rollout that has only just started and
+// needs a longer budget than an interactive run.
 const POLL_ATTEMPTS = Number(process.env.VERIFY_POLL_ATTEMPTS ?? 10);
 const POLL_INTERVAL_MS = Number(process.env.VERIFY_POLL_INTERVAL_MS ?? 3000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A GATE THAT GOT NO ANSWER HAS NOT REFUSED ANYTHING. On 2026-09-18 (run 35300342260)
-// one ECONNRESET threw out of a fetch, crashed this script with exit 1, and the
-// workflow rolled back a good deploy. A thrown fetch is now retried; a gate whose
-// requests all throw is recorded as COULD NOT RUN, and the script exits 3 instead of 1
-// when nothing actually failed. ci.yml rolls back on exit 1 only.
+// A GATE THAT GOT NO ANSWER HAS NOT REFUSED ANYTHING. A thrown fetch is retried; a gate
+// whose requests all throw is recorded as COULD NOT RUN, and the script exits 3 instead
+// of 1 when nothing actually failed. ci.yml rolls back on exit 1 only.
 const FETCH_TRIES = Number(process.env.VERIFY_FETCH_TRIES ?? 3);
 const FETCH_TIMEOUT_MS = Number(process.env.VERIFY_FETCH_TIMEOUT_MS ?? 20000);
 const EXIT_REFUSED = 1;
@@ -95,23 +87,13 @@ function record(gate, passed, detail) {
   console.log(`${tag}  ${gate}\n      ${detail}`);
 }
 
-// Gate 1: liveness, and deploy provenance. /health returns the git sha stamped at deploy
-// time, so this reports WHICH commit is live. An expected sha can be passed to assert
-// it, which makes "the deployed worker is this commit" checkable rather than inferred
-// from a clean working tree.
+// Gate 1: liveness and deploy provenance. /health returns the git sha stamped at deploy
+// time; EXPECT_SHA asserts it.
 //
-// THE STORE IS BOUND AND THE FTS INDEX IS INTACT, from the same /health response (this
-// was gate 1b, which read /health again in a poll loop of its own). Provenance proves
-// WHICH commit is live. It cannot prove the deployed Worker can reach its data: every
-// binding is resolved by name at deploy time, so a Worker deployed against a stale or
-// hand-edited wrangler.jsonc starts happily with DB pointing at nothing, answers
-// /health with ok, and then errors on every read tool. The other gates exercise the
-// OAuth surface, which never touches D1.
-//
-// The FTS half fails separately, and it has failed: DELETE FROM documents_fts corrupts
-// the index, COUNT(*) on an external-content table reads through to the content table
-// and cannot detect drift, and integrity-check passes on an emptied index. /health's
-// probe is a MATCH pinned to one document, so an empty index cannot satisfy it.
+// The same response shows the store is bound and the FTS index is intact: a Worker
+// deployed against a stale wrangler.jsonc still answers /health, and the other gates
+// never touch D1. /health's FTS probe is a MATCH pinned to one document, because
+// COUNT(*) and integrity-check both pass on an emptied external-content index.
 async function gateHealth() {
   const expected = process.env.EXPECT_SHA;
   let data = null;
@@ -129,10 +111,8 @@ async function gateHealth() {
       continue;
     }
     data = parseJson(resp.text);
-    // Keep polling through EVERY not-yet-converged state, including a response that is
-    // not JSON at all: immediately after a deploy the previous version is still serving,
-    // and before this commit that version answered /health with the plain text "ok". An
-    // earlier draft broke out on a null parse, which defeated the polling it exists for.
+    // Keep polling through every not-yet-converged state, including a response that is
+    // not JSON: immediately after a deploy the previous version may still be serving.
     const storeOk = data?.store?.d1 === "ok" && data?.store?.fts === "ok";
     const converged = resp.status === 200 && data?.status === "ok" && (!expected || data.sha === expected) && storeOk;
     if (converged) break;
@@ -181,44 +161,27 @@ async function gateRegister() {
   const clientId = data.client_id;
   const passed = resp.ok && typeof clientId === "string" && clientId.length > 0;
   record("2 register (fresh client)", passed, `status=${resp.status} client_id=${clientId ?? "(none)"}`);
-  // Hand the id to whatever cleans up after this run. scripts/reap-probe-clients.mjs
-  // deletes exactly this key and has no other way to find it: it does not list the
-  // namespace and does not match on client names. Written the moment the id exists,
-  // BEFORE any later gate can fail, so a failed run still gets cleaned up.
+  // Hand the id to scripts/reap-probe-clients.mjs, which has no other way to find it.
+  // Written before any later gate can fail, so a failed run still gets cleaned up.
   if (passed && process.env.PROBE_CLIENT_FILE) {
     writeFileSync(process.env.PROBE_CLIENT_FILE, clientId, "utf8");
   }
   return passed ? clientId : null;
 }
 
-// Gate 2b: the canary client record is still there.
-//
-// On 2026-08-17 a client: record vanished from OAUTH_KV with no request in the window
-// that could account for it. Nothing watched that keyspace, so the only way such a loss
-// surfaces is the user-visible symptom: 400 on /authorize, invalid_client on /token, at
-// the moment the owner next connects. Reading one long-lived record every run bounds
-// time-to-detect at the schedule interval, six hours.
-//
-// IT READS KV DIRECTLY RATHER THAN ASKING THE WORKER. Driving /authorize with the canary
-// id would be more end-to-end and a worse signal: a missing client and a KV outage both
-// come back as an error page. The KV REST API answers with a STATUS:
+// Gate 2b: the canary client record is still there (scripts/bindings.mjs,
+// CANARY_CLIENT). The KV REST API's status separates the cases:
 //
 //   200        the record is there                    PASS
 //   404        the record is GONE                     FAIL, and it is data loss
 //   anything   the store could not be read at all     FAIL, and it is NOT data loss
-//
-// The third case matters: a bad token, an expired secret or a Cloudflare API blip says
-// nothing about whether the record exists, and reporting it as "canary missing" would
-// manufacture an anomaly out of an infrastructure hiccup. Same distinction the reaper
-// makes.
 //
 // The gate label is written out at every record() call rather than held in a variable.
 // test/counts.test.ts counts DISTINCT literal labels to check the gate total, so a label
 // behind a variable is a gate the count cannot see.
 //
 // The decision lives in ./canary-lib.mjs so it can be tested; this function is the
-// wiring, and it does the one thing the library cannot: decide what to do when there
-// are no credentials to read KV with.
+// wiring, plus the no-credentials case.
 async function gateCanary() {
   const account = process.env.CLOUDFLARE_ACCOUNT_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -251,9 +214,9 @@ async function gateCanary() {
     auth: { Authorization: `Bearer ${token}` },
   });
   const { passed, detail } = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
-  // UNREACHABLE means KV could not be read, and TTL-UNVERIFIED (from a separate change
-  // to canary-lib.mjs) means its key list could not be. Neither says anything about
-  // this deploy. They stay red, but as could-not-run, so they do not roll it back.
+  // UNREACHABLE means KV could not be read, and TTL-UNVERIFIED means its key list could
+  // not be. Neither says anything about this deploy, so they are could-not-run and do
+  // not roll it back.
   const unread = result.outcome === "unreachable" || result.outcome === "ttl-unverified";
   record("2b canary client record", unread ? COULD_NOT_RUN : passed, detail);
 }
@@ -270,15 +233,8 @@ function authorizeUrl(clientId) {
   return u.href;
 }
 
-// Gate 1c: BACKUP FRESHNESS (residual 7). /health has reported backup.last_ok since
-// 2026-09-07 and nothing read it, so the backup cron could fail every night with the
-// only signal a JSON key nobody fetches. Measured on live during the audit: null.
-//
-// ASSERTED ON SCHEDULED RUNS ONLY: a push runs minutes after a deploy and says nothing
-// about last night's backup, while the six-hourly schedule exists to bound
-// time-to-detect. A non-scheduled run reports SKIPPED and says what it did not assert.
-// The threshold and the arithmetic live in scripts/freshness-lib.mjs so a test can
-// drive them.
+// Gate 1c: backup freshness from /health's backup.last_ok, asserted on scheduled runs
+// only. The rules live in scripts/freshness-lib.mjs.
 async function gateBackupFreshness() {
   const assertFresh = process.env.ASSERT_BACKUP_FRESH === "1";
   let data = null;
@@ -343,33 +299,23 @@ async function gateCsp(clientId) {
     return;
   }
   // The consent form's redirect chain terminates at a dynamically registered client
-  // redirect_uri, so no static form-action allowlist can be correct. Absent is the ruled
-  // state (e7a0dff). Present is a fail regardless of value.
+  // redirect_uri, so no static form-action allowlist can be correct. Absent is required;
+  // present is a fail regardless of value.
   const passed = !csp || !/form-action/i.test(csp);
   record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
 }
 
 // Gate 6: security headers, asserted per route class rather than per path.
 //
-// The unit half lives in test/headers.test.ts and runs offline in CI. This half exists
-// because the offline test can only prove the header FUNCTION is right; it cannot prove
-// the function is reached by every response. Inspection cannot either:
-// workers-oauth-provider generates /token, /register and both .well-known documents
-// itself, and none of them appear anywhere in src/. Those four are in this list for that
-// reason.
+// test/headers.test.ts proves the header function is right; only a live request proves
+// every response reaches it. workers-oauth-provider generates /token, /register and both
+// .well-known documents itself, outside src/, which is why those are listed.
 //
-// Measured before the fix, 2026-08-12: HSTS and Permissions-Policy absent on 12 of 12
-// surfaces, nosniff absent on 11 of 12.
+// Two more checks ride the same loop:
 //
-// Two former gates are surfaces here, because each was the same per-surface loop over
-// URLs this one already reads:
-//
-//   - CACHE-CONTROL IS FAIL-CLOSED on the OAuth surfaces (was gate 4b): the consent page
-//     and the authorization-server metadata must carry no-store.
-//   - THE CSP REPORT SINK ACCEPTS A REPORT (was gate 7): Report-Only headers are worth
-//     nothing if the endpoint they name does not answer, and that failure is invisible,
-//     because the browser posts once, gets an error, and never retries. Posted with a
-//     synthetic report and expected to answer 204.
+//   - The consent page and the authorization-server metadata must carry no-store.
+//   - The CSP report sink must answer 204 to a synthetic report: a browser posts a report
+//     once and never retries, so a broken sink is otherwise invisible.
 //
 // Polls, because a single fetch after a deploy reads the previous version.
 async function gateSecurityHeaders(clientId) {
@@ -429,7 +375,7 @@ async function gateSecurityHeaders(clientId) {
         // The enforced CSP the consent dialog sets for itself must survive the
         // header layer untouched.
         if (!h("content-security-policy")) problems.push(`${label}: lost its enforced CSP`);
-        // Item 9 first stage: on trial, not enforced.
+        // On trial, not enforced.
         if (!h("cross-origin-opener-policy-report-only")) problems.push(`${label}: no COOP-Report-Only`);
       } else {
         if (!h("content-security-policy-report-only")) problems.push(`${label}: no CSP-Report-Only`);

@@ -1,10 +1,5 @@
-// The one JSON-RPC client the operator scripts use to reach /ops/mcp with a key.
-//
-// scripts/mint-agents.mjs and scripts/schedule-drivers.mjs each carried their own copy
-// of this, and both copies had the same two faults: a tool that REFUSED came back as
-// an ordinary result with isError set and was reported as success, and an SSE body
-// that mentioned "data:" without a line starting with it threw a TypeError instead of
-// saying what came back. One copy means one fix.
+// The one JSON-RPC client the operator scripts use to reach /ops/mcp with a key. A tool
+// refusal (isError) throws rather than reading as success.
 //
 // The key goes into the Authorization header and nowhere else. It is never printed.
 

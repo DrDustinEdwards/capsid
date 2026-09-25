@@ -1,4 +1,4 @@
-// The restore rehearsal (session 3 of the off-account backup arc). Takes a downloaded
+// The restore rehearsal. Takes a downloaded
 // dump run directory (one <table>.json per real table, the shape src/backup.ts writes)
 // and proves it restores: migrations build a fresh SQLite database, every table's rows
 // go in with documents FIRST so the FTS5 triggers rebuild the index, and the result is
@@ -21,25 +21,20 @@
 //   proving nothing.
 // - The FTS index agrees with documents via the _docsize shadow table. COUNT(*) on an
 //   external-content FTS5 table reads through to the content table and cannot detect
-//   drift (measured 2026-07-27, capsid/core.md).
+//   drift.
 // - A MATCH probe on a word taken from a restored document returns it.
 // - The two SIDECARS are present and are exactly the two expected (_kv.json,
 //   _holdout-manifests.json). They restore into no table; a missing one means the loop's
 //   memory is not in the backup. Each must hold a non-empty object of the right shape.
 // - The completion marker (_complete.json), when present, lists exactly the other files
-//   in the dump. It is optional because dumps written before it existed do not carry it.
-// - CROSS-TABLE CONSISTENCY (residual 4). The dump is one D1 batch, so the table objects
-//   must agree with each other. What is checked is the TEARING SIGNATURE, not plain
-//   referential integrity: measured live on 2026-09-08, the real store holds 205
-//   document_versions rows and 2,060 audit_log rows whose document is not in the store,
-//   every one explained by a deletion, by lint finalize rewriting a path, or by the
-//   recova-to-foxhound namespace rename. Failing on those would be red on every good
-//   dump forever. Orphans are COUNTED AND REPORTED; what FAILS is the pair of shapes a
-//   torn read produces and a deletion cannot: a version row whose document_id is above
-//   the highest id in the documents object with no delete or move recorded for its path,
-//   and a `write` audit row newer than every row in the documents object naming a path
-//   that is not there. Both measured zero against the live store before they were
-//   written.
+//   in the dump. It is optional because older dumps do not carry it.
+// - CROSS-TABLE CONSISTENCY. The dump is one D1 batch, so the table objects must agree.
+//   Plain referential integrity is not checked: the live store has orphaned version and
+//   audit rows explained by deletions, path rewrites and a namespace rename. Orphans are
+//   COUNTED AND REPORTED; what FAILS is the pair of shapes a torn read produces and a
+//   deletion cannot: a version row whose document_id is above the highest id in the
+//   documents object with no delete or move recorded for its path, and a `write` audit
+//   row newer than every row in the documents object naming a path that is not there.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -62,7 +57,7 @@ export function deriveTables(migrationsDir) {
 // The sidecars src/backup.ts writes beside the table objects.
 export const SIDECARS = ["_holdout-manifests.json", "_kv.json"];
 // The completion marker src/backup.ts writes last, on a run whose preflight passed.
-// Optional: dumps written before 2026-09-25 do not carry it. When present, the files
+// Optional: older dumps do not carry it. When present, the files
 // it lists must be exactly the other files in the dump.
 export const COMPLETE_MARKER = "_complete.json";
 
@@ -92,9 +87,9 @@ function checkSidecar(dumpDir, file, field, valueOk) {
 }
 
 // A STALE DUMP IS A FAILED REHEARSAL. The workflow takes the newest dump in R2, so
-// when backups stop it keeps rehearsing the last good one: on 2026-09-21 it passed on
-// a 56-hour-old dump during a backup outage. The threshold is the one gate 1c applies
-// to /health (scripts/freshness-lib.mjs), measured from the dump's own exported_at.
+// when backups stop it would keep rehearsing the last good one. The threshold is the
+// one gate 1c applies to /health (scripts/freshness-lib.mjs), measured from the dump's
+// own exported_at.
 function checkDumpAge(dumpDir, opts) {
   const maxHours = opts.maxAgeHours ?? BACKUP_STALE_HOURS;
   const now = opts.now ?? Date.now();
@@ -164,10 +159,9 @@ export function rehearse(dumpDir, migrationsDir, opts = {}) {
     const insert = db.prepare(
       `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`
     );
-    // Every row must carry exactly the table's columns. `row[c] ?? null` alone turned
-    // a column missing from the dump into NULL, so a dump that stopped carrying a
-    // nullable column still restored and passed. src/backup.ts dumps SELECT *, so a
-    // real row has every column, null ones included.
+    // Every row must carry exactly the table's columns, so a dump that stopped carrying
+    // a nullable column does not restore it as NULL and pass. src/backup.ts dumps
+    // SELECT *, so a real row has every column, null ones included.
     const expected = [...columns].sort().join(",");
     parsed.rows.forEach((row, i) => {
       const keys = Object.keys(row ?? {}).sort().join(",");
