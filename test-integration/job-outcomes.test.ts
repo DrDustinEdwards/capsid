@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { reverifyStatements } from "../src/outcome-prs";
@@ -371,5 +371,112 @@ describe("job outcomes", () => {
     const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
     expect(verified.prs_merged).toBe(true);
     expect(verified.prs_opened).toBe(false);
+  });
+});
+
+// ---- audit 2026-09-25, F1-1: the transition and its records are one batch ----------
+
+describe("a holder transition commits with every record of it, or not at all", () => {
+  const NS = "sample";
+  const PR = "https://github.com/example/sample/pull/3";
+
+  beforeEach(async () => {
+    await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
+      .run();
+  });
+
+  async function claimed(title: string) {
+    const posted = await post({ namespace: NS, title });
+    const id = posted.job!.id;
+    const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    expect(claim.ok, claim.refusal).toBe(true);
+    return id;
+  }
+
+  async function records(id: string) {
+    // The transition's own audit row, which names the job id. The mirror's document
+    // write carries a second row under the same action, without it.
+    const audit = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-complete' AND path = ?1 AND json_extract(params, '$.job_id') = ?2"
+    )
+      .bind(`jobs/${id}.md`, id)
+      .first<{ n: number }>();
+    const prs = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs WHERE job_id = ?1").bind(id).first<{ n: number }>();
+    const mirror = await env.DB.prepare("SELECT body, status FROM documents WHERE namespace = ?1 AND path = ?2")
+      .bind(NS, `jobs/${id}.md`)
+      .first<{ body: string; status: string }>();
+    return { outcomes: await outcomeCount(id), audit: audit?.n ?? 0, prs: prs?.n ?? 0, mirror };
+  }
+
+  it("PLANT: a complete whose GitHub token cannot be minted is done WITH its outcome, audit row and mirror", async () => {
+    // No App key in this environment and no cached token, so ghFetch throws. That
+    // throw used to land after the UPDATE had committed: the job was done, with no
+    // outcome row, no audit row, a mirror still saying claimed, and a retry refused.
+    const id = await claimed("token mint fails");
+    const done = await completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, {
+      result_summary: "landed",
+      evidence: { prs: [PR] },
+    });
+    expect(done.ok, done.refusal).toBe(true);
+    expect(done.outcome?.notes.join(" ")).toMatch(/GitHub App not configured/);
+    expect((await jobRow(id))?.status).toBe("done");
+    const after = await records(id);
+    expect(after.outcomes).toBe(1);
+    expect(after.audit).toBe(1);
+    expect(after.prs).toBe(1);
+    expect(after.mirror?.body).toContain("status: **done**");
+    expect(after.mirror?.status).toBe("closed");
+  });
+
+  it("PLANT: a state change while GitHub is being read aborts the whole batch, and nothing is written", async () => {
+    // The lease tick (or anything else) moving the row between the read and the batch.
+    // Simulated inside the GitHub call, which is the window the verification opens.
+    const id = await claimed("raced by the tick");
+    await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      await env.DB.prepare(
+        "UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2 WHERE id = ?1"
+      )
+        .bind(id, "2026-09-10T12:30:00.000Z")
+        .run();
+      return new Response("unavailable", { status: 503 });
+    });
+    let result;
+    try {
+      result = await completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, {
+        result_summary: "landed",
+        evidence: { prs: [PR] },
+      });
+    } finally {
+      spy.mockRestore();
+      await env.APP_KV.delete("gh:token:v3:example/sample");
+    }
+    expect(result.ok).toBe(false);
+    expect(result.refusal).toMatch(/is queued, not claimed/);
+    expect((await jobRow(id))?.status).toBe("queued");
+    const after = await records(id);
+    expect(after.outcomes).toBe(0);
+    expect(after.audit).toBe(0);
+    expect(after.prs).toBe(0);
+    expect(after.mirror?.body).toContain("status: **claimed**");
+  });
+
+  it("PLANT: a record write that fails leaves the job claimed, not done with no record", async () => {
+    // Any throw inside the batch. A trigger refuses the outcome insert; the UPDATE
+    // before it in the same batch must roll back with it.
+    const id = await claimed("record write fails");
+    await env.DB.prepare(
+      "CREATE TRIGGER planted_outcome_refusal BEFORE INSERT ON job_outcomes BEGIN SELECT RAISE(ABORT, 'planted'); END"
+    ).run();
+    try {
+      await expect(
+        completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, { result_summary: "landed" })
+      ).rejects.toThrow(/planted/);
+    } finally {
+      await env.DB.prepare("DROP TRIGGER planted_outcome_refusal").run();
+    }
+    expect((await jobRow(id))?.status).toBe("claimed");
+    expect((await records(id)).audit).toBe(0);
   });
 });

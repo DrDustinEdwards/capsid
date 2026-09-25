@@ -13,6 +13,7 @@ import {
 } from "../src/job-outcomes.ts";
 import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } from "../src/jobs-schema.ts";
 import { TABLES } from "../src/backup.ts";
+import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 import { sourceFile } from "./source-files.ts";
 
@@ -314,6 +315,41 @@ test("GITHUB BEING UNREACHABLE NEVER FAILS THE JOB", async () => {
     assert.equal(verdict.verified.commits, false);
     assert.equal(verdict.commits, 2);
     assert.ok(verdict.notes.length > 0, "an unreachable GitHub produced no note at all");
+  });
+});
+
+test("PLANT: an installation token that cannot be minted is a note, not a throw (audit 2026-09-25, F1-1)", async () => {
+  // No cached token and no App key, so ghFetch throws before any request. prFacts
+  // caught only resolveRepo, so this reached holderTransition after the job row had
+  // committed, and the outcome, audit and mirror were never written.
+  const env = fakeEnv({
+    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify(REPOS) }) }) }) },
+    APP_KV: fakeKv().kv,
+  });
+  await withFetch({}, async () => {
+    const verdict = await verifyEvidence(env, "capsid", { prs: [PR_URL], commits: 2 });
+    assert.equal(verdict.verified.prs_opened, false);
+    assert.equal(verdict.commits, 2);
+    assert.ok(verdict.notes.some((n) => /GitHub App not configured/.test(n)), verdict.notes.join(" | "));
+  });
+});
+
+test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2026-09-25, F3-11)", async () => {
+  // One throw here used to end the daily sweep before its stamp was written.
+  const env = fakeEnv({
+    DB: {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async () => ({ repos: JSON.stringify(REPOS) }),
+          all: async () => (/FROM job_outcome_prs/.test(sql) ? { results: [{ job_id: "job_x", merged: null }] } : { results: [] }),
+        }),
+      }),
+      batch: async () => assert.fail("a failed read must leave every row as it was"),
+    },
+    APP_KV: fakeKv().kv,
+  });
+  await withFetch({}, async () => {
+    assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-25T00:00:00Z")), []);
   });
 });
 
