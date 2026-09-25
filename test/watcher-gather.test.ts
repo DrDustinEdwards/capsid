@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 import { sourceFile } from "./source-files.ts";
-import { gatherFindings, type Finding } from "../src/watcher.ts";
+import { gatherFindings, type Finding, type WatcherCheck } from "../src/watcher.ts";
 
 // THE WATCHER'S TWO HEALTH CHECKS NEVER RAN (AUDIT-2026-09-16.md, 8.1 and 8.21).
 //
@@ -71,21 +71,22 @@ async function gather(
   schema: string,
   repos?: Array<{ repo: string; label: string }>,
   extra: Record<string, Route> = {}
-): Promise<{ found: Finding[]; failures: string[] }> {
+): Promise<{ found: Finding[]; ran: ReadonlySet<WatcherCheck>; failures: string[] }> {
   const failures: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => {
     failures.push(args.map(String).join(" "));
   };
   let found: Finding[] = [];
+  let ran: ReadonlySet<WatcherCheck> = new Set();
   try {
     await withFetch({ ...routes, ...extra }, async () => {
-      found = await gatherFindings(env(schema, repos), new Date());
+      ({ findings: found, ran } = await gatherFindings(env(schema, repos), new Date()));
     });
   } finally {
     console.error = original;
   }
-  return { found, failures };
+  return { found, ran, failures };
 }
 
 const fingerprints = (found: Finding[]) => found.map((f) => f.fingerprint);
@@ -159,4 +160,15 @@ test("a readable, empty mirror listing is the no-dump finding", async () => {
     [`GET /repos/${OWNER}/capsid-backups/contents/backups/json`]: { body: [] },
   });
   assert.ok(fingerprints(found).includes("mirror-no-dump"), `no mirror-no-dump finding: ${fingerprints(found).join(", ")}`);
+});
+
+// A CHECK WHOSE READ FAILED IS NOT REPORTED AS RUN, so runPass does not clear the jobs
+// it owns. In this harness improve_status, the blocked-jobs read and every roster CI
+// read fail, while /health, master head and the migrations listing succeed.
+test("gatherFindings reports only the checks whose reads succeeded", async () => {
+  const { ran, failures } = await gather(NEWER);
+  assert.ok(failures.some((f) => f.includes("improve_status")), "improve_status did not fail, so this proves nothing");
+  assert.ok(failures.some((f) => f.includes("ci ")), "no ci read failed, so this proves nothing");
+  for (const check of ["health", "master head", "migrations"] as const) assert.ok(ran.has(check), `${check} ran and was not reported`);
+  for (const check of ["improve_status", "blocked jobs", "ci"] as const) assert.ok(!ran.has(check), `${check} failed and was reported as run`);
 });

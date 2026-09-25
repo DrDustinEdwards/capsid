@@ -3,7 +3,11 @@ import { listRepoTree, openPr, resolveRepo } from "../github";
 import { renderChange } from "../improve-attempt";
 import { anchorDriftVerdict, driftVerdict } from "../improve-gates";
 import { runMetaLoop } from "../improve-meta";
-import { archivePath, chicagoDay } from "../improve-schema";
+import { archivePath, chicagoDay, loopPauseReason } from "../improve-schema";
+
+// How long a run stays in finalizing retrying a pull request that failed to open.
+// Twelve five-minute ticks.
+export const PR_RETRY_WINDOW_MS = 60 * 60 * 1000;
 import type { ScoreReport } from "../improve-scorer";
 import type { MetricMap } from "../improve-scores";
 import {
@@ -39,6 +43,7 @@ export async function finalizeRun(
   const attempts = await attemptsForRun(env.DB, run.id);
   const kept = attempts.filter((a) => a.kept === 1);
   let prUrl: string | null = run.pr_url;
+  let prFailure: string | null = null;
 
   // NEVER AUTO-MERGE. The PR is opened and left. For germomics that is already
   // the norm; for the others this is the one exception to direct-to-main, and it
@@ -56,7 +61,17 @@ export async function finalizeRun(
       );
       prUrl = pr.url;
     } catch (err) {
-      console.error(`IMPROVE_PR_FAILED ${run.id}: ${err instanceof Error ? err.message : String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`IMPROVE_PR_FAILED ${run.id}: ${message}`);
+      prFailure = `the pull request for branch ${head.branch ?? "(none)"} could not be opened: ${message.slice(0, 300)}`;
+      // A failed open is retried on later ticks while the run is inside the retry
+      // window, measured from when it entered finalizing. The row is not touched,
+      // so advanced_at keeps that entry time. Past the window the run finishes with
+      // the failure recorded in its note and summary.
+      const waited = now.getTime() - Date.parse(`${run.advanced_at.replace(" ", "T")}Z`);
+      if (waited < PR_RETRY_WINDOW_MS) {
+        return { runId: run.id, namespace: run.namespace, from: "finalizing", to: "finalizing", note: `${prFailure}; retrying on a later tick` };
+      }
     }
   }
 
@@ -77,9 +92,11 @@ export async function finalizeRun(
   const pauseReason = anchorDrift.pause ? anchorDrift.reason : drift.pause ? drift.reason : null;
 
   if (pauseReason) {
-    await pauseNamespace(env.APP_KV, run.namespace, pauseReason);
+    await pauseNamespace(env.APP_KV, run.namespace, loopPauseReason(pauseReason));
     await writeTaskDoc(env, run.namespace, now, renderPauseTask(run.namespace, pauseReason, drift));
   }
+
+  const note = [pauseReason ?? run.note, prFailure].filter(Boolean).join("; ") || null;
 
   const summaryPath = archivePath(run.id, "run-summary");
   await env.DB.batch([
@@ -90,7 +107,7 @@ export async function finalizeRun(
       type: "reference",
       action: "improve-run-summary",
       prior: await priorDoc(env.DB, run.namespace, summaryPath),
-      body: renderRunDoc(run, attempts, prUrl, pauseReason, now),
+      body: renderRunDoc(run, attempts, prUrl, prFailure, pauseReason, now),
     })),
     improveAudit(env.DB, "improve-run-finished", run.namespace, {
       run_id: run.id,
@@ -99,6 +116,7 @@ export async function finalizeRun(
       kept: run.kept,
       reverts: run.reverts,
       pr: prUrl,
+      pr_failed: prFailure,
       paused: pauseReason,
     }),
   ]);
@@ -107,7 +125,7 @@ export async function finalizeRun(
     runId: run.id,
     expected: "finalizing",
     next: pauseReason ? "paused" : "done",
-    patch: { finished: now.toISOString(), pr_url: prUrl, note: pauseReason ?? run.note },
+    patch: { finished: now.toISOString(), pr_url: prUrl, note },
   });
 
   // The meta-loop runs after a run finishes, not on its own schedule, so it
@@ -124,7 +142,7 @@ export async function finalizeRun(
     namespace: run.namespace,
     from: "finalizing",
     to: pauseReason ? "paused" : "done",
-    note: pauseReason ?? `${run.kept} kept, ${run.reverts} reverted${prUrl ? `, PR ${prUrl}` : ""}`,
+    note: pauseReason ?? `${run.kept} kept, ${run.reverts} reverted${prUrl ? `, PR ${prUrl}` : ""}${prFailure ? `, ${prFailure}` : ""}`,
   };
 }
 
@@ -212,7 +230,14 @@ export function renderOutcome(input: {
   ].join("\n");
 }
 
-function renderRunDoc(run: RunRow, attempts: AttemptRow[], prUrl: string | null, paused: string | null, now: Date): string {
+function renderRunDoc(
+  run: RunRow,
+  attempts: AttemptRow[],
+  prUrl: string | null,
+  prFailure: string | null,
+  paused: string | null,
+  now: Date
+): string {
   return [
     `# improve run ${run.id}`,
     "",
@@ -224,7 +249,7 @@ function renderRunDoc(run: RunRow, attempts: AttemptRow[], prUrl: string | null,
     `- attempts: ${run.attempts}, kept: ${run.kept}, reverted: ${run.reverts}`,
     `- estimated model cost: $${run.cost_usd.toFixed(4)} (an estimate, not a bill)`,
     `- CI minutes: ${run.ci_minutes}`,
-    `- PR: ${prUrl ?? "none opened (nothing was kept)"}`,
+    `- PR: ${prUrl ?? (prFailure ? `FAILED, ${prFailure}` : "none opened (nothing was kept)")}`,
     paused ? `- **PAUSED**: ${paused}` : "",
     run.note ? `- note: ${run.note}` : "",
     "",
