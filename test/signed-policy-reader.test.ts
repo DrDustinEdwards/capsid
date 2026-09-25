@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { policyField, readSignedPolicy, signTaskBody } from "../src/improve-task.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // ONE SIGNED-POLICY READER (audit 2026-09-25, E2-3 and E1-23). The merge policy and
 // the gate policy each carried a copy of the read, the signature check and the field
@@ -17,7 +17,7 @@ function envWith(body: string | null) {
   const { db } = fakeD1({
     documents: body === null ? [] : [{ namespace: "capsid", path: "policy/example.md", title: "policy", body }],
   });
-  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 }
 
 test("readSignedPolicy returns the signed body and not the frontmatter", async () => {
