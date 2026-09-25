@@ -14,6 +14,8 @@ declare global {
       // Every SQL statement in src/, walked at config time (scripts/sql-statements.mjs).
       TEST_SQL_STATEMENTS: { file: string; sql: string }[];
       TEST_SQL_SKIPPED: { file: string; sql: string }[];
+      // Every src/ file containing `.prepare(`, from a separate fs walk.
+      TEST_SQL_PREPARE_FILES: string[];
     }
   }
 }

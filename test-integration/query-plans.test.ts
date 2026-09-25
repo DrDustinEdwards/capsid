@@ -77,9 +77,17 @@ const reads = () => env.TEST_SQL_STATEMENTS.filter((s) => /^SELECT\b/i.test(s.sq
 
 describe("query plans", () => {
   it("the walk found the statements at all, so nothing below can pass by reading nothing", () => {
-    const all = env.TEST_SQL_STATEMENTS;
-    expect(all.length, "no prepared statements were extracted from src/; the walk is broken").toBeGreaterThan(80);
-    expect(reads().length, "no SELECTs among them").toBeGreaterThan(50);
+    // DERIVED, NOT A FIXED FLOOR. Every src/ file that calls `.prepare(` (listed by a
+    // separate fs walk in vitest.config.ts) must have yielded at least one statement,
+    // extracted or skipped. That catches the walk missing a file or a directory, which
+    // is what the old "more than 80" floor caught once, without going red when a
+    // refactor moves statements between files.
+    const files = env.TEST_SQL_PREPARE_FILES;
+    expect(files.length, "no src/ file calls .prepare(; the file listing is broken").toBeGreaterThan(0);
+    const seen = new Set([...env.TEST_SQL_STATEMENTS, ...env.TEST_SQL_SKIPPED].map((s) => s.file));
+    const unseen = files.filter((f) => !seen.has(f));
+    expect(unseen, `files that call .prepare( but yielded no statement: ${unseen.join(", ")}`).toEqual([]);
+    expect(reads().length, "no SELECTs among them").toBeGreaterThan(0);
     // A statement the walk could not reconstruct is REPORTED rather than dropped.
     // A plan check that quietly covers 40 of 60 statements is the "assertion that
     // can pass by reading nothing" failure capsid/conventions.md names.
