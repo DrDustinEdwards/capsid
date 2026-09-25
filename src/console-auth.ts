@@ -1,6 +1,7 @@
-import { getCookie, hmacHex, isAdminUser, sha256Hex, timingSafeEqual } from "./auth";
+import { getCookie, hmacHex, isAdminUser, timingSafeEqual } from "./auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
+import { clearStateCookie, completeGithubLogin, type GithubLoginFlow, startGithubLogin } from "./github-login";
 
 // THE CONSOLE'S OWN SESSION, and why it needs one.
 //
@@ -23,17 +24,20 @@ import type { Env } from "./env";
 // rather than being trusted from the payload.
 
 const CONSOLE_SESSION_COOKIE = "capsid_console";
-const CONSOLE_STATE_COOKIE = "capsid_console_state";
 // Read by the action handler and written by the page render, so it lives with the
 // other cookie names rather than in whichever module happened to need it first.
 export const CONSOLE_CSRF_COOKIE = "capsid_console_csrf";
 export const CONSOLE_SESSION_TTL_SECONDS = 12 * 60 * 60;
-const CONSOLE_STATE_TTL_SECONDS = 600;
-const CONSOLE_STATE_KV_PREFIX = "capsid:console-state:";
 
-const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
-const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
-const GITHUB_USER_URL = "https://api.github.com/user";
+// The console's half of the GitHub login (src/github-login.ts). The state stored
+// against the token is the console path to return to.
+const CONSOLE_LOGIN: GithubLoginFlow = {
+  callbackPath: "/console/callback",
+  stateCookie: "capsid_console_state",
+  cookiePath: "/console",
+  kvPrefix: "capsid:console-state:",
+  restartHint: "Open /console again.",
+};
 
 export interface ConsoleUser {
   login: string;
@@ -81,78 +85,14 @@ export async function readConsoleSession(request: Request, env: Env, now: Date):
 
 // ---- the login round trip ----------------------------------------------------
 
-export async function startConsoleLogin(request: Request, env: Env, returnTo: string): Promise<Response> {
-  const stateToken = crypto.randomUUID();
-  await env.OAUTH_KV.put(`${CONSOLE_STATE_KV_PREFIX}${stateToken}`, returnTo, {
-    expirationTtl: CONSOLE_STATE_TTL_SECONDS,
-  });
-  const origin = new URL(request.url).origin;
-  const target = new URL(GITHUB_AUTHORIZE_URL);
-  target.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
-  target.searchParams.set("redirect_uri", `${origin}/console/callback`);
-  target.searchParams.set("scope", "read:user");
-  target.searchParams.set("state", stateToken);
-  const headers = new Headers({ Location: target.href });
-  // The state cookie carries a DIGEST of the token, so the cookie alone is not the
-  // token. Same construction as the MCP flow's state cookie.
-  headers.append(
-    "Set-Cookie",
-    `${CONSOLE_STATE_COOKIE}=${await sha256Hex(stateToken)}; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=${CONSOLE_STATE_TTL_SECONDS}`
-  );
-  return new Response(null, { status: 302, headers });
-}
-
-function refusal(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+export function startConsoleLogin(request: Request, env: Env, returnTo: string): Promise<Response> {
+  return startGithubLogin(request, env, CONSOLE_LOGIN, returnTo);
 }
 
 export async function handleConsoleCallback(request: Request, env: Env, now: Date): Promise<Response> {
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const stateToken = url.searchParams.get("state");
-  if (!code || !stateToken) return refusal("missing code or state", 400);
-
-  const stateCookie = getCookie(request, CONSOLE_STATE_COOKIE);
-  if (!stateCookie || !timingSafeEqual(stateCookie, await sha256Hex(stateToken))) {
-    return refusal("state validation failed: this browser did not start the flow. Open /console again.", 403);
-  }
-  const stateKey = `${CONSOLE_STATE_KV_PREFIX}${stateToken}`;
-  const returnTo = await env.OAUTH_KV.get(stateKey);
-  if (returnTo === null) return refusal("state expired or already used. Open /console again.", 403);
-
-  const tokenResp = await fetch(GITHUB_TOKEN_URL, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.GITHUB_CLIENT_ID,
-      client_secret: env.GITHUB_CLIENT_SECRET,
-      code,
-      redirect_uri: `${url.origin}/console/callback`,
-    }),
-  });
-  if (!tokenResp.ok) return refusal("github token exchange failed", 502);
-  const tokenData = (await tokenResp.json()) as { access_token?: string };
-  if (!tokenData.access_token) return refusal("github token exchange failed: no access token returned", 502);
-  // CONSUMED AFTER THE EXCHANGE, for the reason recorded on the MCP flow: deleting it
-  // first means a transient GitHub 502 burns the state, and the reload then reports
-  // "expired" for a code GitHub never processed.
-  await env.OAUTH_KV.delete(stateKey);
-
-  const userResp = await fetch(GITHUB_USER_URL, {
-    headers: {
-      Authorization: `Bearer ${tokenData.access_token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "capsid",
-    },
-  });
-  if (!userResp.ok) return refusal("failed to fetch github user", 502);
-  const user = (await userResp.json()) as { id: number; login: string };
-  if (!isAdminUser(env, user)) {
-    return refusal(
-      `access denied: capsid is a single-user server and GitHub account "${user.login}" is not its administrator`,
-      403
-    );
-  }
+  const login = await completeGithubLogin(request, env, CONSOLE_LOGIN, (stored) => stored);
+  if (!login.ok) return login.response;
+  const { user, state: returnTo } = login;
 
   // A relative console path only, checked here rather than trusted from KV: the value
   // was written by this Worker, and treating it as a URL anyway would leave an open
@@ -160,6 +100,6 @@ export async function handleConsoleCallback(request: Request, env: Env, now: Dat
   const safeReturn = returnTo.startsWith("/console") ? returnTo : "/console";
   const headers = new Headers({ Location: safeReturn });
   headers.append("Set-Cookie", await consoleSessionCookie(user, env.COOKIE_ENCRYPTION_KEY, now));
-  headers.append("Set-Cookie", `${CONSOLE_STATE_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=0`);
+  headers.append("Set-Cookie", clearStateCookie(CONSOLE_LOGIN));
   return new Response(null, { status: 302, headers });
 }

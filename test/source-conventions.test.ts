@@ -49,7 +49,8 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   assert.ok(auth.includes("timingSafeEqual(readonly ? entry.slice(3) : entry, hash)"));
   assert.match(handler, /timingSafeEqual\(sig, await hmacHex/);
   assert.match(handler, /timingSafeEqual\(csrfCookie, csrf\)/);
-  assert.match(handler, /timingSafeEqual\(stateCookie, await sha256Hex/);
+  const githubLogin = sourceFiles().find((f) => f.name === "github-login.ts")!.text;
+  assert.match(githubLogin, /timingSafeEqual\(stateCookie, await sha256Hex/);
 
   // And no file anywhere has gone back to a short-circuiting compare of a secret.
   // Matched by SHAPE rather than by the three spellings that exist today, since a
