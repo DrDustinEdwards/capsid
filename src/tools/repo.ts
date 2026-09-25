@@ -62,8 +62,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
 
   // Repo fallthrough: live GitHub access via the Capsid GitHub App. Reads are
-  // open to any admitted client; writes require the operator key. The target
-  // repo is resolved per namespace from the namespaces table.
+  // open to any admitted client; writes require the write grant (TOOL_GRANTS in
+  // src/scope.ts). The target repo is resolved per namespace from the namespaces
+  // table.
   const guarded = async (fn: () => Promise<unknown>) => {
     try {
       return ok(await fn());

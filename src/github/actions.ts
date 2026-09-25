@@ -407,7 +407,7 @@ export async function ciDispatch(
 
   // 3. CONTENT. A scorer renamed, copied or vendored under another file name still
   //    holds the signing key and posts to the score endpoint. Read the file on the
-  //    DEFAULT branch (the ref a dispatch resolves the workflow from) and refuse
+  //    default branch and, when args.ref is given, on that ref too, and refuse
   //    anything that declares it. A read failure does NOT refuse: a workflow this
   //    tool cannot see is ordinary for a repo whose default branch differs, and
   //    failing closed here would break ci_dispatch on a network blip. Checks 1 and 2

@@ -311,9 +311,9 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
 async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   // ONE BATCH, ONE SNAPSHOT (residual 4, closed 2026-09-08).
   //
-  // D1's batch is ONE TRANSACTION executed in order, so the ten reads agree with
-  // each other and `exported_at` describes one instant. Sequential reads were ten
-  // instants: a write landing between the documents read and the document_versions
+  // D1's batch is ONE TRANSACTION executed in order, so the reads (one per table in
+  // TABLES) agree with each other and `exported_at` describes one instant. Sequential
+  // reads were one instant per table: a write landing between the documents read and the document_versions
   // read put a version row in the dump whose document was not in it, and nothing
   // downstream could tell. The restore rehearsal checks for that signature.
   //
