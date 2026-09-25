@@ -17,12 +17,11 @@ import { runSkillsRefresh } from "./skills-refresh";
 export const BACKUP_CRON = "0 9 * * *";
 export const IMPROVE_OPEN_CRON = "0 8,9 * * *";
 export const IMPROVE_TICK_CRON = "*/5 * * * *";
-// Fires daily; readSchedule decides whether today is the configured day. The
-// expression cannot be read from KV, so a daily fire plus a KV day is what makes
-// the weekly schedule reconfigurable without a redeploy.
+// Fires daily; readSchedule decides from KV whether today is the configured day, so
+// the weekly schedule changes without a redeploy.
 export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
-// 03:00 America/Chicago, per the arc.
+// 03:00 America/Chicago.
 const IMPROVE_OPEN_HOUR_CT = 3;
 
 const apiHandler = {
@@ -33,9 +32,7 @@ const apiHandler = {
         status: 403,
       });
     }
-    // The admitted admin is the synthetic agent "admin", holding every scope. The
-    // login stays the audit actor, because it is more specific than the synthetic
-    // name and every existing audit query reads it.
+    // The admin agent holds every scope; the GitHub login stays the audit actor.
     return createMcpHandler(buildServer(env, adminAgent(props.login)), { route: "/mcp" })(request, env, ctx);
   },
 };
@@ -84,9 +81,8 @@ const provider = new OAuthProvider({
     const verdict = await checkRate(env.APP_KV, ip, new Date(), REGISTRATION_LIMIT);
     if (verdict.allowed) return;
     if (verdict.window === "unavailable") {
-      // Unreachable while REGISTRATION_LIMIT is onUnavailable: "allow", and handled
-      // rather than cast so flipping that policy cannot produce a refusal with a
-      // count nobody measured in it.
+      // Unreachable while REGISTRATION_LIMIT allows on unavailable; handled so
+      // flipping that policy cannot produce a refusal with an unmeasured count.
       return { code: "temporarily_unavailable", status: 503, description: `Registration rate limiting is unavailable: ${verdict.detail}. Retry shortly.` };
     }
     console.error(`DCR_RATE_LIMITED ${ip} hit the ${verdict.window} limit (${verdict.count} of ${verdict.limit})`);

@@ -66,11 +66,9 @@ function requireMissing(db: D1Database, namespace: string, path: string): D1Prep
     .bind(namespace, path);
 }
 
-// THE SNAPSHOT OF THE LIVE ROW, ONE SPELLING (audit 2026-09-25, E1-2). It SELECTs the
-// row the table holds when the batch runs, not a body the caller read earlier, so a
-// write landing between a pre-read and the batch is snapshotted rather than lost. It
-// inserts nothing when no row exists, so a caller can add it unconditionally.
-// RETURNING id tells a caller whether a snapshot was taken (see snapshotTaken).
+// The snapshot of the live row, one spelling. It selects the row the table holds when
+// the batch runs, not a body read earlier, so a write landing in between is
+// snapshotted rather than lost. It inserts nothing when no row exists.
 export function snapshotLive(db: D1Database, namespace: string, path: string): D1PreparedStatement {
   return db
     .prepare(
@@ -150,14 +148,9 @@ export function guardedCommit(opts: {
   };
 }
 
-// THE DOCUMENT UPSERT, ONE SPELLING. `write` and `lint` mode `report` both store a
-// document and both have to store it the same way, or two write paths disagree about
-// what a write is. The split of 2026-09-10 put them in different files, which is
-// where a second spelling comes from.
-//
-// COALESCE on every optional column, so an argument the caller did not supply leaves
-// the stored value alone rather than nulling it. The improve loop's own writer is
-// deliberately NOT folded in here: it always sets every column and has no COALESCE.
+// The document upsert, one spelling, shared by `write` and `lint` mode `report`.
+// COALESCE on every optional column, so an omitted argument leaves the stored value
+// alone. The improve loop's writer sets every column and is not folded in.
 //
 // test/mutation-guard-coverage.test.ts and test/tool-annotations.test.ts both match
 // this call as a mutation marker, the same way they match pathMutation().
@@ -186,10 +179,8 @@ export function documentUpsert(
     .bind(namespace, path, title, body, type, tags, status);
 }
 
-// THE AUDIT ROW, ONE SPELLING (audit 2026-09-25, E1-24). Every write path appends one
-// (the snapshot rule in CLAUDE.md), and the INSERT was spelled out at about fifteen
-// sites. params is
-// stored as JSON. An audit row whose params come from inside the batch (delete's
+// The audit row, spelled once. Every write path appends one (CLAUDE.md, snapshot
+// rule). params is stored as JSON. An audit row whose params come from inside the batch (delete's
 // edges, a skill transition guarded by its new status) is an INSERT ... SELECT and
 // keeps its own statement.
 export function auditStatement(

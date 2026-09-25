@@ -9,7 +9,7 @@ export const PERMISSIONS_POLICY =
 
 export const REPORT_PATH = "/csp-report";
 export const REPORTING_ENDPOINTS = `csp="${REPORT_PATH}"`;
-// Intake and prune must agree; this was two literals, one in backup.ts and one in routes.ts.
+// Shared by intake (routes.ts) and prune (backup.ts), which must agree.
 export const REPORT_PREFIX = "reports/csp/";
 
 // Report-Only, never enforced. form-action is deliberately absent.
