@@ -266,7 +266,7 @@ const sqlOf = (statement: unknown) => (statement as { sql: string }).sql;
 const paramsOf = (statement: unknown) => (statement as { params: unknown[] }).params;
 
 test("AN IMPROVE DOCUMENT WRITE SNAPSHOTS AND AUDITS, like every other write path", async () => {
-  // CLAUDE.md hard rule 5, and it applies here even though nothing the loop writes
+  // CLAUDE.md, snapshot rule, and it applies here even though nothing the loop writes
   // is canon. "The loop's own documents do not matter" is the sentence that
   // precedes finding out they did.
   const { db } = fakeD1();

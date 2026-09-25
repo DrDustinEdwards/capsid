@@ -450,7 +450,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  // THE REPO FALLTHROUGH WIDENING, the SECOND ruled exception to hard rule 1 in one
+  // THE REPO FALLTHROUGH WIDENING, the SECOND ruled exception to the tool surface rule in one
   // day (capsid/decisions.md, 2026-09-06). The justification is not that these are
   // useful: the claude.ai GitHub connector authenticates and then 404s on every
   // private repo in the portfolio, while Capsid's App token has reached them all since

@@ -47,7 +47,7 @@ const lines = (...parts: string[]) => parts.join("\n") + "\n";
 test("a direct read is a scanner, and a marker above it satisfies the rule", () => {
   const bare = lines('test("x", () => {', '  assert.match(sourceFile("a.ts"), /y/);', "});");
   assert.deepEqual(unmarkedScanners(bare), { scanners: 1, unmarked: ['test("x", () => {'] });
-  const marked = lines("// scanner-rule: CLAUDE.md rule 6", bare);
+  const marked = lines("// scanner-rule: CLAUDE.md, one enforcement point rule", bare);
   assert.deepEqual(unmarkedScanners(marked), { scanners: 1, unmarked: [] });
 });
 

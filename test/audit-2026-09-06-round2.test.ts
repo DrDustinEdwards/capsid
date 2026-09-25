@@ -169,7 +169,7 @@ test("a tick leaves a FRESH 'judging' run alone; only a stale one is returned to
   });
 });
 
-// scanner-rule: CLAUDE.md rule 10, every run transition is a CAS whose result is read. It
+// scanner-rule: CLAUDE.md, path mutation rule: every run transition is a CAS whose result is read. It
 // covers every call site in ingestScore, including ones added later, which no single
 // lost-CAS test can.
 test("every advanceRun inside ingestScore checks its result", () => {

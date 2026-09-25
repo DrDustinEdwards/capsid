@@ -15,7 +15,7 @@ const MAX_SKILL_BODY = MAX_BODY;
 export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // THE IMPROVE LOOP'S TWO TOOLS, a ruled exception to hard rule 1 (the surface is
+  // THE IMPROVE LOOP'S TWO TOOLS, a ruled exception to the tool surface rule (the surface is
   // small and stays that way), recorded in capsid/decisions.md alongside the
   // history/restore exception of 2026-08-13. The subsystem is driven by cron, and a
   // cron-only subsystem is one nobody can inspect or start by hand: the 2026-08-09

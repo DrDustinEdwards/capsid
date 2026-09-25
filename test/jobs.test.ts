@@ -205,7 +205,7 @@ test("every action the schema advertises is one the tool handles", async () => {
   assert.deepEqual(unhandled, [], `the jobs tool has no branch for: ${unhandled.join(", ")}`);
 });
 
-// scanner-rule: CLAUDE.md rule 8, meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
+// scanner-rule: CLAUDE.md, path mutation rule: meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
 test("every queue transition is a keyed UPDATE with RETURNING, never meta.changes", () => {
   // The rule the improve state machine already runs on, applied to the queue. A
   // transition that read meta.changes would be counting the FTS5 triggers on the
@@ -226,9 +226,9 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
   assert.doesNotMatch(code, /meta\.changes/, "src/jobs.ts reads meta.changes, which the FTS5 triggers inflate");
 });
 
-// scanner-rule: CLAUDE.md rule 5, every overwrite snapshots and audits. A second write path cannot be exercised before it exists
+// scanner-rule: CLAUDE.md, snapshot rule: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
-  // Hard rule 5: no write path skips document_versions and audit_log. The mirror
+  // CLAUDE.md, snapshot rule: no write path skips document_versions and audit_log. The mirror
   // uses improveDocStatements, which carries both in the same batch, rather than
   // spelling its own upsert.
   const jobs = sourceFile("jobs.ts");

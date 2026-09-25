@@ -69,7 +69,7 @@ test("the integration compatibility date is not AHEAD of the deploy date", () =>
 });
 
 test("no real secret reached the integration bindings", () => {
-  // capsid/conventions.md hard rule 3, applied to the one config file in this repo
+  // CLAUDE.md, public repo rule, applied to the one config file in this repo
   // that carries secret-shaped values at all.
   assert.match(CONFIG, /IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one"/);
   for (const suspicious of [/sk-ant-/, /ghp_/, /github_pat_/, /-----BEGIN/]) {

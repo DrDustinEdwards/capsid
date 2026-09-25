@@ -236,7 +236,7 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
 
 // ---- the derived half --------------------------------------------------------
 
-// scanner-rule: CLAUDE.md rule 6, no new tool bypasses checkScope. Derived over every
+// scanner-rule: CLAUDE.md, one enforcement point rule: no new tool bypasses checkScope. Derived over every
 // registration, including tools added later.
 test("DERIVED: every write tool is on the enforcement point's path", () => {
   // Not a list of tools somebody remembered to check. The registrations are walked,
@@ -256,7 +256,7 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
   assert.ok(toolBlocks().length >= 30, "the tool walk collapsed");
 });
 
-// scanner-rule: CLAUDE.md rule 6, a repo mutation carries its flags through guardedWrite.
+// scanner-rule: CLAUDE.md, one enforcement point rule: a repo mutation carries its flags through guardedWrite.
 // Derived over every GitHub mutation call site.
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
   // The seven repo write tools reach GitHub through guardedWrite, which is where

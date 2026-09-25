@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// THE MANNERED-PROSE GUARD (hard rule 12).
+// THE MANNERED-PROSE GUARD (capsid/conventions.md, Writing style).
 //
 // Mannered prose substitutes metaphor and flourish for direct statement. The rule
 // governs every piece of prose this repo carries; this guard covers the two that
@@ -70,5 +70,5 @@ test("no mannered prose in README.md or docs/", () => {
       }
     }
   }
-  assert.deepEqual(hits, [], `mannered prose found (hard rule 12):\n    ${hits.join("\n    ")}`);
+  assert.deepEqual(hits, [], `mannered prose found (capsid/conventions.md, Writing style):\n    ${hits.join("\n    ")}`);
 });
