@@ -28,7 +28,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 
 const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
@@ -288,7 +288,8 @@ function readKey(ns) {
 // The script path is the capsid clone in FOLDERS, not process.cwd(). An install run
 // from another folder, or from a worktree that is later deleted, would otherwise
 // schedule a path that does not exist, and the task would fail every night.
-const installScript = () => join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
+// win32.join, because the task runs on Windows whatever platform builds its XML.
+const installScript = () => win32.join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
 const installArguments = (ns) => `"${installScript()}" --run --namespace ${ns}`;
 
 export function installCommand(ns) {
