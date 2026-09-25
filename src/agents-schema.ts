@@ -2,8 +2,9 @@ import { bytesToHex } from "./encoding";
 
 // The vocabulary of a scoped credential, in one module so the table
 // (migrations/0008_agents.sql), the tool (src/tools/agents.ts) and the enforcement
-// point (src/scope.ts) cannot disagree about it. Free of Worker and MCP imports so
-// the scope logic is unit-testable under node.
+// point (src/scope.ts) cannot disagree about it: a list spelled twice drifts, and the
+// copy nobody looks at ends up checking five flags out of six. Free of Worker and MCP
+// imports so the scope logic is unit-testable under node.
 
 // Descriptive, not authorizing. What an agent may do lives in its scopes and
 // nowhere else, so a kind cannot quietly become a second permission system.
@@ -23,7 +24,8 @@ export const SCOPE_FLAGS = [
   "can_touch_protected",
   "money_paths",
   // Commenting goes through manage_pr, a write tool, so a reviewer holds the write
-  // grant; this flag keeps commenting separate from merging and closing.
+  // grant; without a flag of its own that grant would also let it merge and close.
+  // This flag makes "may comment on this PR" smaller than "may decide this PR".
   "can_comment_pr",
 ] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
@@ -69,8 +71,9 @@ function emptyScopes(): AgentScopes {
 }
 
 // The default for a new agent: read, on the namespaces it was named for, and no
-// flags. Tools and repos are unrestricted because a read grant cannot reach a write
-// tool.
+// flags. Tools and repos are unrestricted because the grant already limits them (a
+// read grant cannot reach a write tool, and a repo read is a read); the axes that
+// must be narrowed at mint time are the ones the mint command asks for.
 export function defaultScopes(namespaces: string[]): AgentScopes {
   return { namespaces: [...namespaces], repos: "*", tools: "*", grants: ["read"], flags: noFlags() };
 }
@@ -82,7 +85,8 @@ function parseList(value: unknown): ScopeList {
 }
 
 // Fails closed: a scopes column that is null, empty, truncated, an array, a bare
-// string or an object with none of the keys resolves to emptyScopes().
+// string or an object with none of the keys resolves to emptyScopes(). A permissive
+// parse of a corrupt row looks like a working one until the row is corrupt.
 export function parseScopes(json: string | null | undefined): AgentScopes {
   if (!json) return emptyScopes();
   let raw: unknown;
@@ -129,6 +133,9 @@ export function allowsScope(list: ScopeList, value: string): boolean {
 //     names. Anything else of that tool is refused.
 //   - A bare tool name with no qualified sibling means the whole tool.
 //   - The narrowing reaches only the tool it names.
+//
+// Kept beside allowsScope rather than in the enforcement point so the rule is one
+// pure function the tests can drive without an agent or a server.
 export function allowsToolAction(list: ScopeList, tool: string, action: string | undefined): boolean {
   if (list === "*") return true;
   if (!list.includes(tool)) return false;
@@ -138,6 +145,10 @@ export function allowsToolAction(list: ScopeList, tool: string, action: string |
   // An unknown action on a narrowed tool is refused, not read as the whole tool:
   // otherwise a reviewer minted ["manage_pr", "manage_pr.comment"] could close a pull
   // request through a call path that names no action.
+  //
+  // It stays opt-in: a list with no qualified sibling for this tool is untouched.
+  // Opting in means the call path has to say what it is doing, and a path that cannot
+  // is refused.
   if (action === undefined) return false;
   return list.includes(`${prefix}${action}`);
 }

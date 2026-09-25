@@ -41,9 +41,13 @@ export async function createBranch(env: Env, namespace: string, branch: string, 
   return { repo: `${owner}/${repo}`, branch, from: base, sha };
 }
 
-// Branch from an exact commit, which createBranch cannot do; the improve loop
-// branches from the commit the lineage picked. ensureBranch tolerates an existing
-// branch because an attempt id is unique, so a collision is a retry of that attempt.
+// Branch from an exact commit, which createBranch cannot do: it resolves a branch
+// name to whatever that branch points at now. The improve loop branches from the
+// commit the lineage picked, which is frequently not the tip of anything.
+//
+// ensureBranch tolerates an existing branch of the same name. An attempt id is
+// unique, so a collision is a retry of the same attempt, and a retry should land on
+// the branch it made.
 export async function createBranchAt(
   env: Env,
   namespace: string,
@@ -77,10 +81,19 @@ export async function openPr(
   return { repo: `${owner}/${repo}`, number: data.number, url: data.html_url, head, base: baseBranch };
 }
 
+// Merge or close an open pull request. Merging can trigger CI deploys in repos with
+// deploy workflows, so callers gate by blast radius.
+//
 // The head branch is deleted when a PR closes or merges, because write_repo_file's
-// PR mode creates a branch per write. Never the default branch, never an improve-loop
-// branch (the loop owns those refs), and never a failure of the PR action itself:
-// the merge or close already succeeded, so the outcome goes in head_branch_deleted.
+// default PR mode creates a branch per write and nothing else cleans them up. Three
+// refusals:
+//   1. Never the default branch. A PR whose head is the default branch is a
+//      cross-fork PR or a misconfiguration.
+//   2. Never an improve-loop branch. The loop may still need the attempt and its own
+//      lifecycle owns those refs; delete_branch refuses them without force too.
+//   3. Never fails the PR action. The merge or close already succeeded, and failing
+//      the call because a branch delete failed would misreport it. Same rule as
+//      invalidateRepoReads. The outcome is reported in head_branch_deleted.
 async function deleteHeadBranchAfterPr(
   env: Env,
   owner: string,
@@ -157,8 +170,9 @@ export async function managePr(
   expectedSha?: string
 ) {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
-  // A comment leaves the pull request open, so it must never reach the head-branch
-  // cleanup below.
+  // A comment leaves the pull request open and changes no branch, so it is handled
+  // first: it must never reach the head-branch cleanup below, which exists because
+  // merge and close end a pull request.
   if (action === "comment") {
     if (!comment) throw new Error("comment needs a body; a comment action with nothing to say is a call that did nothing.");
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/issues/${number}/comments`, {
@@ -179,7 +193,9 @@ export async function managePr(
     if (resp.status === 409 && expectedSha) throw new HeadMovedError(expectedSha, await resp.text());
     if (!resp.ok) throw new Error(`merge failed (${resp.status}): ${await resp.text()}`);
     const data = (await resp.json()) as { sha: string; merged: boolean; message: string };
-    // A merge writes every path the PR touched, which are not known here.
+    // A merge changes the base branch's contents, so it is a write to every path the
+    // PR touched. Those paths are not known here, which is why invalidation sweeps
+    // the repo prefix.
     await invalidateRepoReads(env, owner, repo);
     const cleanup = await deleteHeadBranchAfterPr(env, owner, repo, number);
     return {
@@ -207,8 +223,9 @@ export async function managePr(
 // goes through resolveRepo, ghFetch and cachedGet; nothing opens its own path to
 // api.github.com.
 
-/** Branches, tags and open PRs in one call. Ahead/behind is per branch against the
- *  default branch. */
+/** Branches, tags and open PRs in one call. The triage question is "what is in flight
+ *  here", which is three GETs the caller would otherwise make separately.
+ *  Ahead/behind is per branch against the default branch. */
 export async function repoRefs(env: Env, namespace: string, repoSelector?: string) {
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const base = `/repos/${owner}/${repo}`;
@@ -236,8 +253,10 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
 
   const prByHead = new Map(prRows.map((p) => [p.head.ref, p.number]));
 
-  // One compare call per branch, bounded by the 100-branch page above; a repo with
-  // more branches reports its first hundred and sets truncated.
+  // Ahead/behind comes from the compare endpoint, one call per branch. The default
+  // branch is skipped: compared with itself it is always 0/0. The fan-out is bounded
+  // by the 100-branch page above; a repo with more branches reports its first hundred
+  // and sets truncated.
   const branches = await Promise.all(
     branchRows.map(async (b) => {
       const row: {
@@ -309,7 +328,8 @@ function summariseCommit(c: { sha: string; commit: { message: string; author: { 
     sha: c.sha,
     date: c.commit.author.date,
     author: c.commit.author.name,
-    // First line only; read one commit by sha for the full message.
+    // First line only. Commit bodies here run to paragraphs, and inlining them buries
+    // the shape of the history. Read one commit by sha for the full message.
     subject: c.commit.message.split("\n")[0],
   };
 }
@@ -343,7 +363,8 @@ function filesWithBudget(
 }
 
 /** Commits, a comparison, or one commit, chosen by which args are present. An
- *  ambiguous combination is refused rather than resolved by precedence. */
+ *  ambiguous combination is refused rather than resolved by precedence: a caller
+ *  passing both sha and base has two questions, and neither is answered silently. */
 export async function repoHistory(
   env: Env,
   namespace: string,
@@ -441,6 +462,8 @@ export async function deleteBranch(
   const base = `/repos/${owner}/${repo}`;
   const defaultBranch = await getDefaultBranch(env, owner, repo);
 
+  // Not liftable by force: a flag that could delete a repo's default branch
+  // eventually will, so this is checked before force is read.
   if (branch === defaultBranch) {
     throw new Error(`delete_branch refuses: ${branch} is the default branch of ${full}. force does not lift this refusal.`);
   }
@@ -452,7 +475,8 @@ export async function deleteBranch(
       );
     }
     const prResp = await cachedGet(env, owner, repo, `${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`);
-    // Fail closed: a lookup that errors is not "no open PRs".
+    // Fail closed: a lookup that errors is not "no open PRs". Skipping the refusal on
+    // a 5xx would delete the branches this check protects whenever GitHub is flaky.
     if (!prResp.ok) {
       throw new Error(
         `delete_branch refuses: could not verify open pull requests for ${branch} on ${full} (${prResp.status}), so the open-PR refusal cannot run. Retry, or pass force: true to delete without the check.`

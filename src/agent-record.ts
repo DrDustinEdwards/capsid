@@ -9,7 +9,9 @@
 
 import { agentActor } from "./agents-schema";
 
-// Not `AgentSummary` from improve-run.ts, which imports this module.
+// What this module needs to know about a credential, and no more. Not
+// `AgentSummary` from improve-run.ts: that module builds the summaries and then asks
+// for the records, so importing its type here would make the two import each other.
 export interface RecordSubject {
   name: string;
   kind: string;
@@ -34,7 +36,8 @@ export interface AgentRecord {
   // has opened none.
   pr_merge_rate: number | null;
   // Share of CI conclusions the Worker checked and found green. The denominator is
-  // ci_checked, not jobs_done: a job with no pull request has no CI.
+  // ci_checked, not jobs_done: a job with no pull request has no CI, and counting it
+  // as a miss would punish a documentation job for not having a build.
   ci_checked: number;
   ci_green_rate: number | null;
   // Whole minutes, median (one job left open over a weekend skews a mean).
@@ -79,8 +82,10 @@ function median(values: number[]): number | null {
 }
 
 // Only a verified field counts toward a rate. Counts are stored whether or not the
-// Worker could check them, but a rate built from numbers a credential reported about
-// itself is that credential grading its own work.
+// Worker could check them, because an unverified count is still better than nothing
+// on the row. A rate is a claim about a credential that a reader acts on, and one
+// built from numbers the credential reported about itself is that credential grading
+// its own work. So the rates read only fields the `verified` object says were checked.
 function verifiedFields(json: string): Record<string, boolean> {
   try {
     const parsed = JSON.parse(json);
