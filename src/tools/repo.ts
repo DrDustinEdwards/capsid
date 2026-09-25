@@ -28,6 +28,7 @@ import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESUL
 import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
 import { resolveRepo } from "../github/client";
+import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
@@ -35,6 +36,26 @@ import { reverifyPr } from "../outcome-prs";
 // GitHub pull request URL is.
 function prUrlFor(result: { repo?: string }, number: number): string {
   return `https://github.com/${result.repo ?? ""}/pull/${number}`;
+}
+
+// manage_pr's sha belongs to action 'merge' only. Thrown rather than returned, because
+// guardedWrite reports a value returned from its callback as success.
+function refuseShaOffMerge(action: string, sha: string | undefined): void {
+  if (action !== "merge" && sha !== undefined) throw new Error(`manage_pr action '${action}' takes no sha; only action 'merge' pins the head.`);
+}
+
+// A merge pinned to a sha that GitHub refused with 409 because the head moved. Rethrown
+// with a message that says so, so guardedWrite reports it as a refusal. Any other error
+// passes through unchanged.
+function headMovedRefusal(number: number) {
+  return (err: unknown): never => {
+    if (err instanceof HeadMovedError) {
+      throw new Error(
+        `merge refused, nothing was merged: the head of pull request ${number} moved and is no longer ${err.expectedSha}. Read the pull request again, review the new head, and merge with its sha. Detail: ${err.message}`
+      );
+    }
+    throw err;
+  };
 }
 
 export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
@@ -340,17 +361,20 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("manage_pr"),
       description:
-        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash'); action 'close' just closes it and needs the can_merge flag too, because closing deletes the head branch and that is the same blast radius as merging it; action 'comment' posts `comment` on the pull request and changes nothing else, needs the can_comment_pr flag rather than can_merge, and leaves the branch alone. MERGE AND CLOSE DELETE THE HEAD BRANCH, because write_repo_file's PR mode creates one per write and nothing else cleans them up (capsid/conventions.md, 2026-09-06); the result carries head_branch and head_branch_deleted, plus head_branch_note when it declined. It REFUSES to delete the default branch, a branch under the improve loop's prefix, or a head branch on a fork, and a cleanup failure never fails the merge or close itself since that already succeeded. Merging can trigger CI deploys in repos with deploy workflows (foxhound): prefer PR mode plus manage_pr for anything touching live behavior, per conventions. Requires operator key.",
+        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash'), and takes an optional `sha`: pass the head sha you reviewed and the merge happens only if the head is still that commit, otherwise it is refused and nothing is merged; action 'close' just closes it and needs the can_merge flag too, because closing deletes the head branch and that is the same blast radius as merging it; action 'comment' posts `comment` on the pull request and changes nothing else, needs the can_comment_pr flag rather than can_merge, and leaves the branch alone. MERGE AND CLOSE DELETE THE HEAD BRANCH, because write_repo_file's PR mode creates one per write and nothing else cleans them up (capsid/conventions.md, 2026-09-06); the result carries head_branch and head_branch_deleted, plus head_branch_note when it declined. It REFUSES to delete the default branch, a branch under the improve loop's prefix, or a head branch on a fork, and a cleanup failure never fails the merge or close itself since that already succeeded. Merging can trigger CI deploys in repos with deploy workflows (foxhound): prefer PR mode plus manage_pr for anything touching live behavior, per conventions. Requires operator key.",
       inputSchema: {
         namespace: nsName,
         number: z.number().int().positive(),
         action: z.enum(["merge", "close", "comment"]),
         merge_method: z.enum(["merge", "squash", "rebase"]).optional(),
         comment: bounded(MAX_PR_COMMENT).optional().describe("For action 'comment': the comment body. Required for that action and refused for the others."),
+        sha: bounded(MAX_SHA)
+          .optional()
+          .describe("For action 'merge': the full head sha you reviewed. GitHub merges only if the head is still that commit, and the merge is refused if it moved. Refused for the other actions."),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
       },
     },
-    ({ namespace, number, action, merge_method, comment, repo }) =>
+    ({ namespace, number, action, merge_method, comment, sha, repo }) =>
       guardedWrite(
         "manage_pr",
         namespace,
@@ -364,7 +388,8 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           if (action !== "comment" && comment !== undefined) {
             return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
           }
-          const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment);
+          refuseShaOffMerge(action, sha);
+          const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment, sha).catch(headMovedRefusal(number));
           // A MERGE IS WHEN AN OUTCOME ROW'S MERGE STATE BECOMES WRONG. The driver
           // wrote "opened, not merged" at complete time and was right then; this is
           // the moment it stops being true, so the rows that named this pull request
