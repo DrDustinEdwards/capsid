@@ -155,12 +155,15 @@ export async function dueForReverify(
   limit = REVERIFY_PER_SWEEP
 ): Promise<Array<{ job_id: string; pr_url: string; namespace: string }>> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  // A superseded job is skipped here and in the seed below: no work was done on it
+  // (migrations/0020), so there is no pull request of its own to re-verify.
   const rows = await env.DB.prepare(
     `SELECT p.job_id, p.pr_url, o.namespace
      FROM job_outcome_prs p
      JOIN job_outcomes o ON o.job_id = p.job_id
      WHERE (p.merged IS NULL OR p.merged = 0)
        AND o.recorded_at >= ?1
+       AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = p.job_id AND j.status = 'superseded')
      ORDER BY p.merge_verified_at IS NOT NULL, p.merge_verified_at ASC
      LIMIT ?2`
   )
@@ -194,6 +197,7 @@ export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SW
      JOIN jobs j ON j.id = o.job_id
      WHERE o.result_kind = 'pr'
        AND o.recorded_at >= ?1
+       AND j.status <> 'superseded'
        AND NOT EXISTS (SELECT 1 FROM job_outcome_prs p WHERE p.job_id = o.job_id)
      LIMIT ?2`
   )
