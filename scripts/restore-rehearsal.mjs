@@ -24,6 +24,8 @@
 // - The two SIDECARS are present and are exactly the two expected (_kv.json,
 //   _holdout-manifests.json). They restore into no table; a missing one means the loop's
 //   memory is not in the backup.
+// - The completion marker (_complete.json), when present, lists exactly the other files
+//   in the dump. It is optional because dumps written before it existed do not carry it.
 // - CROSS-TABLE CONSISTENCY (residual 4). The dump is one D1 batch, so the table objects
 //   must agree with each other. What is checked is the TEARING SIGNATURE, not plain
 //   referential integrity: measured live on 2026-09-08, the real store holds 205
@@ -56,6 +58,10 @@ export function deriveTables(migrationsDir) {
 
 // The sidecars src/backup.ts writes beside the table objects.
 export const SIDECARS = ["_holdout-manifests.json", "_kv.json"];
+// The completion marker src/backup.ts writes last, on a run whose preflight passed.
+// Optional: dumps written before 2026-09-25 do not carry it. When present, the files
+// it lists must be exactly the other files in the dump.
+export const COMPLETE_MARKER = "_complete.json";
 
 function fail(reason) {
   const err = new Error(reason);
@@ -71,11 +77,20 @@ export function rehearse(dumpDir, migrationsDir) {
   // Sidecars are underscore-prefixed so they cannot collide with a table name. Checked in
   // BOTH directions: a missing one is a dump that lost the loop's memory, an unexpected
   // one is a file nothing here knows how to verify.
-  const sidecars = files.filter((f) => f.startsWith("_")).sort();
+  const sidecars = files.filter((f) => f.startsWith("_") && f !== COMPLETE_MARKER).sort();
   const missingSidecars = SIDECARS.filter((f) => !sidecars.includes(f));
   const unknownSidecars = sidecars.filter((f) => !SIDECARS.includes(f));
   if (missingSidecars.length > 0) fail(`the dump is missing sidecars: ${missingSidecars.join(", ")}`);
   if (unknownSidecars.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknownSidecars.join(", ")}`);
+  const marked = files.includes(COMPLETE_MARKER);
+  if (marked) {
+    const marker = JSON.parse(readFileSync(join(dumpDir, COMPLETE_MARKER), "utf8"));
+    const listed = (Array.isArray(marker.keys) ? marker.keys : []).map((k) => String(k).split("/").pop()).sort();
+    const present = files.filter((f) => f !== COMPLETE_MARKER).sort();
+    if (listed.join(",") !== present.join(",")) {
+      fail(`${COMPLETE_MARKER} lists ${listed.join(", ")} but the dump holds ${present.join(", ")}`);
+    }
+  }
 
   const dumped = files.filter((f) => !f.startsWith("_")).map((f) => f.replace(/\.json$/, ""));
   const missing = tables.filter((t) => !dumped.includes(t));
@@ -164,7 +179,7 @@ export function rehearse(dumpDir, migrationsDir) {
   }
 
   db.close();
-  return { tables: tables.length, totalRows, docCount, probe: word, orphanVersions, orphanAudits };
+  return { tables: tables.length, totalRows, docCount, probe: word, orphanVersions, orphanAudits, marked };
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
@@ -177,7 +192,8 @@ if (invokedDirectly) {
   try {
     const summary = rehearse(dumpDir, join(import.meta.dirname, "..", "migrations"));
     console.log(
-      `restore rehearsal PASSED: ${summary.tables} tables, ${summary.totalRows} rows, ${summary.docCount} documents, FTS probe '${summary.probe}' found, ` +
+      `restore rehearsal PASSED: ${summary.tables} tables, ${summary.totalRows} rows, ${summary.docCount} documents, ` +
+        `${summary.marked ? "marked complete" : "no completion marker"}, FTS probe '${summary.probe}' found, ` +
         `cross-table consistent (${summary.orphanVersions} version and ${summary.orphanAudits} audit rows reference documents no longer in the store, all explained by deletions, archiving or the namespace rename)`
     );
   } catch (e) {
