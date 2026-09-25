@@ -9,7 +9,7 @@
 // a STATUS, and the status IS the distinction.
 
 /**
- * @returns {Promise<{ outcome: "present"|"missing"|"unreachable"|"corrupt"|"has-ttl", detail?: string, expiration?: number }>}
+ * @returns {Promise<{ outcome: "present"|"missing"|"unreachable"|"corrupt"|"has-ttl"|"ttl-unverified", detail?: string, expiration?: number }>}
  */
 export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   const key = `client:${clientId}`;
@@ -46,17 +46,22 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   // the 90 day clientRegistrationTTL back, and a canary that can expire on its own has a
   // second legitimate reason to be absent.
   //
-  // An unreadable key LIST is not treated as a TTL: absence of evidence about the expiry
-  // is not evidence of one.
-  let expiration;
+  // An unreadable key LIST is not treated as a TTL, and it is not treated as "no TTL"
+  // either: absence of evidence about the expiry is evidence of nothing. It used to
+  // fall through to "present, non-expiring", a TTL this never checked. It is now its
+  // own failing outcome.
+  let entry;
   try {
     const listed = await fetchImpl(`${base}/keys?prefix=${encodeURIComponent(key)}`, { headers: auth });
+    if (!listed.ok) return { outcome: "ttl-unverified", detail: `key list status=${listed.status}` };
     const data = await listed.json().catch(() => null);
-    expiration = data?.result?.find((k) => k.name === key)?.expiration;
-  } catch {
-    expiration = undefined;
+    if (!Array.isArray(data?.result)) return { outcome: "ttl-unverified", detail: "the key list response carries no result array" };
+    entry = data.result.find((k) => k?.name === key);
+  } catch (err) {
+    return { outcome: "ttl-unverified", detail: err instanceof Error ? err.message : String(err) };
   }
-  if (expiration) return { outcome: "has-ttl", expiration };
+  if (!entry) return { outcome: "ttl-unverified", detail: `${key} reads 200 but is not in the key list` };
+  if (entry.expiration) return { outcome: "has-ttl", expiration: entry.expiration };
 
   return { outcome: "present" };
 }
@@ -88,6 +93,11 @@ export function canaryReport(result, clientId, namespaceName) {
         detail:
           `HAS A TTL: ${key} expires ${new Date(result.expiration * 1000).toISOString().slice(0, 10)}. ` +
           `The canary must not expire, or a normal expiry reads as data loss. Re-put the value with no expiration_ttl.`,
+      };
+    case "ttl-unverified":
+      return {
+        passed: false,
+        detail: `TTL UNVERIFIED: ${key} is present and its clientId matches, but whether it expires could not be read (${result.detail}). Not reporting it as non-expiring.`,
       };
     default:
       return { passed: false, detail: `unknown canary outcome ${JSON.stringify(result.outcome)}` };

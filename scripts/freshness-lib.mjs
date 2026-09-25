@@ -65,6 +65,16 @@ export function checkBackupFreshness(health, opts) {
   const skew =
     reported === null ? "" : ` (worker reported ${reported}h${Math.abs(reported - ageHours) > CLOCK_SKEW_TOLERANCE_HOURS ? ", DISAGREEING with this runner's clock" : ""})`;
 
+  // A stamp in the FUTURE gives a negative age, which passed as fresh. Beyond the clock
+  // skew tolerance it is a bad stamp or a bad clock, and either way it proves nothing
+  // about when the last backup ran.
+  if (ageHours < -CLOCK_SKEW_TOLERANCE_HOURS) {
+    return {
+      outcome: "unknown",
+      passed: false,
+      detail: `backup.last_ok is ${-ageHours}h in the future of this runner's clock, past the ${CLOCK_SKEW_TOLERANCE_HOURS}h skew tolerance${skew}. last_ok=${lastOk}`,
+    };
+  }
   if (ageHours > maxHours) {
     return {
       outcome: "stale",

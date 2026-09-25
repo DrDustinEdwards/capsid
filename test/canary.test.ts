@@ -118,18 +118,21 @@ test("a canary that has acquired a TTL fails BEFORE it can expire", async () => 
   assert.match(report.detail, /2026-11-13/, "the report does not say WHEN it would expire");
 });
 
-test("an unreadable key listing is not mistaken for a TTL", async () => {
-  // Absence of evidence about the expiry is not evidence of one. Failing here
-  // would turn an API hiccup into a false alarm about the alarm.
+test("an unreadable key listing is TTL-UNVERIFIED: neither a TTL nor non-expiring", async () => {
+  // Absence of evidence about the expiry is evidence of nothing. It used to fall
+  // through to "present", which the report prints as "non-expiring", a TTL the gate
+  // never checked.
   //
-  // BOTH failure shapes, because they take different paths through the check and a
-  // plant proved it: a non-200 listing returns a body the parse yields nothing
-  // from, while a THROWN listing lands in the catch. Covering only the first left
-  // the catch free to invent an expiry.
+  // BOTH failure shapes, because they take different paths through the check: a
+  // non-200 listing and a THROWN listing.
   for (const stub of [fakeKvApi({ value: RECORD, listStatus: 500 }), fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" })]) {
     const result = await check(stub);
-    assert.equal(result.outcome, "present", "an unreadable listing was read as an expiry");
+    assert.equal(result.outcome, "ttl-unverified", "an unreadable listing was reported as a checked TTL");
     assert.equal(result.expiration, undefined, "an expiry was invented from a failed listing");
+    const report = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
+    assert.equal(report.passed, false);
+    assert.match(report.detail, /TTL UNVERIFIED/);
+    assert.doesNotMatch(report.detail, /non-expiring,/);
   }
 });
 
