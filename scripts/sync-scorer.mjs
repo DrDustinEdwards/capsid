@@ -365,22 +365,62 @@ function show(dir, ref, path) {
   });
 }
 
-function main() {
-  const apply = process.argv.includes("--apply");
+/**
+ * THE WORKING TREE BEING WRITTEN MUST BE THE BRANCH THAT WAS CHECKED, AND BOTH FILES
+ * MUST BE CLEAN. The comparison reads committed refs, but the write goes into whatever
+ * the clone has checked out. Without this, --apply wrote onto another branch, or
+ * over uncommitted edits to either file, and nothing said so.
+ * @param {string} dir
+ * @param {string} ref
+ * @param {string} label
+ */
+export function requireWritable(dir, ref, label) {
+  let head;
+  try {
+    head = execFileSync("git", ["-C", dir, "symbolic-ref", "--quiet", "--short", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    head = "(detached HEAD)";
+  }
+  if (head !== ref) {
+    throw new Error(
+      `${label}: ${head} is checked out, but the copier writes ${ref}. Run: git -C ${dir} checkout ${ref}. Nothing was written.`
+    );
+  }
+  const dirty = execFileSync("git", ["-C", dir, "status", "--porcelain", "--", WORKFLOW, REPORT], {
+    encoding: "utf8",
+  }).trim();
+  if (dirty) {
+    throw new Error(
+      `${label}: uncommitted changes to the files this would overwrite:\n${dirty}\n` +
+        `Commit or discard them first. Nothing was written.`
+    );
+  }
+}
+
+/**
+ * Compare every target, and with `apply`, write the ones that differ. EVERY TARGET IS
+ * VALIDATED BEFORE ANY FILE IS WRITTEN, so a refusal on the third target leaves the
+ * first two untouched and "Nothing was written" is true.
+ * @param {{ source: { dir: string, ref: string, label: string }, targets: Array<{ dir: string, ref: string, runs?: string, label: string }>, apply: boolean, log?: (line: string) => void }} opts
+ * @returns {number} how many targets differ
+ */
+export function sync({ source, targets, apply, log = console.log }) {
   const short = (/** @type {string} */ s) => blockHash(s).slice(0, 16);
 
-  requireRepo(SOURCE.dir, SOURCE.label);
-  requireCurrent(SOURCE.dir, SOURCE.ref, SOURCE.label);
-  const srcWorkflow = splitBlock(show(SOURCE.dir, SOURCE.ref, WORKFLOW), `${SOURCE.label} ${WORKFLOW}`);
+  requireRepo(source.dir, source.label);
+  requireCurrent(source.dir, source.ref, source.label);
+  const srcWorkflow = splitBlock(show(source.dir, source.ref, WORKFLOW), `${source.label} ${WORKFLOW}`);
   const srcCompare = normalizePins(srcWorkflow.tail);
-  const srcReport = normalize(show(SOURCE.dir, SOURCE.ref, REPORT));
+  const srcReport = normalize(show(source.dir, source.ref, REPORT));
 
-  console.log(`source ${SOURCE.label}@${SOURCE.ref}`);
-  console.log(`  score block  ${short(srcCompare)}  ${srcWorkflow.tail.split("\n").length} lines`);
-  console.log(`  report       ${short(srcReport)}  ${srcReport.split("\n").length} lines\n`);
+  log(`source ${source.label}@${source.ref}`);
+  log(`  score block  ${short(srcCompare)}  ${srcWorkflow.tail.split("\n").length} lines`);
+  log(`  report       ${short(srcReport)}  ${srcReport.split("\n").length} lines\n`);
 
+  /** @type {Array<{ label: string, path: string, text: string }>} */
+  const writes = [];
   let changed = 0;
-  for (const t of TARGETS) {
+  for (const t of targets) {
     requireRepo(t.dir, t.label);
     // What the repo RUNS is what gets compared. Where that is the same ref the copier
     // writes, the local branch is read and checked three ways as before; where it is a
@@ -396,28 +436,54 @@ function main() {
 
     // The ref that was COMPARED is printed, not the one that will be written, because
     // a line naming the wrong ref is how this went unnoticed for two days.
-    console.log(`${t.label}@${read}${t.runs ? ` (writes ${t.ref})` : ""}`);
-    console.log(`  score block  ${short(normalizePins(cur.tail))} -> ${short(srcCompare)}  ${wfDrift ? "CHANGES" : "identical"}`);
-    console.log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
-    if (wfDrift || rpDrift) changed++;
+    log(`${t.label}@${read}${t.runs ? ` (writes ${t.ref})` : ""}`);
+    log(`  score block  ${short(normalizePins(cur.tail))} -> ${short(srcCompare)}  ${wfDrift ? "CHANGES" : "identical"}`);
+    log(`  report       ${short(curReport)} -> ${short(srcReport)}  ${rpDrift ? "CHANGES" : "identical"}`);
+    if (!wfDrift && !rpDrift) continue;
+    changed++;
     if (!apply) continue;
 
     // A rollout branch behind what it will be merged into is refused before any write.
-    if (t.runs && (wfDrift || rpDrift)) requireLanded(t.dir, t.ref, runs, t.label);
+    if (t.runs) requireLanded(t.dir, t.ref, runs, t.label);
+    requireWritable(t.dir, t.ref, t.label);
 
     // The target keeps its own build job (everything above the marker) and takes
-    // the source's block verbatim. Only the block below the marker is shared.
-    // The target keeps its own version comment on any pin whose SHA is unchanged.
-    if (wfDrift) writeFileSync(join(t.dir, WORKFLOW), `${cur.head}\n${preservePinComments(srcWorkflow.tail, cur.tail)}`, "utf8");
-    if (rpDrift) writeFileSync(join(t.dir, REPORT), srcReport, "utf8");
-    if (wfDrift || rpDrift) console.log("  written to the working tree");
+    // the source's block verbatim. Only the block below the marker is shared. The
+    // head is read from the branch being WRITTEN, which differs from the compared
+    // branch on a rollout target. The target keeps its own version comment on any
+    // pin whose SHA is unchanged.
+    const head = t.runs ? splitBlock(show(t.dir, t.ref, WORKFLOW), `${t.label}@${t.ref} ${WORKFLOW}`).head : cur.head;
+    if (wfDrift) {
+      writes.push({ label: t.label, path: join(t.dir, WORKFLOW), text: `${head}\n${preservePinComments(srcWorkflow.tail, cur.tail)}` });
+    }
+    if (rpDrift) writes.push({ label: t.label, path: join(t.dir, REPORT), text: srcReport });
   }
 
-  console.log(
+  /** @type {string[]} */
+  const done = [];
+  for (const w of writes) {
+    try {
+      writeFileSync(w.path, w.text, "utf8");
+    } catch (err) {
+      throw new Error(
+        `${w.label}: could not write ${w.path} (${err instanceof Error ? err.message : String(err)}). ` +
+          `Already written: ${done.length ? done.join(", ") : "nothing"}.`
+      );
+    }
+    done.push(w.path);
+    log(`written ${w.path}`);
+  }
+
+  log(
     apply
       ? `\n${changed} repo(s) written. Nothing committed or pushed.`
       : `\n${changed} repo(s) would change. Dry run: nothing written.`
   );
+  return changed;
+}
+
+function main() {
+  sync({ source: SOURCE, targets: TARGETS, apply: process.argv.includes("--apply") });
 }
 
 if (process.argv[1] && process.argv[1].endsWith("sync-scorer.mjs")) main();
