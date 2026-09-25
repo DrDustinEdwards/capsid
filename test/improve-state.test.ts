@@ -32,6 +32,7 @@ const WIDE_DASH = new RegExp(`[${EN_DASH}${EM_DASH}${HORIZONTAL_BAR}]`);
 // ---- the mode switch --------------------------------------------------------
 
 test("every declared mode reads back as itself", async () => {
+  assert.ok(IMPROVE_MODES.length > 0, "IMPROVE_MODES is empty, so this checks nothing");
   for (const mode of IMPROVE_MODES) {
     const { kv } = fakeKv({ seed: { improve_mode: mode } });
     const read = await readMode(kv);

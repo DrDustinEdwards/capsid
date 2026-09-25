@@ -53,6 +53,7 @@ test("what the JSON names, the page shows", async () => {
   const html = renderConsole(data, "token");
   // Every namespace the JSON carries appears on the page. This is the claim the twin
   // exists to make: reading the JSON tells you what the page would have told you.
+  assert.ok(data.improve.namespaces.length > 0, "the JSON carries no namespaces, so the loop below checks nothing");
   for (const ns of data.improve.namespaces) {
     assert.ok(html.includes(ns.namespace), `${ns.namespace} is in the JSON and not on the page`);
   }

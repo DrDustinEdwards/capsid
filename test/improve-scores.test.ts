@@ -228,18 +228,25 @@ test("a STUB metric is excluded even when both sides report a value", () => {
   assert.equal(result.improved, false, "a stub metric moved the verdict");
 });
 
-test("a metric measured in bytes cannot drown four measured in counts", () => {
+test("a metric measured in bytes cannot drown one measured in counts", () => {
   // Without the relative scaling and the clamp, a 1KB bundle reduction would
   // outweigh every other metric combined, because its raw magnitude is larger.
+  // The seed document declares three secondary metrics; lint_count is the one
+  // measured in counts.
+  assert.deepEqual(SECONDARY.map((m) => m.metric).sort(), ["bundle_size_bytes", "lint_count", "test_pass_rate"]);
   const bytesOnly = compare(SECONDARY, BASE, { ...BASE, bundle_size_bytes: 99_000 });
   const countsWorse = compare(SECONDARY, BASE, {
     ...BASE,
     bundle_size_bytes: 99_000,
     lint_count: 30,
-    error_count: 12,
   });
   assert.equal(bytesOnly.improved, true);
-  assert.equal(countsWorse.improved, false, "a small byte win outweighed two large count regressions");
+  assert.equal(countsWorse.improved, false, "a small byte win outweighed a large count regression");
+  const contribution = (metric: string) => countsWorse.details.find((d) => d.metric === metric)?.contribution ?? 0;
+  assert.ok(
+    Math.abs(contribution("bundle_size_bytes")) < Math.abs(contribution("lint_count")),
+    "the byte metric's contribution was not smaller than the count metric's"
+  );
 });
 
 test("a base of zero does not divide by zero, and an increase from zero still registers a loss", () => {

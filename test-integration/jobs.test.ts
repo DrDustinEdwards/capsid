@@ -145,6 +145,28 @@ describe("the lifecycle", () => {
       .all<{ actor: string }>();
     expect(new Set((actors.results ?? []).map((r) => r.actor))).toEqual(new Set([SEAT, DRIVER_ACTOR]));
   });
+
+  // The innocent direction of two refusals in test/jobs.test.ts: the swallowed-tag
+  // guard and the skills check. A guard that refuses ordinary work gets deleted rather
+  // than fixed, so each is driven here to a completed row.
+  it("a clean summary that mentions tags and parameter names completes: the tag guard is not a wall", async () => {
+    const id = (await post({ title: "tag guard innocent" })).job!.id;
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+    const summary = "landed it; evidence is in the PR and the result_ref is a document key";
+    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: summary });
+    expect(done.ok, done.refusal).toBe(true);
+    const stored = await row(id);
+    expect(stored?.status).toBe("done");
+    expect(stored?.result_summary).toBe(summary);
+  });
+
+  it("naming no skills at all completes: most jobs have no recommend step", async () => {
+    const id = (await post({ title: "no skills named" })).job!.id;
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "done" });
+    expect(done.ok, done.refusal).toBe(true);
+    expect((await row(id))?.status).toBe("done");
+  });
 });
 
 describe("the refusals", () => {

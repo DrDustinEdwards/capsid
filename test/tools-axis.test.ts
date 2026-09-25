@@ -6,7 +6,7 @@ import { buildServer } from "../src/server.ts";
 import { defaultScopes, allowsToolAction } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { actionArgFor } from "../src/scope.ts";
-import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { toolBlocks } from "./source-files.ts";
 
 // The schemas the server actually serves, as the admin sees them.
@@ -49,8 +49,14 @@ interface ToolResult {
   content: Array<{ text: string }>;
 }
 
-async function callAs(caller: Agent, tool: string, args: Record<string, unknown>, repos = REPOS): Promise<ToolResult> {
-  const server = buildServer(env(repos), caller);
+async function callAs(
+  caller: Agent,
+  tool: string,
+  args: Record<string, unknown>,
+  repos = REPOS,
+  serverEnv: ReturnType<typeof env> = env(repos)
+): Promise<ToolResult> {
+  const server = buildServer(serverEnv, caller);
   const client = new Client({ name: "tools-axis", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -58,6 +64,26 @@ async function callAs(caller: Agent, tool: string, args: Record<string, unknown>
   await client.close();
   await server.close();
   return result;
+}
+
+// GitHub routes for a pr-mode write of src/thing.ts to `full`, so an innocent-direction
+// call can be asserted to SUCCEED. With no routes the call fails on GitHub's side, and
+// a check that only looks for the absence of one refusal passes on that failure.
+function prWriteRoutes(full: string) {
+  return {
+    [`GET /repos/${full}`]: { body: { default_branch: "main" } },
+    [`GET /repos/${full}/git/ref/heads/main`]: { body: { object: { sha: "head-sha" } } },
+    [`POST /repos/${full}/git/refs`]: { status: 201, body: {} },
+    [`GET /repos/${full}/contents/src/thing.ts`]: { status: 404, body: { message: "Not Found" } },
+    [`PUT /repos/${full}/contents/src/thing.ts`]: { body: { commit: { sha: "commit-sha" }, content: { sha: "file-sha" } } },
+    [`POST /repos/${full}/pulls`]: { status: 201, body: { number: 9, html_url: "https://pr" } },
+  };
+}
+
+function succeeded(result: ToolResult): Record<string, unknown> {
+  const text = result.content[0]?.text ?? "";
+  assert.notEqual(result.isError, true, `the call failed: ${text}`);
+  return JSON.parse(text) as Record<string, unknown>;
 }
 
 // The reviewer as scripts/mint-agents.mjs mints it: write grant, can_comment_pr and
@@ -101,10 +127,15 @@ test("PLANT: the same reviewer is REFUSED action merge, for the axis and not onl
 test("THE INNOCENT DIRECTION: the reviewer IS allowed action comment", async () => {
   // Without this, a manage_pr broken for everybody passes both plants above, and the
   // reviewer role would be a credential that cannot do the one thing it exists for.
-  await withFetch({}, async () => {
+  const routes = { "POST /repos/o/r/issues/7/comments": { status: 201, body: { id: 55, html_url: "https://comment" } } };
+  await withFetch(routes, async (calls) => {
     const result = await callAs(reviewer(), "manage_pr", { namespace: "capsid", number: 7, action: "comment", comment: "REVIEW: fine. APPROVE" });
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /unauthorized:/, `the reviewer was refused its own action: ${text}`);
+    const out = succeeded(result);
+    assert.equal(out.action, "comment");
+    assert.equal(out.comment_id, 55);
+    assert.equal(calls.filter((c) => c.method === "POST" && c.path === "/repos/o/r/issues/7/comments").length, 1);
   });
 });
 
@@ -114,10 +145,15 @@ test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the
   const caller = reviewer();
   caller.scopes.tools = ["manage_pr"];
   caller.scopes.flags.can_merge = true;
-  await withFetch({}, async () => {
+  const routes = { "PATCH /repos/o/r/pulls/7": { body: { number: 7, state: "closed", html_url: "https://pr" } } };
+  await withFetch(routes, async (calls) => {
     const result = await callAs(caller, "manage_pr", { namespace: "capsid", number: 7, action: "close" });
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /not scoped to/, `an unqualified list was narrowed anyway: ${text}`);
+    const out = succeeded(result);
+    assert.equal(out.action, "close");
+    assert.equal(out.state, "closed");
+    assert.ok(calls.some((c) => c.method === "PATCH" && c.path === "/repos/o/r/pulls/7"), "the close never reached GitHub");
   });
 });
 
@@ -136,9 +172,12 @@ test("PLANT: an agent scoped to lint.gather is REFUSED mode finalize", async () 
 test("THE INNOCENT DIRECTION: the same caller IS allowed mode gather", async () => {
   const caller = reviewer();
   caller.scopes.tools = ["lint", "lint.gather"];
-  const result = await callAs(caller, "lint", { namespace: "capsid", mode: "gather" });
+  const d1 = fakeD1({ documents: [{ namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core" }] });
+  const result = await callAs(caller, "lint", { namespace: "capsid", mode: "gather" }, REPOS, fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }));
   const text = result.content[0]?.text ?? "";
   assert.doesNotMatch(text, /not scoped to/, `the gather-only caller was refused gather: ${text}`);
+  const out = succeeded(result) as { core?: { body?: string } };
+  assert.equal(out.core?.body, "the core", "gather did not return the namespace's core document");
 });
 
 // ---- the rule itself ---------------------------------------------------------------
@@ -236,7 +275,7 @@ test("THE LABEL 'primary' IS A SELECTOR, NOT A SCOPE VALUE, so passing it is not
   const caller = reviewer();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  await withFetch({}, async () => {
+  await withFetch(prWriteRoutes("DrDustinEdwards/capsid"), async () => {
     const result = await callAs(
       caller,
       "write_repo_file",
@@ -246,6 +285,8 @@ test("THE LABEL 'primary' IS A SELECTOR, NOT A SCOPE VALUE, so passing it is not
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /not scoped to the 'primary' repo/, `a legitimate label was compared to the axis: ${text}`);
     assert.doesNotMatch(text, /unauthorized:/, `the driver was refused its own repo: ${text}`);
+    const out = succeeded(result) as { pr?: { number?: number } };
+    assert.equal(out.pr?.number, 9, "the write did not open its pull request");
   });
 });
 
@@ -253,7 +294,7 @@ test("THE INNOCENT DIRECTION: the driver IS allowed the repo its axis names, wit
   const caller = reviewer();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  await withFetch({}, async () => {
+  await withFetch(prWriteRoutes("DrDustinEdwards/capsid"), async () => {
     const result = await callAs(
       caller,
       "write_repo_file",
@@ -262,15 +303,22 @@ test("THE INNOCENT DIRECTION: the driver IS allowed the repo its axis names, wit
     );
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /unauthorized:/, `the driver was refused the repo it is scoped to: ${text}`);
+    const out = succeeded(result) as { pr?: { number?: number } };
+    assert.equal(out.pr?.number, 9, "the write did not open its pull request");
   });
 });
 
 test("AN AGENT WITH repos '*' IS UNTOUCHED, which is every agent minted before the axis was wired", async () => {
   const caller = reviewer();
   caller.scopes.tools = "*";
-  await withFetch({}, async () => {
+  const routes = {
+    "GET /repos/DrDustinEdwards/anything/contents/": { body: [{ name: "README.md", path: "README.md", type: "file", size: 3 }] },
+  };
+  await withFetch(routes, async () => {
     const result = await callAs(caller, "list_repo_tree", { namespace: "capsid" }, [{ repo: "DrDustinEdwards/anything", label: "primary" }]);
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /not scoped to the .* repo/, `a wildcard axis refused a repo: ${text}`);
+    assert.notEqual(result.isError, true, `the listing failed: ${text}`);
+    assert.ok(text.includes("README.md"), "the listing did not come back");
   });
 });

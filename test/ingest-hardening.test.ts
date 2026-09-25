@@ -244,13 +244,19 @@ test("PLANT: a baseline report must match the run's in-flight attempt", async ()
   // rerun of the baseline job after the run moved on would overwrite the run's
   // baseline metrics with a measurement of something else, and every later
   // comparison is against those numbers.
-  const { env } = await ingestEnv({}, [{ ...RUN, current_attempt: "capsid-r1-a01" }]);
+  const { d1, env } = await ingestEnv({}, [{ ...RUN, current_attempt: "capsid-r1-a01" }]);
   const result = await ingestScore(
     env,
     scoreReport({ attempt_id: "capsid-r1-baseline", head_sha: "base000" }),
     AT
   );
-  assert.match(result.message, /not awaiting its baseline/);
+  // A stale baseline is IGNORED (ok, so a retrying sender stops), not ingested. The
+  // state below is what shows it was ignored.
+  assert.match(result.message, /not awaiting its baseline.*ignored/);
+  assert.equal(result.kept, undefined, "and nothing may be kept");
+  assert.equal(d1.rows.improve_runs[0].status, "awaiting-score", "the run must not advance");
+  assert.equal(d1.rows.improve_runs[0].current_attempt, "capsid-r1-a01", "the run's in-flight attempt must not change");
+  assert.equal(d1.rows.improve_runs[0].baseline_metrics ?? null, null, "the baseline metrics must not be overwritten");
 });
 
 test("PLANT: a baseline report must have measured the run's base commit", async () => {

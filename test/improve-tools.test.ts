@@ -17,11 +17,12 @@ import { seedScoresDoc } from "./seed-scores.ts";
 
 const SCORES = seedScoresDoc("capsid");
 
-async function connect(grant: ToolGrant) {
+async function connect(grant: ToolGrant, opts: { seedToken?: boolean } = {}) {
   const d1 = fakeD1({
     documents: [{ namespace: "capsid", path: "improve/scores.md", title: "scores", body: SCORES, type: "reference" }],
   });
   const kv = fakeKv({
+    seedToken: opts.seedToken,
     seed: {
       improve_mode: "api",
       "improve:anchor:capsid": await anchorChecksum(parseScoresDoc("capsid", SCORES)),
@@ -91,6 +92,7 @@ test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE ROSTER, and names the r
     await close();
     assert.equal(result.isError, true, "an off-roster namespace was accepted");
     assert.match(result.content[0].text, /not on the improve roster/);
+    assert.ok(ROSTER.length > 0, "the roster is empty, so the refusal was not checked for any name");
     for (const namespace of ROSTER) {
       assert.match(result.content[0].text, new RegExp(namespace), `the refusal does not name ${namespace}`);
     }
@@ -99,8 +101,14 @@ test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE ROSTER, and names the r
 });
 
 test("improve_run with dry_run WRITES NOTHING through the tool surface either", async () => {
-  await withFetch({}, async (calls) => {
-    const { client, d1, kv, close } = await connect("write");
+  // The repo is reachable, so the preview really reads GitHub (the default branch and
+  // its sha). What it must not do is write there: no branch, no dispatch.
+  const routes = {
+    "GET /repos/owner/repo": { body: { default_branch: "main" } },
+    "GET /repos/owner/repo/git/ref/heads/main": { body: { object: { sha: "a".repeat(40) } } },
+  };
+  await withFetch(routes, async (calls) => {
+    const { client, d1, kv, close } = await connect("write", { seedToken: true });
     const result = (await client.callTool({
       name: "improve_run",
       arguments: { namespace: "capsid", dry_run: true },
@@ -109,9 +117,12 @@ test("improve_run with dry_run WRITES NOTHING through the tool surface either", 
     assert.ok(!result.isError, `dry_run errored: ${result.content?.[0]?.text}`);
     const parsed = JSON.parse(result.content[0].text) as { dry_run: boolean; opened: Array<{ note: string }> };
     assert.equal(parsed.dry_run, true);
-    assert.match(parsed.opened[0].note, /would open a run/);
+    assert.equal(parsed.opened.length, 1);
+    assert.match(parsed.opened[0].note, new RegExp(`would open a run and baseline ${"a".repeat(40)}`));
     assert.deepEqual(d1.recorded, [], "a dry run through the tool wrote statements");
     assert.deepEqual(kv.puts, [], "a dry run through the tool wrote to KV");
-    assert.deepEqual(calls, [], "a dry run through the tool made a network call");
+    assert.ok(calls.length > 0, "the preview never read GitHub, so no write could have been observed");
+    const writes = calls.filter((c) => c.method !== "GET");
+    assert.deepEqual(writes, [], "a dry run through the tool made a write call to GitHub");
   });
 });

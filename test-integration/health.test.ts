@@ -44,11 +44,10 @@ describe("/health", () => {
   it("reports the newest applied migration, so a half-migrated deploy is visible", async () => {
     const response = await SELF.fetch("https://capsid.test/health");
     const body = (await response.json()) as { schema_version?: string | null };
-    // Derived from migrations/, not hardcoded: the newest file is what the endpoint
-    // must name, so adding a migration cannot silently leave this stale.
-    expect(typeof body.schema_version === "string" || body.schema_version === null).toBe(true);
-    if (typeof body.schema_version === "string") {
-      expect(body.schema_version).toMatch(/^\d{4}_/);
-    }
+    // Derived from migrations/, not hardcoded: the newest file the setup applied is
+    // what the endpoint must name, so adding a migration cannot leave this stale.
+    const newest = env.TEST_MIGRATIONS.at(-1);
+    expect(newest, "no migrations were handed to the setup file").toBeDefined();
+    expect(body.schema_version).toBe(newest!.name);
   });
 });

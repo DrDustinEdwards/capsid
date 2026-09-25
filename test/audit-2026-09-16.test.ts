@@ -238,11 +238,21 @@ test("the same call WITH confirm: true overwrites, snapshotting first", async ()
 test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation", async () => {
   // There is nothing to overwrite, so asking would turn the daily report into a
   // prompt and the cron that drives it has nobody to answer.
-  const { client, batches, close } = await connect("write", reportRows(false));
+  const { client, batches, recorded, close } = await connect("write", reportRows(false));
   try {
     const result = await call(client, "lint", { namespace: "capsid", mode: "report" });
     assert.ok(!result.isError, text(result));
     assert.ok(batches.length > 0, "the first report of the day was not written at all");
+    const written = recorded.find((r) => /INSERT INTO documents/.test(r.sql));
+    assert.ok(written, "no document write was issued for the report");
+    assert.equal(written.params[0], "capsid");
+    assert.equal(written.params[1], TODAY, "the report was written somewhere other than today's report path");
+    assert.match(String(written.params[3]), /^# Truth report - capsid/);
+    assert.match(String(written.params[3]), /integrity: \d+%/);
+    assert.ok(
+      recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report" && r.params[3] === TODAY),
+      "the first report skipped the audit log"
+    );
   } finally {
     await close();
   }

@@ -29,23 +29,25 @@ test("discovers models and collapses dated snapshots", () => {
   assert.ok(slugs.length > 0, "parsed zero models means the matcher broke");
 });
 
-// scanner-rule: conventions-verification, a list spelled in two places is derived and compared. The other copy is in the claude-skills repo, read as text
-test("THE WORKER AND THE REPO SCRIPT AGREE ON WHAT A MODEL ID LOOKS LIKE", async () => {
+// The MODEL_ID regex from DrDustinEdwards/claude-skills scripts/model-guides.mjs,
+// vendored as of 2026-09-25. The test used to read that file from a path on one
+// machine and pass with no assertion when it was absent, so it never ran in CI.
+// When the claude-skills copy changes, update this line and src/skills-refresh.ts
+// together.
+const CLAUDE_SKILLS_MODEL_ID = String.raw`/\bclaude-(fable|mythos|opus|sonnet|haiku)-\d[a-z0-9-]*/g`;
+
+// scanner-rule: conventions-verification, a list spelled in two places is derived and compared. The other copy is vendored above from the claude-skills repo
+test("THE WORKER AND THE REPO SCRIPT AGREE ON WHAT A MODEL ID LOOKS LIKE", () => {
   // The same discovery runs in two places: here, and in claude-skills'
   // scripts/model-guides.mjs. A list spelled twice is a list that drifts, and the
   // copy nobody looked at is the one that stops seeing a new model family.
-  const { readFileSync, existsSync } = await import("node:fs");
-  const path = "C:/Users/email/dev/claude-skills/scripts/model-guides.mjs";
-  if (!existsSync(path)) {
-    assert.ok(true, "claude-skills is not checked out beside this repo; skipped");
-    return;
-  }
-  const script = readFileSync(path, "utf8");
-  const theirs = /const MODEL_ID = (\/.+\/g);/.exec(script);
-  assert.ok(theirs, "scripts/model-guides.mjs no longer declares MODEL_ID");
   const mine = /const MODEL_ID = (\/.+\/g);/.exec(sourceFile("skills-refresh.ts"));
   assert.ok(mine, "src/skills-refresh.ts no longer declares MODEL_ID");
-  assert.equal(mine[1], theirs[1], "the Worker and the repo script disagree about what a model id looks like");
+  assert.equal(mine[1], CLAUDE_SKILLS_MODEL_ID, "the Worker and the claude-skills script disagree about what a model id looks like");
+  // And the Worker finds every family that pattern names.
+  const families = ["fable", "mythos", "opus", "sonnet", "haiku"];
+  const overview = families.map((f) => `| x | \`claude-${f}-9-9\` |`).join("\n");
+  assert.deepEqual(discoverModels(overview), families.map((f) => `${f}-9-9`).sort());
 });
 
 test("an unset key takes the documented default and runs", async () => {

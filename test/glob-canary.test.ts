@@ -23,7 +23,8 @@ test("package.json runs the test suite by glob, not by an enumerated list", () =
   assert.match(script, /test\/\*\.test\.ts/, "the test script no longer uses a glob, so a new test file can be skipped");
   // The enumeration is gone, not merely supplemented. A glob appended to a hand
   // list would run everything twice and hide the regression this guards.
-  const enumerated = script.match(/test\/[a-z-]+\.test\.ts/g) ?? [];
+  // [\w.-]+ so a name with digits (audit-2026-09-16.test.ts) is caught as well.
+  const enumerated = script.match(/test\/[\w.-]+\.test\.ts/g) ?? [];
   assert.deepEqual(
     enumerated,
     [],

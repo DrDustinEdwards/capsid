@@ -158,6 +158,11 @@ test("END TO END: the admin still maps namespaces", async () => {
   });
   const text = result.content.map((c) => c.text).join("");
   assert.doesNotMatch(text, /admin only/, `the admin was refused its own tool: ${text}`);
+  assert.notEqual(result.isError, true, `the admin's update failed: ${text}`);
+  const out = JSON.parse(text) as { namespace: string; action: string; repos: Array<{ repo: string; label: string }> };
+  assert.equal(out.namespace, "capsid");
+  assert.equal(out.action, "updated");
+  assert.deepEqual(out.repos, [{ repo: "DrDustinEdwards/capsid", label: "primary" }]);
 });
 
 // ---- half two: the repos axis refuses independently of the mapping -------------

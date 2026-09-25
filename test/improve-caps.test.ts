@@ -67,7 +67,9 @@ test("a free repo contributes NOTHING to the meter, however long its scorer took
 });
 
 test("every BILLED namespace does contribute, and carries a non-zero estimate", () => {
-  for (const ns of ROSTER.filter((n) => !isFreeOfCharge(n))) {
+  const billed = ROSTER.filter((n) => !isFreeOfCharge(n));
+  assert.ok(billed.length > 0, "no roster namespace is billed, so this checks nothing");
+  for (const ns of billed) {
     assert.ok(estimatedScorerMinutes(ns) > 0, `${ns} has no dispatch estimate`);
     assert.equal(meteredMinutes(ns, 4), 4, `${ns} did not meter its reported minutes`);
   }

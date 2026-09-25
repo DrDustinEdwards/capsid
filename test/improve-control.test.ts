@@ -44,7 +44,8 @@ test("pause sets the key with a reason and reads it back; unpause clears it", as
   assert.ok(audited(d1));
 
   const u = await improveControl(env, "unpause", { namespace: "capsid" });
-  if (u.action === "unpause") assert.equal(u.paused.capsid, null);
+  if (u.action !== "unpause") assert.fail(`unpause answered as ${u.action}`);
+  assert.equal(u.paused.capsid, null);
   assert.equal(kv.store.has(pausedKey("capsid")), false);
   assert.equal(await pausedReason(kv.kv, "capsid"), null);
 });
@@ -52,8 +53,10 @@ test("pause sets the key with a reason and reads it back; unpause clears it", as
 test('pause "all" pauses every roster namespace with the default reason', async () => {
   const { env, kv } = harness();
   const r = await improveControl(env, "pause", { namespace: "all" });
+  assert.ok(ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
   for (const ns of ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
-  if (r.action === "pause") assert.deepEqual(r.namespaces.slice().sort(), [...ROSTER].sort());
+  if (r.action !== "pause") assert.fail(`pause answered as ${r.action}`);
+  assert.deepEqual(r.namespaces.slice().sort(), [...ROSTER].sort());
 });
 
 test("pause rejects a non-roster namespace and a missing target", async () => {

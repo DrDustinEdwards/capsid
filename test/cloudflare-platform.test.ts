@@ -23,12 +23,17 @@ function filesUnder(dir: string, ext: RegExp): Array<{ path: string; text: strin
 const LEGACY_KV_ROUTE = ["workers", "namespaces"].join("/");
 
 test(`no Cloudflare API call uses the legacy KV route /${LEGACY_KV_ROUTE}/ (dead 2026-10-15)`, () => {
-  const everywhere = [
-    ...filesUnder("scripts", /\.mjs$/),
-    ...filesUnder("src", /\.ts$/),
-    ...filesUnder(".github/workflows", /\.ya?ml$/),
-    ...filesUnder("test", /\.ts$/).filter((f) => !f.path.endsWith("cloudflare-platform.test.ts")),
-  ];
+  const groups = {
+    scripts: filesUnder("scripts", /\.mjs$/),
+    src: filesUnder("src", /\.ts$/),
+    workflows: filesUnder(".github/workflows", /\.ya?ml$/),
+    test: filesUnder("test", /\.ts$/).filter((f) => !f.path.endsWith("cloudflare-platform.test.ts")),
+  };
+  // A moved directory or a wrong extension would scan nothing and pass.
+  for (const [name, files] of Object.entries(groups)) {
+    assert.ok(files.length > 0, `the scan found no files under ${name}, so it checks nothing there`);
+  }
+  const everywhere = Object.values(groups).flat();
   for (const file of everywhere) {
     assert.ok(
       !file.text.includes(`/${LEGACY_KV_ROUTE}/`),

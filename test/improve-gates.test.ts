@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { anchorDriftVerdict, driftVerdict, monitorAttempt, pathMonitor } from "../src/improve-gates.ts";
 import { parseScoresDoc } from "../src/improve-scores.ts";
-import { DRIFT_RUN_WINDOW, protectedHits } from "../src/improve-schema.ts";
+import { DRIFT_RUN_WINDOW, PROTECTED_PATH_PATTERNS, protectedHits } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import { fakeEnv } from "./fakes.ts";
 import { IMPROVE_RUN_DEFAULTS } from "./improve-fakes.ts";
@@ -78,10 +78,13 @@ test("one protected path among many innocent ones still flags", () => {
 });
 
 test("protectedHits reports one reason per path, not one per pattern", () => {
-  // src/improve-gates.ts matches both the improve-source pattern and nothing else;
-  // a path that matched two patterns must still count once, or the message reads
-  // as if more files were touched than were.
-  const hits = protectedHits(["src/improve-gates.ts"]);
+  // test/foo.test.ts matches two patterns (a test directory and a test file). It
+  // must still count once, or the message reads as if more files were touched
+  // than were.
+  const path = "test/foo.test.ts";
+  const matching = PROTECTED_PATH_PATTERNS.filter(({ pattern }) => pattern.test(path));
+  assert.ok(matching.length >= 2, `the fixture matches ${matching.length} pattern(s), so it cannot tell one reason per path from one per pattern`);
+  const hits = protectedHits([path]);
   assert.equal(hits.length, 1);
 });
 
