@@ -64,6 +64,16 @@ test("an unparseable stamp is a failure, not a NaN that compares false", () => {
   assert.equal(r.passed, false);
 });
 
+test("a stamp in the future FAILS: a negative age is not fresh", () => {
+  // Before, now - last_ok came out negative and passed the "under 26h" test.
+  const r = checkBackupFreshness(health("2026-09-09T12:00:00Z"), { assert: true, now: NOW });
+  assert.equal(r.passed, false);
+  assert.equal(r.outcome, "unknown");
+  assert.match(r.detail, /24h in the future/);
+  // Inside the one hour clock skew tolerance it still passes.
+  assert.equal(checkBackupFreshness(health("2026-09-08T12:30:00Z"), { assert: true, now: NOW }).passed, true);
+});
+
 test("a non-scheduled run SKIPS, says so, and never reports a pass as an assertion", () => {
   const r = checkBackupFreshness(health(null), { assert: false, now: NOW });
   assert.equal(r.outcome, "skipped");

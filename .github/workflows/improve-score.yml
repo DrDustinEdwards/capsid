@@ -135,9 +135,10 @@ jobs:
           # every run. Generated here from wrangler.jsonc.example plus the pinned ids in
           # scripts/bindings.mjs, with NO NETWORK and NO SECRETS: a dry run bundles, it
           # does not talk to the account. Job A holds no credential and this does not
-          # change that (ruled 2026-09-08).
+          # change that (ruled 2026-09-08). It writes wrangler.dryrun.jsonc, never the
+          # wrangler.jsonc a deploy reads, so the dry run names it.
           node scripts/dry-run-config.mjs
-          BUNDLE_BYTES=$(npx wrangler deploy --dry-run --outdir=.improve-build > /dev/null 2>&1 && du -sb .improve-build/index.js 2>/dev/null | cut -f1 || echo "")
+          BUNDLE_BYTES=$(npx wrangler deploy --dry-run --config wrangler.dryrun.jsonc --outdir=.improve-build > /dev/null 2>&1 && du -sb .improve-build/index.js 2>/dev/null | cut -f1 || echo "")
           BUILD_PASSES="${BUILD_PASSES}" RATE="${RATE}" LINT_COUNT="${LINT_COUNT}" BUNDLE_BYTES="${BUNDLE_BYTES}" node -e '
             const n=(v)=>(v===undefined||v===""?null:Number(v));
             process.stdout.write(JSON.stringify({
