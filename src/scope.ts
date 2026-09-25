@@ -330,19 +330,6 @@ interface RegisteredConfig {
 
 type ToolHandler = (...args: unknown[]) => unknown;
 
-// THE REGISTRAR GATE. Wraps the registration method ONCE, before any tool module
-// runs, so every registration that follows is guarded whether or not its author
-// thought about it. That is the property the old per-tool line could not have: this
-// cannot be forgotten by a new tool, because a new tool has to be registered to
-// exist.
-//
-// It wraps the server rather than replacing the call sites deliberately. Every
-// registration stays a literal call on the server object, which is what the source
-// guards read (test/invariants.test.ts, test/tool-annotations.test.ts and
-// test/counts.test.ts all parse those calls by that exact spelling), so the
-// enforcement point lands without blinding the scanners that check the surface it
-// enforces over. This module must never spell that call itself, for the same reason:
-// a scanner counting registrations would count this one.
 // WHICH ARGUMENT NAMES WHAT A TOOL IS BEING ASKED TO DO.
 //
 // Almost every action tool spells it `action`; lint spells it `mode`, because its
@@ -398,6 +385,19 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
   return Object.hasOwn(DEFAULT_ACTION, tool) ? DEFAULT_ACTION[tool] : undefined;
 }
 
+// THE REGISTRAR GATE. Wraps the registration method ONCE, before any tool module
+// runs, so every registration that follows is guarded whether or not its author
+// thought about it. That is the property the old per-tool line could not have: this
+// cannot be forgotten by a new tool, because a new tool has to be registered to
+// exist.
+//
+// It wraps the server rather than replacing the call sites deliberately. Every
+// registration stays a literal call on the server object, which is what the source
+// guards read (test/invariants.test.ts, test/tool-annotations.test.ts and
+// test/counts.test.ts all parse those calls by that exact spelling), so the
+// enforcement point lands without blinding the scanners that check the surface it
+// enforces over. This module must never spell that call itself, for the same reason:
+// a scanner counting registrations would count this one.
 export function guardRegistrations(server: McpServer, agent: Agent): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
