@@ -188,7 +188,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
     // for. And no write to improve:best, even on a late keep: best is what the next
     // run branches from, and this attempt's base is now several attempts stale.
     if (isUnjudged(attempt.status)) {
-      return await recordLateScore(env, run, attempt, report, now);
+      return await recordLateScore(env, run, attempt, report);
     }
     return {
       ok: true,
@@ -221,7 +221,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
       ? holdout.refusal
       : null;
   if (environmentFailure) {
-    return await recordUnjudged(env, run, attempt, report, environmentFailure, now);
+    return await recordUnjudged(env, run, attempt, report, environmentFailure);
   }
 
   const { doc } = await loadScores(env, run.namespace);
@@ -380,8 +380,7 @@ async function recordUnjudged(
   run: RunRow,
   attempt: AttemptRow,
   report: ScoreReport,
-  why: string,
-  now: Date
+  why: string
 ): Promise<IngestResult> {
   const reason = `unjudged: ${why}`;
   const consecutive = run.consecutive_unjudged + 1;
@@ -453,8 +452,7 @@ async function recordLateScore(
   env: Env,
   run: RunRow,
   attempt: AttemptRow,
-  report: ScoreReport,
-  now: Date
+  report: ScoreReport
 ): Promise<IngestResult> {
   const manifest = await readHoldoutManifest(env, run.namespace);
   const holdout = checkHoldout(manifest, report);

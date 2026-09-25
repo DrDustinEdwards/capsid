@@ -24,7 +24,7 @@ function reply(result: JobResult) {
 }
 
 export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
-  const { env, db, agent } = ctx;
+  const { env, agent } = ctx;
 
   // THE WORK QUEUE'S ONE TOOL, a ruled exception to hard rule 1 taking the surface
   // from 30 to 31 (capsid/decisions.md, 2026-09-10). Seven actions on one tool
@@ -227,9 +227,4 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
       }
     }
   );
-
-  // db is destructured for parity with the other tool modules, which take their
-  // reads off it directly. The queue's reads go through src/jobs.ts so the
-  // transitions and their mirrors stay in one file.
-  void db;
 }
