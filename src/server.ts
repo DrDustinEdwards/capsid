@@ -48,9 +48,6 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // path where scopes do not apply.
 export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): McpServer {
   const agent = typeof caller === "string" ? legacyAgent(caller, actor) : caller;
-  // One definition of "may this caller write", so no tool can invent its own.
-  const grant: ToolGrant = agent.scopes.grants.includes("write") ? "write" : "read";
-  const mayWrite = grant === "write";
   const server = new McpServer(SERVER_INFO);
   const db = env.DB;
 
@@ -70,8 +67,6 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   const ctx: ToolCtx = {
     env,
     db,
-    grant,
-    mayWrite,
     actor: agent.actor,
     agent,
     // The handler half of the one enforcement point. The registrar below covers what

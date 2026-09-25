@@ -120,8 +120,7 @@ test("A HEALTHY SURFACE PRODUCES NO FINDING AT ALL", () => {
       {
         budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 10, cost_usd: 1 }, exceeded: false, reason: null },
         namespaces: [{ namespace: "capsid", paused: null }],
-      } as never,
-      NOW
+      } as never
     ),
     []
   );
@@ -177,8 +176,7 @@ test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
       {
         budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false, reason: null },
         namespaces: [{ namespace: "foxing", paused }],
-      } as never,
-      NOW
+      } as never
     );
   assert.deepEqual(report("Dustin is rewriting the scorer"), []);
   assert.deepEqual(report(null), []);
@@ -203,8 +201,7 @@ test("a pause set by either drift gate is a finding", () => {
       {
         budget: { month: "2026-09", caps: {}, spend: {}, exceeded: false, reason: null },
         namespaces: [{ namespace: "foxing", paused: loopPauseReason(reason) }],
-      } as never,
-      NOW
+      } as never
     );
     assert.deepEqual(found.map((f) => f.fingerprint), ["paused-foxing"], `not reported: ${reason}`);
   }
@@ -221,8 +218,7 @@ test("a budget over the warning fraction is a finding, per cap", () => {
         reason: null,
       },
       namespaces: [],
-    } as never,
-    NOW
+    } as never
   );
   assert.deepEqual(found.map((f) => f.fingerprint).sort(), ["budget-actions_minutes_month-2026-09", "budget-model_usd_month-2026-09"]);
   // Just under the line is not a finding, so the threshold is a line rather than a mood.
@@ -236,8 +232,7 @@ test("a budget over the warning fraction is a finding, per cap", () => {
         reason: null,
       },
       namespaces: [],
-    } as never,
-    NOW
+    } as never
   );
   assert.deepEqual(under, []);
 });
@@ -329,8 +324,7 @@ test("every fingerprint the checks produce has an owning check", () => {
       {
         budget: { month: "2026-09", caps: { actions_minutes_month: 10, model_usd_month: 10 }, spend: { ci_minutes: 10, cost_usd: 10 }, exceeded: true, reason: null },
         namespaces: [{ namespace: "foxing", paused: loopPauseReason("budget") }],
-      } as never,
-      NOW
+      } as never
     ),
     ...mirrorFindings("capsid", null, [], NOW),
     ...mirrorFindings("capsid", stale, [], NOW),

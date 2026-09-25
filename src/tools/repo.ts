@@ -65,13 +65,6 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
   // open to any admitted client; writes require the write grant (TOOL_GRANTS in
   // src/scope.ts). The target repo is resolved per namespace from the namespaces
   // table.
-  const guarded = async (fn: () => Promise<unknown>) => {
-    try {
-      return ok(await fn());
-    } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
-    }
-  };
 
   // THE REPOS AXIS, ASKED ABOUT THE REPO THIS CALL ACTUALLY REACHES.
   //
