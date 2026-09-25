@@ -7,6 +7,7 @@ import { defaultScopes } from "../src/agents-schema";
 import { loadRecordRows } from "../src/agent-record";
 import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
 import { splitSignedTask, verifyTaskDoc } from "../src/improve-task";
+import { MAX_TITLE } from "../src/limits";
 
 // THE WORK QUEUE, AGAINST A REAL D1.
 //
@@ -574,6 +575,60 @@ describe("the resume note", () => {
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     expect(after?.body).toContain("approved the migration");
+  });
+
+  // THE SEAT'S FULL NOTE (requested by the seat, 2026-09-25). reason is bounded at
+  // MAX_TITLE and holds one line; an approval carrying rulings or a plan went nowhere,
+  // and the driver received "gave the six rulings" without the rulings.
+  const LONG_NOTE = [
+    "Approved the whole report. The six rulings, in order:",
+    ...Array.from({ length: 6 }, (_, i) =>
+      `${i + 1}. Ruling ${i + 1}: keep the existing route for item ${i + 1}, add a behavior test that fails without the change, and open one pull request per item so each can be reviewed and merged on its own schedule.`
+    ),
+    "",
+    "Plan: work the items in the order above. Stop at the first gate and block with the exact command. Do not merge anything; the seat merges.",
+    "Last paragraph, the one a truncation would lose: the sixth ruling outranks the report where they disagree.",
+  ].join("\n");
+
+  it("a note longer than a reason reaches resume, claim, heartbeat, list and the mirror in full", async () => {
+    expect(LONG_NOTE.length).toBeGreaterThan(MAX_TITLE);
+    const id = await blockedJob("full note reaches everyone");
+    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the report and gave the six rulings", {
+      note: LONG_NOTE,
+    });
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect(resumed.resume_note?.reason).toBe("approved the report and gave the six rulings");
+    expect(resumed.resume_note?.note).toBe(LONG_NOTE);
+
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(beat.ok, beat.refusal).toBe(true);
+    expect(beat.resume_note?.note).toBe(LONG_NOTE);
+
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).resume_note?.note).toBe(LONG_NOTE);
+
+    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
+    expect(doc?.body).toContain(LONG_NOTE);
+
+    const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
+    expect((await expireJobLeases(jobsEnv(), later)).requeued).toEqual([id]);
+    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    expect(claimed.resume_note?.note).toBe(LONG_NOTE);
+
+    // The mirror rewritten by the claim reads the note back from the audit row.
+    const after = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
+    expect(after?.body).toContain(LONG_NOTE);
+  });
+
+  it("a resume without a note carries no note", async () => {
+    const id = await blockedJob("no note");
+    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "one line is enough");
+    expect(resumed.resume_note?.note).toBeUndefined();
+    expect((await heartbeatJob(jobsEnv(), DRIVER, NOW, id)).resume_note?.note).toBeUndefined();
   });
 
   it("the newest resume wins", async () => {
