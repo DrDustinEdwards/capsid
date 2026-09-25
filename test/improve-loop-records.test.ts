@@ -8,6 +8,7 @@ import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { BUDGET_KEY, META_LAST_KEY } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import { runEvaluationCycle } from "../src/skills-evaluate.ts";
+import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, sseChange } from "./improve-fakes.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
@@ -38,6 +39,8 @@ async function harness(opts: Partial<FakeD1Options> = {}, kvSeed: Record<string,
     HOLDOUT: fakeR2({}).bucket,
     MEDIA: fakeR2({}).bucket,
     ANTHROPIC_API_KEY: "sk-test",
+    // Jobs are signed when posted; without a secret postJob refuses.
+    IMPROVE_SCORE_SECRET: "lorem-test-secret",
     GITHUB_APP_CLIENT_ID: "x",
     GITHUB_APP_PRIVATE_KEY: "x",
   });
@@ -48,7 +51,7 @@ async function harness(opts: Partial<FakeD1Options> = {}, kvSeed: Record<string,
 
 const KEPT = { ...IMPROVE_ATTEMPT_DEFAULTS, id: "run-1-a01", run_id: "run-1", status: "kept", kept: 1, branch: "improve/run-1-a01", change_summary: "a kept change" };
 
-async function finalizeWithFailingPr(advancedAt: string) {
+async function finalizeWithFailingPr(advancedAt: string, passes = 1) {
   const { d1, env } = await harness(
     { improveRuns: [{ ...IMPROVE_RUN_DEFAULTS, status: "finalizing", attempts: 1, kept: 1, started: "2026-09-01 07:00:00", advanced_at: advancedAt }], improveAttempts: [KEPT] },
     // The meta-loop is not under test here.
@@ -57,10 +60,17 @@ async function finalizeWithFailingPr(advancedAt: string) {
   let outcome: Awaited<ReturnType<typeof finalizeRun>> | undefined;
   // No GitHub route, so openPr fails.
   await withFetch({}, async () => {
-    outcome = await finalizeRun(env, d1.rows.improve_runs[0] as unknown as RunRow, NOW);
+    for (let i = 0; i < passes; i++) {
+      // A later pass over the same run finds it in finalizing again, as a pass that
+      // raced the one that advanced it would.
+      d1.rows.improve_runs[0].status = "finalizing";
+      outcome = await finalizeRun(env, { ...d1.rows.improve_runs[0], advanced_at: advancedAt } as unknown as RunRow, NOW);
+    }
   });
   return { d1, outcome: outcome! };
 }
+
+const PAST_WINDOW = () => new Date(NOW.getTime() - PR_RETRY_WINDOW_MS - 60_000).toISOString().replace("T", " ").slice(0, 19);
 
 test("a failed pull request is retried while the run is inside the retry window", async () => {
   const { d1, outcome } = await finalizeWithFailingPr("2026-09-01 08:05:00");
@@ -70,9 +80,17 @@ test("a failed pull request is retried while the run is inside the retry window"
   assert.equal(d1.rows.improve_runs[0].advanced_at, "2026-09-01 08:05:00", "the retry moved the window's start");
 });
 
-test("past the retry window the run finishes with the failure in its note and its summary", async () => {
-  const entered = new Date(NOW.getTime() - PR_RETRY_WINDOW_MS - 60_000).toISOString().replace("T", " ").slice(0, 19);
-  const { d1 } = await finalizeWithFailingPr(entered);
+test("the retry window is short: fifteen minutes", () => {
+  assert.equal(PR_RETRY_WINDOW_MS, 15 * 60 * 1000);
+});
+
+test("inside the retry window no job is posted", async () => {
+  const { d1 } = await finalizeWithFailingPr("2026-09-01 08:05:00");
+  assert.equal(d1.rows.jobs.length, 0, "a job was posted while the loop was still retrying the open itself");
+});
+
+test("past the retry window the run finishes with the failure recorded and ONE job posted to open the PR", async () => {
+  const { d1 } = await finalizeWithFailingPr(PAST_WINDOW());
   const run = d1.rows.improve_runs[0];
   assert.equal(run.status, "done");
   assert.match(String(run.note), /the pull request for branch improve\/run-1-a01 could not be opened/);
@@ -80,6 +98,28 @@ test("past the retry window the run finishes with the failure in its note and it
   assert.ok(summary, "no run summary was written");
   assert.match(String(summary.params[3]), /^- PR: FAILED, the pull request for branch improve\/run-1-a01/m);
   assert.doesNotMatch(String(summary.params[3]), /nothing was kept/, "a run with kept work said nothing was kept");
+
+  // The job: in the run's namespace, posted as the watcher through the queue's post
+  // path, naming the branch and what failed.
+  assert.equal(d1.rows.jobs.length, 1, "the failed open was not handed to anyone");
+  const job = d1.rows.jobs[0];
+  assert.equal(job.namespace, "capsid");
+  assert.equal(job.posted_by, WATCHER_ACTOR);
+  assert.equal(job.status, "queued");
+  assert.match(String(job.title), /improve\/run-1-a01/);
+  assert.match(String(job.body), /improve\/run-1-a01/);
+  assert.match(String(job.body), /could not be opened/);
+  // A title ending in [fingerprint] would be read as a watcher finding, and the
+  // watcher clears a finding no check owns on its next pass.
+  assert.doesNotMatch(String(job.title), /\[[^\]]+\]\s*$/);
+  assert.match(String(run.note), new RegExp(`posted ${String(job.id)} to open it`), "the run does not say a job was posted");
+});
+
+test("a second pass over the same run does not post a duplicate job", async () => {
+  const { d1 } = await finalizeWithFailingPr(PAST_WINDOW(), 2);
+  assert.equal(d1.rows.jobs.length, 1, "the second pass posted a second job for the same branch");
+  assert.equal(d1.rows.improve_runs[0].status, "done");
+  assert.match(String(d1.rows.improve_runs[0].note), /already has an open job titled/);
 });
 
 // ---- E2-15: which skills an attempt is offered ---------------------------------

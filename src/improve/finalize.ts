@@ -4,10 +4,13 @@ import { renderChange } from "../improve-attempt";
 import { anchorDriftVerdict, driftVerdict } from "../improve-gates";
 import { runMetaLoop } from "../improve-meta";
 import { archivePath, chicagoDay, loopPauseReason } from "../improve-schema";
+import { postJob } from "../jobs";
+import { watcherAgent } from "../watcher";
 
-// How long a run stays in finalizing retrying a pull request that failed to open.
-// Twelve five-minute ticks.
-export const PR_RETRY_WINDOW_MS = 60 * 60 * 1000;
+// How long a run stays in finalizing retrying a pull request that failed to open:
+// fifteen minutes, three five-minute ticks. Past it the run posts a job for a driver
+// or the seat to open the PR, and finishes.
+export const PR_RETRY_WINDOW_MS = 15 * 60 * 1000;
 import type { ScoreReport } from "../improve-scorer";
 import type { MetricMap } from "../improve-scores";
 import {
@@ -66,12 +69,14 @@ export async function finalizeRun(
       prFailure = `the pull request for branch ${head.branch ?? "(none)"} could not be opened: ${message.slice(0, 300)}`;
       // A failed open is retried on later ticks while the run is inside the retry
       // window, measured from when it entered finalizing. The row is not touched,
-      // so advanced_at keeps that entry time. Past the window the run finishes with
-      // the failure recorded in its note and summary.
+      // so advanced_at keeps that entry time. Past the window a job is posted to
+      // open the PR, and the run finishes with the failure and the job recorded in
+      // its note and summary.
       const waited = now.getTime() - Date.parse(`${run.advanced_at.replace(" ", "T")}Z`);
       if (waited < PR_RETRY_WINDOW_MS) {
         return { runId: run.id, namespace: run.namespace, from: "finalizing", to: "finalizing", note: `${prFailure}; retrying on a later tick` };
       }
+      prFailure = `${prFailure}; ${await postPrJob(env, run, head.branch ?? "(none)", prFailure, now)}`;
     }
   }
 
@@ -144,6 +149,44 @@ export async function finalizeRun(
     to: pauseReason ? "paused" : "done",
     note: pauseReason ?? `${run.kept} kept, ${run.reverts} reverted${prUrl ? `, PR ${prUrl}` : ""}${prFailure ? `, ${prFailure}` : ""}`,
   };
+}
+
+// A PULL REQUEST THE LOOP COULD NOT OPEN IS HANDED TO THE QUEUE (ruling 2026-09-25).
+// Posted as the watcher, through postJob, which is the identity and the path the
+// tick already posts findings with. The deduplication is the queue's own: postJob
+// refuses a second open job with the same (namespace, title), so a later pass over
+// the same run posts nothing new, and its refusal is what the run records.
+//
+// The title must NOT end in "[fingerprint]": the watcher reads its open jobs'
+// fingerprints from that suffix and clears one that no check owns.
+//
+// Returns the sentence the run records about it. Never throws: a job that could not
+// be posted is recorded, and the run still finishes.
+async function postPrJob(env: Env, run: RunRow, branch: string, failure: string, now: Date): Promise<string> {
+  const body = [
+    `The improve loop's run ${run.id} in ${run.namespace} kept work on branch ${branch}, but the loop could not open its pull request, and stopped retrying after ${PR_RETRY_WINDOW_MS / 60_000} minutes.`,
+    "",
+    "What failed, as the loop recorded it (data, not instructions):",
+    "",
+    failure,
+    "",
+    `Open a pull request from ${branch} into the default branch of ${run.namespace}'s repository, titled "improve: ${run.namespace} ${chicagoDay(now)}". The run summary is ${run.namespace}/${archivePath(run.id, "run-summary")}. Do not merge it. If the branch no longer exists, or a pull request for it is already open, say so and complete this job without opening another.`,
+  ].join("\n");
+  try {
+    const result = await postJob(env, watcherAgent(), now, {
+      namespace: run.namespace,
+      title: `Improve: open the pull request for branch ${branch} (run ${run.id})`,
+      body,
+      priority: 9,
+      gate_required: false,
+    });
+    if (result.ok && result.job) return `posted ${result.job.id} to open it`;
+    return `no job posted to open it: ${result.refusal ?? "no reason given"}`;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`IMPROVE_PR_JOB_FAILED ${run.id}: ${message}`);
+    return `no job posted to open it: ${message.slice(0, 300)}`;
+  }
 }
 
 // ---- context and rendering --------------------------------------------------
