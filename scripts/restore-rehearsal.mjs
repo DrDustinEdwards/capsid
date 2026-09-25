@@ -14,7 +14,9 @@
 //   directions: a missing table file and an unexpected extra file both fail.
 // - Each file's own "table" field matches its filename, so a copy shuffle cannot restore
 //   rows into the wrong table.
-// - Every row inserts, and the restored count equals the dump's count.
+// - The dump is fresh: documents.json's exported_at is within 26 hours.
+// - Every row carries exactly its table's columns, every row inserts, and the
+//   restored count equals the dump's count.
 // - documents is non-empty. A zero-document restore passes every other check while
 //   proving nothing.
 // - The FTS index agrees with documents via the _docsize shadow table. COUNT(*) on an
@@ -23,7 +25,7 @@
 // - A MATCH probe on a word taken from a restored document returns it.
 // - The two SIDECARS are present and are exactly the two expected (_kv.json,
 //   _holdout-manifests.json). They restore into no table; a missing one means the loop's
-//   memory is not in the backup.
+//   memory is not in the backup. Each must hold a non-empty object of the right shape.
 // - The completion marker (_complete.json), when present, lists exactly the other files
 //   in the dump. It is optional because dumps written before it existed do not carry it.
 // - CROSS-TABLE CONSISTENCY (residual 4). The dump is one D1 batch, so the table objects
@@ -42,6 +44,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { BACKUP_STALE_HOURS } from "./freshness-lib.mjs";
 
 // Identical derivation to test/backup.test.ts: real tables only. The regex
 // does not match CREATE VIRTUAL TABLE, which is what keeps documents_fts out.
@@ -69,7 +72,47 @@ function fail(reason) {
   throw err;
 }
 
-export function rehearse(dumpDir, migrationsDir) {
+function readJson(dumpDir, file) {
+  try {
+    return JSON.parse(readFileSync(join(dumpDir, file), "utf8"));
+  } catch (e) {
+    fail(`${file} does not parse as JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+function checkSidecar(dumpDir, file, field, valueOk) {
+  const parsed = readJson(dumpDir, file);
+  const inner = parsed?.[field];
+  if (!inner || typeof inner !== "object" || Array.isArray(inner)) fail(`${file} carries no '${field}' object`);
+  const entries = Object.entries(inner);
+  if (entries.length === 0) fail(`${file} has an empty '${field}' object; the sidecar holds nothing`);
+  const bad = entries.filter(([, v]) => !valueOk(v)).map(([k]) => k);
+  if (bad.length > 0) fail(`${file} has '${field}' entries of the wrong shape: ${bad.slice(0, 5).join(", ")}`);
+  if (typeof parsed.exported_at !== "string") fail(`${file} carries no exported_at`);
+}
+
+// A STALE DUMP IS A FAILED REHEARSAL. The workflow takes the newest dump in R2, so
+// when backups stop it keeps rehearsing the last good one: on 2026-09-21 it passed on
+// a 56-hour-old dump during a backup outage. The threshold is the one gate 1c applies
+// to /health (scripts/freshness-lib.mjs), measured from the dump's own exported_at.
+function checkDumpAge(dumpDir, opts) {
+  const maxHours = opts.maxAgeHours ?? BACKUP_STALE_HOURS;
+  const now = opts.now ?? Date.now();
+  const exportedAt = readJson(dumpDir, "documents.json")?.exported_at;
+  const at = typeof exportedAt === "string" ? Date.parse(exportedAt) : NaN;
+  if (!Number.isFinite(at)) fail(`documents.json carries no readable exported_at ('${exportedAt}'), so the dump's age is unknown`);
+  const ageHours = (now - at) / 3_600_000;
+  if (ageHours > maxHours) {
+    fail(`the newest dump was exported at ${exportedAt}, ${ageHours.toFixed(1)}h ago, past the ${maxHours}h threshold. Backups have stopped; this rehearsal would only prove an old dump restores.`);
+  }
+}
+
+/**
+ * @param {string} dumpDir
+ * @param {string} migrationsDir
+ * @param {{ now?: number, maxAgeHours?: number }} [opts]
+ */
+export function rehearse(dumpDir, migrationsDir, opts = {}) {
   const tables = deriveTables(migrationsDir);
   if (tables.length === 0) fail(`no tables derived from ${migrationsDir}; the rehearsal read nothing`);
 
@@ -82,6 +125,10 @@ export function rehearse(dumpDir, migrationsDir) {
   const unknownSidecars = sidecars.filter((f) => !SIDECARS.includes(f));
   if (missingSidecars.length > 0) fail(`the dump is missing sidecars: ${missingSidecars.join(", ")}`);
   if (unknownSidecars.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknownSidecars.join(", ")}`);
+  // Present is not enough: `{}` exists too. Each sidecar must carry the object
+  // src/backup.ts writes, with at least one entry.
+  checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof v.unreadable === "string"));
+  checkSidecar(dumpDir, "_holdout-manifests.json", "manifests", (v) => v === null || (typeof v === "object" && !Array.isArray(v)));
   const marked = files.includes(COMPLETE_MARKER);
   if (marked) {
     const marker = JSON.parse(readFileSync(join(dumpDir, COMPLETE_MARKER), "utf8"));
@@ -97,6 +144,8 @@ export function rehearse(dumpDir, migrationsDir) {
   const extra = dumped.filter((d) => !tables.includes(d));
   if (missing.length > 0) fail(`the dump is missing tables the migrations create: ${missing.join(", ")}`);
   if (extra.length > 0) fail(`the dump carries files no migration explains: ${extra.join(", ")}`);
+
+  checkDumpAge(dumpDir, opts);
 
   const db = new DatabaseSync(":memory:", { enableForeignKeyConstraints: false });
   for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort()) {
@@ -115,8 +164,21 @@ export function rehearse(dumpDir, migrationsDir) {
     const insert = db.prepare(
       `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`
     );
+    // Every row must carry exactly the table's columns. `row[c] ?? null` alone turned
+    // a column missing from the dump into NULL, so a dump that stopped carrying a
+    // nullable column still restored and passed. src/backup.ts dumps SELECT *, so a
+    // real row has every column, null ones included.
+    const expected = [...columns].sort().join(",");
+    parsed.rows.forEach((row, i) => {
+      const keys = Object.keys(row ?? {}).sort().join(",");
+      if (keys !== expected) {
+        const missingCols = columns.filter((c) => !(c in (row ?? {})));
+        const extraCols = Object.keys(row ?? {}).filter((k) => !columns.includes(k));
+        fail(`${table}.json row ${i} does not carry the table's columns (missing: ${missingCols.join(", ") || "none"}; extra: ${extraCols.join(", ") || "none"})`);
+      }
+    });
     for (const row of parsed.rows) {
-      insert.run(...columns.map((c) => row[c] ?? null));
+      insert.run(...columns.map((c) => row[c]));
     }
     const { n } = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get();
     if (n !== parsed.rows.length) fail(`${table} restored ${n} rows against ${parsed.rows.length} dumped`);
@@ -166,7 +228,7 @@ export function rehearse(dumpDir, migrationsDir) {
     .prepare(
       `SELECT a.id, a.namespace, a.path, a.at FROM audit_log a
         WHERE a.action = 'write' AND a.namespace IS NOT NULL AND a.path IS NOT NULL
-          AND a.at > (SELECT COALESCE(MAX(updated_at), '') FROM documents)
+          AND a.at >= (SELECT COALESCE(MAX(updated_at), '') FROM documents)
           AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.namespace = a.namespace AND d.path = a.path)
         LIMIT 5`
     )
