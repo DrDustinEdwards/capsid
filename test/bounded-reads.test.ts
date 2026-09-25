@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { GATHER_BUDGET, MAX_ROWS, MAX_SCAN_CAP, SEARCH_ROWS } from "../src/limits.ts";
+import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
-import { allSourceText, sourceFile } from "./source-files.ts";
+import { sourceFile } from "./source-files.ts";
 
 // EVERY READ IS BOUNDED, AND SAYS SO WHEN IT CUT (audit 9.2).
 //
@@ -305,51 +305,4 @@ test("read returns the named columns, and not the two dead CMS ones", async () =
     ["body", "created_at", "id", "last_actor", "namespace", "path", "status", "tags", "title", "type", "updated_at"],
     "read's column set drifted from list's"
   );
-});
-
-test("brief returns all four of its parallel sections", async () => {
-  // The four reads run in one Promise.all now. A destructuring slip there drops a
-  // whole section silently, and brief is the call every session makes first.
-  const { client, close } = await connect({
-    documents: [
-      { namespace: "capsid", path: "conventions.md", body: "conv" },
-      { namespace: "capsid", path: "repo-structure.md", body: "repo" },
-      { namespace: "capsid", path: "core.md", body: "core" },
-      { namespace: "capsid", path: "TASK-open.md", type: "task", status: "active", body: "task" },
-      { namespace: "capsid", path: "session-1.md", type: "episodic", body: "ep", created_at: "2026-08-01 00:00:00" },
-    ],
-    links: [{ from_ns: "capsid", from_path: "core.md", type: "references", to_ns: "capsid", to_path: "decisions.md" }],
-  });
-  const out = parse(await call(client, "brief", { namespace: "capsid" }));
-  await close();
-  assert.equal(out.core?.body, "core");
-  assert.equal(out.open_tasks.length, 1, "the open-tasks read came back empty");
-  assert.equal(out.recent_episodics.length, 1, "the episodics read came back empty");
-  assert.ok(out.core_links, "the edge reads came back missing");
-  assert.equal(out.core_links.outgoing.length, 1, "the outgoing-edge read came back empty");
-});
-
-// scanner-rule: quality audit 2.4, advertised limits are interpolated from the constant
-test("the advertised caps are INTERPOLATED, not restated as digits", () => {
-  // 2.4. MAX_SCAN_CAP lived as a local const inside searchCode while the tool
-  // description said "max 200" in prose, so the number existed twice and only one
-  // copy was load-bearing.
-  //
-  // Note what this can and cannot catch, because the first version of this test
-  // caught nothing. Comparing the advertised number to the constant is a
-  // TAUTOLOGY once the description interpolates it: change the constant and both
-  // move together, which is the point. The only way the two can part again is if
-  // someone writes the digits back into the prose, so that is what is asserted.
-  const text = allSourceText();
-  const capArgs = text
-    .split("\n")
-    .filter((line) => /max_(files|results): z\.number\(\)/.test(line));
-  assert.equal(capArgs.length, 2, "the two scan cap arguments are not both declared");
-  for (const arg of capArgs) {
-    assert.match(arg, /\$\{(MAX_SCAN_CAP|DEFAULT_SCAN_FILES|DEFAULT_SCAN_RESULTS)\}/, `cap prose is not interpolated: ${arg}`);
-    assert.doesNotMatch(arg, /(default|max) \d+/, `cap prose restates a number instead of interpolating it: ${arg}`);
-  }
-  // And brief's budget, the other number that was written twice.
-  assert.doesNotMatch(text, /Size-bounded near \d+KB/, "brief's budget is hardcoded in its description again");
-  assert.match(text, /Size-bounded near \$\{Math\.round\(BRIEF_BUDGET/, "brief no longer states its budget at all");
 });

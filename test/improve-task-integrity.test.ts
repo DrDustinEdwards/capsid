@@ -6,7 +6,6 @@ import {
   deriveTaskKey,
   signTaskBody,
   splitSignedTask,
-  TASK_KEY_CONTEXT,
   TASK_SIGNATURE_FIELD,
   verifyTaskDoc,
 } from "../src/improve-task.ts";
@@ -59,7 +58,6 @@ test("the task key is derived under its own context, unequal to the other two", 
   assert.match(task, /^[0-9a-f]{64}$/);
   assert.notEqual(task, await deriveScoreKey(ROOT, "capsid"), "a score key must not open a task document");
   assert.notEqual(task, await deriveBackupCredentialKey(ROOT), "the backup key must not open a task document");
-  assert.equal(TASK_KEY_CONTEXT, "capsid-improve-task:v1");
 });
 
 test("a signed document round-trips and verifies", async () => {

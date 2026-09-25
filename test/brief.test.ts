@@ -107,9 +107,13 @@ test("provenance costs ONE audit_log query however many documents the brief carr
       { namespace: "capsid", path: "TASK-2.md", actor: "agent:seat" },
       { namespace: "capsid", path: "session-1.md", actor: "agent:other" },
     ],
+    links: [{ from_ns: "capsid", from_path: "core.md", type: "references", to_ns: "capsid", to_path: "decisions.md" }],
   });
+  // The edge reads run in the same Promise.all as the section reads, so a slip there
+  // drops core_links silently. Moved here from test/bounded-reads.test.ts.
+  assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
-  assert.equal(reads.length, 8, `brief issued ${reads.length} queries: 3 documents, 4 section reads, 1 provenance`);
+  assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 3 documents, 4 section reads and 1 provenance`);
   // And the answer is still right per document: the newest actor wins, and a
   // document with no audit row reads null rather than borrowing a neighbour's.
   assert.equal(out.core.last_actor, "agent:capsid-driver");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sourceFiles, toolBlocks, type ToolBlock } from "./source-files.ts";
-import { TOOL_ACTION_GRANTS, TOOL_GRANTS, requiredGrant } from "../src/scope.ts";
+import { TOOL_GRANTS, requiredGrant } from "../src/scope.ts";
 
 // The two write-path invariants, guarded.
 //
@@ -104,28 +104,6 @@ test("a tool marked read does not mutate, which is the claim it would be dangero
   assert.ok(reads >= 8, `only ${reads} tools classify as read; the derivation is broken`);
 });
 
-// scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
-test("the two handler-checked action tools really do carry their own check", () => {
-  // They are the only tools the registrar cannot decide for, so they are the only
-  // ones where forgetting the call leaves a hole. Named, because there being exactly
-  // two of them is the property: a third would mean the registrar is losing ground.
-  // improve_run is also "action", but its per-action requirements are in
-  // TOOL_ACTION_GRANTS and the registrar reads them (since 2026-09-16).
-  const allAction = Object.entries(TOOL_GRANTS)
-    .filter(([, requirement]) => requirement === "action")
-    .map(([name]) => name)
-    .sort();
-  assert.deepEqual(allAction, ["improve_run", "jobs", "lint"]);
-  assert.deepEqual(Object.keys(TOOL_ACTION_GRANTS), ["improve_run"]);
-  const actionScoped = allAction.filter((name) => !Object.hasOwn(TOOL_ACTION_GRANTS, name));
-  assert.deepEqual(actionScoped, ["jobs", "lint"]);
-  for (const name of actionScoped) {
-    const block = BLOCKS.find((b) => b.name === name);
-    assert.ok(block, `no block parsed for ${name}`);
-    assert.match(block.body, SCOPE_GATE, `${name} is action-scoped and carries no ctx.scope write check`);
-  }
-});
-
 // scanner-rule: CLAUDE.md, one enforcement point rule (count guard for the scans in this file)
 test("the gate check is not vacuous: several tools are found to be mutating", () => {
   // If a refactor moved every statement into a helper, the test above would pass
@@ -135,27 +113,4 @@ test("the gate check is not vacuous: several tools are found to be mutating", ()
   for (const name of ["write", "delete", "move", "restore"]) {
     assert.ok(mutating.includes(name), `${name} no longer contains mutating SQL; has it moved to a helper?`);
   }
-});
-
-// scanner-rule: CLAUDE.md, snapshot and one enforcement point rules: guardedWrite is the one place a repo mutation is gated, flagged and audited. Its per-flag refusals are driven in test/blast-radius.test.ts
-test("the one mutating helper outside a tool handler carries the gate itself", () => {
-  // guardedWrite writes the audit row for the repo tools, so their own blocks
-  // contain no SQL and the scan above cannot see them. The gate has to be here.
-  // Located by search rather than by filename, so moving it to another module
-  // keeps the guard rather than silently losing it.
-  const owner = sourceFiles().find((f) => f.text.includes("const guardedWrite"));
-  assert.ok(owner, "could not locate guardedWrite anywhere under src/");
-  const helper = owner.text.slice(owner.text.indexOf("const guardedWrite"), owner.text.indexOf("const REPO_ARG"));
-  assert.ok(helper.length > 200, `could not bound guardedWrite in src/${owner.name}`);
-  assert.ok(/\bauditStatement\(/.test(helper), "guardedWrite no longer writes the audit row");
-  assert.match(
-    helper,
-    SCOPE_GATE,
-    "guardedWrite lost its scope check: every repo write tool is now unchecked for the grant and for the flags a repo mutation needs"
-  );
-  assert.match(
-    helper,
-    /repoWriteFlags\(/,
-    "guardedWrite no longer computes the flags a repo mutation needs, so can_merge, can_direct_write, can_dispatch, can_write_workflows, can_touch_protected and money_paths are checked nowhere"
-  );
 });

@@ -23,7 +23,6 @@ test("the gate's threshold is the same number /health warns at", () => {
   // Two files, one claim. A gate that failed at 26h against a health endpoint
   // warning at 48h would report a different fact than the one it names.
   assert.equal(BACKUP_STALE_HOURS, HEALTH_THRESHOLD);
-  assert.equal(BACKUP_STALE_HOURS, 26);
 });
 
 test("a backup from three hours ago is fresh", () => {

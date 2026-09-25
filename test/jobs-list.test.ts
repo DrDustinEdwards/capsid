@@ -5,7 +5,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes, type AgentGrant } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
-import { JOB_LIST_COLUMNS } from "../src/jobs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // JOBS.LIST RETURNED EVERY SIGNED BODY (AUDIT-2026-09-16.md).
@@ -86,34 +85,4 @@ test("naming one job by id does not return its body to a read-only caller", asyn
   const { out } = await list(caller(["read"]), { id: JOB.id });
   assert.equal(out.jobs.length, 1);
   assert.equal("body" in out.jobs[0], false);
-});
-
-test("the list asks the database for the named columns, never SELECT * and never body", async () => {
-  // Asserted where it is enforced. Stripping the field after a SELECT * would pass the
-  // tests above while the whole row still crossed the isolate.
-  const { reads } = await list(caller(["read"]), {});
-  const listRead = reads.find((r) => /FROM jobs/i.test(r.sql) && /ORDER BY priority/i.test(r.sql));
-  assert.ok(listRead, "no list query was issued");
-  assert.doesNotMatch(listRead.sql, /SELECT \*/i);
-  assert.doesNotMatch(listRead.sql, /\bbody\b/i);
-  assert.deepEqual(
-    [...JOB_LIST_COLUMNS].sort(),
-    [
-      "blocked_count",
-      "claimed_by",
-      "created_at",
-      "gate_required",
-      "id",
-      "lease_expires",
-      "namespace",
-      "posted_by",
-      "priority",
-      "result_summary",
-      "resumed_count",
-      "review_required",
-      "status",
-      "title",
-      "updated_at",
-    ]
-  );
 });

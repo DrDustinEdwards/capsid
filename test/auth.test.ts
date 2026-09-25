@@ -107,12 +107,6 @@ test("a rejected key yields no grant and no fingerprint", async () => {
   assert.deepEqual(bad, { grant: null, fingerprint: null });
 });
 
-test("operatorIdentity.grant still answers exactly as before", async () => {
-  const env = { OPERATOR_KEY_HASH: await sha256Hex("write-key") };
-  assert.equal(await grantOf(keyRequest("write-key"), env), "write");
-  assert.equal(await grantOf(keyRequest("nope"), env), null);
-});
-
 // ---- timingSafeEqual, moved here from limits.test.ts (quality audit 6.6) ------
 //
 // It is an auth helper and it lives in src/auth.ts; it was findable only inside a

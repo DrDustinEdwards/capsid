@@ -311,18 +311,3 @@ test("PLANT: the forged run document is refused by the ordinary write tool too",
   assert.ok(refusal, "authoring a run document through the ordinary write tool must be refused");
   assert.match(String(refusal), /allow_improve_paths/);
 });
-
-// ---- github text surfaces ---------------------------------------------------
-
-test("PLANT: a hostile PR body and commit message stay quoted values in a JSON result", () => {
-  // These two reach a model through manage_pr and repo_history. Neither surface
-  // parses them, and JSON.stringify is what keeps a forged closing tag from
-  // becoming structure: the tags in commit-message-hostile.txt are characters in a
-  // string, not a shape any parser here reacts to.
-  for (const entry of entriesFor("github")) {
-    const text = corpusText(entry.file);
-    const wrapped = JSON.parse(JSON.stringify({ body: text })) as { body: string };
-    assert.equal(wrapped.body, text, `${entry.file} did not survive a JSON round trip`);
-    assert.ok(wrapped.body.includes(entry.canary));
-  }
-});

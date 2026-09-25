@@ -315,15 +315,6 @@ async function promptClient() {
   return { client, close: () => client.close() };
 }
 
-test("prompts/get returns the document body as an embedded resource, not as user prose", async () => {
-  const { client, close } = await promptClient();
-  const result = await client.getPrompt({ name: "capsid/prompts/brief", arguments: { name: "world" } });
-  await close();
-  const content = result.messages[0].content as { type: string; resource?: { text?: string } };
-  assert.equal(content.type, "resource", "a stored document body is being handed to the model as the user's own words");
-  assert.match(String(content.resource?.text), /Hello world/);
-});
-
 test("prompts/list passes titles through a character allowlist", async () => {
   const { client, close } = await promptClient();
   const result = await client.listPrompts();

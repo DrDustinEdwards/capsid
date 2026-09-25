@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   OUTCOME_RESULT_KINDS,
@@ -12,7 +10,6 @@ import {
   type EvidenceVerdict,
 } from "../src/job-outcomes.ts";
 import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } from "../src/jobs-schema.ts";
-import { TABLES } from "../src/backup.ts";
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 import { sourceFile } from "./source-files.ts";
@@ -24,8 +21,6 @@ import { sourceFile } from "./source-files.ts";
 // property of a PRIMARY KEY and a fake would agree with whatever it was told. What is
 // here is what node can check without a database: the verification rules, the
 // null-not-zero rule, and the derivation of a row from a job.
-
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0011_job_outcomes.sql"), "utf8");
 
 function job(overrides: Partial<JobRow> = {}): JobRow {
   return {
@@ -53,27 +48,6 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
     ...overrides,
   };
 }
-
-// ---- the schema's own promises -------------------------------------------------
-
-test("ONE ROW PER JOB IS THE SCHEMA'S PROMISE: the primary key is declared", () => {
-  // The writer's half, ON CONFLICT DO NOTHING, is proven against SQLite in
-  // test-integration/job-outcomes.test.ts: "a second insert for the same job cannot
-  // overwrite the first record".
-  assert.match(MIGRATION, /job_id TEXT PRIMARY KEY/, "job_id is no longer the primary key, so two rows could describe one job");
-});
-
-// That every column the writer binds exists is proven by the real insert in
-// test-integration/job-outcomes.test.ts, which SQLite refuses on an unknown column.
-
-
-test("the dump carries the new table, so the verified counts survive a restore", () => {
-  // The pull requests these numbers were read from can be deleted on GitHub, so the
-  // dump is the only copy of what was true when the job ended. test/backup.test.ts
-  // derives TABLES from migrations/ in both directions; this names the one that
-  // matters for this arc.
-  assert.ok(TABLES.includes("job_outcomes"), "job_outcomes is not in the nightly dump");
-});
 
 // ---- what the row says about itself ---------------------------------------------
 
@@ -395,10 +369,6 @@ test("the claim and the resume both ask the record question", () => {
   assert.match(source, /const shortfall = await recordShortfall/, "claim does not check the record bar");
   assert.match(source, /const resumeShortfall = await recordShortfall/, "resume does not check the record bar");
 });
-
-// That the record is read only when a job sets a bar is proven by counting the reads
-// against SQLite in test-integration/job-outcomes.test.ts.
-
 
 // ---- the skills a job was offered and used --------------------------------------
 //

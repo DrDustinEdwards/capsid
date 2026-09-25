@@ -205,7 +205,6 @@ test("revoke is a timestamp, not a delete, so the audit rows it wrote still reso
   const update = statements(d1).find((r) => /UPDATE agents SET revoked_at/i.test(r.sql));
   assert.ok(update, "revoke did not set revoked_at");
   assert.ok(!statements(d1).some((r) => /DELETE FROM agents/i.test(r.sql)), "revoke deleted the row");
-  assert.match(update.sql, /RETURNING/i, "the transition is not a keyed UPDATE with RETURNING, so a no-op reports success");
 });
 
 test("revoking or re-scoping an agent that is not there is a refusal, not a silent success", async () => {

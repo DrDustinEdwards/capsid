@@ -19,7 +19,8 @@ export interface Env {
   BUILD_DIRTY?: string;
   BUILT_AT?: string;
   // Second R2 bucket, withheld from AttemptEnv. Only this file (declaration) and
-  // src/improve-scorer.ts may name it; test/improve-holdout.test.ts pins the lines.
+  // src/improve-scorer.ts may name it; test/improve-holdout.test.ts refuses it in every
+  // other module.
   HOLDOUT: R2Bucket;
   // Used only in improve_mode "api".
   ANTHROPIC_API_KEY?: string;
