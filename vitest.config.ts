@@ -1,4 +1,5 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
@@ -52,6 +53,13 @@ const prepareFiles = readdirSync(srcDir, { recursive: true })
   .map((f) => String(f).split(path.sep).join("/"))
   .filter((f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("));
 
+// Two legacy operator keys, obviously fake, and the OPERATOR_KEY_HASH line that admits
+// them: the plain hash is the write (admin) key, the "ro:" one the read key. The keys
+// reach the test file as a binding so test-integration/route-gates.test.ts can present
+// them to /ops/backup exactly as a caller would.
+const TEST_OPERATOR_KEYS = { write: "integration-legacy-write-key", read: "integration-legacy-read-key" };
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -70,6 +78,8 @@ export default defineConfig({
           TEST_SQL_STATEMENTS: sql.statements,
           TEST_SQL_SKIPPED: sql.skipped,
           TEST_SQL_PREPARE_FILES: prepareFiles,
+          TEST_OPERATOR_KEYS,
+          OPERATOR_KEY_HASH: `${sha256(TEST_OPERATOR_KEYS.write)},ro:${sha256(TEST_OPERATOR_KEYS.read)}`,
           // Non-secret vars, matching wrangler.jsonc.example.
           GITHUB_APP_CLIENT_ID: "test-client-id",
           // Secrets, with obviously fake values. capsid/conventions.md hard rule:
