@@ -156,11 +156,19 @@ const REVIEWER_AUDIT_SCAN = 500;
 
 /** The issue-comment ids Capsid posted for an actor allowed to review, in a namespace.
  *
- *  The identity half of the gate, read from audit_log because every comment Capsid
- *  posts has the same App author. A verdict counts when Capsid posted it and the actor
- *  that asked held can_comment_pr, so a `REVIEW:` comment written with local `gh` is
- *  not a review. A non-agent actor (the admin session or the legacy operator key) has
- *  unrestricted scopes and counts. */
+ *  The identity half of the gate, read from audit_log rather than off the comment:
+ *  `manage_pr` action `comment` posts through the App installation, so every comment
+ *  Capsid writes has the same author login and the login cannot separate a reviewer's
+ *  verdict from a driver's. What does separate them is who asked Capsid to post it,
+ *  which the audit row records beside the comment_id.
+ *
+ *  A verdict counts when Capsid posted it and the actor that asked held
+ *  can_comment_pr. A driver with local `gh` can still write `REVIEW: ... APPROVE` on
+ *  the pull request, but it is not a review, because nothing in this set names it; with
+ *  newest-wins it would otherwise also overwrite a real CHANGES.
+ *
+ *  A non-agent actor (the admin session or the legacy operator key) has unrestricted
+ *  scopes and counts: a human reviewing by hand is a case this gate exists to allow. */
 async function reviewerCommentIds(db: D1Database, namespace: string): Promise<Set<number>> {
   const rows = await db
     .prepare(

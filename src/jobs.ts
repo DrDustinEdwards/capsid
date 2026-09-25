@@ -44,22 +44,26 @@ import {
   type JobOutcomeRow,
 } from "./job-outcomes";
 
-// The work queue. The seat posts a job; a driver session claims it, does it, and
-// reports back.
+// The work queue. The seat posts a job from a chat; a driver session on a machine
+// claims it, does it, and reports back.
 //
 // Every transition is `UPDATE ... WHERE status = <expected> RETURNING id`, never
-// meta.changes: these batches carry a document write, and the FTS5 triggers inflate
-// meta.changes. No row back means somebody else got there first. The holder
-// transitions put the UPDATE in the same batch as its records, behind
-// requireJobUnchanged (src/store-guards.ts), which aborts the batch when the row is
-// not in the state the caller read.
+// meta.changes. D1's meta.changes is inflated by the FTS5 triggers on documents, and
+// these batches carry a document write, so the count would be of the triggers as
+// much as the row. No row back means somebody else got there first. The holder
+// transitions (heartbeat, complete, fail, block) put the UPDATE in the same batch as
+// its records, behind requireJobUnchanged (src/store-guards.ts), which aborts the
+// whole batch when the row is not in the state the caller read.
 //
 // The row is the source of truth for status. The mirror document at
-// <namespace>/jobs/<id>.md is rewritten in the same batch as every transition.
+// <namespace>/jobs/<id>.md is rewritten in the same batch as every transition, so a
+// reader who found the job through brief or search sees the state the table holds.
+// It is a projection, and its body says so.
 
 // claimed_by carries the same shape as audit_log.actor (migrations/0006), so one
-// query joins a job to what its driver did. Agent names are unique and never reused,
-// so `agent:<name>` identifies one credential.
+// query joins a job to what its driver did. A minted agent speaks that vocabulary as
+// `agent:<name>` (agentActor in src/agents-schema.ts), and the name is unique in the
+// agents table and never reused, so the string identifies exactly one credential.
 const ACTOR_SHAPE = /^(github:|opkey:|agent:)/;
 
 function actorShapeRefusal(action: string, actor: string): JobResult | null {
@@ -75,7 +79,9 @@ async function heldClaim(db: D1Database, actor: string): Promise<JobRow | null> 
   return db.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1").bind(actor).first<JobRow>();
 }
 
-// THE SEAT IS IDENTIFIED BY admin OR can_merge, for supersede and for resume.
+// The seat is identified by admin or can_merge, for supersede and for resume. An
+// agent's kind is descriptive and not authorizing (src/agents-schema.ts); can_merge is
+// the flag the seat holds and no driver does.
 function callerIsSeat(agent: Agent): boolean {
   return agent.admin || agent.scopes.flags.can_merge;
 }
@@ -88,15 +94,22 @@ export interface JobResult {
   truncated?: boolean;
   note?: string;
   refusal?: string;
-  // The outcome row this transition wrote, so the driver sees what the Worker
-  // checked. `notes` names every verification that could not run.
+  // The outcome row this transition wrote, returned so the driver sees what the
+  // Worker checked rather than assuming its own numbers were taken. `notes` names
+  // every verification that could not run, which separates a count nobody checked
+  // from a count nobody could check.
   outcome?: { row: JobOutcomeRow; notes: string[] };
-  // The latest resume's reason, for a job resumed at least once.
+  // The latest resume's reason, for a job resumed at least once. See
+  // latestResumeNote below.
   resume_note?: ResumeNote;
 }
 
-// The reason given at the latest resume, read back from its audit row so the next
-// holder sees what was approved. The audit row stays the one record.
+// What the last resume approved, handed to whoever holds the job next.
+//
+// The reason a resume takes is written to the audit row, and no tool returns audit
+// params to a driver, so without this a driver picking a resumed job back up could not
+// read what the seat had approved and would have to ask again. The audit row stays the
+// one record; this reads it back.
 export interface ResumeNote {
   reason: string;
   // The seat's full note, when the resume carried one. `reason` is bounded at
@@ -164,13 +177,15 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
     `- claimed by: ${job.claimed_by ?? "(unclaimed)"}`,
     `- lease expires: ${job.lease_expires ?? "(no lease)"}`,
   ];
+  // Only once it has happened, so a job that never hit a gate carries no line of zeroes.
   if (job.blocked_count > 0) lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
   // The brief carries open job documents, so this line is how brief hands the
   // approval to a driver.
   if (note) lines.push(`- last resume, by ${note.by} at ${note.at}: ${note.reason}`);
   if (job.result_summary) lines.push(`- result: ${job.result_summary}`);
   if (job.result_ref) lines.push(`- result ref: ${job.result_ref}`);
-  // The full note, untruncated: a driver reading the brief needs every ruling.
+  // The full note as its own block after the status lines, untruncated: a driver
+  // reading the brief needs every ruling, not the first line of them.
   if (note?.note) lines.push("", "## The last resume's note", "", note.note);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
@@ -188,8 +203,9 @@ async function mirrorStatements(db: D1Database, job: JobRow, action: string, act
     title: `Job: ${job.title}`,
     body: renderJobDoc(job, resumeNote),
     type: "task",
-    // Closed on any finished row, `failed` as much as `done`, or brief keeps carrying
-    // it as open work. isTerminalJobStatus is the one list of finished statuses.
+    // Closed on a finished row, and `failed` is as finished as `done`: a failed job's
+    // mirror left active would keep brief carrying it as open work.
+    // isTerminalJobStatus is the one list of finished statuses.
     status: isTerminalJobStatus(job.status) ? "closed" : "active",
     tags: "jobs",
     prior,
@@ -210,7 +226,9 @@ async function readJob(db: D1Database, id: string): Promise<JobRow | null> {
 // The one path that fails a job that cannot be handed over: a corrupt requirement or
 // a bad signature at claim, a bad signature at resume. The UPDATE, the mirror and the
 // audit row are one guarded batch, so they commit only when the row is still as the
-// caller read it; otherwise the caller gets the current row to refuse with.
+// caller read it. Without the guard, a job another driver had claimed meanwhile would
+// get a mirror and an audit row saying it failed while its row said claimed. When the
+// guard aborts, the caller gets the current row to refuse with.
 async function markJobFailed(
   env: Env,
   job: JobRow,
@@ -234,11 +252,15 @@ async function markJobFailed(
   return { failed: true };
 }
 
-// Every transition and its records are one batch, so a throw cannot leave a moved row
-// with no record of the move. `read` is the row the caller decided on;
-// requireJobUnchanged, first in the batch, aborts it unless the row still has that
-// status, holder and updated_at. Returns false when the guard aborted: nothing was
-// written and the row changed since `read`.
+// Every transition and its records are one batch. Committing the UPDATE alone and
+// writing the mirror and audit row in a second batch would let a throw in between
+// leave a moved row with no record of the move.
+//
+// `read` is the row the caller decided on. requireJobUnchanged, first in the batch,
+// aborts the whole batch unless the row still has that status, holder and updated_at,
+// and D1 runs a batch as one transaction, so the UPDATE and every record built from
+// `read` commit together or not at all. Returns false when the guard aborted, which
+// means nothing was written and the row changed since `read`.
 async function guardedTransition(env: Env, read: JobRow, statements: D1PreparedStatement[]): Promise<boolean> {
   try {
     await env.DB.batch([requireJobUnchanged(env.DB, read.id, read.status, read.claimed_by, read.updated_at), ...statements]);
@@ -257,19 +279,30 @@ function movedBeforeFailing(action: string, id: string, current: JobRow | null, 
   );
 }
 
-// The track-record bar, checked at claim (migrations/0011). Read only when a job sets
-// one, because the record scans every outcome row. recordFor is the same function
-// improve_status and the console use. `null` for namespaces: the improve-loop columns
-// play no part here and would be attributed to whichever credential is asking.
+// The track-record bar, checked at claim (migrations/0011).
+//
+// Read only when a job sets one, which is rare. The record is computed from every
+// outcome row, so making every claim pay for that read would put a table scan in
+// front of the queue's hottest path.
+//
+// It goes through recordFor, the same function improve_status and the console call,
+// so the bar a claim is measured against is the number a human can read on the page.
+// `null` for namespaces because the improve-loop columns play no part in this
+// comparison, and computing them here would attribute a namespace's attempts to
+// whichever credential happened to be asking.
 async function recordShortfall(db: D1Database, actor: string, job: JobRow): Promise<string | null> {
   if (!job.min_record) return null;
   return missingForRecord(recordFor(actor, await loadRecordRows(db), null), job.min_record);
 }
 
-// The body is signed at post with the improve loop's task envelope
-// (src/improve-task.ts). The driver refuses a body that does not verify, so an edited
-// row or document cannot steer a session holding shell and repo credentials. With no
-// IMPROVE_SCORE_SECRET, post refuses rather than queue jobs no driver would accept.
+// The body is signed at post, with the same key and envelope as the improve loop's
+// task documents (src/improve-task.ts). The driver refuses a job whose body does not
+// verify, so a row edited by a raw D1 splice, or a document mirrored back over by
+// hand, cannot steer a session that holds local shell and repo credentials.
+//
+// Unconfigured is a refusal, not a skip. With no IMPROVE_SCORE_SECRET there is no key
+// to sign with, and a queue of unsignable jobs would be refused by the driver one at
+// a time instead of here.
 
 /** The open statuses in prose, derived rather than retyped, so a status added to
  *  OPEN_JOB_STATUSES cannot leave the refusal claiming a shorter list than the index
@@ -281,9 +314,12 @@ function openMeans(): string {
 }
 
 /** What a duplicate post collided with. The unique index is the rule and D1's error
- *  names only the constraint, so the row is read back to name the holding job and its
- *  state. The lookup only shapes the message: if the holder finished in between, the
- *  refusal still stands. */
+ *  names only the constraint, so the row is read back to say which job holds the
+ *  title and what state it is in. A blocked holder is the case that matters, because
+ *  it is waiting on a human rather than on a driver.
+ *
+ *  The lookup only shapes the message, never the rule: if the holder finished between
+ *  the constraint firing and this read, the refusal still stands. */
 async function duplicateRefusal(env: Env, namespace: string, title: string): Promise<string> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 3}`).join(", ");
   const holder = await env.DB.prepare(
@@ -322,10 +358,14 @@ export async function postJob(
   const title = args.title.trim();
   if (!title) return refuse("post", "a job needs a title: it is how the queue refuses a duplicate while one is still open.");
   if (!args.body.trim()) return refuse("post", "a job needs a body. The body is the prompt the driver executes.");
-  // The body is the prompt a driver executes, and swallowed text would be signed with it.
+  // A body is the prompt a driver executes, so a malformed post is worse here than
+  // anywhere else: the swallowed text is signed along with everything else and the
+  // driver runs whatever survived.
   const postSwallowed = swallowedParamTag(args.body);
   if (postSwallowed) return refuse("post", swallowedTagRefusal("body", postSwallowed));
-  // A registered namespace, as write requires, because the mirror document lands there.
+  // A registered namespace, as write requires for a document. Otherwise a caller
+  // scoped to * could post into a namespace that does not exist, and the mirror
+  // document would land where write refuses the same path.
   const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(args.namespace).first();
   if (!registered) {
     return refuse(
@@ -349,9 +389,12 @@ export async function postJob(
     result_ref: null,
     result_summary: null,
     gate_required: args.gate_required ? 1 : 0,
-    // NULL when nothing was asked for, not an empty requirement object.
+    // NULL when nothing was asked for, rather than an empty requirement object. The
+    // column means "this job needs something unusual", and empty JSON would read as a
+    // requirement nobody can see.
     required_scopes: args.required_scopes?.flags?.length ? serializeRequiredScopes(args.required_scopes) : null,
-    // A bar of zero is no bar, so it is stored as NULL.
+    // A bar of zero is no bar, so it is stored as NULL rather than as a requirement
+    // every agent trivially meets.
     min_record: args.min_record?.prs_merged ? serializeMinRecord(args.min_record) : null,
     blocked_count: 0,
     resumed_count: 0,
@@ -392,7 +435,8 @@ export async function postJob(
     await env.DB.batch(statements);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // The partial unique index over (namespace, title) for open statuses.
+    // The partial unique index over (namespace, title) for open statuses, reported as
+    // what it means rather than as the constraint's own text.
     if (/UNIQUE/i.test(message)) {
       return refuse("post", await duplicateRefusal(env, args.namespace, title));
     }
@@ -402,9 +446,11 @@ export async function postJob(
 }
 
 // List never carries a body unless one job was asked for by a writer. A body is the
-// prompt a driver executes, so a read grant must not read every prompt queued. claim
-// returns it, and so does list when `withBody` is set, which the tool sets only for a
-// single named id and a caller holding write.
+// signed prompt a driver executes with shell and repo credentials, and a list that
+// selected every column would let a read grant on a namespace read every prompt queued
+// in it. The columns are named so the body never leaves D1 for a list. claim returns
+// it, and so does list when `withBody` is set, which the tool sets only for a single
+// named id and a caller holding write.
 const JOB_LIST_COLUMNS = [
   "id",
   "namespace",
@@ -453,9 +499,11 @@ export async function listJobs(
     .bind(...binds)
     .all<JobListRow>();
   const rows = results ?? [];
-  // One extra row asked for, so a full page is distinguishable from "there are more".
+  // One extra row asked for, so "exactly the page" is distinguishable from "there are
+  // more". Same shape as every other bounded read here.
   const truncated = rows.length > JOBS_ROWS_MAX;
-  // Only one named job carries its resume note; a wide list would cost a read per row.
+  // One named job carries its latest resume note. Not every row of a wide list, which
+  // would cost one read per resumed job.
   const listNote = args.id && rows.length === 1 ? await latestResumeNote(env.DB, rows[0]) : null;
   return {
     ok: true,
@@ -466,9 +514,10 @@ export async function listJobs(
   };
 }
 
-// One claim per caller, across every namespace: a driver does one job at a time.
-// Checked before the CAS, so the refusal names the job already held rather than
-// reporting a lost race.
+// One claim per caller, across every namespace. A driver does one job at a time, and
+// a second claim means the first is either finished or abandoned; letting a caller
+// hold two would make the lease meaningless. Checked before the CAS, so the refusal
+// names the job already held rather than reporting a lost race.
 export async function claimJob(
   env: Env,
   agent: Agent,
@@ -486,8 +535,9 @@ export async function claimJob(
     );
   }
 
-  // A named job or the top queued one. The SELECT only picks a candidate; the guarded
-  // UPDATE below claims it.
+  // Either a named job or the highest-priority queued one in a namespace. The SELECT
+  // only picks a candidate; the guarded UPDATE below is what claims it, so two drivers
+  // reading the same candidate still resolve to one winner.
   let candidate: JobRow | null = null;
   if (args.id) {
     candidate = await readJob(env.DB, args.id);
@@ -505,10 +555,16 @@ export async function claimJob(
     if (!candidate) return refuse("claim", `no queued jobs in ${args.namespace}.`);
   }
 
-  // What the job needs of the driver is checked before the lease is taken, through
-  // checkScope, so a job is never parked on a driver that cannot do it. A requirement
-  // that cannot be read fails the job: left queued, the same row would be refused to
-  // every driver in turn and stop the namespace's queue.
+  // What the job needs of the driver is checked before the lease is taken. A claim
+  // that took the lease and then refused would park the job on a driver that cannot do
+  // it, and since a caller holds one claim at a time it would also stop that driver
+  // taking anything else for four hours. The check runs through checkScope, so a job
+  // requirement and an agent scope are compared by the same function that decides
+  // every tool call.
+  //
+  // A requirement that cannot be read fails the job, as a bad signature does below:
+  // left queued, the same row would be refused to every driver in turn, and a claim
+  // with no id takes the top queued job, so it would stop the namespace's queue.
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
     const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not leased.`;
@@ -525,17 +581,24 @@ export async function claimJob(
     );
   }
 
+  // What it needs of the driver's history, on the same terms and in the same place:
+  // before the lease, so the job stays queued for a driver that meets the bar.
   const shortfall = await recordShortfall(env.DB, actor, candidate);
   if (shortfall) {
     return refuse("claim", `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${shortfall} The job stays queued for a driver that can do it.`);
   }
 
-  // The signature is checked before the job is handed over, because a job body is
-  // executable input for a session holding shell and repo credentials. A body that
-  // does not verify fails the job rather than being left queued for every driver in
-  // turn. Unlike a run document (verifyTaskDoc) there is no actor check: a job is
-  // posted by a human seat, and this Worker's signature is what proves it went
-  // through `post`.
+  // The signature is checked before the job is handed over, not by the driver after
+  // it has one. A job body is executable input that arrives as a database row, and the
+  // driver is a session holding local shell and repo credentials.
+  //
+  // A body that does not verify was edited after `post` signed it. That job is failed
+  // here rather than left queued: leaving it would hand the same broken row to every
+  // driver in turn, and the queue would never drain.
+  //
+  // Unlike a run document (verifyTaskDoc) there is no actor check. Only the loop writes
+  // a run document, so its audit actor is the loop; a job is posted by a human seat,
+  // and this Worker's signature is what proves it went through `post`.
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
     const marked = await markJobFailed(env, candidate, "queued", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason }, now);
@@ -552,8 +615,9 @@ export async function claimJob(
     lease_expires: expires,
     updated_at: now.toISOString(),
   };
-  // Two drivers reading the same candidate resolve to one winner: the first commit
-  // moves updated_at and the second batch's guard aborts.
+  // One batch with its records, behind the guard. Two drivers reading the same
+  // candidate still resolve to one winner, because the first commit moves updated_at
+  // and the second batch's guard aborts before its UPDATE runs.
   const won = await guardedTransition(env, candidate, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = ?3, lease_expires = ?4, updated_at = ?3
@@ -565,14 +629,16 @@ export async function claimJob(
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
   }
-  // A resumed job whose lease expired reaches its next driver here, with its approval.
+  // A job that went back to the queue after a resume (an expired lease) reaches its
+  // next driver here, so the approval has to come with it.
   const claimNote = await latestResumeNote(env.DB, claimed);
   return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}) };
 }
 
-// heartbeat, complete, fail and block fire only for the claimed job this caller
-// holds, so a lease the tick returned to the queue cannot be completed out from under
-// its new owner.
+// The transitions a holder makes. heartbeat, complete, fail and block are the same
+// shape: a keyed UPDATE that only fires for the claimed job this caller holds, so an
+// expired lease that the tick already returned to the queue cannot be completed out
+// from under its new owner.
 function holderRefusal(action: string, id: string, actor: string, current: JobRow | null): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status !== "claimed") {
@@ -596,13 +662,16 @@ async function holderTransition(
     result_summary?: string | null;
     result_ref?: string | null;
     lease_expires: string | null;
-    // Only block bumps the gate counter. Bound as a number, not interpolated, so the
-    // statement stays one static string that test/jobs.test.ts and
-    // test-integration/query-plans.test.ts can read and EXPLAIN.
+    // Only block bumps the gate counter. Bound as a number, not interpolated as a SQL
+    // fragment: the statement stays one static string, so test/jobs.test.ts can read
+    // that it is keyed and test-integration/query-plans.test.ts can reconstruct it and
+    // EXPLAIN it. A statement assembled at runtime is invisible to both.
     bumpBlocked?: boolean;
-    // What the driver says this job produced; verified on the terminal transitions.
+    // What the driver says this job produced. Verified against GitHub and written into
+    // job_outcomes below, on the terminal transitions only.
     evidence?: JobEvidence;
-    // Skill names only: the credit direction comes from signalFor().
+    // The skills the driver was offered and used. Names only: the credit direction
+    // comes from signalFor(), which reads what the Worker verified on GitHub.
     skills?: JobSkills;
   }
 ): Promise<JobResult> {
@@ -611,7 +680,9 @@ async function holderTransition(
   const notHeld = holderRefusal(action, id, actor, read);
   if (notHeld) return notHeld;
   if (!read) return refuse(action, `no job ${id}.`);
-  // The row as the UPDATE will leave it, so the mirror and outcome can be built first.
+  // The row as the UPDATE below will leave it, computed from the read so the mirror
+  // and the outcome can be built before anything is written. The guard at the head of
+  // the batch is what keeps the read true when the batch commits.
   const job: JobRow = {
     ...read,
     status: patch.status,
@@ -622,13 +693,24 @@ async function holderTransition(
     blocked_count: read.blocked_count + (patch.bumpBlocked ? 1 : 0),
   };
 
-  // The transition and every record of it are one batch, behind a guard that aborts it
-  // unless the row is still claimed by this caller at the updated_at just read.
+  // The transition and every record of it (mirror, audit, outcome, pull request and
+  // attribution rows) are one batch. The first statement aborts the whole batch unless
+  // the row is still claimed by this caller at the updated_at just read, so either all
+  // of it commits or none of it does, and a throw cannot leave a finished job with no
+  // record. id is the primary key, so the guard passing means the UPDATE moves exactly
+  // that one row.
   //
-  // The outcome row is written on the terminal transitions only, once per job (the
-  // primary key enforces it), and a failed job gets one too, or every agent's record
-  // would look equally good. verifyEvidence runs before the batch and reports its own
-  // errors as notes, so an unreachable GitHub cannot stop a finished job closing.
+  // The outcome row is written on the terminal transitions only. A running job has no
+  // outcome, and one that reached `done` or `failed` will not transition again, so this
+  // runs once per job and the primary key enforces that rather than trusting it.
+  //
+  // A failed job gets a row too. A driver whose jobs mostly fail is what this table
+  // exists to show, and recording only successes would make every agent look equally
+  // good.
+  //
+  // Verification runs before the batch and cannot fail the transition. verifyEvidence
+  // reports its own errors as notes, so an unreachable GitHub costs the verified flags
+  // and not the driver's ability to close a finished job.
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
   const statements = [
     requireJobUnchanged(env.DB, id, "claimed", actor, read.updated_at),
@@ -658,11 +740,13 @@ async function holderTransition(
     const row = outcomeFrom(job, verdict, now, patch.skills);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
-    // One row per pull request the evidence named, so the counts can be traced and the
-    // merge state corrected later.
+    // One row per pull request the evidence named, in the same batch as the outcome.
+    // Without them the outcome keeps counts with no way back to what they counted, and
+    // the merge state recorded at complete time could never be corrected.
     statements.push(...outcomePrStatements(env.DB, job.id, patch.evidence?.prs ?? []));
-    // Credit comes only from the verified signal: signalFor reads merge state and CI
-    // as this Worker read them. An unverifiable job earns nothing either way.
+    // The credit comes from the verified signal and nowhere else. The driver names
+    // offered and used; signalFor reads merge state and CI as this Worker read them off
+    // GitHub. An unverifiable job earns nothing in either direction.
     statements.push(
       ...attributionStatements(env.DB, {
         offered: patch.skills?.offered ?? [],
@@ -679,7 +763,8 @@ async function holderTransition(
     const current = await readJob(env.DB, id);
     return holderRefusal(action, id, actor, current) ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
   }
-  // A driver a resume returned the job to learns of it on its next heartbeat.
+  // The driver a resume returned the job to is already holding it and learns of the
+  // resume by its next call, which is usually a heartbeat.
   const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env.DB, job) : null;
   return { ok: true, action, job, ...(outcome ? { outcome } : {}), ...(heartbeatNote ? { resume_note: heartbeatNote } : {}) };
 }
@@ -688,13 +773,21 @@ export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string
   return holderTransition(env, agent, now, "heartbeat", id, { status: "claimed", lease_expires: leaseUntil(now) });
 }
 
-// The corrections budget belongs to the work, not the row. The open-title index
-// (migrations/0019) does not cover `failed`, so a failed job's (namespace, title) can
-// be posted again with a fresh row at 0; summing across every row for that work keeps
-// the cap. Unindexed on purpose: the queue holds a few hundred rows at most.
+// The corrections budget is a property of the work, not of the row.
 //
-// Fails closed: a read that throws or a non-finite SUM returns NaN, which
-// atCorrectionCap treats as a spent budget.
+// corrections_count lives on a row, and the unique open-title index covers `queued`,
+// `claimed` and `blocked` (migrations/0019) but not `failed`, so a failed job leaves
+// (namespace, title) free to be posted again. The new row starts at 0, and a per-row
+// cap would count how many times a row existed rather than how many times the work
+// had been sent back. So the count is per (namespace, title).
+//
+// Summed across every row for that work, whatever its status, and the current row is
+// one of them. Unindexed on purpose: jobs is a single-user queue of a few hundred rows
+// at most, and the only index on (namespace, title) is the partial one, which does not
+// cover finished rows.
+//
+// Fails closed. A read that throws, or a SUM that is not a finite number, returns
+// NaN, and atCorrectionCap treats a budget it cannot read as a budget already spent.
 async function correctionsForWork(db: D1Database, namespace: string, title: string): Promise<number> {
   try {
     const row = await db
@@ -709,10 +802,21 @@ async function correctionsForWork(db: D1Database, namespace: string, title: stri
   }
 }
 
-// The review gate, consulted by complete, fail and block alike: a gate on one of them
-// is bypassed through the others. Only complete demands a pull request, because work
-// that could not be done, or that stopped at a gate, may have none. Returns null when
-// the gate does not apply.
+// The review gate, consulted by complete, fail and block alike.
+//
+// A gate on one of them would not be a gate: a driver that found `complete` refused
+// would `block` or `fail` instead, and the bypass would look like ordinary use. So the
+// same function answers for all three, and the answer is turned into a JobResult here
+// so they cannot describe the same verdict differently.
+//
+// Only complete demands a pull request, because it hands the work on. A job that stops
+// at a gate has usually opened nothing yet, and a job that cannot be done has no pull
+// request to review; demanding one would leave the driver unable to close the job at
+// all. When a pull request is named, block and fail still consult the gate, so a
+// driver cannot walk away from a CHANGES or a BLOCK.
+//
+// Returns null when the gate does not apply: no review_required, or no pull request on
+// a transition that does not demand one. That is the normal path for almost every job.
 async function reviewRefusal(
   env: Env,
   agent: Agent,
@@ -724,7 +828,9 @@ async function reviewRefusal(
 ): Promise<JobResult | null> {
   const current = await readJob(env.DB, id);
   if (!current) return null;
-  // The stored reference is the bound pull request; this call's references are candidates.
+  // The stored reference is the job's bound pull request, if the gate has read one.
+  // The references this call names are candidates, so a driver completing with the
+  // pull request it just opened has it in its arguments.
   let outcome: GateOutcome | null;
   try {
     outcome = await reviewGate(
@@ -733,7 +839,9 @@ async function reviewRefusal(
       { ...opts, candidateRefs: [resultRef, ...(opts.candidateRefs ?? [])] }
     );
   } catch (err) {
-    // A GitHub failure holds the job: an unreadable review is not an approval.
+    // A GitHub failure holds the job rather than waving it through. The gate puts a
+    // second reader in front of the seat, and an unreadable comment list is not
+    // evidence that one looked.
     return refuse(
       action,
       `${id} needs a review and GitHub could not be read: ${err instanceof Error ? err.message : String(err)}. ` +
@@ -742,9 +850,14 @@ async function reviewRefusal(
   }
   if (outcome === null) return null;
 
-  // The first read binds the job to its pull request in result_ref, whatever the
-  // verdict, so a CHANGES cannot be escaped by naming another pull request next time.
-  // The binding moves updated_at, so the CHANGES write guards on the row it left.
+  // The first read binds the job to its pull request in the result_ref column. On a
+  // claimed job nothing else writes it, and the terminal transition that does runs
+  // after this gate. Recorded whatever the verdict, so a CHANGES cannot be escaped by
+  // naming another pull request on the next call.
+  //
+  // Each write below is one guarded batch built from the caller's claimed job as read.
+  // The binding moves updated_at, so the CHANGES write after it guards on the row the
+  // binding left.
   let read = current;
   if (outcome.pr && !current.result_ref) {
     const notHeld = holderRefusal(action, id, agent.actor, current);
@@ -768,13 +881,21 @@ async function reviewRefusal(
     return refuse(action, `${id} is ${outcome.reason} The job stays claimed and its lease keeps running.`);
   }
 
-  // CHANGES and BLOCK both move the job, so the row records what the reviewer said.
+  // CHANGES and BLOCK both move the job, so neither is a plain refusal: the row has to
+  // record what the reviewer said, or the next reader sees a job that stalled for no
+  // stated reason.
   const { review } = outcome;
   const said = review.said ? ` ${review.said}` : "";
   if (outcome.kind === "rework") {
-    // The cap is checked before the correction is spent, or a reviewer and a driver
-    // could disagree forever. At the cap the job goes to the seat through the ordinary
-    // block path; fromReview stops blockJob consulting this review again.
+    // The cap is checked before the correction is spent, so the loop it bounds is
+    // bounded. If the rework path only incremented and left the job claimed, a third
+    // CHANGES would spend a third correction and send the work back again, and a
+    // reviewer and a driver disagreeing forever is the loop the cap exists for.
+    //
+    // At the cap the job goes to the seat through the ordinary block path, so it
+    // carries the reviewer's objection and the gate counter behaves as for any other
+    // block. fromReview stops blockJob consulting the review that produced it and
+    // recursing.
     const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
     if (atCorrectionCap(spentOnWork)) {
       return endedElsewhere(action, await blockJob(env, agent, now, id, {
@@ -784,7 +905,8 @@ async function reviewRefusal(
         fromReview: true,
       }));
     }
-    // Back to the driver, spending a correction from the retry cap's budget.
+    // Back to the driver, spending a correction from the same budget the retry cap
+    // bounds. Counting review rounds separately would exempt them from the cap.
     const summary = `review by ${review.by}: CHANGES.${said}`;
     const notHeld = holderRefusal(action, id, agent.actor, read);
     if (notHeld) return notHeld;
@@ -806,13 +928,18 @@ async function reviewRefusal(
     return { ok: false, action, job, refusal: `${summary} The job stays claimed: fix it and hand it on again. This spent a correction (${job.corrections_count} of ${CORRECTION_CAP}).` };
   }
 
-  // BLOCK: blocked for the seat through the ordinary block path.
+  // BLOCK: blocked for the seat, with the objection as the reason, through the
+  // ordinary block path so the gate counter and the mirror document behave as they do
+  // for any other block.
   return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true }));
 }
 
-// A complete or fail that the reviewer turned into a block is reported as a refusal of
-// the caller's own action, with the job as it now stands. A caller that asked to block
-// got a block, so its result passes.
+// A transition that ended somewhere other than asked is not a success. A complete or
+// fail that met a reviewer BLOCK, or a CHANGES at the correction cap, blocks the job
+// instead, and passing blockJob's result through would tell a driver that asked for
+// something else ok: true with action "block". The block is recorded either way; this
+// reports it as a refusal of the caller's own action, with the job as it now stands.
+// A caller that asked to block got a block, so its result passes.
 function endedElsewhere(action: string, result: JobResult): JobResult {
   if (!result.ok || action === result.action) return result;
   return {
@@ -826,9 +953,12 @@ function endedElsewhere(action: string, result: JobResult): JobResult {
 }
 
 /**
- * Every skill id the caller named, checked against the table. An unknown id is
- * refused, not dropped, because dropping it would record "offered nothing" for a run
- * that was offered something. Returns the refusal, or null.
+ * Every skill id the caller named, checked against the table.
+ *
+ * Refused, not ignored. A skill that does not exist is a stale id or a typo, and
+ * dropping it would record "offered nothing" for a run that was offered something.
+ * That is how the offered-to-used rate could be wrong without anybody writing a wrong
+ * number. Returns the refusal, or null.
  */
 async function unknownSkills(db: D1Database, skills: JobSkills | undefined): Promise<string | null> {
   const named = [...new Set([...(skills?.offered ?? []), ...(skills?.used ?? [])])];
@@ -844,8 +974,8 @@ async function unknownSkills(db: D1Database, skills: JobSkills | undefined): Pro
   return `no skill exists with id ${missing.join(", ")}. A named skill that does not exist is refused rather than dropped, because dropping it would record this run as having been offered nothing.`;
 }
 
-// Used must be a subset of offered: a skill never offered did not come from the
-// recommend step, so it cannot be credited to it.
+// Used must be a subset of offered. A skill used but never offered did not come from
+// the recommend step, so crediting it would measure something this loop did not do.
 function usedNotOffered(skills: JobSkills | undefined): string | null {
   const offered = new Set(skills?.offered ?? []);
   const stray = [...new Set(skills?.used ?? [])].filter((id) => !offered.has(id));
@@ -864,10 +994,14 @@ export async function completeJob(
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
-  // Checked before the write, because the outcome row cannot be corrected afterwards.
+  // Checked before the write, because the outcome row this call produces cannot be
+  // corrected afterwards: a result_ref and evidence swallowed into the summary would
+  // leave a row that records nothing.
   const swallowed = swallowedParamTag(args.result_summary);
   if (swallowed) return refuse("complete", swallowedTagRefusal("result_summary", swallowed));
-  // The review gate (see reviewRefusal). evidence.prs counts as naming the pull request.
+  // The review gate (see reviewRefusal). complete must name a pull request and carry
+  // an APPROVE; evidence.prs counts as naming it, so a driver cannot report its work
+  // there with a document key in result_ref and escape the gate.
   const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
     requirePullRequest: true,
     candidateRefs: args.evidence?.prs,
@@ -901,10 +1035,20 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills });
 }
 
-// The seat failing a job it does not hold, for a job whose driver is gone. Every other
-// transition keys on `claimed_by = <caller>`, which leaves no other way to close it.
-// Admin only (the OAuth admin session or a legacy write key, never a minted agent), so
-// a driver cannot fail another driver's job. A finished job is refused, not rewritten.
+// The seat stepping in, on a job it does not hold.
+//
+// Every other transition keys on `claimed_by = <caller>`, which stops two drivers
+// treading on each other but leaves no way to close a job whose driver is gone: the
+// machine was turned off, the session died, the work was superseded from a chat.
+//
+// Admin only, for the same reason resume allows any write-grant caller: the seat that
+// decides is routinely not the session that held the job. `agent.admin` is true for
+// the OAuth admin session and a legacy write key and false for every minted agent, so
+// a driver cannot fail another driver's job.
+//
+// It refuses a job that is already finished rather than rewriting one, and says so
+// rather than reporting a no-op as success. The mirror and audit row ride in the same
+// guarded batch as every other transition.
 export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
   if (!agent.admin) {
     return refuse(
@@ -927,9 +1071,12 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
   ];
-  // An outcome row, as `fail` writes, but only when somebody held the job: a queued
-  // job was never worked and has no agent to attribute a failure to. No evidence,
-  // because the seat did not do the work.
+  // An outcome row, for the same reason `fail` writes one: a job the seat had to close
+  // because its driver never came back is the kind of ending the record should show.
+  //
+  // Only when somebody held it. A queued job the seat cancelled was never worked, and
+  // inventing an agent would put a failure on a credential that had not touched the
+  // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
     statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now)));
@@ -944,15 +1091,22 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   return { ok: true, action: "admin-fail", job };
 }
 
-// Supersede closes a job replaced before any work was done on it, so it is not
-// recorded as a failure. No outcome row, pull request rows or attribution: nothing was
-// attempted.
+// Supersede: the seat replacing a job before any work was done on it, for a corrected
+// or reposted body, a reorder or a withdrawal. Without it the only way to close such a
+// job is to claim it and fail it, and the history fills with failures that never
+// happened.
 //
-// Allowed from `queued` by any caller that may write the namespace, and from `claimed`
-// only while the row records no work, by the holder or the seat (admin or can_merge,
-// as resume identifies it; an agent's kind is not authorizing). Later jobs are ended
-// by `fail` or the console's admin fail. The whole rule is in the one keyed UPDATE;
-// the checks before it only choose the refusal message.
+// No outcome row, no pull request rows, no attribution. Nothing was attempted, so a
+// row here would put a failure on a credential that did no work.
+//
+// Allowed from `queued` by any caller that may write the job's namespace, since nobody
+// holds it. From `claimed`, only while the row records no work (no gate hit, no
+// resume, no correction, no result_ref), and only by the holder or the seat
+// (callerIsSeat). Anything later is ended by `fail` or the console's admin fail.
+//
+// The whole rule is in the one keyed UPDATE. The checks before it only choose the
+// refusal message; a driver that hits a gate between the read and the write leaves no
+// row to supersede, rather than being superseded out from under its work.
 
 /** Why a job's row shows work was done on it, or null. */
 function workRecorded(job: JobRow): string | null {
@@ -980,7 +1134,8 @@ export async function supersedeJob(
 
   const current = await readJob(env.DB, id);
   if (!current) return refuse("supersede", `no job ${id}.`);
-  // The job's own namespace: the tool's check saw only the argument, which may be omitted.
+  // The job's own namespace, asked here for the reason resume asks it: the tool's
+  // check saw only the namespace argument, which an id-based call may omit.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside) return refuse("supersede", `${agent.actor} cannot supersede ${id} ('${current.title}'): ${outside}`);
 
@@ -1018,9 +1173,11 @@ export async function supersedeJob(
   }
 
   const summary = replacedBy ? `Superseded by ${replacedBy}: ${reason}` : `Superseded: ${reason}`;
-  // ?4 is the holder read above, so a lease that passed to another driver meanwhile
-  // is not superseded out from under it.
+  // ?4 is the holder read above, so a lease that expired and went to another driver
+  // between the read and this write is not superseded out from under the new one.
   const job: JobRow = { ...current, status: "superseded", result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
+  // The guard makes the mirror and audit row commit only with the UPDATE: a row that
+  // changed since the read (a gate hit, a claim) aborts all three.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'superseded', result_summary = ?2, lease_expires = NULL, updated_at = ?3
@@ -1046,8 +1203,10 @@ export async function supersedeJob(
   return { ok: true, action: "supersede", job };
 }
 
-// A blocked job carries the exact command the human must run. blockJob writes this
-// marker and commandFromSummary reads it back, so the format has one spelling.
+// A blocked job carries the exact command. A job that hit a gate is not a failure; it
+// is work waiting on a human, and the human needs the command to run, not a
+// description of the situation. The console shows these. blockJob writes this marker
+// and commandFromSummary reads it back, so the format cannot drift between the two.
 export const RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
 
 /** The exact command a blocked job is waiting on, or null when it recorded none. */
@@ -1074,8 +1233,10 @@ export async function blockJob(
     if (review) return review;
   }
   const summary = args.command ? `${args.reason}\n\n${RESUME_MARKER}\n\n    ${args.command}` : args.reason;
-  // A capped job says so in result_summary, the field every reader looks at. The
-  // budget is read before the transition.
+  // The cap is applied where the block is written, so a capped job says so in the one
+  // field every reader already looks at: the console prints result_summary, the driver
+  // reads it to continue, and a human deciding reads it there too. The budget is read
+  // before the transition, because the transition is what makes this block count.
   const current = await readJob(env.DB, id);
   const capped = current !== null && atCorrectionCap(await correctionsForWork(env.DB, current.namespace, current.title));
   return holderTransition(env, agent, now, "block", id, {
@@ -1086,37 +1247,55 @@ export async function blockJob(
   });
 }
 
-// Resume. A gate is a pause, not an ending: a blocked job goes back to work after a
-// human approves.
+// Resume. A gate is a pause, not an ending. If `blocked` were terminal, a job the
+// driver stopped at a gate could never be picked back up: the human would run the
+// command, the work would land, and the row would still describe the state before the
+// gate, because `claim` refuses anything that is not queued.
 //
-// The signature is checked again, because a blocked row can sit for hours and resume
-// hands its body to a session holding shell and repo credentials. A tampered job is
-// failed rather than returned.
+// The signature is checked again. `claim` verifies the body before handing a job to a
+// driver, but a blocked job then sits in the table for as long as a human takes, which
+// is the window in which a row could be edited. Resume hands that body back to a
+// session holding local shell and repo credentials, so it re-verifies on the same
+// terms and marks a tampered job failed rather than returning it.
 //
-// Any write-grant caller may resume, because the seat that approves is routinely not
-// the session that blocked; the reason is required and lands in the audit row. The
-// claimant may not resume its own job on a plain resume, or the audit row would read
-// as a human approval. It still may as the admin, with can_merge, or through
+// Any write-grant caller may resume, which the tool layer has already checked. It is
+// not restricted to the original claimer, because the point is that a human approved
+// something, and the seat that approves is routinely not the session that blocked. The
+// reason is required and lands in the audit row, so what was approved is recorded
+// rather than implied.
+//
+// Except the claimant itself, on a plain resume. A driver that blocked a job on a
+// deploy, a secret or a force push could otherwise resume it with any reason, and the
+// audit row would read "approved: <reason>" as though a human had said yes. The
+// claimant may still resume its own job as the admin, with can_merge, or through
 // approved_by_policy for a branch push or a pull request.
 //
-// The lease goes back to the driver that blocked, not the resumer, unless `take` is
-// set, which runs every check a claim runs.
+// The lease goes back to the driver that blocked it, not to the caller that resumed
+// it: a blocked row keeps claimed_by. A seat that took the lease would hold a job it
+// has no shell to finish. `take` is the explicit way for a resumer to acquire the job
+// instead, and it runs every check a claim runs.
 export interface ResumeOptions {
-  // The pre-approved gate: the policy version the caller read. The blocked command
-  // must match a signed policy class or the resume is refused.
+  // The pre-approved gate. When set, this resume is approved on the signed gate policy
+  // rather than on a human having said yes, and the value is the policy version the
+  // caller read. The blocked command is matched against the policy classes and the
+  // resume is refused when it matches none, so this narrows what the caller may do on
+  // its own rather than widening it.
   approvedByPolicy?: string;
   // The resumer acquires the job rather than returning it to the driver that blocked.
   take?: boolean;
   // This resume sends the work back to be corrected, so it spends from the retry
-  // cap's budget. A plain resume does not.
+  // cap's budget. A plain resume does not, because an ordinary push through a gate
+  // corrects nothing.
   correction?: boolean;
-  // The seat's full note beside the one-line reason, recorded in the audit row and
-  // handed on whole.
+  // The seat's full note, beside the one-line reason. Recorded in the audit row as
+  // `note` and handed on whole in resume_note and the mirror document.
   note?: string;
 }
 
 // What a driver may approve for itself: pushing its own branch and opening its own
-// pull request. Migrations stay a human gate. This only narrows the policy's classes.
+// pull request. Not a migration, which stays a human gate, so `additive_migration`
+// stays the seat's to approve. The classes and the never list are the policy's own;
+// this only narrows which of them a driver may use.
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 /** The head commit of the job's own pull request, and the mapped repo it is on.
@@ -1175,7 +1354,9 @@ export async function resumeJob(
     );
   }
 
-  // A claimant approving its own gate is no approval, with or without `take`.
+  // A plain resume is a record that somebody approved the gate, and the claimant
+  // approving its own gate is no approval. `take` does not change who the claimant is,
+  // so a claimant passing take is refused the same way.
   const isSeat = callerIsSeat(agent);
   if (approvedByPolicy === undefined && !isSeat && current.claimed_by === actor) {
     return refuse(
@@ -1185,11 +1366,13 @@ export async function resumeJob(
     );
   }
 
-  // A blocked row with no claimant (none should exist) goes to the caller.
+  // The claimant the lease goes to. A blocked row with no claimant (none should
+  // exist, since block keys on claimed_by) goes to the caller.
   const holder = take || !current.claimed_by ? actor : current.claimed_by;
   const acquiring = holder === actor;
 
-  // One claim per caller, asked of whoever ends up holding the lease.
+  // The same one-claim-per-caller rule the claim path runs on, asked of whoever ends
+  // up holding the lease: a driver holding two has abandoned one.
   const held = await heldClaim(env.DB, holder);
   if (held) {
     return refuse(
@@ -1199,13 +1382,17 @@ export async function resumeJob(
     );
   }
 
-  // A resume that acquires the job asks the same questions a claim asks. When the job
-  // goes back to its own claimant, that claimant passed them at its claim.
+  // A resume is a claim when the caller acquires the job, so it asks the same scope
+  // question a claim asks: a driver that could not have claimed this job must not
+  // acquire it by resuming it. When the job goes back to its own claimant, that
+  // claimant passed these checks at its claim, and the resumer is not taking anything.
   const corrupt = corruptRequirement(current);
   if (corrupt) {
     return refuse("resume", `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`);
   }
-  // The namespace is asked either way, because returning the job still moves it.
+  // The namespace is asked either way. A resume that returns the job to its own
+  // claimant still moves a job, so a caller that cannot write the job's namespace may
+  // not do it; only the job's flags are left to the claimant it goes back to.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside) {
     return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${outside} It stays blocked.`);
@@ -1215,14 +1402,17 @@ export async function resumeJob(
     if (missing) {
       return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`);
     }
+    // And the record question, on the same reasoning.
     const resumeShortfall = await recordShortfall(env.DB, actor, current);
     if (resumeShortfall) {
       return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${resumeShortfall} It stays blocked for a driver that can finish it.`);
     }
   }
 
-  // The retry cap, checked before anything is spent. Past it, the next step is a
-  // person's, so an admin resume passes and does not spend the budget.
+  // The retry cap, checked before anything is spent. A job sent back twice already is
+  // one where each further correction has stopped being progress, and what to do next
+  // belongs to a person. An admin is that person arriving, so an admin resume passes
+  // and does not spend the budget.
   const spentOnWork = await correctionsForWork(env.DB, current.namespace, current.title);
   if (!agent.admin && atCorrectionCap(spentOnWork)) {
     return refuse(
@@ -1242,13 +1432,19 @@ export async function resumeJob(
   }
 
   // The policy check runs before the lease is taken, so a refusal leaves the job
-  // blocked as it was.
+  // blocked as it was rather than claimed by a caller whose approval did not hold.
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
-    // Approving on policy is the seat's act (admin or can_merge; an agent's kind is
-    // not authorizing). A driver may approve only DRIVER_SELF_APPROVED classes, on a
-    // job it blocked itself and still holds. The classification is still
-    // approveByPolicy's, so the never list runs first.
+    // Approving on policy is the seat's act. `resume` takes the write grant every
+    // driver holds, so without this check any driver could pass the policy version and
+    // approve its own blocked command. The policy's shape is "what the seat may approve
+    // alone", and a check nobody performs would make that meaningless.
+    //
+    // A driver may approve its own branch push and pull request, and nothing wider:
+    // only on a job it blocked itself and still holds, and only when every class the
+    // command matched is in DRIVER_SELF_APPROVED. The classification is still the
+    // Worker's, through the same approveByPolicy call the seat's approval makes, so the
+    // never list still runs first and a force push still waits.
     if (!isSeat && (current.claimed_by !== actor || take)) {
       return refuse(
         "resume",
@@ -1258,8 +1454,10 @@ export async function resumeJob(
       );
     }
     const command = commandFromSummary(current.result_summary);
-    // The driver's narrower list first, so a driver's migration is refused without a
-    // repo read. An unclassified command falls through to approveByPolicy.
+    // The driver's narrower list is checked before the policy, over the same
+    // classifier, so a driver's migration is refused without a repo read on its behalf.
+    // A command that classifies as nothing falls through to approveByPolicy, which
+    // refuses it for its own reason.
     if (!isSeat && command) {
       const match = classifyCommand(command);
       const beyond = "klasses" in match ? match.klasses.filter((k) => !DRIVER_SELF_APPROVED.includes(k)) : [];
@@ -1271,9 +1469,12 @@ export async function resumeJob(
         );
       }
     }
-    // A migration is read at the job's branch head, because that is the file the
-    // approved command runs. Read once, only when the command names a migration; a
-    // failed read throws its reason into the refusal.
+    // A migration is read at the job's branch head, not on the default branch. The
+    // approved command runs the file in the driver's checkout, so reading the default
+    // branch would refuse a new migration and could approve a same-named file whose
+    // content is not what runs. Read once, and only when the command names a
+    // migration. A read that fails throws its reason, which approveByPolicy puts in the
+    // refusal.
     let head: Promise<{ repo: string; sha: string }> | null = null;
     const verdict = await approveByPolicy(env, approvedByPolicy, command, async (path) => {
       head ??= jobBranchHead(env, current);
@@ -1284,8 +1485,9 @@ export async function resumeJob(
     if (!verdict.approved) {
       return refuse("resume", id + " is not pre-approved: " + verdict.reason);
     }
-    // The driver's list asserted on the approved verdict too, in case the two
-    // classifications disagree.
+    // The approved verdict is the one that counts, so the driver's list is asserted on
+    // it too. Unreachable unless the two classifications disagree, which is the case
+    // this line exists for.
     if (!isSeat && verdict.klasses.some((k) => !DRIVER_SELF_APPROVED.includes(k))) {
       return refuse("resume", `${id} is not pre-approved for a driver: it matched ${verdict.klass}. It stays blocked for the human.`);
     }
@@ -1293,9 +1495,14 @@ export async function resumeJob(
   }
 
   const expires = leaseUntil(now);
-  // Only a correction spends the budget, never an admin's; bound, not interpolated, as
-  // bumpBlocked is. claimed_at is not touched: duration_minutes measures from the
-  // first claim.
+  // Only a correction spends the budget, and never an admin's. The 0 or 1 is bound
+  // rather than interpolated for the same reason bumpBlocked is: the statement stays
+  // one static string that the source guards can read and the query-plan test can
+  // EXPLAIN.
+  //
+  // claimed_at is not touched. It is the first claim, and duration_minutes measures
+  // from it, so a job that waited at a gate is measured over its whole working life
+  // rather than over the stretch after its last resume.
   const spend = correction && !agent.admin ? 1 : 0;
   const job: JobRow = {
     ...current,
@@ -1331,7 +1538,9 @@ export async function resumeJob(
       resumed_count: job.resumed_count,
       corrections_count: job.corrections_count,
       ...(agent.admin ? { cap_lifted_by_admin: true } : {}),
-      // Which class matched, so the approval can be checked against the policy later.
+      // Which class matched, not merely that one did. A row saying "approved by policy"
+      // cannot be checked against the policy afterwards; one naming the class and what
+      // it matched can.
       ...(policyMatch
         ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass, policy_detail: policyMatch.detail }
         : {}),
@@ -1343,10 +1552,16 @@ export async function resumeJob(
   return { ok: true, action: "resume", job, resume_note: resumeNote };
 }
 
-// The lease sweep, run by the five-minute improve tick. An expired claim goes back to
-// queued, so a driver that died holds a job for at most JOB_LEASE_SECONDS. Each job's
-// requeue, mirror and audit row are one guarded batch, so a job whose driver
-// heartbeat in between is left alone. Returns only the jobs whose batch committed.
+// The lease sweep, run by the five-minute improve tick. A claim whose lease has
+// expired goes back to queued, so a driver that died holds a job for at most
+// JOB_LEASE_SECONDS rather than forever. The tick reports only the jobs whose batch
+// committed.
+//
+// The mirror documents are rewritten in the same batch as each job's requeue: a job
+// that reads "claimed by a session that is gone" in brief is the state this sweep
+// exists to clear. Read, then one guarded batch per job, so a job whose records fail
+// is not left requeued with none, and a job whose driver heartbeat in between
+// (updated_at moved) is left alone.
 export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: string[] }> {
   const stamp = now.toISOString();
   const { results } = await env.DB.prepare(
@@ -1375,15 +1590,21 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
   return { requeued };
 }
 
-// The improve_status block: counts per namespace, plus the blocked jobs with the
-// command each waits on, since a count of blocked jobs tells nobody what to run.
-// done_today rather than a lifetime total, which only goes up.
+// The improve_status block. Counted per namespace, plus what a human has to look at:
+// the blocked jobs, with the command each is waiting on. Blocked is the only status
+// whose rows come back rather than a count, because a count of blocked jobs tells
+// nobody what to run, and the console shows exactly these.
+//
+// done_today rather than done: a lifetime total only goes up and stops being
+// information. What the seat wants to know is whether the queue moved today.
 export interface JobsSummary {
   queued: number;
   claimed: number;
   blocked: number;
   done_today: number;
-  // How often each job has hit a gate and how often a human sent it back.
+  // How often each job has hit a gate and how often a human sent it back. A job on
+  // its third gate reads differently from one stuck at the same gate since it was
+  // posted, and the count is what tells them apart.
   blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; blocked_times: number; resumed: number }>;
 }
 

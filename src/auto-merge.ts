@@ -6,21 +6,38 @@ import { onRoster } from "./improve-schema";
 import { isMoneyPath } from "./scope";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./improve-task";
 
-// What the Worker may merge without a human. The document, capsid/policy/auto-merge.md,
-// is signed like a task document; an unsigned or edited policy merges nothing.
+// What the Worker may merge without a human, and where that list lives. The document
+// is capsid/policy/auto-merge.md, signed with the same key and envelope as a task
+// document, because it decides whether this Worker may write to a default branch that
+// deploys on push. An unsigned or edited policy merges nothing.
 //
-// The document names the checks and the code enforces them; it is not parsed into
-// predicates. It carries the version, enabled, the namespaces, and every check id,
-// refused path and required CI step. The code holds the same three lists, and
-// test/auto-merge.test.ts and loadMergePolicy both refuse a disagreement in either
-// direction. The PR author allowlist lives only in the document, and a document
-// without one does not load.
+// The document names the checks and the code enforces them. A policy document parsed
+// into predicates would be a configuration language, and a change to it would be a
+// code change nobody reviewed as one. So the document carries the version, whether the
+// policy is enabled and which namespaces it covers, and it names every check by id,
+// every refused path pattern and every required CI step. The code holds the same three
+// lists. test/auto-merge.test.ts asserts the two agree in both directions, and
+// loadMergePolicy refuses at run time as well, because the test proves the pair in the
+// repo while the document lives in the database.
+//
+// One list lives only in the document: the PR author allowlist. The code has no copy
+// to compare it with, so it is a value the signature governs, and a document without
+// one does not load.
 export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 
-// Every check, in the order evaluated; each refuses on its own. The three path checks
-// run first. Job ids are public, so the PR itself is judged as well as the job its
-// body names: head_in_base_repo, job_handed_on and pr_recorded_for_job. The author
-// allowlist is in the signed document, so changing it is a signed act.
+// Every check, in the order evaluated. Each one refuses on its own. The three path
+// checks run first because they are the never list: a change to one of those paths is
+// not merged without a human, whatever the rest of the PR looks like.
+//
+// Job ids are public, in commit subjects and PR bodies, so judging only the job a PR
+// body names would let any open PR that named a finished driver job merge on green CI.
+// The PR itself is judged too: head_in_base_repo refuses a fork head, job_handed_on
+// refuses a job that is not blocked or done, and pr_recorded_for_job refuses a PR the
+// driver never recorded against that job.
+//
+// pr_author_allowed refuses a PR whose GitHub author login is not on the allowlist the
+// signed document carries. The list is in the document and not here, so changing who
+// may author an unattended merge is a signed act.
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
@@ -52,16 +69,19 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /^src\/auto-merge\.ts$/i, why: "the auto-merge source, which holds this list" },
   { pattern: /^src\/policy-sign\.ts$/i, why: "the policy signer" },
   { pattern: /^src\/improve-schema\.ts$/i, why: "the protected path list" },
-  // The sources the checks read their answers from, or one merged PR could weaken a
-  // check for the next.
+  // The sources the checks read their answers from, not only the ones that run them.
+  // Each is a two-step route otherwise: a green driver PR weakens the source and
+  // merges on its own, and the next PR passes the check it weakened.
   { pattern: /^src\/scope\.ts$/i, why: "isMoneyPath, which is the whole of the paths_not_money check" },
   { pattern: /^src\/improve-task\.ts$/i, why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed" },
   { pattern: /^src\/auth\.ts$/i, why: "the HMAC and the constant-time comparison that verifier delegates to" },
   { pattern: /^src\/encoding\.ts$/i, why: "the hex encoding of the signature that verifier compares" },
   { pattern: /^src\/github\/client\.ts$/i, why: "the reader that supplies the changed paths and the CI facts every check judges" },
   { pattern: /^scripts\/path-guard\.mjs$/i, why: "the driver's enforcement of the protected path list" },
-  // dustinedwards-info's judge files. One list for every namespace: each pattern is a
-  // refusal, so sharing one can only refuse more.
+  // dustinedwards-info's judge files. The list stays one list rather than one per
+  // namespace: every pattern is a refusal, so a namespace inheriting another's pattern
+  // can only refuse more, and a list split per namespace would be a second place to
+  // forget a pattern.
   { pattern: /^\.github\/workflows\//i, why: "any workflow, which is what CI runs" },
   { pattern: /^scripts\/check-[^/]*\.mjs$/i, why: "a check script, which is what the Gates step runs" },
   { pattern: /^scripts\/lib\//i, why: "the library those check scripts read their rules from" },
@@ -77,7 +97,9 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)vitest\.config\.[cm]?[jt]s$/i, why: "the integration suite's configuration" },
   { pattern: /^scripts\/test-budget\.mjs$/i, why: "the runner behind npm test" },
   { pattern: /^scripts\/verify-live\.mjs$/i, why: "the live gate, whose rollback is the backstop for an unattended merge" },
-  // The writers of result_ref and job_outcome_prs, which pr_recorded_for_job trusts.
+  // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's
+  // holder writes them. These two sources are what writes them, so a green PR that
+  // loosened either could record any PR against any job.
   { pattern: /^src\/jobs\.ts$/i, why: "the job transitions that write result_ref, which pr_recorded_for_job reads" },
   { pattern: /^src\/outcome-prs\.ts$/i, why: "the writer of job_outcome_prs, which pr_recorded_for_job reads" },
 ];
@@ -91,11 +113,15 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
   return hits;
 }
 
-// The CI steps a green PR must have run, per namespace, because step names belong to
-// each repo. A repo runs its suites as steps of one job, so check-run names cannot
-// show they ran: ci_green reads the steps of the newest run of each named workflow on
-// the head sha, and every one must have concluded success (skipped is not a pass). A
-// namespace with no list here merges nothing.
+// The CI steps a green PR must have run, per namespace. A repo's CI runs its suites as
+// steps of one job, so check-run names cannot show that any of them ran. ci_green reads
+// the steps of the newest run of each named workflow on the head sha, and every step
+// named for that namespace must have concluded success. A skipped step is not a pass.
+//
+// Per namespace because the step names belong to the repo, not to this policy.
+// Checking one repo's step names against another repo's workflow would refuse every
+// pull request there. A namespace with no list here merges nothing, which is the same
+// refusal for a namespace whose CI nobody has written down.
 export interface RequiredStep {
   workflow: string;
   job: string;
@@ -109,7 +135,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
   capsid: ["Typecheck src, tests, integration tests and the copied scorer script", "Tests", "Integration tests"].map(
     ciStep("checks")
   ),
-  // Every step of dustinedwards-info's one job, so a workflow that drops one refuses.
+  // Every step of dustinedwards-info's one job. Install and the build step are named
+  // alongside the three that judge, so a reordered workflow that drops one refuses
+  // rather than merging on a run that skipped it.
   dustinedwards: [
     "Install",
     "Migrations, stack and content build, publication twins, enhancement bundles, local sync",
@@ -139,8 +167,10 @@ export interface MergePolicy {
   refusedPaths: string[];
   // GitHub logins whose PRs may merge without a human, from the document only.
   authors: string[];
-  // `<namespace> / <workflow> / <job> / <step>`, one flat list so the load-time
-  // agreement check is one comparison in both directions.
+  // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
+  // the step was written under. One flat list keeps the load-time agreement check a
+  // single comparison in both directions, so a namespace section missing from the
+  // document is caught by the same line that catches a missing step.
   requiredCi: string[];
 }
 
@@ -149,7 +179,9 @@ export interface MergePolicy {
 const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
 const AUTHOR_ITEM = /^- author `([^`]+)`/;
-// `## Required CI, <namespace>`. A step under no such heading is a refusal.
+// The heading a required step is filed under: `## Required CI, <namespace>`. A step
+// written before any such heading is a refusal rather than a step belonging to
+// whichever namespace came first.
 const CI_HEADING = /^##\s+Required CI,\s*([a-z0-9-]+)\s*$/i;
 
 /** Parse the policy body below its frontmatter. Returns the policy or a refusal. */
@@ -178,7 +210,8 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   let ciNamespace: string | null = null;
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
-    // Any heading closes the section.
+    // Any heading closes the section, so a step under `## What a merge means` is not
+    // filed under the last namespace that appeared above it.
     if (trimmed.startsWith("##")) {
       const heading = CI_HEADING.exec(trimmed);
       ciNamespace = heading ? heading[1] : null;
@@ -236,8 +269,9 @@ export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy }
   if (paths) return { error: paths };
   const steps = listDisagreement("required CI steps", parsed.policy.requiredCi, namespacedCiLabels());
   if (steps) return { error: steps };
-  // A covered namespace with no required CI steps merges nothing; otherwise ci_green's
-  // step check would have nothing to compare and would pass.
+  // A namespace the policy covers with no required CI steps merges nothing. Without
+  // this, ci_green's step check would have nothing to compare and would pass on any run
+  // that reported at all, so a widening here would be quiet rather than fail closed.
   const uncovered = parsed.policy.namespaces.filter((n) => requiredCiFor(n) === null);
   if (uncovered.length > 0) {
     return {
@@ -293,7 +327,9 @@ export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
 }
 
-// The statuses in which a job has handed its PR on: done, or stopped at a gate.
+// The statuses in which a job has handed its PR on. A driver opens the PR and then
+// completes (done) or stops at a gate (blocked). A queued, claimed, failed or
+// superseded job has not handed anything on, so its id in a PR body proves nothing.
 const HANDED_ON_STATUSES = ["blocked", "done"];
 
 // A PR URL as the job records hold it, compared case-insensitively. The match ends at
@@ -304,8 +340,11 @@ function normalizedPrUrls(text: string | null): string[] {
   return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());
 }
 
-// A second statement, beside the refused list, of the paths whose consequence is not
-// local, so removing a pattern from one list does not open the other.
+// Named separately from the refused list because their consequence is not local: a
+// migration runs against the live database, a workflow is what measures the code, and
+// a lockfile decides what gets installed and executed. The refused list also covers
+// some of these; this is the second statement for them, so removing a pattern from
+// one list does not quietly open the other.
 const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)\.github\/workflows\//i, why: "a workflow, which is what measures the code" },
@@ -323,7 +362,8 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
   const passed: PolicyCheck[] = [];
   const no = (failed: PolicyCheck, why: string): PolicyVerdict => ({ merge: false, failed, why, passed: [...passed] });
 
-  // A path list not read whole is not judged on the part that loaded.
+  // A path list that was not read whole is not judged on the part that loaded: a
+  // refused path on page two would merge that way.
   if (facts.filesProblem) {
     return no("paths_not_refused", `the changed-file list is incomplete (${facts.filesProblem}), so this PR is not evaluated.`);
   }
@@ -346,7 +386,8 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
   }
   passed.push("no_migration_workflow_lockfile");
 
-  // A fork's head, or a deleted fork's (no head repo), is refused.
+  // A fork's head is code nobody holding a credential here pushed. GitHub reports no
+  // head repo when the fork was deleted, which is refused the same way.
   if (!facts.headRepo || facts.headRepo.toLowerCase() !== facts.repo.toLowerCase()) {
     return no("head_in_base_repo", `the PR's head is on ${facts.headRepo ?? "no repo GitHub reports"}, not on ${facts.repo}. A fork's PR waits for the seat.`);
   }
@@ -433,8 +474,9 @@ interface OpenPr {
   user?: { login?: string } | null;
 }
 
-// Every check run must have completed as success, skipped or neutral, and at least one
-// must have reported: a PR with no checks is not green.
+// Every completed check run must have concluded success, skipped or neutral, and at
+// least one must have reported. A PR with no checks is not green: its workflow never
+// started, which cannot be told apart from a workflow that was removed.
 export function ciVerdict(
   runs: Array<{ name: string; status: string; conclusion: string | null }>
 ): { conclusion: string | null; note: string } {
@@ -650,8 +692,11 @@ export interface AutoMergeOutcome {
   passed: string[];
 }
 
-// The awaiting-seat set, rewritten whole every tick, so a PR a human merged or closed
-// drops out. improve_status reads this key rather than calling GitHub.
+// Where the awaiting-seat set lives. Rewritten whole on every tick rather than
+// appended to, because the tick recomputes the full set of open pull requests each
+// time: a PR a human merged or closed stops appearing, with no second mechanism needed
+// to expire it. improve_status reads this key rather than calling GitHub, so asking
+// for status costs nothing.
 export const AWAITING_SEAT_KEY = "improve:awaiting-seat";
 
 export interface AwaitingSeat {
@@ -686,7 +731,9 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     let repo: string;
     let defaultBranch: string;
     let prs: OpenPr[];
-    // A namespace that cannot be read is skipped, not the whole tick.
+    // A namespace that cannot be read is skipped, not the whole tick. The default-branch
+    // read and the list parse throw on a GitHub failure, and a throw here would stop
+    // every later namespace and the awaiting-seat write.
     try {
       ({ owner, repo } = await resolveRepo(env, namespace));
       defaultBranch = await getDefaultBranch(env, owner, repo);
@@ -720,8 +767,10 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         }
         continue;
       }
-      // One PR that throws does not end the tick: it is reported as not merged, and an
-      // auto-merge-failed row says why.
+      // One PR that throws does not end the tick. A 405 on a PR that is not mergeable,
+      // a failed read or a D1 error would otherwise abort every later PR and namespace,
+      // leave no audit row, and skip the awaiting-seat write. The PR is reported as not
+      // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
         await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now);
@@ -749,7 +798,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     }
   }
 
-  // Written even when empty, so no stale entry is left.
+  // The full awaiting-seat set, written whole, and written even when it is empty, so a
+  // tick that cleared the last one leaves no stale entry behind.
   const awaiting: AwaitingSeat[] = outcomes
     .filter((o) => !o.merged)
     .map((o) => ({

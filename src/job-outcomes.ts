@@ -6,13 +6,16 @@ import type { RunSignal } from "./skills-lifecycle";
 
 // One outcome row per finished job, written once, carrying counts.
 //
-// The Worker never stores a driver's count for something it could have checked.
-// Where a GitHub check ran, the stored number is GitHub's and the field is marked
-// verified; where it could not run, the driver's number is stored and marked
-// unverified.
+// The Worker never stores a driver's count for something it could have checked. This
+// Worker holds a GitHub App token that reaches every repo in the portfolio, so for
+// anything that ended in a pull request the authority is GitHub and the driver's
+// number is an opinion. Where a check ran, the stored number is GitHub's and the field
+// is marked verified; where it could not run, the driver's number is stored and marked
+// unverified. A reader can always tell which.
 //
 // Null is not zero: a field nobody reported is null, a field counted and found empty
-// is 0.
+// is 0. Collapsing the two would make "no driver reports test counts"
+// indistinguishable from "no driver adds tests".
 
 export const OUTCOME_RESULT_KINDS = ["pr", "doc", "none"] as const;
 export type OutcomeResultKind = (typeof OUTCOME_RESULT_KINDS)[number];
