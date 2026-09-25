@@ -25,11 +25,14 @@ import { join } from "node:path";
 // Anything else is skipped rather than guessed at, and reported rather than dropped: a
 // plan check that quietly covers 40 of 60 statements is the "assertion that can pass by
 // reading nothing" failure.
-const HOLE = /\$\{[^}]*\}/g;
+//
+// NOT GLOBAL. A global regex keeps lastIndex across .test() calls, so after one
+// skipped statement the next statement's test started mid-string and could miss its
+// hole, keeping `${...}` in the SQL as if it were plannable (audit 2026-09-25, E2-L23).
+const HOLE = /\$\{[^}]*\}/;
 
 function substitute(sql) {
   if (!HOLE.test(sql)) return { ok: true, sql };
-  HOLE.lastIndex = 0;
   // A hole immediately after FROM or INTO or JOIN is a table name.
   let out = sql.replace(/\b(FROM|INTO|JOIN|UPDATE)\s+\$\{[^}]*\}/gi, "$1 documents");
   // A hole standing where the whole WHERE clause goes is an optional filter list,
@@ -46,7 +49,6 @@ function substitute(sql) {
   out = out.replace(/\(\s*\$\{[^}]*\}\s*\)/g, "(?1)");
   // A remaining hole in a projection position.
   out = out.replace(/SELECT\s+\$\{[^}]*\}/gi, "SELECT *");
-  HOLE.lastIndex = 0;
   if (HOLE.test(out)) return { ok: false, sql };
   return { ok: true, sql: out };
 }
@@ -90,8 +92,10 @@ export function extractStatements(srcDir) {
     const text = readFileSync(join(srcDir, name), "utf8");
     // `.prepare(` followed by a string or template literal, up to its closing
     // quote. Both quote styles and backticks, and a leading newline for the
-    // multi-line form this codebase mostly uses.
-    const calls = text.matchAll(/\.prepare\(\s*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
+    // multi-line form this codebase mostly uses. Line comments between `.prepare(`
+    // and the string are skipped: several statements carry their explanation there,
+    // and without this they were neither extracted nor counted.
+    const calls = text.matchAll(/\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
     for (const call of calls) {
       const raw = call[1];
       const body = raw.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\'/g, "'");
@@ -100,6 +104,12 @@ export function extractStatements(srcDir) {
       const substituted = substitute(collapsed);
       if (substituted.ok) statements.push({ file: name, sql: substituted.sql });
       else skipped.push({ file: name, sql: collapsed });
+    }
+    // `.prepare(<expression>)`: the SQL is chosen at run time, so there is no literal
+    // to extract. Counted as skipped rather than left out, so a caller asserting how
+    // much was skipped sees it (audit 2026-09-25, E2-L23).
+    for (const call of text.matchAll(/\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*([^\s`"'/][^\n]*)/g)) {
+      skipped.push({ file: name, sql: `(expression) ${call[1].trim()}` });
     }
   }
   return { statements, skipped };

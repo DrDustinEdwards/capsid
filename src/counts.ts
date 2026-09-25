@@ -129,11 +129,15 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
     let m: RegExpExecArray | null;
     const ofForm = /(\d+)\s*(?:of|\/)\s*(\d+)\s+gates?\b/gi;
     while ((m = ofForm.exec(body)) !== null) {
+      // Consumed like the tools passes, so the plain form below does not read the
+      // same "M gates" a second time and flag it twice.
+      consume(m);
       if (YEAR.test(m[2])) continue;
       flag("live gates", m, m[2], String(authoritative.liveGates), "the total, not the number that passed");
     }
     const plainForm = /\b(\d+)\s+(?:live\s+)?gates\b(?!\s*(?:passed|failed))/gi;
     while ((m = plainForm.exec(body)) !== null) {
+      if (isConsumed(m.index)) continue;
       if (YEAR.test(m[1])) continue;
       flag("live gates", m, m[1], String(authoritative.liveGates));
     }

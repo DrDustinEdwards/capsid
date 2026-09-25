@@ -262,6 +262,24 @@ async function dispatchBaseline(env: Env, run: RunRow, now: Date): Promise<TickO
   return { runId: run.id, namespace: run.namespace, from: "opening", to: "awaiting-score", note: `baseline dispatched on ${branch}` };
 }
 
+// An attempt that ended before its branch was pushed (no proposal, or a flagged path)
+// counts as a revert: the run moves back to attempting, or to finalizing once the
+// consecutive-revert limit is reached.
+async function recordRevertBeforePush(env: Env, run: RunRow, costUsd: number): Promise<void> {
+  await advanceRun(env.DB, {
+    runId: run.id,
+    expected: "awaiting-score",
+    next: run.consecutive_reverts + 1 >= MAX_CONSECUTIVE_REVERTS ? "finalizing" : "attempting",
+    patch: {
+      attempts: run.attempts + 1,
+      reverts: run.reverts + 1,
+      consecutive_reverts: run.consecutive_reverts + 1,
+      cost_usd: run.cost_usd + costUsd,
+      current_attempt: null,
+    },
+  });
+}
+
 async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutcome> {
   const cap = maxAttemptsFor(run.namespace);
   if (run.attempts >= cap) {
@@ -345,18 +363,7 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
       // produces no write at all. Until 2026-09-16 it charged a loss.
       ...(skill ? attributionStatements(env.DB, { offered: [skill.id], used: [], signal: "verified-failure" }) : []),
     ]);
-    await advanceRun(env.DB, {
-      runId: run.id,
-      expected: "awaiting-score",
-      next: run.consecutive_reverts + 1 >= MAX_CONSECUTIVE_REVERTS ? "finalizing" : "attempting",
-      patch: {
-        attempts: run.attempts + 1,
-        reverts: run.reverts + 1,
-        consecutive_reverts: run.consecutive_reverts + 1,
-        cost_usd: run.cost_usd + proposal.costUsd,
-        current_attempt: null,
-      },
-    });
+    await recordRevertBeforePush(env, run, proposal.costUsd);
     return { runId: run.id, namespace: run.namespace, from: "attempting", to: "attempting", note };
   }
 
@@ -381,18 +388,7 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
       // That is a verdict on the work itself, so the skill takes the loss.
       ...(skill ? attributionStatements(env.DB, { offered: [skill.id], used: [skill.id], signal: "verified-failure" }) : []),
     ]);
-    await advanceRun(env.DB, {
-      runId: run.id,
-      expected: "awaiting-score",
-      next: run.consecutive_reverts + 1 >= MAX_CONSECUTIVE_REVERTS ? "finalizing" : "attempting",
-      patch: {
-        attempts: run.attempts + 1,
-        reverts: run.reverts + 1,
-        consecutive_reverts: run.consecutive_reverts + 1,
-        cost_usd: run.cost_usd + proposal.costUsd,
-        current_attempt: null,
-      },
-    });
+    await recordRevertBeforePush(env, run, proposal.costUsd);
     return { runId: run.id, namespace: run.namespace, from: "attempting", to: "attempting", note: `reverted before push: ${preflight.reason}` };
   }
 

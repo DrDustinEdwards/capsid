@@ -102,3 +102,30 @@ test("the pattern list is shaped, not spelled: each entry is a regex with a reas
     assert.equal(typeof entry.why, "string");
   }
 });
+
+// Audit 2026-09-25, E2-30 (finding E2-L13): config the test runner or build reads that
+// the list did not cover.
+test("test runner, compiler, environment and container config are protected", () => {
+  const paths = [
+    "jest.config.json",
+    "babel.config.json",
+    ".babelrc",
+    ".babelrc.json",
+    ".mocharc.yml",
+    ".mocharc.json",
+    "vitest.workspace.ts",
+    ".env",
+    ".env.test",
+    "apps/web/.env.local",
+    "Dockerfile",
+    "docker/Dockerfile.ci",
+  ];
+  const unprotected = paths.filter((p) => protectedHits([p]).length === 0);
+  assert.deepEqual(unprotected, []);
+});
+
+test("the new patterns leave ordinary source and docs writable", () => {
+  for (const p of ["src/environment.ts", "docs/docker.md", "src/config.ts", "README.md"]) {
+    assert.deepEqual(protectedHits([p]), [], `${p} was protected`);
+  }
+});

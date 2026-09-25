@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { monitorAttempt } from "../improve-gates";
+import { monitorAttempt, type MonitorVerdict } from "../improve-gates";
 import {
   estimatedScorerMinutes,
   maxAttemptsFor,
@@ -11,7 +11,7 @@ import {
   type BestRecord,
 } from "../improve-schema";
 import { checkHoldout, readHoldoutManifest, type ScoreReport } from "../improve-scorer";
-import { anchorVerdict, compare, type MetricMap } from "../improve-scores";
+import { anchorVerdict, compare, type Comparison, type MetricMap } from "../improve-scores";
 import { abstractSkill, recordSkill } from "../improve-skills";
 import { attributionStatements } from "../skills-records";
 import {
@@ -65,6 +65,45 @@ export function settledMinutes(run: Pick<RunRow, "namespace" | "ci_minutes">, re
   if (!(Number.isFinite(reported) && reported > 0)) return run.ci_minutes;
   return Math.max(0, run.ci_minutes - estimatedScorerMinutes(run.namespace) + meteredMinutes(run.namespace, reported));
 }
+
+// The scored path and the late-report path both judge the archived change the same way
+// and write the same verdict columns (audit 2026-09-25, E2-29). The two UPDATEs differ
+// only in which statuses they accept, so they share the monitor call and the binds.
+async function monitorArchivedChange(
+  env: Env,
+  run: RunRow,
+  attempt: AttemptRow
+): Promise<{ change: string; monitor: MonitorVerdict }> {
+  const change = (await readDoc(env.DB, run.namespace, attempt.diff_ref ?? "")) ?? "";
+  const monitor = await monitorAttempt(env, {
+    changedPaths: changedPathsFrom(change),
+    changeSummary: attempt.change_summary ?? "",
+    reasoning: change,
+    diff: change,
+  });
+  return { change, monitor };
+}
+
+// Binds ?1 to ?10 of the attempt verdict UPDATE: id, status, kept, reason,
+// score_before, score_after, flagged, flag_reason, anchors_json, secondary_json.
+function attemptVerdictBinds(
+  attempt: AttemptRow,
+  v: { keep: boolean; reason: string; monitor: MonitorVerdict; comparison: Comparison; anchors: MetricMap; secondary: MetricMap }
+): unknown[] {
+  return [
+    attempt.id,
+    v.monitor.flagged ? "flagged" : v.keep ? "kept" : "reverted",
+    v.keep ? 1 : 0,
+    v.reason,
+    v.comparison.scoreBefore,
+    v.comparison.scoreAfter,
+    v.monitor.flagged ? 1 : 0,
+    v.monitor.reason,
+    JSON.stringify(v.anchors),
+    JSON.stringify(v.secondary),
+  ];
+}
+
 export async function ingestScore(env: Env, report: ScoreReport, now: Date): Promise<IngestResult> {
   const run = await runById(env.DB, report.run_id);
   if (!run) return { ok: false, message: `unknown run ${report.run_id}` };
@@ -232,13 +271,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
   // THE MONITOR RUNS BEFORE THE SCORE IS BELIEVED, and its verdict outranks it. A
   // flagged attempt is reverted regardless of how well it scored: a change that games
   // the scorer scores WELL.
-  const change = (await readDoc(env.DB, run.namespace, attempt.diff_ref ?? "")) ?? "";
-  const monitor = await monitorAttempt(env, {
-    changedPaths: changedPathsFrom(change),
-    changeSummary: attempt.change_summary ?? "",
-    reasoning: change,
-    diff: change,
-  });
+  const { change, monitor } = await monitorArchivedChange(env, run, attempt);
 
   const holdoutFailed = !holdout.ok;
   const keep = !monitor.flagged && !holdoutFailed && anchorsVerdict.passed && comparison.improved;
@@ -269,16 +302,7 @@ export async function ingestScore(env: Env, report: ScoreReport, now: Date): Pro
          RETURNING id`
       )
       .bind(
-        attempt.id,
-        monitor.flagged ? "flagged" : keep ? "kept" : "reverted",
-        keep ? 1 : 0,
-        reason,
-        comparison.scoreBefore,
-        comparison.scoreAfter,
-        monitor.flagged ? 1 : 0,
-        monitor.reason,
-        JSON.stringify(anchors),
-        JSON.stringify(report.secondary)
+        ...attemptVerdictBinds(attempt, { keep, reason, monitor, comparison, anchors, secondary: report.secondary })
       ),
     ...scoreStatements(env.DB, run.id, run.namespace, attempt.id, { ...anchors, ...report.secondary }),
     // SCORED, SO THE SIGNAL IS A VERDICT ON THE WORK. The attempt carried the skill
@@ -471,13 +495,7 @@ async function recordLateScore(
   const baseline = await metricsFor(env.DB, run.id, null);
   const comparison = compare(doc.secondary, baseline, report.secondary);
   const anchorsVerdict = anchorVerdict(doc.anchors, anchors);
-  const change = (await readDoc(env.DB, run.namespace, attempt.diff_ref ?? "")) ?? "";
-  const monitor = await monitorAttempt(env, {
-    changedPaths: changedPathsFrom(change),
-    changeSummary: attempt.change_summary ?? "",
-    reasoning: change,
-    diff: change,
-  });
+  const { monitor } = await monitorArchivedChange(env, run, attempt);
 
   const keep = !monitor.flagged && holdout.ok && anchorsVerdict.passed && comparison.improved;
   const verdict = monitor.flagged
@@ -500,16 +518,7 @@ async function recordLateScore(
        RETURNING id`
     )
     .bind(
-      attempt.id,
-      monitor.flagged ? "flagged" : keep ? "kept" : "reverted",
-      keep ? 1 : 0,
-      reason,
-      comparison.scoreBefore,
-      comparison.scoreAfter,
-      monitor.flagged ? 1 : 0,
-      monitor.reason,
-      JSON.stringify(anchors),
-      JSON.stringify(report.secondary)
+      ...attemptVerdictBinds(attempt, { keep, reason, monitor, comparison, anchors, secondary: report.secondary })
     )
     .all<{ id: string }>();
 
