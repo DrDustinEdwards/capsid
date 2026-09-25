@@ -280,7 +280,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         const path = reportPath(now);
         const body = renderTruthReport(report);
         // Through the ordinary write path, so the report is snapshotted and audited
-        // like any other document. Hard rule 5: no write path skips document_versions
+        // like any other document. CLAUDE.md, snapshot rule: no write path skips document_versions
         // and audit_log.
         const prior = await db
           .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")

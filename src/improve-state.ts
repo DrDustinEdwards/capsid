@@ -275,7 +275,7 @@ export async function advanceRun(db: D1Database, t: Transition): Promise<boolean
 // document_versions and a row is appended to audit_log, both in the SAME BATCH as
 // the write, so either all three land or none do.
 //
-// This is CLAUDE.md hard rule 5, and it applies here even though nothing the loop
+// This is the snapshot rule in CLAUDE.md, and it applies here even though nothing the loop
 // writes is canon: an archive doc that overwrites a previous archive doc with no
 // snapshot is exactly the unrecoverable state the rule exists to prevent, and
 // "the loop's own documents do not matter" is the sentence that precedes finding

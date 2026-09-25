@@ -15,7 +15,7 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // watcher is not: "post a job and nothing else" is an ACTION inside one tool, and
 // the tools axis names tools. So a tools entry may now be qualified, `jobs.post`,
 // and the jobs handler asks the enforcement point about the qualified name at the
-// point where the action is known. That is the same shape hard rule 6 already
+// point where the action is known. That is the same shape the one enforcement point rule already
 // permits for `jobs` and `lint`, not a second enforcement point.
 
 function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {

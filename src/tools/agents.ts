@@ -11,7 +11,7 @@ const AGENT_ACTIONS = ["mint", "list", "revoke", "update_scopes"] as const;
 export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  // THE CREDENTIAL CONTROL PLANE'S ONE TOOL, a ruled exception to hard rule 1 taking
+  // THE CREDENTIAL CONTROL PLANE'S ONE TOOL, a ruled exception to the tool surface rule taking
   // the surface from 31 to 32 (capsid/decisions.md, 2026-09-11). The FIFTH, after
   // history and restore (2026-08-13), improve_run and improve_status (2026-09-04),
   // the repo fallthrough widening (2026-09-06) and jobs (2026-09-10).

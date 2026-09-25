@@ -27,7 +27,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Two audits on 2026-09-16 found /ops/backup outside it. handleBackup checked only
 // that the caller held the write grant and never called checkScope, so a driver
 // minted for one namespace could run a full backup, and the prune that follows it,
-// across every namespace in the store. CLAUDE.md rule 6 says there is one
+// across every namespace in the store. CLAUDE.md's one enforcement point rule says there is one
 // enforcement point; this route was not in it.
 //
 // WHY THE ROUTE IS NOT DRIVEN: src/routes.ts imports the Agents SDK, which needs
@@ -83,7 +83,7 @@ async function resolveWith(bearer: string) {
 
 // ---- /ops/backup ----------------------------------------------------------------
 
-// scanner-rule: CLAUDE.md rule 6, one enforcement point, /ops/backup is gated through checkScope. src/routes.ts imports agents/mcp and cannot load under node --test, so the handler's source is what is checked
+// scanner-rule: CLAUDE.md, one enforcement point rule, /ops/backup is gated through checkScope. src/routes.ts imports agents/mcp and cannot load under node --test, so the handler's source is what is checked
 test("REPRODUCTION: /ops/backup refuses a one-namespace driver that holds write", async () => {
   const agent = await resolveWith(DRIVER_KEY);
   // The caller is exactly the one the finding describes.
@@ -102,7 +102,7 @@ test("REPRODUCTION: /ops/backup refuses a one-namespace driver that holds write"
     /routeRefusal\("\/ops\/backup", caller\.agent\)/,
     "handleBackup does not ask routeRefusal about its own path, so the table above decides nothing for it"
   );
-  assert.doesNotMatch(body, /grants\.includes\(/, "handleBackup decides a grant for itself again (CLAUDE.md rule 6)");
+  assert.doesNotMatch(body, /grants\.includes\(/, "handleBackup decides a grant for itself again (CLAUDE.md, one enforcement point rule)");
   assert.match(body, /status: 403/, "a resolved caller that is refused should get 403, not 401");
 });
 
@@ -166,7 +166,7 @@ function dispatches(): { path: string; handler: string }[] {
   return found;
 }
 
-// scanner-rule: CLAUDE.md rule 6, one enforcement point, every route is a decision. Derived over every dispatch line in src/routes.ts
+// scanner-rule: CLAUDE.md, one enforcement point rule, every route is a decision. Derived over every dispatch line in src/routes.ts
 test("every route in defaultHandler is either gated through checkScope or listed as ungated with a reason", () => {
   const routes = dispatches();
   // Measured 2026-09-16: 14 dispatch lines over 12 distinct paths. A change to either
@@ -189,7 +189,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
   }
 });
 
-// scanner-rule: CLAUDE.md rule 6, one enforcement point. src/routes.ts imports agents/mcp and cannot load under node --test
+// scanner-rule: CLAUDE.md, one enforcement point rule. src/routes.ts imports agents/mcp and cannot load under node --test
 test("every gated route's handler asks routeRefusal about its own path", () => {
   const gated = dispatches().filter((r) => Object.hasOwn(ROUTE_GRANTS, r.path));
   assert.equal(gated.length, 1, "the number of gated dispatch lines changed");
@@ -247,7 +247,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
   assert.equal(requiredForAction("improve_run", undefined), "write");
 });
 
-// scanner-rule: CLAUDE.md rule 6, one enforcement point, no handler decides a grant for itself. An absent check cannot be observed by calling the tool
+// scanner-rule: CLAUDE.md, one enforcement point rule, no handler decides a grant for itself. An absent check cannot be observed by calling the tool
 test("no tool handler decides admin for itself", () => {
   // agents and improve_run did until 2026-09-16. improve_status passes admin through
   // to shape what it returns, which is not a gate, so the scan looks for the refusal

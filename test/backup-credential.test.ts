@@ -141,7 +141,7 @@ test("backup HMAC and parse refusal strings are pinned byte-for-byte", async () 
 // The refusal each signed endpoint returns is checked against the real Worker in
 // test-integration/signed-endpoints.test.ts.
 
-// scanner-rule: CLAUDE.md rule 10 applied to the backup parent key, the same way it
+// scanner-rule: CLAUDE.md, improve loop rule, applied to the backup parent key, the same way it
 // limits HOLDOUT. Only the scorer and the env declaration may name it.
 test("ONLY src/improve-scorer.ts names the backup parent key id", () => {
   const offenders = sourceFiles()
