@@ -154,7 +154,7 @@ const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
  * prose as a piece was the defect. Both readers now take their pieces from here, so
  * they cannot disagree again.
  */
-export function commandPieces(command: string): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
+function commandPieces(command: string): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
   if (EXPANDS.test(command)) {
     return {
       refused:

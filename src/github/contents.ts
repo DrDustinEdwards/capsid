@@ -296,7 +296,7 @@ export const SELF_REPO = "DrDustinEdwards/capsid";
 //
 // The improve loop never passes the flag: .github/ is a protected path, so an
 // attempt touching one is reverted before it is pushed.
-export const WORKFLOW_DIR = ".github/workflows/";
+const WORKFLOW_DIR = ".github/workflows/";
 
 export function workflowWriteRefusal(path: string, allow: boolean | undefined): string | null {
   if (allow === true) return null;
