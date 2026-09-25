@@ -28,12 +28,22 @@ const POLICY_NAMESPACE = "capsid";
 // Every check, in the order evaluated. Each one refuses on its own. The three path
 // checks run first because they are the never-list: a change to one of those paths
 // is not merged without a human, whatever the rest of the PR looks like.
+//
+// VERSION 5 ADDS THREE (audit 2026-09-25, finding F2-1). Up to version 4 the tick
+// judged the job a PR body named and never the PR itself: any open PR, from a fork or
+// from any credential holding open_pr, that named a finished driver job's id merged on
+// green CI. Job ids are public, in commit subjects and PR bodies. head_in_base_repo
+// refuses a fork head, job_handed_on refuses a job that is not blocked or done, and
+// pr_recorded_for_job refuses a PR the driver never recorded against that job.
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
   "no_migration_workflow_lockfile",
+  "head_in_base_repo",
   "body_names_job",
   "author_is_driver",
+  "job_handed_on",
+  "pr_recorded_for_job",
   "base_is_default_branch",
   "ci_green",
 ] as const;
@@ -300,10 +310,20 @@ export interface PrFacts {
   // not be read, or null.
   ciSteps: Array<{ workflow: string; job: string; step: string; conclusion: string | null }>;
   ciStepsProblem: string | null;
+  // The owner/name of the repo the PR's head branch lives on, as GitHub reports it, or
+  // null when GitHub reports none (a fork that was deleted).
+  headRepo: string | null;
   // Resolved from the job id in the PR body.
   jobId: string | null;
   jobClaimedBy: string | null;
+  jobStatus: string | null;
   driverAgent: { name: string; kind: string; revoked: boolean } | null;
+  // Every pull request URL the job's holder recorded against the job: its result_ref,
+  // and the job_outcome_prs rows. result_ref is written only by the transition keyed on
+  // claimed_by. job_outcome_prs is written from evidence.prs on that same transition,
+  // or seeded by the daily sweep from that job's result_ref and result_summary, which
+  // the same transition wrote. So a URL here was named by the job's holder.
+  jobPrUrls: string[];
 }
 
 export type PolicyVerdict =
@@ -316,6 +336,20 @@ const JOB_ID_IN_BODY = /\bjob_[0-9a-f]{12}\b/;
 
 export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
+}
+
+// The statuses in which a job has handed its PR on. A driver opens the PR and then
+// completes (done) or stops at a gate (blocked). A queued, claimed, failed or
+// superseded job has not handed anything on, so its id in a PR body proves nothing.
+const HANDED_ON_STATUSES = ["blocked", "done"];
+
+// A PR URL written the way the job records hold it. Compared case-insensitively
+// because GitHub owner and repo names are. The match ends at the PR number, so a
+// trailing slash or fragment is not part of it, and pull/23 never matches pull/234.
+const PR_URL = /https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/pull\/\d+/g;
+
+function normalizedPrUrls(text: string | null): string[] {
+  return [...(text ?? "").matchAll(PR_URL)].map((m) => m[0].toLowerCase());
 }
 
 // Named separately from the refused list because their consequence is not local: a
@@ -361,6 +395,13 @@ export function evaluatePolicy(facts: PrFacts): PolicyVerdict {
   }
   passed.push("no_migration_workflow_lockfile");
 
+  // A fork's head is code nobody holding a credential here pushed. GitHub reports no
+  // head repo when the fork was deleted, which is refused the same way.
+  if (!facts.headRepo || facts.headRepo.toLowerCase() !== facts.repo.toLowerCase()) {
+    return no("head_in_base_repo", `the PR's head is on ${facts.headRepo ?? "no repo GitHub reports"}, not on ${facts.repo}. A fork's PR waits for the seat.`);
+  }
+  passed.push("head_in_base_repo");
+
   if (!facts.jobId) {
     return no("body_names_job", "the PR body names no job id, so there is no request this change can be traced back to.");
   }
@@ -379,6 +420,23 @@ export function evaluatePolicy(facts: PrFacts): PolicyVerdict {
     return no("author_is_driver", `${facts.driverAgent.name} has been revoked, so its open work waits for the seat.`);
   }
   passed.push("author_is_driver");
+
+  if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
+    return no("job_handed_on", `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`);
+  }
+  passed.push("job_handed_on");
+
+  // THE PR ITSELF, not only the job its body names. Without this, anyone who can open a
+  // PR here could name a finished driver job and have their change judged as that
+  // driver's work.
+  const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
+  if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
+    return no(
+      "pr_recorded_for_job",
+      `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`
+    );
+  }
+  passed.push("pr_recorded_for_job");
 
   if (facts.baseRef !== facts.defaultBranch) {
     return no("base_is_default_branch", `the PR targets '${facts.baseRef}', not the default branch '${facts.defaultBranch}'.`);
@@ -413,7 +471,8 @@ interface OpenPr {
   number: number;
   body: string | null;
   base: { ref: string };
-  head: { sha: string };
+  // repo is null when the head was on a fork that has since been deleted.
+  head: { sha: string; repo?: { full_name?: string } | null };
 }
 
 // Every completed check run must have concluded success, skipped or neutral, and at
@@ -522,12 +581,22 @@ async function factsForPr(
   const jobId = jobIdFromBody(body);
 
   let jobClaimedBy: string | null = null;
+  let jobStatus: string | null = null;
   let driverAgent: PrFacts["driverAgent"] = null;
+  const jobPrUrls: string[] = [];
   if (jobId) {
-    const job = await env.DB.prepare("SELECT claimed_by FROM jobs WHERE id = ?1 AND namespace = ?2")
+    const job = await env.DB.prepare("SELECT claimed_by, status, result_ref FROM jobs WHERE id = ?1 AND namespace = ?2")
       .bind(jobId, namespace)
-      .first<{ claimed_by: string | null }>();
+      .first<{ claimed_by: string | null; status: string | null; result_ref: string | null }>();
     jobClaimedBy = job?.claimed_by ?? null;
+    jobStatus = job?.status ?? null;
+    if (job) {
+      if (job.result_ref) jobPrUrls.push(job.result_ref);
+      const recorded = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1")
+        .bind(jobId)
+        .all<{ pr_url: string }>();
+      jobPrUrls.push(...(recorded.results ?? []).map((r) => r.pr_url));
+    }
     if (jobClaimedBy?.startsWith("agent:")) {
       const name = jobClaimedBy.slice("agent:".length);
       const row = await env.DB.prepare("SELECT name, kind, revoked_at FROM agents WHERE name = ?1")
@@ -574,9 +643,12 @@ async function factsForPr(
     ciNote: ci.note,
     ciSteps: steps.steps,
     ciStepsProblem: steps.problem,
+    headRepo: pr.head.repo?.full_name ?? null,
     jobId,
     jobClaimedBy,
+    jobStatus,
     driverAgent,
+    jobPrUrls,
   };
 }
 
