@@ -6,7 +6,7 @@ import type { Agent } from "../agents";
 import { IMPROVE_OVERRIDE_FLAGS, type ScopeNeed } from "../scope";
 import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
 import { sha256Hex } from "../auth";
-import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists } from "../store-guards";
+import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks } from "../links";
 import { validateDocStatus, validateDocType } from "../doc-meta";
@@ -567,14 +567,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         // what the table HELD at commit: on an unguarded update, a body written in
         // the gap was overwritten while the snapshot recorded its predecessor. The
         // SELECT runs in the same transaction as the overwrite.
-        statements.push(
-          db
-            .prepare(
-              `INSERT INTO document_versions (document_id, namespace, path, title, body)
-               SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
-            )
-            .bind(namespace, path)
-        );
+        statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(documentUpsert(db, namespace, path, title ?? null, body, type ?? null, tags ?? null, status ?? null));
       // The PRIOR type, status, tags and title go into the audit params whenever a
@@ -849,14 +842,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         // what the table HELD at commit. Restore elicits a confirmation, so the gap
         // could be the full 90 second prompt. The SELECT runs in the same transaction
         // as the overwrite.
-        statements.push(
-          db
-            .prepare(
-              `INSERT INTO document_versions (document_id, namespace, path, title, body)
-               SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
-            )
-            .bind(namespace, path)
-        );
+        statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
         db
@@ -984,12 +970,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       try {
         const results = await db.batch([
           elicited ? requireBodyUnchanged(db, namespace, path, prior.body) : requireExists(db, namespace, path),
-          db
-            .prepare(
-              `INSERT INTO document_versions (document_id, namespace, path, title, body)
-               SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
-            )
-            .bind(namespace, path),
+          snapshotLive(db, namespace, path),
           db
             .prepare(
               `INSERT INTO audit_log (actor, action, namespace, path, params)

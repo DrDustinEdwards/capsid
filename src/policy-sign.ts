@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { sha256Hex } from "./auth";
 import { POLICY_PREFIX } from "./improve-schema";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./improve-task";
-import { documentUpsert, isMissingRowAbort, requireBodyUnchanged } from "./store-guards";
+import { documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
 
 // ---- signing a policy document ------------------------------------------------
 //
@@ -111,12 +111,7 @@ export async function signPolicyDocument(
   try {
     await env.DB.batch([
       requireBodyUnchanged(env.DB, namespace, path, prior.body),
-      env.DB
-        .prepare(
-          `INSERT INTO document_versions (document_id, namespace, path, title, body)
-           SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
-        )
-        .bind(namespace, path),
+      snapshotLive(env.DB, namespace, path),
       documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
       env.DB
         .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'policy-signed', ?2, ?3, ?4)")

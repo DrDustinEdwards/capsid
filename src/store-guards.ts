@@ -66,6 +66,19 @@ function requireMissing(db: D1Database, namespace: string, path: string): D1Prep
     .bind(namespace, path);
 }
 
+// THE SNAPSHOT OF THE LIVE ROW, ONE SPELLING (audit 2026-09-25, E1-2). It SELECTs the
+// row the table holds when the batch runs, not a body the caller read earlier, so a
+// write landing between a pre-read and the batch is snapshotted rather than lost. It
+// inserts nothing when no row exists, so a caller can add it unconditionally.
+export function snapshotLive(db: D1Database, namespace: string, path: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO document_versions (document_id, namespace, path, title, body)
+       SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
+    )
+    .bind(namespace, path);
+}
+
 type WriteGuard = "none" | "body" | "missing";
 
 type CommitRefusals = {
