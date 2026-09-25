@@ -1,7 +1,7 @@
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
-import { getCookie, hmacHex, isAdminUser, sha256Hex, timingSafeEqual } from "./auth";
+import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
 import { runBackup } from "./backup";
 import { routeRefusal } from "./scope";
@@ -37,16 +37,20 @@ import {
 } from "./console";
 import { handleConsoleAction } from "./console-actions";
 import { handleConsoleCallback } from "./console-auth";
-
-const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
-const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
-const GITHUB_USER_URL = "https://api.github.com/user";
+import { clearStateCookie, completeGithubLogin, type GithubLoginFlow, startGithubLogin, STATE_TTL_SECONDS } from "./github-login";
 
 const APPROVAL_COOKIE = "capsid_approved";
-const STATE_COOKIE = "capsid_state";
 const CSRF_COOKIE = "capsid_csrf";
-const STATE_TTL_SECONDS = 600;
-const STATE_KV_PREFIX = "capsid:oauth-state:";
+
+// The MCP authorization flow's half of the GitHub login (src/github-login.ts). The
+// state stored against the token is the JSON AuthRequest.
+const MCP_LOGIN: GithubLoginFlow = {
+  callbackPath: "/callback",
+  stateCookie: "capsid_state",
+  cookiePath: "/callback",
+  kvPrefix: "capsid:oauth-state:",
+  restartHint: "Restart from your MCP client.",
+};
 
 function textResponse(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
@@ -157,23 +161,7 @@ async function startGithubFlow(
   oauthReq: AuthRequest,
   extraCookies: string[] = []
 ): Promise<Response> {
-  const stateToken = crypto.randomUUID();
-  await env.OAUTH_KV.put(`${STATE_KV_PREFIX}${stateToken}`, JSON.stringify(oauthReq), {
-    expirationTtl: STATE_TTL_SECONDS,
-  });
-  const origin = new URL(request.url).origin;
-  const target = new URL(GITHUB_AUTHORIZE_URL);
-  target.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
-  target.searchParams.set("redirect_uri", `${origin}/callback`);
-  target.searchParams.set("scope", "read:user");
-  target.searchParams.set("state", stateToken);
-  const headers = new Headers({ Location: target.href });
-  headers.append(
-    "Set-Cookie",
-    `${STATE_COOKIE}=${await sha256Hex(stateToken)}; HttpOnly; Secure; SameSite=Lax; Path=/callback; Max-Age=${STATE_TTL_SECONDS}`
-  );
-  for (const cookie of extraCookies) headers.append("Set-Cookie", cookie);
-  return new Response(null, { status: 302, headers });
+  return startGithubLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), extraCookies);
 }
 
 async function handleAuthorizeGet(request: Request, env: Env): Promise<Response> {
@@ -241,67 +229,9 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
 }
 
 async function handleCallback(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const stateToken = url.searchParams.get("state");
-  if (!code || !stateToken) return textResponse("missing code or state", 400);
-
-  const stateCookie = getCookie(request, STATE_COOKIE);
-  if (!stateCookie || !timingSafeEqual(stateCookie, await sha256Hex(stateToken))) {
-    return textResponse("state validation failed: this browser did not start the flow. Restart from your MCP client.", 403);
-  }
-  const stateKey = `${STATE_KV_PREFIX}${stateToken}`;
-  const stored = await env.OAUTH_KV.get(stateKey);
-  if (!stored) return textResponse("state expired or already used. Restart from your MCP client.", 403);
-  // A corrupt stored payload is a 403 with an instruction, not a thrown handler
-  // (audit 2, F18). Whatever wrote it, the caller's move is the same: start again.
-  let oauthReq: AuthRequest;
-  try {
-    oauthReq = JSON.parse(stored) as AuthRequest;
-  } catch {
-    await env.OAUTH_KV.delete(stateKey);
-    return textResponse("stored authorization state is unreadable. Restart from your MCP client.", 403);
-  }
-
-  const tokenResp = await fetch(GITHUB_TOKEN_URL, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.GITHUB_CLIENT_ID,
-      client_secret: env.GITHUB_CLIENT_SECRET,
-      code,
-      redirect_uri: `${url.origin}/callback`,
-    }),
-  });
-  if (!tokenResp.ok) return textResponse("github token exchange failed", 502);
-  const tokenData = (await tokenResp.json()) as { access_token?: string };
-  if (!tokenData.access_token) return textResponse("github token exchange failed: no access token returned", 502);
-  // THE STATE IS CONSUMED HERE, not before the exchange (audit 2, F18). Deleting it
-  // three network calls early meant a transient GitHub 502 burned it: the browser
-  // sat on /callback holding a code GitHub never processed, and a reload answered
-  // "state expired or already used". The reload now works inside the 600 second TTL.
-  //
-  // Replay is bounded by GitHub rather than by this delete. The extra window is one
-  // HTTP round trip, and reaching it needs the state token AND the HttpOnly state
-  // cookie AND an unused code, which GitHub honours once.
-  await env.OAUTH_KV.delete(stateKey);
-
-  const userResp = await fetch(GITHUB_USER_URL, {
-    headers: {
-      Authorization: `Bearer ${tokenData.access_token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "capsid",
-    },
-  });
-  if (!userResp.ok) return textResponse("failed to fetch github user", 502);
-  const user = (await userResp.json()) as { id: number; login: string; name: string | null };
-
-  if (!isAdminUser(env, user)) {
-    return textResponse(
-      `access denied: capsid is a single-user server and GitHub account "${user.login}" is not its administrator`,
-      403
-    );
-  }
+  const login = await completeGithubLogin(request, env, MCP_LOGIN, (stored) => JSON.parse(stored) as AuthRequest);
+  if (!login.ok) return login.response;
+  const { user, state: oauthReq } = login;
 
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReq,
@@ -312,7 +242,7 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
   });
 
   const headers = new Headers({ Location: redirectTo });
-  headers.append("Set-Cookie", `${STATE_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/callback; Max-Age=0`);
+  headers.append("Set-Cookie", clearStateCookie(MCP_LOGIN));
   return new Response(null, { status: 302, headers });
 }
 
