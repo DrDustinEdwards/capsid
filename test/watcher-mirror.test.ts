@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   MIRROR_DUMP_PREFIX,
-  MIRROR_REPO_LABEL,
   MIRROR_STALE_HOURS,
   mirrorFindings,
   newestDump,
@@ -10,7 +9,6 @@ import {
   type MirrorRun,
 } from "../src/watcher.ts";
 import { BACKUP_STALE_HOURS } from "../src/health.ts";
-import { sourceFile } from "./source-files.ts";
 
 // THE OFF-ACCOUNT MIRROR WENT DARK FOR FOUR DAYS AND NOTHING REPORTED IT.
 //
@@ -148,25 +146,9 @@ test("the window is its own constant and not the local backup's", () => {
   assert.ok(MIRROR_STALE_HOURS > 24, "a window under a day fires every morning before the mirror has run");
 });
 
-// Comments stripped, because the property is about CODE. A comment naming the mirror
-// tells a reader what this is about and decides nothing; a string literal naming it
-// would be a second copy of the namespace mapping living outside the authorization
-// boundary, which is the escalation this whole arc closed.
-function codeOnly(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
-
-// scanner-rule: the namespace-to-repo mapping is the authorization boundary (capsid/conventions.md, GitHub access). A second copy of it in code cannot be observed by calling the watcher
-test("the repo is resolved through the mapping and is never named in code", () => {
-  const code = codeOnly(sourceFile("watcher.ts"));
-  // Vacuity: the stripper must not have eaten the file it is meant to scan.
-  assert.ok(code.includes("export function mirrorFindings"), "comment stripping removed the code being checked");
-  assert.equal(MIRROR_REPO_LABEL, "backups");
-  assert.doesNotMatch(code, /capsid-backups/, "src/watcher.ts names the mirror repo in code instead of resolving it");
-  assert.match(code, /MIRROR_REPO_LABEL/, "the mirror reads are not going through the label");
-  // And the label is what reaches the resolver, on both reads.
-  assert.equal((code.match(/MIRROR_REPO_LABEL/g) ?? []).length >= 3, true, "the label is not used by both mirror reads");
-});
+// That the mirror repo is resolved through the namespace's backups label, and never
+// named in code, is driven through gatherFindings in test/watcher-gather.test.ts with
+// the label mapped to a repo of another name.
 
 // That an unreadable mirror listing posts nothing, and a readable empty one posts
 // mirror-no-dump, is driven through gatherFindings in test/watcher-gather.test.ts.

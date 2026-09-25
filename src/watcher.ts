@@ -69,7 +69,7 @@ export const MIRROR_STALE_HOURS = 36;
 // module: it is resolved from the capsid namespace's mapping, which is the authorization
 // boundary and is admin-only to edit. A hardcoded owner/name would be a second copy
 // of that mapping sitting outside the boundary.
-export const MIRROR_REPO_LABEL = "backups";
+const MIRROR_REPO_LABEL = "backups";
 export const MIRROR_DUMP_PREFIX = "backups/json";
 
 // Spend over this fraction of a monthly cap is worth saying out loud before the cap
