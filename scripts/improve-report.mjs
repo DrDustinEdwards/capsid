@@ -170,20 +170,32 @@ export function parseImportsManifest(text) {
 //
 // Default and namespace imports are reported under the names they bind, since removing
 // what they point at breaks the case just the same.
+//
+// Four statement shapes are read: `import ... from`, `export ... from` (a re-export
+// also needs the name to exist), and a dynamic `import()` or `require()` whose result
+// is bound or destructured.
 /** @param {string} text */
 export function importedNames(text) {
   /** @type {Set<string>} */
   const names = new Set();
-  // ANCHORED AT A STATEMENT START, and the clause may not cross a `;`.
+  // ANCHORED AT A STATEMENT START, and the clause may hold only what an import clause
+  // can hold: identifiers, whitespace, braces, commas and `*`, and never the `import`
+  // or `export` keyword.
   //
   // The first spelling used a lazy `[\s\S]*?` for the clause, which crossed statement
   // boundaries: in a file whose first relative import is the third line, the match
   // began at line one and swallowed the two node-builtin imports above it. The first
-  // five runs of this gate reported names like `assert`, `from` and `import`. An
-  // import clause never contains a semicolon, so `[^;]*?` is the boundary.
-  const re = /(?:^|\n)\s*import\s+([^;]*?)\s+from\s+["'](\.[^"']*)["']/g;
+  // five runs of this gate reported names like `assert`, `from` and `import`.
+  //
+  // The second spelling stopped the clause at a `;`, which a file written without
+  // semicolons does not have, so the same crossing came back there (audit 2026-09-25,
+  // finding 6-9: three semicolon-free imports gave `assert`, `from` and `import` and
+  // lost the real name). A clause never contains a quote, and every import statement
+  // ends in a quoted specifier, so the character class stops at the next statement
+  // with or without semicolons.
+  const statics = /(?:^|\n)[ \t]*(?:import|export)\s+((?:(?!\b(?:import|export)\b)[\w$\s{},*])*?)\s*\bfrom\s*["'](\.[^"']*)["']/g;
   let m;
-  while ((m = re.exec(text)) !== null) {
+  while ((m = statics.exec(text)) !== null) {
     const clause = m[1].trim();
     const braces = clause.match(/\{([\s\S]*)\}/);
     if (braces) {
@@ -192,12 +204,31 @@ export function importedNames(text) {
         if (name) names.add(name);
       }
     }
-    const bare = clause.replace(/\{[\s\S]*\}/, "").replace(/,/g, " ").trim();
+    const bare = clause.replace(/\{[\s\S]*\}/, "").replace(/,/g, " ").replace(/^\*\s+as\s+/, "").trim();
     for (const part of bare.split(/\s+/)) {
       const name = part.replace(/^\*$/, "").replace(/^type$/, "").trim();
       if (name && name !== "as") names.add(name);
     }
   }
+  // `const { a, b: c } = await import("../src/x")`, `const mod = require("../src/x")`.
+  // A destructured name reports the property read, which is the export; a whole-module
+  // binding reports the local name, as a namespace import does.
+  const dynamics =
+    /\b(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*(?:await\s+import|require)\s*\(\s*["'](\.[^"']*)["']\s*\)/g;
+  while ((m = dynamics.exec(text)) !== null) {
+    const target = m[1];
+    if (!target.startsWith("{")) {
+      names.add(target);
+      continue;
+    }
+    for (const part of target.slice(1, -1).split(",")) {
+      const name = part.split(/[:=]/)[0].trim();
+      if (name) names.add(name);
+    }
+  }
+  // `(await import("../src/x")).name` and `require("../src/x").name`.
+  const members = /(?:\(\s*await\s+import\s*\(\s*["'](\.[^"']*)["']\s*\)\s*\)|\brequire\s*\(\s*["'](\.[^"']*)["']\s*\))\s*\.\s*([A-Za-z_$][\w$]*)/g;
+  while ((m = members.exec(text)) !== null) names.add(m[3]);
   // A name is a JavaScript identifier and nothing else. A second check after the regex
   // above: a token that is not one is a parse artefact.
   //
@@ -212,12 +243,19 @@ export function importedNames(text) {
   // unicorn/no-useless-spread is itself an error ("Definition for rule was not found")
   // in every repo whose config lacks the plugin, which turned foxhound's main red. A
   // disable comment is a dependency on another repo's plugin list.
+  //
+  // THE KEYWORDS GO TOO. `from`, `import` and the rest pass the identifier test, and
+  // they are the parse artefacts this function has produced before.
   const scanned = [...names];
   for (const name of scanned) {
-    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) names.delete(name);
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) || CLAUSE_KEYWORDS.has(name)) names.delete(name);
   }
   return names;
 }
+
+// Words that can appear in an import or export statement and are never an imported
+// name. `default` is not here: `import { default as x }` names the default export.
+const CLAUSE_KEYWORDS = new Set(["import", "export", "from", "as", "type", "typeof", "await", "const", "let", "var", "require"]);
 
 // The Job B gate. Returns the refusal to print and fail on, or null to proceed. It
 // NEVER names a case file: a filename is part of the hidden suite and this runs in a
@@ -343,15 +381,20 @@ export function splitStream(text, nonce = "") {
     return segment;
   };
   for (const line of text.split("\n")) {
+    // The whole-line markers are compared without a trailing CR or trailing spaces.
+    // Compared exactly, a CRLF stream lost its END marker and read as a container that
+    // never finished (audit 2026-09-25, finding 6-8). CASE and STATUS were already
+    // prefix matches with a trimmed remainder.
+    const bare = line.replace(/\r$/, "").trimEnd();
     if (line.startsWith(m.case)) {
       current = open("case", line.slice(m.case.length).trim());
       continue;
     }
-    if (line === m.test) {
+    if (bare === m.test) {
       current = open("test", "test");
       continue;
     }
-    if (line === m.lint) {
+    if (bare === m.lint) {
       current = open("lint", "lint");
       continue;
     }
@@ -361,7 +404,7 @@ export function splitStream(text, nonce = "") {
       current = null;
       continue;
     }
-    if (line === m.end) {
+    if (bare === m.end) {
       current = null;
       terminated = true;
       continue;
@@ -468,10 +511,17 @@ function metric(value) {
 }
 
 // ---- CLI --------------------------------------------------------------------
-// Six modes, all trusted (this file runs from a stash taken off the default
-// branch), none of which runs attempt code:
+// Eight modes, all trusted (this file runs from a stash taken off the default
+// branch), none of which runs attempt code. Each is one function in MODES below.
 //   --holdout <reportPath>              exit 0 if that single report passed, 1 otherwise.
+//   --holdout-terminated <tapPath> [nonce]
+//                                       exit 0 if the piped stream carries its end
+//                                       marker, 1 if not or if it cannot be read.
 //   --holdout-stream <tapPath> [nonce]  print how many cases passed in a piped stream.
+//                                       Prints nothing and exits 1 if it cannot be read.
+//   --check-holdout-imports <holdoutDir> <ns> <manifestPath>
+//                                       exit 1 with a named refusal when a synced
+//                                       holdout case imports a name imports.txt lacks.
 //   --rate <testReportPath>             print the top-level pass rate, or "" if nothing ran.
 //   --secondary-scripts <ns> <dir>      write this repo's sandbox commands as shell files.
 //   --secondary <tapPath> <ns> <nonce> <metricsPath>
@@ -480,187 +530,260 @@ function metric(value) {
 //                                       metrics.json on stderr.
 //   <metricsPath> <total> <passed>      emit the score-report body to stdout. The
 //                                       signing key never touches this.
-/** @param {string[]} argv */
-function main(argv) {
-  if (argv[0] === "--holdout") {
-    let passed = false;
-    try {
-      passed = holdoutFilePassed(readFileSync(argv[1], "utf8"));
-    } catch {
-      passed = false;
-    }
-    process.exit(passed ? 0 : 1);
-  }
-  // AN EMPTY STREAM IS NOT A RESULT. Exits 0 when the container printed its end
-  // marker and 1 when it did not, so the workflow can tell "every hidden test
-  // failed" from "no hidden test ever ran". holdoutPassCount returns 0 for both,
-  // which is correct for a SCORE and useless as a diagnosis: a container that fails
-  // to start reports a clean 0 of N, indistinguishable from an attempt that broke
-  // the whole suite, and the loop then reverts a change it never measured.
-  if (argv[0] === "--holdout-terminated") {
-    let terminated = false;
-    try {
-      terminated = parseHoldoutStream(readFileSync(argv[1], "utf8"), argv[2] ?? "").terminated;
-    } catch {
-      terminated = false;
-    }
-    process.exit(terminated ? 0 : 1);
-  }
-  if (argv[0] === "--holdout-stream") {
-    let count = 0;
-    try {
-      count = holdoutPassCount(readFileSync(argv[1], "utf8"), argv[2] ?? "");
-    } catch {
-      count = 0;
-    }
-    process.stdout.write(String(count));
-    return;
-  }
-  // Job B's gate on the holdout import manifest. Reads the synced holdout directory and
-  // this repo's committed list, and exits non-zero with a named refusal when they
-  // disagree. It never prints a case FILENAME: a filename is part of the hidden suite
-  // and this runs in a job whose log is readable.
-  if (argv[0] === "--check-holdout-imports") {
-    const [, holdoutDir, namespace, manifestPath] = argv;
-    /** @type {string[]} */
-    const texts = [];
-    try {
-      for (const name of readdirSync(holdoutDir)) {
-        if (!/\.test\./.test(name)) continue;
-        texts.push(readFileSync(join(holdoutDir, name), "utf8"));
-      }
-    } catch (err) {
-      process.stderr.write(`could not read the holdout directory: ${err instanceof Error ? err.message : String(err)}\n`);
-      process.exit(1);
-    }
-    if (texts.length === 0) {
-      process.stderr.write("no holdout cases were synced, so their imports cannot be checked. Refusing rather than passing on an empty read.\n");
-      process.exit(1);
-    }
-    /** @type {string[] | null} */
-    let declared = null;
-    try {
-      declared = parseImportsManifest(readFileSync(manifestPath, "utf8"));
-    } catch {
-      declared = null;
-    }
-    const refusal = holdoutImportRefusal(texts, declared, namespace);
-    if (refusal) {
-      process.stderr.write(`${refusal}\n`);
-      process.exit(1);
-    }
-    process.stdout.write(`holdout imports: ${declared?.length ?? 0} declared, all accounted for across ${texts.length} cases\n`);
-    return;
-  }
-  if (argv[0] === "--secondary-scripts") {
-    const [, namespace, dir] = argv;
-    const files = secondaryScripts(namespace);
-    for (const [name, contents] of Object.entries(files)) {
-      writeFileSync(join(dir, name), contents, { mode: 0o755 });
-      process.stderr.write(`secondary command for ${namespace}: ${name} = ${contents.trim()}\n`);
-    }
-    const spec = /** @type {Record<string, any>} */ (SECONDARY_COMMANDS)[namespace];
-    if (!spec) process.stderr.write(`no secondary command map for namespace ${namespace}; both metrics will be null\n`);
-    else if (!spec.verified) {
-      process.stderr.write(
-        `the secondary command map for ${namespace} is UNVERIFIED: no run has yet been observed producing a real number in the sandbox. ` +
-          `A command that does not run yields null, never Job A's value.\n`
-      );
-    }
-    return;
-  }
-  if (argv[0] === "--secondary") {
-    const [, tapPath, namespace, nonce, metricsPath] = argv;
-    let stream = "";
-    try {
-      stream = readFileSync(tapPath, "utf8");
-    } catch {
-      stream = "";
-    }
-    const recomputed = secondaryFromStream(stream, namespace, nonce ?? "");
 
-    // WHY IT IS NULL, IN THE RUN LOG. A null that does not say why is the shape this
-    // change exists to stop. The four roster repos reported null on their first scored
-    // run and the log could not distinguish "the command was not found" from "it ran and
-    // produced no parseable result", which is the difference between a typo in the map
-    // and a reporter flag the tool no longer supports.
-    const { segments, terminated } = splitStream(stream, nonce ?? "");
-    if (!terminated) {
-      process.stderr.write("SECONDARY: the container did not finish; every recomputed metric is null.\n");
-    }
-    for (const kind of ["test", "lint"]) {
-      const seg = segments.find((x) => x.kind === kind);
-      if (!seg) {
-        process.stderr.write(`SECONDARY ${kind}: no phase ran (this namespace declares no ${kind} command).\n`);
-        continue;
-      }
-      const why =
-        seg.status === null
-          ? "no exit status was printed"
-          : seg.status >= 126
-            ? `exit ${seg.status}, which is "could not execute": check the command in SECONDARY_COMMANDS`
-            : `exit ${seg.status}`;
-      // HEAD AND TAIL. The tail of a Node crash is the version banner, which says
-      // nothing. The message naming the missing module is at the TOP, and printing only
-      // the tail turned "vitest could not resolve X" into three closing braces.
-      const nonEmpty = seg.lines.filter((l) => l.trim() !== "");
-      // ONE LEADING SPACE, AND IT IS DELIBERATE. These two lines echo the sandbox
-      // tool's raw output, and GitHub's tsc problem matcher, which actions/setup-node
-      // registers for the WHOLE job, anchors at `^([^\s].*)`. Without the space a lint
-      // phase that found type errors made every green CI run carry failure annotations
-      // against a path and a line nobody wrote. Guarded by
-      // test/secondary-recompute.test.ts, which holds the matcher regexp verbatim.
-      process.stderr.write(
-        ` SECONDARY ${kind}: ${seg.lines.length} lines, ${why}. First: ${JSON.stringify(nonEmpty.slice(0, 3))}\n`
-      );
-      process.stderr.write(` SECONDARY ${kind}: last: ${JSON.stringify(nonEmpty.slice(-3))}\n`);
-    }
-    /** @type {Record<string, unknown>} */
-    let claimed = {};
-    try {
-      claimed = JSON.parse(readFileSync(metricsPath, "utf8"));
-    } catch {
-      claimed = {};
-    }
-    // THE CROSS-CHECK. metrics.json is written on a runner that has already run attempt
-    // code, so a disagreement is what a forged artifact looks like. The container value
-    // wins in every case; the disagreement is printed so the run log carries it.
-    for (const name of ["test_pass_rate", "lint_count"]) {
-      const mine = /** @type {Record<string, unknown>} */ (recomputed)[name];
-      const theirs = metric(claimed[name]);
-      if (mine !== theirs) {
-        process.stderr.write(
-          `SECONDARY MISMATCH ${name}: the artifact claims ${JSON.stringify(theirs)}, the sandbox measured ` +
-            `${JSON.stringify(mine)}. The sandbox value is used.\n`
-        );
-      }
-    }
-    /**
-     * @param {string} name
-     * @param {number | null} value
-     */
-    const line = (name, value) => `${name}=${value === null ? "" : String(value)}\n`;
-    process.stdout.write(line("test_pass_rate", recomputed.test_pass_rate) + line("lint_count", recomputed.lint_count));
-    return;
-  }
-  if (argv[0] === "--rate") {
-    let rate = null;
-    try {
-      rate = testPassRate(readFileSync(argv[1], "utf8"));
-    } catch {
-      rate = null;
-    }
-    process.stdout.write(rate === null ? "" : String(rate));
-    return;
-  }
-  const [metricsPath, holdoutTotal, holdoutPassed] = argv;
-  /** @type {{ build_passes?: unknown, test_pass_rate?: unknown, lint_count?: unknown, bundle_size_bytes?: unknown }} */
-  let m = {};
+/** @param {unknown} err */
+function errorText(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// READ, OR SAY WHY NOT. Every mode keeps its fail-closed default when a file cannot be
+// read, and the run log says which file and what the error was. Before this helper the
+// same `catch { x = default }` appeared four times, and a missing artifact, a corrupt
+// one and an unreadable one all looked like "nothing there" in the log (audit
+// 2026-09-25, findings 6-1, 6-2, 6-4 and 6-5).
+/**
+ * @template T
+ * @param {string} path
+ * @param {T} fallback
+ * @param {string} label
+ * @returns {string | T}
+ */
+function readOr(path, fallback, label) {
   try {
-    m = JSON.parse(readFileSync(metricsPath, "utf8"));
-  } catch {
-    m = {};
+    return readFileSync(path, "utf8");
+  } catch (err) {
+    process.stderr.write(`could not read ${label} (${path}): ${errorText(err)}\n`);
+    return fallback;
   }
+}
+
+// metrics.json from Job A, or {} with the reason on stderr. {} makes every field it
+// supplies null, which is the correct "not measured" value.
+/**
+ * @param {string} path
+ * @returns {Record<string, unknown>}
+ */
+function readMetrics(path) {
+  const text = readOr(path, null, "metrics.json");
+  if (text === null) return {};
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    process.stderr.write(`metrics.json (${path}) is not a JSON object; its fields are treated as not measured\n`);
+  } catch (err) {
+    process.stderr.write(`metrics.json (${path}) is not valid JSON: ${errorText(err)}; its fields are treated as not measured\n`);
+  }
+  return {};
+}
+
+// A holdout count from the workflow: a non-negative integer, or null. `Number("")` is
+// 0 and `Number("abc")` is NaN, and before this check the first sent a count nobody
+// measured and the second sent a body the Worker refuses (finding 6-3).
+/** @param {string | undefined} value */
+function holdoutCount(value) {
+  const text = String(value ?? "").trim();
+  return /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) ? Number(text) : null;
+}
+
+// The scorer's wall-clock minutes, or null when unknown. The workflow sends "0" when
+// Job A's started.txt did not arrive, and a zero would replace the dispatch reservation
+// with nothing, booking a billed run at zero against the monthly cap (finding 6-6). No
+// real run takes zero minutes, so anything not above zero is unknown, and the Worker
+// keeps its reservation for a null.
+/** @param {string | undefined} value */
+function ciMinutes(value) {
+  const text = String(value ?? "").trim();
+  const n = Number(text);
+  return text !== "" && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** @param {string[]} args */
+function holdoutMode(args) {
+  let passed = false;
+  try {
+    passed = holdoutFilePassed(readFileSync(args[0], "utf8"));
+  } catch {
+    passed = false;
+  }
+  process.exit(passed ? 0 : 1);
+}
+
+// AN EMPTY STREAM IS NOT A RESULT. Exits 0 when the container printed its end
+// marker and 1 when it did not, so the workflow can tell "every hidden test
+// failed" from "no hidden test ever ran". holdoutPassCount returns 0 for both,
+// which is correct for a SCORE and useless as a diagnosis: a container that fails
+// to start reports a clean 0 of N, indistinguishable from an attempt that broke
+// the whole suite, and the loop then reverts a change it never measured.
+/** @param {string[]} args */
+function holdoutTerminatedMode(args) {
+  let terminated = false;
+  try {
+    terminated = parseHoldoutStream(readFileSync(args[0], "utf8"), args[1] ?? "").terminated;
+  } catch {
+    terminated = false;
+  }
+  process.exit(terminated ? 0 : 1);
+}
+
+// AN UNREADABLE STREAM IS NOT A COUNT. It used to print 0 and exit 0, a plausible
+// "0 of N" whose only correction was a separate --holdout-terminated call later in
+// the workflow (finding 6-1). It now prints nothing and exits 1, so the count cannot
+// be taken without the read having worked.
+/** @param {string[]} args */
+function holdoutStreamMode(args) {
+  const text = readOr(args[0], null, "the holdout stream");
+  if (text === null) process.exit(1);
+  process.stdout.write(String(holdoutPassCount(text, args[1] ?? "")));
+}
+
+// Job B's gate on the holdout import manifest. Reads the synced holdout directory and
+// this repo's committed list, and exits non-zero with a named refusal when they
+// disagree. It never prints a case FILENAME: a filename is part of the hidden suite
+// and this runs in a job whose log is readable.
+/** @param {string[]} args */
+function checkHoldoutImportsMode(args) {
+  const [holdoutDir, namespace, manifestPath] = args;
+  /** @type {string[]} */
+  const texts = [];
+  try {
+    for (const name of readdirSync(holdoutDir)) {
+      if (!/\.test\./.test(name)) continue;
+      texts.push(readFileSync(join(holdoutDir, name), "utf8"));
+    }
+  } catch (err) {
+    process.stderr.write(`could not read the holdout directory: ${errorText(err)}\n`);
+    process.exit(1);
+  }
+  if (texts.length === 0) {
+    process.stderr.write("no holdout cases were synced, so their imports cannot be checked. Refusing rather than passing on an empty read.\n");
+    process.exit(1);
+  }
+  // ONLY A MISSING FILE IS "NO MANIFEST". Any other read error used to be treated as
+  // absent too, and the refusal told the operator to create a file that exists
+  // (finding 6-5).
+  /** @type {string[] | null} */
+  let declared = null;
+  try {
+    declared = parseImportsManifest(readFileSync(manifestPath, "utf8"));
+  } catch (err) {
+    const code = err !== null && typeof err === "object" && "code" in err ? err.code : null;
+    if (code !== "ENOENT") {
+      process.stderr.write(
+        `${manifestPath} exists but could not be read: ${errorText(err)}. The holdout imports cannot be checked against it.\n`
+      );
+      process.exit(1);
+    }
+  }
+  const refusal = holdoutImportRefusal(texts, declared, namespace);
+  if (refusal) {
+    process.stderr.write(`${refusal}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(`holdout imports: ${declared?.length ?? 0} declared, all accounted for across ${texts.length} cases\n`);
+}
+
+/** @param {string[]} args */
+function secondaryScriptsMode(args) {
+  const [namespace, dir] = args;
+  const files = secondaryScripts(namespace);
+  for (const [name, contents] of Object.entries(files)) {
+    writeFileSync(join(dir, name), contents, { mode: 0o755 });
+    process.stderr.write(`secondary command for ${namespace}: ${name} = ${contents.trim()}\n`);
+  }
+  const spec = /** @type {Record<string, any>} */ (SECONDARY_COMMANDS)[namespace];
+  if (!spec) process.stderr.write(`no secondary command map for namespace ${namespace}; both metrics will be null\n`);
+  else if (!spec.verified) {
+    process.stderr.write(
+      `the secondary command map for ${namespace} is UNVERIFIED: no run has yet been observed producing a real number in the sandbox. ` +
+        `A command that does not run yields null, never Job A's value.\n`
+    );
+  }
+}
+
+/** @param {string[]} args */
+function secondaryMode(args) {
+  const [tapPath, namespace, nonce, metricsPath] = args;
+  const read = readOr(tapPath, null, "the container stream");
+  const stream = read ?? "";
+  const recomputed = secondaryFromStream(stream, namespace, nonce ?? "");
+
+  // WHY IT IS NULL, IN THE RUN LOG. A null that does not say why is the shape this
+  // change exists to stop. The four roster repos reported null on their first scored
+  // run and the log could not distinguish "the command was not found" from "it ran and
+  // produced no parseable result", which is the difference between a typo in the map
+  // and a reporter flag the tool no longer supports.
+  const { segments, terminated } = splitStream(stream, nonce ?? "");
+  // An unreadable file is its own cause, logged by readOr above. It used to be
+  // reported as a container that did not finish (finding 6-4).
+  if (read === null) {
+    process.stderr.write("SECONDARY: the container stream could not be read; every recomputed metric is null.\n");
+  } else if (!terminated) {
+    process.stderr.write("SECONDARY: the container did not finish; every recomputed metric is null.\n");
+  }
+  for (const kind of ["test", "lint"]) {
+    const seg = segments.find((x) => x.kind === kind);
+    if (!seg) {
+      process.stderr.write(`SECONDARY ${kind}: no phase ran (this namespace declares no ${kind} command).\n`);
+      continue;
+    }
+    const why =
+      seg.status === null
+        ? "no exit status was printed"
+        : seg.status >= 126
+          ? `exit ${seg.status}, which is "could not execute": check the command in SECONDARY_COMMANDS`
+          : `exit ${seg.status}`;
+    // HEAD AND TAIL. The tail of a Node crash is the version banner, which says
+    // nothing. The message naming the missing module is at the TOP, and printing only
+    // the tail turned "vitest could not resolve X" into three closing braces.
+    const nonEmpty = seg.lines.filter((l) => l.trim() !== "");
+    // ONE LEADING SPACE, AND IT IS DELIBERATE. These two lines echo the sandbox
+    // tool's raw output, and GitHub's tsc problem matcher, which actions/setup-node
+    // registers for the WHOLE job, anchors at `^([^\s].*)`. Without the space a lint
+    // phase that found type errors made every green CI run carry failure annotations
+    // against a path and a line nobody wrote. Guarded by
+    // test/secondary-recompute.test.ts, which holds the matcher regexp verbatim.
+    process.stderr.write(
+      ` SECONDARY ${kind}: ${seg.lines.length} lines, ${why}. First: ${JSON.stringify(nonEmpty.slice(0, 3))}\n`
+    );
+    process.stderr.write(` SECONDARY ${kind}: last: ${JSON.stringify(nonEmpty.slice(-3))}\n`);
+  }
+  const claimed = readMetrics(metricsPath);
+  // THE CROSS-CHECK. metrics.json is written on a runner that has already run attempt
+  // code, so a disagreement is what a forged artifact looks like. The container value
+  // wins in every case; the disagreement is printed so the run log carries it.
+  for (const name of ["test_pass_rate", "lint_count"]) {
+    const mine = /** @type {Record<string, unknown>} */ (recomputed)[name];
+    const theirs = metric(claimed[name]);
+    if (mine !== theirs) {
+      process.stderr.write(
+        `SECONDARY MISMATCH ${name}: the artifact claims ${JSON.stringify(theirs)}, the sandbox measured ` +
+          `${JSON.stringify(mine)}. The sandbox value is used.\n`
+      );
+    }
+  }
+  /**
+   * @param {string} name
+   * @param {number | null} value
+   */
+  const line = (name, value) => `${name}=${value === null ? "" : String(value)}\n`;
+  process.stdout.write(line("test_pass_rate", recomputed.test_pass_rate) + line("lint_count", recomputed.lint_count));
+}
+
+/** @param {string[]} args */
+function rateMode(args) {
+  let rate = null;
+  try {
+    rate = testPassRate(readFileSync(args[0], "utf8"));
+  } catch {
+    rate = null;
+  }
+  process.stdout.write(rate === null ? "" : String(rate));
+}
+
+/** @param {string[]} args */
+function reportMode(args) {
+  const [metricsPath, holdoutTotal, holdoutPassed] = args;
+  const m = readMetrics(metricsPath);
   /** @param {unknown} v */
   const numOrNull = (v) => (v === undefined || v === "" || v === "null" ? null : Number(v));
   // THE ANCHOR IS NOT READ FROM THE ARTIFACT (audit 2026-09-07, Grok MAJOR 3).
@@ -668,6 +791,15 @@ function main(argv) {
   // build step's own outcome. metrics.json is written on a runner that has already
   // executed attempt code and is treated as hostile for this field. Absent is 0, not 1.
   const buildPasses = process.env.BUILD_PASSES === "1" ? 1 : 0;
+  // AN UNREADABLE COUNT IS AN ENVIRONMENT FAILURE WITH A REASON. The Worker refuses a
+  // non-numeric count and later records "no score report" with no cause; an empty
+  // total became 0 and read as a size mismatch. Neither said what happened.
+  const total = holdoutCount(holdoutTotal);
+  const passed = holdoutCount(holdoutPassed);
+  const countFailure =
+    total === null || passed === null
+      ? `the holdout count was unreadable (total ${JSON.stringify(holdoutTotal ?? null)}, passed ${JSON.stringify(holdoutPassed ?? null)})`
+      : null;
   // THE RECOMPUTED SECONDARIES ARE NOT READ FROM THE ARTIFACT EITHER (2026-09-07).
   // test_pass_rate and lint_count come from the sandbox run, through the score
   // job's own step outputs. metrics.json is read for bundle_size_bytes and for
@@ -685,18 +817,40 @@ function main(argv) {
       lint_count: metric(numOrNull(process.env.SECONDARY_LINT_COUNT)),
       bundle_size_bytes: metric(m.bundle_size_bytes),
     },
-    holdout: { total: numOrNull(holdoutTotal) ?? 0, passed: numOrNull(holdoutPassed) ?? 0 },
+    holdout: { total: total ?? 0, passed: passed ?? 0 },
     // WHETHER THE MACHINE WORKED. Set by the count step when the holdout container
-    // did not finish or the suite never synced. The Worker leaves an attempt
-    // carrying ok: false UNJUDGED rather than reverting it, because none of the
-    // numbers above describe the attempt in that case.
+    // did not finish or the suite never synced, and here when the counts it handed
+    // over are not counts. The Worker leaves an attempt carrying ok: false UNJUDGED
+    // rather than reverting it, because none of the numbers above describe the
+    // attempt in that case.
     environment:
       process.env.ENV_FAILURE === "1"
         ? { ok: false, reason: String(process.env.ENV_FAILURE_REASON || "").slice(0, 512) || null }
-        : { ok: true, reason: null },
-    ci_minutes: Number(process.env.CI_MINUTES ?? "0"),
+        : countFailure
+          ? { ok: false, reason: countFailure.slice(0, 512) }
+          : { ok: true, reason: null },
+    ci_minutes: ciMinutes(process.env.CI_MINUTES),
   };
   process.stdout.write(JSON.stringify(body));
+}
+
+// One entry per flag. An argv whose first word is not a flag here is the report mode.
+/** @type {Record<string, (args: string[]) => void>} */
+const MODES = {
+  "--holdout": holdoutMode,
+  "--holdout-terminated": holdoutTerminatedMode,
+  "--holdout-stream": holdoutStreamMode,
+  "--check-holdout-imports": checkHoldoutImportsMode,
+  "--rate": rateMode,
+  "--secondary-scripts": secondaryScriptsMode,
+  "--secondary": secondaryMode,
+};
+
+/** @param {string[]} argv */
+function main(argv) {
+  const mode = Object.hasOwn(MODES, argv[0]) ? MODES[argv[0]] : null;
+  if (mode) mode(argv.slice(1));
+  else reportMode(argv);
 }
 
 // Only run the CLI when invoked directly, so importing the pure functions in a test

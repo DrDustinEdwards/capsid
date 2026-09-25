@@ -55,8 +55,14 @@ export interface IngestResult {
  *
  * Clamped at zero so an estimate larger than the actual cannot drive the month
  * negative and buy back budget nobody spent.
+ *
+ * AN UNKNOWN DURATION KEEPS THE RESERVATION. The scorer reports null when Job A's
+ * start time did not reach it (parseScoreReport reads that as 0), and no real run
+ * takes zero minutes. Replacing the estimate with 0 booked a billed run at nothing
+ * against the monthly cap (audit 2026-09-25, finding 6-6).
  */
 export function settledMinutes(run: Pick<RunRow, "namespace" | "ci_minutes">, reported: number): number {
+  if (!(Number.isFinite(reported) && reported > 0)) return run.ci_minutes;
   return Math.max(0, run.ci_minutes - estimatedScorerMinutes(run.namespace) + meteredMinutes(run.namespace, reported));
 }
 export async function ingestScore(env: Env, report: ScoreReport, now: Date): Promise<IngestResult> {
