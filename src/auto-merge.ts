@@ -656,8 +656,9 @@ async function factsForPr(
   }
 
   const [files, checks] = await Promise.all([
-    readAllPages<{ filename: string }>(
-      env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}/files`, (page) => page as Array<{ filename: string }>, FILES_MAX_PAGES
+    readAllPages<{ filename: string; previous_filename?: string }>(
+      env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}/files`,
+      (page) => page as Array<{ filename: string; previous_filename?: string }>, FILES_MAX_PAGES
     ),
     readAllPages<{ name: string; status: string; conclusion: string | null }>(
       env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
@@ -668,7 +669,10 @@ async function factsForPr(
   // A GitHub file list stops at FILES_LIMIT with no next page, so a list that reached
   // it may have been cut by GitHub rather than by this reader.
   const filesProblem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
-  const changedPaths = files.items.map((f) => f.filename);
+  // A rename changes two paths: the one it removes and the one it adds. GitHub lists
+  // it once, under the new name, with the old one in previous_filename. Both are
+  // judged, so moving a refused file to an ordinary name is refused like deleting it.
+  const changedPaths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
   // A read that failed or was cut short is not a pass. paths_not_refused refuses an
   // incomplete file list and ci_green an incomplete check-run list, each with the
   // reason, so the seat decides it. Judging a PR on the pages that did load is how a
