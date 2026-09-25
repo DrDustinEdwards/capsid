@@ -1,4 +1,5 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import { extractStatements } from "./scripts/sql-statements.mjs";
@@ -41,6 +42,16 @@ const migrations = await readD1Migrations(path.join(import.meta.dirname, "migrat
 // PLAN over the reads.
 const sql = extractStatements(path.join(import.meta.dirname, "src"));
 
+// Every src/ file that calls `.prepare(`, listed by fs's own recursive walk rather
+// than the extractor's, so query-plans.test.ts can check that the extractor saw each
+// one. That replaced a fixed floor on the statement count: the floor did catch the
+// extractor missing every subdirectory once, and it also went red whenever a refactor
+// moved statements around.
+const srcDir = path.join(import.meta.dirname, "src");
+const prepareFiles = readdirSync(srcDir, { recursive: true })
+  .map((f) => String(f).split(path.sep).join("/"))
+  .filter((f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("));
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -58,6 +69,7 @@ export default defineConfig({
           TEST_MIGRATIONS: migrations,
           TEST_SQL_STATEMENTS: sql.statements,
           TEST_SQL_SKIPPED: sql.skipped,
+          TEST_SQL_PREPARE_FILES: prepareFiles,
           // Non-secret vars, matching wrangler.jsonc.example.
           GITHUB_APP_CLIENT_ID: "test-client-id",
           // Secrets, with obviously fake values. capsid/conventions.md hard rule:
