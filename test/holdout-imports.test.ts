@@ -40,6 +40,44 @@ test("PLANT: a builtin import before a relative one is not swallowed into the cl
   }
 });
 
+// THE SAME SHAPE WITHOUT SEMICOLONS (audit 2026-09-25, finding 6-9). The second
+// spelling stopped the clause at a `;`, which this file does not have, so the match
+// crossed statements again: it reported assert, from and import and lost foo.
+const NO_SEMICOLONS = [
+  'import assert from "node:assert/strict"',
+  'import { test } from "node:test"',
+  'import { foo } from "../src/foo"',
+  'import def, { a, b as c } from "../src/x"',
+  "const n = 1",
+  'import * as gh from "../src/github"',
+].join("\n");
+
+test("PLANT: a file without semicolons reports its real names and no keyword", () => {
+  assert.deepEqual([...importedNames(NO_SEMICOLONS)].sort(), ["a", "b", "def", "foo", "gh"]);
+});
+
+test("PLANT: re-exports, dynamic imports and require are read too", () => {
+  // ../lib rather than ../src: any relative path counts, and test/scanner-rules.test.ts
+  // reads a dynamic import of src/ in a test body as a source-text read.
+  const text = [
+    'export { reexported, other as renamed } from "../lib/re"',
+    'export * from "../lib/star"',
+    'const { dynA, dynB: local } = await import("../lib/dyn")',
+    "const mod = await import('../lib/whole')",
+    'const { required } = require("../lib/req")',
+    'const member = (await import("../lib/m")).memberName',
+    'const pkg = await import("zod")',
+    'import "../lib/side-effect"',
+  ].join("\n");
+  assert.deepEqual([...importedNames(text)].sort(), ["dynA", "dynB", "memberName", "mod", "other", "reexported", "required"]);
+});
+
+test("an export that is not a re-export is not read as a clause", () => {
+  // It must not swallow the lines up to the next relative specifier.
+  const text = ["export const x = 1", "export default x", 'import { real } from "../src/r"'].join("\n");
+  assert.deepEqual([...importedNames(text)], ["real"]);
+});
+
 test("only RELATIVE imports count, because a package says nothing about this repo", () => {
   assert.deepEqual([...importedNames('import { z } from "zod";')], []);
   assert.deepEqual([...importedNames('import { readFileSync } from "node:fs";')], []);

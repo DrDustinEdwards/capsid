@@ -112,6 +112,17 @@ test("the dispatch reservation is REPLACED by the report, not added to it", () =
   assert.equal(settledMinutes(secondDispatch, 6), 11);
 });
 
+test("PLANT: an unknown scorer duration keeps the reservation instead of booking zero", () => {
+  // Audit 2026-09-25, finding 6-6. The scorer reports null when Job A's start time
+  // did not arrive, and parseScoreReport reads null as 0. Replacing the lien with
+  // meteredMinutes(0) booked a billed run at nothing against the monthly cap.
+  const reserved = estimatedScorerMinutes("foxhound");
+  const afterDispatch = { namespace: "foxhound", ci_minutes: 3 + reserved };
+  for (const unknown of [0, -1, Number.NaN]) {
+    assert.equal(settledMinutes(afterDispatch, unknown), 3 + reserved, `a reported ${unknown} released the reservation`);
+  }
+});
+
 test("settlement never goes negative, so an over-estimate cannot buy back budget", () => {
   const over = { namespace: "foxhound", ci_minutes: 0 };
   assert.equal(settledMinutes(over, 0), 0);
