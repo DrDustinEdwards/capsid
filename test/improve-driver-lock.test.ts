@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { improveControl, improveStatus } from "../src/improve-run.ts";
 import { driverKey, DRIVER_LEASE_TTL_SECONDS, PROTECTED_PATH_PATTERNS, protectedHits } from "../src/improve-schema.ts";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { audited, controlHarness as harness } from "./improve-harness.ts";
 
 // THE SUBSCRIPTION-MODE DRIVER LOCK AND PATH GUARD (residuals 9 and 10).
 //
@@ -20,14 +20,6 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 //   the guard  improve_status now SERVES the pattern list, so the driver applies
 //              the rules the Worker holds instead of a copy in prose that drifts
 //              the first time a pattern is added here.
-
-function harness(seed: Record<string, string> = {}) {
-  const kv = fakeKv({ seed });
-  const d1 = fakeD1();
-  return { env: fakeEnv({ APP_KV: kv.kv, DB: d1.db }), kv, d1 };
-}
-
-const audited = (d1: ReturnType<typeof fakeD1>) => d1.batches.some((b) => b.some((s) => /INSERT INTO audit_log/.test(s)));
 
 test("claim takes the lease for one namespace, with a six-hour TTL", async () => {
   const { env, kv, d1 } = harness();
