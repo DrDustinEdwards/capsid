@@ -121,18 +121,12 @@ async function confirmDestructive(server: McpServer, message: string): Promise<C
   }
 }
 
-// THE CONFIRMATION BLOCK, ONCE. Four call sites wrote the same three-branch dance
-// around confirmDestructive, each with its own wording for the two refusals. The
-// messages stay per tool because they are the instruction the caller acts on.
+// The confirmation step for every destructive tool. The messages stay per tool
+// because they are the instruction the caller acts on.
 //
-// IT REPORTS WHETHER IT ACTUALLY ELICITED. A human who sat through an elicitation
-// said "overwrite THIS" about a body read before the prompt went out, and the answer
-// can arrive 90 seconds later, so that consent goes stale exactly like an if_match.
-// Both write and restore arm the commit-time body guard on it.
-//
-// Before this returned it, write kept its own `elicited` flag and restore re-derived
-// it as `confirm !== true`. Those coincide only because restore always calls this
-// helper and this helper returns early when confirm is true.
+// It reports whether it actually elicited. An elicited answer can arrive 90 seconds
+// after the body it approved was read, so that consent goes stale like an if_match,
+// and write and restore arm the commit-time body guard on it.
 type ConfirmResult = { ok: true; elicited: boolean } | { ok: false; message: string };
 
 export async function requireConfirmation(
@@ -146,49 +140,35 @@ export async function requireConfirmation(
   return { ok: false, message: verdict === "declined" ? messages.declined : messages.unsupported };
 }
 
-// THE GRANT, NOT A BOOLEAN. This was `operator: boolean`, which misread at every call
-// site: `buildServer(env, true, ...)` looks like "this is the operator server" when
-// it means "this grant may write", and a read-only ro: key IS an operator.
-// src/auth.ts already resolves a key to exactly this union.
+// The grant, not a boolean: a read-only ro: key is also an operator. src/auth.ts
+// resolves a key to exactly this union.
 export type ToolGrant = "write" | "read";
 
 export interface ToolCtx {
   env: Env;
   db: D1Database;
-  // `actor` is the principal recorded on every audit_log row. It replaced a hardcoded
-  // 'operator' string at all eight audit write sites, which left the column answering
-  // "what happened" and never "who did it".
-  //
-  // Shape: "github:<login>" for an OAuth session, "opkey:<fingerprint>" for an operator
-  // key, "agent:<name>" for a minted agent (src/agents.ts). The fingerprint is a 12-char
-  // PREFIX of the key's sha256, not the key: OPERATOR_KEY_HASH is the verifier, so a
-  // full hash in audit_log would copy it into the database the audit log holds to
-  // account. Rows written before the change keep their literal 'operator' value.
+  // The principal recorded on every audit_log row: "github:<login>" for an OAuth
+  // session, "opkey:<fingerprint>" for an operator key, "agent:<name>" for a minted
+  // agent (src/agents.ts). The fingerprint is a 12-char prefix of the key's sha256,
+  // because OPERATOR_KEY_HASH is the verifier and a full hash in audit_log would copy
+  // it into the database. Older rows keep a literal 'operator' value.
   actor: string;
-  // THE CALLER, resolved once per request (src/agents.ts). `actor` is a projection of
-  // it, kept as its own field so the tool modules read unchanged; the scope checks
-  // read this.
+  // The caller, resolved once per request (src/agents.ts). `actor` is a projection of
+  // it; the scope checks read this.
   agent: Agent;
-  // THE ONE CHECK, bound to this caller (src/scope.ts). Returns a refusal naming the
-  // missing scope, or null. The registrar has already checked the tool, the grant,
-  // the namespace and the repo by the time a handler runs; this is for what only the
-  // handler knows: an action tool's action, and the flags a repo mutation needs.
+  // checkScope bound to this caller (src/scope.ts): a refusal naming the missing
+  // scope, or null. The registrar has already checked the tool, grant, namespace and
+  // repo; this is for what only the handler knows: an action tool's action, and the
+  // flags a repo mutation needs.
   scope: (need: ScopeNeed) => string | null;
   lastActor: (ns: string, path: string) => Promise<string | null>;
 }
 
-// THE IMPROVE CONTROL-SURFACE CHECK, ONE SPELLING, for write, restore, delete and move.
-//
-// First the override is itself scoped. allow_improve_paths is how a caller writes the
-// loop's own control surface (its run documents, its prompts, its skills, its
-// anchors), and before agents it was open to anything holding the write grant. It is
-// the document-side twin of the repo-side protected-path flag, so it asks for the same
-// one (audit 2026-09-13, finding C1, extended it from write and restore to delete and
-// move).
-//
-// Then improveWriteRefusal on every path the call changes, as what the path holds now
-// against what it would hold (audit 2026-09-07, Opus MAJOR 5.4). Returns the first
-// refusal, or null.
+// The improve control-surface check for write, restore, delete and move. The
+// allow_improve_paths override is itself scoped (IMPROVE_OVERRIDE_FLAGS in
+// src/scope.ts); then improveWriteRefusal runs on every path the call changes, as
+// what the path holds now against what it would hold. Returns the first refusal, or
+// null.
 async function improvePathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -225,12 +205,10 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     async ({ namespace, type, status }) => {
       const { results } = await db
         .prepare(
-          // frontmatter and publish_at are NOT selected. Both are columns from the
-          // original CMS-shaped schema that nothing in this server reads or writes.
-          // Measured 2026-08-13: both are NULL on all 494 documents. Ruled
-          // 2026-08-13: dropped from the output, LEFT IN THE TABLE. Removing a
-          // column means a migration, a rebuild of the FTS triggers and a change to
-          // the backup table guard, to reclaim nothing.
+          // frontmatter and publish_at are not selected: nothing in this server reads
+          // or writes them. They stay in the table, because dropping a column means a
+          // migration, a rebuild of the FTS triggers and a change to the backup table
+          // guard, to reclaim nothing.
           `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at
            FROM documents
            WHERE (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR type = ?2) AND (?3 IS NULL OR status = ?3)
@@ -260,14 +238,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
-      // NAMED COLUMNS, the same set `list` returns plus the body (quality audit 7.3).
-      // SELECT * left `read` the one tool still handing back frontmatter and
-      // publish_at, two columns from the original CMS-shaped schema that nothing
-      // reads or writes and that `list` dropped on 2026-08-13. Re-measured
-      // 2026-08-17: both still NULL on all 559 documents.
-      //
-      // They stay IN THE TABLE: dropping a column means a migration, a rebuild of
-      // the FTS triggers and a change to the backup table guard, to reclaim nothing.
+      // Named columns: the set `list` returns plus the body. See `list` for why
+      // frontmatter and publish_at are left out.
       const row = await db
         .prepare(
           `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at, body
@@ -281,8 +253,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
   );
 
   // One-call session start: assembles the read ritual so a session cannot skip a
-  // piece of it (a skipped core.md caused a real status misread). Pure assembly, no
-  // reasoning. Size-bounded so it stays loadable; when trimmed it says so.
+  // piece of it. Pure assembly, no reasoning. Size-bounded so it stays loadable;
+  // when trimmed it says so.
   server.registerTool(
     "brief",
     {
@@ -302,26 +274,19 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         doc("capsid", "repo-structure.md"),
         doc(namespace, "core.md"),
       ]);
-      // Not filtered on status, and it must stay that way: same ruling as the
-      // unconsolidated counter and the gather query (2aefceb). status records
-      // editorial state and does not mark a task done, so filtering on 'published'
-      // hid 21 of 32 non-archived task docs. archive/ is the only exclusion.
+      // Not filtered on status (beyond 'closed' below): status records editorial
+      // state and does not mark a task done. archive/ is the only other exclusion.
       //
-      // The four remaining reads run TOGETHER (quality audit 9.5). They were four
-      // sequential awaits on the call every session makes first. None depends on
-      // another's result and the trim arithmetic below needs all four.
+      // The four remaining reads run together: none depends on another's result.
       const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] = await Promise.all([
         db
           .prepare(
-            // The closure predicate below is the ONLY status filter in this query,
-            // and it is not a return of the bug 94b8528 fixed. That one filtered on
-            // status = published and hid 21 of 32 task docs. This excludes exactly
-            // one value, set deliberately to mean finished. status is NOT NULL, so
-            // the comparison cannot swallow a row via NULL semantics.
+            // The closure predicate below is the only status filter in this query.
+            // It excludes exactly one value, set deliberately to mean finished.
+            // status is NOT NULL, so the comparison cannot swallow a row via NULL.
             //
-            // test/doc-meta.test.ts asserts this predicate appears exactly ONCE in
-            // this file, so the lint loop can never grow one. Only the archive/
-            // prefix takes a document out of memory.
+            // test/doc-meta.test.ts asserts this predicate appears exactly once in
+            // this file, so the lint loop can never grow one.
             "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC"
           )
           .bind(namespace)
@@ -346,16 +311,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const coreOut = coreOutResult.results;
       const coreIn = coreInResult.results;
 
-      // PROVENANCE on every document in the packet (audit 2026-09-06). Attached after
-      // the reads rather than joined in, so each documents SELECT stays a plain
-      // projection. A poisoned task or core.md is instructions at turn 0; last_actor
-      // is how a session tells the operator's own writing from another client's.
+      // Provenance on every document in the packet: a poisoned task or core.md is
+      // instructions at turn 0, and last_actor is how a session tells the operator's
+      // own writing from another client's. Attached after the reads so each documents
+      // SELECT stays a plain projection.
       //
-      // ONE QUERY FOR ALL OF THEM (AUDIT-2026-09-16.md). It was one lastActor call per
-      // document, 21 of the 28 queries on the capsid brief of 2026-09-17. The pairs
-      // travel as ONE JSON parameter because D1 caps a statement at 100 bound
-      // parameters and the open-task list has no cap of its own. The correlated
-      // subquery is the lastActor query per pair, so it uses audit_log_doc as that did.
+      // One query for all of them. The pairs travel as one JSON parameter because D1
+      // caps a statement at 100 bound parameters and the open-task list has no cap.
+      // The correlated subquery is the lastActor query per pair, so it uses
+      // audit_log_doc.
       type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null };
       const present = [conventions, repoStructure, core, ...openTasks, ...recentEpisodics].filter((r): r is NonNullable<typeof r> => r !== null);
@@ -388,11 +352,10 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // Stay under budget by trimming the largest, most re-readable sections to
       // metadata first (episodics, then task bodies), and report what was cut.
       //
-      // ONLY A CUT THAT HAPPENED IS REPORTED, and nothing is cut when the three
-      // documents that are never trimmed exceed the budget by themselves: trimming
-      // the rest cannot bring the packet under it, so that state is reported as
-      // floor_exceeds_budget with the sizes instead. Until 2026-09-17 every capsid
-      // brief said it had trimmed "0 episodic bodies".
+      // Only a cut that happened is reported. Nothing is cut when the three documents
+      // that are never trimmed exceed the budget by themselves, since trimming the
+      // rest cannot bring the packet under it; that is reported as
+      // floor_exceeds_budget with the sizes.
       type Row = { namespace: string; path: string; title: string | null; body: string | null; updated_at: string; last_actor?: string | null };
       const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
@@ -446,8 +409,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         path: docPath,
         // title and body are required for mode 'replace' and validated as such below.
         // They are optional in the schema because append needs no title and patch
-        // needs neither. Requiring them here would force a caller to resupply a title
-        // it is not changing, which is the retranscription this mode removes.
+        // needs neither.
         title: bounded(MAX_TITLE).optional(),
         body: bounded(MAX_BODY).optional(),
         mode: z.enum(["replace", "append", "patch", "meta"]).optional(),
@@ -481,20 +443,11 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null; type: string | null; status: string | null; tags: string | null; updated_at: string }>();
 
-      // OPTIMISTIC CONCURRENCY. if_match is the sha256 of the body the caller believes
-      // is stored, which is the value every write already returns, so a client that
-      // read or wrote the document has it without an extra fetch.
-      //
-      // conventions.md's "re-read a document immediately before overwriting it" is a
-      // discipline the server could not enforce. It fired live on 2026-07-27 when a
-      // session doc was rewritten between a read and a planned write. A lost update
-      // leaves no trace in the result: the write succeeds, the prior body is
-      // snapshotted, and nothing says anything went wrong.
-      //
-      // Fail closed, the same shape as a patch anchor: on mismatch NOTHING is written
-      // and the error carries the CURRENT sha so the caller can rebase and retry.
-      // Opt-in, because requiring it would break append, which is safe by
-      // construction.
+      // Optimistic concurrency. if_match is the sha256 of the body the caller believes
+      // is stored, which every write already returns. A lost update otherwise leaves no
+      // trace in the result. On mismatch nothing is written and the error carries the
+      // current sha so the caller can rebase and retry. Opt-in, because requiring it
+      // would break append, which is safe by construction.
       const commit = guardedCommit({
         db,
         namespace,
@@ -522,22 +475,18 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const staleIfMatch = await commit.precheckIfMatch();
       if (staleIfMatch) return fail(staleIfMatch);
 
-      // Normalize wide dashes server-side so no client can store an em dash, whether
-      // or not the Claude Code hook ran. See ./normalize. ONLY THE CALLER'S TEXT is
-      // normalized, and it is normalized BEFORE assembly: body for replace and append,
-      // replace_with for patch. Normalizing the assembled body rewrote stored text the
-      // caller did not touch (audit 2026-09-25, F1-6), and conventions.md forbids
-      // editing already-stored content to satisfy the dash rule. find is not
-      // normalized, because it has to match the stored bytes. meta takes no body, so
-      // it leaves the stored body byte-identical, which is its contract.
+      // Normalize wide dashes server-side so no client can store an em dash (see
+      // ./normalize). Only the caller's text is normalized, before assembly: body for
+      // replace and append, replace_with for patch. Normalizing the assembled body
+      // would rewrite stored text the caller did not touch, which conventions.md
+      // forbids. find is not normalized, because it has to match the stored bytes.
+      // meta takes no body, so the stored body stays byte-identical.
       if (title !== undefined) title = normalizeDashes(title, "title");
       if (body !== undefined) body = normalizeDashes(body, "prose");
       if (replace_with !== undefined) replace_with = normalizeDashes(replace_with, "prose");
 
-      // Body assembly, per mode. Pure and unit-tested in ./write-modes. All FOUR modes
-      // return the FULL new body, so the write path below is unchanged and both
-      // invariants (version snapshot, audit row) apply identically. meta returns the
-      // stored body BYTE-IDENTICAL.
+      // Body assembly, per mode (./write-modes). Every mode returns the full new body,
+      // so the version snapshot and audit row apply identically.
       const assembled = assembleBody({
         mode: writeMode,
         exists: Boolean(prior),
@@ -553,24 +502,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
       }
 
-      // IMPROVE CONTROL-SURFACE GUARD (audit 2026-09-06). Computed on the final
-      // assembled and normalized body, so it sees exactly what would be stored: a
-      // patch or append that ends up changing scores.md's anchor block is caught the
-      // same as a full replace. Refused unless allow_improve_paths was passed.
+      // Computed on the final assembled body, so a patch or append that changes
+      // scores.md's anchor block is caught the same as a full replace.
       const improveRefusal = await improvePathsRefusal(ctx, "write", namespace, allow_improve_paths, [
         { path, before: prior?.body ?? null, after: body as string },
       ]);
       if (improveRefusal) return fail(improveRefusal);
 
-      // append is exempt from confirmation. Confirmation exists to stop an accidental
-      // clobber of existing text, and an append destroys none: the prior body is still
-      // snapshotted and the addition goes after it. Requiring a confirm here would put
-      // more friction on the safe operation than on the dangerous one. patch and
-      // replace both mutate existing text and are NOT exempt.
-      //
-      // `elicited` is whether a human answered a prompt, reported by the helper rather
-      // than inferred here. It arms the commit-time body guard; why that consent goes
-      // stale is stated once, on requireConfirmation.
+      // append and meta are exempt from confirmation: neither destroys existing text.
+      // `elicited` arms the commit-time body guard (see requireConfirmation).
       let elicited = false;
       if (prior && confirm !== true && writeMode !== "append" && writeMode !== "meta") {
         const refusal = await requireConfirmation(server, confirm, {
@@ -584,21 +524,14 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // The guard itself is armed by commit.run() below, from this same pre-read.
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // SNAPSHOT FROM THE LIVE ROW, INSIDE THE BATCH (audit 2026-09-06, Grok MAJOR
-        // 20 / 4.1b). Binding the pre-read body filed what this handler had READ, not
-        // what the table HELD at commit: on an unguarded update, a body written in
-        // the gap was overwritten while the snapshot recorded its predecessor. The
-        // SELECT runs in the same transaction as the overwrite.
+        // Snapshot from the live row, inside the batch, so the snapshot records what
+        // the table held at commit rather than what this handler read earlier.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(documentUpsert(db, namespace, path, title ?? null, body, type ?? null, tags ?? null, status ?? null));
-      // The PRIOR type, status, tags and title go into the audit params whenever a
-      // write changes any of them, and this is the only place they survive.
-      // document_versions snapshots title and body ONLY, so a meta write that retyped
-      // a document or closed a task was previously unrecoverable. Ruled 2026-08-13:
-      // the snapshot schema stays title plus body and the audit log carries the
-      // metadata delta, because widening a version row would mean a migration plus a
-      // rewrite of every restore path to answer a question the log already answers.
+      // The prior type, status, tags and title go into the audit params whenever a
+      // write changes any of them, and this is the only place they survive:
+      // document_versions snapshots title and body only.
       const metaChanged = title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
         auditStatement(db, actor, "write", namespace, path, {
@@ -631,10 +564,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         }
         statements.push(auditStatement(db, actor, "links", namespace, path, { edges: parsedLinks.edges.length }));
       }
-      // The warning is computed from a read taken HERE, not from the pre-read at the
-      // top of the handler. Between those two points this handler may have sat in a 90
-      // second elicitation, which is when a racing write is most likely to have
-      // landed. Reading it late costs one SELECT.
+      // The warning is computed from a read taken here, not from the pre-read: this
+      // handler may have sat in a 90 second elicitation in between.
       const atCommit = prior
         ? await db
             .prepare("SELECT updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
@@ -645,21 +576,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       if ("refusal" in committed) return fail(committed.refusal);
       // From the snapshot statement's own result, not from the pre-read: with no guard
       // armed, a row deleted between the pre-read and the batch is snapshotted by
-      // nothing (audit 2026-09-25, F3-8). The snapshot is statements[0] when present.
+      // nothing. The snapshot is statements[0] when present.
       const snapshotted = Boolean(prior) && snapshotTaken(committed.results[0]);
-      // Warn, do not reject, when an edge points at a document that does not exist.
-      // Rejecting would block asserting an edge before its target is written, and a
-      // silent dangling edge is how 23 of them accumulated before 2026-08-10.
-      //
-      // The second reason, that edges may address repo files, was withdrawn
-      // 2026-08-17: an edge has nowhere to put a repo or a ref. The endpoint grammar
-      // is enforced in parseLinks. The lint loop reports these per namespace; this is
-      // the same check at the moment the edge is created.
+      // Warn, do not reject, when an edge points at a document that does not exist:
+      // rejecting would block asserting an edge before its target is written. The lint
+      // loop reports the same thing per namespace.
       let danglingTargets: string[] = [];
       if (parsedLinks && "edges" in parsedLinks && parsedLinks.edges.length > 0) {
-        // This read runs AFTER the commit, so a failure here must not be reported as a
-        // failed write: the document is stored. Same shape as the audit warning in
-        // guardedWrite (F17).
+        // This read runs after the commit, so a failure here must not be reported as a
+        // failed write: the document is stored.
         try {
           const checks = await db.batch(
             parsedLinks.edges.map((edge) =>
@@ -676,12 +601,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         }
       }
       // The read-back: sha256 and byte length of the body now stored, so a caller can
-      // verify the write landed WITHOUT fetching the document and comparing it by eye.
-      // That second read was itself a transcription, and the correlated-transcription
-      // risk fired twice on 2026-08-07.
-      //
-      // Hash the assembled body rather than re-selecting it: re-selecting would be the
-      // extra read this avoids, and D1 returns exactly what was bound.
+      // verify the write without fetching the document. Hashes the assembled body,
+      // since D1 stores exactly what was bound.
       const bodySha = await sha256Hex(body);
       const bodyBytes = new TextEncoder().encode(body).length;
 
@@ -712,11 +633,6 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     }
   );
 
-  // Every overwrite and delete has snapshotted the prior row into document_versions
-  // since the beginning, and until 2026-08-13 nothing could read it back. The rows
-  // were reachable only by raw SQL: the 2026-08-10 edge repair read snapshots
-  // directly, and recova/parity/INVENTORY-SEED.md is STILL unrestored while surviving
-  // as a 7889-byte snapshot.
   server.registerTool(
     "history",
     {
@@ -740,9 +656,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       }
       const { results } = await db
         .prepare(
-          // Bounded (audit 2026-09-06): retention is 90 days, so HISTORY_ROWS covers
-          // more than a snapshot a day. Without a LIMIT this returned every snapshot
-          // ever taken of a hot document in one response.
+          // Bounded: retention is 90 days, so HISTORY_ROWS covers more than a
+          // snapshot a day.
           `SELECT id, snapshot_at, title, LENGTH(body) AS bytes
            FROM document_versions
            WHERE namespace = ?1 AND path = ?2
@@ -792,11 +707,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
-      // THE IMPROVE CONTROL-SURFACE GUARD, on restore too (audit 2026-09-07, Opus
-      // MAJOR 5.4). The guard shipped on `write` alone, so restoring
-      // improve/prompts/run.md to an earlier version installed an older system prompt
-      // for the nightly attempt generator with no flag and no marked audit row. Same
-      // call shape as write: what is stored now, against what would be stored.
+      // The improve control-surface guard (see improvePathsRefusal): restoring an old
+      // improve/prompts/run.md installs an older prompt.
       const restoreImproveRefusal = await improvePathsRefusal(ctx, "restore", namespace, allow_improve_paths, [
         { path, before: prior?.body ?? null, after: version.body ?? "" },
       ]);
@@ -838,12 +750,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const body = version.body ?? "";
       const statements: D1PreparedStatement[] = [];
       if (prior) {
-        // SNAPSHOT FROM THE LIVE ROW, INSIDE THE BATCH (audit 2026-09-07, Grok MAJOR
-        // 10). write and delete were fixed on 2026-09-06 and restore was not, so this
-        // was the last write path binding the body this handler had READ rather than
-        // what the table HELD at commit. Restore elicits a confirmation, so the gap
-        // could be the full 90 second prompt. The SELECT runs in the same transaction
-        // as the overwrite.
+        // Snapshot from the live row, inside the batch, as on write.
         statements.push(snapshotLive(db, namespace, path));
       }
       statements.push(
@@ -876,7 +783,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         snapshot_at: version.snapshot_at,
         sha256: await sha256Hex(body),
         bytes: new TextEncoder().encode(body).length,
-        // From the snapshot statement's result, as on write (audit 2026-09-25, F3-8).
+        // From the snapshot statement's result, as on write.
         snapshotted: Boolean(prior) && snapshotTaken(committed.results[0]),
         ...(prior ? {} : { note: "the document did not exist and was recreated; its type, status, tags and links are defaults, not the ones it had" }),
       });
@@ -923,12 +830,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      // THE IMPROVE CONTROL-SURFACE GUARD, on delete too (audit 2026-09-07, Opus MAJOR
-      // 5.4). Removing improve/prompts/run.md drops the loop back to the hardcoded
-      // default prompt and removing a skill retires it, so a delete is a steering
-      // change even though it installs nothing. The "" is the resulting body: for the
-      // two prefixes that is a prefix match, and for scores.md an anchor block going
-      // from something to nothing.
+      // The improve control-surface guard (see improvePathsRefusal): removing a prompt
+      // or skill is a steering change. The "" is the resulting body.
       const deleteImproveRefusal = await improvePathsRefusal(ctx, "delete", namespace, allow_improve_paths, [
         { path, before: prior.body, after: "" },
       ]);
@@ -940,20 +843,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       });
       if (!deleteRefusal.ok) return fail(deleteRefusal.message);
       const elicited = deleteRefusal.elicited;
-      // The edges are recorded INSIDE THE BATCH, before pathMutation removes them: the
-      // audit row is the only place they survive, since document_versions holds title
-      // and body only. They used to be read before the batch, so an edge added between
-      // that read and the batch was deleted and never recorded (audit 2026-09-25,
-      // F1-5). The aggregate always yields one row, '[]' when there are no edges, and
-      // RETURNING hands the recorded list back for the count in the response.
+      // The edges are recorded inside the batch, before pathMutation removes them, so
+      // an edge added after an earlier read is still recorded; the audit row is the
+      // only place they survive. The aggregate always yields one row ('[]' when there
+      // are no edges), and RETURNING hands the list back for the count.
       //
-      // The guard is not redundant with the `prior` read above: that read is a separate
-      // transaction, and a delete matching zero rows would otherwise snapshot a body,
-      // write an audit row saying 'delete', and answer "deleted" having removed
-      // nothing. AFTER AN ELICITATION the guard is the body one (audit 2026-09-06,
-      // Grok 4.1b): the human consented to deleting the body they were shown, so a
-      // body written in that window must abort the delete. The snapshot itself SELECTs
-      // the live row inside the batch; see the write handler.
+      // The guard is not redundant with the `prior` read, which is a separate
+      // transaction: a delete matching zero rows would otherwise answer "deleted"
+      // having removed nothing. After an elicitation the guard is the body one, since
+      // the human consented to deleting the body they were shown.
       let edgesRemoved = 0;
       try {
         const results = await db.batch([
@@ -1005,21 +903,15 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // Existence and the edge count are both read BEFORE the batch. D1's meta.changes
       // cannot be used for either: documents carries FTS5 sync triggers, so an UPDATE
       // reports the trigger's row changes too, and in a batch those accumulate across
-      // statements. Measured 2026-08-10, when the batch reported 5 edges repointed for
-      // a single edge.
+      // statements.
       const exists = await db
         .prepare("SELECT 1 AS ok FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      // THE IMPROVE CONTROL-SURFACE GUARD, BOTH ENDS (audit 2026-09-07, Opus MAJOR
-      // 5.4). A move touches two paths and either can steer the loop: moving a document
-      // INTO improve/skills/ installs a skill other namespaces' runs re-inject, and
-      // moving run.md OUT of improve/prompts/ drops the attempt generator to its
-      // hardcoded default. Checked as what each path ends up holding: the source is
-      // emptied, the destination is filled with the moved body. The override flag is
-      // checked once for the move rather than per end, because the refusal is about
-      // the caller, not the path.
+      // The improve control-surface guard on both ends (see improvePathsRefusal):
+      // either path can steer the loop. The source is emptied and the destination
+      // filled with the moved body.
       const moved = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
@@ -1030,10 +922,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         { path: new_path, before: null, after: movedBody },
       ]);
       if (moveImproveRefusal) return fail(moveImproveRefusal);
-      // move JOINS the confirmation as of 2026-08-17 (audit 2, F25 ruling). It is
-      // destructive-class and had none: it renames a document and repoints every edge
-      // touching it, and unlike delete it leaves no snapshot of the old path, only an
-      // audit row.
+      // move needs confirmation: it repoints every edge and, unlike delete, leaves no
+      // snapshot of the old path, only an audit row.
       const moveRefusal = await requireConfirmation(server, confirm, {
         prompt: `Rename ${namespace}/${path} to ${namespace}/${new_path}? Edges pointing at the old path are repointed.`,
         declined: `move of ${namespace}/${path} declined`,
@@ -1042,12 +932,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       if (!moveRefusal.ok) return fail(moveRefusal.message);
       const { results: movingEdges } = await edgesTouching(db, namespace, path).all();
       const repointed = movingEdges.length;
-      // ONE batch: the guard, the rename, the edge repointing AND the audit row.
-      //
-      // The audit INSERT used to run as its own statement after the batch, which made
-      // two failures possible that the log could not then describe: a move that
-      // succeeded with no record, and a record of a move that never happened. The
-      // 2026-08-10 edge repair recovered five repoints from audit_log move records.
+      // One batch: the guard, the rename, the edge repointing and the audit row, so a
+      // move cannot succeed without a record or be recorded without happening.
       try {
         await db.batch([
           requireExists(db, namespace, path),
@@ -1139,10 +1025,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     },
     async () => {
       // unconsolidated = episodic and source docs not yet archived by the lint loop,
-      // surfaced so every session sees which namespaces need a run. Deliberately NOT
-      // filtered on status: this counted only status 'published' until 2026-07-30 and
-      // read 2 for recova against a real backlog of 24. The archive/ prefix is the only
-      // thing that takes a doc out of the loop.
+      // surfaced so every session sees which namespaces need a run. Not filtered on
+      // status: the archive/ prefix is the only thing that takes a doc out of the loop.
       const { results } = await db
         .prepare(
           `SELECT n.namespace, n.repos, n.created_at,
@@ -1152,12 +1036,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
            FROM namespaces n ORDER BY n.namespace`
         )
         .all();
-      // FILTERED TO THE CALLER'S OWN NAMESPACES. This tool takes no arguments, so
-      // namespaceRefusal at the registrar has nothing to fire on, and every read-grant
-      // agent, a one-namespace driver included, read the whole mapping (audit
-      // 2026-09-13, finding 7). That mapping is what scripts/mint-agents.mjs uses to
-      // set the repos axis and what resolveRepo resolves through, so handing it to a
-      // narrowed caller hands it the shape of the boundary it sits behind.
+      // Filtered to the caller's own namespaces. This tool takes no arguments, so
+      // namespaceRefusal at the registrar has nothing to fire on, and the mapping is
+      // the boundary a narrowed caller sits behind.
       const scoped = ctx.agent.scopes.namespaces;
       const visible = scoped === "*" ? results : results.filter((row) => scoped.includes(String((row as { namespace: string }).namespace)));
       return ok(visible);
@@ -1166,8 +1047,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
 
   // Register a namespace: the one row in the namespaces table that repo tools and the
   // namespaces list read. Writing documents to a new namespace label does not create
-  // it, so without this a namespace was a raw D1 insert. Create-only: it will not
-  // overwrite an existing mapping. Admin only (TOOL_GRANTS in src/scope.ts): an OAuth
+  // it. Create-only: it will not overwrite an existing mapping. Admin only (TOOL_GRANTS in src/scope.ts): an OAuth
   // session qualifies, a minted agent holding the write grant does not.
   server.registerTool(
     "register_namespace",
@@ -1196,10 +1076,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         }
         list = [{ repo, label: (label ?? "primary").trim() || "primary" }];
       }
-      // The single-primary requirement is UNIFIED with update_namespace as of
-      // 2026-08-13. It was enforced on the update path only, so register could create
-      // a namespace with two primaries or none, which every repo tool then resolves by
-      // accident, and update would refuse to fix it in place.
+      // The same single-primary requirement as update_namespace: two primaries or none
+      // would make every repo tool resolve by accident.
       const primaryError = requireSinglePrimary(list);
       if (primaryError) return fail(primaryError);
       const existing = await db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(ns).first();
@@ -1221,10 +1099,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
     }
   );
 
-  // Remap an existing namespace's repos. register_namespace stays the create path;
-  // this is the update path the recova remap needed, previously a raw D1 UPDATE that
-  // bypassed the audit log. Snapshots the prior mapping. It does NOT rename the
-  // namespace: a rename touches document keys, versions and audit history.
+  // Remap an existing namespace's repos; register_namespace is the create path.
+  // Snapshots the prior mapping to the audit log. It does not rename the namespace: a
+  // rename touches document keys, versions and audit history.
   server.registerTool(
     "update_namespace",
     {

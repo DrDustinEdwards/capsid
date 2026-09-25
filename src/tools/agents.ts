@@ -11,21 +11,10 @@ const AGENT_ACTIONS = ["mint", "list", "revoke", "update_scopes"] as const;
 export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  // THE CREDENTIAL CONTROL PLANE'S ONE TOOL, a ruled exception to the tool surface rule taking
-  // the surface from 31 to 32 (capsid/decisions.md, 2026-09-11). The FIFTH, after
-  // history and restore (2026-08-13), improve_run and improve_status (2026-09-04),
-  // the repo fallthrough widening (2026-09-06) and jobs (2026-09-10).
-  //
-  // The argument is the same one the improve loop and the queue made, and it is the
-  // only argument this repo accepts for a new tool: a control plane nobody can reach
-  // from a chat is one that gets worked around. The alternative here was minting by
-  // hand with wrangler and a SQL statement, which means a human pasting a key hash
-  // into a shell, and a scope system whose rows are written by hand is a scope system
-  // with no audit trail and no validation.
-  //
-  // Four actions on one tool rather than four tools, for the same reason jobs carries
-  // eight: one subsystem, one row shape, and a caller that has the tool has the whole
-  // lifecycle.
+  // The credential control plane's one tool, a ruled exception to the tool surface
+  // rule (CLAUDE.md; capsid/decisions.md). Minting by hand would leave the scope rows
+  // with no audit trail and no validation. Its actions share one tool because they
+  // are one subsystem with one row shape.
   server.registerTool(
     "agents",
     {

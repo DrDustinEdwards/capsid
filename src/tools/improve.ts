@@ -15,11 +15,9 @@ const MAX_SKILL_BODY = MAX_BODY;
 export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
 
-  // THE IMPROVE LOOP'S TWO TOOLS, a ruled exception to the tool surface rule (the surface is
-  // small and stays that way), recorded in capsid/decisions.md alongside the
-  // history/restore exception of 2026-08-13. The subsystem is driven by cron, and a
-  // cron-only subsystem is one nobody can inspect or start by hand: the 2026-08-09
-  // outage went 26 days undetected for that shape of reason.
+  // The improve loop's two tools, a ruled exception to the tool surface rule
+  // (CLAUDE.md; capsid/decisions.md). The subsystem is driven by cron, and these let
+  // a human inspect it and start it by hand.
   server.registerTool(
     "improve_run",
     {
@@ -68,26 +66,19 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     },
     async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path, skill }) => {
       try {
-        // SIGN A POLICY DOCUMENT. Admin only, like every action but run and claim:
-        // TOOL_ACTION_GRANTS in src/scope.ts states it and the registrar refuses a
-        // minted agent before this handler runs. A minted agent that could sign a
-        // policy could sign one that widened itself.
+        // Every action but run and claim is admin only, stated in TOOL_ACTION_GRANTS
+        // (src/scope.ts) and enforced by the registrar before this handler runs.
         if (action === "sign_policy") {
           if (!namespace || !path) return fail("sign_policy needs the namespace and the path of the policy document.");
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
           return signed.ok ? ok(signed) : fail(signed.error);
         }
-        // REGISTER A CANDIDATE SKILL. Admin only by the same default: register_skill is
-        // not listed in TOOL_ACTION_GRANTS, so a driver is refused before this runs.
         if (action === "register_skill") {
           if (!skill) return fail("register_skill needs the skill object.");
           const registered = await registerSkill(env, ctx.actor, skill);
           return registered.ok ? ok(registered) : fail(registered.error);
         }
         if (action && action !== "run") {
-          // THE CONTROL SURFACE IS ADMIN (audit 2026-09-13, finding 5), and so is every
-          // action here but claim. TOOL_ACTION_GRANTS in src/scope.ts is where that is
-          // stated and enforced; this handler no longer repeats it.
           return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release }));
         }
         if (namespace && !onRoster(namespace)) {
