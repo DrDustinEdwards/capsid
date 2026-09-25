@@ -104,7 +104,8 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             // A JSON string is accepted too. An MCP client caches the tool schema at
             // connect time, so a session that connected before this parameter existed
             // refuses the object locally, and some clients flatten an object to a
-            // string.
+            // string. Both are a caller that knows what it did and cannot say so in the
+            // shape asked for; refusing them would leave the outcome row storing nulls.
             bounded(MAX_BODY),
           ])
           .optional()
@@ -118,7 +119,8 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
       try {
         if (args.action === "list") {
           // The read action needs the read grant. The registrar names no grant for
-          // an "action" tool, so it is checked here.
+          // an "action" tool, so it is checked here, and a read the caller may not
+          // make is refused for its own reason rather than by a neighbouring check.
           const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace });
           if (listRefusal) return fail(listRefusal);
           if (args.status !== undefined && !isJobStatus(args.status)) {

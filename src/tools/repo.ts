@@ -71,7 +71,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
   // can only compare a fully qualified owner/name; a label is a selector, and
   // omitting it is the default. So every repo tool resolves the selector against the
   // namespace mapping here and asks checkScope about the result. Without this the
-  // axis would bind nothing on the default call path. Costs one D1 read per call.
+  // axis would bind nothing on the default call path: an admin remap of a namespace's
+  // primary would silently redirect every driver scoped to the old repo. It costs one
+  // D1 read per repo call.
   const scopedRepo = async (tool: string, namespace: string, selector: string | undefined) => {
     const resolved = await resolveRepo(env, namespace, selector);
     return { resolved, refusal: ctx.scope({ tool, namespace, repo: resolved.full }) };
@@ -135,7 +137,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     }
     // The mutation already landed: fn() has committed to GitHub, and GitHub cannot
     // join a D1 transaction. A failed audit INSERT is reported as a warning on a
-    // success, because a caller told "failed" would retry into a second commit.
+    // success, because a caller told "failed" would retry into a second commit. The
+    // D1-only tools do not need this: delete, move and finalize put the audit
+    // INSERT inside the same batch as the mutation.
     try {
       await auditStatement(db, actor, action, namespace, path, result).run();
     } catch (err) {
@@ -350,8 +354,11 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     },
     ({ namespace, number, action, merge_method, comment, sha, repo }) => {
       // comment belongs to exactly one action, and is refused rather than ignored in
-      // both directions. Checked before guardedWrite, not inside it: guardedWrite
-      // files whatever fn returns as a landed result.
+      // both directions: a comment silently dropped from a merge call is a review
+      // nobody posted, and a comment on a merge is a caller who believes something
+      // else is about to happen. Checked before guardedWrite, not inside it: guardedWrite files whatever fn
+      // returns as a landed result. Refused here, the call is an error and writes no
+      // audit row.
       if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
       if (action !== "comment" && comment !== undefined) {
         return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
@@ -365,7 +372,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment, sha).catch(headMovedRefusal(number));
           // A merge makes the outcome rows naming this pull request stale, so they are
           // re-read from GitHub now rather than at the daily sweep. It never fails the
-          // merge, which already happened; the sweep picks the row up either way.
+          // merge, which already happened: reporting it as failed because a
+          // bookkeeping update did not land would misreport the merge, and the sweep
+          // picks the row up either way.
           if (action === "merge") {
             try {
               const url = (result as { url?: string }).url ?? prUrlFor(result as { repo?: string }, number);
