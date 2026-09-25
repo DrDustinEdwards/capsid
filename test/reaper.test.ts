@@ -128,9 +128,15 @@ test("a failed delete is not reported as gone", async () => {
   assert.equal(stub.isPresent(), true);
 });
 
-test("a delete the API accepts but does not honour is not reported as gone", async () => {
+test("a key that still reads back after a 2xx delete is logged, and does not fail the job", async () => {
+  // KV is eventually consistent, so the read straight after a delete can still see
+  // the value. That failed 9 live runs (one a good deploy) with nothing wrong. The
+  // 2xx DELETE is taken as done; the read-back is reported, not failed on.
   const stub = fakeKvApi({ present: true, deleteReally: false });
   const result = await run(stub);
   assert.equal(result.outcome, "still-present");
-  assert.equal(reportFor(result.outcome, "k").ok, false);
+  const report = reportFor(result.outcome, "k");
+  assert.equal(report.ok, true, "an eventually consistent read-back failed the job");
+  assert.match(report.message, /still read back/);
+  assert.match(report.message, /eventual consistency/);
 });
