@@ -129,9 +129,9 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
 });
 
 test("one single-shot gate that never gets an answer makes the run exit 3", async () => {
-  const { code, out } = await run(healthy, (req) => req.url === "/csp-report");
+  const { code, out } = await run(healthy, (req) => req.method === "POST" && req.url === "/authorize");
   assert.equal(code, 3, out);
-  assert.match(out, /NORUN {2}7 csp report sink accepts/);
+  assert.match(out, /NORUN {2}5 approve redirects to GitHub/);
 });
 
 test("a server that answers with errors is still a refusal: exit 1", async () => {
@@ -146,7 +146,7 @@ test("a server that answers with errors is still a refusal: exit 1", async () =>
 });
 
 test("a refusal outranks a gate that could not run: exit 1", async () => {
-  // /health reports the wrong sha (a refusal) while the report sink never answers.
+  // /health reports the wrong sha (a refusal) while the approve POST never answers.
   const wrongSha: Handler = (req, res) => {
     if (req.url === "/health") {
       res.writeHead(200, { ...NON_HTML, "content-type": "application/json" });
@@ -154,8 +154,72 @@ test("a refusal outranks a gate that could not run: exit 1", async () => {
     }
     healthy(req, res);
   };
-  const { code, out } = await run(wrongSha, (req) => req.url === "/csp-report");
+  const { code, out } = await run(wrongSha, (req) => req.method === "POST" && req.url === "/authorize");
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}1 health \+ provenance/);
-  assert.match(out, /NORUN {2}7 csp report sink accepts/);
+  assert.match(out, /NORUN {2}5 approve redirects to GitHub/);
+});
+
+// THE FOLDED GATES (audit item B8). Gate 1 now carries the store check that was gate
+// 1b, and gate 6 carries the no-store check that was 4b and the report sink that was
+// 7. Each case breaks one thing the removed gate used to catch.
+function breaking(change: (req: IncomingMessage, res: ServerResponse) => boolean): Handler {
+  return (req, res) => {
+    if (!change(req, res)) healthy(req, res);
+  };
+}
+
+test("gate 1 refuses a Worker whose FTS index is broken (was gate 1b)", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/health") return false;
+      res.writeHead(200, { ...NON_HTML, "content-type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", sha: SHA, store: { d1: "ok", fts: "empty" } }));
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}1 health \+ provenance\n.*d1=ok fts=empty/);
+});
+
+test("gate 6 refuses a consent page without no-store (was gate 4b)", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.method !== "GET" || !req.url?.startsWith("/authorize?")) return false;
+      res.writeHead(200, { ...HTML, "cache-control": "public, max-age=60", "set-cookie": "capsid_csrf=c1; Path=/" });
+      res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}6 security headers per class\n.*\/authorize consent: cache-control public, max-age=60, expected no-store/);
+});
+
+test("gate 6 refuses a report sink that does not answer 204 (was gate 7)", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/csp-report") return false;
+      res.writeHead(500, NON_HTML);
+      res.end();
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}6 security headers per class\n.*\/csp-report: status 500, expected 204/);
+});
+
+test("an enforced COOP or a non-html CSP no longer fails gate 6: those arms pinned a policy choice", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/nope") return false;
+      res.writeHead(404, { ...NON_HTML, "content-security-policy": "default-src 'none'", "cross-origin-opener-policy": "same-origin" });
+      res.end();
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 0, out);
 });
