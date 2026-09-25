@@ -73,6 +73,15 @@ test("a missing root secret is refused, and says there is no way to read one bac
   assert.match(result.stderr, /no way to read a Worker secret back/);
 });
 
+// Audit 2026-09-25, E2-31 (finding E2-L26). A whitespace-only value passed the
+// presence check and derived a key from spaces, which then failed every report.
+test("a whitespace-only root secret is refused like a missing one", () => {
+  const result = run("capsid", { IMPROVE_SCORE_SECRET: "  \t " });
+  assert.notEqual(result.status, 0, "a key was derived from a blank secret");
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /IMPROVE_SCORE_SECRET is not set/);
+});
+
 test("THE ROSTER IN THE SCRIPT MATCHES THE ROSTER IN SOURCE", () => {
   // The script cannot import the TypeScript module, so it restates the list. Two
   // copies of a list is the drift class this repo keeps ruling against, and here
