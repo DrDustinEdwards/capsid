@@ -58,10 +58,8 @@ function textResponse(message: string, status: number): Response {
 
 // The approval cookie carries entries from src/approval.ts: a client id bound to a
 // digest of its redirect set, signed with COOKIE_ENCRYPTION_KEY, kept 30 days.
-//
-// Cookies cap near 4KB. An entry is 16 chars of id, a dot, and 16 hex chars, about
-// 36 bytes of JSON. The 24 registrations measured 2026-08-17 come to roughly 1.2KB
-// after b64 and the signature. The 30 day expiry is what bounds the growth.
+// Cookies cap near 4KB; an entry is about 36 bytes of JSON, and the 30 day expiry
+// bounds the growth.
 async function approvedClients(request: Request, secret: string): Promise<string[]> {
   const raw = getCookie(request, APPROVAL_COOKIE);
   if (!raw) return [];
@@ -88,10 +86,10 @@ function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: s
   const name = escapeHtml(clientName);
   const redirect = escapeHtml(oauthReq.redirectUri);
   const req = b64urlEncode(JSON.stringify(oauthReq));
-  // EVERY registered redirect URI is shown, not just the one being requested
-  // (audit 2026-09-06). A dynamically registered client may hold several and the
-  // approval covers only the requested one, so listing the rest is what shows the
-  // admin that a client named "Claude" also carries an attacker's redirect.
+  // Every registered redirect URI is shown, not just the requested one. A dynamically
+  // registered client may hold several and the approval covers only the requested
+  // one, so listing the rest is what shows the admin that a client with a familiar
+  // name also carries an attacker's redirect.
   const others = (registeredUris ?? []).filter((u) => u !== oauthReq.redirectUri);
   const othersHtml = others.length
     ? `<p>This client also has these registered redirect URIs (not covered by this approval):</p><ul>${others
@@ -154,10 +152,9 @@ async function handleAuthorizeGet(request: Request, env: Env): Promise<Response>
     return textResponse(`invalid authorization request: ${err instanceof Error ? err.message : String(err)}`, 400);
   }
   if (!oauthReq.clientId) return textResponse("invalid authorization request: missing client_id", 400);
-  // The lookup runs AHEAD of the cookie check: the approval is bound to this
-  // client's redirect set and reading the client is the only way to check it. A
-  // client id that no longer resolves therefore cannot ride an old cookie past the
-  // dialog.
+  // The lookup runs before the cookie check: the approval is bound to this client's
+  // redirect set, and reading the client is the only way to check it. A client id
+  // that no longer resolves cannot ride an old cookie past the dialog.
   const client = await env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId);
   if (!client) return textResponse("unknown client", 400);
   const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
@@ -167,25 +164,20 @@ async function handleAuthorizeGet(request: Request, env: Env): Promise<Response>
   return renderApprovalDialog(oauthReq, client.clientName ?? oauthReq.clientId, crypto.randomUUID(), client.redirectUris);
 }
 
-// THE CONSENT FORM'S BODY CAP. `req` is a base64url AuthRequest and `csrf` is a
-// uuid, so a real submission is well under a kilobyte. 64KB leaves headroom and
-// still refuses a body that is trying to be something else. Same reasoning as
-// MAX_REPORT_BYTES on the signed endpoints.
+// The consent form's body cap. `req` is a base64url AuthRequest and `csrf` a uuid, so
+// a real submission is well under a kilobyte; 64KB leaves headroom and still refuses
+// a body that is trying to be something else.
 const AUTHORIZE_FORM_MAX_BYTES = 65_536;
 
 async function handleAuthorizePost(request: Request, env: Env): Promise<Response> {
-  // BOUNDED AT THE STREAM, BEFORE THE PARSE (2026-09-08). This was a bare
-  // request.formData(), which buffers AND PARSES the whole body before any check in
-  // this handler runs, on a path reachable without credentials: the CSRF cookie is
-  // checked after the parse and a caller can fetch the form to obtain one. Same
-  // primitive and reason as /csp-report. The test file also asserts the CSRF and
-  // missing-field refusals still answer 403 and 400, not only the new 413.
+  // Bounded at the stream, before the parse. request.formData() buffers and parses
+  // the whole body before any check here runs, on a path reachable without
+  // credentials: the CSRF cookie is checked after the parse, and a caller can fetch
+  // the form to obtain one.
   const bounded = await readBoundedText(request, AUTHORIZE_FORM_MAX_BYTES);
   if (!bounded.ok) return new Response(null, { status: 413 });
-  // URLSearchParams, not formData(): the consent dialog is a plain
-  // `<form method="post">` with no enctype, so the browser sends
-  // application/x-www-form-urlencoded. Multipart is not a shape this endpoint has
-  // ever received, and the live gate's approve step posts urlencoded too.
+  // URLSearchParams, not formData(): the dialog is a plain `<form method="post">` with
+  // no enctype, so the browser sends urlencoded, and so does the live gate.
   const form = new URLSearchParams(bounded.text);
   const csrf = form.get("csrf");
   const req = form.get("req");
@@ -229,10 +221,9 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  // THE BEARER IS RESOLVED TO A CALLER ONCE, here, and that caller is what every tool
-  // in this request is checked against (src/agents.ts, src/scope.ts). A minted agent
-  // carries the scopes its row says; a key that predates the agents table resolves to
-  // the unrestricted caller it has always been, until it is revoked by hand.
+  // The bearer is resolved to a caller once, here, and every tool in this request is
+  // checked against it. A minted agent carries the scopes its row says; a legacy
+  // operator key resolves to the unrestricted caller until it is revoked by hand.
   const resolved = await resolveAgent(request, env);
   if (!resolved) {
     return new Response("unauthorized: valid operator key or agent key required", {
@@ -240,9 +231,8 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
-  // last_seen is what makes an unused credential noticeable, and it is not part of
-  // authorizing this request: it rides on waitUntil so a slow or failing write cannot
-  // turn into a slow or failing tool call.
+  // last_seen is not part of authorizing, so a slow or failing write rides on
+  // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
   return createMcpHandler(buildServer(env, resolved.agent), { route: "/ops/mcp" })(request, env, ctx);
 }
@@ -257,14 +247,13 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
     });
   }
   // A caller that resolved but may not run this: 403. A backup and its prune cover
-  // every namespace in the store, so ROUTE_GRANTS in src/scope.ts requires the admin,
-  // through the same checkScope the tools use. Until 2026-09-16 this checked only the
-  // write grant, which every namespace-scoped driver holds.
+  // every namespace, so ROUTE_GRANTS in src/scope.ts requires the admin, through the
+  // same checkScope the tools use. The write grant alone is held by every
+  // namespace-scoped driver.
   const refusal = routeRefusal("/ops/backup", caller.agent);
   if (refusal) return new Response(refusal, { status: 403 });
   const result = await runBackup(env);
-  // 409 when another run holds the lease: a caller polling this endpoint should be
-  // able to tell "I did nothing" from "I ran" without reading the body.
+  // 409 when another run holds the lease, so "did nothing" is visible without the body.
   return Response.json(result, { status: result.ran ? 200 : 409 });
 }
 
@@ -310,17 +299,13 @@ function summarizeReport(parsed: unknown): { directive: string; blocked: string;
 }
 
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
-  // RATE LIMITED FIRST, before the body is read (audit 2, F3; the WAF half turned
-  // out not to exist, see src/rate-limit.ts). Every accepted report becomes an R2
+  // Rate limited first, before the body is read: every accepted report becomes an R2
   // object, so this is the Worker's most expensive unauthenticated write per call.
-  //
-  // The refusal is a 429 rather than this endpoint's usual 204. Reasoning is stated
-  // once, on rateLimitedResponse.
+  // The refusal is a 429 rather than the usual 204 (see rateLimitedResponse).
   const ip = callerIp(request);
   const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
   if (!rate.allowed) {
-    // The unavailable refusal has already logged itself, naming the failure; logging
-    // it again here as a limit that fired would record a count nobody measured.
+    // The unavailable refusal has already logged itself.
     if (rate.window !== "unavailable") {
       console.error(`CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})`);
     }
@@ -335,13 +320,10 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
     });
   }
-  // BOUNDED AT THE STREAM, IN BYTES (residual 11, closed 2026-09-08). This was
-  // `await request.text()` followed by a length check, with two faults. It buffered
-  // the WHOLE body before deciding to accept it, on the one public unauthenticated
-  // write path with no body cap in front of it; and `raw.length` counts UTF-16 code
-  // units, so 16,384 three-byte characters measured 16,384 against a cap named in
-  // bytes and a 48KB body reached R2. readBoundedText cancels on the chunk that
-  // crosses the cap.
+  // Bounded at the stream, in bytes: readBoundedText cancels on the chunk that
+  // crosses the cap. Reading the whole text first would buffer an unbounded body on a
+  // public unauthenticated path, and a length check on text counts UTF-16 units, so a
+  // body of multi-byte characters would pass a cap named in bytes at three times it.
   const bounded = await readBoundedText(request, CSP_REPORT_MAX_BYTES);
   if (!bounded.ok) return new Response(null, { status: 413 });
   const raw = bounded.text;
@@ -360,11 +342,9 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
   }
 
   const now = new Date();
-  // The REQUEST's cf-ray has no colo suffix; the RESPONSE's cf-ray does. A report
-  // posted from a colo in Dallas keys as "a29fb43b4ac66c31.json", not
-  // "a29fb43b4ac66c31-DFW.json". Reading the ray off the response and looking it up
-  // in R2 returns "The specified key does not exist" against an object that is
-  // present (measured 2026-08-12).
+  // The request's cf-ray has no colo suffix; the response's does. A report keys as
+  // "a29fb43b4ac66c31.json", not "a29fb43b4ac66c31-DFW.json", so looking one up by the
+  // ray off a response finds no such key against an object that is present.
   const ray = request.headers.get("cf-ray") ?? crypto.randomUUID();
   const key = `${REPORT_PREFIX}${now.toISOString().slice(0, 10)}/${ray}.json`;
   const summary = summarizeReport(parsed);
@@ -434,11 +414,10 @@ async function readSignedBody(
   return { ok: true, body: bounded.text };
 }
 
-// The backup-credential mint (session 3, off-account backup). Same shape as the
-// holdout mint below, with the backup-specific derived key and no namespace: the
-// scope is one hour of object-read-only on backups/json/, always. The jti replay
-// cache runs under the literal namespace "backup", which ROSTER is a fixed list
-// without.
+// The backup-credential mint. Same shape as the holdout mint below, with the
+// backup-specific derived key and no namespace: one hour of object-read-only on
+// backups/json/. The jti cache runs under the literal scope "backup", which is not
+// in ROSTER.
 async function handleBackupCredential(request: Request, env: Env): Promise<Response> {
   const { timestamp, signature } = signedHeaders(request, "backup");
 
@@ -467,11 +446,9 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
-// The holdout-credential mint (platform arc 2026-09-06). Same envelope as the score
-// report: per-namespace HMAC over timestamp.body, bounded body, jti replay cache.
-// The signed namespace is the authority, so a repo can mint read access to ITS OWN
-// holdout prefix and nothing else. The minting and its secrets are in
-// src/improve-scorer.ts with the rest of the holdout surface.
+// The holdout-credential mint. Same envelope as the score report: per-namespace HMAC
+// over timestamp.body, bounded body, jti replay cache. The signed namespace is the
+// authority, so a repo can mint read access to its own holdout prefix only.
 async function handleHoldoutCredential(request: Request, env: Env): Promise<Response> {
   const { namespace, timestamp, signature } = signedHeaders(request, "improve");
 
@@ -509,26 +486,23 @@ async function handleHoldoutCredential(request: Request, env: Env): Promise<Resp
   });
 }
 
-// THE SCORE REPORT SINK. CI posts here when it has finished scoring a branch.
+// The score report sink. CI posts here when it has finished scoring a branch.
 //
-// NOT UNDER /ops/. An /ops/ path means an operator key opens it, and an operator
-// key can write every document in the store. Five repos reach this endpoint, so it
-// is opened by a per-namespace HMAC derived from one Worker secret instead: a key
-// leaking from one repo's Actions log authorises reports for that namespace only.
+// Not under /ops/. An /ops/ path is opened by an operator key, which can write every
+// document in the store. Several repos reach this endpoint, so it is opened by a
+// per-namespace HMAC derived from one Worker secret: a key leaking from one repo's
+// Actions log authorizes reports for that namespace only.
 //
-// NO RATE LIMITER, unlike /csp-report. That path takes an unauthenticated write
-// into R2 from anyone; this one writes nothing until a signature over the body
-// verifies against a secret only the target repo holds. An unsigned flood costs two
-// HMAC computations per request and reaches no storage.
+// No rate limiter, unlike /csp-report, which takes an unauthenticated write into R2.
+// This one writes nothing until a signature over the body verifies, so an unsigned
+// flood costs two HMAC computations per request and reaches no storage.
 async function handleImproveScore(request: Request, env: Env): Promise<Response> {
   const { namespace, timestamp, signature } = signedHeaders(request, "improve");
 
-  // Bounded BEFORE any HMAC. The Content-Length fast-path rejects a declared-large
-  // body cheaply but fires only when the header is present and finite; a report with
-  // no Content-Length, or a lying one, used to be read in full and HMAC'd before
-  // parseScoreReport enforced the ceiling (audit 2026-09-06, MAJOR). The bounded
-  // reader is the real enforcement: it stops pulling from the stream once
-  // MAX_REPORT_BYTES is exceeded, so neither memory nor crypto is spent.
+  // Bounded before any HMAC. The Content-Length check rejects a declared-large body
+  // cheaply but fires only when the header is present and honest; the bounded reader
+  // is the enforcement, and it stops pulling from the stream once MAX_REPORT_BYTES is
+  // exceeded, so neither memory nor crypto is spent.
   const bounded = await readSignedBody(
     request,
     `report too large: exceeds ${MAX_REPORT_BYTES} bytes`,
@@ -546,9 +520,8 @@ async function handleImproveScore(request: Request, env: Env): Promise<Response>
   const parsed = parseScoreReport(body);
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
 
-  // THE SIGNED NAMESPACE IS THE AUTHORITY, not the one in the body. The signature
-  // was verified with the key derived for the header's namespace, so a body claiming
-  // a different namespace is a repo reporting for a project it holds no key to.
+  // The signed namespace is the authority, not the one in the body. A body claiming a
+  // different namespace is a repo reporting for a project it holds no key to.
   if (parsed.report.namespace !== verdict.namespace) {
     return textResponse(
       `the report body names namespace '${parsed.report.namespace}' but it was signed with the key for '${verdict.namespace}'`,
@@ -556,9 +529,8 @@ async function handleImproveScore(request: Request, env: Env): Promise<Response>
     );
   }
 
-  // REPLAY CACHE (audit 2026-09-06). The jti is inside the signed body, so it cannot
-  // be swapped. A jti seen before, for this namespace, is refused. claimJti fails
-  // closed on a KV error.
+  // Replay cache: the jti is inside the signed body, and a jti seen before for this
+  // namespace is refused. claimJti fails closed on a store error.
   const claim = await claimJti(env.DB, verdict.namespace, parsed.report.jti);
   if (!claim.ok) {
     if (claim.status === 503) console.error(`IMPROVE_SCORE_REPLAY_KV_ERROR ${verdict.namespace}: ${claim.refusal}`);

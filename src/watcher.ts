@@ -9,22 +9,16 @@ import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, s
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 
-// ---- the watcher ----------------------------------------------------------------
+// The watcher looks at the surface every half hour and, when something is wrong,
+// posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
+// anything. A watcher that could act on what it found would be an unattended agent
+// deciding at 03:00 what to do about a red default branch, so it writes the finding
+// down with the evidence and a named caller picks it up.
 //
-// GROUP 3 OF THE ROLES ARC. A step that looks at the surface every half hour and,
-// when something is wrong, POSTS A JOB. That is the whole of it.
-//
-// WHAT IT CANNOT DO IS THE POINT. It holds no blast-radius flag, it cannot claim a
-// job, and it cannot fix anything. A watcher that could act on what it found would be
-// an unattended agent deciding at 03:00 what to do about a red default branch, and
-// the arc this belongs to exists to put a person at that boundary. So it writes the
-// finding down, with the evidence, and something with a name picks it up.
-//
-// THE DEDUPLICATION IS THE QUEUE'S OWN RULE, not a second mechanism. `post` already
-// refuses a duplicate while one job of the same (namespace, title) is open, so a
-// finding whose title carries its fingerprint posts once and is refused every half
-// hour after that until it clears. Building a separate fingerprint table would be a
-// second answer to a question the queue already answers, and the two would disagree.
+// Deduplication is the queue's own rule: `post` refuses a duplicate while a job with
+// the same (namespace, title) is open, and the title carries the fingerprint, so a
+// finding posts once and is refused every pass after that until it clears. A
+// separate fingerprint table would be a second answer that could disagree.
 
 export const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
@@ -32,61 +26,54 @@ export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
 const WATCHER_CADENCE_KEY = "watcher:cadence-minutes";
 export const WATCHER_LAST_KEY = "watcher:last";
 
-// HALF AN HOUR BY DEFAULT, KV-configurable. The tick runs every five minutes, so this
-// gates itself the way the skill cycle does: all but one invocation in six returns
-// after a single KV read.
+// KV-configurable. The tick runs every five minutes, so all but one invocation in six
+// returns after a single KV read.
 export const DEFAULT_CADENCE_MINUTES = 30;
 
-// The floor. Zero or a negative number would run every check on every tick, which is
-// the one setting that turns a bounded cost into an unbounded one, so an unusable
-// value falls back rather than being obeyed.
+// The floor. Zero or a negative number would run every check on every tick, which
+// turns a bounded cost into an unbounded one, so an unusable value falls back rather
+// than being obeyed.
 const MIN_CADENCE_MINUTES = 5;
 
-// A blocked job nobody has looked at in a day. Long enough that an ordinary gate
-// cleared the same afternoon never trips it.
+// Long enough that an ordinary gate cleared the same afternoon never trips it.
 export const BLOCKED_STALE_HOURS = 24;
 
-// A default branch that has been red this long is not a flake somebody is already
-// fixing.
+// Red this long is not a flake somebody is already fixing.
 export const CI_RED_HOURS = 2;
 
-// THE OFF-ACCOUNT MIRROR'S WINDOW, AND IT IS NOT BACKUP_STALE_HOURS.
+// The off-account mirror's window, and it is not BACKUP_STALE_HOURS.
 //
-// BACKUP_STALE_HOURS is the LOCAL dump at 26 hours, measured from a key this Worker
-// writes itself. This is a different thing measured from the other side: the newest
-// dump present in the backups repo (MIRROR_REPO_LABEL, below), which this Worker only
-// observes.
-// The mirror's schedule lives in that repo and can change without this one hearing,
-// so one constant standing for both would go wrong silently the day it does.
+// BACKUP_STALE_HOURS is the local dump, measured from a key this Worker writes
+// itself. This measures the newest dump present in the backups repo
+// (MIRROR_REPO_LABEL, below), which this Worker only observes. The mirror's schedule
+// lives in that repo and can change without this one hearing, so one constant
+// standing for both would go wrong silently the day it does.
 //
-// 36 hours is the daily cadence plus real slack. The newest dump is stamped at the
-// backup cron's 09:00 UTC, and the mirror picks it up hours later, so at 08:59 UTC
-// the freshest possible dump is already about 24 hours old before the mirror has
-// even run. A tighter window would fire every morning.
+// 36 hours is the daily cadence plus slack. The newest dump is stamped at the backup
+// cron's 09:00 UTC and the mirror picks it up hours later, so just before 09:00 UTC
+// the freshest possible dump is already about 24 hours old before the mirror has run.
+// A tighter window would fire every morning.
 export const MIRROR_STALE_HOURS = 36;
 
-// The mapping label and the path, spelled once. The repo itself is NEVER named in this
-// module: it is resolved from the capsid namespace's mapping, which is the authorization
-// boundary and is admin-only to edit. A hardcoded owner/name would be a second copy
-// of that mapping sitting outside the boundary.
+// The repo is never named in this module: it is resolved from the capsid namespace's
+// mapping, which is the authorization boundary. A hardcoded owner/name would be a
+// second copy of that mapping outside the boundary.
 const MIRROR_REPO_LABEL = "backups";
 export const MIRROR_DUMP_PREFIX = "backups/json";
 
-// Spend over this fraction of a monthly cap is worth saying out loud before the cap
-// stops the loop rather than after.
+// Warn before the cap stops the loop, not after.
 export const BUDGET_WARN_FRACTION = 0.8;
 
-// How many findings one pass will post. A bound rather than a guess: if every check
-// fires at once, the queue gets ten jobs and the rest are found again in half an
-// hour, which is better than a tick that posts fifty and times out.
+// How many findings one pass will post. If every check fires at once, the queue gets
+// ten jobs and the rest are found again next pass, which is better than a tick that
+// posts fifty and times out.
 export const MAX_FINDINGS_PER_PASS = 10;
 
-// THE WATCHER'S IDENTITY INSIDE THE WORKER, shaped exactly like the minted `watcher`
-// role in scripts/mint-agents.mjs: every namespace, the write grant, `jobs.post` and
-// nothing else, no flags. Spelled here because the tick has no bearer token to
-// present, and spelled to MATCH rather than to be convenient, so the credential a
-// person can mint and the identity the Worker uses are the same authority.
-// test/watcher.test.ts derives one from the other and fails if they drift.
+// The watcher's identity inside the Worker, matching the minted `watcher` role in
+// scripts/mint-agents.mjs (every namespace, write, `jobs.post`, no flags), so the
+// credential a person can mint and the identity the tick uses are the same authority.
+// Spelled here because the tick has no bearer token to present.
+// test/watcher.test.ts fails if they drift.
 export function watcherAgent(): Agent {
   return {
     id: WATCHER_ACTOR,
@@ -113,9 +100,7 @@ export async function cadenceMinutes(env: Env): Promise<number> {
     if (!Number.isFinite(parsed) || parsed < MIN_CADENCE_MINUTES) return DEFAULT_CADENCE_MINUTES;
     return Math.floor(parsed);
   } catch {
-    // An unreadable store means the default, on the rule improve_mode already
-    // follows: fall back to the safe value rather than to whatever was last in
-    // memory.
+    // An unreadable store means the default, as improve_mode does.
     return DEFAULT_CADENCE_MINUTES;
   }
 }
@@ -125,20 +110,17 @@ export type DueVerdict = { due: true; reason: string } | { due: false; reason: s
 export function passDue(lastIso: string | null, minutes: number, now: Date): DueVerdict {
   if (!lastIso) return { due: true, reason: "the watcher has not run yet." };
   const last = Date.parse(lastIso);
-  // A corrupt stamp RUNS the pass rather than blocking it: one extra pass costs a
-  // handful of reads, and never running again costs a watcher that silently stopped.
+  // A corrupt stamp runs the pass: an extra pass is cheap, a watcher that silently
+  // stopped is not.
   if (Number.isNaN(last)) return { due: true, reason: `last-run stamp '${lastIso}' does not parse; running rather than blocking.` };
   const elapsed = (now.getTime() - last) / 60000;
   if (elapsed < minutes) return { due: false, reason: `${Math.floor(elapsed)} of ${minutes} minutes since the last pass.` };
   return { due: true, reason: `${Math.floor(elapsed)} minutes since the last pass, cadence is ${minutes}.` };
 }
 
-// ---- findings --------------------------------------------------------------------
-
 export interface Finding {
-  // STABLE WHILE THE FINDING PERSISTS AND DIFFERENT WHEN IT IS A DIFFERENT PROBLEM.
-  // It goes in the title, so the queue's one-open-job-per-title rule is what stops a
-  // finding being posted twice.
+  // Stable while the finding persists, different for a different problem. It goes in
+  // the title, so the queue's one-open-job-per-title rule stops a double post.
   fingerprint: string;
   namespace: string;
   title: string;
@@ -183,9 +165,8 @@ export function healthFindings(
       ])
     );
   }
-  // A SHA COMPARISON IS ONLY MEANINGFUL WHEN BOTH SIDES ARE KNOWN. A null master sha
-  // means the repo read failed, and reporting that as drift would be a finding about
-  // the watcher rather than about the deploy.
+  // A sha comparison needs both sides. A null master sha means the repo read failed,
+  // and reporting that as drift would be a finding about the watcher, not the deploy.
   if (masterSha && health.sha && health.sha !== "unknown" && health.sha !== masterSha) {
     out.push(
       finding(namespace, `deploy-drift-${masterSha.slice(0, 7)}`, "the deployed sha is not master head", [
@@ -244,10 +225,9 @@ export function statusFindings(status: StatusReport): Finding[] {
   }
 
   for (const ns of status.namespaces ?? []) {
-    // A PAUSE IS NOT A PROBLEM. A human pausing a namespace is the system working, so
-    // only a pause the loop set on itself is reported. Those carry LOOP_PAUSE_PREFIX.
-    // A bare "budget" is the value written before the prefix existed and may still be
-    // in KV.
+    // Only a pause the loop set on itself is reported (LOOP_PAUSE_PREFIX, or a bare
+    // "budget", the older spelling that may still be in KV). A human pause is not a
+    // problem.
     if (ns.paused && (ns.paused.startsWith(LOOP_PAUSE_PREFIX) || ns.paused === "budget")) {
       out.push(
         finding(ns.namespace, `paused-${ns.namespace}`, `${ns.namespace} is paused by the loop itself`, [
@@ -260,8 +240,7 @@ export function statusFindings(status: StatusReport): Finding[] {
   return out;
 }
 
-// The headline of a block summary. A blocked job's summary carries the whole resume
-// command and can run to a page; a finding wants the first line of it.
+// A blocked job's summary can run to a page; a finding wants its first line.
 function firstLine(text: string | null): string {
   const head = (text ?? "").split("\n")[0].trim();
   return head || "(nothing recorded)";
@@ -277,10 +256,9 @@ export interface BlockedRow {
 
 /** A blocked job nobody has looked at in a day.
  *
- *  Read from the table rather than from improve_status, because the status report's
- *  blocked_jobs projection carries no timestamp: it answers "what is blocked and on
- *  what command", which is the console's question, not "for how long". Widening that
- *  shape to answer both would put a field on the console that only this reads. */
+ *  Read from the table because improve_status's blocked_jobs projection carries no
+ *  timestamp: it answers "what is blocked and on what command", the console's
+ *  question, not "for how long". Widening it would add a field only this reads. */
 export function staleBlockedFindings(rows: BlockedRow[], now: Date): Finding[] {
   const out: Finding[] = [];
   for (const row of rows) {
@@ -336,26 +314,18 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   ];
 }
 
-// ---- the off-account mirror ---------------------------------------------------------
+// The off-account mirror. Measure the dump, not the attempt. A credential request
+// proves the mirror started; a run can pass its credential step and then fail before
+// the dump lands. Only a dump proves a backup exists.
 //
-// MEASURE THE DUMP, NOT THE ATTEMPT. Two earlier versions of this check keyed on a
-// verified POST /backup/credential, and that signal is measured false: on run
-// 34696901751 the mirror's credential step concluded SUCCESS and the run then failed
-// two steps later, so no dump landed. The mirror was dead for four days, 2026-09-09
-// to 2026-09-12, and the Worker saw a healthy credential request on every one of
-// them. A credential request proves the mirror STARTED. Only a dump proves a backup
-// EXISTS.
-//
-// THE TIMESTAMP COMES FROM THE DIRECTORY NAME, not from the commit date and not from
-// the commit message. The mirror writes backups/json/<dump timestamp>/, so the
-// directory names ARE the thing being asked about: which dumps exist. A commit date
-// would answer "when did the mirror last push", which is the same only while the
-// mirror is healthy, and a commit message would couple this check to how the other
-// repo words its commits.
+// The timestamp comes from the directory name, not the commit date or message. The
+// mirror writes backups/json/<dump timestamp>/, so the directory names are the thing
+// being asked about. A commit date answers "when did the mirror last push", which is
+// the same only while the mirror is healthy, and a commit message would couple this
+// check to how the other repo words its commits.
 
-// `2026-09-12T09-00-11-132Z` as the backup writes it. Anchored and total: a directory
-// that is not a dump stamp yields null rather than an accidental date, so a stray
-// entry cannot look like a fresh backup.
+// `2026-09-12T09-00-11-132Z` as the backup writes it. Anchored, so a stray directory
+// yields null rather than looking like a fresh backup.
 const DUMP_STAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
 
 export function parseDumpStamp(name: string): Date | null {
@@ -386,29 +356,24 @@ export interface MirrorRun {
   url?: string;
 }
 
-/** The mirror's own workflow runs, newest first, ignoring anything else in that repo.
- *  Matched on the workflow NAME rather than the file path, because that is what the
- *  runs API returns. */
+/** The mirror's latest completed run, matched on workflow name (what the runs API
+ *  returns). */
 function latestMirrorRun(runs: MirrorRun[]): MirrorRun | null {
   return runs.find((r) => r.status === "completed" && (r.name ?? "").toLowerCase().includes("mirror")) ?? null;
 }
 
-/**
- * THE DUMP AGE DECIDES WHETHER, THE RUN CONCLUSION EXPLAINS WHY.
- *
- * Three states, three findings, because they need three different actions, and
- * collapsing them is how the third one gets missed. A green run with no new dump is
- * the subtlest and the one a conclusion-first check cannot see at all.
- */
+/** The dump age decides whether there is a finding; the run conclusion explains why.
+ *  Three states need three different actions, so they are three findings, and
+ *  collapsing them is how the third one gets missed: a green run with no new dump is
+ *  the one a conclusion-first check cannot see at all. */
 export function mirrorFindings(
   namespace: string,
   newest: Date | null,
   runs: MirrorRun[],
   now: Date
 ): Finding[] {
-  // No dump at all is its own fact. "Never mirrored" and "stopped mirroring" call for
-  // different things: the first is a setup that never worked, the second is a
-  // regression in one that did.
+  // No dump at all is its own fact. "Never mirrored" is a setup that never worked;
+  // "stopped mirroring" is a regression in one that did.
   if (newest === null) {
     return [
       finding(namespace, "mirror-no-dump", "the off-account mirror holds no dump at all", [
@@ -438,8 +403,7 @@ export function mirrorFindings(
   const conclusion = latest.conclusion ?? "none";
   const green = conclusion === "success" || conclusion === "skipped" || conclusion === "neutral";
 
-  // (c) Green and no dump. The hardest one to see and the reason the dump is the
-  // primary signal: every conclusion-first check reports this mirror as healthy.
+  // (c) Green and no dump, which a conclusion-first check reports as healthy.
   if (green) {
     return [
       finding(namespace, "mirror-green-no-dump", "the off-account mirror ran green and no new dump appeared", [
@@ -451,7 +415,7 @@ export function mirrorFindings(
     ];
   }
 
-  // (a) Ran and failed. The 2026-09-09 case.
+  // (a) Ran and failed.
   return [
     finding(namespace, `mirror-run-failed-${conclusion}`, "the off-account mirror's workflow is failing", [
       age,
@@ -462,8 +426,6 @@ export function mirrorFindings(
   ];
 }
 
-// ---- posting and clearing ---------------------------------------------------------
-
 export interface WatcherReport {
   ran: boolean;
   note: string;
@@ -471,17 +433,13 @@ export interface WatcherReport {
   cleared: string[];
 }
 
-/** The fingerprints of every watcher job still open, over EVERY open status rather
- *  than queued alone. This map does two jobs, and only one of them wanted the narrow
- *  read: it decides what the pass skips posting, and it is the list the pass offers to
- *  `clearFinding`. Queued-only made the skip miss a claimed or blocked copy, which is
- *  the second half of the 2026-09-18 duplicate: the index did not count blocked as
- *  open and neither did this.
+/** The fingerprints of every open watcher job, over every open status rather than
+ *  queued alone. The map decides what the pass skips posting, and a queued-only read
+ *  would miss a claimed or blocked copy and post a duplicate.
  *
- *  A job a driver claimed, or one blocked for a human, is still left alone: closing it
- *  underneath its owner would be the queue losing work. That guarantee lives in
- *  `clearFinding`'s keyed UPDATE, which moves a row only out of `queued`, so widening
- *  the read here cannot close anything it could not close before. */
+ *  A claimed or blocked job is still never closed: closing it underneath its owner
+ *  would lose work. That guarantee lives in `clearFinding`'s keyed UPDATE, which
+ *  moves a row only out of `queued`, so the wider read cannot close anything more. */
 export async function openWatcherFingerprints(env: Env): Promise<Map<string, string>> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   const { results } = await env.DB.prepare(
@@ -497,12 +455,9 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
   return open;
 }
 
-/** A finding that is no longer being found. The job is marked failed with "cleared",
- *  which is the honest word: nobody did the work, the thing stopped being true.
- *
- *  KEYED ON queued, so a job a driver claimed between the read and the write is not
- *  closed underneath it, and RETURNING so the count is of rows this actually moved
- *  rather than of D1's trigger-inflated meta.changes. */
+/** A finding that is no longer found: the job is marked failed with "cleared", since
+ *  nobody did the work. Keyed on queued, so a job claimed between the read and the
+ *  write is not closed underneath its driver; RETURNING, not meta.changes. */
 export async function clearFinding(env: Env, id: string, now: Date): Promise<boolean> {
   const won = await env.DB.prepare(
     `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
@@ -513,18 +468,13 @@ export async function clearFinding(env: Env, id: string, now: Date): Promise<boo
   return won !== null;
 }
 
-// ---- one pass --------------------------------------------------------------------
-//
-// THE IO IS INJECTED, so every rule above can be driven without a Worker, a database
-// or GitHub. What is left here is the ORDER: gather, clear what is no longer found,
-// post what is new. Clearing first matters: a finding that flickers off and on would
-// otherwise be refused as a duplicate of the job about to be closed.
+// One pass, with the IO injected. Order: gather, clear what is no longer found, post
+// what is new. Clearing first stops a finding that flickers off and on being refused
+// as a duplicate of the job about to be closed.
 
-// WHICH CHECK PRODUCES EACH FINGERPRINT. A pass clears an open job only when the
-// check that would have found it again actually ran. A read that failed is not
-// evidence that the problem went away, and clearing on it would record "cleared"
-// for a finding that was only unreadable. A fingerprint no check owns can never be
-// found again, so it is cleared as before.
+// Which check produces each fingerprint. An open job is cleared only when the check
+// that would find it again actually ran: a failed read is not evidence the problem
+// went away. A fingerprint no check owns is cleared.
 export const WATCHER_CHECKS = [
   "health",
   "master head",
@@ -584,9 +534,8 @@ export async function runPass(readers: PassReaders): Promise<{ posted: string[];
 
   const posted: string[] = [];
   for (const f of found.slice(0, MAX_FINDINGS_PER_PASS)) {
-    // ALREADY OPEN IS NOT A FAILURE, it is the deduplication working. The post is
-    // skipped rather than attempted-and-refused so the log does not fill with
-    // refusals every half hour for as long as a finding persists.
+    // Already open is the deduplication working. Skipped rather than posted and
+    // refused, so the log does not fill with refusals every pass while it persists.
     if (open.has(f.fingerprint)) continue;
     const result = await readers.post(f);
     if (result.ok) posted.push(f.fingerprint);
@@ -595,8 +544,7 @@ export async function runPass(readers: PassReaders): Promise<{ posted: string[];
   return { posted, cleared };
 }
 
-/** The step the five-minute tick calls. Gates on its own cadence first, so all but
- *  one invocation in six returns after a single KV read. */
+/** The step the five-minute tick calls. Gates on its own cadence first. */
 export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>): Promise<WatcherReport> {
   const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);
@@ -614,15 +562,14 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
         title: f.title,
         body: f.body,
         priority: 9,
-        // A FINDING IS NOT A GATE. The work it leads to may hit one, and that job
-        // blocks then; saying so here would mark every finding as needing a human
-        // confirmation before anybody has read it.
+        // A finding is not a gate. The work it leads to may hit one and block then;
+        // marking it here would demand a human confirmation before anyone read it.
         gate_required: false,
       }),
   });
 
-  // THE STAMP IS WRITTEN LAST AND ONLY ON A PASS THAT RAN. A stamp written first
-  // would make a throwing pass look like a completed one and skip the next six ticks.
+  // Written last and only on a pass that ran. A stamp written first would make a
+  // throwing pass look completed and skip the next several ticks.
   await env.APP_KV.put(WATCHER_LAST_KEY, now.toISOString());
   return {
     ran: true,
@@ -632,9 +579,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   };
 }
 
-// ---- gathering, against the real surfaces -----------------------------------------
-//
-// Every read here is wrapped: one failing surface must not stop the others being
+// Every read is wrapped so one failing surface does not stop the others being
 // checked. A watcher that goes silent because GitHub was slow is worse than one that
 // reports three of its four checks, because silence reads as health.
 
@@ -649,27 +594,18 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
 
 const basename = (path: string): string => path.split("/").filter(Boolean).pop() ?? "";
 
-/** The newest migration filename on master, which is what the live schema_version is
- *  compared against. Sorted by name, because the files are zero-padded and ordered by
- *  that padding everywhere else in this repo. */
+/** The newest migration filename on master, compared against the live schema_version.
+ *  Sorted by name: the files are zero-padded. */
 export function newestMigration(names: string[]): string | null {
   const sql = names.filter((n) => n.endsWith(".sql")).sort();
   return sql.length ? sql[sql.length - 1] : null;
 }
 
-/** THE SCORER SURFACE IS MEANT TO BE IDENTICAL IN ALL FIVE ROSTER REPOS, and until
- *  2026-09-16 nothing measured whether it was. The copier had thrown on every run
- *  since 2026-09-12, three commits changed the shared surface and reached nobody,
- *  and four separate places asserted byte-identity while no check could see across
- *  repos. This is that check, in the only component with read access to all five.
- *
- *  A READ THAT RETURNS NOTHING IS A FINDING, never four hashes that happen to
- *  agree. The count of repos actually read is in the finding, so "they all match"
- *  can never be reached by matching one repo against itself, and a repo that could
- *  not be read is named rather than dropped from the comparison.
- *
- *  It reports; it does not prevent. The copier is what fixes the divergence and a
- *  human runs it. */
+/** The scorer surface is meant to be identical in all roster repos; this checks it
+ *  from the only component that can read all of them. A repo that cannot be read is
+ *  named in a finding rather than dropped, and the count read is stated, so "they all
+ *  match" cannot come from fewer repos than it claims. It reports; a human runs the
+ *  copier to fix it. */
 async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
   const read: Array<{ namespace: string; block: string; report: string }> = [];
   const unreadable: string[] = [];
@@ -688,8 +624,8 @@ async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
     const block = sharedBlock(files.workflow);
     if (block === null) {
       // The marker is missing or doubled, so there is no block to compare. Reported
-      // rather than skipped: a file that has lost its marker has stopped being the
-      // shape the copier can maintain at all.
+      // rather than skipped: a file that lost its marker is a shape the copier cannot
+      // maintain.
       malformed.push(namespace);
       continue;
     }
@@ -709,8 +645,7 @@ export interface ScorerSurface {
   report: string;
 }
 
-/** The judgement, with no IO in it, so every branch is reachable from a test:
- *  what was read, what could not be, and what that means. */
+/** The judgement, with no IO in it, so every branch is reachable from a test. */
 export function identityFindings(read: ScorerSurface[], unreadable: string[], malformed: string[]): Finding[] {
   const out: Finding[] = [];
   const seen = `${read.length} of ${ROSTER.length} repos read`;
@@ -726,8 +661,8 @@ export function identityFindings(read: ScorerSurface[], unreadable: string[], ma
     );
   }
 
-  // FEWER THAN TWO READ IS NOT AGREEMENT. One repo always matches itself and zero
-  // repos always match too; neither says anything about identity.
+  // Fewer than two read is not agreement: one repo always matches itself and zero
+  // repos match too.
   if (read.length < 2) {
     if (read.length > 0) {
       out.push(
@@ -776,12 +711,9 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
   const out: Finding[] = [];
   const ran = new Set<WatcherCheck>();
 
-  // NO CASTS ON A REPO READER'S RESULT. Until 2026-09-17 both reads below went
-  // through one: the head read called repoHistory with no ref, which throws, and the
-  // migrations read took `name` from entries that carry `path`. attempt() swallowed
-  // the first and the cast hid the second, so neither check ever ran
-  // (AUDIT-2026-09-16.md 8.1, 8.21). With the inferred types, a renamed field fails
-  // `npm run check`; test/watcher-gather.test.ts drives both reads end to end.
+  // No casts on a repo reader's result, so a renamed field fails `npm run check`.
+  // attempt() swallows a throw, so a cast would hide a check that never runs.
+  // test/watcher-gather.test.ts drives both reads end to end.
   const health = await attempt("health", () => healthReport(env));
   if (health) {
     ran.add("health");
@@ -809,18 +741,10 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
     out.push(...staleBlockedFindings(blocked, now));
   }
 
-  // THE OFF-ACCOUNT MIRROR. Resolved through the namespace mapping like every other
-  // repo call: capsid, selector "backups". Nothing is hardcoded here and no agent
-  // scope changes, because this runs inside the tick rather than through the
-  // registrar.
-  //
-  // BOTH READS ARE SEPARATELY FAIL-SAFE, and the dump read is the one that gates.
-  // `attempt` returns null when GitHub cannot be reached, and a null dump listing
-  // skips the check entirely rather than reporting an empty mirror: "cannot see the
-  // mirror" and "the mirror is dead" are different facts, and posting the second
-  // during an outage would file a job every half hour about GitHub being down. A
-  // failed RUN read is softer and degrades to an empty list, which still lets the
-  // stale-dump finding fire and say only that nothing has run.
+  // The off-account mirror, resolved through the capsid namespace mapping (selector
+  // "backups"). A failed dump read skips the check: "cannot see the mirror" is not
+  // "the mirror is dead", and an outage must not file a job every half hour. A failed
+  // run read degrades to an empty list, so the stale-dump finding still fires.
   const dumps = await attempt("mirror dumps", async () => {
     const tree = await listRepoTree(env, "capsid", MIRROR_DUMP_PREFIX, undefined, MIRROR_REPO_LABEL);
     return tree.entries;
@@ -835,8 +759,8 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
   const scorer = await attempt("scorer identity", () => scorerIdentityFindings(env));
   if (scorer) {
     ran.add("scorer identity");
-    // A comparison over fewer than all five repos says nothing about the ones it
-    // could not read, so the identity findings are only cleared on a full read.
+    // A comparison over fewer than all the repos says nothing about the ones it could
+    // not read, so identity findings clear only on a full read.
     if (!scorer.some((f) => owningCheck(f.fingerprint) === "scorer identity")) ran.add("scorer surface");
     out.push(...scorer);
   }
