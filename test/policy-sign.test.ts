@@ -170,9 +170,10 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   );
   const audit = fake.recorded.find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "signing must be audit-logged");
-  assert.equal(audit.params[1], "capsid");
-  assert.equal(audit.params[2], AUTO_MERGE_POLICY_PATH);
-  const params = JSON.parse(String(audit.params[3])) as Record<string, unknown>;
+  assert.equal(audit.params[1], "policy-signed");
+  assert.equal(audit.params[2], "capsid");
+  assert.equal(audit.params[3], AUTO_MERGE_POLICY_PATH);
+  const params = JSON.parse(String(audit.params[4])) as Record<string, unknown>;
   assert.match(String(params.signature), /^[0-9a-f]{64}$/);
   assert.equal(params.resigned, false);
   assert.equal(

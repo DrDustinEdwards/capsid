@@ -227,13 +227,16 @@ test("PLANT: a second report the same day is REFUSED without confirmation", asyn
 });
 
 test("the same call WITH confirm: true overwrites, snapshotting first", async () => {
-  const { client, batches, close } = await connect("write", reportRows(true));
+  const { client, batches, recorded, close } = await connect("write", reportRows(true));
   try {
     const result = await call(client, "lint", { namespace: "capsid", mode: "report", confirm: true });
     assert.ok(!result.isError, text(result));
     const flat = batches.flat().map((s) => s.replace(/\s+/g, " "));
     assert.ok(flat.some((s) => /INSERT INTO document_versions/.test(s)), "snapshot rule: the prior report was replaced without a snapshot");
-    assert.ok(flat.some((s) => /INSERT INTO audit_log .* 'lint_report'/.test(s)), "the overwrite skipped the audit log");
+    assert.ok(
+      recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report"),
+      "the overwrite skipped the audit log"
+    );
   } finally {
     await close();
   }

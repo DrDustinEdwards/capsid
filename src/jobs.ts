@@ -28,7 +28,7 @@ import type { Agent } from "./agents";
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
-import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
+import { auditStatement, isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { readRepoFile } from "./github/contents";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { signTaskBody, verifySignedBody } from "./improve-task";
@@ -67,6 +67,24 @@ import {
 // the name is UNIQUE in the agents table and never reused, so the string identifies
 // exactly one credential forever.
 const ACTOR_SHAPE = /^(github:|opkey:|agent:)/;
+
+function actorShapeRefusal(action: string, actor: string): JobResult | null {
+  if (ACTOR_SHAPE.test(actor)) return null;
+  return refuse(
+    action,
+    `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`
+  );
+}
+
+// The job a caller holds, if any. A caller holds at most one (claimJob).
+async function heldClaim(db: D1Database, actor: string): Promise<JobRow | null> {
+  return db.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1").bind(actor).first<JobRow>();
+}
+
+// THE SEAT IS IDENTIFIED BY admin OR can_merge, for supersede and for resume.
+function callerIsSeat(agent: Agent): boolean {
+  return agent.admin || agent.scopes.flags.can_merge;
+}
 
 export interface JobResult {
   ok: boolean;
@@ -202,10 +220,9 @@ async function mirrorStatements(db: D1Database, job: JobRow, action: string, act
   });
 }
 
-function auditStatement(db: D1Database, actor: string, action: string, job: JobRow, params: Record<string, unknown>) {
-  return db
-    .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)")
-    .bind(actor, action, job.namespace, jobDocPath(job.id), JSON.stringify({ job_id: job.id, ...params }));
+// A job's audit row is addressed to its mirror document and carries the job id.
+function jobAudit(db: D1Database, actor: string, action: string, job: JobRow, params: Record<string, unknown>) {
+  return auditStatement(db, actor, action, job.namespace, jobDocPath(job.id), { job_id: job.id, ...params });
 }
 
 async function readJob(db: D1Database, id: string): Promise<JobRow | null> {
@@ -237,7 +254,7 @@ async function markJobFailed(
        WHERE id = ?1 AND status = ?4 RETURNING id`
     ).bind(job.id, summary, now.toISOString(), fromStatus),
     ...(await mirrorStatements(env.DB, failed, auditAction, actor)),
-    auditStatement(env.DB, actor, auditAction, failed, auditParams),
+    jobAudit(env.DB, actor, auditAction, failed, auditParams),
   ]);
   if (!committed) return { failed: false, current: await readJob(env.DB, job.id) };
   return { failed: true };
@@ -419,7 +436,7 @@ export async function postJob(
       job.created_at
     ),
     ...(await mirrorStatements(env.DB, job, "job-posted", actor)),
-    auditStatement(env.DB, actor, "job-posted", job, {
+    jobAudit(env.DB, actor, "job-posted", job, {
       title: job.title,
       priority: job.priority,
       gate_required: job.gate_required,
@@ -526,12 +543,9 @@ export async function claimJob(
   args: { namespace?: string; id?: string }
 ): Promise<JobResult> {
   const actor = agent.actor;
-  if (!ACTOR_SHAPE.test(actor)) {
-    return refuse("claim", `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`);
-  }
-  const held = await env.DB.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1")
-    .bind(actor)
-    .first<JobRow>();
+  const badActor = actorShapeRefusal("claim", actor);
+  if (badActor) return badActor;
+  const held = await heldClaim(env.DB, actor);
   if (held) {
     return refuse(
       "claim",
@@ -559,19 +573,6 @@ export async function claimJob(
     if (!candidate) return refuse("claim", `no queued jobs in ${args.namespace}.`);
   }
 
-  // THE SIGNATURE IS CHECKED BEFORE THE JOB IS HANDED OVER, not by the driver after
-  // it has one. A job body is executable input that arrives as a database row, and
-  // the driver is a session holding local shell and repo credentials.
-  //
-  // A body that does not verify was edited after `post` signed it, by a raw splice
-  // or by a write that reached the row some other way. That job is FAILED here
-  // rather than left queued: leaving it would hand the same broken row to the next
-  // driver, and every driver in turn, which is a queue that never drains.
-  //
-  // The actor check verifyTaskDoc adds for a run document deliberately does NOT
-  // apply. Only the loop writes a run doc, so its audit actor is the loop; a job is
-  // posted by a human seat, so its actor is that seat. What proves a job went
-  // through `post` is that this Worker's key signed it.
   // WHAT THIS JOB NEEDS OF THE DRIVER, checked BEFORE the lease is taken. A claim
   // that takes the lease and then refuses has parked the job on a driver that cannot
   // do it, and since a caller holds one claim at a time it has also stopped that
@@ -605,6 +606,19 @@ export async function claimJob(
     return refuse("claim", `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${shortfall} The job stays queued for a driver that can do it.`);
   }
 
+  // THE SIGNATURE IS CHECKED BEFORE THE JOB IS HANDED OVER, not by the driver after
+  // it has one. A job body is executable input that arrives as a database row, and
+  // the driver is a session holding local shell and repo credentials.
+  //
+  // A body that does not verify was edited after `post` signed it, by a raw splice
+  // or by a write that reached the row some other way. That job is FAILED here
+  // rather than left queued: leaving it would hand the same broken row to the next
+  // driver, and every driver in turn, which is a queue that never drains.
+  //
+  // The actor check verifyTaskDoc adds for a run document deliberately does NOT
+  // apply. Only the loop writes a run doc, so its audit actor is the loop; a job is
+  // posted by a human seat, so its actor is that seat. What proves a job went
+  // through `post` is that this Worker's key signed it.
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
     const marked = await markJobFailed(env, candidate, "queued", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason }, now);
@@ -630,7 +644,7 @@ export async function claimJob(
        WHERE id = ?1 AND status = 'queued' RETURNING id`
     ).bind(candidate.id, actor, now.toISOString(), expires),
     ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),
-    auditStatement(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
+    jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
   ]);
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
@@ -740,7 +754,7 @@ async function holderTransition(
       patch.bumpBlocked ? 1 : 0
     ),
     ...(await mirrorStatements(env.DB, job, `job-${action}`, actor)),
-    auditStatement(env.DB, actor, `job-${action}`, job, {
+    jobAudit(env.DB, actor, `job-${action}`, job, {
       status: job.status,
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
@@ -885,7 +899,7 @@ async function reviewRefusal(
          WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
       ).bind(id, outcome.pr, now.toISOString(), agent.actor),
       ...(await mirrorStatements(env.DB, job, "job-review-bound", agent.actor)),
-      auditStatement(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
+      jobAudit(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
     ]);
     if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
     read = job;
@@ -939,7 +953,7 @@ async function reviewRefusal(
          WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 RETURNING id`
       ).bind(id, summary, now.toISOString(), agent.actor),
       ...(await mirrorStatements(env.DB, job, "job-review-changes", agent.actor)),
-      auditStatement(env.DB, agent.actor, "job-review-changes", job, {
+      jobAudit(env.DB, agent.actor, "job-review-changes", job, {
         verdict: review.verdict,
         by: review.by,
         at: review.at,
@@ -1101,7 +1115,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
        WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
     ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
-    auditStatement(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
+    jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
   ];
   // THE OTHER WAY A JOB REACHES A TERMINAL STATE, and it gets a row for the same
   // reason `fail` does: a job the seat had to close because its driver never came
@@ -1201,7 +1215,7 @@ export async function supersedeJob(
     );
   }
   if (current.status === "claimed") {
-    const isSeat = agent.admin || agent.scopes.flags.can_merge;
+    const isSeat = callerIsSeat(agent);
     if (current.claimed_by !== agent.actor && !isSeat) {
       return refuse(
         "supersede",
@@ -1226,7 +1240,7 @@ export async function supersedeJob(
          AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
     ).bind(id, summary, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env.DB, job, "job-superseded", agent.actor)),
-    auditStatement(env.DB, agent.actor, "job-superseded", job, {
+    jobAudit(env.DB, agent.actor, "job-superseded", job, {
       reason,
       replaced_by: replacedBy,
       from: current.status,
@@ -1389,9 +1403,8 @@ export async function resumeJob(
   // A blank note is no note, so resume_note does not carry an empty block.
   const fullNote = opts.note?.trim() ? opts.note : undefined;
   const actor = agent.actor;
-  if (!ACTOR_SHAPE.test(actor)) {
-    return refuse("resume", `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`);
-  }
+  const badActor = actorShapeRefusal("resume", actor);
+  if (badActor) return badActor;
   if (!reason?.trim()) {
     return refuse("resume", "resume needs a reason: what the human approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen.");
   }
@@ -1409,7 +1422,7 @@ export async function resumeJob(
   // policy path below. A plain resume is a record that somebody approved the gate, and
   // the claimant approving its own gate is no approval. `take` does not change who the
   // claimant is, so a claimant passing take is refused the same way.
-  const isSeat = agent.admin || agent.scopes.flags.can_merge;
+  const isSeat = callerIsSeat(agent);
   if (approvedByPolicy === undefined && !isSeat && current.claimed_by === actor) {
     return refuse(
       "resume",
@@ -1425,9 +1438,7 @@ export async function resumeJob(
 
   // The same one-claim-per-caller rule the claim path runs on, for the same reason,
   // asked of whoever ends up HOLDING the lease: a driver holding two has abandoned one.
-  const held = await env.DB.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1")
-    .bind(holder)
-    .first<JobRow>();
+  const held = await heldClaim(env.DB, holder);
   if (held) {
     return refuse(
       "resume",
@@ -1592,7 +1603,7 @@ export async function resumeJob(
        WHERE id = ?1 AND status = 'blocked' RETURNING id`
     ).bind(id, holder, now.toISOString(), expires, spend),
     ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
-    auditStatement(env.DB, actor, "job-resumed", job, {
+    jobAudit(env.DB, actor, "job-resumed", job, {
       approved: reason,
       ...(fullNote ? { note: fullNote } : {}),
       held_by: holder,
@@ -1648,7 +1659,7 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
            WHERE id = ?1 AND status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?2 RETURNING id`
         ).bind(read.id, stamp),
         ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
-        auditStatement(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
+        jobAudit(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
       ]);
       if (moved) requeued.push(read.id);
     } catch (err) {

@@ -8,6 +8,7 @@ import type { Env } from "./env";
 import { improveControl } from "./improve-run";
 import { adminFailJob, resumeJob } from "./jobs";
 import { readBoundedText } from "./improve-scorer";
+import { auditStatement } from "./store-guards";
 
 // THE CONSOLE'S FIVE CONTROLS.
 //
@@ -121,11 +122,7 @@ ${carried}
 // for it. This row carries the admin's actor, the action, and what was submitted, so
 // the log answers "who paused germomics on Tuesday".
 async function auditClick(env: Env, actor: string, action: ConsoleAction, namespace: string | null, params: unknown) {
-  await env.DB.batch([
-    env.DB
-      .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, NULL, ?4)")
-      .bind(actor, `console-${action}`, namespace, JSON.stringify(params)),
-  ]);
+  await env.DB.batch([auditStatement(env.DB, actor, `console-${action}`, namespace, null, params)]);
 }
 
 export async function handleConsoleAction(request: Request, env: Env, now: Date = new Date()): Promise<Response> {

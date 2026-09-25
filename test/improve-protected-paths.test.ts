@@ -92,7 +92,7 @@ test("write with allow_improve_paths lands and records the flag in the audit par
   });
   await close();
   assert.equal(out.isError ?? false, false);
-  const auditStmt = recorded.find((r) => /INSERT INTO audit_log.*'write'/.test(r.sql.replace(/\s+/g, " ")));
+  const auditStmt = recorded.find((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "write");
   assert.ok(auditStmt, "no audit row for the write");
   const params = JSON.parse(auditStmt.params.find((p) => typeof p === "string" && p.includes("allow_improve_paths")) as string);
   assert.equal(params.allow_improve_paths, true);
