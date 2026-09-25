@@ -7,7 +7,6 @@ import { defaultScopes, allowsToolAction } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { actionArgFor } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { toolBlocks } from "./source-files.ts";
 
 // The schemas the server actually serves, as the admin sees them.
 async function listedTools() {
@@ -197,8 +196,7 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
 
 // ---- DERIVED: a new action tool cannot be added without wiring its action ----------
 
-// scanner-rule: CLAUDE.md, one enforcement point rule
-test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", () => {
+test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", async () => {
   // The guard against the finding recurring. A tool added with an `action` or `mode`
   // enum whose name is not in the enforcement point's table would be unnarrowable in
   // exactly the way manage_pr was, and nothing else in the suite would notice.
@@ -208,9 +206,14 @@ test("DERIVED: every tool that declares an action-shaped argument is in ACTION_A
   // chooses how a body is edited rather than what authority the call needs. Giving one
   // setting two authorities to disagree about is worse than leaving it out.
   const REVIEWED_EXCLUSIONS = new Set(["write", "write_repo_file", "delete_repo_file"]);
-  const found = toolBlocks()
-    .filter((block) => /\n\s+action: z\./.test(block.body) || /\n\s+mode: z\.enum/.test(block.body))
-    .map((block) => block.name);
+  // Read from the schemas the server serves, which is what a caller sees, rather than
+  // from the registration source.
+  const found = (await listedTools())
+    .filter((tool) => {
+      const props = (tool.inputSchema.properties ?? {}) as Record<string, { enum?: unknown[] }>;
+      return Object.hasOwn(props, "action") || Array.isArray(props.mode?.enum);
+    })
+    .map((tool) => tool.name);
   assert.ok(found.length >= 5, `the scan found ${found.length} action-shaped tools, so it is passing by reading nothing`);
   const unwired = found.filter((name) => !REVIEWED_EXCLUSIONS.has(name) && actionArgFor(name) === undefined);
   assert.deepEqual(unwired, [], `these tools declare an action-shaped argument the enforcement point cannot see: ${unwired.join(", ")}`);
