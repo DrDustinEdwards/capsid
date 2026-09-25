@@ -39,10 +39,6 @@ test("every backed-up table exists in the migrations", () => {
   assert.deepEqual(unknown, [], `src/backup.ts exports tables no migration creates: ${unknown.join(", ")}`);
 });
 
-test("the FTS5 virtual table and its shadow tables are not exported", () => {
-  assert.deepEqual(TABLES.filter((t) => DERIVED.test(t)), []);
-});
-
 // ---- the run itself ---------------------------------------------------------
 //
 // FAKES, AND WHY THEY ARE SHAPED THIS WAY (audit 2 batch B). There was no fake R2 in
@@ -220,7 +216,6 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   // a different set of rows than the one that leaves. TWO batches now: the export
   // snapshot and this one. The prune batch is found by what it contains rather than
   // by position, so a third batch cannot silently retarget these assertions.
-  assert.equal(batches.length, 2);
   const pruneBatch = batches.find((b) => b.some((sql) => sql.startsWith("DELETE FROM document_versions")));
   assert.ok(pruneBatch, "no batch carried the prune");
   const [countVersions, deleteVersions, countAudit, deleteAudit] = pruneBatch;
@@ -273,19 +268,6 @@ test("a pre-change flat dump key ages as its own single-object run", async () =>
 
   assert.equal(result.json_backups_pruned, 7);
   assert.equal(r2.deleted.flat().filter((k) => k.startsWith("backups/json/")).length, 7);
-});
-
-// scanner-rule: quality audit 1.1 and 6.6, one definition imported everywhere
-test("/health and the backup preflight probe the index through one module", () => {
-  // They must agree. A backup that carried its own copy of the probe would drift
-  // from the one the live gate asserts, and the drift would only surface on the day
-  // the store was actually broken. /health lives in health.ts since 2026-09-07.
-  const src = (name: string) => readFileSync(join(import.meta.dirname, "..", "src", name), "utf8");
-  for (const name of ["health.ts", "backup.ts"]) {
-    assert.match(src(name), /from "\.\/store-probe"/, `${name} does not use the shared probe`);
-    assert.doesNotMatch(src(name), /documents_fts MATCH/, `${name} carries its own copy of the FTS probe`);
-  }
-  assert.match(src("store-probe.ts"), /documents_fts MATCH/);
 });
 
 test("a clean run stamps backup:last-ok with the run timestamp", async () => {

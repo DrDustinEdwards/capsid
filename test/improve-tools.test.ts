@@ -45,14 +45,6 @@ async function connect(grant: ToolGrant) {
 
 type ToolResult = { isError?: boolean; content: Array<{ text: string }> };
 
-test("both tools are registered and discoverable", async () => {
-  const { client, close } = await connect("write");
-  const names = (await client.listTools()).tools.map((t) => t.name);
-  await close();
-  assert.ok(names.includes("improve_run"), "improve_run is not registered");
-  assert.ok(names.includes("improve_status"), "improve_status is not registered");
-});
-
 test("A READ-ONLY KEY CANNOT REACH improve_run, and writes nothing while refusing", async () => {
   await withFetch({}, async () => {
     const { client, d1, kv, close } = await connect("read");

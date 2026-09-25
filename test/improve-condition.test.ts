@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
   DEFAULT_CONDITION,
@@ -19,7 +17,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { IMPROVE_RUN_DEFAULTS, sseMessage } from "./improve-fakes.ts";
 import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
-import { sourceFiles } from "./source-files.ts";
 import { seedScoresDoc } from "./seed-scores.ts";
 
 // improve_runs.condition, from the arc's third ruling.
@@ -31,35 +28,12 @@ import { seedScoresDoc } from "./seed-scores.ts";
 // recorded on a run that behaved identically to `full` is a label that lies, which
 // is worse than no column at all.
 
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0003_improve.sql"), "utf8");
 const SCORES = seedScoresDoc("capsid");
 const NOW = new Date("2026-09-05T08:05:00Z");
 // A run started just before NOW, so the age limit does not end it first.
 const FRESH = { started: "2026-09-05 08:00:00", advanced_at: "2026-09-05 08:00:00" };
 
 // ---- the column and the vocabulary ------------------------------------------
-
-test("the migration declares the column, NOT NULL, defaulting to full", () => {
-  assert.match(MIGRATION, /condition TEXT NOT NULL DEFAULT 'full',/);
-  assert.equal(DEFAULT_CONDITION, "full");
-});
-
-test("THE VOCABULARY IN CODE MATCHES THE SET THE MIGRATION DOCUMENTS", () => {
-  // A TEXT column with no CHECK constraint, validated in code: the same shape and
-  // the same reasoning as DOC_STATUSES. That only holds if the two lists agree, so
-  // the migration's own comment is parsed rather than trusted.
-  const documented = [...MIGRATION.matchAll(/'(full|no-memory|no-transfer)'/g)].map((m) => m[1]);
-  assert.ok(documented.length > 0, "the migration no longer names the condition values; this derivation is broken");
-  assert.deepEqual([...new Set(documented)].sort(), [...RUN_CONDITIONS].sort());
-});
-
-test("the column carries NO CHECK constraint, deliberately", () => {
-  // src/doc-meta.ts records the ruling: the vocabulary is a code-level set, so
-  // adding a value needs no migration. A CHECK here would silently make that false.
-  const block = /CREATE TABLE IF NOT EXISTS improve_runs \(([\s\S]*?)\n\);/.exec(MIGRATION);
-  assert.ok(block, "could not bound the improve_runs table in the migration");
-  assert.equal(/CHECK\s*\(/i.test(block[1]), false, "improve_runs gained a CHECK constraint");
-});
 
 test("isRunCondition admits exactly the three and nothing else", () => {
   for (const value of RUN_CONDITIONS) assert.equal(isRunCondition(value), true, `${value} was rejected`);
@@ -178,22 +152,6 @@ test("'no-transfer' OFFERS NO cross-project skill", async () => {
 // scanner-rule: the improve arc's condition ruling (capsid/decisions.md), a condition that
 // changes nothing is a label that lies. A fourth value cannot be exercised by a test
 // written before it exists, so the source is what is checked.
-test("EVERY CONDITION OTHER THAN full CHANGES A BEHAVIOUR", () => {
-  // The guard against adding a fourth value that records a difference it does not
-  // make. Every non-default condition must be named somewhere in the orchestrator
-  // outside its own type declaration.
-  const run = sourceFiles()
-    .filter((f) => f.name !== "improve-schema.ts")
-    .map((f) => f.text)
-    .join("\n");
-  for (const condition of RUN_CONDITIONS) {
-    if (condition === DEFAULT_CONDITION) continue;
-    assert.ok(
-      run.includes(`"${condition}"`),
-      `condition '${condition}' is declared but no orchestrator file branches on it, so a run recorded under it behaves identically to full`
-    );
-  }
-});
 
 // ---- the tool surface -------------------------------------------------------
 

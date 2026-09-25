@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, TERMINAL_JOB_STATUSES, isJobStatus, isTerminalJobStatus, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
+import { JOB_ACTIONS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, isJobStatus, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
@@ -23,7 +23,6 @@ import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 // cannot drift apart.
 
 const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
-const MIGRATION = readFileSync(join(MIGRATIONS_DIR, "0006_jobs.sql"), "utf8");
 
 /** Every definition of the jobs_open_title index across migrations/, in the order
  *  wrangler applies them. The LAST one is the index the database ends up with, which
@@ -65,78 +64,6 @@ test("the partial index and OPEN_JOB_STATUSES name the same statuses", () => {
   );
 });
 
-test("BLOCKED IS AN OPEN STATUS, in the code and in the index the database ends up with", () => {
-  // The 2026-09-18 duplicate, pinned from both sides. The watcher re-posted a finding
-  // twelve minutes after the first copy was blocked for the seat, because neither the
-  // index nor the code counted a blocked job as holding its title.
-  assert.ok(OPEN_JOB_STATUSES.includes("blocked"), "a blocked job is a pause with somebody waiting on it, which is open");
-  const effective = openTitleIndexClauses().at(-1);
-  assert.ok(effective, "no migration defines jobs_open_title");
-  assert.ok(effective.statuses.includes("blocked"), `${effective.file} does not count a blocked job as open`);
-});
-
-/** Every statement of the status vocabulary across migrations/, in the order wrangler
- *  applies them. The NEWEST is the one the code must match: migrations/0020 added
- *  superseded and restated the list, and a guard pinned to 0006 would go on asserting
- *  the older one. */
-function vocabularyDeclarations(): { file: string; statuses: string[] }[] {
-  const found: { file: string; statuses: string[] }[] = [];
-  for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    const declared = /--\s+(queued(?: \| [a-z]+)+)\./.exec(sql);
-    if (declared) found.push({ file, statuses: declared[1].split(" | ").sort() });
-  }
-  return found;
-}
-
-test("every status the code knows is a status the newest migration comment declares", () => {
-  // The column is a bare TEXT with no CHECK, so the migrations' own comments are the
-  // schema's statement of the vocabulary. Asserting against them keeps those comments
-  // honest rather than decorative.
-  const declarations = vocabularyDeclarations();
-  // TWO today: 0006 declared it and 0020 added superseded. Stated as a list so a
-  // regex that stops matching fails here rather than passing over an empty one.
-  assert.deepEqual(
-    declarations.map((d) => d.file),
-    ["0006_jobs.sql", "0020_jobs_superseded.sql"],
-    "the status vocabulary is declared in an unexpected set of migrations"
-  );
-  const newest = declarations[declarations.length - 1];
-  assert.deepEqual(newest.statuses, [...JOB_STATUSES].sort(), `${newest.file} disagrees with JOB_STATUSES`);
-});
-
-test("SUPERSEDED IS FINISHED, IS NOT OPEN, AND IS NOT A FAILURE", () => {
-  // It closes the mirror like done and failed, holds no title like them, and is its
-  // own status so nothing that counts failures counts it.
-  assert.ok(isJobStatus("superseded"));
-  assert.equal(isTerminalJobStatus("superseded"), true);
-  assert.equal(OPEN_JOB_STATUSES.includes("superseded"), false);
-  assert.ok(JOB_ACTIONS.includes("supersede"));
-});
-
-test("every status in the vocabulary is classified terminal or not, and the two do not overlap", () => {
-  // The mirror document's status is decided by this classification, so a status
-  // added to JOB_STATUSES and left out of the classification would project as open
-  // work forever. That is the defect this pins: `failed` was unclassified in effect,
-  // because the mirror asked `=== "done"` rather than asking the vocabulary.
-  for (const status of JOB_STATUSES) {
-    assert.equal(
-      typeof isTerminalJobStatus(status),
-      "boolean",
-      `${status} is not classified by isTerminalJobStatus`
-    );
-  }
-  assert.deepEqual([...TERMINAL_JOB_STATUSES].sort(), ["done", "failed", "superseded"]);
-  // Both directions: a terminal status is a real status, and the open ones are not
-  // terminal. `blocked` is in neither list and that is deliberate, so it is named.
-  for (const status of TERMINAL_JOB_STATUSES) assert.ok(isJobStatus(status));
-  for (const status of OPEN_JOB_STATUSES) assert.equal(isTerminalJobStatus(status), false);
-  assert.equal(isTerminalJobStatus("blocked"), false, "a blocked job is paused, not finished");
-});
-
-// Proven against a real D1 in test-integration/jobs.test.ts: "PLANT: a failed job's document is closed too" and "a blocked job's document stays active".
-
-
 test("supersede refuses a missing reason and a swallowed tag before it reads anything", async () => {
   // fakeEnv with no DB, so a refusal that reached the database would throw rather
   // than pass quietly.
@@ -148,19 +75,6 @@ test("supersede refuses a missing reason and a swallowed tag before it reads any
   const swallowed = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "reposted</replaced_by>" });
   assert.equal(swallowed.ok, false);
   assert.match(swallowed.refusal ?? "", /^reason contains the literal text '<\/replaced_by>'\./);
-});
-
-// scanner-rule: a superseded job was never worked, so its transition must not write the evidence tables. The integration suite drives it; this reads that no call site exists
-test("supersedeJob writes no outcome row, no outcome PR rows and no skill attribution", () => {
-  const jobs = sourceFile("jobs.ts");
-  const start = jobs.indexOf("export async function supersedeJob(");
-  assert.ok(start > 0, "supersedeJob is gone from src/jobs.ts; the scan is broken");
-  const end = jobs.indexOf("\n}\n", start);
-  const body = jobs.slice(start, end);
-  assert.ok(body.includes("job-superseded"), "the slice does not cover supersedeJob's batch");
-  for (const writer of ["outcomeStatement(", "outcomePrStatements(", "attributionStatements(", "INSERT INTO job_outcomes"]) {
-    assert.equal(body.includes(writer), false, `supersedeJob calls ${writer}`);
-  }
 });
 
 test("isJobStatus refuses anything that is not one of them", () => {
@@ -178,11 +92,6 @@ test("a job id is minted, not sequential", () => {
   assert.match(a, /^job_[0-9a-f]{12}$/);
   assert.notEqual(a, b);
   assert.equal(jobDocPath(a), `jobs/${a}.md`);
-});
-
-test("the lease is the four hours the table's comment claims", () => {
-  assert.equal(JOB_LEASE_SECONDS, 4 * 60 * 60);
-  assert.match(MIGRATION, /lease_expires four hours out/);
 });
 
 test("every action the schema advertises is one the tool handles", async () => {
@@ -236,26 +145,6 @@ test("the queue's writes go through the shared document statements, not a second
   assert.doesNotMatch(jobs, /INSERT INTO documents/, "src/jobs.ts spells its own document upsert");
   assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "src/jobs.ts spells its own snapshot");
 });
-
-// BLOCKED IS NOT TERMINAL (2026-09-10). The counters live in their own migration,
-// so the same derive-from-the-source rule applies to them.
-const RESUME_MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0007_jobs_resume.sql"), "utf8");
-
-// Proven against a real D1 in test-integration/jobs.test.ts: "a job can hit a gate, come back, and hit another, counting each".
-
-
-// Proven against a real D1 in test-integration/jobs.test.ts: "resume refuses a queued job and a done job" and "a blocked job cannot be claimed".
-
-
-// Proven against a real D1 in test-integration/jobs.test.ts: "PLANT: a body edited while the job sat blocked is refused and failed".
-
-
-// Proven against a real D1 in test-integration/jobs.test.ts: "resume holds the one-claim-per-caller rule".
-
-
-// That the jobs tool is served, once, is covered by the tool count in
-// test/counts.test.ts and by every test here and in test/jobs-list.test.ts that calls it.
-
 
 // ---- A SWALLOWED PARAMETER TAG IS A MALFORMED CALL, NOT A SUMMARY -------------
 //

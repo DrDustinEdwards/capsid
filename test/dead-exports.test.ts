@@ -271,6 +271,12 @@ const KNOWN_SUSPECTS = [
   "clientFor",
   "verifyTaskDocument",
   "workflowRunsForBranch",
+  // SURFACED 2026-09-25 when the audit's change-detector tests were deleted: each
+  // was read only by a deleted test. Left exported for the hygiene pass to decide.
+  "commandPieces",
+  "JOB_LIST_COLUMNS",
+  "TASK_KEY_CONTEXT",
+  "TERMINAL_JOB_STATUSES",
 ];
 
 // TWO CHECKS, AND NEITHER IS "the set still matches exactly".

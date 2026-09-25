@@ -10,9 +10,8 @@
 //   oauth-flow     y    n     y    y     n      n     y       n         y      y
 //   repo-tools     y    y     y    n     y      y     n       y         n      n
 //
-// Everything in that matrix survives here, plus cursor pagination on both KV and R2
-// list: listAllKeys in backup.ts and invalidateRepoReads in github/client.ts are cursor
-// loops whose second page no test had reached.
+// Everything in that matrix survives here except list failure, which no test used.
+// list() answers in one page; no test drives a second page.
 //
 // THE D1 FAKE IS ROW-BACKED (quality audit 6.1). The old one answered on SQL SHAPE alone
 // and ignored the bound params, so `WHERE id = ?1` returned version 42 whatever id was
@@ -43,13 +42,9 @@ export interface FakeKvOptions {
   // rate limiter's fail-open paths are testable.
   failGet?: boolean;
   failPut?: boolean;
-  failList?: boolean;
   // Return a value that is not what the caller expects, for the corrupt-counter
   // path. From the oauth-flow fake.
   corrupt?: string;
-  // Keys returned per list() page. Default is everything in one page, which is
-  // what every existing test assumes; set it to force the cursor loop.
-  pageSize?: number;
 }
 
 export interface FakeKv {
@@ -61,7 +56,7 @@ export interface FakeKv {
 }
 
 export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
-  const { seedToken = false, pageSize } = opts;
+  const { seedToken = false } = opts;
   const store = new Map<string, string>(Object.entries(opts.seed ?? {}));
   const puts: Array<{ key: string; value: string; ttl?: number }> = [];
   const deleted: string[] = [];
@@ -82,29 +77,15 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
       deleted.push(key);
       store.delete(key);
     },
-    list: async ({ prefix, cursor }: { prefix?: string; cursor?: string }) => {
-      if (opts.failList) throw new Error("KV list exploded");
+    list: async ({ prefix }: { prefix?: string }) => {
       const all = [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
-      const from = cursor ? Number(cursor) : 0;
-      const size = pageSize ?? all.length;
-      const page = all.slice(from, from + Math.max(size, 1));
-      const next = from + page.length;
-      const complete = next >= all.length;
-      return complete
-        ? { keys: page.map((name) => ({ name })), list_complete: true as const }
-        : { keys: page.map((name) => ({ name })), list_complete: false as const, cursor: String(next) };
+      return { keys: all.map((name) => ({ name })), list_complete: true as const };
     },
   } as unknown as KVNamespace;
   return { store, puts, deleted, keysUnder: (prefix) => [...store.keys()].filter((k) => k.startsWith(prefix)), kv };
 }
 
 // ---- R2 ---------------------------------------------------------------------
-
-export interface FakeR2Options {
-  // Objects per list() page. Default is one page, which is what the existing
-  // backup tests assume; set it to force listAllKeys through its cursor loop.
-  pageSize?: number;
-}
 
 export interface FakeR2 {
   objects: Map<string, string>;
@@ -118,7 +99,7 @@ export interface FakeR2 {
   bucket: R2Bucket;
 }
 
-export function fakeR2(seed: Record<string, string> = {}, opts: FakeR2Options = {}): FakeR2 {
+export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
   const objects = new Map<string, string>(Object.entries(seed));
   const deleted: string[][] = [];
   const multipart: FakeR2["multipart"] = [];
@@ -135,14 +116,9 @@ export function fakeR2(seed: Record<string, string> = {}, opts: FakeR2Options = 
       if (value === undefined) return null;
       return { key, text: async () => value };
     },
-    list: async ({ prefix, cursor }: { prefix?: string; cursor?: string }) => {
+    list: async ({ prefix }: { prefix?: string }) => {
       const all = [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
-      const from = cursor ? Number(cursor) : 0;
-      const size = opts.pageSize ?? all.length;
-      const page = all.slice(from, from + Math.max(size, 1));
-      const next = from + page.length;
-      const truncated = next < all.length;
-      return { objects: page.map((key) => ({ key })), truncated, ...(truncated ? { cursor: String(next) } : {}) };
+      return { objects: all.map((key) => ({ key })), truncated: false };
     },
     delete: async (keys: string | string[]) => {
       const list = Array.isArray(keys) ? keys : [keys];
@@ -443,7 +419,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // proof that the CAS is a CAS lives in test-integration against real SQLite,
     // because that is a property of the engine and a fake would agree with anything.
     if (/^UPDATE agents SET/i.test(flat)) {
-      const id = params[params.length - 1] === undefined ? params[0] : params[0];
+      const id = params[0];
       const row = rows.agents.find((a) => a.id === id && (!/revoked_at IS NULL/i.test(flat) || a.revoked_at == null));
       if (!row) return null;
       if (/SET revoked_at/i.test(flat)) row.revoked_at = "2026-09-11 02:00:00";

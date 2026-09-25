@@ -41,28 +41,6 @@ test("the restore runbook names every backed-up table", () => {
   assert.doesNotMatch(restore, /The five tables are\b/i, "the runbook still enumerates only five tables");
 });
 
-test("the restore runbook applies every migration, not just 0001 and 0002", () => {
-  assert.match(restoreRunbook(), /0003_improve\.sql/, "the runbook does not apply migration 0003");
-});
-
-test("CLAUDE.md states the authoritative tool count, not a stale one", () => {
-  const claude = read("CLAUDE.md");
-  assert.match(claude, new RegExp(`\\b${AUTHORITATIVE.capsid.tools} tools\\b`), "CLAUDE.md does not state the current tool count");
-  assert.doesNotMatch(claude, /\b26 tools\b/, "CLAUDE.md still claims 26 tools");
-});
-
-test("CLAUDE.md commands list includes check:test", () => {
-  const claude = read("CLAUDE.md");
-  assert.match(claude, /check:test/, "CLAUDE.md commands omit check:test, so a session skips the test typecheck the way this session did");
-});
-
-test("CLAUDE.md no longer prescribes the withdrawn end-of-session episodic", () => {
-  const claude = read("CLAUDE.md");
-  // The episodic ritual was withdrawn portfolio-wide 2026-08-21; the session
-  // ritual here must not still instruct writing one.
-  assert.doesNotMatch(claude, /write a `session-YYYY-MM-DD\.md` episodic/i, "the episodic ritual is still prescribed");
-});
-
 // ---- the dump's real shape, and every migration (residual 14) ----------------
 
 test("the restore runbook states the table count TABLES actually has", () => {

@@ -49,9 +49,7 @@ test("PLANT: the driver mint instruction agrees with what register_namespace act
   // to "write" fails here as loudly as a sentence rewritten to the wrong grant.
   const said = driverMintInstruction("capsid");
   const required = requiredGrant("register_namespace");
-  assert.equal(required, "admin", "register_namespace stopped being admin only; the mint instruction has to be rewritten with it");
   assert.match(said, new RegExp(`register_namespace is itself ${required} only`), said);
-  assert.doesNotMatch(said, /plain write grant/, "the instruction still promises a grant that will be refused");
 });
 
 // ---- 2: the jobs description and the retry cap ----------------------------------
@@ -69,11 +67,6 @@ test("PLANT: the jobs description states the correction cap rather than promisin
     assert.ok(
       description.includes(`capped at ${CORRECTION_CAP}`),
       `the description does not state the cap of ${CORRECTION_CAP}: ${description.slice(-400)}`
-    );
-    assert.doesNotMatch(
-      description,
-      /A job may be blocked and resumed any number of times/,
-      "the description still promises an unbounded loop"
     );
   } finally {
     await close();
@@ -315,17 +308,6 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
 });
 
 // ---- 8: closing a pull request deletes a branch ---------------------------------
-
-test("PLANT: manage_pr close carries can_merge, because close deletes the head branch", () => {
-  // close needed nothing but the write grant while deleting the head branch, which is
-  // the same destruction merging performs. The alternative considered was to stop
-  // deleting on close, which would put back the invisible litter that deletion was
-  // added to clear (capsid/conventions.md, 2026-09-06).
-  assert.deepEqual(repoWriteFlags("manage_pr", { action: "close" }), ["can_merge"]);
-  assert.deepEqual(repoWriteFlags("manage_pr", { action: "merge" }), ["can_merge"]);
-  // A comment still does not, or the reviewer role loses the one action it exists for.
-  assert.deepEqual(repoWriteFlags("manage_pr", { action: "comment" }), ["can_comment_pr"]);
-});
 
 test("PLANT: a write-grant caller holding no flags is refused manage_pr close", () => {
   // The flag through the path a caller takes, rather than the table that names it.

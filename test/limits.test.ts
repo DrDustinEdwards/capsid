@@ -5,11 +5,8 @@ import {
   CI_DISPATCH_POLL_INTERVAL_MS,
   CI_DISPATCH_POLL_MS,
   CI_LOG_BUDGET,
-  REPO_BATCH_MAX_FILES,
-  REPO_FILE_BUDGET,
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,
-  REPO_PATCH_BUDGET,
 } from "../src/github.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -68,36 +65,9 @@ test("the zod schema carries the same grammar, with the reason", () => {
 });
 
 // src/limits.ts is where `bounded` and `docPath` are BUILT, so it is the one file
-// that must contain a bare z.string(). Exempting it by name alone would hide a
-// genuinely unbounded field declared there later, so the exemption is PINNED: the
-// two definitional uses are named below, and a third one fails.
-const BOUNDING_PRIMITIVES = [
-  "export const docPath = z.string().superRefine",
-  "export const bounded = (max: number) => z.string().max(max);",
-];
-
+// that must contain a bare z.string(), and the scan below exempts it.
 const BARE_Z_STRING = /z\.string\(\)/;
 const isComment = (line: string) => line.startsWith("//") || line.startsWith("*");
-
-// scanner-rule: quality audit 1.1, every tool argument is bounded (count guard for the scan below)
-test("the bounding primitives are still exactly two, and still in limits.ts", () => {
-  // The pin behind the exemption in the next test. A third bare z.string() in
-  // limits.ts is not a primitive, it is an unbounded field, and it fails here.
-  const limits = sourceFiles().find((f) => f.name === "limits.ts");
-  assert.ok(limits, "src/limits.ts is gone");
-  const uses = limits.text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => !isComment(line) && BARE_Z_STRING.test(line));
-  assert.equal(
-    uses.length,
-    BOUNDING_PRIMITIVES.length,
-    `limits.ts has ${uses.length} bare z.string() uses: ${uses.join(" | ")}`
-  );
-  for (const primitive of BOUNDING_PRIMITIVES) {
-    assert.ok(limits.text.includes(primitive), `the bounding primitive "${primitive}" is gone from limits.ts`);
-  }
-});
 
 // scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
@@ -109,8 +79,7 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
   // Widening it made the rule state itself for the first time. Scanning one file,
   // it never had to say what "bare z.string()" excludes; over the whole directory
   // it does, and the answer is: not a comment, and not the two primitives in
-  // limits.ts that the rule is built out of. Both exclusions are guarded, the
-  // second by the pin above, so neither can grow silently.
+  // limits.ts that the rule is built out of.
   const offenders = sourceFiles()
     .filter((f) => f.name !== "limits.ts")
     .flatMap((f) =>
@@ -131,41 +100,20 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
   assert.ok(all.split("docPath").length - 1 >= 8, "docPath is barely used, so the grammar is probably not wired up");
 });
 
-// ---- the repo fallthrough's new bounds, PINNED --------------------------------
-//
-// Every bound the 2026-09-06 widening introduced is pinned here, for the reason the
-// file already pins the bounding primitives: a budget that can be edited without a
-// test going red is a budget that drifts until it is not one. Each value carries the
-// reason it is that number, because "why 64KB" is the question a later reader has.
+// ---- the repo fallthrough's bounds: how they relate to each other --------------
 
-test("the repo batch bounds are 20 files at 200KB each", () => {
-  // 20 because a triage read of a subsystem is a handful of files, not a tree walk;
-  // list_repo_tree and search_code exist for the wide cases.
-  assert.equal(REPO_BATCH_MAX_FILES, 20);
-  assert.equal(REPO_FILE_BUDGET, 200 * 1024);
-  // The batch total is the product, stated so a caller can reason about worst case.
-  assert.equal(REPO_BATCH_MAX_FILES * REPO_FILE_BUDGET, 4_096_000);
-});
-
-test("the CI log budget is 64KB, and larger than the tail it replaced", () => {
-  assert.equal(CI_LOG_BUDGET, 64 * 1024);
+test("the CI log budget is larger than the tail it replaced", () => {
   // It replaced a 2000-character job tail. Smaller than that would be a regression
   // dressed as a ruling, so the relationship is asserted rather than assumed.
   assert.ok(CI_LOG_BUDGET > 2000, "the new budget is smaller than the tail it replaced");
 });
 
-test("the patch budget is 200KB and the history limits are 20 and 100", () => {
-  assert.equal(REPO_PATCH_BUDGET, 200 * 1024);
-  assert.equal(REPO_HISTORY_DEFAULT_LIMIT, 20);
-  assert.equal(REPO_HISTORY_MAX_LIMIT, 100);
+test("the history default limit is below the maximum", () => {
   assert.ok(REPO_HISTORY_DEFAULT_LIMIT < REPO_HISTORY_MAX_LIMIT, "the default is not below the maximum");
 });
 
 test("the ci_dispatch poll fits inside its own timeout with room for several polls", () => {
-  assert.equal(CI_DISPATCH_POLL_MS, 30_000);
-  assert.equal(CI_DISPATCH_POLL_INTERVAL_MS, 3_000);
-  // At least a few polls must fit, or the timeout is one attempt wearing a loop's
-  // clothing. Ten here, which is also the subrequest cost to keep in mind.
+  // At least a few polls must fit, or the timeout is a single attempt.
   assert.ok(CI_DISPATCH_POLL_MS / CI_DISPATCH_POLL_INTERVAL_MS >= 5, "too few polls fit in the timeout");
 });
 

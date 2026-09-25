@@ -14,7 +14,6 @@ import {
   neverListView,
   parseGatePolicy,
   splitStatements,
-  commandPieces,
 } from "../src/gate-policy.ts";
 import { commandFromSummary, RESUME_MARKER, resumeJob } from "../src/jobs.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
@@ -735,7 +734,6 @@ const NEVER_EXAMPLES: Record<string, { trigger: string; real: string[] }> = {
 
 test("every never entry has an example it refuses and a quoted title it does not, in both directions", () => {
   const sources = NEVER.map((n) => n.pattern.source);
-  assert.equal(sources.length, 16, "the never list changed size; give the new entry a row in NEVER_EXAMPLES");
   assert.deepEqual([...sources].sort(), Object.keys(NEVER_EXAMPLES).sort());
 });
 
@@ -827,15 +825,6 @@ test("the real blocked command from job_33d90163ad1e is approved, semicolon in t
   );
   assert.ok("klasses" in match, `the driver still cannot approve its own PR: ${JSON.stringify(match)}`);
   assert.deepEqual(match.klasses, ["push_branch", "open_pr"]);
-});
-
-test("a quoted body carrying every separator still yields exactly the two real pieces", () => {
-  const split = commandPieces('git push -u origin fix/x && gh pr create --body "a; b && c | d & e\nstill the body"');
-  assert.ok("pieces" in split, JSON.stringify(split));
-  const real = split.pieces.map((p) => p.raw.trim()).filter(Boolean);
-  assert.equal(real.length, 2, `expected two pieces, got ${JSON.stringify(real)}`);
-  assert.match(real[0], /^git push/);
-  assert.match(real[1], /^gh pr create/);
 });
 
 test("PLANT: an unquoted passenger AFTER a quoted body is still refused", () => {

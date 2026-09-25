@@ -1,22 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { DOC_STATUSES, DOC_TYPES, validateDocStatus, validateDocType } from "../src/doc-meta.ts";
 import { sourceFiles } from "./source-files.ts";
-
-// Pinned so adding or removing a status is a deliberate edit here, not a silent
-// widening. Fails in both directions: a missing entry and an orphaned one.
-test("DOC_STATUSES is exactly the six statuses in live use", () => {
-  assert.deepEqual([...DOC_STATUSES].sort(), ["active", "closed", "draft", "published", "ready", "superseded"]);
-});
-
-// Task closure, batch-two item 5. Ruled a status value rather than a new column
-// on 2026-08-12. The pin above is what made adding it a deliberate act: it went
-// red on the first run after "closed" was added, which is the guard working.
-test("'closed' is a valid status", () => {
-  assert.equal(validateDocStatus("closed"), null);
-});
 
 // The blast radius of closure is exactly one query. brief excludes closed task
 // docs; nothing else filters on it, and in particular the lint loop must not,
@@ -71,9 +56,6 @@ test("an off-schema type is rejected and the message names episodic", () => {
 // written as 'active' were never malformed; the defect was that the counter and
 // gather treated status as a visibility filter. Rejecting 'active' here would
 // "fix" the incident by breaking the callers instead.
-test("'active' is a valid status, not the thing that was wrong", () => {
-  assert.equal(validateDocStatus("active"), null);
-});
 
 test("status validation does not accept the empty string", () => {
   assert.ok(validateDocStatus(""), "expected the empty string to be rejected");

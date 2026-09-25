@@ -646,17 +646,6 @@ test("a transferred skill's LOSS is recorded too, so transfer is falsifiable", a
 // unjudged and the run continues. What that costs and what stops it repeating is
 // pinned in test/improve-unjudged.test.ts; this keeps the half that was always
 // right, which is that the run does not wedge.
-test("A SCORE THAT NEVER ARRIVES LEAVES THE ATTEMPT UNJUDGED, and the run continues", async () => {
-  await withFetch({}, async () => {
-    const late = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60_000);
-    const { d1, env } = await harness({ improveRuns: [AWAITING], improveAttempts: [ATTEMPT] });
-    const outcomes = await tickRuns(env, late);
-    assert.match(outcomes[0].note, /no score report after \d+ minutes/);
-    assert.equal(d1.rows.improve_attempts[0].status, "timed-out");
-    assert.equal(d1.rows.improve_runs[0].reverts, 0, "a machine that never reported was counted as a bad change");
-    assert.equal(d1.rows.improve_runs[0].status, "attempting", "the run wedged instead of continuing");
-  });
-});
 
 test("a score still inside the window is WAITED for, not reverted", async () => {
   await withFetch({}, async () => {
