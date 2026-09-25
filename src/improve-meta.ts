@@ -163,11 +163,13 @@ export async function runMetaLoop(env: Env, now: Date): Promise<MetaResult> {
     ].join("\n"),
   });
 
-  await env.APP_KV.put(META_LAST_KEY, now.toISOString());
-
+  // NO STAMP WITHOUT A USABLE ANSWER. A refusal or an unparseable answer used to
+  // stamp the weekly marker and silence the loop for a week. Unstamped, it is tried
+  // again when the next run finishes, which is at most once per finished run.
   if (result.refused || !result.parsed) {
     return { ran: true, proposed: false, path: null, note: "the meta-loop produced no usable answer", costUsd: result.costUsd };
   }
+  await env.APP_KV.put(META_LAST_KEY, now.toISOString());
   const parsed = result.parsed as { propose?: unknown; rationale?: unknown; revised_prompt?: unknown };
   if (parsed.propose !== true || typeof parsed.revised_prompt !== "string" || parsed.revised_prompt.trim().length === 0) {
     return {

@@ -10,6 +10,7 @@ import {
   renderTruthReport,
   reportPath,
   STALE_DECISION_DAYS,
+  UNCONSOLIDATED_CADENCE,
   type ReportDoc,
   type ReportEdge,
 } from "../src/truth-report.ts";
@@ -77,6 +78,21 @@ test("PLANT: a check that could not run is EXCLUDED from integrity, never counte
     ran.integrity! < 100,
     "a real drift finding must move the number; if it does not, the check is decorative"
   );
+});
+
+test("a backlog at or under the lint cadence neither finds nor lowers integrity; over it, both", () => {
+  const episodics = (n: number) =>
+    Array.from({ length: n }, (_, i) => doc({ path: `sessions/s${i}.md`, type: "episodic" }));
+  const core = doc({ path: "core.md", type: "core" });
+
+  const under = buildTruthReport({ ...base, docs: [core, ...episodics(UNCONSOLIDATED_CADENCE)], repoPaths: new Set<string>() });
+  assert.deepEqual(under.findings, [], "no finding at the cadence, so this proves nothing if one appears");
+  assert.equal(under.integrity, 100, "integrity fell with no finding to explain it");
+  assert.equal(under.documents.unconsolidated, UNCONSOLIDATED_CADENCE, "the backlog is still counted");
+
+  const over = buildTruthReport({ ...base, docs: [core, ...episodics(UNCONSOLIDATED_CADENCE + 1)], repoPaths: new Set<string>() });
+  assert.deepEqual(over.findings.map((f) => f.check), ["unconsolidated"]);
+  assert.ok(over.integrity! < 100, "a real backlog finding must move the number");
 });
 
 // ---- the report is an observation of the store, not a member of it ---------

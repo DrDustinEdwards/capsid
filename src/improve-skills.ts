@@ -121,6 +121,8 @@ export async function recordSkill(
 }
 
 // Other namespaces' skills this one has not tried, Laplace-smoothed win rate.
+// Candidate and live only, and only skills that claim this namespace or claim none,
+// on the same terms as offerSkills in ./skills-records.
 export async function candidateSkills(
   db: D1Database,
   namespace: string,
@@ -131,13 +133,15 @@ export async function candidateSkills(
       `SELECT s.id, s.source_namespace, s.title, s.body_ref, s.wins, s.losses, s.source_attempt, s.ts
        FROM improve_skills s
        WHERE s.source_namespace != ?1
+         AND s.status IN ('candidate', 'live')
+         AND (s.namespaces IS NULL OR s.namespaces LIKE ?2)
          AND NOT EXISTS (
            SELECT 1 FROM improve_attempts a WHERE a.skill_id = s.id AND a.namespace = ?1
          )
        ORDER BY s.ts DESC
        LIMIT 200`
     )
-    .bind(namespace)
+    .bind(namespace, `%"${namespace}"%`)
     .all<SkillRow>();
 
   return results

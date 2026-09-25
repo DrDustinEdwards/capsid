@@ -76,6 +76,9 @@ export interface TruthInput {
 // re-reading. Not a defect: a ruling can be right for years. It is a prompt.
 export const STALE_DECISION_DAYS = 180;
 
+// The lint cadence in capsid/conventions.md: consolidate at roughly five.
+export const UNCONSOLIDATED_CADENCE = 5;
+
 // Matches a repo path in prose: at least one slash, a file extension, and no
 // spaces. Deliberately narrow. `src/server.ts` and `.github/workflows/ci.yml`
 // match; `capsid/conventions.md` matches too and is excluded below, because a
@@ -298,14 +301,18 @@ export function buildTruthReport(input: TruthInput): TruthReport {
   }
 
   // 6. UNCONSOLIDATED. Not a defect, a backlog: conventions puts the lint cadence
-  //    at roughly five. Counted so the trend is visible beside the rest.
+  //    at roughly five. Counted so the trend is visible beside the rest. A backlog
+  //    at or under the cadence is not a finding, so it does not lower integrity
+  //    either: a report reading "Findings: None" at under 100% would be a number
+  //    nobody can trace to a cause.
   const unconsolidated = standing.filter((d) => d.type === "episodic" || d.type === "source");
+  const overCadence = unconsolidated.length > UNCONSOLIDATED_CADENCE;
   checks.push({
     check: "unconsolidated",
     subjects: standing.length,
-    ok: standing.length - unconsolidated.length,
+    ok: overCadence ? standing.length - unconsolidated.length : standing.length,
     findings:
-      unconsolidated.length > 5
+      overCadence
         ? [
             {
               check: "unconsolidated",

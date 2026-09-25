@@ -95,6 +95,9 @@ export interface ImproveRows {
   // the query. Optional: only that one branch reads it, and fakeD1 already passes its
   // own rows object, which carries documents.
   documents?: ReadonlyArray<{ namespace: string; path: string; body?: string | null }>;
+  // The skill transition's audit row lands here when its condition holds. Optional
+  // for the same reason as documents: fakeD1 passes its own rows object.
+  audit_log?: Array<Record<string, unknown>>;
 }
 
 export type ImproveAnswer = { handled: false } | { handled: true; results: unknown[] };
@@ -172,7 +175,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   if (dump) {
     // documents is excluded: this branch only matches improve_* tables, and including
     // it would widen the result type to the read-only shape the recommend branch uses.
-    const table = dump[1] as Exclude<keyof ImproveRows, "documents">;
+    // audit_log is excluded because no improve_* dump names it.
+    const table = dump[1] as Exclude<keyof ImproveRows, "documents" | "audit_log">;
     if (!(table in rows)) throw new Error(`improve fake: the dump named an unknown table '${table}'`);
     return { handled: true, results: rows[table] };
   }
@@ -427,9 +431,15 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   // branch placed first would claim it and answer with the wrong table.
   if (/FROM improve_skills s/i.test(text)) {
     const ns = params[0];
+    // Both filters are read from the SQL, so this branch can disagree with a query
+    // that dropped one of them.
+    const onlyOpen = /s\.status IN \('candidate', 'live'\)/i.test(text);
+    const scoped = /s\.namespaces IS NULL OR s\.namespaces LIKE \?2/i.test(text);
     const out = rows.improve_skills.filter(
       (s) =>
         s.source_namespace !== ns &&
+        (!onlyOpen || ["candidate", "live"].includes(String(s.status ?? "candidate"))) &&
+        (!scoped || s.namespaces === null || s.namespaces === undefined || String(s.namespaces).includes('"' + String(ns) + '"')) &&
         !rows.improve_attempts.some((a) => a.skill_id === s.id && a.namespace === ns)
     );
     out.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
@@ -484,6 +494,17 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
   // ---- skills ---------------------------------------------------------------
+
+  // THE TRANSITION'S AUDIT ROW (commitTransition), inserted only when the skill now
+  // holds the new status. Modelled on that condition, so a transition that did not
+  // land writes no row here, as in SQLite.
+  if (/^INSERT INTO audit_log .* WHERE EXISTS \(SELECT 1 FROM improve_skills WHERE id = \?3 AND status = \?4\)$/i.test(text)) {
+    const [actor, auditParams, id, status] = params;
+    if (rows.improve_skills.some((k) => k.id === id && k.status === status)) {
+      rows.audit_log?.push({ actor, action: "skill-status-changed", namespace: null, path: null, params: auditParams });
+    }
+    return { handled: true, results: [] };
+  }
 
   if (/^INSERT INTO improve_skills/i.test(text)) {
     const row = { ...IMPROVE_SKILL_DEFAULTS, ...insertRow(text, params) };
