@@ -48,6 +48,17 @@ export const R2 = { name: "capsid-media" };
 // secret never in the Worker's environment. The Worker reads only the manifest.
 export const HOLDOUT_R2 = { name: "capsid-improve-holdout" };
 
+// THE TWO BUCKETS MUST BE DIFFERENT BUCKETS. Pointing HOLDOUT at capsid-media would
+// satisfy every other deploy check and silently undo the isolation: attempt code holds
+// MEDIA, so a shared bucket means attempt code can reach the hidden suite. Returns the
+// refusal, or null. scripts/ci-config.mjs refuses to deploy on it.
+export function sharedBucketProblem(media, holdout) {
+  return media.name === holdout.name
+    ? `MEDIA and HOLDOUT are pinned to the SAME bucket (${media.name}). ` +
+        `Attempt code holds MEDIA, so this would give it read access to the hidden holdout suite. Nothing was deployed.`
+    : null;
+}
+
 // Public identifier. It appears in every OAuth URL the App generates and in wrangler's
 // own deploy output. Pinned because wrangler would otherwise write the example's
 // placeholder over the live value: keep_vars preserves vars that are ABSENT from config,

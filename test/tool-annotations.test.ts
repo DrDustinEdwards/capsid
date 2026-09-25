@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hintsFor, TOOL_HINTS } from "../src/tool-annotations.ts";
 import { requiredGrant } from "../src/scope.ts";
-import { AUTHORITATIVE } from "../src/counts.ts";
-import { allSourceText, toolBlocks } from "./source-files.ts";
-
-const CAPSID = AUTHORITATIVE.capsid;
+import { toolBlocks } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { adminAgent } from "../src/agents.ts";
+import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // TOOL ANNOTATIONS ARE DERIVED, NOT DECLARED.
 //
@@ -69,70 +71,64 @@ const DESTRUCTIVE = [
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
 
-// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
-test("PLANT: the hint table and the registrations name exactly the same tools", () => {
-  const registered = toolBlocks().map((b) => b.name).sort();
-  const tabled = Object.keys(TOOL_HINTS).sort();
-  assert.deepEqual(tabled, registered, "a tool without an entry, or an entry without a tool, fails here");
+// THE ANNOTATIONS A CLIENT RECEIVES, read from tools/list rather than from the
+// registration source.
+async function servedAnnotations(): Promise<Map<string, Record<string, unknown> | undefined>> {
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const client = new Client({ name: "tool-annotations", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const { tools } = await client.listTools();
+  await client.close();
+  return new Map(tools.map((t) => [t.name, t.annotations as Record<string, unknown> | undefined]));
+}
+
+test("PLANT: every served tool carries exactly its hint table entry, and the table names only served tools", async () => {
+  const served = await servedAnnotations();
+  assert.ok(served.size > 0, "the server served no tools");
+  assert.deepEqual([...served.keys()].sort(), Object.keys(TOOL_HINTS).sort(), "a tool without an entry, or an entry without a tool, fails here");
+  const differs = [...served].filter(([name, hints]) => JSON.stringify(hints) !== JSON.stringify(TOOL_HINTS[name])).map(([name]) => name);
+  assert.deepEqual(differs, [], `these tools serve annotations that are not their table entry: ${differs.join(", ")}`);
 });
 
-// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
-test("PLANT: every tool is annotated at its registration, from the table and not by hand", () => {
-  const unannotated = toolBlocks()
-    .filter((b) => !new RegExp(`annotations: hintsFor\\("${b.name}"\\)`).test(b.body))
-    .map((b) => b.name);
-  assert.deepEqual(unannotated, [], `these tools carry no annotations: ${unannotated.join(", ")}`);
-  // And nobody hand-wrote one, which would be the way the table stops being the
-  // single place the hints live.
-  const inline = [...allSourceText().matchAll(/annotations:\s*\{/g)];
-  assert.equal(inline.length, 0, "an inline annotation literal bypasses the table this file checks");
-});
-
-// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
-test("PLANT: readOnlyHint is exactly the negation of the write gate", () => {
-  const writeGated = toolBlocks().filter((b) => isWriteGated(b.name));
-  // Vacuity guard. The read half is what is stable: fifteen read tools, and every
-  // tool added since has been write-gated, so the gated count is the surface minus
-  // fifteen and moves with counts.ts rather than by hand.
-  const READ_TOOLS = 15;
-  assert.equal(
-    writeGated.length,
-    CAPSID.tools - READ_TOOLS,
-    `the write-gate scan found ${writeGated.length} gated tools, expected ${CAPSID.tools - READ_TOOLS}`
-  );
-
-  const wrong: string[] = [];
-  for (const block of toolBlocks()) {
-    const gated = isWriteGated(block.name);
-    const hint = hintsFor(block.name);
-    if (hint.readOnlyHint === gated) {
-      wrong.push(`${block.name}: write-gated=${gated} but readOnlyHint=${hint.readOnlyHint}`);
-    }
-  }
+test("PLANT: the served readOnlyHint is exactly the negation of the write gate", async () => {
+  const served = await servedAnnotations();
+  const gated = [...served.keys()].filter(isWriteGated);
+  // Vacuity: both sides of the rule are populated, or it is comparing nothing.
+  assert.ok(gated.length > 0 && gated.length < served.size, `the write gate splits ${served.size} tools into ${gated.length} gated`);
+  const wrong = [...served]
+    .filter(([name, hints]) => hints?.readOnlyHint !== !isWriteGated(name))
+    .map(([name, hints]) => `${name}: write-gated=${isWriteGated(name)} but readOnlyHint=${hints?.readOnlyHint}`);
   assert.deepEqual(wrong, [], wrong.join("; "));
 });
 
-// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
-test("PLANT: every mutating tool declares destructiveHint true", () => {
+// The destructive classification still comes from the handler source: the repo, queue,
+// improve and agent tools overwrite through modules a call in this file cannot observe
+// without their own fakes. The hints compared are the SERVED ones. The five document
+// mutators that test/write-invariants.test.ts drives (write, delete, restore, move and
+// lint finalize) are also checked by name below, so that half rests on behavior.
+test("PLANT: every mutating tool is served with destructiveHint true", async () => {
+  const served = await servedAnnotations();
   const mutating = toolBlocks().filter((b) => isWriteGated(b.name) && matches(b.body, DESTRUCTIVE));
   assert.ok(mutating.length >= 10, `the destructive scan found only ${mutating.length} mutating tools; it is broken`);
-  const understated = mutating.filter((b) => hintsFor(b.name).destructiveHint !== true).map((b) => b.name);
+  const understated = mutating.filter((b) => served.get(b.name)?.destructiveHint !== true).map((b) => b.name);
   assert.deepEqual(understated, [], `these tools can overwrite or remove and do not say so: ${understated.join(", ")}`);
+  for (const tool of ["write", "delete", "restore", "move", "lint"]) {
+    assert.equal(served.get(tool)?.destructiveHint, true, `${tool} overwrites or removes a document and is not served as destructive`);
+  }
 });
 
-// scanner-rule: conventions-verification, derive a mirrored list from its source of truth in both directions
-test("PLANT: no read-only tool claims to be destructive, and no additive tool overstates", () => {
+test("PLANT: no read-only tool is served as destructive, and no additive tool overstates", async () => {
   // The innocent case. A guard that also fires on code doing nothing wrong gets
   // deleted rather than fixed, so the negative direction is asserted too.
+  const served = await servedAnnotations();
   const overstated = toolBlocks()
     .filter((b) => !matches(b.body, DESTRUCTIVE))
-    .filter((b) => hintsFor(b.name).destructiveHint === true)
+    .filter((b) => served.get(b.name)?.destructiveHint === true)
     .map((b) => b.name);
   assert.deepEqual(overstated, [], `these tools claim to be destructive and mutate nothing: ${overstated.join(", ")}`);
-  for (const block of toolBlocks()) {
-    if (hintsFor(block.name).readOnlyHint) {
-      assert.equal(hintsFor(block.name).destructiveHint, false, `${block.name} is read-only and cannot be destructive`);
-    }
+  for (const [name, hints] of served) {
+    if (hints?.readOnlyHint) assert.equal(hints.destructiveHint, false, `${name} is read-only and cannot be destructive`);
   }
 });
 

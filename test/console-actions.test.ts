@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CONSOLE_ACTIONS, handleConsoleAction } from "../src/console-actions.ts";
+import { handleConsoleAction } from "../src/console-actions.ts";
 import { consoleSessionCookie } from "../src/console-auth.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
@@ -62,10 +62,22 @@ async function post(
 
 const CONFIRMED = { csrf: CSRF, confirm: "yes" };
 
-test("the action list is exactly the five controls, and names neither merge nor mint", () => {
-  assert.deepEqual([...CONSOLE_ACTIONS].sort(), ["fail_job", "mode", "pause", "resume_job", "revoke_agent", "unpause"]);
-  for (const forbidden of ["merge", "manage_pr", "mint", "mint_operator_key", "mint_agent"]) {
-    assert.ok(!(CONSOLE_ACTIONS as readonly string[]).includes(forbidden), `${forbidden} must not be a console action`);
+test("a merge or a mint, fully confirmed by an admin session, is refused and writes nothing", async () => {
+  // Sent through the handler with a valid session, CSRF and confirm, so the only
+  // thing that can refuse them is that the console has no such action.
+  for (const [action, fields] of [
+    ["merge", { namespace: "capsid", number: "12" }],
+    ["manage_pr", { namespace: "capsid", number: "12", pr_action: "merge" }],
+    ["mint", { name: "capsid-driver" }],
+    ["mint_operator_key", {}],
+    ["mint_agent", { name: "capsid-driver", namespaces: "capsid" }],
+  ] as const) {
+    const d1 = fakeD1();
+    const kv = fakeKv();
+    const res = await handleConsoleAction(await post({ action, ...fields, ...CONFIRMED }), env({ DB: d1.db, APP_KV: kv.kv }));
+    assert.equal(res.status, 400, `${action} was not refused as an unknown action`);
+    assert.deepEqual(d1.recorded, [], `${action} wrote to D1`);
+    assert.deepEqual(kv.puts, [], `${action} wrote to KV`);
   }
 });
 

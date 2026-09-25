@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { HOLDOUT_PREFIX, holdoutManifestKey } from "../src/improve-schema.ts";
 import { sourceFile, sourceFiles } from "./source-files.ts";
+// @ts-expect-error scripts/ is plain .mjs with no declarations (see test/canary.test.ts).
+import { HOLDOUT_R2, R2, sharedBucketProblem } from "../scripts/bindings.mjs";
 import type { AttemptEnv } from "../src/env.ts";
 import type * as Attempt from "../src/improve-attempt.ts";
 
@@ -99,17 +101,13 @@ test("THE CI R2 READ TOKEN IS NOT IN THE WORKER'S ENVIRONMENT AT ALL", () => {
 });
 
 test("the two buckets are pinned to DIFFERENT buckets, and CI refuses if they converge", () => {
-  const bindings = readFileSync(join(import.meta.dirname, "..", "scripts", "bindings.mjs"), "utf8");
-  const media = /export const R2 = \{ name: "([^"]+)" \}/.exec(bindings)?.[1];
-  const holdout = /export const HOLDOUT_R2 = \{ name: "([^"]+)" \}/.exec(bindings)?.[1];
-  assert.ok(media, "the MEDIA bucket pin is gone from scripts/bindings.mjs");
-  assert.ok(holdout, "the HOLDOUT bucket pin is gone from scripts/bindings.mjs");
-  assert.notEqual(media, holdout, "MEDIA and HOLDOUT are pinned to the same bucket, which undoes the isolation");
-
-  // And the deploy asserts it, so a later edit that converges them cannot ship.
+  assert.notEqual(R2.name, HOLDOUT_R2.name, "MEDIA and HOLDOUT are pinned to the same bucket, which undoes the isolation");
+  assert.equal(sharedBucketProblem(R2, HOLDOUT_R2), null, "the deploy check refuses the real, distinct pins");
+  assert.match(String(sharedBucketProblem(R2, { name: R2.name })), /SAME bucket/, "the deploy check admits two converged pins");
+  // The deploy runs the check. scripts/ci-config.mjs writes wrangler.jsonc and resolves
+  // the other bindings through wrangler, so it cannot be run here; its call is checked.
   const ciConfig = readFileSync(join(import.meta.dirname, "..", "scripts", "ci-config.mjs"), "utf8");
-  assert.match(ciConfig, /MEDIA and HOLDOUT are pinned to the SAME bucket/);
-  assert.match(ciConfig, /EXPECTED\.r2\.name === EXPECTED\.holdoutR2\.name/);
+  assert.match(ciConfig, /sharedBucketProblem\(EXPECTED\.r2, EXPECTED\.holdoutR2\)/, "ci-config.mjs no longer runs the bucket check");
 });
 
 test("the manifest key is namespaced under the holdout prefix", () => {

@@ -67,8 +67,8 @@ if (!root) {
 
 // The off-account backup mirror's key: the same root, a different
 // context string. Must match deriveBackupCredentialKey in src/improve-scorer.ts
-// exactly, version segment included; test/backup-credential.test.ts pins the
-// context string in both places.
+// exactly, version segment included; test/backup-credential.test.ts runs this
+// branch and compares the key with the Worker's.
 if (namespace === "--backup-credential") {
   const backupKey = createHmac("sha256", root).update("capsid-backup-credential:v1").digest("hex");
   console.error("improve-derive-key: derived the backup credential key. Set it as the repo secret BACKUP_CREDENTIAL_KEY");

@@ -1,26 +1,49 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DOC_STATUSES, DOC_TYPES, validateDocStatus, validateDocType } from "../src/doc-meta.ts";
-import { sourceFiles } from "./source-files.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server.ts";
+import { type DocRow, fakeD1, fakeEnv } from "./fakes.ts";
 
-// The blast radius of closure is exactly one query. brief excludes closed task
-// docs; nothing else filters on it, and in particular the lint loop must not,
-// because the archive/ prefix is the ONLY thing that takes a document out of
-// memory. A closed task is finished, not forgotten.
-// scanner-rule: capsid/decisions.md 2026-08-12, a closed document stays in the lint loop, filtered in one place
-test("closure does not remove a document from the lint loop", () => {
-  // Scanned across all of src/ (quality audit 1.1): a second closed-filter added
-  // in another module is exactly as damaging as one added here, and would have
-  // been invisible to a scan of server.ts alone.
-  const perFile = sourceFiles()
-    .map((f) => ({ name: f.name, hits: (f.text.match(/status\s*!=\s*'closed'/g) ?? []).length }))
-    .filter((f) => f.hits > 0);
-  const closedFilters = perFile.reduce((sum, f) => sum + f.hits, 0);
-  assert.equal(
-    closedFilters,
-    1,
-    `expected exactly one 'status != closed' filter (brief's task query), found ${closedFilters} in ${perFile.map((f) => `src/${f.name}`).join(", ")}. If the lint loop grew one, a closed document just fell out of memory.`
+// THE BLAST RADIUS OF CLOSURE is brief's task list. Nothing else filters on it, and
+// in particular the lint loop must not, because the archive/ prefix is the ONLY thing
+// that takes a document out of memory. A closed task is finished, not forgotten.
+// Driven through the tools rather than counted in the source: a closed document is
+// still in lint gather, and brief leaves a closed task out.
+async function toolOut(name: string, documents: DocRow[]) {
+  const fake = fakeD1({ documents, namespaces: [{ namespace: "capsid", repos: "[]" }] });
+  const server = buildServer(fakeEnv({ DB: fake.db }), "write", "test:doc-meta");
+  const client = new Client({ name: "doc-meta", version: "1.0.0" });
+  const [c, t] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(t), client.connect(c)]);
+  const result = (await client.callTool({ name, arguments: { namespace: "capsid" } })) as { isError?: boolean; content: Array<{ text: string }> };
+  await client.close();
+  assert.notEqual(result.isError, true, result.content[0]?.text);
+  return JSON.parse(result.content[0].text);
+}
+
+const CLOSED_AND_OPEN: DocRow[] = [
+  { namespace: "capsid", path: "core.md", title: "core", body: "core", type: "core", status: "published" },
+  { namespace: "capsid", path: "concept-closed.md", title: "c", body: "c", type: "concept", status: "closed" },
+  { namespace: "capsid", path: "ep-closed.md", title: "e", body: "e", type: "episodic", status: "closed" },
+  { namespace: "capsid", path: "TASK-closed.md", title: "t", body: "t", type: "task", status: "closed" },
+  { namespace: "capsid", path: "TASK-open.md", title: "t", body: "t", type: "task", status: "active" },
+];
+
+test("closure does not remove a document from the lint loop", async () => {
+  const packet = await toolOut("lint", CLOSED_AND_OPEN);
+  assert.deepEqual(packet.wiki.map((d: { path: string }) => d.path), ["concept-closed.md"], "a closed concept fell out of gather");
+  assert.deepEqual(
+    packet.unconsolidated.map((d: { path: string }) => d.path),
+    ["ep-closed.md"],
+    "a closed episodic fell out of gather, so it can never be consolidated"
   );
+});
+
+test("brief leaves a closed task out of its open tasks, and keeps an open one", async () => {
+  const out = await toolOut("brief", CLOSED_AND_OPEN);
+  assert.deepEqual(out.open_tasks.map((t: { path: string }) => t.path), ["TASK-open.md"]);
 });
 
 test("every valid status is accepted", () => {

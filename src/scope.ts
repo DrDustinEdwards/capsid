@@ -382,7 +382,7 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
   if (!config?.inputSchema || !Object.hasOwn(config.inputSchema, key)) return undefined;
   const value = args[key];
   if (typeof value === "string") return value;
-  return Object.hasOwn(DEFAULT_ACTION, tool) ? DEFAULT_ACTION[tool] : undefined;
+  return defaultActionFor(tool);
 }
 
 // THE REGISTRAR GATE. Wraps the registration method ONCE, before any tool module

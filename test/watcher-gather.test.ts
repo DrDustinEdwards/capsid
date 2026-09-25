@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
+import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 import { gatherFindings, type Finding, type WatcherCheck } from "../src/watcher.ts";
 
 // THE WATCHER'S TWO HEALTH CHECKS NEVER RAN (AUDIT-2026-09-16.md, 8.1 and 8.21).
@@ -70,7 +70,7 @@ async function gather(
   schema: string,
   repos?: Array<{ repo: string; label: string }>,
   extra: Record<string, Route> = {}
-): Promise<{ found: Finding[]; ran: ReadonlySet<WatcherCheck>; failures: string[] }> {
+): Promise<{ found: Finding[]; ran: ReadonlySet<WatcherCheck>; failures: string[]; calls: FetchCall[] }> {
   const failures: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => {
@@ -78,14 +78,16 @@ async function gather(
   };
   let found: Finding[] = [];
   let ran: ReadonlySet<WatcherCheck> = new Set();
+  let calls: FetchCall[] = [];
   try {
-    await withFetch({ ...routes, ...extra }, async () => {
+    await withFetch({ ...routes, ...extra }, async (made) => {
+      calls = made;
       ({ findings: found, ran } = await gatherFindings(env(schema, repos), new Date()));
     });
   } finally {
     console.error = original;
   }
-  return { found, ran, failures };
+  return { found, ran, failures, calls };
 }
 
 const fingerprints = (found: Finding[]) => found.map((f) => f.fingerprint);
@@ -142,6 +144,20 @@ test("a readable, empty mirror listing is the no-dump finding", async () => {
     [`GET /repos/${OWNER}/capsid-backups/contents/backups/json`]: { body: [] },
   });
   assert.ok(fingerprints(found).includes("mirror-no-dump"), `no mirror-no-dump finding: ${fingerprints(found).join(", ")}`);
+});
+
+test("the mirror is read from whichever repo the namespace maps to its backups label", async () => {
+  // The namespace-to-repo mapping is the authorization boundary, so the watcher must
+  // not know the mirror's name. Mapped here to a repo with a different name, the
+  // listing has to follow the mapping.
+  const elsewhere = `${OWNER}/lorem-mirror`;
+  const { found, calls } = await gather(NEWER, [BACKUPS[0], { repo: elsewhere, label: "backups" }], {
+    [`GET /repos/${elsewhere}`]: { body: { default_branch: "main" } },
+    [`GET /repos/${elsewhere}/contents/backups/json`]: { body: [] },
+  });
+  assert.ok(calls.some((c) => c.path === `/repos/${elsewhere}/contents/backups/json`), "the dump listing was not requested from the mapped repo");
+  assert.ok(!calls.some((c) => c.path.includes("capsid-backups")), "the watcher read a repo the mapping does not name");
+  assert.ok(fingerprints(found).includes("mirror-no-dump"), `the mapped repo's empty listing was not judged: ${fingerprints(found).join(", ")}`);
 });
 
 // A CHECK WHOSE READ FAILED IS NOT REPORTED AS RUN, so runPass does not clear the jobs

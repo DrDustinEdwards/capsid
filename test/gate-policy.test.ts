@@ -11,7 +11,6 @@ import {
   deniedReason,
   isAdditiveMigration,
   loadGatePolicy,
-  neverListView,
   parseGatePolicy,
   splitStatements,
 } from "../src/gate-policy.ts";
@@ -428,9 +427,18 @@ for (const entry of NEVER) {
 }
 
 test("PLANT: quoted text is removed only from gh pr create, never from a push or a d1 execute", () => {
-  const seen = neverListView('git push origin "main" && gh pr create --title "improve_run" --fill');
-  assert.ok("view" in seen);
-  assert.equal("view" in seen ? seen.view : "", 'git push origin "main" ; gh pr create --title "" --fill');
+  // The same quoted title rides along in both commands. Only the default-branch push,
+  // whose branch is quoted, may be refused: the quotes hide nothing in a push.
+  const mainPush = NEVER.find((n) => n.pattern.test("git push origin main"));
+  assert.ok(mainPush, "no never entry refuses a push to main");
+  const pushed = classifyCommand('git push origin "main" && gh pr create --title "improve_run" --fill');
+  assert.ok("refused" in pushed, "a push to a quoted main was approved");
+  assert.ok(pushed.refused.includes(mainPush.why), `refused for another reason: ${pushed.refused}`);
+  const branch = classifyCommand('git push -u origin feat/x && gh pr create --title "improve_run" --fill');
+  assert.ok("klasses" in branch, `the quoted title in gh pr create was read as a command: ${JSON.stringify(branch)}`);
+  assert.deepEqual(branch.klasses, ["push_branch", "open_pr"]);
+  const d1 = classifyCommand('npx wrangler d1 execute capsid --remote --command "DROP TABLE jobs"');
+  assert.ok("refused" in d1, "quoted SQL in a d1 execute was removed before the never list read it");
 });
 
 test("PLANT: anything a shell would evaluate inside an approved piece is refused", () => {
