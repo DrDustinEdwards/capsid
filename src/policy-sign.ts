@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { sha256Hex } from "./auth";
 import { POLICY_PREFIX } from "./improve-schema";
-import { signTaskBody, splitSignedTask } from "./improve-task";
+import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./improve-task";
 import { documentUpsert, isMissingRowAbort, requireBodyUnchanged } from "./store-guards";
 
 // ---- signing a policy document ------------------------------------------------
@@ -90,6 +90,20 @@ export async function signPolicyDocument(
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET, body);
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
+
+  // THE ANTI-ROLLBACK RECORD IS WRITTEN FIRST (audit 2026-09-25, E2-2). From here on
+  // the loaders accept this body and no other signed copy (improve-task.ts, policyPin).
+  // Written before the store so every failure refuses: a record that could not be
+  // written stops the signing with nothing stored, and a store that aborts below
+  // leaves the record naming a body that is not stored, which the loaders refuse
+  // until the policy is signed again, as that refusal already asks.
+  try {
+    await env.APP_KV.put(policyPinKey(path), JSON.stringify(await policyPin(body)));
+  } catch (err) {
+    return refuse(
+      `the anti-rollback record for ${namespace}/${path} could not be written (${err instanceof Error ? err.message : String(err)}). Nothing was signed or written. Sign it again.`
+    );
+  }
 
   // The body guard goes first. The signature covers the body read above, so a policy
   // edit that lands between that read and this batch must abort the signing: without

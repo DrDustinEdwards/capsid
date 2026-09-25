@@ -1,4 +1,4 @@
-import { hmacHex, timingSafeEqual } from "./auth";
+import { hmacHex, sha256Hex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
 
 // Distinct from the score-report and backup-credential contexts on purpose.
@@ -119,7 +119,7 @@ const POLICY_NAMESPACE = "capsid";
  * the sentence that reports a missing document ("so nothing is auto-merged").
  */
 export async function readSignedPolicy(
-  env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET">,
+  env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET" | "APP_KV">,
   path: string,
   what: string,
   ifAbsent: string
@@ -131,7 +131,71 @@ export async function readSignedPolicy(
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, row.body ?? "", what);
   if (!verdict.ok) return { error: verdict.reason };
   // The signed body only. The stored text also holds the unsigned frontmatter.
+  const rollback = await checkPolicyPin(env, path, what, verdict.body);
+  if (rollback) return { error: rollback };
   return { body: verdict.body };
+}
+
+// ---- anti-rollback ----------------------------------------------------------------
+//
+// A SIGNATURE PROVES THE WORKER SIGNED THESE BYTES ONCE, NOT THAT THEY ARE CURRENT.
+// Every signed version of a policy stays in document_versions, and `restore` or a
+// plain write can put an older one back; its signature still verifies. So the Worker
+// records which signed body is current, in APP_KV under policyPinKey(path), and a
+// load refuses any other signed body (audit 2026-09-25, E2-2).
+//
+// WHAT IS RECORDED: the sha256 of the signed body, and its `- version:` for the
+// refusal text. The pin is the hash and not the version, because a lower version
+// signed on purpose (the seat withdrawing a change) must hold, and a higher version
+// put back after that must not.
+//
+// WHO WRITES IT: sign_policy, before it stores the signed document, so the body it
+// signs becomes the only one that loads. Re-signing the same body writes the same
+// hash. A load writes it only when there is no record yet: the first load after this
+// change deploys, when KV holds nothing, pins whatever signed body is stored then.
+export const policyPinKey = (path: string): string => `policy:signed:${path}`;
+
+export interface PolicyPin {
+  sha256: string;
+  version: string | null;
+}
+
+export async function policyPin(body: string): Promise<PolicyPin> {
+  return { sha256: await sha256Hex(body), version: policyField(body, "version") };
+}
+
+/** A refusal when `body` is not the signed body recorded for `path`, or null. */
+async function checkPolicyPin(
+  env: Pick<Env, "APP_KV">,
+  path: string,
+  what: string,
+  body: string
+): Promise<string | null> {
+  const current = await policyPin(body);
+  const cannot = (step: string, err: unknown) =>
+    `the ${what}'s anti-rollback record (${policyPinKey(path)}) could not be ${step} (${err instanceof Error ? err.message : String(err)}), so the stored policy is not shown to be the last one signed. Refusing rather than loading it.`;
+  let raw: string | null;
+  try {
+    raw = await env.APP_KV.get(policyPinKey(path));
+  } catch (err) {
+    return cannot("read", err);
+  }
+  if (raw === null) {
+    try {
+      await env.APP_KV.put(policyPinKey(path), JSON.stringify(current));
+    } catch (err) {
+      return cannot("written", err);
+    }
+    return null;
+  }
+  let pinned: PolicyPin;
+  try {
+    pinned = JSON.parse(raw) as PolicyPin;
+  } catch (err) {
+    return cannot("parsed", err);
+  }
+  if (pinned.sha256 === current.sha256) return null;
+  return `the stored ${what} (version ${current.version ?? "unnamed"}, body sha256 ${current.sha256.slice(0, 12)}) is signed but is not the one last signed (version ${pinned.version ?? "unnamed"}, body sha256 ${String(pinned.sha256).slice(0, 12)}). An older signed copy put back in place is refused. If this copy is meant to be current, sign it again with sign_policy.`;
 }
 
 /** The value of the first `- <name>: <value>` line in a policy body, or null. */

@@ -187,7 +187,7 @@ async function envWithPolicy(body: string | null) {
   const { db } = fakeD1({
     documents: body === null ? [] : [{ namespace: "capsid", path: GATE_POLICY_PATH, title: "gates", body }],
   });
-  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 }
 
 test("parseGatePolicy reads the version and the switch", () => {
@@ -429,7 +429,7 @@ function auditRow(recorded: Recorded[], action: string): Record<string, unknown>
 test("a policy-approved resume records which class matched and what it matched on", async () => {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
   const { db, recorded } = resumeDb(await blockedJob("git push -u origin feat/autonomy-policy-gates"), policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 
   const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "pre-approved branch push", { approvedByPolicy: "1" });
   assert.equal(result.ok, true, `resume refused: ${result.ok ? "" : JSON.stringify(result)}`);
@@ -445,7 +445,7 @@ test("a policy-approved resume records which class matched and what it matched o
 test("a resume with no policy records no policy fields, so the two cases are distinguishable", async () => {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
   const { db, recorded } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 
   const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "the human said yes");
   assert.equal(result.ok, true);
@@ -459,7 +459,7 @@ test("a command on the never list refuses the resume and leaves the job blocked"
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
   const job = await blockedJob("npx wrangler secret put IMPROVE_SCORE_SECRET");
   const { db, recorded } = resumeDb(job, policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 
   const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "trying it on", { approvedByPolicy: "1" });
   assert.equal(result.ok, false);
@@ -484,7 +484,7 @@ async function driverResume(command: string, opts: { claimedBy?: string; take?: 
   const job = await blockedJob(command);
   if (opts.claimedBy) job.claimed_by = opts.claimedBy;
   const fake = resumeDb(job, policy);
-  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
   const result = await resumeJob(env, driverAgent() as never, new Date("2026-09-17T03:00:00Z"), "job_4c0ecc28548b", "the policy covers it", {
     approvedByPolicy: "1",
     take: opts.take,
@@ -556,7 +556,7 @@ test("PLANT: a DRIVER may not approve a job another agent blocked, nor take one 
 test("a SEAT's policy approval returns the job to the driver that blocked it", async () => {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
   const { db, row } = resumeDb(await blockedJob("git push -u origin feat/x"), policy);
-  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
   const result = await resumeJob(env, seatAgent() as never, new Date("2026-09-12T03:00:00Z"), "job_4c0ecc28548b", "approved", { approvedByPolicy: "1" });
   assert.equal(result.ok, true, `the seat was refused its own policy: ${JSON.stringify(result)}`);
   assert.equal(row.claimed_by, "agent:capsid-driver", "the seat took the job it approved");
@@ -572,7 +572,7 @@ test("a SEAT's policy approval returns the job to the driver that blocked it", a
 async function plainResume(agent: unknown, command: string, opts: { take?: boolean } = {}) {
   const policy = await signTaskBody(SECRET, GOOD_POLICY);
   const fake = resumeDb(await blockedJob(command), policy);
-  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET });
+  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
   const result = await resumeJob(env, agent as never, new Date("2026-09-25T03:00:00Z"), "job_4c0ecc28548b", "the human ran it", { take: opts.take });
   return { result, ...fake };
 }
