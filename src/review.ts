@@ -15,7 +15,7 @@
 // failure would look like a review that happened.
 
 import type { Env } from "./env";
-import { ghFetch } from "./github/client";
+import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { parseScopes } from "./agents-schema";
 
 export const REVIEW_PREFIX = "REVIEW:";
@@ -121,7 +121,7 @@ export function outcomeOf(review: Review | null): ReviewOutcome {
       kind: "waiting",
       reason:
         `no review yet. This job was posted with review_required, so it waits for a comment on its pull request ` +
-        `starting with '${REVIEW_PREFIX}' and ending with ${VERDICTS.join(", ")}.`,
+        `starting with '${REVIEW_PREFIX}' and ending with ${VERDICTS.join(", ")}. An APPROVE must also quote the pull request's head sha.`,
     };
   }
   switch (review.verdict) {
@@ -132,24 +132,6 @@ export function outcomeOf(review: Review | null): ReviewOutcome {
     case "BLOCK":
       return { kind: "halt", review };
   }
-}
-
-// The pull request a reference names, or null when it names something else. A job can
-// finish with a document key rather than a pull request, and a review gate has nothing
-// to read in that case: coercing one into a number would send the Worker to GitHub
-// asking about a pull request it invented.
-//
-// ANCHORED AT BOTH ENDS. prUrlsFromJob in src/outcome-prs.ts scans free prose for
-// every pull request a job mentioned, which is the right rule for counting evidence
-// and the wrong one here: the review gate needs THE pull request this job's work is,
-// and a URL mentioned in passing in a summary is not it.
-const PR_URL = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#].*)?$/;
-
-export function pullRequestFrom(ref: string | null | undefined): { owner: string; repo: string; number: number } | null {
-  if (!ref) return null;
-  const match = PR_URL.exec(ref.trim());
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], number: Number(match[3]) };
 }
 
 // ---- reading the comments ---------------------------------------------------------
@@ -163,7 +145,7 @@ export function pullRequestFrom(ref: string | null | undefined): { owner: string
 export async function readReviewComments(
   env: Env,
   namespace: string,
-  pr: { owner: string; repo: string; number: number }
+  pr: PrUrl
 ): Promise<ReviewComment[]> {
   const resp = await ghFetch(env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments?per_page=100`);
   if (!resp.ok) throw new Error(`reading review comments failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
@@ -174,6 +156,36 @@ export async function readReviewComments(
     body: r.body ?? "",
     created_at: r.created_at ?? "",
   }));
+}
+
+/** The pull request's current head sha, read so an APPROVE counts only for the code it
+ *  names. Throws on a GitHub failure, which the caller treats as an unread review
+ *  rather than an approval. */
+async function readHeadSha(env: Env, pr: PrUrl): Promise<string> {
+  const resp = await ghFetch(env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`);
+  if (!resp.ok) throw new Error(`reading the pull request failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+  const sha = ((await resp.json()) as { head?: { sha?: string } }).head?.sha ?? "";
+  if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error(`the pull request reported no head commit`);
+  return sha;
+}
+
+// The shortest prefix of a sha a review may quote. Seven is what `git log --oneline`
+// and GitHub's short form print.
+const MIN_QUOTED_SHA = 7;
+
+/** Whether a review's text quotes `head`: some standalone run of 7 to 40 hex
+ *  characters in it is a prefix of the head sha (case-insensitive). */
+function quotesSha(text: string, head: string): boolean {
+  const want = head.toLowerCase();
+  for (const token of text.match(new RegExp(`\\b[0-9a-f]{${MIN_QUOTED_SHA},40}\\b`, "gi")) ?? []) {
+    if (want.startsWith(token.toLowerCase())) return true;
+  }
+  return false;
+}
+
+// Owner and repo compare case-insensitively because GitHub resolves them that way.
+function samePr(a: PrUrl, b: PrUrl): boolean {
+  return a.number === b.number && `${a.owner}/${a.repo}`.toLowerCase() === `${b.owner}/${b.repo}`.toLowerCase();
 }
 
 // ---- which comments are a review, and which are only a comment --------------------
@@ -237,8 +249,17 @@ async function reviewerCommentIds(db: D1Database, namespace: string): Promise<Se
  *  request carries, and a job that finished with a document key has none; holding it
  *  for a review nobody can write would strand it forever. Said here rather than at
  *  the call site so both transitions that consult this cannot answer differently. */
+export type GateOutcome = ReviewOutcome & {
+  // The pull request the gate read, as the namespace mapping spells it. Set whenever
+  // one was read, so the caller can bind the job to it on the first read.
+  pr?: string;
+};
+
 export async function reviewGate(
   env: Env,
+  // result_ref here is the STORED one. On a claimed job nothing but the gate writes it
+  // (the holder transitions set it only on the terminal ones), so a pull request URL
+  // there is the job's own pull request, recorded the first time the gate read one.
   job: { namespace: string; review_required: number; result_ref: string | null },
   opts: {
     // THE TRANSITION THAT HANDS WORK ON MUST NAME ITS PULL REQUEST. Set on `complete`
@@ -254,18 +275,32 @@ export async function reviewGate(
     // consult the gate when a pull request IS named, so a driver cannot walk away from
     // a CHANGES or a BLOCK by failing or blocking instead.
     requirePullRequest?: boolean;
-    // Further references that may name this job's pull request: the evidence a
-    // complete carries. Read because a driver reporting its work in evidence.prs and a
-    // document key in result_ref was, before this, unreviewed.
+    // The references THIS CALL names, in order: the result_ref it passes, then the
+    // evidence a complete carries. Read because a driver reporting its work in
+    // evidence.prs and a document key in result_ref was, before this, unreviewed.
     candidateRefs?: readonly (string | null | undefined)[];
   } = {}
-): Promise<ReviewOutcome | null> {
+): Promise<GateOutcome | null> {
   if (!job.review_required) return null;
-  let pr: { owner: string; repo: string; number: number } | null = null;
-  for (const ref of [job.result_ref, ...(opts.candidateRefs ?? [])]) {
-    pr = pullRequestFrom(ref);
-    if (pr) break;
+  let named: PrUrl | null = null;
+  for (const ref of opts.candidateRefs ?? []) {
+    named = parsePrUrl(ref);
+    if (named) break;
   }
+  // BOUND TO THE JOB'S OWN PULL REQUEST (audit 2026-09-25, F2-4). The gate used to read
+  // whichever pull request this call named, so a driver whose job got CHANGES could
+  // complete naming an older pull request a reviewer had approved. Once the gate has
+  // read one, a call naming a different one is refused rather than read.
+  const bound = parsePrUrl(job.result_ref);
+  if (bound && named && !samePr(bound, named)) {
+    return {
+      kind: "waiting",
+      reason:
+        `bound to ${job.result_ref}, the pull request its review gate first read, and this call names ` +
+        `https://github.com/${named.owner}/${named.repo}/pull/${named.number}. A review of a different pull request does not review this job's work.`,
+    };
+  }
+  const pr = bound ?? named;
   if (!pr) {
     if (!opts.requirePullRequest) return null;
     return {
@@ -276,7 +311,42 @@ export async function reviewGate(
         `because that would let the driver decide whether the review applied.`,
     };
   }
-  const comments = await readReviewComments(env, job.namespace, pr);
+  // THE NAMESPACE MAPPING IS THE AUTHORIZATION BOUNDARY, as it is for prFacts: the repo
+  // the URL names is resolved through it, and one the namespace does not map is refused
+  // rather than read.
+  let target: PrUrl;
+  let url: string;
+  try {
+    const resolved = await resolveRepo(env, job.namespace, `${pr.owner}/${pr.repo}`);
+    target = { owner: resolved.owner, repo: resolved.repo, number: pr.number };
+    url = `https://github.com/${resolved.full}/pull/${pr.number}`;
+  } catch (err) {
+    return {
+      kind: "waiting",
+      reason:
+        `naming a pull request the review gate may not read: ${err instanceof Error ? err.message : String(err)} ` +
+        `Name a pull request in a repo that namespace ${job.namespace} maps.`,
+    };
+  }
+  const comments = await readReviewComments(env, job.namespace, target);
   const eligible = await reviewerCommentIds(env.DB, job.namespace);
-  return outcomeOf(decidingReview(comments.filter((c) => c.id !== undefined && eligible.has(c.id))));
+  const review = decidingReview(comments.filter((c) => c.id !== undefined && eligible.has(c.id)));
+  // AN APPROVE COUNTS ONLY FOR THE HEAD IT QUOTES (ruled 2026-09-25). The review must
+  // quote the pull request's current head sha, so a push after the review leaves the
+  // job waiting for a fresh one. A sha rather than the head commit's committer date,
+  // because whoever commits sets that date and can put it before the review. CHANGES
+  // and BLOCK need no sha: sending work back does not depend on which head was read.
+  if (review?.verdict === "APPROVE") {
+    const head = await readHeadSha(env, target);
+    if (!quotesSha(review.said, head)) {
+      return {
+        kind: "waiting",
+        reason:
+          `approved without quoting the current head of ${url}, which is ${head}. An APPROVE counts only when its ` +
+          `${REVIEW_PREFIX} comment quotes the head sha it reviewed (at least ${MIN_QUOTED_SHA} hex characters), so this needs a fresh review.`,
+        pr: url,
+      };
+    }
+  }
+  return { ...outcomeOf(review), pr: url };
 }
