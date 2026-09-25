@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
-import { managePr } from "./github/refs";
+import { HeadMovedError, managePr } from "./github/refs";
 import { improveAudit } from "./improve-state";
 import { onRoster } from "./improve-schema";
 import { isMoneyPath } from "./scope";
@@ -662,7 +662,8 @@ async function factsForPr(
 export function declineParams(
   policyVersion: string,
   facts: PrFacts,
-  verdict: Extract<PolicyVerdict, { merge: false }>,
+  // A policy refusal, or "head_moved" when GitHub refused the pinned merge.
+  verdict: { failed: PolicyCheck | "head_moved"; why: string; passed: PolicyCheck[] },
   now: Date
 ): Record<string, unknown> {
   return {
@@ -780,8 +781,25 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         continue;
       }
       // merge_method "merge" because the policy audits a head sha and a squash would
-      // not preserve it on the default branch.
-      const result = await managePr(env, namespace, pr.number, "merge", "merge");
+      // not preserve it on the default branch. The merge is pinned to the sha the
+      // checks above read: a push to the head since then makes GitHub answer 409, and
+      // that PR is left open for this tick. The next tick judges the new head.
+      let result: unknown;
+      try {
+        result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, undefined, facts.headSha);
+      } catch (err) {
+        if (!(err instanceof HeadMovedError)) throw err;
+        const moved = {
+          failed: "head_moved" as const,
+          why: `the PR head moved after the policy judged ${facts.headSha}, so GitHub refused the pinned merge. ${err.message}`,
+          passed: verdict.passed,
+        };
+        outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved });
+        await env.DB.batch([
+          improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, facts, moved, now)),
+        ]);
+        continue;
+      }
       outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed });
       await env.DB.batch([
         improveAudit(
