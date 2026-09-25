@@ -211,7 +211,7 @@ function commandPieces(command: string): { pieces: Array<{ raw: string; bare: st
 }
 
 /** The command as the never list reads it, or why it cannot be read safely. */
-export function neverListView(command: string): { view: string } | { refused: string } {
+function neverListView(command: string): { view: string } | { refused: string } {
   const split = commandPieces(command);
   if ("refused" in split) return split;
 
