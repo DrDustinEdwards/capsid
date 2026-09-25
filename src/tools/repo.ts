@@ -232,7 +232,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("write_repo_file"),
       description:
-        "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch and opens a PR; mode 'direct' commits straight to the default branch. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged: a workflow is code CI executes with the repo's secrets in scope. Requires operator key.",
+        "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch, or to branch if given, and opens a PR; mode 'direct' commits straight to the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the commit then lands on that PR and no second PR is opened). REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged: a workflow is code CI executes with the repo's secrets in scope. Requires operator key.",
       inputSchema: {
         namespace: nsName,
         path: bounded(MAX_PATH),
@@ -247,14 +247,22 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           .describe(
             "Opt in to writing under .github/workflows/. Refused without it: a workflow is code CI executes with this repo's secrets in scope, not ordinary file content, and this App holds Workflows: write on every mapped repo. Audit-logged when passed."
           ),
+        pr: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "The number of the open pull request whose head is branch. Mode 'pr' with a branch that already has an open pull request is refused unless this names it; when it does, the commit lands on that branch and no second pull request is opened. Refused if it is not that branch's open pull request."
+          ),
       },
     },
-    ({ namespace, path, content, message, mode, branch, repo, allow_workflow_write }) =>
+    ({ namespace, path, content, message, mode, branch, repo, allow_workflow_write, pr }) =>
       guardedWrite(
         "write_repo_file",
         namespace,
         path,
-        () => writeRepoFile(env, namespace, path, content, message, mode ?? "pr", branch, repo, allow_workflow_write),
+        () => writeRepoFile(env, namespace, path, content, message, mode ?? "pr", branch, repo, allow_workflow_write, pr),
         { path, mode: mode ?? "pr", allow_workflow_write, repo }
       )
   );
@@ -293,7 +301,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("delete_repo_file"),
       description:
-        "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch and opens a PR; mode 'direct' deletes on the default branch. The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged. Requires operator key.",
+        "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch, or to branch if given, and opens a PR; mode 'direct' deletes on the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the deletion then lands on that PR and no second PR is opened). The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged. Requires operator key.",
       inputSchema: {
         namespace: nsName,
         path: bounded(MAX_PATH),
@@ -307,14 +315,22 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           .describe(
             "Opt in to writing under .github/workflows/. Refused without it: a workflow is code CI executes with this repo's secrets in scope, not ordinary file content, and this App holds Workflows: write on every mapped repo. Audit-logged when passed."
           ),
+        pr: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "The number of the open pull request whose head is branch. Mode 'pr' with a branch that already has an open pull request is refused unless this names it; when it does, the commit lands on that branch and no second pull request is opened. Refused if it is not that branch's open pull request."
+          ),
       },
     },
-    ({ namespace, path, message, mode, branch, repo, allow_workflow_write }) =>
+    ({ namespace, path, message, mode, branch, repo, allow_workflow_write, pr }) =>
       guardedWrite(
         "delete_repo_file",
         namespace,
         path,
-        () => deleteRepoFile(env, namespace, path, message, mode ?? "pr", branch, repo, allow_workflow_write),
+        () => deleteRepoFile(env, namespace, path, message, mode ?? "pr", branch, repo, allow_workflow_write, pr),
         { path, mode: mode ?? "pr", allow_workflow_write, repo }
       )
   );

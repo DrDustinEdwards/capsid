@@ -340,15 +340,23 @@ async function commitOnBranch<R>(
     fallbackTitle: string;
     prBody: string;
     allowWorkflowWrite?: boolean;
+    existingPr?: number;
     mutate: (owner: string, repo: string, target: string) => Promise<R>;
   }
 ): Promise<{
   base: { repo: string; mode: "pr" | "direct"; branch: string; path: string };
   result: R;
-  pr: { number: number; url: string } | null;
+  pr: { number: number; url: string; existing?: true } | null;
 }> {
   assertRepoArg("path", path);
   if (branch) assertRepoArg("branch", branch);
+  // `pr` names the open pull request whose head is `branch`, so it means nothing in
+  // direct mode or without a branch (a generated branch has no PR yet).
+  if (op.existingPr !== undefined && (mode !== "pr" || !branch)) {
+    throw new Error(
+      `refuses: pr names an existing pull request to commit to, which needs mode "pr" and branch set to that pull request's head branch.`
+    );
+  }
   // BEFORE ANY NETWORK CALL, and before the repo is resolved: a refusal that costs a
   // round trip is a refusal an attacker can probe with. This covers
   // delete_repo_file too, whose mutate does its own ghFetch and never reaches
@@ -377,6 +385,49 @@ async function commitOnBranch<R>(
       `refuses: ${defaultBranch} is the default branch of this server's own repo (${SELF_REPO}), and a commit landing there redeploys the Worker. Use mode "pr" with a work branch and merge through manage_pr, or name a non-default branch.`
     );
   }
+  // PR MODE NEVER COMMITS TO THE DEFAULT BRANCH, ON ANY REPO (audit 2026-09-25, F2-3).
+  // can_direct_write is required only for mode "direct" (repoWriteFlags), so a pr-mode
+  // call naming the default branch as its work branch used to commit straight onto it
+  // without that flag, and several mapped repos deploy on push to it. Refused here,
+  // before the branch step and the commit, so nothing lands.
+  if (mode === "pr" && branch === defaultBranch) {
+    throw new Error(
+      `refuses: mode "pr" with branch ${defaultBranch}, which is the default branch of ${owner}/${repo}; the commit would land on it without a pull request. Omit branch, name a work branch, or use mode "direct" (which needs can_direct_write).`
+    );
+  }
+  // A NAMED BRANCH THAT AN OPEN PR ALREADY HOLDS IS REFUSED UNLESS THE CALL NAMES THAT
+  // PR (audit 2026-09-25, F2-3; ruled 2026-09-25). Committing to another open PR's head
+  // changes that PR, which may not be the caller's. Uncached, so a PR opened seconds
+  // ago is seen, and FAIL CLOSED: a lookup that errors is not "no open PR".
+  let existing: { number: number; url: string } | null = null;
+  if (mode === "pr" && branch) {
+    const prResp = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`
+    );
+    if (!prResp.ok) {
+      throw new Error(
+        `refuses: could not check open pull requests for ${branch} on ${owner}/${repo} (${prResp.status}), so the write cannot tell whether another pull request holds that branch. Retry.`
+      );
+    }
+    const open = (await prResp.json()) as Array<{ number: number; html_url: string }>;
+    const held = open[0];
+    if (op.existingPr !== undefined && held?.number !== op.existingPr) {
+      throw new Error(
+        held
+          ? `refuses: pr ${op.existingPr} is not the open pull request on ${branch}; ${branch} on ${owner}/${repo} has open pull request #${held.number} (${held.html_url}).`
+          : `refuses: pr ${op.existingPr} is not the open pull request on ${branch}; ${branch} has no open pull request on ${owner}/${repo}. Omit pr to commit and open one.`
+      );
+    }
+    if (held && op.existingPr === undefined) {
+      throw new Error(
+        `refuses: branch ${branch} on ${owner}/${repo} already has open pull request #${held.number} (${held.html_url}), and this commit would change it. Pass pr: ${held.number} to commit to that pull request, or name a different branch.`
+      );
+    }
+    if (held) existing = { number: held.number, url: held.html_url };
+  }
   const target =
     mode === "direct"
       ? branch || defaultBranch
@@ -395,6 +446,9 @@ async function commitOnBranch<R>(
 
   const base = { repo: `${owner}/${repo}`, mode, branch: target, path };
   if (mode === "direct") return { base, result, pr: null };
+  // The commit landed on a named PR's head, so that PR carries it; a second PR from
+  // the same head would be refused by GitHub anyway.
+  if (existing) return { base, result, pr: { ...existing, existing: true } };
 
   const title = message.split("\n")[0] || op.fallbackTitle;
   // Pass the resolved repo full name so the PR lands on the repo the file was
@@ -412,13 +466,15 @@ export async function writeRepoFile(
   mode: "pr" | "direct" = "pr",
   branch?: string,
   repoSelector?: string,
-  allowWorkflowWrite?: boolean
+  allowWorkflowWrite?: boolean,
+  existingPr?: number
 ) {
   const { base, result, pr } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
     branchPrefix: "capsid/",
     fallbackTitle: `Update ${path}`,
     prBody: `Automated change to \`${path}\` via Capsid.`,
     allowWorkflowWrite,
+    existingPr,
     mutate: (owner, repo, target) => putFile(env, owner, repo, path, content, message, target, allowWorkflowWrite),
   });
   // The flag is RETURNED so it lands in audit_log via guardedWrite, which files the
@@ -441,13 +497,15 @@ export async function deleteRepoFile(
   mode: "pr" | "direct" = "pr",
   branch?: string,
   repoSelector?: string,
-  allowWorkflowWrite?: boolean
+  allowWorkflowWrite?: boolean,
+  existingPr?: number
 ) {
   const { base, result, pr } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
     branchPrefix: "capsid/rm-",
     fallbackTitle: `Delete ${path}`,
     prBody: `Delete \`${path}\` via Capsid.`,
     allowWorkflowWrite,
+    existingPr,
     mutate: async (owner, repo, target) => {
       // GitHub's contents DELETE needs the CURRENT file sha, so a missing file is an
       // error rather than a no-op. Read on the target branch, which in pr mode is
