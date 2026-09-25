@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { sha256Hex } from "./auth";
 import { POLICY_PREFIX } from "./improve-schema";
 import { signTaskBody, splitSignedTask } from "./improve-task";
-import { documentUpsert } from "./store-guards";
+import { documentUpsert, isMissingRowAbort, requireBodyUnchanged } from "./store-guards";
 
 // ---- signing a policy document ------------------------------------------------
 //
@@ -91,26 +91,39 @@ export async function signPolicyDocument(
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
 
-  await env.DB.batch([
-    env.DB
-      .prepare(
-        `INSERT INTO document_versions (document_id, namespace, path, title, body)
-         SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
-      )
-      .bind(namespace, path),
-    documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
-    env.DB
-      .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'policy-signed', ?2, ?3, ?4)")
-      .bind(
-        actor,
-        namespace,
-        path,
-        // The signature and the hash, not the body. What a reader of the log needs is
-        // which bytes were blessed and when, and the bytes themselves are in the
-        // document and its version snapshot.
-        JSON.stringify({ signature, sha256, bytes: signed.length, resigned: existing !== null })
-      ),
-  ]);
+  // The body guard goes first. The signature covers the body read above, so a policy
+  // edit that lands between that read and this batch must abort the signing: without
+  // the guard the upsert would replace the newer policy with the signed older one.
+  try {
+    await env.DB.batch([
+      requireBodyUnchanged(env.DB, namespace, path, prior.body),
+      env.DB
+        .prepare(
+          `INSERT INTO document_versions (document_id, namespace, path, title, body)
+           SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
+        )
+        .bind(namespace, path),
+      documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
+      env.DB
+        .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'policy-signed', ?2, ?3, ?4)")
+        .bind(
+          actor,
+          namespace,
+          path,
+          // The signature and the hash, not the body. What a reader of the log needs is
+          // which bytes were blessed and when, and the bytes themselves are in the
+          // document and its version snapshot.
+          JSON.stringify({ signature, sha256, bytes: signed.length, resigned: existing !== null })
+        ),
+    ]);
+  } catch (err) {
+    if (isMissingRowAbort(err)) {
+      return refuse(
+        `${namespace}/${path} changed or was removed after sign_policy read it. Nothing was signed or written. Read the policy again and sign it again.`
+      );
+    }
+    throw err;
+  }
 
   return {
     ok: true,

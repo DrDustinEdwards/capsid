@@ -494,11 +494,22 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const staleIfMatch = await commit.precheckIfMatch();
       if (staleIfMatch) return fail(staleIfMatch);
 
+      // Normalize wide dashes server-side so no client can store an em dash, whether
+      // or not the Claude Code hook ran. See ./normalize. ONLY THE CALLER'S TEXT is
+      // normalized, and it is normalized BEFORE assembly: body for replace and append,
+      // replace_with for patch. Normalizing the assembled body rewrote stored text the
+      // caller did not touch (audit 2026-09-25, F1-6), and conventions.md forbids
+      // editing already-stored content to satisfy the dash rule. find is not
+      // normalized, because it has to match the stored bytes. meta takes no body, so
+      // it leaves the stored body byte-identical, which is its contract.
+      if (title !== undefined) title = normalizeDashes(title, "title");
+      if (body !== undefined) body = normalizeDashes(body, "prose");
+      if (replace_with !== undefined) replace_with = normalizeDashes(replace_with, "prose");
+
       // Body assembly, per mode. Pure and unit-tested in ./write-modes. All FOUR modes
       // return the FULL new body, so the write path below is unchanged and both
       // invariants (version snapshot, audit row) apply identically. meta returns the
-      // stored body BYTE-IDENTICAL, which is its contract, and is the one mode the
-      // dash normalizer below is skipped for.
+      // stored body BYTE-IDENTICAL.
       const assembled = assembleBody({
         mode: writeMode,
         exists: Boolean(prior),
@@ -513,20 +524,6 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       if (writeMode === "meta" && title === undefined && type === undefined && tags === undefined && status === undefined) {
         return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
       }
-
-      // Normalize wide dashes server-side so no client can store an em dash, whether
-      // or not the Claude Code hook ran. See ./normalize. This runs AFTER assembly so
-      // append and patch content is normalized too, which is the gap the hand-run SQL
-      // splice had.
-      if (title !== undefined) title = normalizeDashes(title, "title");
-      // mode 'meta' does not touch the body, so the body is not normalized either.
-      // THE CONTRACT IS: meta leaves the stored body byte-identical. Bodies stored
-      // before the normalizer existed can still carry a wide dash, and a meta write
-      // closing a task would then rewrite prose it was never asked to change, with
-      // bytes_before != bytes as the only hint. conventions.md also forbids editing
-      // already-stored content to satisfy the dash rule. Everything a caller supplies
-      // still goes through the normalizer.
-      if (writeMode !== "meta") body = normalizeDashes(body as string, "prose");
 
       // THE OVERRIDE IS ITSELF SCOPED. allow_improve_paths is how a caller writes the
       // loop's own control surface (its run documents, its prompts, its skills, its
@@ -970,9 +967,13 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       });
       if (!deleteRefusal.ok) return fail(deleteRefusal.message);
       const elicited = deleteRefusal.elicited;
-      // Read the edges before pathMutation removes them: the audit row is the only
-      // place they survive, since document_versions holds title and body only.
-      const { results: removedEdges } = await edgesTouching(db, namespace, path).all();
+      // The edges are recorded INSIDE THE BATCH, before pathMutation removes them: the
+      // audit row is the only place they survive, since document_versions holds title
+      // and body only. They used to be read before the batch, so an edge added between
+      // that read and the batch was deleted and never recorded (audit 2026-09-25,
+      // F1-5). The aggregate always yields one row, '[]' when there are no edges, and
+      // RETURNING hands the recorded list back for the count in the response.
+      //
       // The guard is not redundant with the `prior` read above: that read is a separate
       // transaction, and a delete matching zero rows would otherwise snapshot a body,
       // write an audit row saying 'delete', and answer "deleted" having removed
@@ -980,8 +981,9 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // Grok 4.1b): the human consented to deleting the body they were shown, so a
       // body written in that window must abort the delete. The snapshot itself SELECTs
       // the live row inside the batch; see the write handler.
+      let edgesRemoved = 0;
       try {
-        await db.batch([
+        const results = await db.batch([
           elicited ? requireBodyUnchanged(db, namespace, path, prior.body) : requireExists(db, namespace, path),
           db
             .prepare(
@@ -989,11 +991,19 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
                SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2`
             )
             .bind(namespace, path),
-          ...pathMutation(db, namespace, path, null),
           db
-            .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'delete', ?2, ?3, ?4)")
-            .bind(actor, namespace, path, JSON.stringify({ edges_removed: removedEdges })),
+            .prepare(
+              `INSERT INTO audit_log (actor, action, namespace, path, params)
+               SELECT ?1, 'delete', ?2, ?3, json_object('edges_removed', json_group_array(
+                 json_object('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path)))
+               FROM document_links WHERE (from_ns = ?2 AND from_path = ?3) OR (to_ns = ?2 AND to_path = ?3)
+               RETURNING params`
+            )
+            .bind(actor, namespace, path),
+          ...pathMutation(db, namespace, path, null),
         ]);
+        const recordedParams = (results[2]?.results?.[0] as { params?: string } | undefined)?.params;
+        if (recordedParams) edgesRemoved = (JSON.parse(recordedParams) as { edges_removed: unknown[] }).edges_removed.length;
       } catch (err) {
         if (isMissingRowAbort(err)) {
           return fail(
@@ -1009,7 +1019,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         path,
         action: "deleted",
         snapshotted: true,
-        edges_removed: removedEdges.length,
+        edges_removed: edgesRemoved,
       });
     }
   );
