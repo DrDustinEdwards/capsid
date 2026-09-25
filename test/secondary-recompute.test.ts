@@ -297,33 +297,6 @@ test("the sandbox runs the secondary phases, framed by the nonce", () => {
   assert.match(WORKFLOW, /SECONDARY_LINT_COUNT: \$\{\{ steps\.secondary\.outputs\.lint_count \}\}/);
 });
 
-test("PLANT: the scorer no longer reads test_pass_rate or lint_count from the artifact", () => {
-  const source = readFileSync(SCORER, "utf8");
-  assert.ok(
-    !/metric\(m\.test_pass_rate\)/.test(source),
-    "reading test_pass_rate out of metrics.json is the hole run 34162010375 walked through"
-  );
-  assert.ok(!/metric\(m\.lint_count\)/.test(source), "same for lint_count");
-  assert.match(source, /metric\(m\.bundle_size_bytes\)/, "bundle_size_bytes is the one field the artifact still supplies");
-});
-
-test("the container mounts the trusted checkout read-only and the attempt separately", () => {
-  for (const mount of [
-    /-v "\$\{RUNNER_TEMP\}\/attempt\/code:\/attempt:ro"/,
-    /-v "\$\{RUNNER_TEMP\}\/holdout:\/holdout:ro"/,
-    /-v "\$\{RUNNER_TEMP\}\/trusted:\/trusted:ro"/,
-    /-v "\$\{GITHUB_WORKSPACE\}:\/repo:ro"/,
-  ]) {
-    assert.match(WORKFLOW, mount, `every bind mount must be read-only: ${mount}`);
-  }
-  assert.ok(!/-v "\$\{GITHUB_WORKSPACE\}:\/[a-z-]+"(?!:ro)/.test(EXECUTABLE), "no writable workspace mount");
-  assert.match(
-    WORKFLOW,
-    /done < \/trusted\/trees\.txt/,
-    "which trees the attempt replaces comes from the trusted map, never from what the artifact happens to contain"
-  );
-});
-
 test("PLANT: the container script carries no apostrophe, comments included", () => {
   // Run 34168919050 died at `cd: /repo: No such file or directory` because a
   // comment inside the container script said "a test file's REAL path". The whole

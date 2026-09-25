@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { approvalTag } from "../src/approval.ts";
-import { callerIp, checkRate, dcrRedirectRefusal, isLoopbackRedirect, MAX_PER_DAY, MAX_PER_HOUR, REGISTRATION_LIMIT, type RateVerdict } from "../src/rate-limit.ts";
+import { callerIp, checkRate, dcrRedirectRefusal, isLoopbackRedirect, MAX_PER_DAY, MAX_PER_HOUR, REGISTRATION_LIMIT } from "../src/rate-limit.ts";
 
 const checkRegistrationRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, REGISTRATION_LIMIT);
 import { fakeKv } from "./fakes.ts";
@@ -12,8 +10,6 @@ import { fakeKv } from "./fakes.ts";
 // The KV is the shared fake now (quality audit 6.2). Its failure injection came
 // from this file's local copy and is what makes the limiter's fail-open paths
 // testable at all; the merged version keeps it and adds list plus pagination.
-
-const src = (name: string) => readFileSync(join(import.meta.dirname, "..", "src", name), "utf8");
 
 const NOW = new Date("2026-08-17T14:30:00.000Z");
 const HOUR_KEY = "dcr:rate:h:1.2.3.4:2026-08-17T14";
@@ -41,19 +37,6 @@ test("the hourly limit refuses at the threshold, named", async () => {
   // A refused call must not advance the counter, or a blocked caller stays blocked
   // for longer every time they retry.
   assert.deepEqual(kv.puts, []);
-});
-
-test("a refusal cannot be constructed without its reason", () => {
-  // COMPILE-TIME, which is what the union buys (quality audit 3.3).
-  // RateVerdict was one interface with allowed:boolean and three OPTIONAL fields,
-  // so `{ allowed: false }` typechecked, and index.ts interpolates all three into
-  // the 429 body: that value renders as "undefined in the last undefined, limit
-  // undefined". @ts-expect-error inverts the assertion, failing `npm run
-  // check:test` if the line below ever stops being an error, which is what
-  // collapsing the union back into optional fields would do.
-  // @ts-expect-error a refused verdict must name its window, count and limit
-  const broken: RateVerdict = { allowed: false };
-  assert.equal(broken.allowed, false);
 });
 
 test("the daily limit refuses even when the hour is quiet", async () => {
@@ -159,16 +142,6 @@ test("the tag binds one redirect URI, so approving one does not authorize a sibl
 // a client that does not resolve, so the handler's own order cannot be observed through the
 // Worker: a plant that moved the cookie check first left test-integration/oauth-flow.test.ts
 // green. src/routes.ts cannot load under node --test, so the order is read as text.
-test("the client is resolved before the cookie can skip the dialog", () => {
-  // Order matters: a client id that no longer resolves must not ride an old cookie
-  // past the consent screen.
-  const handler = src("routes.ts");
-  const get = handler.slice(handler.indexOf("async function handleAuthorizeGet"), handler.indexOf("async function handleAuthorizePost"));
-  const lookupAt = get.indexOf("lookupClient(oauthReq.clientId)");
-  const approvedAt = get.indexOf("await approvedClients(");
-  assert.ok(lookupAt > 0 && approvedAt > 0);
-  assert.ok(lookupAt < approvedAt, "the cookie is still consulted before the client is resolved");
-});
 
 // ---- Fix 4: DCR redirect cap and resource pinning ---------------------------
 

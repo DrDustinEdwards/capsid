@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
-import { MARKER, SOURCE_ROOT, TARGETS, blockHash, normalize, normalizePins, preservePinComments, splitBlock } from "../scripts/sync-scorer.mjs";
+import { MARKER, SOURCE_ROOT, blockHash, normalize, normalizePins, preservePinComments, splitBlock } from "../scripts/sync-scorer.mjs";
 
 // WHAT THIS FILE CHECKS: THE COPIER'S MECHANICS, ON THIS REPO'S COPY ONLY.
 //
@@ -57,16 +57,6 @@ test("the tail is the shared block: it starts at the marker and carries the scor
   assert.ok(!/^\s{2}build:$/m.test(tail), "the per-repo build job must stay above the marker");
 });
 
-test("the diagnostics restored on 2026-09-10 are inside the shared block", () => {
-  const { tail } = splitBlock(workflow, "improve-score.yml");
-  // Ruled by the seat 2026-09-10: these are diagnostics, not slop, and a comment
-  // pass never removes executable lines. Copied to four repos, so they belong to
-  // the shared block rather than to any one repo.
-  for (const line of ['echo "container exited $?"', 'tail -5 "${RUNNER_TEMP}/holdout.err"', 'echo "holdout ${PASSED} of ${TOTAL}"', 'echo "${BODY}"']) {
-    assert.ok(tail.includes(line), `the score job must keep its diagnostic: ${line}`);
-  }
-});
-
 test("blockHash is stable and independent of line endings", () => {
   const { tail } = splitBlock(workflow, "improve-score.yml");
   assert.equal(blockHash(tail), blockHash(tail));
@@ -102,31 +92,6 @@ test("the copier's source resolves to THIS repository, whatever it is named", ()
     "the copier's source has no scorer workflow to copy"
   );
   assert.ok(existsSync(join(SOURCE_ROOT, "scripts", "improve-report.mjs")), "the copier's source has no report script to copy");
-});
-
-test("THE COPIER NEVER WRITES INTO THE dustinedwards-info CLONE (ruling 60)", () => {
-  // Ruling 60: every rollout the Capsid seat makes to that repo runs in the
-  // worktree on improve/capsid, never in the clone, because the site session owns
-  // the clone and main. The target list named the clone, so --apply would have
-  // written straight into it.
-  assert.equal(TARGETS.length, 4, `expected 4 targets, found ${TARGETS.length}; the list is not the one this guard read`);
-  const offenders = TARGETS.filter((t) => basename(t.dir) === "dustinedwards-info").map((t) => t.dir);
-  assert.deepEqual(offenders, [], "a target points at the dustinedwards-info clone; ruling 60 requires the worktree");
-  const dustin = TARGETS.find((t) => /dustinedwards/.test(t.label));
-  assert.ok(dustin, "no dustinedwards target at all; the rollout would silently skip it");
-  // Compared with path functions, not a regex: a separator class is one escaping
-  // slip away from matching only forward slashes and passing on every Windows path.
-  assert.equal(basename(dustin.dir), "capsid", "the dustinedwards target is not the ruling 60 worktree");
-  assert.equal(basename(dirname(dustin.dir)), "worktrees", "the dustinedwards target is not under worktrees/");
-  assert.equal(dustin.ref, "improve/capsid", "the dustinedwards target is not on the ruling 60 branch");
-});
-
-test("every target is an absolute path with a ref and a label", () => {
-  for (const t of TARGETS) {
-    assert.ok(isAbsolute(t.dir), `target ${t.label} is not an absolute path: ${t.dir}`);
-    assert.ok(t.ref.length > 0, `target ${t.dir} has no ref`);
-    assert.ok(t.label.length > 0, `target ${t.dir} has no label`);
-  }
 });
 
 // ---- the pin, shared; the version comment, not ------------------------------

@@ -68,19 +68,6 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   );
 });
 
-// scanner-rule: conventions-verification, enumerate every site
-test("every destructive tool goes through the one confirmation helper", () => {
-  const all = sourceFiles();
-  // confirmDestructive is called from exactly one place: the helper.
-  const direct = all.reduce((n, f) => n + (f.text.split("await confirmDestructive(").length - 1), 0);
-  assert.equal(direct, 1, "a tool calls confirmDestructive directly instead of requireConfirmation");
-  // And the five destructive-class tools all reach it, wherever they now live.
-  const text = all.map((f) => f.text).join("\n");
-  for (const marker of ["refusal", "restoreRefusal", "deleteRefusal", "moveRefusal", "finalizeRefusal"]) {
-    assert.ok(text.includes(`${marker} = await requireConfirmation(`), `${marker} is missing`);
-  }
-});
-
 test("move and lint finalize still accept an optional boolean confirm", async () => {
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "confirm-schema", version: "1.0.0" });

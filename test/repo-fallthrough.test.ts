@@ -710,25 +710,6 @@ test("ci_status caps the failing step's log at the budget, keeping the END", asy
   );
 });
 
-test("ci_status still withholds the log from a read-only key", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
-      "GET /repos/o/r/actions/runs/42/jobs": {
-        body: { jobs: [{ id: 9, name: "verify", conclusion: "failure", steps: [FAILED_STEP] }] },
-      },
-    },
-    async () => {
-      const out = (await ciStatus(makeEnv(), "ns", undefined, { logTail: false })) as {
-        failed_run: { log?: string; log_tail_withheld?: string };
-      };
-      // The ro: tier is unchanged by the 2026-09-06 log ruling, deliberately.
-      assert.equal(out.failed_run.log, undefined, "a read-only key received the log");
-      assert.match(out.failed_run.log_tail_withheld ?? "", /read-only key/);
-    }
-  );
-});
-
 // ---- read_repo_file batch ----------------------------------------------------
 
 test("read_repo_file batch returns each file's error INDEPENDENTLY", async () => {

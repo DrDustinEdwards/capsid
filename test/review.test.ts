@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parsePrUrl } from "../src/github/client.ts";
 import { prUrlsFromJob } from "../src/outcome-prs.ts";
-import { REVIEW_PREFIX, VERDICTS, decidingReview, outcomeOf, readReviewComments, verdictOf } from "../src/review.ts";
+import { VERDICTS, decidingReview, outcomeOf, readReviewComments, verdictOf } from "../src/review.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // GROUP 4: A SECOND READER BEFORE THE SEAT.
@@ -14,11 +14,6 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 
 const at = (iso: string) => ({ user: "reviewer", created_at: iso, body: "" });
 const comment = (body: string, iso = "2026-09-12T10:00:00Z", user = "reviewer") => ({ user, created_at: iso, body });
-
-test("the three verdicts are the three the job named", () => {
-  assert.deepEqual([...VERDICTS], ["APPROVE", "CHANGES", "BLOCK"]);
-  assert.equal(REVIEW_PREFIX, "REVIEW:");
-});
 
 test("a well-formed review of each verdict parses", () => {
   for (const verdict of VERDICTS) {

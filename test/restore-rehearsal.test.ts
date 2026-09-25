@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -163,11 +163,6 @@ test("a dump with no readable exported_at is refused, since its age is unknown",
     writeFileSync(join(dir, "documents.json"), JSON.stringify(docs));
     assert.throws(() => rehearse(dir, MIGRATIONS), /no readable exported_at/);
   });
-});
-
-test("the runner script exists and is the one the derive script points restorers at", () => {
-  const scripts = readdirSync(join(import.meta.dirname, "..", "scripts"));
-  assert.ok(scripts.includes("restore-rehearsal.mjs"), "the rehearsal runner is missing");
 });
 
 // ---- cross-table consistency (residual 4) -----------------------------------

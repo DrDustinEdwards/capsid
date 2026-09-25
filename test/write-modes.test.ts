@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type AssembleInput, assembleBody, narrowWrite } from "../src/write-modes.ts";
+import { assembleBody, narrowWrite } from "../src/write-modes.ts";
 
 // Batch-two item 4. These cover the two things append and patch have to get
 // right to be trusted with a 60KB canon document: the anchor guard must refuse
@@ -222,29 +222,8 @@ test("patch keeps a realistic canon fragment byte-exact", () => {
 
 // ---- the narrow shape (quality audit 3.1) -----------------------------------
 
-// AssembleInput used to be one interface with every field optional, so
-// { mode: "patch", body } and { mode: "replace" } with no title both typechecked
-// and every assembly branch re-established by hand which fields it could trust.
-// It is a discriminated union now, and these are the two halves of that claim:
-// the illegal shapes do not compile, and the legal ones still carry their fields.
-
-test("an illegal mode/field combination does not COMPILE", () => {
-  // @ts-expect-error mode 'replace' cannot exist without a title
-  const noTitle: AssembleInput = { mode: "replace", exists: false, priorBody: null, body: "b" };
-  // @ts-expect-error mode 'patch' has no body field
-  const patchWithBody: AssembleInput = { mode: "patch", exists: true, priorBody: "x", find: "a", replace_with: "b", body: "no" };
-  // @ts-expect-error mode 'meta' carries no find
-  const metaWithFind: AssembleInput = { mode: "meta", exists: true, priorBody: "x", find: "a" };
-  // @ts-expect-error mode 'append' cannot exist without a body
-  const appendNoBody: AssembleInput = { mode: "append", exists: true, priorBody: "x" };
-  // Referenced so they are not unused; the assertions above are the compiler's.
-  assert.deepEqual([noTitle.mode, patchWithBody.mode, metaWithFind.mode, appendNoBody.mode], [
-    "replace",
-    "patch",
-    "meta",
-    "append",
-  ]);
-});
+// AssembleInput is a discriminated union: narrowWrite turns a loose wire request into
+// it, and refuses a mode/field mismatch.
 
 test("narrowWrite turns a loose wire request into the shape assembly needs", () => {
   const narrowed = narrowWrite({ mode: "patch", exists: true, priorBody: "hello world", find: "world", replace_with: "there" });

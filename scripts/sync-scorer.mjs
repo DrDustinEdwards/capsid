@@ -36,8 +36,7 @@ const DEV = join(import.meta.dirname, "..", "..");
 // so the rename pointed this at a directory that does not exist and the copier
 // threw on its first git call ever after. Nothing caught it because nothing had
 // run it and no test resolved the path. The folder is not named here on purpose:
-// test/repo-name.test.ts bans the old spelling in this directory, and deriving
-// the path means no spelling is needed at all.
+// deriving the path means no spelling is needed at all.
 //
 // Deriving it from import.meta.dirname removes the class rather than correcting
 // the spelling: this file lives in the source repo, so the source is wherever

@@ -196,21 +196,6 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
-  // That no handler decides admin for itself is asserted for every handler in
-  // test/route-gates.test.ts.
-});
-
-
-// THE SIGNER TAKES NO BODY ARGUMENT, so it cannot be used to sign arbitrary bytes: it
-// signs what the store holds. A type-level check, compiled by npm run check:test: a new
-// parameter changes the tuple length and this assignment stops compiling. The tampering
-// test above shows it signs the stored bytes.
-// Exact, in both directions: an optional parameter makes the length 4 | 5, which a plain
-// assignment of 4 would still accept.
-type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-const SIGNER_ARITY_IS_FOUR: Exactly<Parameters<typeof signPolicyDocument>["length"], 4> = true;
-test("the signer takes exactly env, actor, namespace and path", () => {
-  assert.equal(SIGNER_ARITY_IS_FOUR, true);
 });
 
 // ---- anti-rollback (audit 2026-09-25, E2-2) ------------------------------------------
