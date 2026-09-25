@@ -186,14 +186,19 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
   } catch (err) {
     return `${url}: ${err instanceof Error ? err.message : String(err)}`;
   }
-  const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`);
-  if (!resp.ok) return `${url}: GitHub answered ${resp.status}, so its state could not be read`;
-  const pr = (await resp.json()) as {
-    merged?: boolean;
-    commits?: number;
-    changed_files?: number;
-    head?: { sha?: string };
-  };
+  // THE FETCH AND THE PARSE ARE CAUGHT TOO. ghFetch throws when the installation
+  // token cannot be minted or the request rejects, and verifyEvidence promises its
+  // callers a note rather than a throw: a throw here reached holderTransition after
+  // the job row had already moved, and ended reverifySweep early (audit 2026-09-25,
+  // F1-1 and F3-11).
+  let pr: { merged?: boolean; commits?: number; changed_files?: number; head?: { sha?: string } };
+  try {
+    const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`);
+    if (!resp.ok) return `${url}: GitHub answered ${resp.status}, so its state could not be read`;
+    pr = (await resp.json()) as typeof pr;
+  } catch (err) {
+    return `${url}: GitHub could not be read (${err instanceof Error ? err.message : String(err)})`;
+  }
   return {
     merged: pr.merged === true,
     commits: typeof pr.commits === "number" ? pr.commits : 0,

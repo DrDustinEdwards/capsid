@@ -14,6 +14,27 @@ export function requireExists(db: D1Database, namespace: string, path: string): 
     .bind(namespace, path);
 }
 
+// The same abort for a job transition, as the first statement of the batch that
+// carries the UPDATE and every record of it. It fires unless the row is still in the
+// status and holder the caller read, at the updated_at the caller read, so the
+// mirror, audit and outcome rows built from that read commit only with the UPDATE
+// they describe. updated_at moves on every job UPDATE, so any change in between aborts.
+export function requireJobUnchanged(
+  db: D1Database,
+  id: string,
+  status: string,
+  claimedBy: string | null,
+  updatedAt: string
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO document_versions (document_id, namespace, path)
+       SELECT NULL, 'jobs', ?1
+       WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE id = ?1 AND status = ?2 AND claimed_by IS ?3 AND updated_at = ?4)`
+    )
+    .bind(id, status, claimedBy, updatedAt);
+}
+
 export function isMissingRowAbort(err: unknown): boolean {
   return (err instanceof Error ? err.message : String(err)).includes(GUARD_VIOLATION);
 }
