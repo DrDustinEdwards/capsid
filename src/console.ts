@@ -281,7 +281,7 @@ function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): str
   const total = s.candidate + s.live + s.retired;
   const skills =
     total === 0 && s.offered === 0
-      ? `<p class="quiet">No skills recorded for this namespace yet.</p>`
+      ? `<p class="empty">No skills recorded for this namespace yet.</p>`
       : `<ul class="facts">${[
           fact("skills", `${s.candidate} candidate, ${s.live} live, ${s.retired} retired`),
           s.use_rate === null
@@ -292,7 +292,7 @@ function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): str
                 s.use_rate >= 0.5 ? "good" : "warn"
               ),
           s.last_evaluation
-            ? fact("last evaluation", escapeHtml(s.last_evaluation))
+            ? fact("last evaluation", s.last_evaluation)
             : fact("last evaluation", "never evaluated", "warn"),
         ].join("")}</ul>`;
 

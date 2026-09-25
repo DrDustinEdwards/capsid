@@ -94,7 +94,10 @@ describe("query plans", () => {
     expect(
       env.TEST_SQL_SKIPPED.length,
       `${env.TEST_SQL_SKIPPED.length} statements could not be reconstructed: ${env.TEST_SQL_SKIPPED.map((s) => `${s.file}: ${s.sql.slice(0, 70)}`).join(" | ")}`
-    ).toBeLessThanOrEqual(1);
+      // Three as of 2026-09-25: advanceRun's built SET list, and two .prepare() calls
+      // that take an expression (backup.ts's dump, improve/open.ts's attempt read),
+      // which are now counted rather than left out.
+    ).toBeLessThanOrEqual(3);
   });
 
   it("every read PLANS at all, so a statement the schema rejects is a build failure", async () => {

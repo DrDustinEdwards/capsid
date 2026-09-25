@@ -122,9 +122,12 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
   // Every outcome row carries the counts; only the verified ones feed the rates.
   const prVerified = mine.filter((o) => verifiedFields(o.verified).prs_opened === true);
   const prsOpened = prVerified.reduce((total, o) => total + (o.prs_opened ?? 0), 0);
-  const prsMerged = prVerified
-    .filter((o) => verifiedFields(o.verified).prs_merged === true)
-    .reduce((total, o) => total + (o.prs_merged ?? 0), 0);
+  // The merge rate reads only rows where BOTH counts were verified. A row with its
+  // opened count verified and its merged count not added to the denominator only,
+  // which understated the rate (audit 2026-09-25, E2-L12).
+  const mergeVerified = prVerified.filter((o) => verifiedFields(o.verified).prs_merged === true);
+  const prsMerged = mergeVerified.reduce((total, o) => total + (o.prs_merged ?? 0), 0);
+  const prsOpenedForRate = mergeVerified.reduce((total, o) => total + (o.prs_opened ?? 0), 0);
 
   const ciChecked = mine.filter((o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null);
   const durations = mine.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number");
@@ -143,7 +146,7 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
     resumed: mine.reduce((total, o) => total + o.resumed_count, 0),
     prs_opened: prsOpened,
     prs_merged: prsMerged,
-    pr_merge_rate: rate(prsMerged, prsOpened),
+    pr_merge_rate: rate(prsMerged, prsOpenedForRate),
     ci_checked: ciChecked.length,
     ci_green_rate: rate(ciChecked.filter((o) => o.ci_green === 1).length, ciChecked.length),
     median_duration_minutes: median(durations),
