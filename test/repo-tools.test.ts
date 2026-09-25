@@ -178,6 +178,60 @@ test("delete_repo_file pr mode opens a branch and a PR", async () => {
   );
 });
 
+// ---- pr mode never commits to the default branch (audit 2026-09-25, F2-3) ---
+
+// can_direct_write guards mode "direct" only, so a pr-mode call naming the default
+// branch as its work branch used to commit onto it with no flag and no pull request.
+// The repo here is an ordinary mapped repo, not the server's own.
+const ONE_REPO_PR = [{ repo: "o/r", label: "primary" }];
+const PR_MODE_ROUTES = {
+  "GET /repos/o/r": { body: { default_branch: "main" } },
+  "GET /repos/o/r/git/ref/heads/main": { body: { object: { sha: "head-sha" } } },
+  "POST /repos/o/r/git/refs": { status: 201, body: {} },
+  "GET /repos/o/r/contents/doc.md": { body: { sha: "file-sha" } },
+  "PUT /repos/o/r/contents/doc.md": { body: { commit: { sha: "commit-sha" }, content: { sha: "new-file-sha" } } },
+  "DELETE /repos/o/r/contents/doc.md": { body: { commit: { sha: "commit-sha" } } },
+  "POST /repos/o/r/pulls": { status: 201, body: { number: 9, html_url: "https://pr" } },
+};
+
+for (const verb of ["write", "delete"] as const) {
+  test(`${verb}_repo_file pr mode with branch set to the default branch is refused before anything is written`, async () => {
+    await withFetch(PR_MODE_ROUTES, async (calls) => {
+      const env = makeEnv(ONE_REPO_PR);
+      await assert.rejects(
+        () =>
+          verb === "write"
+            ? writeRepoFile(env, "ns", "doc.md", "NEW", "m", "pr", "main")
+            : deleteRepoFile(env, "ns", "doc.md", "m", "pr", "main"),
+        /refuses: mode "pr" with branch main, which is the default branch of o\/r/
+      );
+      assert.deepEqual(
+        calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`),
+        [],
+        "no branch, commit or pull request request may reach GitHub"
+      );
+    });
+  });
+}
+
+test("write_repo_file pr mode with a named work branch still commits there and opens a PR", async () => {
+  await withFetch(PR_MODE_ROUTES, async (calls) => {
+    const result = (await writeRepoFile(makeEnv(ONE_REPO_PR), "ns", "doc.md", "NEW", "m", "pr", "feature/x")) as {
+      branch: string;
+      pr: { number: number };
+    };
+    assert.equal(result.branch, "feature/x");
+    assert.equal(result.pr.number, 9);
+    const put = calls.find((c) => c.method === "PUT");
+    assert.equal((put?.body as { branch: string }).branch, "feature/x");
+    const pull = calls.find((c) => c.method === "POST" && c.path.endsWith("/pulls"));
+    assert.deepEqual(
+      { head: (pull?.body as { head: string }).head, base: (pull?.body as { base: string }).base },
+      { head: "feature/x", base: "main" }
+    );
+  });
+});
+
 // ---- manage_pr: action routing ----------------------------------------------
 
 // The routes manage_pr needs for its branch cleanup, factored out because every
