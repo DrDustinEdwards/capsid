@@ -167,6 +167,28 @@ test("an unknown sidecar is refused too, so the set cannot quietly grow", () => 
   });
 });
 
+// The completion marker (audit finding F1-8). Optional, because older dumps lack it;
+// when present it must list exactly the other files in the dump.
+function writeMarker(dir: string, files: string[]): void {
+  const keys = files.map((f) => `backups/json/2026-09-25T09-00-00-000Z/${f}`);
+  writeFileSync(join(dir, "_complete.json"), JSON.stringify({ exported_at: "2026-09-25T09:00:00Z", keys }));
+}
+
+test("a dump carrying a completion marker that lists its files restores", () => {
+  withDump((dir) => {
+    writeMarker(dir, readdirSync(dir));
+    const summary = rehearse(dir, MIGRATIONS);
+    assert.equal(summary.marked, true);
+  });
+});
+
+test("a completion marker that lists a file the dump does not hold is refused", () => {
+  withDump((dir) => {
+    writeMarker(dir, [...readdirSync(dir), "jobs-extra.json"]);
+    assert.throws(() => rehearse(dir, MIGRATIONS), /_complete\.json lists/);
+  });
+});
+
 test("A TORN SNAPSHOT IS REFUSED: a version row for a document created after the documents read", () => {
   withDump((dir) => {
     setRows(dir, "document_versions", [
