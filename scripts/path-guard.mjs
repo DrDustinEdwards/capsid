@@ -11,16 +11,23 @@
 // in, so the rules it applies are the rules the Worker holds. A copy here would be
 // correct on the day it was written and wrong the first time a pattern was added.
 //
-// Usage, from the driver:
+// Usage, from the driver, run inside the clone being checked:
 //
-//   git diff --name-only <base>..HEAD > changed.txt
-//   node scripts/path-guard.mjs protected.json changed.txt
+//   node scripts/path-guard.mjs protected.json <base> HEAD
 //
 // protected.json is the `protected_paths` array improve_status returned, verbatim. Exit
 // 0 means no changed path is protected. Exit 1 means at least one is, and every hit is
 // printed with the reason the Worker gives for it. Exit 2 means the guard could not run,
 // which is NOT a pass.
+//
+// The guard runs the diff itself. It used to read a file the driver wrote with
+// `git diff --name-only <base>..HEAD > changed.txt`, and three inputs got past it that
+// way: a rename printed only its new path, so a file moved out of test/ was never
+// checked; core.quotePath printed a non-ASCII path in C quotes, so no anchored pattern
+// matched it; and a failed diff still created an empty file, which read as "changed
+// no files". A PowerShell 5.1 redirect also writes UTF-16LE, which matches nothing.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // Returns the hits, or throws. AN EMPTY LIST IS A REFUSAL, not an all-clear: a driver
@@ -48,23 +55,52 @@ export function checkPaths(served, paths) {
   return hits;
 }
 
+// The paths changed between two commits, from git directly, or throws.
+//
+// --no-renames lists a rename as a delete of the old path plus an add of the new one,
+// so both are checked. -z prints paths raw and NUL-terminated, never C-quoted. No
+// shell is involved. A git failure throws, and so does an empty list: an attempt that
+// changed nothing has nothing to push, and an empty list is more often a wrong ref.
+// A path that still starts with a double quote is refused rather than matched, since
+// no pattern anchored at the start of a path can see past the quote.
+export function changedPaths(base, head, cwd = process.cwd()) {
+  for (const ref of [base, head]) {
+    if (typeof ref !== "string" || ref === "") throw new Error("a base and a head ref are required");
+    if (ref.startsWith("-")) throw new Error(`the ref ${JSON.stringify(ref)} starts with "-" and would be read as an option`);
+  }
+  let out;
+  try {
+    out = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", `${base}..${head}`, "--"], {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (e) {
+    const stderr = e && typeof e === "object" && "stderr" in e ? String(e.stderr).trim() : "";
+    throw new Error(`git diff failed for ${base}..${head}: ${stderr || (e instanceof Error ? e.message : String(e))}`);
+  }
+  const paths = out.split("\0").filter((p) => p !== "");
+  if (paths.length === 0) {
+    throw new Error(`git diff lists no changed paths for ${base}..${head}. Check the refs; an empty list is not a pass.`);
+  }
+  const quoted = paths.filter((p) => p.startsWith('"'));
+  if (quoted.length > 0) {
+    throw new Error(`refusing path(s) that start with a double quote: ${quoted.map((p) => JSON.stringify(p)).join(", ")}`);
+  }
+  return paths;
+}
+
 const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].replaceAll("\\", "/").split("/").pop());
 if (invokedDirectly) {
-  const [servedFile, changedFile] = process.argv.slice(2);
-  if (!servedFile || !changedFile) {
-    console.error("usage: node scripts/path-guard.mjs <protected_paths.json> <changed-paths.txt>");
+  const [servedFile, base, head] = process.argv.slice(2);
+  if (!servedFile || !base || !head) {
+    console.error("usage: node scripts/path-guard.mjs <protected_paths.json> <base> <head>");
     process.exit(2);
   }
   try {
     const served = JSON.parse(readFileSync(servedFile, "utf8"));
-    const paths = readFileSync(changedFile, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (paths.length === 0) {
-      console.log("path guard: the attempt changed no files");
-      process.exit(0);
-    }
+    const paths = changedPaths(base, head);
     const hits = checkPaths(Array.isArray(served) ? served : served.protected_paths, paths);
     if (hits.length === 0) {
       console.log(`path guard: ${paths.length} changed path(s), none protected`);
