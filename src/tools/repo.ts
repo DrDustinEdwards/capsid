@@ -254,7 +254,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("write_repo_file"),
       description:
-        "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch, or to branch if given, and opens a PR; mode 'direct' commits straight to the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the commit then lands on that PR and no second PR is opened). REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged: a workflow is code CI executes with the repo's secrets in scope. Requires operator key.",
+        "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch, or to branch if given, and opens a PR; mode 'direct' commits straight to the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the commit then lands on that PR and no second PR is opened). REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged: a workflow is code CI executes with the repo's secrets in scope. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: bounded(MAX_PATH),
@@ -293,7 +293,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     "create_branch",
     {
       annotations: hintsFor("create_branch"),
-      description: "Create a branch in a namespace's GitHub repo. Branches off the default branch unless 'from' is given. Requires operator key.",
+      description: "Create a branch in a namespace's GitHub repo. Branches off the default branch unless 'from' is given. Needs the write grant.",
       inputSchema: { namespace: nsName, branch: bounded(MAX_REF), from: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
     ({ namespace, branch, from, repo }) =>
@@ -304,7 +304,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     "open_pr",
     {
       annotations: hintsFor("open_pr"),
-      description: "Open a pull request in a namespace's GitHub repo. Base defaults to the repo's default branch. Requires operator key.",
+      description: "Open a pull request in a namespace's GitHub repo. Base defaults to the repo's default branch. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         title: bounded(MAX_PR_TITLE),
@@ -323,7 +323,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("delete_repo_file"),
       description:
-        "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch, or to branch if given, and opens a PR; mode 'direct' deletes on the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the deletion then lands on that PR and no second PR is opened). The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged. Requires operator key.",
+        "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch, or to branch if given, and opens a PR; mode 'direct' deletes on the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number (the deletion then lands on that PR and no second PR is opened). The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed, which is audit-logged. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: bounded(MAX_PATH),
@@ -362,7 +362,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("manage_pr"),
       description:
-        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash'), and takes an optional `sha`: pass the head sha you reviewed and the merge happens only if the head is still that commit, otherwise it is refused and nothing is merged; action 'close' just closes it and needs the can_merge flag too, because closing deletes the head branch and that is the same blast radius as merging it; action 'comment' posts `comment` on the pull request and changes nothing else, needs the can_comment_pr flag rather than can_merge, and leaves the branch alone. MERGE AND CLOSE DELETE THE HEAD BRANCH, because write_repo_file's PR mode creates one per write and nothing else cleans them up (capsid/conventions.md, 2026-09-06); the result carries head_branch and head_branch_deleted, plus head_branch_note when it declined. It REFUSES to delete the default branch, a branch under the improve loop's prefix, or a head branch on a fork, and a cleanup failure never fails the merge or close itself since that already succeeded. Merging can trigger CI deploys in repos with deploy workflows (foxhound): prefer PR mode plus manage_pr for anything touching live behavior, per conventions. Requires operator key.",
+        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash'), and takes an optional `sha`: pass the head sha you reviewed and the merge happens only if the head is still that commit, otherwise it is refused and nothing is merged; action 'close' just closes it and needs the can_merge flag too, because closing deletes the head branch and that is the same blast radius as merging it; action 'comment' posts `comment` on the pull request and changes nothing else, needs the can_comment_pr flag rather than can_merge, and leaves the branch alone. MERGE AND CLOSE DELETE THE HEAD BRANCH, because write_repo_file's PR mode creates one per write and nothing else cleans them up (capsid/conventions.md, 2026-09-06); the result carries head_branch and head_branch_deleted, plus head_branch_note when it declined. It REFUSES to delete the default branch, a branch under the improve loop's prefix, or a head branch on a fork, and a cleanup failure never fails the merge or close itself since that already succeeded. Merging can trigger CI deploys in repos with deploy workflows (foxhound): prefer PR mode plus manage_pr for anything touching live behavior, per conventions. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         number: z.number().int().positive(),
@@ -502,7 +502,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("delete_branch"),
       description:
-        "Delete a branch in a namespace's GitHub repo. REFUSES, naming which refusal it is: the repo's default branch, ALWAYS, and force does not lift that one; a branch under the improve loop's branch prefix, because it may be an attempt the loop still needs; and a branch with an open pull request. The last two are lifted by force:true, which also requires the can_merge flag, because it can delete another agent's open PR head. Also refuses a branch that does not exist rather than reporting a no-op as success. Requires an operator key with the write grant; audit-logged.",
+        "Delete a branch in a namespace's GitHub repo. REFUSES, naming which refusal it is: the repo's default branch, ALWAYS, and force does not lift that one; a branch under the improve loop's branch prefix, because it may be an attempt the loop still needs; and a branch with an open pull request. The last two are lifted by force:true, which also requires the can_merge flag, because it can delete another agent's open PR head. Also refuses a branch that does not exist rather than reporting a no-op as success. Needs the write grant; audit-logged.",
       inputSchema: {
         namespace: nsName,
         branch: bounded(MAX_REF),
@@ -521,7 +521,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     "ci_dispatch",
     {
       annotations: hintsFor("ci_dispatch"),
-      description: `Start a workflow, or rerun one's failed jobs. Pass workflow (the file name, e.g. ci.yml) and ref to trigger a workflow_dispatch: the dispatch endpoint answers 204 with no body, so this then polls for up to ${CI_DISPATCH_POLL_MS / 1000}s and returns the run_id of the run that appeared, or run_id null with a note saying the dispatch was accepted but nothing started. Pass run_id alone to rerun that run's failed jobs. REFUSES, naming it: a workflow with no workflow_dispatch trigger, which cannot be started by hand at all; and workflow together with run_id, which are two different requests. Requires an operator key with the write grant; audit-logged. Spends CI minutes and can start a deploy.`,
+      description: `Start a workflow, or rerun one's failed jobs. Pass workflow (the file name, e.g. ci.yml) and ref to trigger a workflow_dispatch: the dispatch endpoint answers 204 with no body, so this then polls for up to ${CI_DISPATCH_POLL_MS / 1000}s and returns the run_id of the run that appeared, or run_id null with a note saying the dispatch was accepted but nothing started. Pass run_id alone to rerun that run's failed jobs. REFUSES, naming it: a workflow with no workflow_dispatch trigger, which cannot be started by hand at all; and workflow together with run_id, which are two different requests. Needs the write grant and the can_dispatch flag; audit-logged. Spends CI minutes and can start a deploy.`,
       inputSchema: {
         namespace: nsName,
         workflow: bounded(MAX_PATH).optional().describe("Workflow file name, e.g. ci.yml. Requires ref."),
