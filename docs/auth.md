@@ -47,7 +47,7 @@ Audit rows and `jobs.claimed_by` record a minted agent as `agent:<name>`.
 
 **Four of these have never connected, and what each is waiting for is written down so an unused credential reads as a plan rather than a loose end.** `improve_status` shows `last_seen: null` for all four today.
 
-- `seat` is used the first time a merge is made by a machine rather than by a person at GitHub. Until then the human merges pull requests and the seat's key sits unused on disk, which is the correct state while `capsid/policy/auto-merge.md` ships disabled.
+- `seat` is not what auto-merge uses. `capsid/policy/auto-merge.md` is signed and enabled, and the Worker merges a qualifying pull request itself on its cron tick (`src/improve/tick.ts`). The seat's key is for a seat session working through `/ops/mcp`, and its `last_seen` in `improve_status` shows whether one has.
 - `reviewer` is used the first time a job is posted with `review_required`, since that is the only thing that waits for a `REVIEW:` comment. No job has been posted with it yet.
 - `auditor` is used by an outside model doing a cold audit, which is a thing a person starts rather than something the system reaches for.
 - `watcher` is different from the other three, and its `null` means something else. The tick has no bearer token to present, so it builds a SYNTHETIC watcher identity in `src/watcher.ts` shaped to match the minted role exactly, and `touchLastSeen` returns early for an agent with no row. The minted `watcher` key is therefore unused by construction, and its `last_seen` stays `null` however many findings the tick posts. What records that work is `audit_log`, where the actor is `agent:watcher` either way. The key is there for a person driving the watcher's checks by hand from outside the Worker.
@@ -58,7 +58,7 @@ Three kinds of caller resolve, in this order:
 2. **A legacy operator key**, until its hash is removed from `OPERATOR_KEY_HASH` by hand.
 3. **The OAuth admin session**, the synthetic agent `admin` with every scope.
 
-The operator hash is removed once every machine runs as its folder's driver agent and the admin OAuth session is the only wider credential. That is the intent, and it is the last step of the migration in `docs/bootstrap.md`, not something this document can report as done. Until `OPERATOR_KEY_HASH` is unset on the Worker the legacy path stays live: `src/auth.ts` reads the secret on every bearer request, and `src/agents.ts` gives a plain entry the admin grant, so a key in it can still mint agents. Whether it is still set is Worker state this repo cannot see. `npx wrangler secret list --name capsid` answers it, and prints names only.
+The operator hash is removed once every machine runs as its folder's driver agent and the admin OAuth session is the only wider credential. That is the last step of the migration in `docs/bootstrap.md`. On this deployment it was done on 2026-09-12, when `OPERATOR_KEY_HASH` was deleted (recorded in `docs/bootstrap.md`), and the secret list read on 2026-09-25 did not contain it. On any deployment where the secret is still set, the legacy path stays live: `src/auth.ts` reads the secret on every bearer request, and `src/agents.ts` gives a plain entry the admin grant, so a key in it can still mint agents. `npx wrangler secret list --name capsid` shows whether it is set, and prints names only.
 
 Two gated endpoints:
 

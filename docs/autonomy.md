@@ -50,7 +50,7 @@ whose every statement is `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLU
 `main`, with no force flag. `open_pr` is a `gh pr create`. A never-list is checked over
 the whole command before any class is tried: secrets, revocations, force pushes, pushes
 to a default branch, `wrangler deploy` and `rollback`, mode changes, drops and deletes,
-and merging a pull request, which stays the human's gate. The audit row records which
+and merging a pull request, which the auto-merge policy governs instead. The audit row records which
 class matched and what it matched on.
 
 **Signing is admin only.** `improve_run` action `sign_policy` signs the body already

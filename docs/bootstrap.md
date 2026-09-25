@@ -233,10 +233,12 @@ a skill's workflow is part of the artifact being shipped. Every other driver hol
 none. `improve_status` and the console list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
-A driver opens pull requests; a human merges them. That is the same rule the
-improve loop already runs on. Giving a driver `can_merge` is how it stops being
-a rule. `can_direct_write` is off even for the seat: a direct commit to a default
-branch on a repo that deploys on push is a deploy, and a deploy is a gate.
+A driver opens pull requests and never merges them. A driver's pull request is
+merged either by the seat or by the Worker under the signed auto-merge policy
+(`docs/policy/auto-merge.md`); the gates policy cannot approve a merge. Giving a
+driver `can_merge` would bypass both. `can_direct_write` is off even for the seat: a
+direct commit to a default branch on a repo that deploys on push is a deploy, and a
+deploy is a gate.
 
 Widen one later with `agents(action: "update_scopes", ...)`, which names the axes it
 changes and leaves the rest. Revoke with `agents(action: "revoke", name: ...)`: the
@@ -406,11 +408,13 @@ starts writing to every repository on the roster.
 - [ ] Read the run summary and every attempt archive. They are written before
       the score arrives, so an attempt that was never scored still left a record.
 - [ ] Check the audit log for the loop's actor. One query answers what it did.
-- [ ] Look at the pull request. Nothing is merged automatically while the
-      auto-merge policy is disabled, and it ships disabled. That is the human
-      gate. If it is ever enabled, what the Worker may
-      merge alone is `docs/policy/auto-merge.md`, and every merge it makes names
-      the policy version and every check that passed in the audit log.
+- [ ] Look at the pull request. A loop attempt is never merged automatically:
+      the auto-merge policy merges only a pull request whose body names a job
+      that a driver agent claimed, and the loop's pull request names its run,
+      not a job, so `body_names_job` refuses it.
+      That is the human gate. What the Worker may merge alone is
+      `docs/policy/auto-merge.md`, and every merge it makes names the policy
+      version and every check that passed in the audit log.
 
 ## 10. The nightly driver, one scheduled task per project
 
