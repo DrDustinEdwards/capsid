@@ -147,7 +147,7 @@ test("the one mutating helper outside a tool handler carries the gate itself", (
   assert.ok(owner, "could not locate guardedWrite anywhere under src/");
   const helper = owner.text.slice(owner.text.indexOf("const guardedWrite"), owner.text.indexOf("const REPO_ARG"));
   assert.ok(helper.length > 200, `could not bound guardedWrite in src/${owner.name}`);
-  assert.ok(MUTATING_SQL.test(helper), "guardedWrite no longer writes the audit row");
+  assert.ok(/\bauditStatement\(/.test(helper), "guardedWrite no longer writes the audit row");
   assert.match(
     helper,
     SCOPE_GATE,

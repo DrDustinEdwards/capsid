@@ -14,6 +14,7 @@ import {
   type AgentRow,
   type AgentScopes,
 } from "./agents-schema";
+import { auditStatement } from "./store-guards";
 
 // THE CONTROL PLANE FOR CREDENTIALS: mint, list, revoke, re-scope.
 //
@@ -72,13 +73,11 @@ function refuse(action: string, refusal: string): AgentResult {
   return { ok: false, action, refusal };
 }
 
-function auditStatement(db: D1Database, actor: string, action: string, name: string, params: Record<string, unknown>) {
+function agentAudit(db: D1Database, actor: string, action: string, name: string, params: Record<string, unknown>) {
   // namespace and path are the audit table's addressing columns, and an agent is not
   // a document, so the agent's NAME goes in the path slot under a fixed "agents"
   // namespace. One audit table rather than a second log nobody reads.
-  return db
-    .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, 'agents', ?3, ?4)")
-    .bind(actor, action, name, JSON.stringify(params));
+  return auditStatement(db, actor, action, "agents", name, params);
 }
 
 async function liveAgentByName(db: D1Database, name: string): Promise<AgentRow | null> {
@@ -220,7 +219,7 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
     db
       .prepare("INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
       .bind(row.id, row.name, row.kind, row.key_hash, row.scopes, row.created_by, row.created_at),
-    auditStatement(db, actor, "agent-minted", name, { id: row.id, kind: row.kind, key_fingerprint: keyHash.slice(0, 12), scopes }),
+    agentAudit(db, actor, "agent-minted", name, { id: row.id, kind: row.kind, key_fingerprint: keyHash.slice(0, 12), scopes }),
   ]);
   return {
     ok: true,
@@ -251,7 +250,7 @@ export async function revokeAgent(db: D1Database, actor: string, name: string): 
     .bind(row.id)
     .first<{ id: string }>();
   if (!won) return refuse("revoke", `'${name}' was revoked by somebody else between reading it and revoking it.`);
-  await db.batch([auditStatement(db, actor, "agent-revoked", name, { id: row.id, scopes: parseScopes(row.scopes) })]);
+  await db.batch([agentAudit(db, actor, "agent-revoked", name, { id: row.id, scopes: parseScopes(row.scopes) })]);
   return { ok: true, action: "revoke", agent: { ...publicAgent(row), revoked_at: new Date().toISOString() } };
 }
 
@@ -268,6 +267,6 @@ export async function updateAgentScopes(db: D1Database, actor: string, name: str
   // BOTH SIDES IN THE AUDIT ROW. "What are this agent's scopes now" is answerable
   // from the table. "What were they yesterday, and who widened them" is answerable
   // only if the row that changed them recorded what it changed from.
-  await db.batch([auditStatement(db, actor, "agent-rescoped", name, { id: row.id, before, after: scopes })]);
+  await db.batch([agentAudit(db, actor, "agent-rescoped", name, { id: row.id, before, after: scopes })]);
   return { ok: true, action: "update_scopes", agent: { ...publicAgent(row), scopes }, scopes };
 }

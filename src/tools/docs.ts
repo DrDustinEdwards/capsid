@@ -6,7 +6,7 @@ import type { Agent } from "../agents";
 import { IMPROVE_OVERRIDE_FLAGS, type ScopeNeed } from "../scope";
 import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
 import { sha256Hex } from "../auth";
-import { documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
+import { auditStatement, documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks } from "../links";
 import { validateDocStatus, validateDocType } from "../doc-meta";
@@ -601,25 +601,18 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       // rewrite of every restore path to answer a question the log already answers.
       const metaChanged = title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
-        db
-          .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'write', ?2, ?3, ?4)")
-          .bind(
-            actor,
-            namespace,
-            path,
-            JSON.stringify({
-              title,
-              type,
-              tags,
-              status,
-              mode: writeMode,
-              updated: Boolean(prior),
-              ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
-              ...(prior && metaChanged
-                ? { prior_meta: { title: prior.title, type: prior.type, status: prior.status, tags: prior.tags } }
-                : {}),
-            })
-          )
+        auditStatement(db, actor, "write", namespace, path, {
+          title,
+          type,
+          tags,
+          status,
+          mode: writeMode,
+          updated: Boolean(prior),
+          ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
+          ...(prior && metaChanged
+            ? { prior_meta: { title: prior.title, type: prior.type, status: prior.status, tags: prior.tags } }
+            : {}),
+        })
       );
       // links replaces this document's outgoing edges when provided. Left
       // untouched when omitted, so a routine body edit never drops edges.
@@ -636,11 +629,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
               .bind(namespace, path, edge.type, edge.to_ns, edge.to_path)
           );
         }
-        statements.push(
-          db
-            .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'links', ?2, ?3, ?4)")
-            .bind(actor, namespace, path, JSON.stringify({ edges: parsedLinks.edges.length }))
-        );
+        statements.push(auditStatement(db, actor, "links", namespace, path, { edges: parsedLinks.edges.length }));
       }
       // The warning is computed from a read taken HERE, not from the pre-read at the
       // top of the handler. Between those two points this handler may have sat in a 90
@@ -870,14 +859,12 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace, path, version.title, body)
       );
       statements.push(
-        db
-          .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'restore', ?2, ?3, ?4)")
-          .bind(
-            actor,
-            namespace,
-            path,
-            JSON.stringify({ version_id, snapshot_at: version.snapshot_at, recreated: !prior, snapshotted: Boolean(prior) })
-          )
+        auditStatement(db, actor, "restore", namespace, path, {
+          version_id,
+          snapshot_at: version.snapshot_at,
+          recreated: !prior,
+          snapshotted: Boolean(prior),
+        })
       );
       const committed = await commit.run(elicited, statements);
       if ("refusal" in committed) return fail(committed.refusal);
@@ -1065,9 +1052,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
         await db.batch([
           requireExists(db, namespace, path),
           ...pathMutation(db, namespace, path, new_path),
-          db
-            .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'move', ?2, ?3, ?4)")
-            .bind(actor, namespace, path, JSON.stringify({ new_path, edges_repointed: repointed })),
+          auditStatement(db, actor, "move", namespace, path, { new_path, edges_repointed: repointed }),
         ]);
       } catch (err) {
         if (isMissingRowAbort(err)) {
@@ -1224,9 +1209,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const reposJson = JSON.stringify(list);
       await db.batch([
         db.prepare("INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, reposJson),
-        db
-          .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'register_namespace', ?2, NULL, ?3)")
-          .bind(actor, ns, reposJson),
+        auditStatement(db, actor, "register_namespace", ns, null, list),
       ]);
       return ok({
         namespace: ns,
@@ -1266,9 +1249,7 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
       const reposJson = JSON.stringify(list);
       await db.batch([
         db.prepare("UPDATE namespaces SET repos = ?2 WHERE namespace = ?1").bind(ns, reposJson),
-        db
-          .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, 'update_namespace', ?2, NULL, ?3)")
-          .bind(actor, ns, JSON.stringify({ old: existing.repos, new: reposJson })),
+        auditStatement(db, actor, "update_namespace", ns, null, { old: existing.repos, new: reposJson }),
       ]);
       return ok({ namespace: ns, repos: list, action: "updated", previous: existing.repos });
     }
