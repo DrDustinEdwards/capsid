@@ -48,6 +48,7 @@ const HEALTHY = {
   builtAt: null,
   schema_version: "0016_jobs_retry_cap.sql",
   store: { d1: "ok", fts: "ok" },
+  bindings: { media: "ok", app_kv: "ok" },
   backup: { last_ok: hoursAgo(2), age_hours: 2 },
 };
 
