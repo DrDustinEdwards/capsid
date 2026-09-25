@@ -3,11 +3,10 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { improveWriteRefusal } from "../src/improve-scores.ts";
+import { improveWriteRefusal, seedScoresDoc } from "../src/improve-scores.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // Fix 6 (audit 2026-09-06): the ordinary write tool refuses the improve loop's
 // control surface (improve/prompts/, improve/skills/, and the Anchors block of

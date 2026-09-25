@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { REPORTED_SECONDARY } from "../scripts/improve-report.mjs";
-import { parseScoresDoc } from "../src/improve-scores";
-import { seedScoresDoc } from "./seed-scores.ts";
+import { parseScoresDoc, seedScoresDoc } from "../src/improve-scores";
 import { ROSTER } from "../src/improve-schema";
 
 // A DECLARED METRIC THAT NOTHING REPORTS IS A FALSE CLAIM IN THE DOCUMENT.

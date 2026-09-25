@@ -4,14 +4,13 @@ import { tickRuns } from "../src/improve/tick.ts";
 import { finalizeRun, PR_RETRY_WINDOW_MS } from "../src/improve/finalize.ts";
 import { runMetaLoop } from "../src/improve-meta.ts";
 import { candidateSkills } from "../src/improve-skills.ts";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { BUDGET_KEY, META_LAST_KEY } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import { runEvaluationCycle } from "../src/skills-evaluate.ts";
 import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, sseChange } from "./improve-fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // THE IMPROVE LOOP'S RECORDS SAY WHAT HAPPENED (audit 2026-09-25, E2 items 12 to 18).
 // Each test drives the public function and reads the rows, the KV keys or the
