@@ -164,3 +164,32 @@ test("improve_status reports spend against cap", async () => {
     assert.equal(status.budget.exceeded, false);
   });
 });
+
+// ---- audit 2026-09-25, F1-4: the lease sweep cannot stop the tick --------------------
+
+test("PLANT: a lease sweep that throws does not stop the rest of the tick", async () => {
+  // expireJobLeases ran first in tickRuns and outside any try, so a D1 error there ended
+  // auto-merge, the skill cycle and every run transition for that tick.
+  await withFetch({}, async () => {
+    const { d1, env } = await harness({
+      runs: [
+        spentRun({ id: "capsid-r1", ci_minutes: 1, cost_usd: 51 }),
+        { id: "capsid-r2", namespace: "capsid", mode: "api", status: "opening", base_sha: "base000", started: "2026-09-15 08:00:00", advanced_at: "2026-09-15 08:04:00" },
+      ],
+    });
+    const prepare = d1.db.prepare.bind(d1.db);
+    let swept = 0;
+    (d1.db as { prepare: unknown }).prepare = (sql: string) => {
+      if (/UPDATE jobs SET status = 'queued'/.test(sql)) {
+        swept++;
+        const failing = { bind: () => failing, all: async () => { throw new Error("D1_ERROR: database is locked"); } };
+        return failing;
+      }
+      return prepare(sql);
+    };
+    const outcomes = await tickRuns(env, NOW);
+    assert.equal(swept, 1, "the sweep did not run, so this test proves nothing");
+    assert.equal(outcomes.length, 1, "the tick stopped at the lease sweep");
+    assert.match(outcomes[0].note, /budget exceeded/);
+  });
+});
