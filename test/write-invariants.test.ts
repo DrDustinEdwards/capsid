@@ -968,6 +968,105 @@ test("write_repo_file reports success with a warning when the audit insert fails
   }
 });
 
+// ---- Audit 2026-09-25, F3-1 and F3-2: what guardedWrite files ------------------------
+//
+// A fake D1 that answers the namespace lookup and records every audit_log insert, and a
+// server over it. Shared by the two tests below.
+async function connectAuditRecording() {
+  const { db } = fakeD1(connectOptions({}));
+  const audits: unknown[][] = [];
+  (db as { prepare: unknown }).prepare = ((sql: string) => {
+    let bound: unknown[] = [];
+    const base = {
+      bind: (...args: unknown[]) => {
+        bound = args;
+        return base;
+      },
+      first: async () => null,
+      all: async () => ({ results: [], meta: { changes: 0 } }),
+      run: async () => {
+        if (/INSERT INTO audit_log/i.test(sql)) audits.push(bound);
+        return { meta: { changes: 1 } };
+      },
+    } as Record<string, unknown>;
+    if (/FROM namespaces/i.test(sql)) base.first = async () => ({ repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) });
+    return base;
+  }) as never;
+  const server = buildServer({ DB: db, APP_KV: { get: async (k: string) => (k.startsWith("gh:token:") ? "t" : null), put: async () => {}, delete: async () => {}, list: async () => ({ keys: [], list_complete: true }) } } as never, "write", "test:guard");
+  const client = new Client({ name: "f3-test", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { client, audits };
+}
+
+test("a pr-mode write whose commit landed but whose PR open failed is audited and reported, not failed", async () => {
+  // The commit is on the work branch before openPr runs. A throw from openPr used to
+  // reach guardedWrite as a failed call with no audit row, and the caller retried into a
+  // second commit.
+  const { client, audits } = await connectAuditRecording();
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const path = new URL(url).pathname;
+    if (path === "/repos/o/r" && method === "GET") return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
+    if (path === "/repos/o/r/git/ref/heads/main") return new Response(JSON.stringify({ object: { sha: "base-sha" } }), { status: 200 });
+    if (path === "/repos/o/r/git/refs" && method === "POST") return new Response("{}", { status: 201 });
+    if (path === "/repos/o/r/contents/doc.md" && method === "GET") return new Response("{}", { status: 404 });
+    if (path === "/repos/o/r/contents/doc.md" && method === "PUT") {
+      return new Response(JSON.stringify({ commit: { sha: "landed-sha" }, content: { sha: "file-sha" } }), { status: 201 });
+    }
+    if (path === "/repos/o/r/pulls" && method === "POST") return new Response("secondary rate limit", { status: 403 });
+    return new Response("unexpected", { status: 500 });
+  }) as typeof fetch;
+
+  try {
+    const result = (await client.callTool({
+      name: "write_repo_file",
+      arguments: { namespace: "capsid", path: "doc.md", content: "hi", message: "m" },
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+    assert.ok(!result.isError, `the landed commit was reported as a failure: ${result.content?.[0]?.text}`);
+    const payload = JSON.parse(result.content[0].text) as { commitSha?: string; pr?: unknown; pr_error?: string; branch?: string };
+    assert.equal(payload.commitSha, "landed-sha");
+    assert.equal(payload.pr, null);
+    assert.match(payload.pr_error ?? "", /THE COMMIT LANDED/);
+    assert.match(payload.pr_error ?? "", /secondary rate limit/);
+    assert.match(payload.pr_error ?? "", /Do not retry/);
+    assert.equal(audits.length, 1, "the landed commit has no audit row");
+    assert.equal(audits[0][1], "write_repo_file");
+    assert.match(String(audits[0][4]), /landed-sha/);
+  } finally {
+    globalThis.fetch = original;
+    await client.close();
+  }
+});
+
+for (const { label, args } of [
+  { label: "a comment action with no comment", args: { namespace: "capsid", number: 7, action: "comment" } },
+  { label: "a comment on a merge", args: { namespace: "capsid", number: 7, action: "merge", comment: "lgtm" } },
+]) {
+  test(`manage_pr refuses ${label} as an error with no audit row`, async () => {
+    // Returned from inside guardedWrite, the refusal was filed as a landed result: an
+    // audit row and an MCP result with isError false.
+    const { client, audits } = await connectAuditRecording();
+    const original = globalThis.fetch;
+    let fetched = 0;
+    globalThis.fetch = (async () => {
+      fetched++;
+      return new Response("unexpected", { status: 500 });
+    }) as typeof fetch;
+    try {
+      const result = (await client.callTool({ name: "manage_pr", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+      assert.equal(result.isError, true, `the refusal read as success: ${result.content?.[0]?.text}`);
+      assert.match(result.content[0].text, /comment/);
+      assert.equal(audits.length, 0, "a refused call wrote an audit row");
+      assert.equal(fetched, 0, "a refused call reached GitHub");
+    } finally {
+      globalThis.fetch = original;
+      await client.close();
+    }
+  });
+}
+
 // ---- F6: patch uniqueness, through the write TOOL ---------------------------------
 //
 // Audit 2026-09-13, finding F6. test/write-modes.test.ts drives `assembleBody` and

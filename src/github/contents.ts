@@ -347,6 +347,7 @@ async function commitOnBranch<R>(
   base: { repo: string; mode: "pr" | "direct"; branch: string; path: string };
   result: R;
   pr: { number: number; url: string; existing?: true } | null;
+  pr_error?: string;
 }> {
   assertRepoArg("path", path);
   if (branch) assertRepoArg("branch", branch);
@@ -451,10 +452,27 @@ async function commitOnBranch<R>(
   if (existing) return { base, result, pr: { ...existing, existing: true } };
 
   const title = message.split("\n")[0] || op.fallbackTitle;
+  // THE COMMIT HAS LANDED, SO A FAILED PR OPEN IS REPORTED, NOT THROWN (audit
+  // 2026-09-25, F3-1). A throw here reached guardedWrite as a failed call with no audit
+  // row, and a caller told "failed" retries into a second commit. The result carries
+  // pr: null and pr_error, and guardedWrite audits it like any other landed write.
+  //
   // Pass the resolved repo full name so the PR lands on the repo the file was
   // committed to, not the namespace default.
-  const pr = await openPr(env, namespace, title, target, defaultBranch, op.prBody, `${owner}/${repo}`);
-  return { base, result, pr: { number: pr.number, url: pr.url } };
+  try {
+    const pr = await openPr(env, namespace, title, target, defaultBranch, op.prBody, `${owner}/${repo}`);
+    return { base, result, pr: { number: pr.number, url: pr.url } };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return {
+      base,
+      result,
+      pr: null,
+      pr_error:
+        `THE COMMIT LANDED on ${target} of ${owner}/${repo}, but the pull request could not be opened: ${reason}. ` +
+        `Do not retry this write; open the pull request with open_pr (head ${target}).`,
+    };
+  }
 }
 
 export async function writeRepoFile(
@@ -469,7 +487,7 @@ export async function writeRepoFile(
   allowWorkflowWrite?: boolean,
   existingPr?: number
 ) {
-  const { base, result, pr } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
+  const { base, result, pr, pr_error } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
     branchPrefix: "capsid/",
     fallbackTitle: `Update ${path}`,
     prBody: `Automated change to \`${path}\` via Capsid.`,
@@ -482,6 +500,7 @@ export async function writeRepoFile(
   const flag = allowWorkflowWrite === true ? { allow_workflow_write: true } : {};
   // direct carries the file sha as well as the commit sha; pr mode never has. The
   // asymmetry is preserved because tidying it would change what a caller receives.
+  if (pr_error) return { ...base, commitSha: result.commitSha, pr: null, pr_error, ...flag };
   if (!pr) return { ...base, ...result, ...flag };
   return { ...base, commitSha: result.commitSha, pr, ...flag };
 }
@@ -500,7 +519,7 @@ export async function deleteRepoFile(
   allowWorkflowWrite?: boolean,
   existingPr?: number
 ) {
-  const { base, result, pr } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
+  const { base, result, pr, pr_error } = await commitOnBranch(env, namespace, path, message, mode, branch, repoSelector, {
     branchPrefix: "capsid/rm-",
     fallbackTitle: `Delete ${path}`,
     prBody: `Delete \`${path}\` via Capsid.`,
@@ -523,6 +542,7 @@ export async function deleteRepoFile(
     },
   });
   const flag = allowWorkflowWrite === true ? { allow_workflow_write: true } : {};
+  if (pr_error) return { ...base, commitSha: result.commitSha, pr: null, pr_error, ...flag };
   if (!pr) return { ...base, commitSha: result.commitSha, ...flag };
   return { ...base, commitSha: result.commitSha, pr, ...flag };
 }
