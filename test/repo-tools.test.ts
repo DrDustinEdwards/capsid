@@ -178,6 +178,148 @@ test("delete_repo_file pr mode opens a branch and a PR", async () => {
   );
 });
 
+// ---- pr mode never commits to the default branch (audit 2026-09-25, F2-3) ---
+
+// can_direct_write guards mode "direct" only, so a pr-mode call naming the default
+// branch as its work branch used to commit onto it with no flag and no pull request.
+// The repo here is an ordinary mapped repo, not the server's own.
+const ONE_REPO_PR = [{ repo: "o/r", label: "primary" }];
+const PR_MODE_ROUTES = {
+  "GET /repos/o/r": { body: { default_branch: "main" } },
+  "GET /repos/o/r/git/ref/heads/main": { body: { object: { sha: "head-sha" } } },
+  "POST /repos/o/r/git/refs": { status: 201, body: {} },
+  "GET /repos/o/r/contents/doc.md": { body: { sha: "file-sha" } },
+  "PUT /repos/o/r/contents/doc.md": { body: { commit: { sha: "commit-sha" }, content: { sha: "new-file-sha" } } },
+  "DELETE /repos/o/r/contents/doc.md": { body: { commit: { sha: "commit-sha" } } },
+  "POST /repos/o/r/pulls": { status: 201, body: { number: 9, html_url: "https://pr" } },
+  "GET /repos/o/r/pulls": { body: [] },
+};
+
+for (const verb of ["write", "delete"] as const) {
+  test(`${verb}_repo_file pr mode with branch set to the default branch is refused before anything is written`, async () => {
+    await withFetch(PR_MODE_ROUTES, async (calls) => {
+      const env = makeEnv(ONE_REPO_PR);
+      await assert.rejects(
+        () =>
+          verb === "write"
+            ? writeRepoFile(env, "ns", "doc.md", "NEW", "m", "pr", "main")
+            : deleteRepoFile(env, "ns", "doc.md", "m", "pr", "main"),
+        /refuses: mode "pr" with branch main, which is the default branch of o\/r/
+      );
+      assert.deepEqual(
+        calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`),
+        [],
+        "no branch, commit or pull request request may reach GitHub"
+      );
+    });
+  });
+}
+
+test("write_repo_file pr mode with a named work branch still commits there and opens a PR", async () => {
+  await withFetch(PR_MODE_ROUTES, async (calls) => {
+    const result = (await writeRepoFile(makeEnv(ONE_REPO_PR), "ns", "doc.md", "NEW", "m", "pr", "feature/x")) as {
+      branch: string;
+      pr: { number: number };
+    };
+    assert.equal(result.branch, "feature/x");
+    assert.equal(result.pr.number, 9);
+    const put = calls.find((c) => c.method === "PUT");
+    assert.equal((put?.body as { branch: string }).branch, "feature/x");
+    const pull = calls.find((c) => c.method === "POST" && c.path.endsWith("/pulls"));
+    assert.deepEqual(
+      { head: (pull?.body as { head: string }).head, base: (pull?.body as { base: string }).base },
+      { head: "feature/x", base: "main" }
+    );
+    // The open-PR lookup ran for the named branch and found nothing.
+    const lookup = calls.find((c) => c.method === "GET" && c.path === "/repos/o/r/pulls");
+    const params = new URLSearchParams(lookup?.search ?? "");
+    assert.deepEqual({ head: params.get("head"), state: params.get("state") }, { head: "o:feature/x", state: "open" });
+  });
+});
+
+// ---- pr mode refuses a branch another open PR holds (audit 2026-09-25, F2-3) ---
+
+// A pr-mode call naming a branch that already has an open pull request used to
+// commit onto that PR's head, changing a PR the caller may not own. It is refused
+// unless the call names that PR's number with `pr`, and a call that names it
+// commits without opening a second PR.
+const OPEN_PR_ROUTES = {
+  ...PR_MODE_ROUTES,
+  "GET /repos/o/r/pulls": (_body: unknown, params: URLSearchParams) =>
+    params.get("head") === "o:feature/x" && params.get("state") === "open"
+      ? { body: [{ number: 41, html_url: "https://github.com/o/r/pull/41" }] }
+      : { body: [] },
+};
+
+const nonGet = (calls: Array<{ method: string; path: string }>) =>
+  calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`);
+
+for (const verb of ["write", "delete"] as const) {
+  const run = (env: ReturnType<typeof makeEnv>, branch: string, pr?: number) =>
+    verb === "write"
+      ? writeRepoFile(env, "ns", "doc.md", "NEW", "m", "pr", branch, undefined, undefined, pr)
+      : deleteRepoFile(env, "ns", "doc.md", "m", "pr", branch, undefined, undefined, pr);
+
+  test(`${verb}_repo_file pr mode on a branch with an open PR is refused without pr, before any commit`, async () => {
+    await withFetch(OPEN_PR_ROUTES, async (calls) => {
+      await assert.rejects(
+        () => run(makeEnv(ONE_REPO_PR), "feature/x"),
+        /refuses: branch feature\/x on o\/r already has open pull request #41 \(https:\/\/github\.com\/o\/r\/pull\/41\).*pr: 41/
+      );
+      assert.deepEqual(nonGet(calls), [], "no branch, commit or pull request request may reach GitHub");
+    });
+  });
+
+  test(`${verb}_repo_file pr mode naming the branch's open PR commits there and opens no second PR`, async () => {
+    await withFetch(OPEN_PR_ROUTES, async (calls) => {
+      const result = (await run(makeEnv(ONE_REPO_PR), "feature/x", 41)) as {
+        branch: string;
+        commitSha: string;
+        pr: { number: number; url: string; existing?: boolean };
+      };
+      assert.equal(result.branch, "feature/x");
+      assert.equal(result.commitSha, "commit-sha");
+      assert.deepEqual(result.pr, { number: 41, url: "https://github.com/o/r/pull/41", existing: true });
+      assert.deepEqual(
+        nonGet(calls).filter((c) => c.endsWith("/pulls")),
+        [],
+        "a call that names an existing PR must not open another"
+      );
+      const mutation = calls.find((c) => c.method === (verb === "write" ? "PUT" : "DELETE"));
+      assert.equal((mutation?.body as { branch: string }).branch, "feature/x");
+    });
+  });
+
+  test(`${verb}_repo_file pr mode naming a PR that is not the branch's open PR is refused`, async () => {
+    await withFetch(OPEN_PR_ROUTES, async (calls) => {
+      await assert.rejects(() => run(makeEnv(ONE_REPO_PR), "feature/x", 40), /refuses: pr 40 .*open pull request #41/);
+      // A branch with no open PR at all: the named number cannot be its PR either.
+      await assert.rejects(() => run(makeEnv(ONE_REPO_PR), "feature/y", 40), /refuses: pr 40 .*feature\/y has no open pull request/);
+      assert.deepEqual(nonGet(calls), [], "no branch, commit or pull request request may reach GitHub");
+    });
+  });
+}
+
+test("write_repo_file pr mode refuses when the open-PR lookup fails, rather than treating it as none", async () => {
+  await withFetch({ ...PR_MODE_ROUTES, "GET /repos/o/r/pulls": { status: 502, text: "bad gateway" } }, async (calls) => {
+    await assert.rejects(
+      () => writeRepoFile(makeEnv(ONE_REPO_PR), "ns", "doc.md", "NEW", "m", "pr", "feature/x"),
+      /refuses: could not check open pull requests for feature\/x on o\/r \(502\)/
+    );
+    assert.deepEqual(nonGet(calls), []);
+  });
+});
+
+test("write_repo_file refuses pr in direct mode, where there is no pull request to name", async () => {
+  await withFetch(PR_MODE_ROUTES, async (calls) => {
+    await assert.rejects(
+      () => writeRepoFile(makeEnv(ONE_REPO_PR), "ns", "doc.md", "NEW", "m", "direct", "feature/x", undefined, undefined, 41),
+      /refuses: pr names an existing pull request/
+    );
+    assert.deepEqual(calls, []);
+  });
+});
+
 // ---- manage_pr: action routing ----------------------------------------------
 
 // The routes manage_pr needs for its branch cleanup, factored out because every
