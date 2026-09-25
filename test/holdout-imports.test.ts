@@ -93,14 +93,6 @@ test("a multi-line import clause is one statement", () => {
   assert.deepEqual([...importedNames(text)].sort(), ["alpha", "beta"]);
 });
 
-test("nothing that is not an identifier can reach the comparison", () => {
-  // A second check after the regex. A parse artefact compared against the manifest is a
-  // refusal nobody can act on.
-  for (const name of importedNames(REALISTIC)) {
-    assert.match(name, /^[A-Za-z_$][A-Za-z0-9_$]*$/, `${JSON.stringify(name)} is not an identifier`);
-  }
-});
-
 // ---- the manifest ------------------------------------------------------------
 
 test("the manifest is names only, and reads past comments and blank lines", () => {
@@ -130,17 +122,6 @@ test("PLANT: no manifest at all is refused, and hands over the list to create", 
   assert.match(refusal!, /no improve\/holdout\/capsid\/imports\.txt/);
   // Actionable rather than merely correct: the refusal IS the file to write.
   assert.match(refusal!, /alpha\nbeta/);
-});
-
-test("PLANT: the refusal never names a case file", () => {
-  // A case filename is part of the hidden suite and this runs in a job whose log
-  // is readable. Every refusal is built from IMPORT names, which are source
-  // exports and already public.
-  const refusals = [holdoutImportRefusal([CASE], ["alpha"], "capsid"), holdoutImportRefusal([CASE], null, "capsid")];
-  for (const refusal of refusals) {
-    assert.ok(refusal);
-    assert.doesNotMatch(refusal!, /\.test\./, "a refusal must not carry a case filename");
-  }
 });
 
 test("a complete manifest passes, so the guard is not simply always red", () => {

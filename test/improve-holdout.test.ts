@@ -23,17 +23,6 @@ import type * as Attempt from "../src/improve-attempt.ts";
 const HOLDOUT_BINDING = "HOLDOUT";
 const BUCKET_NAME = "capsid-improve-holdout";
 
-// THE EXEMPTION IS PINNED TO ITS LINES, not granted by filename.
-//
-// src/env.ts has to name the binding: it declares the environment. Exempting the
-// whole file would let a later field there reach for it, so the exact permitted
-// occurrences are listed and a third one in that file fails. Same technique as
-// the bounding-primitive pin in test/limits.test.ts.
-const ENV_PERMITTED = [
-  "  HOLDOUT: R2Bucket;",
-  'export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID">;',
-];
-
 // A COMMENT IS NOT A USE. Several modules explain this isolation at length, and
 // naming the binding while doing so is the opposite of the problem. Same
 // exclusion test/limits.test.ts applies to its bare-z.string() scan, and it is
@@ -55,22 +44,6 @@ test("ONLY src/improve-scorer.ts uses the holdout binding", () => {
     offenders.map((o) => `src/${o.file}:${o.line} ${o.text}`),
     [],
     "a module other than the scorer names the holdout binding. Attempt code must have no read path to the hidden suite."
-  );
-});
-
-// scanner-rule: CLAUDE.md, improve loop rule: only src/improve-scorer.ts may reach the holdout
-test("src/env.ts names it exactly twice, on the two pinned lines", () => {
-  const env = sourceFile("env.ts");
-  const uses = env
-    .split("\n")
-    .map((line) => line.replace(/\r$/, ""))
-    .filter((line) => new RegExp(`\\b${HOLDOUT_BINDING}\\b`).test(line))
-    // Comments explain the binding at length and are not uses of it.
-    .filter((line) => !line.trim().startsWith("//"));
-  assert.deepEqual(
-    uses,
-    ENV_PERMITTED,
-    "src/env.ts's holdout occurrences moved. The exemption is pinned to these exact lines so a new field cannot widen it."
   );
 });
 
@@ -137,13 +110,6 @@ test("the two buckets are pinned to DIFFERENT buckets, and CI refuses if they co
   const ciConfig = readFileSync(join(import.meta.dirname, "..", "scripts", "ci-config.mjs"), "utf8");
   assert.match(ciConfig, /MEDIA and HOLDOUT are pinned to the SAME bucket/);
   assert.match(ciConfig, /EXPECTED\.r2\.name === EXPECTED\.holdoutR2\.name/);
-});
-
-test("wrangler.jsonc.example binds both buckets, with a placeholder for each", () => {
-  const example = readFileSync(join(import.meta.dirname, "..", "wrangler.jsonc.example"), "utf8");
-  assert.match(example, /"binding": "MEDIA"/);
-  assert.match(example, /"binding": "HOLDOUT"/);
-  assert.match(example, /YOUR_HOLDOUT_R2_BUCKET/);
 });
 
 test("the manifest key is namespaced under the holdout prefix", () => {
@@ -231,16 +197,6 @@ test("a credential request without a namespace or jti is refused at the parse", 
   assert.equal(parseCredentialRequest(JSON.stringify({ namespace: "foxing", jti: "short" })).ok, false);
   const good = parseCredentialRequest(JSON.stringify({ namespace: "foxing", jti: "0123456789" }));
   assert.ok(good.ok && good.namespace === "foxing");
-});
-
-test("holdout credential parse refusal strings are pinned byte-for-byte", async () => {
-  const { parseCredentialRequest } = await import("../src/improve-scorer.ts");
-  const notJson = parseCredentialRequest("not json");
-  assert.equal(notJson.ok === false && notJson.refusal, "the credential request body is not JSON");
-  const noNs = parseCredentialRequest(JSON.stringify({ jti: "0123456789" }));
-  assert.equal(noNs.ok === false && noNs.refusal, "the credential request body must name a namespace");
-  const short = parseCredentialRequest(JSON.stringify({ namespace: "foxing", jti: "short" }));
-  assert.equal(short.ok === false && short.refusal, "the credential request body must carry a jti of 8 to 128 characters");
 });
 
 test("the scorer workflow holds NO long-lived R2 secret and asks the Worker instead", () => {

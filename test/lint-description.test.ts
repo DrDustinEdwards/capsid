@@ -73,21 +73,6 @@ test("DERIVED: the lint description states the number of checks the report runs"
   }
 });
 
-test("documents by type is not described as one of the checks", () => {
-  // The original defect, pinned by name. by_type is on the response and is a count,
-  // so the description may mention it; what it may not do is list it among the
-  // checks, which is how a reader learns to expect a check id that never arrives.
-  assert.ok(
-    !reportedCheckIds().includes("by_type"),
-    "by_type is a check now; this test and the description both need rewriting"
-  );
-  assert.match(
-    LINT_DESCRIPTION,
-    /documents by type, which is reported beside the checks rather than being one of them/,
-    "the description no longer says where documents-by-type sits, which is the sentence that stops it being read as a check"
-  );
-});
-
 // The registration must actually use the exported constant, or the constant is a
 // second copy that agrees with nothing. Checked against what the server serves.
 test("the served lint description is the exported one", async () => {

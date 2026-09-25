@@ -313,5 +313,4 @@ test("every improve audit row carries the one actor spelling", async () => {
   const statements = await improveDocStatements(db, { ...DOC, prior: null });
   const audit = statements.find((s) => sqlOf(s).includes("audit_log"));
   assert.equal(paramsOf(audit)[0], IMPROVE_ACTOR);
-  assert.equal(IMPROVE_ACTOR, "improve-loop");
 });

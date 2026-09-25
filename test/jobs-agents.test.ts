@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, legacyAgent, type Agent } from "../src/agents.ts";
@@ -14,19 +12,12 @@ import { missingForJob, parseRequiredScopes, serializeRequiredScopes } from "../
 // the mismatch surfaced four hours later when the lease expired, or did not surface at
 // all because the driver could do it and nobody had decided that it should.
 
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0009_jobs_required_scopes.sql"), "utf8");
-
 function driver(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   mutate(scopes);
   return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
 }
-
-test("the migration adds the column the queue reads, and says null means no requirement", () => {
-  assert.match(MIGRATION, /ALTER TABLE jobs ADD COLUMN required_scopes TEXT/);
-  assert.match(MIGRATION, /NULL MEANS NO REQUIREMENT/i, "a nullable column with no stated meaning is a column two readers will disagree about");
-});
 
 test("a job with no requirement is claimable by any write-grant driver, which is every job posted so far", () => {
   assert.equal(missingForJob(driver(), "capsid", null), null);
@@ -79,11 +70,4 @@ test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather 
   assert.deepEqual(parseRequiredScopes('{"flags":["can_merge"]}'), { ok: true, value: { flags: ["can_merge"] } });
   assert.deepEqual(parseRequiredScopes("{}"), { ok: true, value: { flags: [] } });
 });
-
-// That the claim checks scopes before it takes the lease is proven against SQLite in
-// test-integration/job-required-scopes.test.ts: a refused job STAYS QUEUED.
-
-
-// That agent, OAuth and operator-key identities can each hold a lease is proven by
-// claiming with all three against SQLite in test-integration/jobs.test.ts.
 

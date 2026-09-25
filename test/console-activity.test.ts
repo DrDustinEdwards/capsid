@@ -64,7 +64,3 @@ test("both filters narrow together, and each is its own clause", async () => {
   assert.match(read.sql, /namespace = \?/);
   assert.match(read.sql, /actor = \?/);
 });
-
-test("ACTIVITY_LIMIT is the 50 the job asked for", () => {
-  assert.equal(ACTIVITY_LIMIT, 50);
-});

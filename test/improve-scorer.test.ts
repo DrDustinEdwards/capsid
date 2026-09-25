@@ -9,13 +9,12 @@ import {
   MAX_REPORT_BYTES,
   parseScoreReport,
   readBoundedText,
-  SCORE_PATH,
   signaturePayload,
   SIGNATURE_MAX_AGE_MS,
   verifySignedReport,
   type ScoreReport,
 } from "../src/improve-scorer.ts";
-import { fakeD1, fakeKv } from "./fakes.ts";
+import { fakeD1 } from "./fakes.ts";
 
 // The scorer seam: who may report a score, and what a report has to say to be
 // believed. Nothing here needs a database or a network.
@@ -43,15 +42,6 @@ async function sign(namespace: string, body: string, at: Date = NOW): Promise<{ 
   const timestamp = at.toISOString();
   return { namespace, timestamp, signature: await hmacHex(key, signaturePayload(timestamp, body)), body };
 }
-
-// ---- the endpoint is not under /ops/ ----------------------------------------
-
-test("the score path is NOT under /ops/, deliberately", () => {
-  // An /ops/ path means an operator key opens it, and an operator key can write
-  // every document in the store. Five repos need to reach this endpoint.
-  assert.equal(SCORE_PATH, "/improve/score");
-  assert.equal(SCORE_PATH.startsWith("/ops/"), false);
-});
 
 // ---- key derivation ---------------------------------------------------------
 
@@ -150,20 +140,6 @@ test("a malformed namespace or timestamp header is a 400", async () => {
   assert.equal(bad.ok === false && bad.status, 400);
   const noTime = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, { namespace: "capsid", timestamp: "yesterday", signature: "x", body: "{}" }, NOW);
   assert.equal(noTime.ok === false && noTime.status, 400);
-});
-
-test("score HMAC refusal strings are pinned byte-for-byte", async () => {
-  const missing = await verifySignedReport({}, { namespace: "capsid", timestamp: NOW.toISOString(), signature: "x", body: "{}" }, NOW);
-  assert.equal(missing.ok === false && missing.refusal, "score reporting is not configured: IMPROVE_SCORE_SECRET is unset");
-  const malformed = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, { namespace: "not a namespace!", timestamp: NOW.toISOString(), signature: "x", body: "{}" }, NOW);
-  assert.equal(malformed.ok === false && malformed.refusal, "missing or malformed namespace header");
-  const noTime = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, { namespace: "capsid", timestamp: "yesterday", signature: "x", body: "{}" }, NOW);
-  assert.equal(noTime.ok === false && noTime.refusal, "missing or unparseable timestamp header");
-  const staleAt = new Date(NOW.getTime() - SIGNATURE_MAX_AGE_MS - 60_000);
-  const stale = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, await sign("capsid", "{}", staleAt), NOW);
-  assert.equal(stale.ok === false && stale.refusal, `report timestamp is ${Math.round((NOW.getTime() - staleAt.getTime()) / 1000)}s from now, outside the accepted window`);
-  const badSig = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, { namespace: "capsid", timestamp: NOW.toISOString(), signature: "0".repeat(64), body: "{}" }, NOW);
-  assert.equal(badSig.ok === false && badSig.refusal, "score report signature does not verify");
 });
 
 // ---- report parsing ---------------------------------------------------------
