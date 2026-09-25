@@ -4,7 +4,7 @@ export async function sha256Hex(input: string): Promise<string> {
   return bytesToHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)));
 }
 
-// HMAC-SHA256, hex. One definition; routes.ts used to have its own copy.
+// HMAC-SHA256, hex. The one definition.
 export async function hmacHex(secret: string, payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -17,9 +17,7 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
   return bytesToHex(sig);
 }
 
-// Cookie lookup, once. The consent flow and the console session both read cookies
-// off a Request, and a hand-rolled second parser is where a trailing-space or a
-// name-prefix bug lands.
+// Cookie lookup, once, for the consent flow and the console session.
 export function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get("Cookie");
   if (!header) return null;

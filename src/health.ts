@@ -38,10 +38,8 @@ function probeError(err: unknown): string {
   return `error: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`;
 }
 
-// THE TWO BINDINGS BESIDE THE STORE. MEDIA holds the backups and CSP reports; APP_KV
-// holds tokens, leases and the backup stamp. Each probe is one read of a key that need
-// not exist: a null answer proves the binding resolves. Reported as fields and left out
-// of status, which stays about whether the store answers (see healthReport).
+// The two bindings beside the store. Each probe reads a key that need not exist: a
+// null answer proves the binding resolves. Reported as fields, left out of status.
 async function probeBindings(env: Env): Promise<{ media: string; app_kv: string }> {
   let media = "unbound";
   if (env.MEDIA) {
@@ -75,10 +73,8 @@ export interface HealthReport {
   backup: { last_ok: string | null; age_hours: number | null; warning?: string };
 }
 
-// THE PROBE AS DATA. /health serializes this and the console header renders it, so
-// the sha, the schema version and the backup age a person reads on the console are
-// the same three values the live gate asserts. A second query path for them would be
-// a second set of numbers to disagree.
+// /health serializes this and the console header renders it, so the console shows
+// the same values the live gate asserts.
 export async function healthReport(env: Env): Promise<HealthReport> {
   const provenance = {
     sha: env.BUILD_SHA ?? "unknown",
@@ -110,9 +106,7 @@ export async function healthReport(env: Env): Promise<HealthReport> {
   const backup = await backupFreshness(env);
   const bindings = await probeBindings(env);
 
-  // STATUS IS THE STORE ONLY. The live gate polls /health until status reads ok after
-  // a deploy, and a 503 here fails it. The bindings are reported as fields, the same
-  // way backup freshness is.
+  // Status is the store only: the live gate polls it after a deploy, and a 503 fails it.
   const healthy = d1 === "ok" && fts === "ok";
   return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, bindings, backup };
 }

@@ -10,25 +10,15 @@ import { adminFailJob, resumeJob } from "./jobs";
 import { readBoundedText } from "./improve-scorer";
 import { auditStatement } from "./store-guards";
 
-// THE CONSOLE'S FIVE CONTROLS.
+// The console's controls. Each is the admin session, a CSRF token, a confirm step,
+// then the shared mutator the MCP tool calls, then an audit row naming the person who
+// clicked. Nothing here reimplements a transition.
 //
-// Every one is the same shape: the admin session, a CSRF token, a confirm step, then
-// THE SHARED MUTATOR the MCP tool already calls, then an audit row naming the person
-// who clicked. Nothing here reimplements a transition: pause, unpause and mode go
-// through improveControl, the two job actions through src/jobs.ts, and the revoke
-// through the agents control plane.
+// No merge (it can start a CI deploy, so it stays behind can_merge) and no mint (a
+// mint hands out a key). test/console-actions.test.ts asserts both absences.
 //
-// WHAT IS NOT HERE, deliberately. No merge: merging can start a CI deploy in two of
-// these repos, and that decision belongs to manage_pr behind a caller holding
-// can_merge, not to anything reachable with a browser cookie. No mint: a mint hands
-// out a key, and the agents tool is admin-only for that reason. Both absences are
-// asserted by test/console-actions.test.ts, because an absence nobody checks is one
-// that comes back.
-//
-// THE CONFIRM IS A SECOND REQUEST. A hidden `confirm` field the form always sends
-// confirms nothing: the browser sends it whether or not a person read the page. The
-// first POST renders what will happen and changes nothing; the second, carrying the
-// same CSRF, performs it.
+// The confirm is a second request: the first POST renders what will happen and
+// changes nothing; the second, with the same CSRF, performs it.
 
 const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
@@ -37,8 +27,7 @@ function isConsoleAction(value: string): value is ConsoleAction {
   return (CONSOLE_ACTIONS as readonly string[]).includes(value);
 }
 
-// Same cap and same reasoning as the consent form: these bodies are a handful of
-// short fields, and the bound is applied at the stream before anything is parsed.
+// Same cap as the consent form, applied at the stream before parsing.
 const ACTION_FORM_MAX_BYTES = 65_536;
 
 function textResponse(message: string, status: number): Response {
@@ -50,9 +39,7 @@ function required(form: URLSearchParams, field: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// What each action is about to do, in a sentence a person can check before clicking
-// again. This is the whole value of the confirm step, so it names the target rather
-// than the action alone.
+// What each action is about to do, naming the target, for the confirm step.
 function describe(action: ConsoleAction, form: URLSearchParams): string {
   const ns = form.get("namespace") ?? "";
   const id = form.get("id") ?? "";
@@ -117,10 +104,8 @@ ${carried}
   });
 }
 
-// THE CLICK'S OWN AUDIT ROW. The shared mutators write their own: improveControl
-// records a pause as `improve-loop`, which says a pause happened and not who asked
-// for it. This row carries the admin's actor, the action, and what was submitted, so
-// the log answers "who paused germomics on Tuesday".
+// The click's own audit row, naming the admin. The shared mutators' rows do not say
+// who asked (improveControl records a pause as `improve-loop`).
 async function auditClick(env: Env, actor: string, action: ConsoleAction, namespace: string | null, params: unknown) {
   await env.DB.batch([auditStatement(env.DB, actor, `console-${action}`, namespace, null, params)]);
 }
@@ -142,9 +127,8 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
     );
   }
 
-  // CSRF BEFORE ANYTHING ELSE THAT COULD WRITE, including the confirmation page:
-  // rendering a confirm for a forged request would hand an attacker a page that
-  // carries a valid token forward.
+  // CSRF before anything else, including the confirmation page, which would carry a
+  // valid token forward for a forged request.
   const csrfField = form.get("csrf");
   const csrfCookie = getCookie(request, CONSOLE_CSRF_COOKIE);
   if (!csrfField || !csrfCookie || !timingSafeEqual(csrfCookie, csrfField)) {
@@ -155,9 +139,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
 
   const actor = `github:${gate.user.login}`;
   const agent = adminAgent(gate.user.login);
-  // Set once the shared mutator has returned success, so the catch can tell a failure
-  // before the action (nothing changed) from a failure in the click's own audit row
-  // after it (the action happened).
+  // Set once the mutator succeeds, so the catch knows whether the action happened.
   let committed = false;
   try {
     switch (action) {
@@ -214,9 +196,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (committed) {
-      // The action happened; only the console's own audit row failed. A 400 here
-      // would tell the person nothing changed when something did. The shared mutators
-      // write their own audit rows, so the log still records the transition.
+      // The action happened; only the console's own audit row failed, so no 400.
       const warning = `${action} completed, but the console audit row naming ${actor} was not written: ${message}`;
       console.error(warning);
       return new Response(warning, {
@@ -229,8 +209,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         },
       });
     }
-    // improveControl throws on a bad value rather than returning a refusal, and the
-    // message it throws already names what was wrong and says nothing changed.
+    // improveControl throws on a bad value, with a message that says so.
     return textResponse(message, 400);
   }
 

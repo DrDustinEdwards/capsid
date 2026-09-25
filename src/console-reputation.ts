@@ -1,19 +1,14 @@
 import { agentActor } from "./agents-schema";
 import type { AgentSummary } from "./improve-run";
 
-// THE REPUTATION PANEL: what each credential has actually done.
+// The reputation panel: what each credential has done, as counts, not scores. A
+// score needs a weighting, which is an opinion about how much to trust a credential;
+// every number here is a row count with a name on it, and the reader decides.
 //
-// COUNTS, NOT SCORES. A score needs a weighting, a weighting is an opinion, and an
-// opinion about how much to trust a credential is not something a page should be
-// computing on a reader's behalf. Every number here is a row count with a name on
-// it, and a reader who wants to know whether a driver is behaving reads the counts
-// and decides.
-//
-// THIS IS THE ONE PLACE THE CONSOLE QUERIES SOMETHING OF ITS OWN, and it is because
-// no tool computes it: improve_status serves the inventory (who exists, what scopes,
-// last_seen) and says nothing about what any of them did. The aggregation is a pure
-// function over rows, so what it computes is checked against fixtures rather than
-// against a fake that would agree with whatever it was handed.
+// This is the one place the console queries something of its own, because no tool
+// computes it: improve_status serves the inventory and says nothing about what any
+// agent did. The aggregation is a pure function over rows, tested against fixtures
+// rather than a fake that would agree with whatever it was handed.
 
 export interface ReputationRows {
   // One row per (claimed_by, status) from the jobs table.
@@ -30,9 +25,8 @@ export interface AgentReputation extends AgentSummary {
   jobs_blocked: number;
   prs_opened: number;
   prs_merged: number;
-  // null for every kind except driver: an attempt belongs to the namespace's improve
-  // runs, and attributing those to a seat that merely has read access there would be
-  // crediting one credential with another's work.
+  // null except for a driver: attempts belong to the namespace's improve runs, not
+  // to every credential that can read there.
   attempts_kept: number | null;
   attempts_reverted: number | null;
 }
@@ -43,10 +37,8 @@ function sumBy(rows: Array<{ actor: string; n: number }>, actor: string): number
 
 export function reputationFrom(agents: AgentSummary[], rows: ReputationRows): AgentReputation[] {
   return agents.map((agent) => {
-    // THE ACTOR STRING, not the name. `agent:<name>` is what jobs.claimed_by and
-    // audit_log.actor carry (migrations/0006 states they share a shape), and matching
-    // on the bare name would count rows written by a different kind of caller that
-    // happened to spell itself the same way.
+    // The actor string (`agent:<name>`), which jobs.claimed_by and audit_log.actor
+    // carry; a bare name could match a different kind of caller.
     const actor = agentActor(agent.name);
     const jobsByStatus = (status: string) =>
       rows.jobs.filter((r) => r.actor === actor && r.status === status).reduce((total, r) => total + r.n, 0);
@@ -67,12 +59,8 @@ export function reputationFrom(agents: AgentSummary[], rows: ReputationRows): Ag
   });
 }
 
-// ---- the queries -------------------------------------------------------------
-
 export async function loadReputation(db: D1Database, agents: AgentSummary[]): Promise<AgentReputation[]> {
-  // Four grouped reads rather than a handful per agent: the inventory is small but it
-  // grows by one row per credential, and a per-agent loop would grow the query count
-  // with it.
+  // Grouped reads, so the query count does not grow with the number of agents.
   const jobs = await db
     .prepare(
       `SELECT claimed_by AS actor, status, COUNT(*) AS n FROM jobs
@@ -82,11 +70,8 @@ export async function loadReputation(db: D1Database, agents: AgentSummary[]): Pr
   const prsOpened = await db
     .prepare("SELECT actor, COUNT(*) AS n FROM audit_log WHERE action = 'open_pr' GROUP BY actor")
     .all<{ actor: string; n: number }>();
-  // A MERGE IS A manage_pr ROW WHOSE RESULT SAYS IT MERGED. manage_pr also closes,
-  // and the audit row's params is the tool's whole result, so the merged flag is what
-  // separates the two. Matched as a substring of the stored JSON, which is honest
-  // about what it is: a close carries no such key, and a title containing the literal
-  // text would have to be inside a params column this Worker wrote itself.
+  // A merge is a manage_pr row whose stored result says it merged; a close carries no
+  // such key. Matched as a substring of params, which this Worker writes.
   const prsMerged = await db
     .prepare(
       `SELECT actor, COUNT(*) AS n FROM audit_log
