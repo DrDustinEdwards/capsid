@@ -217,8 +217,9 @@ async function readJob(db: D1Database, id: string): Promise<JobRow | null> {
 // F3-4 and F4-2). There were three copies, and all three ignored the RETURNING row, so
 // when the job had moved (another driver claimed it) the mirror was still rewritten as
 // failed and closed and an audit row said it was failed while the row was claimed.
-// Now the mirror and the audit row are written only when the UPDATE moved the row,
-// and otherwise the caller gets the row as it now is, to refuse with.
+// The UPDATE, the mirror and the audit row are one guarded batch (guardedTransition),
+// so they commit only when the row is still as the caller read it; otherwise the
+// caller gets the row as it now is, to refuse with.
 async function markJobFailed(
   env: Env,
   job: JobRow,
@@ -229,19 +230,37 @@ async function markJobFailed(
   auditParams: Record<string, unknown>,
   now: Date
 ): Promise<{ failed: true } | { failed: false; current: JobRow | null }> {
-  const moved = await env.DB.prepare(
-    `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
-     WHERE id = ?1 AND status = ?4 RETURNING id`
-  )
-    .bind(job.id, summary, now.toISOString(), fromStatus)
-    .first<{ id: string }>();
-  if (!moved) return { failed: false, current: await readJob(env.DB, job.id) };
   const failed = { ...job, status: "failed" as const, result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
-  await env.DB.batch([
+  const committed = await guardedTransition(env, job, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+       WHERE id = ?1 AND status = ?4 RETURNING id`
+    ).bind(job.id, summary, now.toISOString(), fromStatus),
     ...(await mirrorStatements(env.DB, failed, auditAction, actor)),
     auditStatement(env.DB, actor, auditAction, failed, auditParams),
   ]);
+  if (!committed) return { failed: false, current: await readJob(env.DB, job.id) };
   return { failed: true };
+}
+
+// EVERY TRANSITION AND ITS RECORDS ARE ONE BATCH (audit 2026-09-25, F1-1). The
+// holder transitions have done this since the first E1-1 change (holderTransition);
+// the rest committed the UPDATE on its own and wrote the mirror and audit row in a
+// second batch, so a throw in between left a moved row with no record of the move.
+//
+// `read` is the row the caller decided on. requireJobUnchanged, first in the batch,
+// aborts the whole batch unless the row still has that status, holder and updated_at,
+// and D1 runs a batch as one transaction, so the UPDATE and every record built from
+// `read` commit together or not at all. Returns false when the guard aborted, which
+// means nothing was written and the row changed since `read`.
+async function guardedTransition(env: Env, read: JobRow, statements: D1PreparedStatement[]): Promise<boolean> {
+  try {
+    await env.DB.batch([requireJobUnchanged(env.DB, read.id, read.status, read.claimed_by, read.updated_at), ...statements]);
+    return true;
+  } catch (err) {
+    if (!isMissingRowAbort(err)) throw err;
+    return false;
+  }
 }
 
 /** The refusal for a job markJobFailed found had already moved. */
@@ -594,16 +613,6 @@ export async function claimJob(
   }
 
   const expires = leaseUntil(now);
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = ?3, lease_expires = ?4, updated_at = ?3
-     WHERE id = ?1 AND status = 'queued' RETURNING id`
-  )
-    .bind(candidate.id, actor, now.toISOString(), expires)
-    .first<{ id: string }>();
-  if (!won) {
-    return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
-  }
-
   const claimed: JobRow = {
     ...candidate,
     status: "claimed",
@@ -612,10 +621,20 @@ export async function claimJob(
     lease_expires: expires,
     updated_at: now.toISOString(),
   };
-  await env.DB.batch([
+  // One batch with its records, behind the guard: two drivers reading the same
+  // candidate still resolve to one winner, because the first commit moves updated_at
+  // and the second batch's guard aborts before its UPDATE runs.
+  const won = await guardedTransition(env, candidate, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = ?3, lease_expires = ?4, updated_at = ?3
+       WHERE id = ?1 AND status = 'queued' RETURNING id`
+    ).bind(candidate.id, actor, now.toISOString(), expires),
     ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),
     auditStatement(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
   ]);
+  if (!won) {
+    return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
+  }
   // A job that went back to the queue after a resume (an expired lease) reaches its
   // next driver here, so the approval has to come with it.
   const claimNote = await latestResumeNote(env.DB, claimed);
@@ -851,19 +870,25 @@ async function reviewRefusal(
   // result_ref column: on a claimed job nothing else writes it, and the terminal
   // transition that does write it runs after this gate. Recorded whatever the verdict,
   // so a CHANGES cannot be escaped by naming another pull request on the next call.
+  //
+  // THE ROW THE WRITES BELOW ARE BUILT FROM. Each is one guarded batch, so it has to be
+  // the caller's claimed job, as read; the binding moves updated_at, so the CHANGES
+  // write after it guards on the row the binding left.
+  let read = current;
   if (outcome.pr && !current.result_ref) {
-    const bound = await env.DB.prepare(
-      `UPDATE jobs SET result_ref = ?2, updated_at = ?3
-       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
-    )
-      .bind(id, outcome.pr, now.toISOString(), agent.actor)
-      .first<{ id: string }>();
-    if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
-    const job = (await readJob(env.DB, id)) as JobRow;
-    await env.DB.batch([
+    const notHeld = holderRefusal(action, id, agent.actor, current);
+    if (notHeld) return notHeld;
+    const job: JobRow = { ...current, result_ref: outcome.pr, updated_at: now.toISOString() };
+    const bound = await guardedTransition(env, current, [
+      env.DB.prepare(
+        `UPDATE jobs SET result_ref = ?2, updated_at = ?3
+         WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
+      ).bind(id, outcome.pr, now.toISOString(), agent.actor),
       ...(await mirrorStatements(env.DB, job, "job-review-bound", agent.actor)),
       auditStatement(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
     ]);
+    if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
+    read = job;
   }
 
   if (outcome.kind === "proceed") return null;
@@ -905,15 +930,14 @@ async function reviewRefusal(
     // cap bounds. A review sending work round forever is the loop that cap exists for,
     // and counting it separately would exempt it.
     const summary = `review by ${review.by}: CHANGES.${said}`;
-    const won = await env.DB.prepare(
-      `UPDATE jobs SET result_summary = ?2, corrections_count = corrections_count + 1, updated_at = ?3
-       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 RETURNING id`
-    )
-      .bind(id, summary, now.toISOString(), agent.actor)
-      .first<{ id: string }>();
-    if (!won) return refuse(action, `${id} moved between reading it and recording the review. Ask again.`);
-    const job = (await readJob(env.DB, id)) as JobRow;
-    await env.DB.batch([
+    const notHeld = holderRefusal(action, id, agent.actor, read);
+    if (notHeld) return notHeld;
+    const job: JobRow = { ...read, result_summary: summary, corrections_count: read.corrections_count + 1, updated_at: now.toISOString() };
+    const won = await guardedTransition(env, read, [
+      env.DB.prepare(
+        `UPDATE jobs SET result_summary = ?2, corrections_count = corrections_count + 1, updated_at = ?3
+         WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 RETURNING id`
+      ).bind(id, summary, now.toISOString(), agent.actor),
       ...(await mirrorStatements(env.DB, job, "job-review-changes", agent.actor)),
       auditStatement(env.DB, agent.actor, "job-review-changes", job, {
         verdict: review.verdict,
@@ -922,6 +946,7 @@ async function reviewRefusal(
         corrections_count: job.corrections_count,
       }),
     ]);
+    if (!won) return refuse(action, `${id} moved between reading it and recording the review. Ask again.`);
     return { ok: false, action, job, refusal: `${summary} The job stays claimed: fix it and hand it on again. This spent a correction (${job.corrections_count} of ${CORRECTION_CAP}).` };
   }
 
@@ -1064,19 +1089,17 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     );
   }
   if (!reason?.trim()) return refuse("admin-fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'failed', result_summary = ?3, lease_expires = NULL, updated_at = ?2
-     WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
-  )
-    .bind(id, now.toISOString(), reason)
-    .first<{ id: string }>();
-  if (!won) {
-    const current = await readJob(env.DB, id);
-    if (!current) return refuse("admin-fail", `no job ${id}.`);
+  const current = await readJob(env.DB, id);
+  if (!current) return refuse("admin-fail", `no job ${id}.`);
+  if (current.status !== "queued" && current.status !== "claimed" && current.status !== "blocked") {
     return refuse("admin-fail", `${id} is already ${current.status}; there is nothing to fail.`);
   }
-  const job = (await readJob(env.DB, id)) as JobRow;
+  const job: JobRow = { ...current, status: "failed", result_summary: reason, lease_expires: null, updated_at: now.toISOString() };
   const statements = [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'failed', result_summary = ?3, lease_expires = NULL, updated_at = ?2
+       WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
+    ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
     auditStatement(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
   ];
@@ -1092,7 +1115,13 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     const verdict = await verifyEvidence(env, job.namespace, undefined);
     statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now)));
   }
-  await env.DB.batch(statements);
+  if (!(await guardedTransition(env, current, statements))) {
+    const moved = await readJob(env.DB, id);
+    return refuse(
+      "admin-fail",
+      `${id} changed between reading it and failing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written; look again before failing it.`
+    );
+  }
   return { ok: true, action: "admin-fail", job };
 }
 
@@ -1186,23 +1215,16 @@ export async function supersedeJob(
   const summary = replacedBy ? `Superseded by ${replacedBy}: ${reason}` : `Superseded: ${reason}`;
   // ?4 is the holder read above, so a lease that expired and went to another driver
   // between the read and this write is not superseded out from under the new one.
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'superseded', result_summary = ?2, lease_expires = NULL, updated_at = ?3
-     WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
-       AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
-  )
-    .bind(id, summary, now.toISOString(), current.claimed_by)
-    .first<{ id: string }>();
-  if (!won) {
-    const moved = await readJob(env.DB, id);
-    const work = moved ? workRecorded(moved) : null;
-    return refuse(
-      "supersede",
-      `${id} changed between reading it and superseding it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}${work ? `, and ${work}` : ""}. Nothing was written.`
-    );
-  }
-  const job = (await readJob(env.DB, id)) as JobRow;
-  await env.DB.batch([
+  const job: JobRow = { ...current, status: "superseded", result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
+  // The keyed UPDATE keeps the whole rule, and the guard in front of it makes the mirror
+  // and audit row commit only with it: a row that changed since the read (a gate hit,
+  // a claim) aborts all three.
+  const won = await guardedTransition(env, current, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'superseded', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+       WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
+         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
+    ).bind(id, summary, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env.DB, job, "job-superseded", agent.actor)),
     auditStatement(env.DB, agent.actor, "job-superseded", job, {
       reason,
@@ -1211,6 +1233,14 @@ export async function supersedeJob(
       held_by: current.claimed_by,
     }),
   ]);
+  if (!won) {
+    const moved = await readJob(env.DB, id);
+    const work = moved ? workRecorded(moved) : null;
+    return refuse(
+      "supersede",
+      `${id} changed between reading it and superseding it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}${work ? `, and ${work}` : ""}. Nothing was written.`
+    );
+  }
   return { ok: true, action: "supersede", job };
 }
 
@@ -1538,18 +1568,15 @@ export async function resumeJob(
   // from it (ruled 2026-09-16), so a job that waited at a gate is measured over its
   // whole working life rather than over the stretch after its last resume.
   const spend = correction && !agent.admin ? 1 : 0;
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'claimed', claimed_by = ?2, lease_expires = ?4,
-       resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
-     WHERE id = ?1 AND status = 'blocked' RETURNING id`
-  )
-    .bind(id, holder, now.toISOString(), expires, spend)
-    .first<{ id: string }>();
-  if (!won) {
-    return refuse("resume", `${id} left blocked between reading it and resuming it. Ask again.`);
-  }
-
-  const job = (await readJob(env.DB, id)) as JobRow;
+  const job: JobRow = {
+    ...current,
+    status: "claimed",
+    claimed_by: holder,
+    lease_expires: expires,
+    resumed_count: current.resumed_count + 1,
+    corrections_count: current.corrections_count + spend,
+    updated_at: now.toISOString(),
+  };
   const resumeNote: ResumeNote = {
     reason,
     ...(fullNote ? { note: fullNote } : {}),
@@ -1558,7 +1585,12 @@ export async function resumeJob(
     ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
     ...(spend ? { correction: true as const } : {}),
   };
-  await env.DB.batch([
+  const won = await guardedTransition(env, current, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, lease_expires = ?4,
+         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
+       WHERE id = ?1 AND status = 'blocked' RETURNING id`
+    ).bind(id, holder, now.toISOString(), expires, spend),
     ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
     auditStatement(env.DB, actor, "job-resumed", job, {
       approved: reason,
@@ -1578,6 +1610,9 @@ export async function resumeJob(
         : {}),
     }),
   ]);
+  if (!won) {
+    return refuse("resume", `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`);
+  }
   return { ok: true, action: "resume", job, resume_note: resumeNote };
 }
 
@@ -1585,33 +1620,39 @@ export async function resumeJob(
 //
 // Run by the five-minute improve tick. A claim whose lease has expired goes back to
 // queued, so a driver that died holds a job for at most JOB_LEASE_SECONDS rather
-// than forever. RETURNING, so the tick reports what it actually moved.
+// than forever. The tick reports only the jobs whose batch committed.
 //
-// The mirror documents are rewritten too, one batch per job: a job that reads
-// "claimed by a session that is gone" in brief is the state this sweep exists to
-// clear, and leaving the document behind would keep telling that story.
+// The mirror documents are rewritten in the same batch as each job's requeue: a job
+// that reads "claimed by a session that is gone" in brief is the state this sweep
+// exists to clear, and leaving the document behind would keep telling that story.
 export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: string[] }> {
   const stamp = now.toISOString();
+  // READ, THEN ONE GUARDED BATCH PER JOB (audit 2026-09-25, F1-1). One UPDATE used to
+  // requeue every expired job and the records followed per job, so a job whose records
+  // failed stayed requeued with none. Now each job's requeue, mirror and audit row
+  // commit together, and a job whose driver heartbeat in between (updated_at moved) is
+  // left alone.
   const { results } = await env.DB.prepare(
-    `UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?1
-     WHERE status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?1 RETURNING id`
+    "SELECT * FROM jobs WHERE status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?1"
   )
     .bind(stamp)
-    .all<{ id: string }>();
-  const requeued = (results ?? []).map((r) => r.id);
-  // ONE JOB'S RECORDS FAILING DOES NOT COST THE OTHERS THEIRS (audit 2026-09-25, F1-4).
-  // The UPDATE above has already requeued every id, so a throw on job N used to leave
-  // N+1 onwards requeued with no audit row and a stale mirror.
-  for (const id of requeued) {
+    .all<JobRow>();
+  const requeued: string[] = [];
+  // ONE JOB FAILING DOES NOT COST THE OTHERS THEIR REQUEUE (audit 2026-09-25, F1-4).
+  for (const read of results ?? []) {
     try {
-      const job = await readJob(env.DB, id);
-      if (!job) continue;
-      await env.DB.batch([
+      const job: JobRow = { ...read, status: "queued", claimed_by: null, claimed_at: null, lease_expires: null, updated_at: stamp };
+      const moved = await guardedTransition(env, read, [
+        env.DB.prepare(
+          `UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2
+           WHERE id = ?1 AND status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?2 RETURNING id`
+        ).bind(read.id, stamp),
         ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
         auditStatement(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
       ]);
+      if (moved) requeued.push(read.id);
     } catch (err) {
-      console.error(`JOB_LEASE_RECORD_FAILED ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`JOB_LEASE_REQUEUE_FAILED ${read.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return { requeued };

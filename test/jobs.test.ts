@@ -448,23 +448,21 @@ test("a jobs refusal comes back with isError set, and a caller still reads the r
 //
 // A job that failed its signature check is marked failed with a keyed UPDATE. When the
 // row had moved first (another driver claimed it), the three copies of this path still
-// rewrote the mirror as failed and wrote an audit row saying so. This fake answers the
-// UPDATE with no row, as D1 does when the WHERE no longer matches, and records every
-// batch.
+// rewrote the mirror as failed and wrote an audit row saying so. The UPDATE now rides
+// in one batch with its records behind requireJobUnchanged, so this fake aborts any
+// batch that opens with that guard, as D1 does when the row no longer matches what was
+// read. `attempted` is every batch sent, `committed` every batch that landed.
 function movedJobDb(before: Record<string, unknown>, after: Record<string, unknown>) {
-  const batches: unknown[][] = [];
-  const updates: string[] = [];
+  const attempted: string[][] = [];
+  const committed: string[][] = [];
   let reads = 0;
   const stmt = (sql: string) => {
     const flat = sql.replace(/\s+/g, " ").trim();
     const s = {
+      flat,
       bind: () => s,
       first: async () => {
         if (/SELECT \* FROM jobs WHERE id = \?1/.test(flat)) return reads++ === 0 ? { ...before } : { ...after };
-        if (/^UPDATE jobs SET/.test(flat)) {
-          updates.push(flat);
-          return null;
-        }
         return null;
       },
       all: async () => ({ results: [] }),
@@ -474,12 +472,25 @@ function movedJobDb(before: Record<string, unknown>, after: Record<string, unkno
   };
   const db = {
     prepare: (sql: string) => stmt(sql),
-    batch: async (statements: unknown[]) => {
-      batches.push(statements);
+    batch: async (statements: Array<{ flat: string }>) => {
+      const sqls = statements.map((x) => x.flat);
+      attempted.push(sqls);
+      if (/WHERE NOT EXISTS \(SELECT 1 FROM jobs/.test(sqls[0] ?? "")) {
+        throw new Error("NOT NULL constraint failed: document_versions.document_id");
+      }
+      committed.push(sqls);
       return [];
     },
   };
-  return { db: db as unknown as D1Database, batches, updates };
+  return { db: db as unknown as D1Database, attempted, committed };
+}
+
+// The one batch markJobFailed sends: the guard, then the UPDATE, then its records.
+function assertGuardedFailBatch(attempted: string[][]) {
+  assert.equal(attempted.length, 1, "the job was never offered the failed UPDATE");
+  assert.match(attempted[0][0], /WHERE NOT EXISTS \(SELECT 1 FROM jobs/, "the batch does not open with the guard");
+  assert.match(attempted[0][1], /^UPDATE jobs SET status = 'failed'/);
+  assert.ok(attempted[0].some((sql) => /INSERT INTO audit_log/.test(sql)), "the audit row is not in the same batch");
 }
 
 const MOVED_JOB = {
@@ -505,22 +516,22 @@ const MOVED_JOB = {
 };
 
 test("PLANT: a claim whose bad-signature job moved first writes no mirror and no audit row", async () => {
-  const { db, batches, updates } = movedJobDb(
+  const { db, attempted, committed } = movedJobDb(
     { ...MOVED_JOB, status: "queued", claimed_by: null },
     { ...MOVED_JOB, status: "claimed", claimed_by: "agent:other-driver" }
   );
   const out = await claimJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), legacyAgent("write", "agent:capsid-driver"), new Date("2026-09-25T09:00:00Z"), {
     id: "job_abc123abc123",
   });
-  assert.equal(updates.length, 1, "the job was never offered the failed UPDATE");
+  assertGuardedFailBatch(attempted);
   assert.equal(out.ok, false);
-  assert.deepEqual(batches, [], "a job that moved was still mirrored and audited as failed");
+  assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
   assert.match(out.refusal ?? "", /now claimed, held by agent:other-driver/);
   assert.doesNotMatch(out.refusal ?? "", /has been marked failed/);
 });
 
 test("PLANT: a resume whose bad-signature job moved first writes no mirror and no audit row", async () => {
-  const { db, batches, updates } = movedJobDb(
+  const { db, attempted, committed } = movedJobDb(
     { ...MOVED_JOB, status: "blocked", claimed_by: "agent:capsid-driver", blocked_count: 1 },
     { ...MOVED_JOB, status: "failed", claimed_by: "agent:capsid-driver", blocked_count: 1 }
   );
@@ -531,39 +542,47 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
     "job_abc123abc123",
     "ran it"
   );
-  assert.equal(updates.length, 1, "the job was never offered the failed UPDATE");
+  assertGuardedFailBatch(attempted);
   assert.equal(out.ok, false);
-  assert.deepEqual(batches, [], "a job that moved was still mirrored and audited as failed");
+  assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
   assert.match(out.refusal ?? "", /now failed/);
 });
 
 // ---- audit 2026-09-25, F1-4: one job's records failing does not cost the others theirs --
 
-test("PLANT: expireJobLeases writes the later jobs' records when an earlier job's batch throws", async () => {
-  // The UPDATE requeues every expired job at once; the mirror and audit row follow per
-  // job. A throw on the first used to leave the second requeued with neither.
-  const rows: Record<string, Record<string, unknown>> = {
-    job_aaaaaaaaaaaa: { id: "job_aaaaaaaaaaaa", namespace: "capsid", title: "a", body: "b", status: "queued", priority: 0, posted_by: "github:x", claimed_by: null, claimed_at: null, lease_expires: null, result_ref: null, result_summary: null, gate_required: 0, required_scopes: null, min_record: null, blocked_count: 0, resumed_count: 0, corrections_count: 0, review_required: 0, created_at: "2026-09-25T00:00:00Z", updated_at: "2026-09-25T09:00:00Z" },
+test("PLANT: expireJobLeases requeues the later jobs when an earlier job's batch throws", async () => {
+  // Each expired job is requeued in its own batch with its mirror and audit row. A
+  // throw on the first leaves it claimed and must not stop the second.
+  const expired = { id: "job_aaaaaaaaaaaa", namespace: "capsid", title: "a", body: "b", status: "claimed", priority: 0, posted_by: "github:x", claimed_by: "agent:gone", claimed_at: "2026-09-25T00:00:00Z", lease_expires: "2026-09-25T04:00:00Z", result_ref: null, result_summary: null, gate_required: 0, required_scopes: null, min_record: null, blocked_count: 0, resumed_count: 0, corrections_count: 0, review_required: 0, created_at: "2026-09-25T00:00:00Z", updated_at: "2026-09-25T00:00:00Z" };
+  const rows = [expired, { ...expired, id: "job_bbbbbbbbbbbb", title: "b" }];
+  const batches: string[][] = [];
+  const stmt = (sql: string): unknown => {
+    const s = {
+      sql,
+      bind: () => s,
+      all: async () => (/FROM jobs WHERE status = 'claimed' AND lease_expires/.test(sql) ? { results: rows } : { results: [] }),
+      first: async () => null,
+      run: async () => ({}),
+    };
+    return s;
   };
-  rows.job_bbbbbbbbbbbb = { ...rows.job_aaaaaaaaaaaa, id: "job_bbbbbbbbbbbb", title: "b" };
-  const batches: number[] = [];
-  const stmt = (sql: string, params: unknown[] = []): unknown => ({
-    bind: (...bound: unknown[]) => stmt(sql, bound),
-    all: async () => (/^\s*UPDATE jobs SET status = 'queued'/.test(sql) ? { results: [{ id: "job_aaaaaaaaaaaa" }, { id: "job_bbbbbbbbbbbb" }] } : { results: [] }),
-    first: async () => (/SELECT \* FROM jobs WHERE id = \?1/.test(sql) ? rows[String(params[0])] ?? null : null),
-    run: async () => ({}),
-  });
   const db = {
     prepare: (sql: string) => stmt(sql),
-    batch: async () => {
-      batches.push(batches.length);
+    batch: async (statements: Array<{ sql: string }>) => {
+      batches.push(statements.map((x) => x.sql));
       if (batches.length === 1) throw new Error("D1_ERROR: database is locked");
       return [];
     },
   };
   const out = await expireJobLeases(fakeEnv({ DB: db as never }), new Date("2026-09-25T10:00:00Z"));
-  assert.deepEqual(out.requeued, ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]);
-  assert.equal(batches.length, 2, "the second job's mirror and audit row were never attempted");
+  assert.equal(batches.length, 2, "the second job was never attempted");
+  assert.deepEqual(out.requeued, ["job_bbbbbbbbbbbb"], "a job whose batch threw was reported as requeued");
+  // Each batch is the guard, the requeue and its records together.
+  for (const sqls of batches) {
+    assert.match(sqls[0], /WHERE NOT EXISTS \(SELECT 1 FROM jobs/);
+    assert.match(sqls[1], /UPDATE jobs SET status = 'queued'/);
+    assert.ok(sqls.some((sql) => /INSERT INTO audit_log/.test(sql)));
+  }
 });
 
 // ---- audit 2026-09-25, F2-8: post needs a registered namespace -------------------------
