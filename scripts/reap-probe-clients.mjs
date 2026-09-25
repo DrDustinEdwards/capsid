@@ -52,8 +52,12 @@ function resolveClientId() {
   if (!file) return null;
   try {
     return readFileSync(file, "utf8").trim() || null;
-  } catch {
-    return null;
+  } catch (err) {
+    // Only a file that is NOT THERE means gate 2 registered nothing. A file that is
+    // there and cannot be read may name a client that is now left behind, so it fails.
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") return null;
+    console.error(`reap: could not read ${file}: ${/** @type {Error} */ (err).message}`);
+    process.exit(1);
   }
 }
 

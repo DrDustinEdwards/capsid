@@ -18,16 +18,18 @@
 // here and each task reaches Capsid as exactly one driver.
 //
 // OFF BY DEFAULT, TWICE OVER. Nothing is created without --apply, and an installed
-// task is created DISABLED. Enabling it is a separate, deliberate act:
+// task is created DISABLED, from a task XML whose settings say so (taskXml), so it
+// never exists enabled. Enabling it is a separate, deliberate act:
 //
 //   schtasks /Change /TN "<task name>" /ENABLE
 //
 // A scheduler that armed itself on install would be a nightly unattended agent
 // nobody decided to switch on.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, win32 } from "node:path";
+import { capsidClient } from "./capsid-rpc.mjs";
 
 const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
 
@@ -51,13 +53,18 @@ const START_TIME = "04:00";
 export const taskName = (ns) => `Capsid improve driver (${ns})`;
 export const keyPath = (ns) => join(homedir(), ".capsid", `agent-${ns}-driver.key`);
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = { mode: null, namespace: undefined, apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--install" || arg === "--remove" || arg === "--run" || arg === "--list") out.mode = arg.slice(2);
     else if (arg === "--apply") out.apply = true;
-    else if (arg === "--namespace") out.namespace = argv[++i];
+    else if (arg === "--namespace") {
+      // A value-less flag used to leave the namespace undefined, which selects all five.
+      const value = argv[++i];
+      if (!value || value.startsWith("--")) throw new Error("--namespace needs a value, for example --namespace capsid.");
+      out.namespace = value;
+    }
     else throw new Error(`unknown argument '${arg}'`);
   }
   if (!out.mode) throw new Error("one of --install, --remove, --run or --list is required.");
@@ -72,37 +79,16 @@ export function selected(namespace) {
   return namespace ? [namespace] : Object.keys(FOLDERS);
 }
 
-function schtasks(args) {
+export function schtasks(args) {
   const res = spawnSync("schtasks", args, { encoding: "utf8" });
   return { code: res.status ?? 1, out: `${res.stdout ?? ""}${res.stderr ?? ""}`.trim() };
 }
 
-export function taskExists(ns) {
-  return schtasks(["/Query", "/TN", taskName(ns)]).code === 0;
+export function taskExists(ns, run = schtasks) {
+  return run(["/Query", "/TN", taskName(ns)]).code === 0;
 }
 
 // ---- the log the nightly run leaves behind --------------------------------------
-
-let rpcId = 0;
-async function rpc(origin, key, method, params) {
-  const res = await fetch(`${origin}/ops/mcp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} -> HTTP ${res.status}: ${text.slice(0, 400)}`);
-  const payload = text.includes("data:")
-    ? text.split("\n").filter((l) => l.startsWith("data:")).pop().slice(5).trim()
-    : text;
-  const body = JSON.parse(payload);
-  if (body.error) throw new Error(`${method} -> ${JSON.stringify(body.error)}`);
-  return body.result;
-}
 
 // The Chicago day, because the run is scheduled by Chicago wall clock and a log named
 // by the UTC day would file a 04:00 run under the previous date for half the year.
@@ -146,32 +132,16 @@ export function renderLog(ns, { exitCode, output, started, finished }) {
   ].join("\n");
 }
 
-async function postLog(ns, origin, key, body, day) {
-  await rpc(origin, key, "initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "schedule-drivers", version: "1" },
-  });
-  await fetch(`${origin}/ops/mcp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
-  });
-  return rpc(origin, key, "tools/call", {
-    name: "write",
-    arguments: {
-      namespace: ns,
-      path: logPath(day),
-      title: `Nightly driver run, ${ns}, ${day}`,
-      type: "reference",
-      tags: "jobs,nightly",
-      body,
-      confirm: true,
-    },
+// Throws when the write tool refuses, so a refused log is never reported as posted.
+export async function postLog(ns, client, body, day) {
+  return client.tool("write", {
+    namespace: ns,
+    path: logPath(day),
+    title: `Nightly driver run, ${ns}, ${day}`,
+    type: "reference",
+    tags: "jobs,nightly",
+    body,
+    confirm: true,
   });
 }
 
@@ -220,6 +190,12 @@ const DENIED_COMMANDS = [
   "npm run deploy*",
   "wrangler deploy*",
   "npx wrangler deploy*",
+  // The same deploy reached another way: the script behind `npm run deploy`, npm's
+  // long spelling of `run`, and a version-pinned wrangler.
+  "node scripts/deploy.mjs*",
+  "npm run-script ship*",
+  "npm run-script deploy*",
+  "npx wrangler@* deploy*",
   "git push --force*",
   "git push -f*",
   "git push * --force*",
@@ -228,6 +204,9 @@ const DENIED_COMMANDS = [
   "git -C * push -f*",
   "git -C * push * --force*",
   "git -C * push * -f*",
+  // A refspec with a leading + is a force push of that one branch.
+  "git push * +*",
+  "git -C * push * +*",
 ];
 export const DRIVER_DENIED = [
   ...DENIED_COMMANDS.flatMap((c) => [`Bash(${c})`, `PowerShell(${c})`]),
@@ -279,7 +258,8 @@ async function runOne(ns) {
     return exitCode;
   }
   try {
-    await postLog(ns, process.env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT, key, body, day);
+    const client = capsidClient(process.env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT, key, "schedule-drivers");
+    await postLog(ns, client, body, day);
     console.log(`posted ${ns}/${logPath(day)}`);
   } catch (err) {
     // A log that could not be posted does not change what the run did. It goes to
@@ -304,39 +284,110 @@ function readKey(ns) {
 // The task runs THIS script in --run mode. A task that invoked `claude` directly
 // could not post a log for a session that died, which is the run whose log matters
 // most.
-function installCommand(ns) {
-  const script = join(process.cwd(), "scripts", "schedule-drivers.mjs");
-  return `node "${script}" --run --namespace ${ns}`;
+//
+// The script path is the capsid clone in FOLDERS, not process.cwd(). An install run
+// from another folder, or from a worktree that is later deleted, would otherwise
+// schedule a path that does not exist, and the task would fail every night.
+// win32.join, because the task runs on Windows whatever platform builds its XML.
+const installScript = () => win32.join(FOLDERS.capsid, "scripts", "schedule-drivers.mjs");
+const installArguments = (ns) => `"${installScript()}" --run --namespace ${ns}`;
+
+export function installCommand(ns) {
+  return `node ${installArguments(ns)}`;
 }
 
-function install(ns, apply) {
-  const exists = taskExists(ns);
+const xmlEscape = (s) =>
+  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+// The task definition, for `schtasks /Create /XML`. <Settings><Enabled>false</Enabled>
+// is why this is XML: schtasks /Create has no switch for a disabled task, so creating
+// it with /TR and then running /Change /DISABLE left a window in which the task existed
+// ENABLED, and a failed /Change left it that way. Created from this document, the task
+// is disabled from the moment it exists.
+//
+// Every setting not named here takes the Task Scheduler default, which is what the
+// /TR form got. The start date is only the day the daily trigger begins counting from;
+// with no time zone the time is local wall clock (see START_TIME).
+export function taskXml(ns) {
+  return [
+    `<?xml version="1.0" encoding="UTF-16"?>`,
+    `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
+    `  <RegistrationInfo>`,
+    `    <Description>${xmlEscape(`${taskName(ns)}. Written by scripts/schedule-drivers.mjs.`)}</Description>`,
+    `  </RegistrationInfo>`,
+    `  <Triggers>`,
+    `    <CalendarTrigger>`,
+    `      <StartBoundary>2026-01-01T${START_TIME}:00</StartBoundary>`,
+    `      <ScheduleByDay>`,
+    `        <DaysInterval>1</DaysInterval>`,
+    `      </ScheduleByDay>`,
+    `    </CalendarTrigger>`,
+    `  </Triggers>`,
+    `  <Principals>`,
+    `    <Principal id="Author">`,
+    `      <LogonType>InteractiveToken</LogonType>`,
+    `      <RunLevel>LeastPrivilege</RunLevel>`,
+    `    </Principal>`,
+    `  </Principals>`,
+    `  <Settings>`,
+    `    <Enabled>false</Enabled>`,
+    `  </Settings>`,
+    `  <Actions Context="Author">`,
+    `    <Exec>`,
+    `      <Command>node</Command>`,
+    `      <Arguments>${xmlEscape(installArguments(ns))}</Arguments>`,
+    `    </Exec>`,
+    `  </Actions>`,
+    `</Task>`,
+    ``,
+  ].join("\r\n");
+}
+
+// Each returns { ok, line }. ok is false on any failure, so main exits non-zero.
+export function install(ns, apply, run = schtasks) {
+  const exists = taskExists(ns, run);
   const command = installCommand(ns);
   if (!apply) {
-    return `${exists ? "REPLACE" : "CREATE "} ${taskName(ns)}  daily ${START_TIME}  ${command}`;
+    return { ok: true, line: `${exists ? "REPLACE" : "CREATE "} ${taskName(ns)}  daily ${START_TIME}  ${command}  (created disabled)` };
   }
-  const created = schtasks([
-    "/Create",
-    "/TN", taskName(ns),
-    "/TR", command,
-    "/SC", "DAILY",
-    "/ST", START_TIME,
-    "/F",
-  ]);
-  if (created.code !== 0) return `FAILED  ${taskName(ns)}: ${created.out}`;
-  // CREATED DISABLED. See the header: install is not the same act as switching on a
-  // nightly unattended agent, and conflating them is how one ends up running because
-  // somebody ran a setup script.
-  const disabled = schtasks(["/Change", "/TN", taskName(ns), "/DISABLE"]);
-  if (disabled.code !== 0) return `CREATED ${taskName(ns)} but could NOT disable it: ${disabled.out}`;
-  return `created ${taskName(ns)}, DISABLED. Enable with: schtasks /Change /TN "${taskName(ns)}" /ENABLE`;
+  // CREATED DISABLED, in the one call that creates it. See the header: install is not
+  // the same act as switching on a nightly unattended agent, and conflating them is how
+  // one ends up running because somebody ran a setup script. The file is UTF-16 LE with
+  // a byte-order mark, the encoding the XML declares and the one schtasks reads.
+  const dir = mkdtempSync(join(tmpdir(), "capsid-task-"));
+  const file = join(dir, "task.xml");
+  try {
+    writeFileSync(file, `﻿${taskXml(ns)}`, "utf16le");
+    const created = run(["/Create", "/XML", file, "/TN", taskName(ns), "/F"]);
+    if (created.code !== 0) return { ok: false, line: `FAILED  ${taskName(ns)}: ${created.out}` };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return { ok: true, line: `created ${taskName(ns)}, DISABLED. Enable with: schtasks /Change /TN "${taskName(ns)}" /ENABLE` };
 }
 
-function remove(ns, apply) {
-  if (!taskExists(ns)) return `absent  ${taskName(ns)}`;
-  if (!apply) return `DELETE  ${taskName(ns)}`;
-  const res = schtasks(["/Delete", "/TN", taskName(ns), "/F"]);
-  return res.code === 0 ? `deleted ${taskName(ns)}` : `FAILED  ${taskName(ns)}: ${res.out}`;
+export function remove(ns, apply, run = schtasks) {
+  if (!taskExists(ns, run)) return { ok: true, line: `absent  ${taskName(ns)}` };
+  if (!apply) return { ok: true, line: `DELETE  ${taskName(ns)}` };
+  const res = run(["/Delete", "/TN", taskName(ns), "/F"]);
+  return res.code === 0 ? { ok: true, line: `deleted ${taskName(ns)}` } : { ok: false, line: `FAILED  ${taskName(ns)}: ${res.out}` };
+}
+
+// Install needs the key file, because the task it creates posts its log with it.
+// REMOVE DOES NOT: a task whose key was revoked and deleted must still be removable,
+// and requiring the file left exactly that task running every night.
+export function manage(mode, targets, apply, { run = schtasks, hasKey = (ns) => existsSync(keyPath(ns)), log = console.log } = {}) {
+  let failed = 0;
+  for (const ns of targets) {
+    if (mode === "install" && !hasKey(ns)) {
+      log(`SKIP    ${ns}: no key file at ${keyPath(ns)}. Mint it before scheduling a driver for it.`);
+      continue;
+    }
+    const { ok, line } = mode === "install" ? install(ns, apply, run) : remove(ns, apply, run);
+    if (!ok) failed += 1;
+    log(`  ${line}`);
+  }
+  return failed;
 }
 
 function list() {
@@ -352,15 +403,12 @@ async function main() {
   if (mode === "list") return list();
   if (mode === "run") process.exit(await runOne(namespace));
 
-  const targets = selected(namespace);
-  for (const ns of targets) {
-    if (!existsSync(keyPath(ns))) {
-      console.log(`SKIP    ${ns}: no key file at ${keyPath(ns)}. Mint it before scheduling a driver for it.`);
-      continue;
-    }
-    console.log(`  ${mode === "install" ? install(ns, apply) : remove(ns, apply)}`);
-  }
+  const failed = manage(mode, selected(namespace), apply);
   if (!apply) console.log("\nDry run. Re-run with --apply to change anything.");
+  if (failed > 0) {
+    console.error(`\n${failed} task(s) FAILED.`);
+    process.exitCode = 1;
+  }
 }
 
 // Only when executed, so the pure helpers above are importable by the test suite.

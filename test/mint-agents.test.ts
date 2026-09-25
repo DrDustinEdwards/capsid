@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AGENTS, driverFor, keyPath, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
+import { AGENTS, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
 import { ROSTER } from "../src/improve-schema.ts";
 
 // scripts/mint-agents.mjs: the six credentials of docs/bootstrap.md.
@@ -160,4 +161,69 @@ test("the key file path is the one docs/bootstrap.md and the driver both name", 
     assert.equal(keyPath(`${ns}-driver`), expected(`${ns}-driver`));
   }
   assert.equal(keyPath("seat"), expected("seat"));
+});
+
+// ---- the key file is created before the mint ---------------------------------
+//
+// A mint that succeeded followed by a write that failed left a live credential that
+// nothing on disk could present, under a name that can never be minted again.
+
+function tempDir() {
+  return mkdtempSync(join(tmpdir(), "mint-agents-"));
+}
+
+test("A KEY FILE THAT CANNOT BE CREATED REFUSES BEFORE ANYTHING IS MINTED", async () => {
+  const dir = tempDir();
+  try {
+    let called = 0;
+    const tool = async () => {
+      called += 1;
+      return JSON.stringify({ key: "capsid_k_example" });
+    };
+    const path = join(dir, "no-such-folder", "agent-x.key");
+    await assert.rejects(mintInto(tool, { name: "x" }, path), /cannot create .*Nothing was minted/);
+    assert.equal(called, 0, "the agent was minted although its key had nowhere to go");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a failed mint leaves no file, a good one writes the key and reports only its fingerprint", async () => {
+  const dir = tempDir();
+  try {
+    const path = join(dir, "agent-x.key");
+    const refused = async () => {
+      throw new Error("agents refused: name taken");
+    };
+    await assert.rejects(mintInto(refused, { name: "x" }, path), /name taken/);
+    assert.equal(existsSync(path), false, "an empty key file was left behind by a failed mint");
+
+    const sent: object[] = [];
+    const good = async (_name: string, args: object) => {
+      sent.push(args);
+      return JSON.stringify({ key: "capsid_k_example" });
+    };
+    const line = await mintInto(good, { name: "x", what: "docs only" }, path);
+    assert.equal(readFileSync(path, "utf8"), "capsid_k_example\n");
+    assert.match(line, new RegExp(`fingerprint ${fingerprint("capsid_k_example")}`));
+    assert.equal(line.includes("capsid_k_example"), false, "the report printed the key");
+    assert.deepEqual(sent, [{ action: "mint", name: "x" }], "`what` went over the wire");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an existing key file is skipped and nothing is minted", async () => {
+  const dir = tempDir();
+  try {
+    const path = join(dir, "agent-x.key");
+    writeFileSync(path, "old\n");
+    let called = 0;
+    const line = await mintInto(async () => (called++, "{}"), { name: "x" }, path);
+    assert.match(line, /SKIPPED/);
+    assert.equal(called, 0);
+    assert.equal(readFileSync(path, "utf8"), "old\n");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
