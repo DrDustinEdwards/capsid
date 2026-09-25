@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { REVIEW_PREFIX, VERDICTS, decidingReview, outcomeOf, pullRequestFrom, readReviewComments, verdictOf } from "../src/review.ts";
+import { parsePrUrl } from "../src/github/client.ts";
+import { prUrlsFromJob } from "../src/outcome-prs.ts";
+import { REVIEW_PREFIX, VERDICTS, decidingReview, outcomeOf, readReviewComments, verdictOf } from "../src/review.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // GROUP 4: A SECOND READER BEFORE THE SEAT.
@@ -125,12 +127,12 @@ test("DERIVED: every verdict maps to an outcome, so none of them falls through",
 // ---- the pull request a job finished with ------------------------------------------
 
 test("a pull request URL is recognised, with its owner, repo and number", () => {
-  assert.deepEqual(pullRequestFrom("https://github.com/DrDustinEdwards/capsid-mcp/pull/27"), {
+  assert.deepEqual(parsePrUrl("https://github.com/DrDustinEdwards/capsid-mcp/pull/27"), {
     owner: "DrDustinEdwards",
     repo: "capsid-mcp",
     number: 27,
   });
-  assert.deepEqual(pullRequestFrom("https://github.com/DrDustinEdwards/capsid-mcp/pull/27/files"), {
+  assert.deepEqual(parsePrUrl("https://github.com/DrDustinEdwards/capsid-mcp/pull/27/files"), {
     owner: "DrDustinEdwards",
     repo: "capsid-mcp",
     number: 27,
@@ -142,8 +144,18 @@ test("anything that is not a pull request URL is null, so a document key does no
   // a parser that coerced one into a pull request number would go asking GitHub about
   // a number it made up.
   for (const ref of [null, undefined, "", "capsid/decisions.md", "https://github.com/DrDustinEdwards/capsid-mcp/issues/27", "https://example.com/pull/1"]) {
-    assert.equal(pullRequestFrom(ref), null, `'${ref}' was read as a pull request`);
+    assert.equal(parsePrUrl(ref), null, `'${ref}' was read as a pull request`);
   }
+});
+
+test("ONE PARSER: the gate and the prose scan agree on what a pull request URL is (F4-1)", () => {
+  // The review gate accepted any characters between the slashes and the evidence
+  // parser did not, so the gate read owner/repo strings the verifier refused.
+  const odd = "https://github.com/some%20owner/repo/pull/3";
+  assert.equal(parsePrUrl(odd), null);
+  assert.deepEqual(prUrlsFromJob({ result_ref: odd, result_summary: null }), []);
+  const url = "https://github.com/DrDustinEdwards/capsid-mcp/pull/27";
+  assert.deepEqual(prUrlsFromJob({ result_ref: null, result_summary: `opened ${url} today` }), [url]);
 });
 
 // ---- reading the comments off GitHub ----------------------------------------------

@@ -50,9 +50,18 @@ function queueDb(row: Record<string, unknown>, audit: unknown[] = reviewerAudit(
         // correctionsForWork fails CLOSED, so a fake that returns nothing turns every
         // resume in the suite into a refusal.
         if (/SUM\(corrections_count\)/i.test(flat)) return { spent: Number(row.corrections_count ?? 0) };
+        // The namespace mapping the gate resolves a pull request's repo through.
+        if (/SELECT repos FROM namespaces/i.test(flat)) {
+          return params[0] === "capsid" ? { repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }]) } : null;
+        }
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id) return null;
+          if (/SET result_ref = \?2/.test(flat)) {
+            if (/result_ref IS NULL/.test(flat) && row.result_ref !== null) return null;
+            row.result_ref = params[1];
+            return { id: row.id };
+          }
           // THE FAKE APPLIES WHAT THE STATEMENT ASKS rather than keeping its own
           // answer. A fake that decided for itself is how a plant deleting a clause
           // leaves a suite green, measured on this repo on 2026-09-12.
@@ -121,19 +130,40 @@ function claimedRow(overrides: Record<string, unknown> = {}) {
 
 const NOW = new Date("2026-09-12T12:00:00Z");
 
-async function withComments<T>(bodies: string[], fn: () => Promise<T>): Promise<T> {
+// The head commit every pull request reports. An APPROVE counts only when it quotes
+// this sha, so the approving comments below quote SHORT.
+const HEAD_SHA = "abc1234def5678abc1234def5678abc1234def56";
+const SHORT = HEAD_SHA.slice(0, 7);
+
+// A fake GitHub. Comments are served per pull request number (the key "*" serves any
+// number), each comment i posted at 1i:00, and every pull request's head commit is
+// HEAD_SHA. `asked` collects every URL requested.
+async function withGitHub<T>(
+  comments: Record<string, string[]>,
+  fn: () => Promise<T>,
+  opts: { asked?: string[] } = {}
+): Promise<T> {
   const original = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify(bodies.map((body, i) => ({ id: COMMENT_IDS[i], user: { login: "reviewer" }, body, created_at: `2026-09-12T1${i}:00:00Z` }))), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })) as never;
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  globalThis.fetch = (async (input: string) => {
+    const url = String(input);
+    opts.asked?.push(url);
+    const onComments = /\/issues\/(\d+)\/comments/.exec(url);
+    if (onComments) {
+      const bodies = comments[onComments[1]] ?? comments["*"] ?? [];
+      return json(bodies.map((body, i) => ({ id: COMMENT_IDS[i], user: { login: "reviewer" }, body, created_at: `2026-09-12T1${i}:00:00Z` })));
+    }
+    if (/\/pulls\/\d+$/.test(url)) return json({ head: { sha: HEAD_SHA } });
+    return new Response("not modelled", { status: 404 });
+  }) as never;
   try {
     return await fn();
   } finally {
     globalThis.fetch = original;
   }
 }
+
+const withComments = <T>(bodies: string[], fn: () => Promise<T>) => withGitHub({ "*": bodies }, fn);
 
 function reviewEnv(db: D1Database) {
   return fakeEnv({
@@ -160,7 +190,7 @@ test("NO REVIEW YET: complete is refused and the job stays claimed", async () =>
 
 test("APPROVE: complete proceeds exactly as it would with no reviewer", async () => {
   const { db, row } = queueDb(claimedRow());
-  await withComments(["REVIEW: the scope check is right. APPROVE"], async () => {
+  await withComments([`REVIEW: the scope check is right at ${SHORT}. APPROVE`], async () => {
     const result = await finish(db);
     assert.equal(result.ok, true, `an approved job was refused: ${JSON.stringify(result)}`);
     assert.equal(row.status, "done");
@@ -273,7 +303,7 @@ test("PLANT: complete with a DOCUMENT KEY is refused, because the reviewed party
 test("EVIDENCE NAMES THE PULL REQUEST TOO, so reporting it there is not a way past the gate", async () => {
   // The other half of the same hole: result_ref a document, evidence.prs the real work.
   const { db, row } = queueDb(claimedRow({ result_ref: null }));
-  await withComments(["REVIEW: reads fine. APPROVE"], async () => {
+  await withComments([`REVIEW: reads fine at ${SHORT}. APPROVE`], async () => {
     const result = await completeJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", {
       result_summary: "opened PR 27",
       result_ref: "capsid/decisions.md",
@@ -289,7 +319,7 @@ test("PLANT: a REVIEW comment Capsid did not post for a reviewer is not a verdic
   // do is make Capsid record that a can_comment_pr actor asked for that comment. With
   // newest-wins, before this the same comment also overwrote a real CHANGES.
   const { db, row } = queueDb(claimedRow(), reviewerAudit(COMMENT_IDS, { actor: "agent:capsid-driver", canComment: false }));
-  await withComments(["REVIEW: looks good to me. APPROVE"], async () => {
+  await withComments([`REVIEW: looks good to me at ${SHORT}. APPROVE`], async () => {
     const result = await finish(db);
     assert.equal(result.ok, false, "a comment from an actor with no can_comment_pr counted as a review");
     assert.match(String(result.refusal), /no review yet/);
@@ -317,6 +347,115 @@ test("FAIL WITH NO PULL REQUEST STILL WORKS, because work that could not be done
   const result = await failJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", "the API this needs was retired");
   assert.equal(result.ok, true, `a genuinely failed job was stranded: ${JSON.stringify(result)}`);
   assert.equal(row.status, "failed");
+});
+
+// ---- the gate is bound to the job's own pull request and head (audit 2026-09-25, F2-4)
+
+const OLDER_PR = "https://github.com/DrDustinEdwards/capsid-mcp/pull/26";
+
+test("PLANT: after CHANGES, completing with an older APPROVED pull request is refused", async () => {
+  // Scenario 1 of the finding. The gate read whichever pull request the call named, so
+  // a driver whose job got CHANGES on PR 27 could complete naming PR 26, which a
+  // reviewer approved last week, and the gate returned proceed.
+  const { db, row } = queueDb(claimedRow({ result_ref: null }));
+  await withGitHub({ "27": ["REVIEW: the error path is wrong. CHANGES"], "26": [`REVIEW: fine at ${SHORT}. APPROVE`] }, async () => {
+    await finish(db);
+    assert.equal(row.corrections_count, 1);
+    const result = await completeJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", {
+      result_summary: "done, see PR 26",
+      result_ref: OLDER_PR,
+    });
+    assert.equal(result.ok, false, "an approval of a different pull request passed the gate");
+    assert.match(String(result.refusal), /bound to/);
+    assert.equal(row.status, "claimed");
+    assert.equal(row.result_ref, PR, "the first read did not record the job's pull request");
+  });
+});
+
+test("PLANT: an APPROVE that quotes no head sha does not pass", async () => {
+  // A committer date is set by whoever commits, so a push backdated before the review
+  // passed the date check. The sha the reviewer quotes is what ties the approval to
+  // the code it read.
+  const { db, row } = queueDb(claimedRow());
+  await withComments(["REVIEW: reads fine. APPROVE"], async () => {
+    const result = await finish(db);
+    assert.equal(result.ok, false, "an APPROVE that names no commit passed the gate");
+    assert.match(String(result.refusal), /quote/);
+    assert.equal(row.status, "claimed");
+    assert.equal(row.corrections_count, 0, "an unpinned approval is not a correction");
+  });
+});
+
+test("PLANT: an APPROVE quoting an older head sha does not pass", async () => {
+  // Scenario 2 of the finding: the reviewer approved 1111111 and the driver pushed
+  // since; the head is HEAD_SHA.
+  const { db, row } = queueDb(claimedRow());
+  await withComments(["REVIEW: reviewed at 1111111, reads fine. APPROVE"], async () => {
+    const result = await finish(db);
+    assert.equal(result.ok, false, "an approval of an older head passed the gate");
+    assert.match(String(result.refusal), /needs a fresh review/);
+    assert.equal(row.status, "claimed");
+    assert.equal(row.corrections_count, 0, "a stale approval is not a correction");
+  });
+});
+
+test("AN APPROVE QUOTING THE CURRENT HEAD passes, as a 7-character prefix or the full sha", async () => {
+  for (const quoted of [HEAD_SHA.slice(0, 7), HEAD_SHA, HEAD_SHA.toUpperCase().slice(0, 12)]) {
+    const { db, row } = queueDb(claimedRow());
+    await withComments([`REVIEW: reviewed at ${quoted}, reads fine. APPROVE`], async () => {
+      const result = await finish(db);
+      assert.equal(result.ok, true, `an approval quoting ${quoted} was refused: ${JSON.stringify(result)}`);
+      assert.equal(row.status, "done");
+    });
+  }
+});
+
+test("A CHANGES QUOTING AN OLDER HEAD STILL SENDS THE JOB BACK, because only APPROVE needs the sha", async () => {
+  const { db, row } = queueDb(claimedRow());
+  await withComments(["REVIEW: at 1111111 the error path is wrong. CHANGES"], async () => {
+    await finish(db);
+    assert.equal(row.status, "claimed");
+    assert.equal(row.corrections_count, 1, "a CHANGES on an older head was not acted on");
+  });
+});
+
+test("A 6-CHARACTER PREFIX IS NOT A QUOTED SHA", async () => {
+  const { db, row } = queueDb(claimedRow());
+  await withComments([`REVIEW: reviewed at ${HEAD_SHA.slice(0, 6)}. APPROVE`], async () => {
+    const result = await finish(db);
+    assert.equal(result.ok, false, "a 6-character prefix counted as the head sha");
+    assert.equal(row.status, "claimed");
+  });
+});
+
+test("PLANT: a pull request in a repo the namespace does not map is refused, and GitHub is not asked about it", async () => {
+  const { db, row } = queueDb(claimedRow({ result_ref: null }));
+  const asked: string[] = [];
+  await withGitHub(
+    { "*": [`REVIEW: fine at ${SHORT}. APPROVE`] },
+    async () => {
+      const result = await completeJob(reviewEnv(db), driver() as never, NOW, "job_reviewme1234", {
+        result_summary: "opened PR 5",
+        result_ref: "https://github.com/someone-else/other-repo/pull/5",
+      });
+      assert.equal(result.ok, false, "a pull request outside the namespace mapping passed the gate");
+      assert.match(String(result.refusal), /is not mapped to namespace capsid/);
+      assert.equal(row.status, "claimed");
+      assert.equal(row.result_ref, null, "an unmapped pull request must not become the job's bound one");
+    },
+    { asked }
+  );
+  assert.deepEqual(asked.filter((u) => u.includes("someone-else")), []);
+});
+
+test("THE NORMAL CASE: the job's own pull request, approved at its current head, proceeds and stays bound", async () => {
+  const { db, row } = queueDb(claimedRow({ result_ref: null }));
+  await withGitHub({ "27": [`REVIEW: the scope check is right at ${SHORT}. APPROVE`] }, async () => {
+    const result = await finish(db);
+    assert.equal(result.ok, true, `an approved job was refused: ${JSON.stringify(result)}`);
+    assert.equal(row.status, "done");
+    assert.equal(row.result_ref, PR);
+  });
 });
 
 test("AN UNREADABLE GITHUB HOLDS THE JOB rather than waving it through", async () => {
