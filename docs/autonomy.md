@@ -6,28 +6,31 @@ Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13
 
 **Auto-merge** (`docs/policy/auto-merge.md`, read from `capsid/policy/auto-merge.md`).
 The five-minute tick walks every open pull request on the namespaces the policy names
-and merges only those that pass all ten checks, evaluated in order, each refusing on
+and merges only those that pass all eleven checks, evaluated in order, each refusing on
 its own. **A merge is a deploy on any repo that deploys on merge to its default branch,
 capsid included**, so passing these checks ships to production with no human:
 
 | check | what it requires |
 | --- | --- |
-| `paths_not_refused` | the changed-file list was read whole, and no path matches the policy's refused paths: the scorer and its scripts, the holdout suite, the policy and signer sources, the protected path list, migrations, wrangler config, secrets, and the files that define the checks |
+| `paths_not_refused` | the changed-file list was read whole, and no path matches the policy's refused paths: the scorer and its scripts, the holdout suite, the policy and signer sources, the protected path list, migrations, wrangler config, secrets, the files that define the checks, and the two sources that write what `pr_recorded_for_job` reads |
 | `paths_not_money` | no changed path names a billing or payment surface |
 | `no_migration_workflow_lockfile` | no changed path is a migration, a workflow or a lockfile |
 | `head_in_base_repo` | the PR's head branch is on the base repo, not a fork |
 | `body_names_job` | the PR body carries the id of the job the work came from |
+| `pr_author_allowed` | the GitHub account that opened the PR is on the signed document's author allowlist (`DrDustinEdwards` and `capsid-repo-access[bot]` in version 5) |
 | `author_is_driver` | that job was claimed by a minted, unrevoked agent of kind `driver` |
 | `job_handed_on` | that job is `blocked` or `done` |
 | `pr_recorded_for_job` | the job's `result_ref` or one of its `job_outcome_prs` rows names this PR |
 | `base_is_default_branch` | the PR targets the repo's default branch |
-| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the unit suite, the four typechecks and the integration suite to success |
+| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the unit suite and the integration suite to success |
 
 Tests, `src/`, docs, `CLAUDE.md` and `.claude/` merge on green since policy version 2 (2026-09-17). The improve loop's `PROTECTED_PATH_PATTERNS` still decides what the loop may edit and no longer decides what auto-merges.
 
 The document names the checks, the refused paths and the required CI steps, and the code
 enforces them. A document that disagrees with the code on any of the three is refused at load time. A test asserts the two agree in
-both directions. A pull request failing any check is left open, audited with the check
+both directions. The PR author allowlist is the exception: it is carried only in the
+signed document, the code holds no copy, and a document that names no author does not
+load. A pull request failing any check is left open, audited with the check
 that refused it, and reported under `improve_status` as awaiting the seat.
 
 **Pre-approved gates** (`docs/policy/gates.md`, read from `capsid/policy/gates.md`). A

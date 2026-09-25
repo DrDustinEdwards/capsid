@@ -28,9 +28,12 @@ test("the integration suite has files, and they are where the config looks", () 
   assert.equal(PKG.scripts.test, 'node scripts/test-budget.mjs "test/*.test.ts"');
 });
 
-test("PLANT: CI runs both suites and typechecks all three configs", () => {
+test("PLANT: CI runs both suites and typechecks all four configs", () => {
+  // Each command either as a step's `run:` or as a whole line of a `run: |` block,
+  // which is how the one typecheck step runs all four configs (audit 2026-09-25, B1).
   for (const step of ["npm run check", "npm run check:test", "npm run check:integration", "npm run check:scripts", "npm test", "npm run test:integration"]) {
-    assert.ok(CI.includes(`run: ${step}`), `the CI checks job does not run \`${step}\``);
+    const escaped = step.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(CI, new RegExp(`^\\s+(run: )?${escaped}( \\|\\| status=1)?$`, "m"), `the CI checks job does not run \`${step}\``);
   }
   // Ordering matters: the deploy job is `needs: checks`, so an integration failure
   // has to be inside that job rather than in a job beside it.
