@@ -211,23 +211,19 @@ test("a non-string entry in prs is dropped and the rest survive", () => {
   assert.deepEqual(parsed.evidence?.prs, ["https://github.com/o/r/pull/1"]);
 });
 
-test("the tool accepts both forms and refuses an unparseable string", async () => {
+// That the tool accepts evidence as an object and as a JSON string, and that each
+// reaches the outcome row, is driven against a real D1 in
+// test-integration/job-outcomes.test.ts ("the jobs tool takes evidence as an object
+// and as a JSON string").
+test("the tool refuses an unparseable evidence string and writes nothing", async () => {
   const d1 = fakeD1({});
   const client = await connectAdmin(d1.db);
-  const complete = async (evidence: unknown) => {
-    const result = (await client.callTool({
-      name: "jobs",
-      arguments: { action: "complete", namespace: "capsid", id: "job_000000000001", result_summary: "done", evidence },
-    })) as { content: Array<{ text: string }> };
-    return result.content[0]?.text ?? "";
-  };
-  const evidence = { prs: ["https://github.com/o/r/pull/1"], commits: 6 };
-  const asObject = await complete(evidence);
-  const asString = await complete(JSON.stringify(evidence));
-  const garbage = await complete("6 commits, 19 files");
+  const result = (await client.callTool({
+    name: "jobs",
+    arguments: { action: "complete", namespace: "capsid", id: "job_000000000001", result_summary: "done", evidence: "6 commits, 19 files" },
+  })) as { isError?: boolean; content: Array<{ text: string }> };
   await client.close();
-  for (const [form, text] of [["object", asObject], ["string", asString]] as const) {
-    assert.doesNotMatch(text, /Input validation error|not JSON/, `evidence as a JSON ${form} was refused before the job was looked at: ${text}`);
-  }
-  assert.match(garbage, /not JSON/, "an unparseable evidence string was not refused");
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? "", /not JSON/, "an unparseable evidence string was not refused");
+  assert.deepEqual(d1.batches, [], "a refused complete still wrote");
 });

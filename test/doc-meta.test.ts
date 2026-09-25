@@ -24,12 +24,14 @@ test("closure does not remove a document from the lint loop", () => {
 });
 
 test("every valid status is accepted", () => {
+  assert.ok(DOC_STATUSES.size > 0, "DOC_STATUSES is empty, so this checks nothing");
   for (const status of DOC_STATUSES) {
     assert.equal(validateDocStatus(status), null, `expected '${status}' to be accepted`);
   }
 });
 
 test("every valid type is accepted", () => {
+  assert.ok(DOC_TYPES.size > 0, "DOC_TYPES is empty, so this checks nothing");
   for (const type of DOC_TYPES) {
     assert.equal(validateDocType(type), null, `expected '${type}' to be accepted`);
   }

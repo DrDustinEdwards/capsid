@@ -209,6 +209,9 @@ test("the scan never returns a rewritten body, only a flag", () => {
   // Flag, never auto-correct. If this object ever grows a "corrected" or
   // "replacement" field, that is a program editing canon on its own judgement.
   const claims = scanCountClaims([{ path: "core.md", type: "core", body: "19 tools" }], "capsid");
+  // "19 tools" is a stale count, so there is exactly one claim to inspect. An empty
+  // result would pass the loop below without checking anything.
+  assert.equal(claims.length, 1, `expected one claim for a stale tool count: ${JSON.stringify(claims)}`);
   for (const c of claims) {
     assert.deepEqual(
       Object.keys(c).sort().filter((k) => !["path", "type", "noun", "quote", "states", "authoritative", "note"].includes(k)),

@@ -50,6 +50,7 @@ test("each namespace gets a DIFFERENT key, and none of them is the root secret",
   // went stale the moment the recova namespace was renamed to foxhound, which is
   // the drift this repo keeps ruling against, one level down.
   const keys = await Promise.all(ROSTER.map((ns) => deriveScoreKey(ROOT, ns)));
+  assert.ok(keys.length > 1, "fewer than two namespaces, so distinctness is not tested");
   assert.equal(new Set(keys).size, keys.length, "two namespaces derived the same key");
   for (const key of keys) {
     assert.notEqual(key, ROOT, "a derived key is the root secret itself");

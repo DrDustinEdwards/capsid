@@ -78,6 +78,7 @@ test("supersede refuses a missing reason and a swallowed tag before it reads any
 });
 
 test("isJobStatus refuses anything that is not one of them", () => {
+  assert.ok(JOB_STATUSES.length > 0, "JOB_STATUSES is empty, so no status was checked");
   for (const status of JOB_STATUSES) assert.ok(isJobStatus(status));
   for (const bad of ["", "QUEUED", "running", "constructor", "toString", null, 3]) {
     assert.equal(isJobStatus(bad), false, `${String(bad)} is not a job status`);
@@ -104,6 +105,7 @@ test("every action the schema advertises is one the tool handles", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const unhandled: string[] = [];
+  assert.ok(JOB_ACTIONS.length > 0, "JOB_ACTIONS is empty, so no action was called");
   for (const action of JOB_ACTIONS) {
     const result = (await client.callTool({ name: "jobs", arguments: { action, namespace: "capsid" } })) as {
       content: Array<{ text: string }>;
@@ -172,6 +174,7 @@ test("PLANT: the real malformed summary from job_9980f57bd359 is detected", () =
 test("every parameter name the guard knows is one the tool serves", async () => {
   // Derived from the served schema rather than retyped, so a name the guard lists and
   // nobody can send fails here.
+  assert.ok(JOB_PARAM_NAMES.length > 0, "JOB_PARAM_NAMES is empty, so no name was checked");
   for (const name of JOB_PARAM_NAMES) {
     assert.equal(swallowedParamTag(`text </${name}> more`), name, `'</${name}>' is not detected`);
   }
@@ -250,20 +253,8 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
   assert.match(posted.refusal ?? "", /^body contains the literal text '<\/result_ref>'\./);
 });
 
-test("a well-formed call is still accepted, so the guard is not a wall", async () => {
-  // The innocent case in the same commit as the guard: a guard that refuses ordinary
-  // work gets deleted rather than fixed. This one gets past the tag check and stops
-  // at the missing database, which is proof it was not refused.
-  const agent = legacyAgent("write", "agent:capsid-driver");
-  await assert.rejects(
-    () =>
-      completeJob(fakeEnv({}), agent, new Date(), "job_abc123abc123", {
-        result_summary: "landed it; evidence is in the PR and the result_ref is a document key",
-      }),
-    /prepare|undefined|DB/i,
-    "a clean summary was refused by the tag guard instead of reaching the database"
-  );
-});
+// The innocent direction, a clean summary driven to a completed row, is in
+// test-integration/jobs.test.ts ("the tag guard is not a wall").
 
 // ---- the skills a run names are checked before anything is written ---------------
 //
@@ -299,15 +290,8 @@ test("a skill named as USED but not OFFERED is refused", async () => {
   assert.match(out.refusal ?? "", /not as offered/);
 });
 
-test("naming no skills at all is not a refusal: most jobs have no recommend step", async () => {
-  const d1 = fakeD1({});
-  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
-    result_summary: "done",
-  });
-  // It refuses for an unrelated reason (no such job in this fake) or succeeds, but it
-  // must not refuse ON THE SKILLS.
-  assert.equal(/skill/i.test(out.refusal ?? ""), false, `refused on skills when none were named: ${out.refusal}`);
-});
+// Naming no skills at all is not a refusal: test-integration/jobs.test.ts drives that
+// case to a completed row.
 
 // ---- audit 2026-09-25, F3-7: a refusal is an error to the MCP client -------------------
 

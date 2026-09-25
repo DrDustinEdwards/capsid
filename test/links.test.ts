@@ -80,6 +80,7 @@ test("the shapes the live store actually holds still parse", () => {
 test("the link vocabulary is closed, and the error names the whole set", () => {
   const result = parseLinks('[{"type":"mentions","to_path":"core.md"}]', "capsid");
   assert.ok("error" in result);
+  assert.ok(LINK_TYPES.length > 0, "LINK_TYPES is empty, so the error was not checked for any type");
   for (const type of LINK_TYPES) assert.match(result.error, new RegExp(type));
 });
 
