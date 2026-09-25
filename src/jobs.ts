@@ -1554,13 +1554,20 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
     .bind(stamp)
     .all<{ id: string }>();
   const requeued = (results ?? []).map((r) => r.id);
+  // ONE JOB'S RECORDS FAILING DOES NOT COST THE OTHERS THEIRS (audit 2026-09-25, F1-4).
+  // The UPDATE above has already requeued every id, so a throw on job N used to leave
+  // N+1 onwards requeued with no audit row and a stale mirror.
   for (const id of requeued) {
-    const job = await readJob(env.DB, id);
-    if (!job) continue;
-    await env.DB.batch([
-      ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
-      auditStatement(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
-    ]);
+    try {
+      const job = await readJob(env.DB, id);
+      if (!job) continue;
+      await env.DB.batch([
+        ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
+        auditStatement(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
+      ]);
+    } catch (err) {
+      console.error(`JOB_LEASE_RECORD_FAILED ${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
   return { requeued };
 }
