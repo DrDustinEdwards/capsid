@@ -105,7 +105,7 @@ export function rollbackTookEffect(afterSha, runSha) {
   return { moved: true, reason: `${after} is live after the rollback.` };
 }
 
-// Skipped when imported by the test, the same check scripts/test-budget.mjs uses.
+// Skipped when imported by the test.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
   try {
