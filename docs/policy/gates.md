@@ -89,14 +89,16 @@ to master.
 - Changing the improve loop's mode.
 - Dropping a table, index or column; deleting rows; truncating a table.
 - Deleting files recursively.
-- Merging a pull request, which is the human's gate and stays that way.
+- Merging a pull request. A merge is not approvable through this policy; the auto-merge
+  policy (`docs/policy/auto-merge.md`) governs which driver pull requests the Worker
+  merges, and the seat merges the rest.
 
 ## What this policy cannot do
 
 It cannot describe less than the code enforces: a class the Worker would approve that
 this document does not name is refused at load time. It cannot approve a command that
-matched no class. The refusal is the default and a match has to be demonstrated. It
-ships disabled. Turning it on is recorded in the audit log.
+matched no class. The refusal is the default and a match has to be demonstrated.
+Turning it on or off is recorded in the audit log.
 
-The stored copy's closing paragraph instead records when it was enabled, so the
+The stored copy's closing paragraph also records when it was enabled, so that
 difference between the two is history rather than drift.
