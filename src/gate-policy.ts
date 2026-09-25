@@ -85,7 +85,17 @@ const PUSH_BRANCH = new RegExp(
   "i"
 );
 const OPEN_PR = /^gh\s+pr\s+create\b/i;
-const MIGRATION = /\bd1\s+execute\s+\S+[^\n]*?--file[= ]\s*(\S+)/i;
+// ANCHORED AT BOTH ENDS, like PUSH_BRANCH (audit 2026-09-25, F2-7). It was an unanchored
+// search, so extra arguments in the same segment (a second --file, another database
+// name, a --command) rode along with the one file that was checked. The segment is now
+// exactly: wrangler d1 execute, one database name, at most one of --remote or --local
+// on either side of the file, and one --file under a plain path.
+const MIGRATION_FILE = String.raw`--file(?:=|\s+)("[A-Za-z0-9._/-]+"|'[A-Za-z0-9._/-]+'|[A-Za-z0-9._/-]+)`;
+const MIGRATION_TARGET = String.raw`--(?:remote|local)`;
+const MIGRATION = new RegExp(
+  String.raw`^(?:npx\s+)?wrangler\s+d1\s+execute\s+[A-Za-z0-9_-]+\s+(?:${MIGRATION_TARGET}\s+${MIGRATION_FILE}|${MIGRATION_FILE}(?:\s+${MIGRATION_TARGET})?)\s*$`,
+  "i"
+);
 
 export type GateMatch =
   // EVERY segment's class, in order, and every migration file the command runs. A
@@ -217,7 +227,8 @@ export function neverListView(command: string): { view: string } | { refused: st
 function classifySegment(segment: string): { klass: GateClass; migrationPath?: string } | { refused: string } {
   const migration = MIGRATION.exec(segment);
   if (migration) {
-    const path = migration[1].replace(/^["']|["']$/g, "");
+    // Group 1 or 2, by which side of the file the --remote or --local sits.
+    const path = (migration[1] ?? migration[2]).replace(/^["']|["']$/g, "");
     if (!/(^|\/)migrations\//i.test(path)) {
       return { refused: `${path} is not under migrations/, so it is not a migration this policy covers.` };
     }
@@ -376,7 +387,8 @@ export type ApprovalVerdict =
 /**
  * Whether the seat may send this blocked command back in on the policy alone.
  * `readMigration` is passed in so the caller owns the repo read and this stays
- * testable without a GitHub fake.
+ * testable without a GitHub fake. It returns the file, null when there is none, or
+ * throws with the reason it could not be read.
  */
 export async function approveByPolicy(
   env: Env,
@@ -407,7 +419,16 @@ export async function approveByPolicy(
   // two files would otherwise have had one of them checked.
   const details: string[] = [];
   for (const path of match.migrationPaths) {
-    const sql = await readMigration(path);
+    // A reader that throws says why it could not read, and the refusal carries that.
+    let sql: string | null;
+    try {
+      sql = await readMigration(path);
+    } catch (err) {
+      return {
+        approved: false,
+        reason: `${path} could not be read (${err instanceof Error ? err.message : String(err)}), so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
+      };
+    }
     if (sql === null) {
       return { approved: false, reason: `${path} could not be read, so its statements could not be checked. A migration nobody parsed is not pre-approved.` };
     }

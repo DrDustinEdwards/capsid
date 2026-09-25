@@ -105,6 +105,8 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM agents").run();
   await env.DB.prepare("DELETE FROM job_outcome_prs").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
 });
 
 describe("job outcomes", () => {
