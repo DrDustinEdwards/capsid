@@ -480,6 +480,25 @@ test("loadMergePolicy refuses a policy that is absent, unsigned, or edited after
   assert.match(edited.error, /does not match its body/);
 });
 
+test("PLANT: a field added to the frontmatter of a signed policy does not change what loadMergePolicy reads", async () => {
+  // The signature covers the body below the frontmatter only, and the parser returns
+  // the first `- <name>:` line in what it is given. Handed the whole stored text, it
+  // read a line placed beside the signature ahead of the signed one.
+  const signed = await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false"));
+  const inject = (line: string) => signed.replace(/^---\n/, `---\n${line}\n`);
+
+  for (const plant of ["- enabled: true", "- namespaces: capsid, dustinedwards", "- version: 99"]) {
+    const loaded = await loadMergePolicy(await envWithPolicy(inject(plant)));
+    if ("policy" in loaded) {
+      assert.equal(loaded.policy.enabled, false, `'${plant}' in the frontmatter enabled a policy signed as disabled`);
+      assert.deepEqual(loaded.policy.namespaces, ["capsid"], `'${plant}' in the frontmatter widened the signed namespaces`);
+      assert.equal(loaded.policy.version, "1", `'${plant}' in the frontmatter replaced the signed version`);
+    }
+    assert.ok("error" in loaded, `a policy with '${plant}' added to its frontmatter must be refused`);
+    assert.match(loaded.error, /besides the capsid-task-signature line/);
+  }
+});
+
 test("loadMergePolicy accepts the signed policy and refuses one that names fewer checks than the code enforces", async () => {
   const ok = await loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, GOOD_POLICY)));
   assert.ok("policy" in ok, "the signed policy must load");
