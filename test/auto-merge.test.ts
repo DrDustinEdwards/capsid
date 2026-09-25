@@ -939,7 +939,7 @@ async function pinnedEnv() {
   const d1 = fakeD1({
     namespaces: NS_ROW,
     documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body: await signTaskBody(SECRET, GOOD_POLICY) }],
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "claimed" }],
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
   const kv = fakeKv({ seedToken: true });
