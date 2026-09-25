@@ -130,9 +130,9 @@ export interface ScoreReport {
   run_id: string;
   attempt_id: string;
   head_sha: string;
-  // A per-report nonce, inside the signed body so it cannot be swapped. The Worker
-  // keeps a KV replay cache keyed on (namespace, jti) for the signature window, so
-  // a captured, still-in-window signed report cannot be posted twice (audit
+  // A per-report nonce, inside the signed body so it cannot be swapped. claimJti
+  // records it in the D1 table improve_jti, keyed on (scope, jti) with the namespace
+  // as the scope, so a captured signed report cannot be posted twice (audit
   // 2026-09-06). The workflow generates a fresh uuid per post.
   jti: string;
   anchors: MetricMap;
@@ -428,9 +428,6 @@ export const HOLDOUT_BUCKET_NAME = "capsid-improve-holdout";
 // generous headroom and three orders of magnitude under the API's 7-day ceiling.
 export const HOLDOUT_CREDENTIAL_TTL_SECONDS = 3600;
 
-// What the credential request body must say: which namespace (bound to the
-// signing key by the same rule as a score report) and a jti so a captured
-// request cannot be replayed inside the signature window.
 function parseJsonBody(body: string): { ok: true; parsed: unknown } | { ok: false; refusal: string } {
   try {
     return { ok: true, parsed: JSON.parse(body) };
@@ -447,6 +444,9 @@ function jtiOf(parsed: unknown): { ok: true; jti: string } | { ok: false; refusa
   return { ok: true, jti };
 }
 
+// What the credential request body must say: which namespace (bound to the
+// signing key by the same rule as a score report) and a jti so a captured
+// request cannot be replayed inside the signature window.
 export function parseCredentialRequest(
   body: string
 ): { ok: true; namespace: string; jti: string } | { ok: false; refusal: string } {

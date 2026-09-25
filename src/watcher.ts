@@ -54,7 +54,8 @@ export const CI_RED_HOURS = 2;
 //
 // BACKUP_STALE_HOURS is the LOCAL dump at 26 hours, measured from a key this Worker
 // writes itself. This is a different thing measured from the other side: the newest
-// dump present in DrDustinEdwards/capsid-backups, which this Worker only observes.
+// dump present in the backups repo (MIRROR_REPO_LABEL, below), which this Worker only
+// observes.
 // The mirror's schedule lives in that repo and can change without this one hearing,
 // so one constant standing for both would go wrong silently the day it does.
 //
@@ -64,8 +65,8 @@ export const CI_RED_HOURS = 2;
 // even run. A tighter window would fire every morning.
 export const MIRROR_STALE_HOURS = 36;
 
-// The mapping label and the path, spelled once. The repo itself is NEVER named here:
-// it is resolved from the capsid namespace's mapping, which is the authorization
+// The mapping label and the path, spelled once. The repo itself is NEVER named in this
+// module: it is resolved from the capsid namespace's mapping, which is the authorization
 // boundary and is admin-only to edit. A hardcoded owner/name would be a second copy
 // of that mapping sitting outside the boundary.
 export const MIRROR_REPO_LABEL = "backups";

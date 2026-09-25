@@ -146,16 +146,6 @@ export async function requireConfirmation(
   return { ok: false, message: verdict === "declined" ? messages.declined : messages.unsupported };
 }
 
-// `actor` is the principal recorded on every audit_log row. It replaced a hardcoded
-// 'operator' string at all eight audit write sites, which left the column answering
-// "what happened" and never "who did it".
-//
-// Shape: "github:<login>" for an OAuth session, "opkey:<fingerprint>" for an operator
-// key. The fingerprint is a 12-char PREFIX of the key's sha256, not the key:
-// OPERATOR_KEY_HASH is the verifier, so a full hash in audit_log would copy it into
-// the database the audit log holds to account. Rows written before the change keep
-// their literal 'operator' value.
-
 // THE GRANT, NOT A BOOLEAN. This was `operator: boolean`, which misread at every call
 // site: `buildServer(env, true, ...)` looks like "this is the operator server" when
 // it means "this grant may write", and a read-only ro: key IS an operator.
@@ -167,6 +157,15 @@ export interface ToolCtx {
   db: D1Database;
   grant: ToolGrant;
   mayWrite: boolean;
+  // `actor` is the principal recorded on every audit_log row. It replaced a hardcoded
+  // 'operator' string at all eight audit write sites, which left the column answering
+  // "what happened" and never "who did it".
+  //
+  // Shape: "github:<login>" for an OAuth session, "opkey:<fingerprint>" for an operator
+  // key, "agent:<name>" for a minted agent (src/agents.ts). The fingerprint is a 12-char
+  // PREFIX of the key's sha256, not the key: OPERATOR_KEY_HASH is the verifier, so a
+  // full hash in audit_log would copy it into the database the audit log holds to
+  // account. Rows written before the change keep their literal 'operator' value.
   actor: string;
   // THE CALLER, resolved once per request (src/agents.ts). `grant`, `mayWrite` and
   // `actor` are all projections of it, kept as their own fields so the tool modules
@@ -1209,7 +1208,8 @@ export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
   // Register a namespace: the one row in the namespaces table that repo tools and the
   // namespaces list read. Writing documents to a new namespace label does not create
   // it, so without this a namespace was a raw D1 insert. Create-only: it will not
-  // overwrite an existing mapping. Requires an operator key.
+  // overwrite an existing mapping. Admin only (TOOL_GRANTS in src/scope.ts): an OAuth
+  // session qualifies, a minted agent holding the write grant does not.
   server.registerTool(
     "register_namespace",
     {

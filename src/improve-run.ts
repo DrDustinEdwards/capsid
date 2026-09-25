@@ -448,7 +448,9 @@ export async function improveRunManual(
 // THE CONTROL ACTIONS. improve_run's non-run verbs: set the mode, pause or unpause
 // namespaces, set the budget caps. Each is a KV write, audited, and READ BACK from KV
 // so the caller sees the value that landed rather than the one it asked for.
-// improve_status reads the same keys. All of it is write-gated at the tool boundary.
+// improve_status reads the same keys. The registrar gates each action by
+// TOOL_ACTION_GRANTS.improve_run in src/scope.ts: every control action is admin, and
+// only run and claim take the write grant.
 export type ImproveControlResult =
   | { action: "mode"; requested: string; mode: ImproveMode; mode_note: string | null }
   | { action: "pause" | "unpause"; namespaces: string[]; paused: Record<string, string | null> }
