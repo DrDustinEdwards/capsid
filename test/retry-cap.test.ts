@@ -168,7 +168,7 @@ test("the first two corrections are allowed, and each one spends the budget", as
   for (const corrections of [0, 1]) {
     const { db, row } = resumeDb(await blockedRow(corrections));
     const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-    const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "fix the review findings", {
+    const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "fix the review findings", {
       correction: true,
     });
     assert.equal(result.ok, true, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`);
@@ -184,7 +184,7 @@ test("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the c
   const { db, row } = resumeDb(await blockedRow(0));
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
   for (let i = 1; i <= 3; i++) {
-    const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", `push ${i} ran`);
+    const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", `push ${i} ran`);
     assert.equal(result.ok, true, `plain resume ${i} refused: ${JSON.stringify(result)}`);
     assert.equal(row.corrections_count, 0, `plain resume ${i} spent a correction`);
     row.status = "blocked";
@@ -214,7 +214,7 @@ test("PLANT: resume keeps claimed_at, so duration is measured from the first cla
   // and the outcome recorded the stretch after it.
   const { db, row } = resumeDb(await blockedRow(0));
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "the push ran");
+  const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "the push ran");
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(row.claimed_at, "2026-09-12T00:00:00.000Z", "resume rewrote the first claim's timestamp");
 });
@@ -222,7 +222,7 @@ test("PLANT: resume keeps claimed_at, so duration is measured from the first cla
 test("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {
   const { db, row } = resumeDb(await blockedRow(CORRECTION_CAP));
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "one more go");
+  const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "one more go");
   assert.equal(result.ok, false);
   assert.match(String(result.refusal), new RegExp(RETRY_CAP_REASON));
   assert.match(String(result.refusal), /admin caller may resume it/, "a refusal that does not say who CAN act leaves the job stuck with no route out");
@@ -240,7 +240,7 @@ test("PLANT: re-posting the same work does NOT reset the correction budget", asy
   // This row is brand new and has spent nothing; its predecessors spent the whole cap.
   const { db, row } = resumeDb(await blockedRow(0), CORRECTION_CAP);
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "posting it again");
+  const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "posting it again");
   assert.equal(result.ok, false, "a fresh row for the same work reset the cap");
   assert.match(String(result.refusal), new RegExp(RETRY_CAP_REASON));
   assert.match(String(result.refusal), /per \(namespace, title\) rather than per row/, "the refusal must say why re-posting did not help");
@@ -252,7 +252,7 @@ test("THE INNOCENT DIRECTION: work whose siblings spent nothing still resumes", 
   // Without this, a cap that refused everything would pass the plant above.
   const { db, row } = resumeDb(await blockedRow(0), 0);
   const env = fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET });
-  const result = await resumeJob(env, agentNamed("capsid-driver", false) as never, NOW, "job_4c0ecc28548b", "first go");
+  const result = await resumeJob(env, agentNamed("other-driver", false) as never, NOW, "job_4c0ecc28548b", "first go");
   assert.equal(result.ok, true, `an unspent budget was refused: ${JSON.stringify(result)}`);
   assert.equal(row.status, "claimed");
 });
