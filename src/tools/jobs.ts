@@ -44,7 +44,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .boolean()
           .optional()
           .describe(
-            "For post: this job's work needs a REVIEWER to speak before it reaches the seat. The driver cannot complete or block a job carrying a pull request until a comment on that pull request starts with 'REVIEW:' and ends with APPROVE, CHANGES or BLOCK. APPROVE hands it on as now; CHANGES sends it back to the driver and spends a correction from the retry cap's budget; BLOCK stops it for the seat with the objection as the reason. The newest review wins, since a reviewer is allowed to change its mind."
+            "For post: this job's work needs a REVIEWER to speak before it reaches the seat. The driver cannot complete or block a job carrying a pull request until a comment on that pull request starts with 'REVIEW:' and ends with APPROVE, CHANGES or BLOCK. An APPROVE must also quote the pull request's current head sha (full, or a prefix of at least 7 hex characters), e.g. 'REVIEW: checked abc1234, reads right. APPROVE'; an APPROVE quoting no sha or an older head does not count, so a push after it needs a fresh review. APPROVE hands it on as now; CHANGES sends it back to the driver and spends a correction from the retry cap's budget; BLOCK stops it for the seat with the objection as the reason. The newest review wins, since a reviewer is allowed to change its mind."
           ),
         required_flags: z
           .array(z.enum(SCOPE_FLAGS))

@@ -26,7 +26,7 @@ import {
 } from "./jobs-schema";
 import type { Agent } from "./agents";
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
-import { reviewGate, type ReviewOutcome } from "./review";
+import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { readRepoFile } from "./github/contents";
 import { signTaskBody, verifySignedBody } from "./improve-task";
@@ -758,12 +758,16 @@ async function reviewRefusal(
 ): Promise<JobResult | null> {
   const current = await readJob(env.DB, id);
   if (!current) return null;
-  // The reference this call is about, not only the one already stored: a driver
-  // completing with the pull request it just opened has it in its arguments.
-  const ref = resultRef ?? current.result_ref;
-  let outcome: ReviewOutcome | null;
+  // The stored reference is the job's bound pull request, if the gate has read one;
+  // the references this call names are the candidates, so a driver completing with
+  // the pull request it just opened has it in its arguments.
+  let outcome: GateOutcome | null;
   try {
-    outcome = await reviewGate(env, { namespace: current.namespace, review_required: current.review_required, result_ref: ref }, opts);
+    outcome = await reviewGate(
+      env,
+      { namespace: current.namespace, review_required: current.review_required, result_ref: current.result_ref },
+      { ...opts, candidateRefs: [resultRef, ...(opts.candidateRefs ?? [])] }
+    );
   } catch (err) {
     // A GITHUB FAILURE HOLDS THE JOB, it does not wave it through. This gate exists to
     // put a second reader in front of the seat, and an unreadable comment list is not
@@ -774,7 +778,28 @@ async function reviewRefusal(
         `The job stays claimed; try again rather than treating an unreadable review as an approval.`
     );
   }
-  if (outcome === null || outcome.kind === "proceed") return null;
+  if (outcome === null) return null;
+
+  // THE FIRST READ BINDS THE JOB TO ITS PULL REQUEST (audit 2026-09-25, F2-4), in the
+  // result_ref column: on a claimed job nothing else writes it, and the terminal
+  // transition that does write it runs after this gate. Recorded whatever the verdict,
+  // so a CHANGES cannot be escaped by naming another pull request on the next call.
+  if (outcome.pr && !current.result_ref) {
+    const bound = await env.DB.prepare(
+      `UPDATE jobs SET result_ref = ?2, updated_at = ?3
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
+    )
+      .bind(id, outcome.pr, now.toISOString(), agent.actor)
+      .first<{ id: string }>();
+    if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
+    const job = (await readJob(env.DB, id)) as JobRow;
+    await env.DB.batch([
+      ...(await mirrorStatements(env.DB, job, "job-review-bound", agent.actor)),
+      auditStatement(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
+    ]);
+  }
+
+  if (outcome.kind === "proceed") return null;
 
   if (outcome.kind === "waiting") {
     return refuse(action, `${id} is ${outcome.reason} The job stays claimed and its lease keeps running.`);

@@ -265,6 +265,32 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
   return primaries === 1 ? null : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
+// ---- pull request URLs -------------------------------------------------------------
+//
+// https://github.com/<owner>/<repo>/pull/<number>, which is what open_pr returns and
+// what a driver pastes. ONE SPELLING for every site that reads one: the review gate,
+// the evidence verifier and the prose scan in outcome-prs.ts each had their own, with
+// different character classes, so the gate accepted owner/repo strings the verifier
+// refused (audit 2026-09-25, F4-1). The owner and repo this returns are what the URL
+// says, not what the namespace maps: a caller that reaches GitHub with them resolves
+// them through resolveRepo first.
+export const PR_URL_SOURCE = String.raw`https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)`;
+const PR_URL_EXACT = new RegExp(`^${PR_URL_SOURCE}(?:[/?#].*)?$`);
+
+export interface PrUrl {
+  owner: string;
+  repo: string;
+  number: number;
+}
+
+// Anchored at both ends: a reference that merely mentions a pull request is not one.
+export function parsePrUrl(ref: string | null | undefined): PrUrl | null {
+  if (!ref) return null;
+  const match = PR_URL_EXACT.exec(ref.trim());
+  if (!match) return null;
+  return { owner: match[1], repo: match[2], number: Number(match[3]) };
+}
+
 // Resolve a namespace to one of its mapped repos. `selector` is the optional `repo`
 // tool argument: a label from the namespace's repos array ("primary", "legacy") or a
 // full "owner/name" that MUST appear in that array. The namespace mapping is the

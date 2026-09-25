@@ -306,7 +306,9 @@ driver remembering to wait, which is the party being reviewed deciding whether i
 reviewed.
 
 A review is a comment whose body starts with `REVIEW:` and ends with `APPROVE`,
-`CHANGES` or `BLOCK`. It is not a GitHub review approval: the reviewer agent holds
+`CHANGES` or `BLOCK`. An `APPROVE` must also quote the pull request's head sha it
+reviewed, full or as a prefix of at least 7 hex characters, for example
+`REVIEW: checked abc1234, the scope check is right. APPROVE`. It is not a GitHub review approval: the reviewer agent holds
 `can_comment_pr` and nothing else, so a comment is the only mark it can leave.
 
 The envelope is strict at both ends and `src/review.ts` states why. A comment that opens
@@ -330,6 +332,15 @@ would use the other and the bypass would look like ordinary use. A job with no
 `review_required`, or one whose `result_ref` is not a pull request, proceeds untouched.
 An unreadable GitHub holds the job rather than waving it through, since an unreadable
 comment list is not evidence that anybody read the code.
+
+The gate is bound to the job's own pull request and head. The first pull request it
+reads is recorded in the claimed job's `result_ref`, and a later call naming a
+different one is refused. The URL's repo is resolved through the namespace mapping,
+and a repo the namespace does not map is refused without reading it. An `APPROVE`
+counts only when the sha it quotes is the pull request's head at the time the gate
+reads it, so a push after the approval needs a fresh review. The sha is used rather
+than the head commit's committer date because whoever commits sets that date. A
+`CHANGES` or `BLOCK` needs no sha and counts whichever head it was written against.
 
 ## Skill records
 
