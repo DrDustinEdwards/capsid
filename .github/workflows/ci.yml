@@ -148,6 +148,11 @@ jobs:
     timeout-minutes: 15
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    # Which attempt of the run did the deploying. A rerun of the live job alone keeps
+    # this job's outputs from the earlier attempt, so the rollback step can tell a rerun
+    # from the attempt that shipped (scripts/rollback-guard.mjs).
+    outputs:
+      attempt: ${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
@@ -222,7 +227,13 @@ jobs:
 
       # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
       # schedule run. Empty otherwise: the ternary below is the behaviour.
+      #
+      # EXIT 1 IS A REFUSAL, EXIT 3 IS "COULD NOT RUN". A gate whose requests never got
+      # an answer (a reset connection, a timeout) has not refused the deploy; on
+      # 2026-09-18 one ECONNRESET rolled back a good deploy. The exit code is recorded
+      # so the rollback below runs on a refusal only. Exit 3 still fails the job.
       - name: verify:live
+        id: verify
         env:
           EXPECT_SHA: ${{ (needs.deploy.result == 'success' || github.event_name == 'schedule') && github.sha || '' }}
           VERIFY_POLL_ATTEMPTS: "40"
@@ -239,40 +250,64 @@ jobs:
           # so; it never passes quietly.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run verify:live
+        run: |
+          set +e
+          npm run verify:live
+          code=$?
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          if [ "$code" = "3" ]; then
+            echo "::error::the live gate could not run (no answer from the Worker). No gate refused this deploy, so it is not rolled back. Rerun the live job."
+          fi
+          exit "$code"
 
-      # Only if this run's deploy succeeded, then the gate failed. A scheduled
-      # run skipping deploy must not roll back a live sha that is merely behind.
+      # Only if this run's deploy succeeded, then the gate REFUSED it (exit 1). A
+      # scheduled run skipping deploy must not roll back a live sha that is merely
+      # behind, and a gate that could not run (exit 3) has not refused anything.
       - name: Roll back the deploy this run shipped
-        if: failure() && needs.deploy.result == 'success'
+        if: failure() && needs.deploy.result == 'success' && steps.verify.outputs.exit_code == '1'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOY_ATTEMPT: ${{ needs.deploy.outputs.attempt }}
         run: |
           set -euo pipefail
           HEALTH_URL=https://capsid.dustin-edwards.workers.dev/health
-          ROLLBACK_FROM=$(curl -fsS "$HEALTH_URL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).sha??"unknown")}catch{process.stdout.write("unreadable")}})')
+          # No -f on curl and no abort on its failure: a /health that answers 5xx, or
+          # not at all, must reach the guard as "unreadable" rather than end this step
+          # before it decides anything.
+          live_sha() {
+            { curl -sS --max-time 10 "$HEALTH_URL" || true; } | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).sha??"unknown")}catch{process.stdout.write("unreadable")}})'
+          }
+          ROLLBACK_FROM=$(live_sha)
           # ROLL BACK ONLY WHAT THIS RUN PUT LIVE. `needs.deploy.result` survives a
           # rerun of just this job, so the `if:` above is true on a rerun whose deploy
           # happened in an earlier attempt and has already been rolled back. On
           # 2026-09-18 that ran the rollback a second time and "the previous version"
           # was the refused commit, moving production forward onto it. The guard
-          # compares what is live NOW against this run's own commit; see the script.
-          if ! node scripts/rollback-guard.mjs "${ROLLBACK_FROM}" "${GITHUB_SHA}"; then
+          # compares what is live NOW against this run's own commit, and when /health
+          # cannot say, rolls back only if the deploy happened in this attempt.
+          if ! node scripts/rollback-guard.mjs "${ROLLBACK_FROM}" "${GITHUB_SHA}" "${DEPLOY_ATTEMPT}" "${GITHUB_RUN_ATTEMPT}"; then
             echo "::error::not rolling back. master and production may disagree; a human decides."
             echo "rollback_skipped: live=${ROLLBACK_FROM} this_run=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "::warning::the live gate failed against ${ROLLBACK_FROM}; rolling back to the previous version"
           npx --yes wrangler@4.107.0 rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
-          # The rollout is not instant, so read the sha back rather than assuming.
+          # The rollout is not instant, so read the sha back rather than assuming, and
+          # say so when it never moved.
+          ROLLBACK_TO=unreadable
           for i in $(seq 1 20); do
-            ROLLBACK_TO=$(curl -fsS "$HEALTH_URL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).sha??"unknown")}catch{process.stdout.write("unreadable")}})')
-            if [ "${ROLLBACK_TO}" != "${ROLLBACK_FROM}" ]; then break; fi
+            ROLLBACK_TO=$(live_sha)
+            if node scripts/rollback-guard.mjs --after "${ROLLBACK_TO}" "${GITHUB_SHA}" > /dev/null; then
+              echo "::error::rolled back: was ${ROLLBACK_FROM} (this run's commit ${GITHUB_SHA}), now ${ROLLBACK_TO}. master still points at the bad commit; land a fix or revert it."
+              echo "rollback_from=${ROLLBACK_FROM} rollback_to=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
             sleep 3
           done
-          echo "::error::rolled back: was ${ROLLBACK_FROM} (this run's commit ${GITHUB_SHA}), now ${ROLLBACK_TO}. master still points at the bad commit; land a fix or revert it."
-          echo "rollback_from=${ROLLBACK_FROM} rollback_to=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::the rollback did not take effect: /health still reports ${ROLLBACK_TO} after 20 reads (this run's commit ${GITHUB_SHA}). Production may still be serving the refused deploy; a human decides."
+          echo "rollback_did_not_take_effect: from=${ROLLBACK_FROM} now=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       # Gate 2 registers a fresh client every run, and it must: reusing one would take
       # the approved-client fast path that hid the 26-day outage. The registration is

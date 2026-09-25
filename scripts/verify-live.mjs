@@ -37,10 +37,62 @@ const POLL_INTERVAL_MS = Number(process.env.VERIFY_POLL_INTERVAL_MS ?? 3000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// A GATE THAT GOT NO ANSWER HAS NOT REFUSED ANYTHING. On 2026-09-18 (run 35300342260)
+// one ECONNRESET threw out of a fetch, crashed this script with exit 1, and the
+// workflow rolled back a good deploy. A thrown fetch is now retried; a gate whose
+// requests all throw is recorded as COULD NOT RUN, and the script exits 3 instead of 1
+// when nothing actually failed. ci.yml rolls back on exit 1 only.
+const FETCH_TRIES = Number(process.env.VERIFY_FETCH_TRIES ?? 3);
+const FETCH_TIMEOUT_MS = Number(process.env.VERIFY_FETCH_TIMEOUT_MS ?? 20000);
+const EXIT_REFUSED = 1;
+const EXIT_COULD_NOT_RUN = 3;
+
+class NoAnswer extends Error {
+  constructor(url, cause) {
+    super(`no answer from ${String(url).split("?")[0]}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+// One request, body read included, since a reset can also land mid-body. Retries a
+// throw `tries` times and then throws NoAnswer. A response of any status is an answer
+// and is returned as is. Gates that poll one URL pass tries=1, because the poll loop is
+// their retry.
+async function request(url, init = {}, tries = FETCH_TRIES) {
+  let last;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      const resp = await fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      const text = await resp.text();
+      return { status: resp.status, ok: resp.ok, headers: resp.headers, text };
+    } catch (err) {
+      last = err;
+      if (i < tries) await sleep(POLL_INTERVAL_MS);
+    }
+  }
+  throw new NoAnswer(url, last);
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// Rethrows anything that is not a NoAnswer, so a bug in this script still crashes.
+function noAnswer(err) {
+  if (err instanceof NoAnswer) return err;
+  throw err;
+}
+
+const COULD_NOT_RUN = "could-not-run";
 const results = [];
+// passed is true, false, or COULD_NOT_RUN.
 function record(gate, passed, detail) {
   results.push({ gate, passed, detail });
-  console.log(`${passed ? "PASS" : "FAIL"}  ${gate}\n      ${detail}`);
+  const tag = passed === COULD_NOT_RUN ? "NORUN" : passed ? "PASS" : "FAIL";
+  console.log(`${tag}  ${gate}\n      ${detail}`);
 }
 
 // Gate 1: liveness, and deploy provenance. /health returns the git sha stamped at deploy
@@ -51,9 +103,19 @@ async function gateHealth() {
   const expected = process.env.EXPECT_SHA;
   let data = null;
   let attempt = 0;
+  let lost = null;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    const resp = await fetch(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } });
-    data = await resp.json().catch(() => null);
+    let resp;
+    try {
+      resp = await request(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } }, 1);
+      lost = null;
+    } catch (err) {
+      // A thrown fetch is a poll that has not converged yet, not a verdict.
+      lost = noAnswer(err);
+      if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
+    data = parseJson(resp.text);
     // Keep polling through EVERY not-yet-converged state, including a response that is
     // not JSON at all: immediately after a deploy the previous version is still serving,
     // and before this commit that version answered /health with the plain text "ok". An
@@ -61,6 +123,11 @@ async function gateHealth() {
     const converged = resp.status === 200 && data?.status === "ok" && (!expected || data.sha === expected);
     if (converged) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+  }
+  // The last poll got no answer, so whatever an earlier poll saw is not the verdict.
+  if (lost) {
+    record("1 health + provenance", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
   }
   const live = data?.status === "ok";
   const shaOk = !expected || data?.sha === expected;
@@ -74,18 +141,27 @@ async function gateHealth() {
 // Gate 2: dynamic client registration. Returns a client id never seen before,
 // which is what keeps gate 3 off the approved-client fast path.
 async function gateRegister() {
-  const resp = await fetch(`${ORIGIN}/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_name: "capsid verify-live probe",
-      redirect_uris: ["https://example.com/verify-live-callback"],
-      token_endpoint_auth_method: "none",
-      grant_types: ["authorization_code"],
-      response_types: ["code"],
-    }),
-  });
-  const data = await resp.json().catch(() => ({}));
+  let resp;
+  try {
+    // A retry after a lost response can register a second client. That one is not
+    // recorded for the reaper and expires on the registration TTL; a missed gate would
+    // cost more.
+    resp = await request(`${ORIGIN}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "capsid verify-live probe",
+        redirect_uris: ["https://example.com/verify-live-callback"],
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+      }),
+    });
+  } catch (err) {
+    record("2 register (fresh client)", COULD_NOT_RUN, noAnswer(err).message);
+    return null;
+  }
+  const data = parseJson(resp.text) ?? {};
   const clientId = data.client_id;
   const passed = resp.ok && typeof clientId === "string" && clientId.length > 0;
   record("2 register (fresh client)", passed, `status=${resp.status} client_id=${clientId ?? "(none)"}`);
@@ -139,14 +215,29 @@ async function gateCanary() {
     return;
   }
 
+  // Retries a thrown fetch like request() does, but hands checkCanary the Response.
+  const retryingFetch = async (url, init) => {
+    let last;
+    for (let i = 1; i <= FETCH_TRIES; i++) {
+      try {
+        return await fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      } catch (err) {
+        last = err;
+        if (i < FETCH_TRIES) await sleep(POLL_INTERVAL_MS);
+      }
+    }
+    throw last;
+  };
   const result = await checkCanary({
-    fetchImpl: fetch,
+    fetchImpl: retryingFetch,
     base: `https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${OAUTH_KV.id}`,
     clientId: CANARY_CLIENT.id,
     auth: { Authorization: `Bearer ${token}` },
   });
   const { passed, detail } = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
-  record("2b canary client record", passed, detail);
+  // UNREACHABLE means KV could not be read, which says nothing about this deploy. It
+  // stays red, but as could-not-run, so it does not roll the deploy back.
+  record("2b canary client record", result.outcome === "unreachable" ? COULD_NOT_RUN : passed, detail);
 }
 
 // Gate 1b: the store is bound and the FTS index is intact.
@@ -166,11 +257,21 @@ async function gateCanary() {
 async function gateStore() {
   let data = null;
   let attempt = 0;
+  let lost = null;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    const resp = await fetch(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } });
-    data = await resp.json().catch(() => null);
-    if (data?.store?.d1 === "ok" && data?.store?.fts === "ok") break;
+    try {
+      const resp = await request(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } }, 1);
+      lost = null;
+      data = parseJson(resp.text);
+      if (data?.store?.d1 === "ok" && data?.store?.fts === "ok") break;
+    } catch (err) {
+      lost = noAnswer(err);
+    }
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+  }
+  if (lost) {
+    record("1b store bound (D1 + FTS)", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
   }
   const d1 = data?.store?.d1 ?? "(absent)";
   const fts = data?.store?.fts ?? "(absent)";
@@ -202,12 +303,12 @@ async function gateBackupFreshness() {
   const assertFresh = process.env.ASSERT_BACKUP_FRESH === "1";
   let data = null;
   try {
-    const resp = await fetch(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } });
-    data = await resp.json().catch(() => null);
+    const resp = await request(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } });
+    data = parseJson(resp.text);
   } catch (err) {
     data = null;
     if (assertFresh) {
-      record("1c backup freshness", false, `/health could not be read: ${err instanceof Error ? err.message : String(err)}`);
+      record("1c backup freshness", COULD_NOT_RUN, `/health could not be read: ${noAnswer(err).message}`);
       return;
     }
   }
@@ -218,12 +319,18 @@ async function gateBackupFreshness() {
 // Gate 3: the consent FORM renders. A 302 here means the fast path was taken and
 // the whole run is void, so that is reported as VOID rather than a plain fail.
 async function gateConsentForm(clientId) {
-  const resp = await fetch(authorizeUrl(clientId), { redirect: "manual" });
+  let resp;
+  try {
+    resp = await request(authorizeUrl(clientId), { redirect: "manual" });
+  } catch (err) {
+    record("3 consent form renders", COULD_NOT_RUN, noAnswer(err).message);
+    return COULD_NOT_RUN;
+  }
   if (resp.status >= 300 && resp.status < 400) {
     record("3 consent form renders", false, `VOID: got ${resp.status} redirect, not a form. The fast path was hit, so this run proves nothing. Check that the client id is genuinely new.`);
     return null;
   }
-  const html = await resp.text();
+  const html = resp.text;
   const hasForm = /<form[^>]+method=["']post["'][^>]*action=["']\/authorize["']/i.test(html);
   const csrf = html.match(/name=["']csrf["'][^>]*value=["']([^"']+)["']/i)?.[1];
   const req = html.match(/name=["']req["'][^>]*value=["']([^"']+)["']/i)?.[1];
@@ -239,11 +346,21 @@ async function gateConsentForm(clientId) {
 async function gateCsp(clientId) {
   let csp = null;
   let attempt = 0;
+  let lost = null;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    const resp = await fetch(authorizeUrl(clientId), { redirect: "manual" });
-    csp = resp.headers.get("content-security-policy");
-    if (!csp || !/form-action/i.test(csp)) break;
+    try {
+      const resp = await request(authorizeUrl(clientId), { redirect: "manual" }, 1);
+      lost = null;
+      csp = resp.headers.get("content-security-policy");
+      if (!csp || !/form-action/i.test(csp)) break;
+    } catch (err) {
+      lost = noAnswer(err);
+    }
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+  }
+  if (lost) {
+    record("4 consent CSP permits the chain", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
   }
   // The consent form's redirect chain terminates at a dynamically registered client
   // redirect_uri, so no static form-action allowlist can be correct. Absent is the ruled
@@ -260,15 +377,25 @@ async function gateCacheControl(clientId) {
   ];
   const rows = [];
   let allNoStore = false;
+  let lost = null;
   for (let attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
     rows.length = 0;
-    for (const [label, url] of surfaces) {
-      const resp = await fetch(url, { redirect: "manual" });
-      rows.push([label, resp.headers.get("cache-control")]);
+    lost = null;
+    try {
+      for (const [label, url] of surfaces) {
+        const resp = await request(url, { redirect: "manual" });
+        rows.push([label, resp.headers.get("cache-control")]);
+      }
+      allNoStore = rows.every(([, cc]) => cc && /no-store/i.test(cc));
+      if (allNoStore) break;
+    } catch (err) {
+      lost = noAnswer(err);
     }
-    allNoStore = rows.every(([, cc]) => cc && /no-store/i.test(cc));
-    if (allNoStore) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+  }
+  if (lost) {
+    record("4b cache-control no-store", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
   }
   record("4b cache-control no-store", allNoStore, rows.map(([l, cc]) => `${l}=${cc ?? "(none)"}`).join(" "));
 }
@@ -303,10 +430,18 @@ async function gateSecurityHeaders(clientId) {
 
   let problems = [];
   let attempt = 0;
+  let lost = null;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
     problems = [];
+    lost = null;
     for (const [label, cls, { url, init }] of surfaces) {
-      const resp = await fetch(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
+      let resp;
+      try {
+        resp = await request(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
+      } catch (err) {
+        lost = noAnswer(err);
+        break;
+      }
       const h = (name) => resp.headers.get(name);
 
       // Every class, no exception.
@@ -331,10 +466,14 @@ async function gateSecurityHeaders(clientId) {
         if (h("content-security-policy")) problems.push(`${label}: CSP is ENFORCED on a non-html surface without a ruling`);
       }
     }
-    if (problems.length === 0) break;
+    if (!lost && problems.length === 0) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
 
+  if (lost) {
+    record("6 security headers per class", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
+  }
   record(
     "6 security headers per class",
     problems.length === 0,
@@ -348,18 +487,24 @@ async function gateSecurityHeaders(clientId) {
 // the endpoint they name does not answer, and that failure is invisible: the browser
 // posts once, gets an error, and never retries.
 async function gateReportSink() {
-  const resp = await fetch(`${ORIGIN}/csp-report`, {
-    method: "POST",
-    headers: { "Content-Type": "application/csp-report" },
-    body: JSON.stringify({
-      "csp-report": {
-        "document-uri": `${ORIGIN}/verify-live-probe`,
-        "effective-directive": "verify-live-probe",
-        "blocked-uri": "https://example.com/probe",
-        note: "synthetic probe from scripts/verify-live.mjs, not a real violation",
-      },
-    }),
-  });
+  let resp;
+  try {
+    resp = await request(`${ORIGIN}/csp-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/csp-report" },
+      body: JSON.stringify({
+        "csp-report": {
+          "document-uri": `${ORIGIN}/verify-live-probe`,
+          "effective-directive": "verify-live-probe",
+          "blocked-uri": "https://example.com/probe",
+          note: "synthetic probe from scripts/verify-live.mjs, not a real violation",
+        },
+      }),
+    });
+  } catch (err) {
+    record("7 csp report sink accepts", COULD_NOT_RUN, noAnswer(err).message);
+    return;
+  }
   record("7 csp report sink accepts", resp.status === 204, `status=${resp.status} (expected 204)`);
 }
 
@@ -367,15 +512,23 @@ async function gateReportSink() {
 // where the run stops. It never follows the 302 and never touches GitHub.
 async function gateGithubRedirect(clientId, form) {
   const body = new URLSearchParams({ csrf: form.csrf, req: form.req });
-  const resp = await fetch(`${ORIGIN}/authorize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: `capsid_csrf=${form.csrfCookie}` },
-    body,
-    redirect: "manual",
-  });
+  let resp;
+  try {
+    // Safe to retry: the csrf check compares the field with the cookie and consumes
+    // nothing (src/routes.ts), so a repeat POST is judged the same way as the first.
+    resp = await request(`${ORIGIN}/authorize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: `capsid_csrf=${form.csrfCookie}` },
+      body: body.toString(),
+      redirect: "manual",
+    });
+  } catch (err) {
+    record("5 approve redirects to GitHub", COULD_NOT_RUN, noAnswer(err).message);
+    return;
+  }
   const location = resp.headers.get("location") ?? "";
   const passed = resp.status === 302 && location.startsWith("https://github.com/login/oauth/authorize");
-  const shown = location ? new URL(location).origin + new URL(location).pathname : "(none)";
+  const shown = passed ? new URL(location).origin + new URL(location).pathname : location || "(none)";
   record("5 approve redirects to GitHub", passed, `status=${resp.status} location=${shown} (not followed)`);
 }
 
@@ -387,21 +540,31 @@ const clientId = await (async () => {
   return gateRegister();
 })();
 
+// Whether a skipped gate is a refusal or could-not-run follows the gate it depends on.
+const upstream = (gate) => (results.find((r) => r.gate === gate)?.passed === COULD_NOT_RUN ? COULD_NOT_RUN : false);
+
 if (clientId) {
   const form = await gateConsentForm(clientId);
   await gateCsp(clientId);
   await gateCacheControl(clientId);
   await gateSecurityHeaders(clientId);
   await gateReportSink();
-  if (form) await gateGithubRedirect(clientId, form);
-  else record("5 approve redirects to GitHub", false, "skipped: gate 3 did not yield a usable form");
+  if (form && form !== COULD_NOT_RUN) await gateGithubRedirect(clientId, form);
+  else record("5 approve redirects to GitHub", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
 } else {
-  record("3 consent form renders", false, "skipped: no client id from gate 2");
+  record("3 consent form renders", upstream("2 register (fresh client)"), "skipped: no client id from gate 2");
 }
 
-const failed = results.filter((r) => !r.passed);
-console.log(`\n${results.length - failed.length}/${results.length} gates passed against ${ORIGIN}`);
+// process.exitCode rather than process.exit(): exiting with fetch sockets still closing
+// trips a libuv assertion on Windows and replaces the exit code with 3221226505.
+const failed = results.filter((r) => r.passed === false);
+const norun = results.filter((r) => r.passed === COULD_NOT_RUN);
+console.log(`\n${results.length - failed.length - norun.length}/${results.length} gates passed against ${ORIGIN}`);
 if (failed.length) {
   console.log(`FAILED GATES: ${failed.map((f) => f.gate).join(", ")}`);
-  process.exit(1);
+  if (norun.length) console.log(`COULD NOT RUN: ${norun.map((f) => f.gate).join(", ")}`);
+  process.exitCode = EXIT_REFUSED;
+} else if (norun.length) {
+  console.log(`COULD NOT RUN: ${norun.map((f) => f.gate).join(", ")}. No gate refused this deploy; exiting ${EXIT_COULD_NOT_RUN} so it is not rolled back.`);
+  process.exitCode = EXIT_COULD_NOT_RUN;
 }
