@@ -91,6 +91,10 @@ export interface JobResult {
 // (job_6aef1c672fc3). The audit row stays the one record; this reads it back.
 export interface ResumeNote {
   reason: string;
+  // The seat's full note, when the resume carried one. `reason` is bounded at
+  // MAX_TITLE and holds one line; the rulings or plan the seat approved go here and
+  // are handed on whole, never truncated.
+  note?: string;
   by: string;
   at: string;
   approved_by_policy?: string;
@@ -121,6 +125,7 @@ async function latestResumeNote(
   if (typeof params.approved !== "string") return null;
   return {
     reason: params.approved,
+    ...(typeof params.note === "string" ? { note: params.note } : {}),
     by: row.actor ?? "(unknown)",
     at: row.at,
     ...(typeof params.approved_by_policy === "string" ? { approved_by_policy: params.approved_by_policy } : {}),
@@ -159,6 +164,9 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
   if (note) lines.push(`- last resume, by ${note.by} at ${note.at}: ${note.reason}`);
   if (job.result_summary) lines.push(`- result: ${job.result_summary}`);
   if (job.result_ref) lines.push(`- result ref: ${job.result_ref}`);
+  // The full note as its own block after the status lines, whole: a driver reading
+  // the brief needs every ruling, not the first line of them.
+  if (note?.note) lines.push("", "## The last resume's note", "", note.note);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
 }
@@ -1182,6 +1190,9 @@ export interface ResumeOptions {
   // cap's budget. A plain resume does not (ruled 2026-09-16): job_466d6472511e reached
   // the cap on three ordinary pushes, none of which corrected anything.
   correction?: boolean;
+  // THE SEAT'S FULL NOTE, beside the one-line reason. Recorded in the audit row as
+  // `note` and handed on whole in resume_note and the mirror document.
+  note?: string;
 }
 
 // WHAT A DRIVER MAY APPROVE FOR ITSELF (ruled 2026-09-16). Pushing its own branch and
@@ -1199,6 +1210,8 @@ export async function resumeJob(
   opts: ResumeOptions = {}
 ): Promise<JobResult> {
   const { approvedByPolicy, take = false, correction = false } = opts;
+  // A blank note is no note, so resume_note does not carry an empty block.
+  const fullNote = opts.note?.trim() ? opts.note : undefined;
   const actor = agent.actor;
   if (!ACTOR_SHAPE.test(actor)) {
     return refuse("resume", `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`);
@@ -1385,6 +1398,7 @@ export async function resumeJob(
   const job = (await readJob(env.DB, id)) as JobRow;
   const resumeNote: ResumeNote = {
     reason,
+    ...(fullNote ? { note: fullNote } : {}),
     by: actor,
     at: now.toISOString(),
     ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
@@ -1394,6 +1408,7 @@ export async function resumeJob(
     ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
     auditStatement(env.DB, actor, "job-resumed", job, {
       approved: reason,
+      ...(fullNote ? { note: fullNote } : {}),
       held_by: holder,
       ...(take ? { taken: true } : {}),
       ...(spend ? { correction: true } : {}),
