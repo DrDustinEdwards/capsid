@@ -565,3 +565,21 @@ test("PLANT: expireJobLeases writes the later jobs' records when an earlier job'
   assert.deepEqual(out.requeued, ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]);
   assert.equal(batches.length, 2, "the second job's mirror and audit row were never attempted");
 });
+
+// ---- audit 2026-09-25, F2-8: post needs a registered namespace -------------------------
+
+test("PLANT: post into a namespace that is not registered is refused and writes nothing", async () => {
+  // A caller scoped to * could create a job and its mirror document in a namespace that
+  // does not exist, which write refuses for the same document path.
+  const d1 = fakeD1({});
+  const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
+  const agent = legacyAgent("write", "agent:capsid-driver");
+  const refused = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), { namespace: "nosuchns", title: "a job", body: "do it" });
+  assert.equal(refused.ok, false, "a job was posted into an unregistered namespace");
+  assert.match(refused.refusal ?? "", /unknown namespace 'nosuchns'/);
+  assert.equal(d1.recorded.some((r) => /INSERT INTO jobs|INSERT INTO documents/.test(r.sql)), false, "a refused post wrote a row");
+
+  // The innocent direction: a registered namespace still posts.
+  const posted = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), { namespace: "capsid", title: "a job", body: "do it" });
+  assert.equal(posted.ok, true, JSON.stringify(posted));
+});
