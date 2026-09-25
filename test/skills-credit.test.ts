@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tickRuns } from "../src/improve/tick.ts";
 import { IMPROVE_RUN_DEFAULTS, sseMessage } from "./improve-fakes.ts";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // ONE CREDIT SYSTEM, AND THE LOOP WAS NOT ON IT.
 //

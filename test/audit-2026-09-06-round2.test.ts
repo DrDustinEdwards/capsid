@@ -10,11 +10,10 @@ import { SELF_REPO, ciDispatch, deleteBranch, deleteRepoFile, writeRepoFile } fr
 import { checkHoldout, type ScoreReport } from "../src/improve-scorer.ts";
 import { mcpOriginProblem } from "../src/headers.ts";
 import { tickRuns } from "../src/improve-run.ts";
-import { anchorChecksum, parseScoresDoc } from "../src/improve-scores.ts";
+import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { sseChange } from "./improve-fakes.ts";
 import { sourceFiles } from "./source-files.ts";
-import { seedScoresDoc } from "./seed-scores.ts";
 
 // THE 2026-09-06 ROUND-2 AUDIT FIXES, one block per finding. Each test was
 // written FIRST, against the code at 881dd90, and failed there (item 10's is a

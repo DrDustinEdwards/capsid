@@ -414,6 +414,11 @@ export function compare(specs: SecondarySpec[], before: MetricMap, after: Metric
 // test/, and restored the next day: the holdout suite imports it, and the holdout
 // is structurally invisible to any scan that runs here. 28/30 without it, 30/30
 // with it, against an anchor of min 1.0. See the note in src/normalize.ts.
+//
+// It is also the canonical statement of what a scores document declares: every live
+// one was generated from it, and test/null-metrics.test.ts checks its Secondary list
+// against the scorer's REPORTED_SECONDARY in both directions. Only wired metrics
+// appear here; the unbuilt ones are listed in capsid/improve/TASK-wire-the-metrics.md.
 export function seedScoresDoc(namespace: string): string {
   return [
     `# improve scores - ${namespace}`,

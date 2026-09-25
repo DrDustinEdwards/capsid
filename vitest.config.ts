@@ -29,7 +29,7 @@ import { extractStatements } from "./scripts/sql-statements.mjs";
 // test/cloudflare-platform.test.ts). Setting the deploy date here fails at
 // startup with "the newest date supported by this server binary is 2026-08-22",
 // so the suite runs at the newest date its runtime HAS.
-// test-integration/deploy-shape.test.ts asserts the gap is exactly that: the
+// test/integration-layer.test.ts asserts the direction of the gap: the
 // integration date must be no later than the deploy date, and the day the pool
 // catches up the two are expected to converge. Anything a compatibility date
 // between the two changes is outside what this layer can see.

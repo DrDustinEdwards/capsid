@@ -281,7 +281,7 @@ export function isUnjudged(status: string): boolean {
 // nothing but a slower recovery from a report that really was lost. Fifty is the 45
 // minute ceiling plus five for the queueing delay before a dispatched job starts.
 //
-// test/workflow-pins.test.ts derives both sides and fails if they drift apart.
+// test/workflow-policy.test.ts derives both sides and fails if they drift apart.
 export const SCORE_TIMEOUT_MS = 50 * 60 * 1000;
 
 // A run alive this long finalizes wherever it is. The nightly cadence is the

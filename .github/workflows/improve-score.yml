@@ -207,7 +207,7 @@ jobs:
       # NODE_MODULES IS CACHED IN THIS JOB AND IN NO OTHER. This job checks out the
       # DEFAULT branch only and never puts attempt code on the runner, so nothing an
       # attempt wrote can reach what is saved here. Job A is the opposite case and
-      # caches no directory attempt code can write; test/workflow-pins.test.ts is the
+      # caches no directory attempt code can write; test/workflow-policy.test.ts is the
       # guard and capsid/conventions.md carries the rule.
       #
       # NO restore-keys, deliberately. A near miss must never half-restore a

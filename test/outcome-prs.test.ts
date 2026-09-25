@@ -91,16 +91,6 @@ test("a near-miss URL is not mistaken for a pull request", () => {
 // pull request closed unmerged is stored as 0; the sweep binds its limit, takes
 // never-checked rows first, and skips what is known merged.
 
-
-// ---- what re-verification touches ---------------------------------------------------
-
-
-
-
-
-// ---- the bounds ----------------------------------------------------------------------
-
-
 async function connectAdmin(db: unknown) {
   const server = buildServer(fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "outcome-prs", version: "1.0.0" });
