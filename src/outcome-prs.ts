@@ -15,12 +15,12 @@ import { prFacts } from "./job-outcomes";
 // How many rows one sweep re-checks. Bounded because each row costs a GitHub read,
 // and a sweep that walked the whole table would spend the Worker's request budget on
 // rows whose answer has not changed since yesterday.
-export const REVERIFY_PER_SWEEP = 50;
+const REVERIFY_PER_SWEEP = 50;
 
 // How far back the sweep looks. A pull request that has been open and unmerged for a
 // month is not about to merge silently, and re-reading it forever is how a bounded
 // job becomes an unbounded one.
-export const REVERIFY_WINDOW_DAYS = 30;
+const REVERIFY_WINDOW_DAYS = 30;
 
 /** One row per pull request the evidence named, written in the same batch as the outcome. */
 export function outcomePrStatements(db: D1Database, jobId: string, urls: readonly string[]): D1PreparedStatement[] {
@@ -228,7 +228,7 @@ export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SW
 // ---- the daily cadence ----------------------------------------------------------
 
 const SWEEP_STAMP_KEY = "outcomes:reverify:last";
-export const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Run a sweep at most once a day, on the five-minute tick.

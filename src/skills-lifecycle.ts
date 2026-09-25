@@ -19,7 +19,7 @@ export type Verdict = (typeof VERDICTS)[number];
 // MINIMUM EVIDENCE FOR ANY STATUS CHANGE, in either direction. One evaluation is a
 // sample: a system that promoted on one would spend its life promoting and retiring
 // the same skill on noise.
-export const MIN_EVALUATIONS = 2;
+const MIN_EVALUATIONS = 2;
 
 // A delta at or below this counts as no improvement. Stated as a constant rather than
 // a bare zero so the tie case is visible: a tie is NOT an improvement.
@@ -138,7 +138,7 @@ export function nextStatus(
 // AT MOST THIS FRACTION OF L2 LINES PER EDIT. An optimizer that could rewrite a skill
 // wholesale is not editing it, it is replacing it, and the accumulated evaluations
 // would then describe a document that no longer exists.
-export const MAX_EDIT_FRACTION = 0.2;
+const MAX_EDIT_FRACTION = 0.2;
 
 export type EditOp =
   | { op: "add"; line: number; text: string }

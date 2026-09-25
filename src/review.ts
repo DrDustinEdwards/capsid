@@ -18,7 +18,7 @@ import type { Env } from "./env";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { parseScopes } from "./agents-schema";
 
-export const REVIEW_PREFIX = "REVIEW:";
+const REVIEW_PREFIX = "REVIEW:";
 
 export const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
 export type Verdict = (typeof VERDICTS)[number];

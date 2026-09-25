@@ -3,7 +3,7 @@ import type { Env } from "./env";
 
 // Distinct from the score-report and backup-credential contexts on purpose.
 // scripts/improve-derive-key.mjs must match; test/improve-derive-key.test.ts pins both.
-export const TASK_KEY_CONTEXT = "capsid-improve-task:v1";
+const TASK_KEY_CONTEXT = "capsid-improve-task:v1";
 
 export async function deriveTaskKey(rootSecret: string): Promise<string> {
   return hmacHex(rootSecret, TASK_KEY_CONTEXT);
