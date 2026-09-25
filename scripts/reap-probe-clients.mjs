@@ -3,28 +3,12 @@
 // created. Nothing else. It does not list the namespace, it does not match on a client
 // name, and it cannot discover a key it was not told about.
 //
-// WHY THE PROBE CLIENTS EXIST AND MUST KEEP EXISTING. Gate 2 registers a FRESH client on
-// every run: handleAuthorizeGet short-circuits for a client id already in the approved
-// cookie and 302s straight out of the GET without rendering a form, and that fast path
-// hid the 26-day consent outage. A run that reused a client id would prove nothing. The
-// fix for the accumulation is not to reuse a client, it is to clean up afterwards.
+// Gate 2 must register a FRESH client every run (see verify-live.mjs), so the probe
+// clients are cleaned up afterwards rather than reused.
 //
-// WHY IT NARROWED TO ONE ID, 2026-08-13. The first version listed every key under the
-// client: prefix, read each value, and deleted the ones whose clientName was in a
-// hardcoded set. Three faults, in increasing order of seriousness:
-//
-//   1. It read the whole keyspace to delete its own key: 51 keys enumerated and 51
-//      values fetched, including live sessions' clients, to find the one it wrote.
-//   2. The name list is a guess about the future. Any client registering under one of
-//      those names is deleted; a probe registering under a new name is not. Both errors
-//      are silent.
-//   3. A name is attacker-controlled input. /register is unauthenticated by necessity,
-//      so any caller can choose its own client_name, and a delete rule keyed on that
-//      string is a rule anyone can aim.
-//
-// Two known strays are deliberately left behind rather than swept: "p" and
-// "capsid-smoke-test". They expire on their own, because index.ts sets a 90 day
-// clientRegistrationTTL and every live registration carries one (measured 2026-08-13).
+// ONE ID, never a match on client name: /register is unauthenticated, so any caller
+// chooses its own client_name, and a delete rule keyed on that string is one anyone can
+// aim. It also never reads the rest of the keyspace.
 //
 // No wrangler and no node_modules. This runs in the live job, which skips npm ci so the
 // gate still works when install is broken, so it talks to the KV REST API with global
@@ -38,9 +22,7 @@ const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 // The probe client lives in the OAuth provider's keyspace, so this deletes from OAUTH_KV
 // and nothing else. The id comes from scripts/bindings.mjs, the single place any binding
-// id is written: this script and the deploy-time assertion in ci-config.mjs used to hold
-// their own copies, and a rotation that updated one would have left this cleanup
-// deleting from a keyspace nothing writes to, reporting success forever.
+// id is written.
 const NAMESPACE_ID = OAUTH_KV.id;
 
 // The id comes from the run that created it: --client <id>, or the file
@@ -63,10 +45,8 @@ function resolveClientId() {
 
 const clientId = resolveClientId();
 
-// Nothing registered means nothing to delete, and that is a real state rather than a
-// failure to look: verify-live.mjs writes the file the moment gate 2 succeeds, so an
-// absent file means gate 2 did not get that far. Said out loud, because a cleanup step
-// that prints nothing is indistinguishable from one that did not run.
+// Nothing registered means nothing to delete: verify-live.mjs writes the file the moment
+// gate 2 succeeds. Printed, so the step is visibly not a no-op.
 if (!clientId) {
   console.log("reap: no probe client id recorded (gate 2 did not register one). Nothing to delete.");
   process.exit(0);

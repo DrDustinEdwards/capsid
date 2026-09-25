@@ -2,17 +2,13 @@
 // same reason scripts/canary-lib.mjs and scripts/reap-lib.mjs exist: verify-live.mjs is
 // a program that runs on import.
 //
-// A GATE AND NOT A FIELD (residual 7). /health has reported `backup.last_ok` and an age
-// since 2026-09-07, and warns past 26 hours. NOTHING READ IT: the backup cron could fail
-// every night and the only signal would be a JSON key nobody fetches. Measured on live
-// during the 2026-09-07 audit, `backup:last-ok` was null and no gate said anything.
+// A gate rather than only a /health field, so a failing backup cron is reported.
 //
 // TWENTY-SIX HOURS is the daily cron plus a two-hour grace, the same number src/health.ts
 // uses, so a single late run does not fail the gate and a genuinely missed day does.
 //
-// ASSERTED ON SCHEDULED RUNS ONLY, and SKIPPED LOUDLY otherwise. A push runs minutes
-// after a deploy and says nothing about last night's backup. The six-hourly schedule
-// bounds this at six hours. A skip is REPORTED as a skip, never as a pass.
+// ASSERTED ON SCHEDULED RUNS ONLY, since a push says nothing about last night's backup.
+// A skip is REPORTED as a skip, never as a pass.
 //
 // THE AGE IS COMPUTED HERE, from last_ok, rather than taken from the response's own
 // age_hours: a number the thing under test reports is not a measurement of it. The
@@ -65,9 +61,8 @@ export function checkBackupFreshness(health, opts) {
   const skew =
     reported === null ? "" : ` (worker reported ${reported}h${Math.abs(reported - ageHours) > CLOCK_SKEW_TOLERANCE_HOURS ? ", DISAGREEING with this runner's clock" : ""})`;
 
-  // A stamp in the FUTURE gives a negative age, which passed as fresh. Beyond the clock
-  // skew tolerance it is a bad stamp or a bad clock, and either way it proves nothing
-  // about when the last backup ran.
+  // A stamp in the FUTURE gives a negative age. Beyond the clock skew tolerance it is a
+  // bad stamp or a bad clock, and proves nothing about when the last backup ran.
   if (ageHours < -CLOCK_SKEW_TOLERANCE_HOURS) {
     return {
       outcome: "unknown",

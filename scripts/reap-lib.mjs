@@ -4,21 +4,13 @@
 // Importing it to test it would run it. The decision it makes lives here, takes a fetch,
 // and returns a verdict instead of exiting.
 //
-// WHY THE READ COMES FIRST (2026-08-17). KV DELETE is IDEMPOTENT: deleting a key that
-// was never there returns the same 200 as deleting one that was, and the read-back
-// afterwards returns 404 either way. The old sequence, DELETE then confirm-404, could
-// not distinguish three states:
+// WHY THE READ COMES FIRST. KV DELETE is IDEMPOTENT: deleting a key that was never there
+// returns the same 200 as deleting one that was, and the read-back returns 404 either
+// way. Only a read before the delete distinguishes:
 //
 //   1. the key existed and this run removed it            (the normal case)
 //   2. the key had already vanished on its own            (a data-loss signal)
 //   3. this script is pointed at the wrong namespace id   (a config error)
-//
-// and it reported all three as "deleted and confirmed gone". On 2026-08-17 an OAuth
-// client record disappeared from OAUTH_KV with no request in the window that could
-// account for it, and the investigation ruled out five hypotheses without finding a
-// cause. This reaper ran against that keyspace throughout and reported success every
-// time, because success was the only thing it could report. A verification step whose
-// passing result is unconditional is not a verification step.
 
 export const REAP_OUTCOMES = /** @type {const} */ ([
   "deleted",
@@ -98,9 +90,8 @@ export function reportFor(outcome, key) {
     case "delete-failed":
       return { ok: false, message: `reap: DELETE ${key} failed. The key may still exist.` };
     // NOT A FAILURE. The DELETE returned 2xx, which is the API accepting it. The
-    // read-back that follows is not a valid check, because KV is eventually consistent:
-    // a read straight after a delete can still see the value. It failed 9 live runs
-    // (audit of 2026-09-25), one of them a good deploy, and none had anything wrong.
+    // read-back is not a valid check, because KV is eventually consistent: a read
+    // straight after a delete can still see the value.
     case "still-present":
       return {
         ok: true,

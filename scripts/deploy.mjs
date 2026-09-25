@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // Deploy with provenance stamped in.
 //
-// There was no link between a Cloudflare version id and a git sha, so "the deployed
-// worker is this commit" rested on a clean tree plus the belief that src had not changed
-// since. That claim was made repeatedly on 2026-08-09 and could never be checked.
+// A Cloudflare version id carries no git sha, so this stamps one in and /health serves
+// it, which makes "the deployed worker is this commit" checkable.
 //
 // The sha is passed as a deploy-time --var rather than written into wrangler.jsonc
 // (gitignored here, so it cannot carry committed values) or into a generated source file
