@@ -161,6 +161,7 @@ test("the panel renders every agent, revoked ones included, and never a key", ()
       builtAt: null,
       schema_version: "0009_jobs_required_scopes.sql",
       store: { d1: "ok", fts: "ok" },
+      bindings: { media: "ok", app_kv: "ok" },
       backup: { last_ok: "2026-09-11T09:00:00.000Z", age_hours: 5 },
     },
     improve: {

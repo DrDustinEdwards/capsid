@@ -19,13 +19,49 @@ async function backupFreshness(
     };
   }
   if (!lastOk) return { last_ok: null, age_hours: null, warning: "no successful backup recorded" };
-  const ageMs = Date.now() - Date.parse(lastOk);
+  const stamped = Date.parse(lastOk);
+  // NaN compares false against the threshold, so without this an unreadable stamp
+  // would pass as fresh with no warning.
+  if (Number.isNaN(stamped)) {
+    return { last_ok: lastOk, age_hours: null, warning: `${BACKUP_LAST_OK_KEY} is not a parseable time: ${lastOk.slice(0, 40)}` };
+  }
+  const ageMs = Date.now() - stamped;
   const ageHours = Math.round((ageMs / 3_600_000) * 10) / 10;
   const result: { last_ok: string; age_hours: number; warning?: string } = { last_ok: lastOk, age_hours: ageHours };
   if (ageMs > BACKUP_STALE_HOURS * 3_600_000) {
     result.warning = `last successful backup was ${ageHours}h ago, over the ${BACKUP_STALE_HOURS}h threshold`;
   }
   return result;
+}
+
+function probeError(err: unknown): string {
+  return `error: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`;
+}
+
+// THE TWO BINDINGS BESIDE THE STORE. MEDIA holds the backups and CSP reports; APP_KV
+// holds tokens, leases and the backup stamp. Each probe is one read of a key that need
+// not exist: a null answer proves the binding resolves. Reported as fields and left out
+// of status, which stays about whether the store answers (see healthReport).
+async function probeBindings(env: Env): Promise<{ media: string; app_kv: string }> {
+  let media = "unbound";
+  if (env.MEDIA) {
+    try {
+      await env.MEDIA.head("health-probe");
+      media = "ok";
+    } catch (err) {
+      media = probeError(err);
+    }
+  }
+  let app_kv = "unbound";
+  if (env.APP_KV) {
+    try {
+      await env.APP_KV.get("health-probe");
+      app_kv = "ok";
+    } catch (err) {
+      app_kv = probeError(err);
+    }
+  }
+  return { media, app_kv };
 }
 
 export interface HealthReport {
@@ -35,6 +71,7 @@ export interface HealthReport {
   builtAt: string | null;
   schema_version: string | null;
   store: { d1: string; fts: string };
+  bindings: { media: string; app_kv: string };
   backup: { last_ok: string | null; age_hours: number | null; warning?: string };
 }
 
@@ -71,9 +108,13 @@ export async function healthReport(env: Env): Promise<HealthReport> {
   }
 
   const backup = await backupFreshness(env);
+  const bindings = await probeBindings(env);
 
+  // STATUS IS THE STORE ONLY. The live gate polls /health until status reads ok after
+  // a deploy, and a 503 here fails it. The bindings are reported as fields, the same
+  // way backup freshness is.
   const healthy = d1 === "ok" && fts === "ok";
-  return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, backup };
+  return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, bindings, backup };
 }
 
 export async function handleHealth(env: Env): Promise<Response> {
