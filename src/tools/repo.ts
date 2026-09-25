@@ -374,20 +374,25 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
       },
     },
-    ({ namespace, number, action, merge_method, comment, sha, repo }) =>
-      guardedWrite(
+    ({ namespace, number, action, merge_method, comment, sha, repo }) => {
+      // The argument belongs to exactly one action. Refused rather than ignored in
+      // both directions: a comment silently dropped from a merge call is a review
+      // nobody posted, and a merge_method on a comment is a caller who believes
+      // something else is about to happen.
+      //
+      // CHECKED BEFORE guardedWrite, NOT INSIDE IT (audit 2026-09-25, F3-2):
+      // guardedWrite files whatever fn returns as a landed result, so a fail() returned
+      // from fn was audited and wrapped in ok() with isError false. Refused here, the
+      // call is an error and writes no audit row.
+      if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
+      if (action !== "comment" && comment !== undefined) {
+        return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
+      }
+      return guardedWrite(
         "manage_pr",
         namespace,
         null,
         async () => {
-          // The argument belongs to exactly one action. Refused rather than ignored
-          // in both directions: a comment silently dropped from a merge call is a
-          // review nobody posted, and a merge_method on a comment is a caller who
-          // believes something else is about to happen.
-          if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
-          if (action !== "comment" && comment !== undefined) {
-            return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
-          }
           refuseShaOffMerge(action, sha);
           const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment, sha).catch(headMovedRefusal(number));
           // A MERGE IS WHEN AN OUTCOME ROW'S MERGE STATE BECOMES WRONG. The driver
@@ -412,7 +417,8 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           return result;
         },
         { action, repo }
-      )
+      );
+    }
   );
 
   server.registerTool(
