@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { ciStatus } from "./github";
-import { ghFetch, resolveRepo } from "./github/client";
+import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
 import type { RunSignal } from "./skills-lifecycle";
 
@@ -144,11 +144,6 @@ export function durationMinutes(claimedAt: string | null, now: Date): number | n
 
 // ---- verification -------------------------------------------------------------
 
-// https://github.com/<owner>/<repo>/pull/<number>, which is what open_pr returns and
-// what a driver pastes. Anything else is not a pull request this Worker can ask about
-// and is reported as unresolved rather than guessed at.
-const PR_URL = /^https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/pull\/(\d+)(?:[/?#].*)?$/;
-
 interface PrFacts {
   merged: boolean;
   commits: number;
@@ -176,9 +171,11 @@ export interface EvidenceVerdict {
 }
 
 export async function prFacts(env: Env, namespace: string, url: string): Promise<PrFacts | string> {
-  const match = PR_URL.exec(url);
-  if (!match) return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
-  const [, owner, repo, number] = match;
+  // Anything that is not a pull request URL is reported as unresolved rather than
+  // guessed at.
+  const parsed = parsePrUrl(url);
+  if (!parsed) return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
+  const { owner, repo, number } = parsed;
   // THE NAMESPACE-TO-REPOS MAPPING IS THE AUTHORIZATION BOUNDARY (capsid/conventions.md),
   // so the repo named in the URL is resolved THROUGH it rather than used directly. A
   // driver that could hand this a repo its namespace does not map would be using the

@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PR_URL_SOURCE } from "./github/client";
 import { prFacts } from "./job-outcomes";
 
 // ---- the merge-state re-verification path ---------------------------------------
@@ -47,7 +48,7 @@ export function outcomePrStatements(db: D1Database, jobId: string, urls: readonl
 /** Extract the pull request URLs a finished job referred to, for a row that stored none. */
 export function prUrlsFromJob(job: { result_ref: string | null; result_summary: string | null }): string[] {
   const found = new Set<string>();
-  const pattern = /https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/pull\/\d+/g;
+  const pattern = new RegExp(PR_URL_SOURCE, "g");
   for (const text of [job.result_ref ?? "", job.result_summary ?? ""]) {
     for (const match of text.match(pattern) ?? []) found.add(match);
   }
