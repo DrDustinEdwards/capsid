@@ -133,7 +133,7 @@ describe("the lifecycle", () => {
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "s" });
 
     // Both the queue's own audit row and the mirrored document's write land, which
-    // is what makes hard rule 5 hold for a job document as for any other.
+    // is what makes the snapshot rule hold for a job document as for any other.
     const actions = await auditActions(id);
     expect(actions).toContain("job-posted");
     expect(actions).toContain("job-claimed");
@@ -688,7 +688,7 @@ describe("the mirrored document", () => {
     // A done job's document is closed, so brief stops carrying it as open work.
     expect(atDone!.status).toBe("closed");
 
-    // Every rewrite snapshotted the one it replaced. Hard rule 5 applies to a job
+    // Every rewrite snapshotted the one it replaced. The snapshot rule applies to a job
     // document as to any other: three writes, two snapshots.
     const versions = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path = ?1"

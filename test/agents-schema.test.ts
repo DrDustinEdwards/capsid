@@ -119,7 +119,7 @@ test("the audit identity of an agent is its name, in the actor vocabulary the qu
   assert.equal(agentActor("capsid-driver"), "agent:capsid-driver");
 });
 
-// scanner-rule: CLAUDE.md rule 6, one enforcement point names the flags
+// scanner-rule: CLAUDE.md, one enforcement point rule: the enforcement point names the flags
 test("the flag LIST lives in one module, and only the enforcement point names individual flags", () => {
   // The same rule the roster, the job statuses and the protected paths run on: one
   // list, imported everywhere. A second copy is what lets an enforcement point check

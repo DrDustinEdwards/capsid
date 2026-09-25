@@ -123,7 +123,7 @@ test("a money path is matched by name, and an innocent path is not", () => {
   }
 });
 
-// scanner-rule: CLAUDE.md rule 6, the registrar wraps every registration. The SDK validates arguments before the wrapped handler runs, so a behaviour test would need valid arguments for every write tool
+// scanner-rule: CLAUDE.md, one enforcement point rule: the registrar wraps every registration. The SDK validates arguments before the wrapped handler runs, so a behaviour test would need valid arguments for every write tool
 test("the registrar is installed BEFORE any tool module registers, or it guards nothing", () => {
   // Order is the whole property: the wrapper only covers registrations that happen
   // after it is installed, so a registration moved above it would be silently
@@ -137,7 +137,7 @@ test("the registrar is installed BEFORE any tool module registers, or it guards 
   }
 });
 
-// scanner-rule: CLAUDE.md rule 6, no handler decides a grant for itself
+// scanner-rule: CLAUDE.md, one enforcement point rule: no handler decides a grant for itself
 test("no tool handler carries a private gate of its own any more", () => {
   // The old shape, gone. A handler that re-introduces `mayWrite` is a second
   // enforcement point, which is the thing this group exists to remove.

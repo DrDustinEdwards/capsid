@@ -7,7 +7,7 @@
 // DrDustinEdwards/claude-skills, and opens a pull request. NOTHING APPLIES
 // WITHOUT THE MERGE.
 //
-// A FOURTH CRON, as a ruled exception to the lean-surface rule (CLAUDE.md rule 1),
+// A FOURTH CRON, as a ruled exception to the tool surface rule (CLAUDE.md),
 // approved 2026-09-11. It adds no tool: the surface stays at 32. The reasoning is
 // the same one that admitted improve_run, that a cron-only subsystem is one
 // nobody can inspect by hand, plus the specific point that the thing being kept
