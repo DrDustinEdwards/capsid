@@ -15,18 +15,27 @@ policy is on. Turning it on or off is a ruling, and the document is on the ordin
 write tool's refusal list, so changing it needs `allow_improve_paths: true` and the
 `can_touch_protected` flag, and lands in the audit log.
 
-Version 5 adds three checks: `head_in_base_repo`, `job_handed_on` and
-`pr_recorded_for_job` (audit 2026-09-25, finding F2-1). Up to version 4 the Worker
-judged the job a pull request's body named and never the pull request itself. It read
-who claimed that job, in any status, and did not check where the head branch lived or
-whether the job's driver had ever named this pull request. Job ids are public, in
-commit subjects and pull request bodies, so a fork pull request, or one opened by any
+Version 5 adds four checks: `head_in_base_repo`, `job_handed_on` and
+`pr_recorded_for_job` (audit 2026-09-25, finding F2-1), and `pr_author_allowed` (ruled
+by Dustin 2026-09-25). Up to version 4 the Worker judged the job a pull request's body
+named and never the pull request itself. It read who claimed that job, in any status,
+and did not check where the head branch lived, who opened the pull request, or whether
+the job's driver had ever named this pull request. Job ids are public, in commit
+subjects and pull request bodies, so a fork pull request, or one opened by any
 credential holding `open_pr`, that named a finished driver job merged on green CI.
 
-Version 5 does not check the GitHub account that opened the pull request. Measured
-2026-09-25: every merged capsid pull request from #47 to #86 was opened by the
-`DrDustinEdwards` user account, because drivers run `gh pr create` locally, so a rule
-that required the GitHub App's bot account would refuse every real driver pull request.
+`pr_author_allowed` refuses a pull request whose GitHub author login is not under
+Allowed PR authors below. The list names two accounts. `DrDustinEdwards` is the user
+account: every merged capsid pull request from #47 to #86 was opened by it, because
+drivers run `gh pr create` locally (measured 2026-09-25). `capsid-repo-access[bot]` is
+the login GitHub reports for pull requests opened through Capsid's GitHub App. The list
+is carried in this document and in no code, so adding or removing an author is a signed
+change to this document.
+
+Version 5 also refuses `src/jobs.ts` and `src/outcome-prs.ts`, the two sources that
+write the records `pr_recorded_for_job` reads, and requires one merged typecheck step
+where version 4 required four (audit 2026-09-25, B1). The step runs the same four
+typecheck configs.
 
 Version 4 adds dustinedwards and makes the required CI steps per namespace. The step
 list was one array of capsid's own step names, so naming a second namespace in it
@@ -71,6 +80,9 @@ are the never-list.
   a fork, or one whose fork GitHub no longer reports, is left for the seat.
 - `body_names_job` The PR body carries the id of the job the work came from, so a
   merged change traces back to a request somebody made.
+- `pr_author_allowed` The GitHub account that opened the PR is under Allowed PR
+  authors below, compared without regard to letter case. A PR from any other account,
+  or one GitHub reports no author for, is left for the seat.
 - `author_is_driver` That job was claimed by a minted agent whose kind is `driver` and
   which has not been revoked. A job claimed by a seat, a cron agent, an operator key or
   a person is left for the seat.
@@ -86,6 +98,15 @@ are the never-list.
   skipped or neutral, and at least one has reported. The newest run of each workflow
   under Required CI on the head sha also ran every step listed there to success. A
   skipped or missing step is a refusal, and so is a step list that could not be read.
+
+## Allowed PR authors
+
+Each entry is a GitHub login exactly as GitHub reports it in a pull request's
+`user.login`. The Worker holds no copy of this list: it reads it from this document,
+and refuses to load a document that names no author.
+
+- author `DrDustinEdwards` the user account drivers open pull requests from.
+- author `capsid-repo-access[bot]` Capsid's GitHub App.
 
 ## Refused paths
 
@@ -124,6 +145,8 @@ list differs from it in either direction.
 - path `(^|\/)vitest\.config\.[cm]?[jt]s$` the integration suite's configuration.
 - path `^scripts\/test-budget\.mjs$` the runner behind npm test.
 - path `^scripts\/verify-live\.mjs$` the live gate, whose rollback is the backstop for an unattended merge.
+- path `^src\/jobs\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
+- path `^src\/outcome-prs\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
 
 ## Required CI
 
@@ -135,10 +158,7 @@ because a green run nobody has written a step list for proves nothing.
 
 ## Required CI, capsid
 
-- step `.github/workflows/ci.yml / checks / Typecheck`
-- step `.github/workflows/ci.yml / checks / Typecheck tests`
-- step `.github/workflows/ci.yml / checks / Typecheck integration tests`
-- step `.github/workflows/ci.yml / checks / Typecheck the copied scorer script`
+- step `.github/workflows/ci.yml / checks / Typecheck src, tests, integration tests and the copied scorer script`
 - step `.github/workflows/ci.yml / checks / Tests`
 - step `.github/workflows/ci.yml / checks / Integration tests`
 
@@ -185,5 +205,9 @@ disagree is refused at load time. That is also what closes the window on every v
 bump: a version 2 document lists five fewer refused paths than this code enforces, so
 it loads nothing here, and between this code deploying and version 3 being signed
 nothing is auto-merged. The same was true of version 1 against the version 2 code, and
-of version 4 against the version 5 code, whose document does not name the three checks
-version 5 added.
+of version 4 against the version 5 code, whose document does not name the four checks
+version 5 added and carries no author allowlist.
+
+It can change who may author an unattended merge without a code change. The author
+allowlist is the one list the code does not also hold, so a signed document that adds
+a login widens the policy on its own. Signing is admin only.
