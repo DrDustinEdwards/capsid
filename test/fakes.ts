@@ -356,6 +356,20 @@ function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   return !row;
 }
 
+// snapshotLive (src/store-guards.ts) answers RETURNING id with the row it copied, or
+// nothing when the documents row is gone at batch time. write and restore report
+// `snapshotted` from this result, so a fake answering [] would make every snapshot
+// read as not taken.
+function liveSnapshotReturning(sql: string, params: unknown[], rows: FakeD1Rows): unknown[] {
+  const flat = sql.replace(/\s+/g, " ");
+  if (!/^\s*INSERT INTO document_versions \(document_id, namespace, path, title, body\) SELECT id, namespace, path, title, body FROM documents WHERE namespace = \?1 AND path = \?2 RETURNING id/i.test(flat)) {
+    return [];
+  }
+  const [namespace, path] = params as [string, string];
+  const row = rows.documents.find((d) => d.namespace === namespace && d.path === path);
+  return row ? [{ id: row.id }] : [];
+}
+
 export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   const rows: FakeD1Rows = {
     documents: (opts.documents ?? []).map((d, i) => ({
@@ -757,7 +771,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
           rows.jobs.push({ id, namespace, title, body, priority, status: "queued", posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at: created_at });
         }
         const answer = isImproveStatement(s.sql) ? improveExec(s.sql, s.params, rows) : { handled: false as const };
-        landed.push(answer.handled ? answer.results : []);
+        landed.push(answer.handled ? answer.results : liveSnapshotReturning(s.sql, s.params, rows));
       }
       return statements.map((s, i) => ({
         // Inflated on purpose: FTS5 triggers inflate meta.changes on this schema,

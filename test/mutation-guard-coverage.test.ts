@@ -4,7 +4,7 @@ import { workflowWriteRefusal, WORKFLOW_DIR, writeRepoFile, deleteRepoFile } fro
 import { improveWriteRefusal } from "../src/improve-scores.ts";
 import { RUN_TASK_PREFIX } from "../src/improve-schema.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { allSourceText, toolBlocks } from "./source-files.ts";
+import { allSourceText, sourceFile, toolBlocks } from "./source-files.ts";
 
 // ENUMERATE EVERY SITE, audit 2026-09-07 (Opus MAJOR 5.4 and NOTE 6.1).
 //
@@ -30,6 +30,25 @@ function mutationTools() {
   return toolBlocks().filter((t) => MUTATION_MARKERS.some((re) => re.test(t.body)));
 }
 
+// write, restore, delete and move reach both guards through one helper in
+// src/tools/docs.ts (audit 2026-09-25, E1-21). A tool body calling it counts as
+// calling both, and the helper itself is checked to call both.
+const HELPER_CALL = /\bimprovePathsRefusal\(/;
+function helperBody(): string {
+  const docs = sourceFile("tools/docs.ts");
+  const start = docs.indexOf("async function improvePathsRefusal(");
+  assert.ok(start >= 0, "improvePathsRefusal is gone from src/tools/docs.ts; update this file");
+  return docs.slice(start, docs.indexOf("\n}\n", start));
+}
+
+// scanner-rule: audit 2026-09-13 finding C1, every opt-in is scoped to can_touch_protected (the helper the four tools share)
+test("the helper asks for can_touch_protected and runs the control-surface guard", () => {
+  const body = helperBody();
+  assert.match(body, /flags: IMPROVE_OVERRIDE_FLAGS/);
+  assert.match(body, /improveWriteRefusal\(/);
+  assert.match(body, /allowImprovePaths === true/, "the helper must read the caller's opt-in, not a literal");
+});
+
 // scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07) (count guard)
 test("the scan finds the mutation entry points at all, so this file cannot pass by reading nothing", () => {
   const found = mutationTools().map((t) => t.name).sort();
@@ -42,7 +61,7 @@ test("the scan finds the mutation entry points at all, so this file cannot pass 
 // scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07)
 test("PLANT: every document mutation entry point calls improveWriteRefusal", () => {
   const unguarded = mutationTools()
-    .filter((t) => !/improveWriteRefusal\(/.test(t.body))
+    .filter((t) => !/improveWriteRefusal\(/.test(t.body) && !HELPER_CALL.test(t.body))
     .map((t) => t.name);
   assert.deepEqual(
     unguarded,
@@ -71,8 +90,8 @@ test("every guarded mutation reads its opt-in from the caller, except the one th
     );
     assert.match(
       tool.body,
-      /allow_improve_paths === true/,
-      `${tool.name} must pass the caller's opt-in through, not a literal`
+      new RegExp(`improvePathsRefusal\\(ctx, "${tool.name}", namespace, allow_improve_paths,`),
+      `${tool.name} must pass the caller's opt-in and its own tool name through the helper, not a literal`
     );
   }
 });
@@ -89,7 +108,7 @@ test("PLANT: every mutation that accepts the opt-in scopes it to can_touch_prote
   // is added, whether or not anyone remembers this file.
   const unscoped = mutationTools()
     .filter((t) => t.body.includes("allow_improve_paths: z.boolean().optional()"))
-    .filter((t) => !t.body.includes("flags: IMPROVE_OVERRIDE_FLAGS"))
+    .filter((t) => !t.body.includes("flags: IMPROVE_OVERRIDE_FLAGS") && !HELPER_CALL.test(t.body))
     .map((t) => t.name);
   assert.deepEqual(
     unscoped,
