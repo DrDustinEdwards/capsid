@@ -66,6 +66,10 @@ function queueDb(row: Record<string, unknown>, audit: unknown[] = reviewerAudit(
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id) return null;
+          // updated_at from the bound param the statement names, so the guard on the
+          // next write in the same call matches the row this one left.
+          const stamp = /updated_at = \?(\d+)/.exec(flat);
+          if (stamp) row.updated_at = params[Number(stamp[1]) - 1];
           if (/SET result_ref = \?2/.test(flat)) {
             if (/result_ref IS NULL/.test(flat) && row.result_ref !== null) return null;
             row.result_ref = params[1];
