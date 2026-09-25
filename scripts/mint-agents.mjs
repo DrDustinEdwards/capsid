@@ -14,10 +14,14 @@
 //   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.mjs --role auditor --apply
 //
 // --namespace exists because minting is not a one-time event: a project joins the
-// roster after the first six were minted, or one key is lost and needs replacing,
-// and re-running the whole set is not an option once the others are live. An
-// existing key file is SKIPPED rather than overwritten, so the full run stays safe
-// to repeat, but that skip is a floor and not a plan.
+// roster after the first six were minted, and re-running the whole set is not an
+// option once the others are live. An existing key file is SKIPPED rather than
+// overwritten, so the full run stays safe to repeat.
+//
+// A LOST KEY CANNOT BE REPLACED BY RE-RUNNING THIS. An agent name is unique forever,
+// revoked names included, because it is the audit identity, so the server refuses a
+// second mint under the same name. Replacing a key is: revoke the old agent with the
+// agents tool, then mint under a new name.
 //
 // --namespace TAKES ANY NAMESPACE REGISTERED IN CAPSID, not just a roster one.
 // AGENTS below is derived from the improve roster, which is the five projects the
@@ -27,9 +31,10 @@
 // `namespaces` tool whether it is registered and synthesizes a driver of exactly
 // the shape above. Registration is the authority, so a typo still refuses.
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, unlinkSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { capsidClient } from "./capsid-rpc.mjs";
 
 export const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
 
@@ -82,7 +87,6 @@ export const ROLES = [
     name: "watcher",
     kind: "cron",
     namespaces: ["*"],
-    repos: ["*"],
     grants: ["read", "write"],
     // Same shape, same reason: posting a job is a write, and `jobs.post` is what
     // stops that write from also being claim, complete, fail, block and resume.
@@ -182,7 +186,7 @@ export function parseArgs(argv) {
 // The `namespaces` tool answers with a bare array of rows keyed on `namespace`.
 // Parsed in its own function so the test drives the real response shape rather
 // than a shape this script hopes for.
-export function parseNamespaces(text) {
+function namespaceRows(text) {
   let rows;
   try {
     rows = JSON.parse(text);
@@ -190,6 +194,11 @@ export function parseNamespaces(text) {
     throw new Error(`the namespaces tool did not answer with JSON. Raw: ${text.slice(0, 300)}`);
   }
   if (!Array.isArray(rows)) throw new Error(`the namespaces tool answered with ${typeof rows}, not an array.`);
+  return rows;
+}
+
+export function parseNamespaces(text) {
+  const rows = namespaceRows(text);
   const names = rows.map((r) => r?.namespace).filter((n) => typeof n === "string" && n.length > 0);
   // Vacuity guard. An empty list here would make every --namespace refuse, which
   // reads as "not registered" when it actually means "the shape changed".
@@ -210,13 +219,7 @@ export function parseNamespaces(text) {
 // from a table in this file. A second copy of the mapping is a copy that goes stale,
 // and the stale one would be the one deciding authorization.
 export function parseNamespaceRepos(text) {
-  let rows;
-  try {
-    rows = JSON.parse(text);
-  } catch {
-    throw new Error(`the namespaces tool did not answer with JSON. Raw: ${text.slice(0, 300)}`);
-  }
-  if (!Array.isArray(rows)) throw new Error(`the namespaces tool answered with ${typeof rows}, not an array.`);
+  const rows = namespaceRows(text);
   const map = new Map();
   for (const row of rows) {
     if (typeof row?.namespace !== "string" || !row.namespace) continue;
@@ -252,30 +255,54 @@ export function reposForNamespace(map, namespace) {
   return repos;
 }
 
-let id = 0;
-async function rpc(origin, key, method, params) {
-  const res = await fetch(`${origin}/ops/mcp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} -> HTTP ${res.status}: ${text.slice(0, 400)}`);
-  // Streamable HTTP may answer as SSE; take the last data: line either way.
-  const payload = text.includes("data:")
-    ? text.split("\n").filter((l) => l.startsWith("data:")).pop().slice(5).trim()
-    : text;
-  const body = JSON.parse(payload);
-  if (body.error) throw new Error(`${method} -> ${JSON.stringify(body.error)}`);
-  return body.result;
+/**
+ * Mint one agent into one key file.
+ *
+ * THE FILE IS CREATED BEFORE THE MINT. A mint that succeeded and a write that then
+ * failed left a live credential that nothing on disk could present, and a name that
+ * can never be minted again. Opening with "wx" first proves the directory is writable
+ * and the file is absent, atomically, and a mint that fails removes the empty file.
+ * The key goes to the file before anything is reported, and is never printed.
+ * @param {(name: string, args: object) => Promise<string>} tool
+ * @param {{ name: string, what?: string }} agent
+ * @param {string} path
+ * @returns {Promise<string>} the report line
+ */
+export async function mintInto(tool, agent, path) {
+  let fd;
+  try {
+    fd = openSync(path, "wx", 0o600);
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === "EEXIST") return `${agent.name}: SKIPPED, ${path} already exists`;
+    throw new Error(`${agent.name}: cannot create ${path} (${/** @type {Error} */ (err).message}). Nothing was minted.`);
+  }
+  let minted;
+  try {
+    // `what` is documentation for the reader of this file and is not a scope axis,
+    // so it does not go over the wire. Sending it would have the tool reject the
+    // whole mint for an unknown argument, or worse, accept and ignore it.
+    const { what: _what, ...scopes } = agent;
+    const text = await tool("agents", { action: "mint", ...scopes });
+    try {
+      minted = JSON.parse(text).key;
+    } catch {
+      throw new Error(`${agent.name}: could not parse the mint response. Raw: ${text.slice(0, 300)}`);
+    }
+    if (!minted) throw new Error(`${agent.name}: the mint response carried no key. Raw: ${text.slice(0, 300)}`);
+  } catch (err) {
+    closeSync(fd);
+    unlinkSync(path);
+    throw err;
+  }
+  try {
+    writeSync(fd, minted + "\n");
+  } finally {
+    closeSync(fd);
+  }
+  return `${agent.name}: written to ${path}  fingerprint ${fingerprint(minted)}`;
 }
 
 async function main() {
-  let initialized = false;
   const { apply, namespace, role, roles } = parseArgs(process.argv.slice(2));
   const origin = process.env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT;
 
@@ -297,6 +324,8 @@ async function main() {
     console.error("CAPSID_OPERATOR_KEY is not set. It is your write-grant operator key; this script never reads a file for it.");
     process.exit(2);
   }
+  // Refuses a non-https origin before any request carries the key.
+  const client = capsidClient(origin, key, "mint-agents");
 
   // Resolve before branching on --apply, so a dry run against a non-roster
   // namespace tells you whether it would mint rather than finding out later.
@@ -306,15 +335,7 @@ async function main() {
   if (role !== undefined) {
     wanted = selectAgents(undefined, undefined, role);
   } else if (namespace !== undefined && !AGENTS.some((a) => a.namespaces.includes(namespace))) {
-    await rpc(origin, key, "initialize", {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "mint-agents", version: "1" },
-    });
-    initialized = true;
-    const result = await rpc(origin, key, "tools/call", { name: "namespaces", arguments: {} });
-    const text = result?.content?.map((c) => c.text ?? "").join("") ?? "";
-    wanted = selectAgents(namespace, parseNamespaces(text));
+    wanted = selectAgents(namespace, parseNamespaces(await client.tool("namespaces", {})));
   } else {
     wanted = selectAgents(namespace);
   }
@@ -332,17 +353,7 @@ async function main() {
   // new thing would be worse than a slower one.
   const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
   if (needsRepos.length > 0) {
-    if (!initialized) {
-      await rpc(origin, key, "initialize", {
-        protocolVersion: "2025-06-18",
-        capabilities: {},
-        clientInfo: { name: "mint-agents", version: "1" },
-      });
-      initialized = true;
-    }
-    const result = await rpc(origin, key, "tools/call", { name: "namespaces", arguments: {} });
-    const text = result?.content?.map((c) => c.text ?? "").join("") ?? "";
-    const mapping = parseNamespaceRepos(text);
+    const mapping = parseNamespaceRepos(await client.tool("namespaces", {}));
     for (const a of needsRepos) {
       // One namespace per driver, which selectAgents and driverFor both guarantee.
       a.repos = reposForNamespace(mapping, a.namespaces[0]);
@@ -361,39 +372,13 @@ async function main() {
     return;
   }
 
-  if (!initialized) {
-    await rpc(origin, key, "initialize", {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "mint-agents", version: "1" },
-    });
-  }
-
   mkdirSync(keyDir(), { recursive: true, mode: 0o700 });
 
+  // Never overwrite: a second mint would leave a live credential in the table with
+  // nothing on disk able to present it, and no way to tell which is which. mintInto
+  // skips an existing file.
   for (const a of wanted) {
-    const path = keyPath(a.name);
-    // Never overwrite: a second mint would leave a live credential in the table
-    // with nothing on disk able to present it, and no way to tell which is which.
-    if (existsSync(path)) {
-      console.log(`${a.name}: SKIPPED, ${path} already exists`);
-      continue;
-    }
-    // `what` is documentation for the reader of this file and is not a scope axis,
-    // so it does not go over the wire. Sending it would have the tool reject the
-    // whole mint for an unknown argument, or worse, accept and ignore it.
-    const { what: _what, ...scopes } = a;
-    const result = await rpc(origin, key, "tools/call", { name: "agents", arguments: { action: "mint", ...scopes } });
-    const text = result?.content?.map((c) => c.text ?? "").join("") ?? "";
-    let minted;
-    try {
-      minted = JSON.parse(text).key;
-    } catch {
-      throw new Error(`${a.name}: could not parse the mint response. Raw: ${text.slice(0, 300)}`);
-    }
-    if (!minted) throw new Error(`${a.name}: the mint response carried no key. Raw: ${text.slice(0, 300)}`);
-    writeFileSync(path, minted + "\n", { mode: 0o600 });
-    console.log(`${a.name}: written to ${path}  fingerprint ${fingerprint(minted)}`);
+    console.log(await mintInto(client.tool, a, keyPath(a.name)));
   }
 }
 

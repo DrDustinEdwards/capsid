@@ -48,6 +48,12 @@ export function parseNamespaces(text: string): string[];
 // cannot fall back to the wildcard by accident.
 export function parseNamespaceRepos(text: string): Map<string, string[]>;
 export function reposForNamespace(map: Map<string, string[]>, namespace: string): string[];
+// Creates the key file, mints into it, and returns the report line. Never prints the key.
+export function mintInto(
+  tool: (name: string, args: object) => Promise<string>,
+  agent: { name: string; what?: string },
+  path: string
+): Promise<string>;
 export function parseArgs(argv: string[]): {
   apply: boolean;
   namespace: string | undefined;
