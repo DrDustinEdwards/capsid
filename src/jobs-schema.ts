@@ -9,26 +9,18 @@ import { checkScope } from "./scope";
 export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked", "superseded"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-// The states a job is still holding a slot in. The partial unique index names the
-// same values, and test/jobs.test.ts asserts the two agree against the LAST migration
-// that defines that index: a status added here and not there would let two open jobs
-// share a title.
+// The states a job still holds a title slot in. The partial unique index names the
+// same values, and test/jobs.test.ts asserts they agree with the last migration that
+// defines it: a status added here and not there would let two open jobs share a title.
 //
-// BLOCKED IS OPEN (migrations/0019). It is a pause with somebody waiting on it, and
-// `resume` takes the same row back to claimed. Leaving it out is what let the watcher
-// re-post a finding twelve minutes after the first copy was blocked for the seat.
+// Blocked is open (migrations/0019). It is a pause with somebody waiting on it, and
+// resume takes the same row back to claimed; leaving it out would let a watcher post
+// the same finding again while the first copy waits for the seat.
 export const OPEN_JOB_STATUSES: readonly JobStatus[] = ["queued", "claimed", "blocked"];
 
-// THE STATES A JOB IS FINISHED IN. A job's mirrored document closes on these and
-// stays active on the rest, so `brief` and `search` stop carrying finished work as
-// open. `blocked` is deliberately not here: it is a pause a human clears, and
-// `resume` takes it back to claimed, so it is still open work while it waits.
-//
-// SUPERSEDED IS FINISHED BUT IS NOT A FAILURE (migrations/0020). It is a job the seat
-// replaced before any work was done on it: a corrected or reposted body, a reorder, a
-// withdrawal. Until it existed the only way to close one was to claim it and fail it,
-// so the job history carried failures that never happened. It writes no outcome row,
-// so no record, rate or skill score counts it.
+// The finished states. A job's mirror document closes on these. Superseded is finished
+// but not a failure (migrations/0020): the job was replaced before any work was done,
+// so it writes no outcome row.
 const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ["done", "failed", "superseded"];
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
@@ -38,19 +30,16 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
 export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
-// FOUR HOURS. Long enough for a driver to do a real job without heartbeating on a
+// Four hours. Long enough for a driver to do a real job without heartbeating on a
 // timer, short enough that a dead session costs one afternoon rather than the queue.
 // The driver heartbeats every 15 minutes anyway, so the lease is the backstop for a
-// session that died, not the normal renewal path.
+// session that died, not the renewal path.
 export const JOB_LEASE_SECONDS = 4 * 60 * 60;
 
-// Bounded like every other list in this Worker: a page, and a note when there are
-// more, so a short list is never mistaken for the whole queue.
 export const JOBS_ROWS_MAX = 100;
 
-// Every job is also a document at <namespace>/jobs/<id>.md, so brief and search see
-// the queue without anyone calling this tool. The TABLE is the source of truth for
-// status; the document is the findable copy and says so in its own body.
+// Every job is also a document, so brief and search see the queue. The table is the
+// source of truth for status.
 export const jobDocPath = (id: string) => `jobs/${id}.md`;
 
 export interface JobRow {
@@ -70,57 +59,37 @@ export interface JobRow {
   // The scopes this job's work needs of the driver that claims it, as JSON, or null
   // for the jobs that need nothing unusual (migrations/0009).
   required_scopes: string | null;
-  // The TRACK RECORD this job's work needs of that driver, as JSON, or null
-  // (migrations/0011). The other half of the same question: required_scopes asks what
-  // a driver is permitted to do, this asks what it has actually done.
+  // The track record this job needs of that driver, as JSON, or null (migrations/0011).
   min_record: string | null;
-  // How many times this job has hit a gate, and how many times a human sent it back
-  // in. Counted where they happen (migrations/0007_jobs_resume.sql says why neither
-  // is derived from the other).
+  // Gates hit and human resumes, counted where they happen (migrations/0007).
   blocked_count: number;
   resumed_count: number;
-  // THE BUDGET THE RETRY CAP IS MEASURED AGAINST (migrations/0016). Distinct from the
-  // two counters above, which are history and count every gate: this counts only the
-  // times the work was sent BACK to be corrected, and an admin resume does not spend
-  // it. See atCorrectionCap below.
+  // The retry cap's budget (migrations/0016): only the times the work was sent back to
+  // be corrected. See atCorrectionCap.
   corrections_count: number;
-  // 1 when this job's work needs a reviewer to speak before it reaches the seat
-  // (migrations/0017). A gate on the ROW rather than a convention, because the
-  // alternative is the party being reviewed deciding whether it is reviewed.
+  // 1 when a reviewer must speak before the work reaches the seat (migrations/0017).
+  // On the row, so the party being reviewed does not decide whether it is reviewed.
   review_required: number;
   created_at: string;
   updated_at: string;
 }
 
-// ---- the retry cap -------------------------------------------------------------
-//
-// TWO CORRECTIONS, THEN A HUMAN. `resume` made a gate a pause rather than an ending,
-// and left the loop unbounded: block, sent back, block again, sent back again, block
-// again. Each step is defensible on its own, which is why the ceiling is counted
-// rather than judged at each step.
-//
-// Pure functions, in the schema module, so the rule can be driven to its refusals in
-// a test without a database and so the tool layer and the queue cannot disagree
-// about where the line is.
+// The retry cap: two corrections, then a human. Each round is defensible on its own,
+// which is why the ceiling is counted rather than judged.
 
 export const CORRECTION_CAP = 2;
 
-// The exact string a capped job carries, so the console, the driver and a human
-// reading the row all see the same words.
 export const RETRY_CAP_REASON = "retry cap; human decision required";
 
-/** Whether a job has spent its correction budget. FAILS CLOSED: a count that is not
- *  a finite number at or above zero is treated as at the cap, because a budget that
- *  cannot be read is one that cannot be bounded, and waving it through would hand
- *  the loop the one case nobody tested. */
+/** Whether a job has spent its correction budget. Fails closed: a count that is not a
+ *  finite number at or above zero is treated as at the cap. */
 export function atCorrectionCap(corrections: number): boolean {
   if (!Number.isFinite(corrections) || corrections < 0) return true;
   return corrections >= CORRECTION_CAP;
 }
 
-/** What a capped job's summary says. The driver's own summary is KEPT and the cap is
- *  stated above it: the human now deciding needs to read what the driver was trying
- *  to do, and a cap that replaced that would throw away the thing being decided. */
+/** A capped job's summary: the cap, then the driver's own summary, which the human
+ *  deciding needs to read. */
 export function cappedSummary(summary: string | null): string {
   const said = summary?.trim();
   return said ? `${RETRY_CAP_REASON}\n\n${said}` : RETRY_CAP_REASON;
@@ -130,38 +99,22 @@ export function isJobStatus(value: unknown): value is JobStatus {
   return typeof value === "string" && (JOB_STATUSES as readonly string[]).includes(value);
 }
 
-// ---- what a job needs of the driver that claims it ---------------------------
-//
-// A job may say which scopes its work requires (migrations/0009), and the claim
-// refuses a driver that does not hold them. Expressed in the same vocabulary as an
-// agent's scopes and checked by the same function, so "what this job needs" and
-// "what this agent has" cannot drift into two comparisons.
-
-// FLAGS ONLY, and that is the whole vocabulary on purpose. The write grant and the
-// namespace are required of every claim already, so the only thing a job has left to
-// declare is blast radius: this work ends in a merge, or a direct commit, or a
-// workflow edit. A requirement a job could state and the claim could not act on would
-// be documentation pretending to be a check.
+// The scopes a job's work requires (migrations/0009), checked by the same function as
+// an agent's scopes. Flags only: the write grant and the namespace are required of
+// every claim already, so a job has only blast radius left to declare.
 export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// A JOB REQUIREMENT THAT CANNOT BE READ IS CORRUPT, NOT ABSENT (AUDIT-2026-09-16.md).
+// A requirement that cannot be read is corrupt, not absent. Failing open would lease a
+// job whose requirement had been damaged to any driver at all, and a garbled "needs
+// can_merge" is not the same statement as "needs nothing". post validates both fields
+// before it writes them, so an unreadable value only comes from a write that bypassed
+// post, which is the row that should not be handed out.
 //
-// Both parsers used to fail OPEN, on the reasoning that a corrupt requirement must not
-// strand a job behind a refusal nothing can satisfy. What that did instead was lease
-// a job whose requirement had been damaged to any driver at all, and a garbled
-// "needs can_merge" is not the same statement as "needs nothing". post validates both
-// fields before it writes them, so an unreadable value only arises from a write that
-// bypassed post, which is exactly the row that should not be handed out.
-//
-// The stranding the old ruling feared is handled at the claim instead: a job whose
-// requirement is corrupt is marked FAILED there, with the field named, the way a job
-// whose signature fails is. Resume refuses and leaves it blocked.
-//
-// null, undefined and "" are NO requirement, which is what post writes when none was
-// asked for. An object that omits the field is also none. Anything else that does not
-// parse to the documented shape is corrupt.
+// So the job cannot strand behind a refusal nothing can satisfy, the claim marks it
+// failed with the field named, as it does a bad signature; resume refuses and leaves
+// it blocked. null, undefined, "" and an object without the field are no requirement.
 export type ParsedRequirement<T> = { ok: true; value: T } | { ok: false; problem: string };
 
 function parseObject(field: string, json: string): ParsedRequirement<Record<string, unknown>> {
@@ -204,57 +157,37 @@ export function serializeRequiredScopes(required: Partial<RequiredScopes>): stri
   return JSON.stringify({ flags: required.flags ?? [] });
 }
 
-// THE CLAIM'S AUTHORIZATION, in one call to the one enforcement point. Returns a
-// refusal naming the missing scope, or null.
-//
-// The write grant and the namespace are checked for EVERY job, requirement or not: a
-// claim is a write, and a driver claiming work in a namespace it cannot reach would
-// only discover that at its first tool call. The job's own requirements are added on
-// top.
+// The claim's authorization, through the one enforcement point: the write grant and
+// the namespace for every job, plus the job's own flags. Returns a refusal or null.
 export function missingForJob(agent: Agent, namespace: string, requiredScopes: string | null | undefined): string | null {
   const required = parseRequiredScopes(requiredScopes);
-  // Fails closed here too, so a caller that reaches this without the claim's corrupt
-  // check first still cannot be handed the job.
+  // Fails closed for a caller that skipped the claim's corrupt check.
   if (!required.ok) return `this job's ${required.problem}, so nothing can be checked against it.`;
   return checkScope(agent, { tool: "jobs", namespace, grant: "write", flags: required.value.flags });
 }
 
-/** Why this caller cannot move a job in this namespace, or null. The namespace half
- *  of missingForJob, for a resume that returns a job to its own claimant: the caller
- *  acquires nothing, so the job's flags are not its question, but it still moves a
- *  job and must be able to write where the job lives. */
+/** The namespace half of missingForJob, for a resume that returns a job to its own
+ *  claimant: the caller acquires nothing but still moves the job. */
 export function outsideJobNamespace(agent: Agent, namespace: string): string | null {
   return checkScope(agent, { tool: "jobs", namespace, grant: "write" });
 }
 
-// job_<12 hex>, minted by the Worker. Not an AUTOINCREMENT integer: a job id is
-// quoted in chat and in a commit message, and a guessable sequence invites
-// addressing a job by arithmetic. 48 bits is collision-free at this volume and the
-// PRIMARY KEY refuses one anyway.
-//
-// bytesToHex, not an inline map: src/encoding.ts owns the byte encodings.
+// job_<12 hex>, random rather than sequential so an id quoted in chat cannot be used
+// to address a job by arithmetic. The PRIMARY KEY refuses a collision.
+// Hex through bytesToHex (src/encoding.ts).
 export function mintJobId(): string {
   return `job_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
 
-// ---- what a job needs of the driver's HISTORY ---------------------------------
-//
-// migrations/0011. A scope says what a credential MAY do; this says what it must
-// already HAVE done. Some work should not go to a driver that has never had a pull
-// request merged, and a queue with no way to express that hands it to whoever asks
-// first.
-//
-// ONE FIELD, AND THAT IS DELIBERATE FOR NOW. Every bar here has to be a number the
-// agent record already computes and a human can read on the console, or the claim is
-// gated on something nobody can check before posting the job. prs_merged is that
-// number. A bar on a RATE is deliberately not offered: a rate over a small
-// denominator is noise, and "merge rate at least 0.8" would refuse an agent that has
-// merged one of one.
+// What a job needs of the driver's history (migrations/0011): a scope says what a
+// credential may do, this says what it has done. Each bar must be a number the agent
+// record computes and the console shows. No rate bar: a rate over a small
+// denominator is noise.
 export interface MinRecord {
   prs_merged?: number;
 }
 
-// FAILS CLOSED, on the same terms as parseRequiredScopes above.
+// Fails closed, as parseRequiredScopes does.
 export function parseMinRecord(json: string | null | undefined): ParsedRequirement<MinRecord> {
   if (!json) return { ok: true, value: {} };
   const parsed = parseObject("min_record", json);
@@ -271,9 +204,8 @@ export function serializeMinRecord(min: MinRecord): string {
   return JSON.stringify({ prs_merged: min.prs_merged ?? 0 });
 }
 
-// THE BAR, CHECKED AGAINST THE RECORD THE CONSOLE SHOWS. Returns a refusal naming the
-// shortfall, or null. Takes the record's numbers rather than the record, so this stays
-// a pure comparison and src/agent-record.ts stays the only place they are computed.
+// The bar against the record's numbers, a pure comparison; src/agent-record.ts
+// computes them. Returns a refusal naming the shortfall, or null.
 export function missingForRecord(record: { prs_merged: number }, minRecord: string | null | undefined): string | null {
   const parsed = parseMinRecord(minRecord);
   if (!parsed.ok) return `this job's ${parsed.problem}, so no record can be compared against it.`;
@@ -282,26 +214,11 @@ export function missingForRecord(record: { prs_merged: number }, minRecord: stri
   return `this job asks for a driver with at least ${prs_merged} merged pull request${prs_merged === 1 ? "" : "s"} on its record, and this one has ${record.prs_merged}.`;
 }
 
-// ---- a swallowed parameter tag --------------------------------------------------
-//
-// WHAT THIS CATCHES, and it is a real failure measured twice on 2026-09-11 rather
-// than a hypothetical. A caller that closes a parameter tag INSIDE a value sends one
-// argument where it meant to send three: `result_ref` and `evidence` never arrive as
-// arguments at all, they arrive as literal text in the middle of `result_summary`,
-// and the job is completed with no reference and no evidence. Both times the outcome
-// row recorded nothing.
-//
-// WHY IT IS REFUSED RATHER THAN CLEANED UP. The arguments are already gone by the
-// time this runs; there is nothing to recover from the text, because what was lost is
-// the STRUCTURE. Stripping the tags would leave a tidy summary that is still missing
-// its result_ref and its evidence, and the caller would never learn. And the outcome
-// row cannot be corrected afterwards by design (a primary key plus ON CONFLICT DO
-// NOTHING is what makes it evidence), so before the write is the only place to catch
-// this at all.
-//
-// THE PARAMETER NAMES ARE THE ONES A CALLER WRITES. test/jobs.test.ts derives them
-// against the tool's own schema, so a parameter added to `jobs` and not added here is
-// a build failure rather than a hole.
+// A swallowed parameter tag: a caller that closes a parameter tag inside a value sends
+// the later arguments as literal text in that value. Refused rather than cleaned up,
+// because the lost arguments cannot be recovered from the text, and the outcome row
+// cannot be corrected after the write. test/jobs.test.ts derives these names from
+// the tool's schema.
 export const JOB_PARAM_NAMES = [
   "action",
   "namespace",
@@ -316,24 +233,17 @@ export const JOB_PARAM_NAMES = [
   "evidence",
 ] as const;
 
-// DELIBERATELY NARROW: the full `</name>` spelling and nothing looser. A guard that
-// fired on a bare "</" would refuse a job body explaining this very rule, and a guard
-// that gets in the way of ordinary prose is one somebody deletes rather than fixes.
-// Writing the pieces apart, as this feature's own job body did, is not matched.
+// Only the full `</name>` spelling, so a body that discusses this rule is not refused.
 const SWALLOWED_TAG = new RegExp(`</(${JOB_PARAM_NAMES.join("|")})>`);
 
-// The first parameter name found, or null. The first one is the useful one: it is
-// where the value was cut off, and everything after it was lost.
+// The first parameter name found, which is where the value was cut off, or null.
 export function swallowedParamTag(value: string): string | null {
   const match = SWALLOWED_TAG.exec(value ?? "");
   return match ? match[1] : null;
 }
 
-// One message for all three call sites, so a caller sees the same explanation
-// wherever it happens. It names the field that swallowed the text AND the tag that
-// did the swallowing, because on the measured cases those differ only sometimes: a
-// value cut off by its OWN closing tag is the common shape and reads confusingly
-// unless both are stated.
+// One message for every call site. It names both the field and the tag, because a
+// value cut off by its own closing tag reads confusingly unless both are stated.
 export function swallowedTagRefusal(field: string, tag: string): string {
   const own = field === tag ? " (its own closing tag)" : "";
   return (

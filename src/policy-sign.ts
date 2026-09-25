@@ -4,33 +4,19 @@ import { POLICY_PREFIX } from "./improve-schema";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./improve-task";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
 
-// ---- signing a policy document ------------------------------------------------
+// Signing a policy document: the one path that mints the signature the auto-merge and
+// gate policies are verified against. Its constraints:
 //
-// THE ONE THING THAT MINTS POLICY AUTHORITY, and the narrowest surface that can do
-// the job. The auto-merge policy and the gate policy are both verified with
-// verifySignedBody, and until this existed nothing could produce the signature they
-// verify: signTaskBody was reachable only from the improve loop's run-document writer
-// and from jobs post. Both policies were inert by construction.
+//   1. Admin only, enforced at the tool layer: an agent that could sign a policy could
+//      widen itself.
+//   2. capsid/policy/ only, checked here as well as at the tool, so no second caller
+//      can point it elsewhere.
+//   3. It signs what is already stored. There is no body argument, so this cannot sign
+//      arbitrary bytes.
+//   4. It re-signs rather than nesting: existing frontmatter is stripped first.
 //
-// FOUR CONSTRAINTS, and each is here because this function decides what the machine
-// may do without a human:
-//
-//   1. ADMIN ONLY. Enforced at the tool layer, on the same reasoning as `agents`: a
-//      minted agent that could sign a policy could write itself a policy that widened
-//      it, which is an agent with no scope.
-//   2. ONE NAMESPACE AND ONE PREFIX. capsid/policy/ and nothing else. The path is
-//      checked here rather than only at the tool, because this is the function whose
-//      output is authority and a second caller must not be able to point it elsewhere.
-//   3. IT SIGNS WHAT IS ALREADY STORED. There is no body argument. A caller cannot
-//      hand this function bytes to sign: it signs the document the store holds, which
-//      is the document a human wrote and can read back. Signing supplied bytes would
-//      make this an oracle for signing anything.
-//   4. IT RE-SIGNS RATHER THAN NESTING. An already-signed document has its frontmatter
-//      stripped before signing, so signing twice is idempotent in shape and the second
-//      signature covers the same bytes as the first.
-//
-// The write goes through the same invariants every other write does: the prior row is
-// snapshotted into document_versions and a row is appended to audit_log, in one batch.
+// The write snapshots the prior row and appends to audit_log in one batch
+// (CLAUDE.md, snapshot rule).
 
 export interface PolicySignResult {
   ok: true;
@@ -38,8 +24,7 @@ export interface PolicySignResult {
   namespace: string;
   path: string;
   signature: string;
-  // Of the SIGNED body as stored, so a caller can verify the write without reading
-  // the document back.
+  // Of the signed body as stored.
   sha256: string;
   bytes: number;
   resigned: boolean;
@@ -91,12 +76,9 @@ export async function signPolicyDocument(
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
 
-  // THE ANTI-ROLLBACK RECORD IS WRITTEN FIRST (audit 2026-09-25, E2-2). From here on
-  // the loaders accept this body and no other signed copy (improve-task.ts, policyPin).
-  // Written before the store so every failure refuses: a record that could not be
-  // written stops the signing with nothing stored, and a store that aborts below
-  // leaves the record naming a body that is not stored, which the loaders refuse
-  // until the policy is signed again, as that refusal already asks.
+  // The anti-rollback record is written first: from here on the loaders accept this
+  // body and no other signed copy (policyPin in improve-task.ts). Written before the
+  // store so every failure refuses, including a store that aborts below.
   try {
     await env.APP_KV.put(policyPinKey(path), JSON.stringify(await policyPin(body)));
   } catch (err) {
@@ -105,17 +87,14 @@ export async function signPolicyDocument(
     );
   }
 
-  // The body guard goes first. The signature covers the body read above, so a policy
-  // edit that lands between that read and this batch must abort the signing: without
-  // the guard the upsert would replace the newer policy with the signed older one.
+  // The body guard goes first, so an edit after the read aborts rather than being
+  // replaced by the signed older body.
   try {
     await env.DB.batch([
       requireBodyUnchanged(env.DB, namespace, path, prior.body),
       snapshotLive(env.DB, namespace, path),
       documentUpsert(env.DB, namespace, path, prior.title, signed, null, null, null),
-      // The signature and the hash, not the body. What a reader of the log needs is
-      // which bytes were blessed and when, and the bytes themselves are in the
-      // document and its version snapshot.
+      // The signature and hash, not the body, which the document and snapshot hold.
       auditStatement(env.DB, actor, "policy-signed", namespace, path, {
         signature,
         sha256,
