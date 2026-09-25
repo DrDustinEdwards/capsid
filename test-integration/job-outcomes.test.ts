@@ -293,6 +293,39 @@ describe("job outcomes", () => {
     expect(refused.refusal).toMatch(/has 0/);
   });
 
+  it("PLANT: the bar is enforced at a RESUME that hands the lease to a new holder, too", async () => {
+    // Moved from test/job-outcomes.test.ts (audit 2026-09-25, item C1-12), which
+    // counted recordShortfall( call sites in src/jobs.ts. Resume with take hands a
+    // caller a lease exactly as a claim does, so a driver that could not have claimed
+    // the job must not acquire it by resuming it.
+    const OTHER_ACTOR = "opkey:ddddeeeeffff";
+    const OTHER = legacyAgent("write", OTHER_ACTOR);
+    await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
+    const posted = await post({ title: "needs a record to take over", min_record: { prs_merged: 2 }, gate_required: true });
+    const id = posted.job!.id;
+    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
+    expect(blocked.ok, blocked.refusal).toBe(true);
+
+    const refused = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
+    expect((await jobRow(id))?.status).toBe("blocked");
+
+    // The same caller with a verified record takes it, so the bar is a bar and not a wall.
+    await env.DB.prepare(
+      `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
+         result_kind, verified, recorded_at)
+       VALUES ('job_history0002', ?1, 'capsid', 2, 2, 0, 0, 'pr', ?2, '2026-09-01')`
+    )
+      .bind(OTHER_ACTOR, FULLY_VERIFIED)
+      .run();
+    const taken = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
+    expect(taken.ok, taken.refusal).toBe(true);
+    expect((await jobRow(id))?.claimed_by).toBe(OTHER_ACTOR);
+  });
+
   it("a job with no bar is claimed without the record ever being read", async () => {
     // The record is computed from every outcome row, so reading it on a claim that
     // asks no question would put a table scan in front of the queue's hottest path.

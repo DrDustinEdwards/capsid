@@ -27,27 +27,18 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // across every namespace in the store. CLAUDE.md's one enforcement point rule says there is one
 // enforcement point; this route was not in it.
 //
-// WHY THE ROUTE IS NOT DRIVEN: src/routes.ts imports the Agents SDK, which needs
-// `cloudflare:workers`, and node --test cannot load that scheme. Nothing in this suite
-// has ever driven defaultHandler for that reason (test/csp-rate-limit.test.ts says the
-// same). So the caller is resolved for real, through resolveAgent, the decision is
-// made by the real routeRefusal, and the handler's wiring is read from the source it
-// runs.
+// THE ROUTES THEMSELVES ARE DRIVEN in test-integration/route-gates.test.ts, through
+// the whole Worker: /ops/backup with a one-namespace driver key (403), the legacy write
+// key (runs), the legacy read key (403) and no key (401); every path in ROUTE_GRANTS
+// and UNGATED_ROUTES is served; every gated path refuses a driver. node --test cannot
+// load src/routes.ts, so what stays here is routeRefusal over callers resolved for
+// real, and the one direction no request can show: every path defaultHandler
+// dispatches on is in one of the two tables.
 
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 const LEGACY_WRITE_KEY = "legacy-write-key";
 const LEGACY_READ_KEY = "legacy-read-key";
 const ROUTES = readFileSync(join(import.meta.dirname, "..", "src", "routes.ts"), "utf8");
-
-function handlerBody(name: string): string {
-  const start = ROUTES.indexOf(`async function ${name}(`);
-  assert.ok(start !== -1, `${name} not found in src/routes.ts; the scan is reading the wrong file`);
-  const next = ROUTES.indexOf("\nasync function ", start + 1);
-  const nextConst = ROUTES.indexOf("\nconst ", start + 1);
-  const nextExport = ROUTES.indexOf("\nexport ", start + 1);
-  const end = Math.min(...[next, nextConst, nextExport].filter((i) => i !== -1));
-  return ROUTES.slice(start, end);
-}
 
 async function resolveWith(bearer: string) {
   const scopes = defaultScopes(["capsid"]);
@@ -79,29 +70,6 @@ async function resolveWith(bearer: string) {
 }
 
 // ---- /ops/backup ----------------------------------------------------------------
-
-// scanner-rule: CLAUDE.md, one enforcement point rule, /ops/backup is gated through checkScope. src/routes.ts imports agents/mcp and cannot load under node --test, so the handler's source is what is checked
-test("REPRODUCTION: /ops/backup refuses a one-namespace driver that holds write", async () => {
-  const agent = await resolveWith(DRIVER_KEY);
-  // The caller is exactly the one the finding describes.
-  assert.deepEqual(agent.scopes.namespaces, ["capsid"], "the driver is scoped to one namespace");
-  assert.ok(agent.scopes.grants.includes("write"), "the driver holds write");
-  assert.equal(agent.admin, false, "the driver is not the admin");
-
-  const refusal = routeRefusal("/ops/backup", agent);
-  assert.ok(refusal, "a one-namespace driver was allowed to back up and prune every namespace");
-  assert.match(refusal, /admin only/);
-  assert.match(refusal, /every namespace/, "the refusal does not say why a backup is admin work");
-
-  const body = handlerBody("handleBackup");
-  assert.match(
-    body,
-    /routeRefusal\("\/ops\/backup", caller\.agent\)/,
-    "handleBackup does not ask routeRefusal about its own path, so the table above decides nothing for it"
-  );
-  assert.doesNotMatch(body, /grants\.includes\(/, "handleBackup decides a grant for itself again (CLAUDE.md, one enforcement point rule)");
-  assert.match(body, /status: 403/, "a resolved caller that is refused should get 403, not 401");
-});
 
 test("/ops/backup admits the legacy write-grant operator key, which is the admin", async () => {
   const agent = await resolveWith(LEGACY_WRITE_KEY);
@@ -166,11 +134,8 @@ function dispatches(): { path: string; handler: string }[] {
 // scanner-rule: CLAUDE.md, one enforcement point rule, every route is a decision. Derived over every dispatch line in src/routes.ts
 test("every route in defaultHandler is either gated through checkScope or listed as ungated with a reason", () => {
   const routes = dispatches();
-  // Measured 2026-09-16: 14 dispatch lines over 12 distinct paths. A change to either
-  // number is a route added or removed, and this assertion is where that is noticed.
-  assert.equal(routes.length, 14, "the number of dispatch lines in defaultHandler changed");
   const paths = new Set(routes.map((r) => r.path));
-  assert.equal(paths.size, 12, "the number of distinct routes changed");
+  assert.ok(paths.size > 0, "parsed no dispatch lines out of defaultHandler, so this guard is vacuous");
 
   for (const path of paths) {
     const gated = Object.hasOwn(ROUTE_GRANTS, path);
@@ -179,24 +144,8 @@ test("every route in defaultHandler is either gated through checkScope or listed
     assert.ok(!(gated && ungated), `route ${path} is in both ROUTE_GRANTS and UNGATED_ROUTES`);
     if (ungated) assert.ok(UNGATED_ROUTES[path].trim().length > 20, `route ${path} is listed as ungated with no real reason`);
   }
-  // No stale entry: a table that names a route that no longer exists stops being a
-  // statement about this Worker.
-  for (const path of [...Object.keys(ROUTE_GRANTS), ...Object.keys(UNGATED_ROUTES)]) {
-    assert.ok(paths.has(path), `src/scope.ts names route ${path}, which defaultHandler does not serve`);
-  }
-});
-
-// scanner-rule: CLAUDE.md, one enforcement point rule. src/routes.ts imports agents/mcp and cannot load under node --test
-test("every gated route's handler asks routeRefusal about its own path", () => {
-  const gated = dispatches().filter((r) => Object.hasOwn(ROUTE_GRANTS, r.path));
-  assert.equal(gated.length, 1, "the number of gated dispatch lines changed");
-  for (const { path, handler } of gated) {
-    const body = handlerBody(handler);
-    assert.ok(
-      body.includes(`routeRefusal(${JSON.stringify(path)},`),
-      `${handler} serves ${path}, which ROUTE_GRANTS gates, and never calls routeRefusal for it`
-    );
-  }
+  // The other direction, that no table entry is stale, is driven through the Worker in
+  // test-integration/route-gates.test.ts.
 });
 
 // ---- the table is the whole statement -------------------------------------------

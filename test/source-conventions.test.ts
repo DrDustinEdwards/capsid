@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { REPORT_PREFIX } from "../src/headers.ts";
 import { sourceFiles } from "./source-files.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -18,28 +17,9 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // hardcoded list of two or three files, which made the guard's scope a guess about
 // where the next copy would be written (quality audit 1.1). They scan all of src/
 // now, which is also what lets server.ts be split later without losing them.
-
-// scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
-test("one REPORT_PREFIX, and no file defines its own", () => {
-  assert.equal(REPORT_PREFIX, "reports/csp/");
-  const offenders = sourceFiles()
-    .filter((f) => f.name !== "headers.ts")
-    .filter((f) => /= "reports\/csp\//.test(f.text))
-    .map((f) => `src/${f.name}`);
-  assert.deepEqual(
-    offenders,
-    [],
-    "these files define their own report prefix; intake and prune must agree or reports accumulate under a prefix nothing reaps"
-  );
-  // Both sides of the agreement still import it: the sink that writes and the
-  // cron that prunes. A guard that only checked for duplicates would pass if both
-  // sides simply stopped using the prefix.
-  const importers = sourceFiles().filter((f) => /REPORT_PREFIX/.test(f.text) && f.name !== "headers.ts").map((f) => f.name);
-  assert.ok(
-    importers.includes("backup.ts") && importers.includes("routes.ts"),
-    `expected both the prune and the sink to use REPORT_PREFIX, found: ${importers.join(", ")}`
-  );
-});
+//
+// That the CSP report sink and the backup prune agree on the report prefix is driven
+// in test-integration/csp-report.test.ts: a stored report, aged, is reaped by the cron.
 
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through timingSafeEqual, in every file", () => {

@@ -66,17 +66,8 @@ test("every cron the config fires is handled", () => {
 
 // That the handler dispatches on controller.cron is driven in
 // test-integration/scheduled.test.ts: each expression is fired and does only its own
-// work, and an unrecognised expression does nothing.
-
-
-// scanner-rule: conventions-verification, enumerate every site. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
-test("each branch is guarded on its own, so one throwing does not stop the others", () => {
-  const index = sourceFile("index.ts");
-  // Four separate ctx.waitUntil chains, each with its own catch. A shared try
-  // would let a failing improve tick cancel the backup.
-  assert.equal(index.split("ctx.waitUntil(").length - 1, 4);
-  assert.ok(index.split(".catch((err)").length - 1 >= 4, "a cron branch has no catch of its own");
-});
+// work, and an unrecognised expression does nothing. That a branch which throws stays
+// inside its own waitUntil, and a later cron still runs, is driven there too.
 
 // ---- the DST gate -----------------------------------------------------------
 
