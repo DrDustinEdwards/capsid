@@ -76,33 +76,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # tsc --noEmit is the safe form here: a conventional single-project config with an
+      # FOUR TYPECHECKS IN ONE STEP (audit 2026-09-25, B1). Each config stays separate,
+      # and every one runs even when an earlier one fails, so one red run reports all of
+      # them. The step name is on the auto-merge policy's required CI list.
+      #
+      # check: tsc --noEmit over src, a conventional single-project config with an
       # explicit include of ["src"]. See capsid/conventions.md on why `tsc -b` is
-      # required elsewhere in the portfolio. This step covers src only.
-      - name: Typecheck
-        run: npm run check
-
-      # The test suite is type-checked under its own config (quality audit 10.2).
+      # required elsewhere in the portfolio.
+      #
+      # check:test: the test suite under its own config (quality audit 10.2).
       # tsconfig.json includes only src, so until 2026-08-17 the files guarding every
       # other invariant were never seen by tsc: node's type stripping erases types
       # without checking them, so a test could stop compiling and still report green.
       # Two configs rather than one widened include, because only this one carries node
       # types and the shipping config must keep rejecting a node API in src/.
-      - name: Typecheck tests
-        run: npm run check:test
-
-      # The integration suite has its own config: it needs the workers-types experimental
+      #
+      # check:integration: the integration suite needs the workers-types experimental
       # surface and the pool's `cloudflare:test` ambient module, and the shipping config
       # must keep rejecting both in src/.
-      - name: Typecheck integration tests
-        run: npm run check:integration
-
-      # scripts/improve-report.mjs is copied BYTE-IDENTICAL into four other repos, which
-      # do not all gate it the same way. On 2026-09-07 this repo shipped ten type errors
-      # in it that only dustinedwards-info's stricter gate could see. This is the guard,
-      # in the repo the file is authored in.
-      - name: Typecheck the copied scorer script
-        run: npm run check:scripts
+      #
+      # check:scripts: scripts/improve-report.mjs is copied BYTE-IDENTICAL into four
+      # other repos, which do not all gate it the same way. On 2026-09-07 this repo
+      # shipped ten type errors in it that only dustinedwards-info's stricter gate could
+      # see. This is the guard, in the repo the file is authored in.
+      - name: Typecheck src, tests, integration tests and the copied scorer script
+        run: |
+          status=0
+          npm run check || status=1
+          npm run check:test || status=1
+          npm run check:integration || status=1
+          npm run check:scripts || status=1
+          exit $status
 
       - name: Tests
         run: npm test
