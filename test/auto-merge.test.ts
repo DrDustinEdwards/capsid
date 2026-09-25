@@ -1226,3 +1226,61 @@ test("a page that fails partway is refused, not judged on the pages that loaded"
   assert.equal(report.outcomes[0].merged, false);
   assert.match(report.outcomes[0].why ?? "", /502/);
 });
+
+// ---- audit 2026-09-25, F3-6 and F7-1: one PR cannot end the tick, and a PR naming no
+// job costs no GitHub read --------------------------------------------------------------
+
+const NO_JOB_SHA = "cccc000000000000000000000000000000000000";
+
+function twoPrRoutes(mergeRoute: unknown) {
+  const base = tickRoutes(["src/jobs.ts"]);
+  return {
+    ...base,
+    [`GET ${OWNER}/pulls`]: {
+      body: [
+        ...(base[`GET ${OWNER}/pulls`] as { body: unknown[] }).body,
+        { number: 30, body: "A human's change, no job here.", head: { sha: NO_JOB_SHA, repo: { full_name: "DrDustinEdwards/capsid" } }, base: { ref: "master" } },
+      ],
+    },
+    [`PUT ${OWNER}/pulls/23/merge`]: mergeRoute,
+  };
+}
+
+test("PLANT F3-6: a merge GitHub refuses with 405 is audited as failed, and the tick goes on to the next PR and writes the awaiting set", async () => {
+  const { d1, kv, env } = await pinnedEnv();
+  let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
+  await withFetch(twoPrRoutes({ status: 405, body: { message: "Pull Request is not mergeable" } }) as never, async () => {
+    report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+  });
+  const out = report!;
+  assert.equal(out.ran, true, out.note);
+  assert.equal(out.outcomes.length, 2, "the throw on PR 23 stopped the tick before PR 30");
+  const first = out.outcomes.find((o) => o.number === 23);
+  assert.equal(first?.merged, false);
+  assert.equal(first?.failed, "error");
+  assert.match(first?.why ?? "", /405/);
+  const actions = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[1]);
+  assert.ok(actions.includes("auto-merge-failed"), `no failure audit row: ${JSON.stringify(actions)}`);
+  const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string) as Array<{ number: number; failed: string }>;
+  assert.deepEqual(awaiting.map((a) => [a.number, a.failed]).sort(), [[23, "error"], [30, "body_names_job"]]);
+});
+
+test("PLANT F7-1: a PR whose body names no job is declined without reading its files, checks or CI runs", async () => {
+  const { d1, env } = await pinnedEnv();
+  let calls: Array<{ method: string; path: string; search?: string }> = [];
+  let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
+  await withFetch(twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as never, async (c) => {
+    report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    calls = c;
+  });
+  const skipped = report!.outcomes.find((o) => o.number === 30);
+  assert.equal(skipped?.merged, false);
+  assert.equal(skipped?.failed, "body_names_job");
+  const aboutPr30 = calls.filter((c) => c.path.includes("/pulls/30") || c.path.includes(NO_JOB_SHA) || (c.search ?? "").includes(NO_JOB_SHA));
+  assert.deepEqual(aboutPr30, [], "the tick read GitHub for a PR that names no job");
+  // The PR that names a job is still judged and merged, so the skip is not a wall.
+  assert.equal(report!.outcomes.find((o) => o.number === 23)?.merged, true);
+  const declined = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined");
+  assert.equal(declined.length, 1);
+  assert.equal(JSON.parse(String(declined[0].params[3])).head_sha, NO_JOB_SHA);
+});

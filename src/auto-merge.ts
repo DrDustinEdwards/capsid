@@ -697,7 +697,9 @@ async function factsForPr(
 
 export function declineParams(
   policyVersion: string,
-  facts: PrFacts,
+  // Only what names the PR and the head judged, so a PR declined before its facts were
+  // read (its body names no job) is audited the same way.
+  facts: Pick<PrFacts, "repo" | "number" | "headSha">,
   // A policy refusal, or "head_moved" when GitHub refused the pinned merge.
   verdict: { failed: PolicyCheck | "head_moved"; why: string; passed: PolicyCheck[] },
   now: Date
@@ -784,67 +786,75 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   for (const namespace of policy.namespaces) {
     let owner: string;
     let repo: string;
+    let defaultBranch: string;
+    let prs: OpenPr[];
+    // A NAMESPACE THAT CANNOT BE READ IS SKIPPED, NOT THE WHOLE TICK (audit 2026-09-25,
+    // F3-6): the default-branch read and the list parse throw on a GitHub failure, and a
+    // throw here stopped every later namespace and the awaiting-seat write.
     try {
       ({ owner, repo } = await resolveRepo(env, namespace));
+      defaultBranch = await getDefaultBranch(env, owner, repo);
+      const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100`);
+      if (!listed.ok) {
+        console.error(`AUTO_MERGE could not list PRs on ${owner}/${repo} (${listed.status})`);
+        continue;
+      }
+      prs = (await listed.json()) as OpenPr[];
     } catch (err) {
-      console.error(`AUTO_MERGE could not resolve ${namespace}: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
-    const defaultBranch = await getDefaultBranch(env, owner, repo);
-    const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100`);
-    if (!listed.ok) {
-      console.error(`AUTO_MERGE could not list PRs on ${owner}/${repo} (${listed.status})`);
-      continue;
-    }
-    const prs = (await listed.json()) as OpenPr[];
 
     for (const pr of prs) {
-      const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
-      const verdict = evaluatePolicy(facts, policy.authors);
-      if (!verdict.merge) {
-        outcomes.push({
-          namespace,
-          repo: facts.repo,
-          number: pr.number,
-          merged: false,
-          failed: verdict.failed,
-          why: verdict.why,
-          passed: verdict.passed,
-        });
-        await env.DB.batch([
-          improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, facts, verdict, now)),
-        ]);
-        continue;
-      }
-      // merge_method "merge" because the policy audits a head sha and a squash would
-      // not preserve it on the default branch. The merge is pinned to the sha the
-      // checks above read: a push to the head since then makes GitHub answer 409, and
-      // that PR is left open for this tick. The next tick judges the new head.
-      let result: unknown;
-      try {
-        result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, undefined, facts.headSha);
-      } catch (err) {
-        if (!(err instanceof HeadMovedError)) throw err;
-        const moved = {
-          failed: "head_moved" as const,
-          why: `the PR head moved after the policy judged ${facts.headSha}, so GitHub refused the pinned merge. ${err.message}`,
-          passed: verdict.passed,
+      // A PR WHOSE BODY NAMES NO JOB IS DECLINED BEFORE ANY GITHUB READ (audit
+      // 2026-09-25, F7-1). body_names_job refuses it whatever its files and checks say,
+      // and reading them cost several requests per stale PR on every tick against the
+      // rate limit every repo tool shares. The body is already in the list response.
+      if (!jobIdFromBody(pr.body ?? "")) {
+        const skipped = {
+          failed: "body_names_job" as const,
+          why: "the PR body names no job id, so there is no request this change can be traced back to. Its files and checks were not read.",
+          passed: [] as PolicyCheck[],
         };
-        outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved });
-        await env.DB.batch([
-          improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, facts, moved, now)),
-        ]);
+        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, ...skipped });
+        try {
+          await env.DB.batch([
+            improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, { repo: `${owner}/${repo}`, number: pr.number, headSha: pr.head.sha }, skipped, now)),
+          ]);
+        } catch (err) {
+          console.error(`AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`);
+        }
         continue;
       }
-      outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed });
-      await env.DB.batch([
-        improveAudit(
-          env.DB,
-          "auto-merged",
-          namespace,
-          mergeParams(policy.version, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now)
-        ),
-      ]);
+      // ONE PR THAT THROWS DOES NOT END THE TICK (audit 2026-09-25, F3-6). A 405 on a PR
+      // that is not mergeable, a failed read or a D1 error used to abort every later PR
+      // and namespace, leave no audit row, and skip the awaiting-seat write. The PR is
+      // reported as not merged with the error, and an auto-merge-failed row says why.
+      const before = outcomes.length;
+      try {
+        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now);
+      } catch (err) {
+        const why = err instanceof Error ? err.message : String(err);
+        console.error(`AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}`);
+        // An outcome already pushed means the PR was judged (or merged) and only its
+        // audit row failed; that outcome is the true one and is kept.
+        if (outcomes.length > before) continue;
+        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
+        try {
+          await env.DB.batch([
+            improveAudit(env.DB, "auto-merge-failed", namespace, {
+              policy_version: policy.version,
+              repo: `${owner}/${repo}`,
+              pr: pr.number,
+              head_sha: pr.head.sha,
+              error: why,
+              at: now.toISOString(),
+            }),
+          ]);
+        } catch (auditErr) {
+          console.error(`AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+        }
+      }
     }
   }
 
@@ -875,4 +885,67 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     policy_version: policy.version,
     outcomes,
   };
+}
+
+/** Judge one PR that names a job, merge it when the policy passes, and audit either way.
+ *  Pushes exactly one outcome, before its audit row, so a caller can tell a PR that was
+ *  judged from one that threw first. */
+async function judgeOnePr(
+  env: Env,
+  policyVersion: string,
+  allowedAuthors: string[],
+  namespace: string,
+  owner: string,
+  repo: string,
+  defaultBranch: string,
+  pr: OpenPr,
+  outcomes: AutoMergeOutcome[],
+  now: Date
+): Promise<void> {
+  const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
+  const verdict = evaluatePolicy(facts, allowedAuthors);
+  if (!verdict.merge) {
+    outcomes.push({
+      namespace,
+      repo: facts.repo,
+      number: pr.number,
+      merged: false,
+      failed: verdict.failed,
+      why: verdict.why,
+      passed: verdict.passed,
+    });
+    await env.DB.batch([
+      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now)),
+    ]);
+    return;
+  }
+  // merge_method "merge" because the policy audits a head sha and a squash would
+  // not preserve it on the default branch. The merge is pinned to the sha the
+  // checks above read: a push to the head since then makes GitHub answer 409, and
+  // that PR is left open for this tick. The next tick judges the new head.
+  let result: unknown;
+  try {
+    result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, undefined, facts.headSha);
+  } catch (err) {
+    if (!(err instanceof HeadMovedError)) throw err;
+    const moved = {
+      failed: "head_moved" as const,
+      why: `the PR head moved after the policy judged ${facts.headSha}, so GitHub refused the pinned merge. ${err.message}`,
+      passed: verdict.passed,
+    };
+    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved });
+    await env.DB.batch([
+      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now)),
+    ]);
+    return;
+  }
+  outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed });
+  await env.DB.batch([
+    improveAudit(
+      env.DB,
+      "auto-merged",
+      namespace,
+      mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now)
+    ),
+  ]);
 }
