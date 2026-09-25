@@ -131,6 +131,14 @@ jobs:
           npm run check:scripts || status=1
           exit $status
 
+      # THE LINTS (audit 2026-09-25, C1-6): the dead-export report and the derived
+      # doc-drift checks, moved out of npm test into test/lint/. They sit BEFORE Tests
+      # on purpose. This step is not on the auto-merge policy's required list, so a
+      # failure here has to stop the job: the Tests step it skips is required, and a
+      # skipped required step refuses the merge.
+      - name: Lint dead exports and doc drift
+        run: npm run lint
+
       - name: Tests
         run: npm test
 

@@ -11,7 +11,7 @@ import { holdoutImportRefusal, holdoutImportsPath, importedNames, parseImportsMa
 // no scan running in the repo can see, which is its entire point, so the names it
 // reaches for have to be written down.
 //
-// test/dead-exports.test.ts owns the direction where a listed name counts as a
+// test/lint/dead-exports.lint.ts owns the direction where a listed name counts as a
 // caller. This file owns the parser and the refusal, which is what Job B runs.
 
 // THE SHAPE THAT BROKE IT, kept as the first fixture. The first spelling of the
