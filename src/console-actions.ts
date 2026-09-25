@@ -63,7 +63,7 @@ function describe(action: ConsoleAction, form: URLSearchParams): string {
     case "mode":
       return `Set the improve mode to ${form.get("value") ?? ""} for every namespace.`;
     case "resume_job":
-      return `Resume blocked job ${id}. THIS TAKES THE LEASE: the job moves to claimed under your own login, so the driver cannot pick it up until you finish it or it expires.`;
+      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, the resume is refused and the job stays blocked.`;
     case "fail_job":
       return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
     case "revoke_agent":
@@ -158,6 +158,10 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
 
   const actor = `github:${gate.user.login}`;
   const agent = adminAgent(gate.user.login);
+  // Set once the shared mutator has returned success, so the catch can tell a failure
+  // before the action (nothing changed) from a failure in the click's own audit row
+  // after it (the action happened).
+  let committed = false;
   try {
     switch (action) {
       case "pause":
@@ -166,6 +170,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         if (!namespace) return textResponse(`${action} needs a namespace.`, 400);
         const reason = form.get("reason")?.trim() || undefined;
         const result = await improveControl(env, action, { namespace, reason });
+        committed = true;
         await auditClick(env, actor, action, namespace, result);
         break;
       }
@@ -173,6 +178,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         const value = required(form, "value");
         if (!value) return textResponse("mode needs a value.", 400);
         const result = await improveControl(env, "mode", { value });
+        committed = true;
         await auditClick(env, actor, action, null, result);
         break;
       }
@@ -194,6 +200,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
             ? await resumeJob(env, agent, now, id, reason)
             : await adminFailJob(env, agent, now, id, reason);
         if (!result.ok) return textResponse(result.refusal ?? `${action} was refused.`, 400);
+        committed = true;
         await auditClick(env, actor, action, result.job?.namespace ?? null, { id, reason });
         break;
       }
@@ -202,14 +209,32 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         if (!name) return textResponse("revoke_agent needs an agent name.", 400);
         const result = await revokeAgent(env.DB, actor, name);
         if (!result.ok) return textResponse(result.refusal ?? `revoking ${name} was refused.`, 400);
+        committed = true;
         await auditClick(env, actor, action, null, { name });
         break;
       }
     }
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (committed) {
+      // The action happened; only the console's own audit row failed. A 400 here
+      // would tell the person nothing changed when something did. The shared mutators
+      // write their own audit rows, so the log still records the transition.
+      const warning = `${action} completed, but the console audit row naming ${actor} was not written: ${message}`;
+      console.error(warning);
+      return new Response(warning, {
+        status: 303,
+        headers: {
+          Location: CONSOLE_PATH,
+          "Content-Type": "text/plain;charset=utf-8",
+          // A header value must be printable Latin-1; the error text is not guaranteed to be.
+          "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " "),
+        },
+      });
+    }
     // improveControl throws on a bad value rather than returning a refusal, and the
     // message it throws already names what was wrong and says nothing changed.
-    return textResponse(err instanceof Error ? err.message : String(err), 400);
+    return textResponse(message, 400);
   }
 
   // POST then redirect, so a reload does not repeat the action.
