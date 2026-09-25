@@ -3,6 +3,7 @@
 The `lint` tool runs the wiki maintenance loop. The Worker never calls an LLM. The driving client does the reasoning with the ordinary read and write tools.
 
 - `lint(namespace, mode: "gather")` returns a read-only packet: the namespace `core.md`, the compiled `concept` and `decision` documents, every un-archived `episodic` and `source` document, and the schema and conventions.
+- `lint` reads only what the caller is scoped to. A caller not scoped to `capsid` gets no schema or conventions (the packet says they were withheld), an edge whose other end is in a namespace the caller is not scoped to is left out of gather and report, and report skips the doc-vs-code drift check when the namespace's repo is outside the caller's repo scope.
 - `lint(namespace, mode: "finalize", consumed: [paths])` archives the consumed entries under an `archive/` prefix and writes one audit row. It moves and never deletes, and `gather` excludes `archive/`, so the loop is idempotent.
 
 ## Destructive writes need confirmation
