@@ -211,6 +211,24 @@ test("loadGatePolicy refuses an absent, unsigned or edited policy", async () => 
   assert.match(edited.error, /does not match its body/);
 });
 
+test("PLANT: a field added to the frontmatter of a signed gate policy does not change what loadGatePolicy reads", async () => {
+  // The signature covers the body below the frontmatter only, and the parser returns
+  // the first `- <name>:` line in what it is given. Handed the whole stored text, it
+  // read a line placed beside the signature ahead of the signed one.
+  const signed = await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false"));
+  const inject = (line: string) => signed.replace(/^---\n/, `---\n${line}\n`);
+
+  for (const plant of ["- enabled: true", "- version: 99"]) {
+    const loaded = await loadGatePolicy(await envWithPolicy(inject(plant)));
+    if ("policy" in loaded) {
+      assert.equal(loaded.policy.enabled, false, `'${plant}' in the frontmatter enabled a gate policy signed as disabled`);
+      assert.equal(loaded.policy.version, "1", `'${plant}' in the frontmatter replaced the signed version`);
+    }
+    assert.ok("error" in loaded, `a gate policy with '${plant}' added to its frontmatter must be refused`);
+    assert.match(loaded.error, /besides the capsid-task-signature line/);
+  }
+});
+
 test("loadGatePolicy refuses a policy naming fewer classes than the code approves", async () => {
   const short = GOOD_POLICY.replace("- `additive_migration` a bounded command.\n", "");
   const refused = await loadGatePolicy(await envWithPolicy(await signTaskBody(SECRET, short)));
