@@ -67,18 +67,13 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
   // src/scope.ts). The target repo is resolved per namespace from the namespaces
   // table.
 
-  // THE REPOS AXIS, ASKED ABOUT THE REPO THIS CALL ACTUALLY REACHES.
-  //
-  // The registrar can only compare a fully qualified owner/name, because that is the
-  // only form of the `repo` argument that is a scope value; a label is a selector, and
+  // The repos axis, asked about the repo this call actually reaches. The registrar
+  // can only compare a fully qualified owner/name; a label is a selector, and
   // omitting it is the default. So every repo tool resolves the selector against the
-  // namespace mapping HERE, where the mapping is readable, and asks the one
-  // enforcement point about the result. Without this the axis bound nothing on the
-  // default call path: an admin remap of a namespace's primary silently redirected
-  // every driver scoped to the old repo (audit 2026-09-13, finding 4).
-  //
-  // It costs one extra D1 read per repo call, which is the price of the axis meaning
-  // what the mint script says it means.
+  // namespace mapping here and asks checkScope about the result. Without this the
+  // axis would bind nothing on the default call path: an admin remap of a namespace's
+  // primary would silently redirect every driver scoped to the old repo. It costs one
+  // D1 read per repo call.
   const scopedRepo = async (tool: string, namespace: string, selector: string | undefined) => {
     const resolved = await resolveRepo(env, namespace, selector);
     return { resolved, refusal: ctx.scope({ tool, namespace, repo: resolved.full }) };
@@ -110,14 +105,11 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     // "direct"` needs can_direct_write and `mode: "pr"` does not.
     intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean; repo?: string } = {}
   ) => {
-    // EVERY REPO MUTATION FUNNELS THROUGH HERE, which is why the flag check is here
-    // and not in each of the seven tools: this is the one place that already sees
-    // all of them (quality audit 1.5 put the GitHub dance behind one helper for the
-    // same reason). test/scope-coverage.test.ts derives that no repo write tool
-    // reaches GitHub any other way.
-    // RESOLVED FIRST, so the repos axis is asked about the repo this write reaches
-    // rather than about the selector, which is usually absent. A namespace that cannot
-    // be resolved fails here, before anything is written.
+    // Every repo mutation passes through here, so the flag check is here and not in
+    // each tool. test/scope-coverage.test.ts derives that no repo write tool reaches
+    // GitHub any other way.
+    // Resolved first, so the repos axis is asked about the repo this write reaches.
+    // A namespace that cannot be resolved fails here, before anything is written.
     let resolvedRepo: string;
     try {
       resolvedRepo = (await resolveRepo(env, namespace, intent.repo)).full;
@@ -128,11 +120,10 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       tool: action,
       namespace,
       repo: resolvedRepo,
-      // WHAT THIS CALL IS ASKING TO DO, which is what the tools axis narrows on. Its
-      // absence here is what let a reviewer minted ["manage_pr", "manage_pr.comment"]
-      // close a pull request, and closing deletes the head branch (audit 2026-09-13,
-      // critical 1). The registrar populates it too; both are kept, because this is
-      // the one place every repo mutation passes through.
+      // What this call is asking to do, which is what the tools axis narrows on.
+      // Without it a reviewer minted ["manage_pr", "manage_pr.comment"] could close a
+      // pull request. The registrar populates it too; this is the one place every repo
+      // mutation passes through.
       action: intent.action,
       grant: "write",
       flags: repoWriteFlags(action, { ...intent, path: intent.path ?? path ?? undefined }),
@@ -144,15 +135,11 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
-    // THE MUTATION ALREADY LANDED (audit 2, F17). fn() has committed to GitHub by the
-    // time this row is written, and the audit INSERT is a separate statement that
-    // cannot be rolled into it. When it failed the caller was told the tool failed, so
-    // "the branch exists, the PR is open, and the log does not know" came out as
-    // "nothing happened", and a caller acting on that retries into a second commit.
-    //
-    // The D1-only tools do not need this: delete, move and finalize put the audit
-    // INSERT inside the same batch as the mutation. GitHub cannot join that
-    // transaction.
+    // The mutation already landed: fn() has committed to GitHub, and GitHub cannot
+    // join a D1 transaction. A failed audit INSERT is reported as a warning on a
+    // success, because a caller told "failed" would retry into a second commit. The
+    // D1-only tools do not need this: delete, move and finalize put the audit
+    // INSERT inside the same batch as the mutation.
     try {
       await auditStatement(db, actor, action, namespace, path, result).run();
     } catch (err) {
@@ -167,8 +154,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     return ok(result);
   };
 
-  // A namespace can map to more than one repo (foxhound -> foxhound primary plus
-  // recova legacy). The optional `repo` argument on every repo tool selects one: a
+  // A namespace can map to more than one repo. The optional `repo` argument on every repo tool selects one: a
   // label ("primary", "legacy") or a full "owner/name" mapped to the namespace. Omit
   // it to target the primary. `namespaces` shows the mapping.
   const REPO_ARG = "Optional repo selector for a multi-repo namespace: a label (\"primary\", \"legacy\") or a mapped \"owner/name\". Defaults to the primary repo.";
@@ -367,15 +353,12 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, number, action, merge_method, comment, sha, repo }) => {
-      // The argument belongs to exactly one action. Refused rather than ignored in
+      // comment belongs to exactly one action, and is refused rather than ignored in
       // both directions: a comment silently dropped from a merge call is a review
-      // nobody posted, and a merge_method on a comment is a caller who believes
-      // something else is about to happen.
-      //
-      // CHECKED BEFORE guardedWrite, NOT INSIDE IT (audit 2026-09-25, F3-2):
-      // guardedWrite files whatever fn returns as a landed result, so a fail() returned
-      // from fn was audited and wrapped in ok() with isError false. Refused here, the
-      // call is an error and writes no audit row.
+      // nobody posted, and a comment on a merge is a caller who believes something
+      // else is about to happen. Checked before guardedWrite, not inside it: guardedWrite files whatever fn
+      // returns as a landed result. Refused here, the call is an error and writes no
+      // audit row.
       if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
       if (action !== "comment" && comment !== undefined) {
         return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
@@ -387,14 +370,11 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         async () => {
           refuseShaOffMerge(action, sha);
           const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment, sha).catch(headMovedRefusal(number));
-          // A MERGE IS WHEN AN OUTCOME ROW'S MERGE STATE BECOMES WRONG. The driver
-          // wrote "opened, not merged" at complete time and was right then; this is
-          // the moment it stops being true, so the rows that named this pull request
-          // are re-read from GitHub here rather than waiting for the daily sweep.
-          //
-          // It never fails the merge. The merge already happened, and reporting it as
-          // failed because a bookkeeping update did not land would be a lie about the
-          // merge; the sweep picks the row up tomorrow either way.
+          // A merge makes the outcome rows naming this pull request stale, so they are
+          // re-read from GitHub now rather than at the daily sweep. It never fails the
+          // merge, which already happened: reporting it as failed because a
+          // bookkeeping update did not land would misreport the merge, and the sweep
+          // picks the row up either way.
           if (action === "merge") {
             try {
               const url = (result as { url?: string }).url ?? prUrlFor(result as { repo?: string }, number);
@@ -429,9 +409,8 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ namespace, repo, limit, ref, run_id }) =>
-      // THE LOG TAIL IS WITHHELD FROM A READ-ONLY CALLER (2026-08-13): a build log
-      // carries whatever the workflow echoed. That is a scope question, so it is
-      // asked of the one enforcement point rather than decided here from a boolean.
+      // The log tail is withheld from a read-only caller: a build log carries whatever
+      // the workflow echoed. Asked of checkScope rather than decided here.
       guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
@@ -442,15 +421,10 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  // THE REPO FALLTHROUGH WIDENING, the SECOND ruled exception to the tool surface rule in one
-  // day (capsid/decisions.md, 2026-09-06). The justification is not that these are
-  // useful: the claude.ai GitHub connector authenticates and then 404s on every
-  // private repo in the portfolio, while Capsid's App token has reached them all since
-  // 2026-07-06. These four make existing reach callable.
-  //
-  // repo_refs and repo_history are READS and stay open to ro: keys. delete_branch and
-  // ci_dispatch are write-gated: one destroys refs, the other spends CI minutes and
-  // can start a deploy.
+  // repo_refs and repo_history are reads and stay open to ro: keys. delete_branch and
+  // ci_dispatch need the write grant: one destroys refs, the other spends CI minutes
+  // and can start a deploy. These four are a ruled exception to the tool surface
+  // rule (CLAUDE.md; capsid/decisions.md).
 
   server.registerTool(
     "repo_refs",
