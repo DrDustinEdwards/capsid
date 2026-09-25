@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { workflowWriteRefusal, WORKFLOW_DIR, writeRepoFile, deleteRepoFile } from "../src/github.ts";
+import { workflowWriteRefusal, writeRepoFile, deleteRepoFile } from "../src/github.ts";
 import { improveWriteRefusal } from "../src/improve-scores.ts";
 import { RUN_TASK_PREFIX } from "../src/improve-schema.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { allSourceText, sourceFile, toolBlocks } from "./source-files.ts";
+import { sourceFile, toolBlocks } from "./source-files.ts";
 
 // ENUMERATE EVERY SITE, audit 2026-09-07 (Opus MAJOR 5.4 and NOTE 6.1).
 //
@@ -197,19 +197,6 @@ test("the flag opens it, and ordinary paths were never closed", () => {
   for (const path of ["src/index.ts", ".github/dependabot.yml", ".github/ISSUE_TEMPLATE/bug.md", "workflows/x.yml"]) {
     assert.equal(workflowWriteRefusal(path, false), null, `${path} is not a workflow and must stay writable`);
   }
-});
-
-// scanner-rule: defence in depth for a write caller added later that skips commitOnBranch, which no call made today can reach. The commitOnBranch half is also driven by the workflow plant above
-test("the refusal is checked in BOTH the shared dance and the write primitive", () => {
-  // commitOnBranch covers delete_repo_file, whose mutate does its own ghFetch and
-  // never reaches putFile. putFile covers a caller added later that does not go
-  // through commitOnBranch at all.
-  const github = allSourceText();
-  const inCommit = /async function commitOnBranch[\s\S]*?workflowWriteRefusal\(/.test(github);
-  const inPut = /async function putFile[\s\S]*?workflowWriteRefusal\(/.test(github);
-  assert.ok(inCommit, "commitOnBranch must refuse before any network call");
-  assert.ok(inPut, "putFile must refuse as the write primitive");
-  assert.equal(WORKFLOW_DIR, ".github/workflows/");
 });
 
 test("the opt-in is returned, so guardedWrite files it into audit_log", async () => {

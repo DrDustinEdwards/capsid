@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { TARGETS, requireLanded, requireRemoteCurrent } from "../scripts/sync-scorer.mjs";
+import { requireLanded, requireRemoteCurrent } from "../scripts/sync-scorer.mjs";
 
 // THE REF THE COPIER READ WAS NOT THE REF THE REPO RUNS.
 //
@@ -105,22 +105,4 @@ test("A ROLLOUT BRANCH BEHIND WHAT IT MERGES INTO IS REFUSED, and the refusal na
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
-
-test("the dustinedwards target compares the branch it RUNS, not the branch it writes", () => {
-  // Ruling 60 sends the write to a rollout branch in the worktree. Nothing sends the
-  // COMPARISON there, and collapsing the two back into one ref restores the defect.
-  const dustin = TARGETS.find((t) => /dustinedwards/.test(t.label));
-  assert.ok(dustin, "no dustinedwards target at all; the rollout would silently skip it");
-  assert.equal(dustin.ref, "improve/capsid", "the write branch is not the ruling 60 branch");
-  assert.equal(dustin.runs, "main", "the dustinedwards target does not compare against its default branch");
-});
-
-test("every other target writes what it runs, and a runs ref is never the write ref", () => {
-  for (const t of TARGETS) {
-    if (t.runs === undefined) continue;
-    assert.notEqual(t.runs, t.ref, `${t.label} sets runs to the ref it writes, which compares the copier with itself`);
-  }
-  const split = TARGETS.filter((t) => t.runs !== undefined).map((t) => t.label);
-  assert.equal(split.length, 1, `expected exactly one target whose write branch differs from what it runs, found ${split.join(", ")}`);
 });

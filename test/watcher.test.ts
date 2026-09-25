@@ -13,12 +13,8 @@ import {
   CI_RED_HOURS,
   DEFAULT_CADENCE_MINUTES,
   MAX_FINDINGS_PER_PASS,
-  MIN_CADENCE_MINUTES,
   WATCHER_ACTOR,
   WATCHER_CHECKS,
-  WATCHER_CADENCE_KEY,
-  WATCHER_LAST_KEY,
-  WATCHER_NAME,
   cadenceMinutes,
   ciFindings,
   clearFinding,
@@ -89,11 +85,6 @@ test("the watcher can post a job and cannot claim, complete or resume one", () =
 });
 
 // ---- the cadence -----------------------------------------------------------------
-
-test("the cadence is half an hour and its floor is five minutes", () => {
-  assert.equal(DEFAULT_CADENCE_MINUTES, 30);
-  assert.equal(MIN_CADENCE_MINUTES, 5);
-});
 
 test("a pass is due on the first run, not due inside the cadence, and due after it", () => {
   assert.equal(passDue(null, 30, NOW).due, true);
@@ -420,12 +411,6 @@ test("allowsToolAction is what makes the watcher's narrowing real", () => {
 // These are exported because they carry rules worth guarding, not because something
 // outside the module calls them. The dead-export check is what asks for this, and the
 // right answer to it is a caller rather than an exemption.
-
-test("the cadence keys are the ones a human sets, spelled once", () => {
-  assert.equal(WATCHER_NAME, "watcher");
-  assert.equal(WATCHER_CADENCE_KEY, "watcher:cadence-minutes");
-  assert.equal(WATCHER_LAST_KEY, "watcher:last");
-});
 
 test("an unset, unusable or unreadable cadence falls back to the default", async () => {
   const env = (get: () => Promise<string | null>) => ({ APP_KV: { get } }) as never;

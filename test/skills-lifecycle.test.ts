@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import {
-  MAX_EDIT_FRACTION,
   MERGE_DIFFERENCE_THRESHOLD,
-  MIN_EVALUATIONS,
   acceptEdit,
   attribute,
   bodyDifference,
@@ -22,8 +18,6 @@ import {
 
 // THE SKILL RECORD LIFECYCLE. Status changes on evaluation evidence and never on a
 // driver's judgement of its own run, so every test here drives a rule to its refusal.
-
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0012_skill_records.sql"), "utf8");
 
 function evaluation(over: Partial<Evaluation> = {}): Evaluation {
   return {
@@ -251,31 +245,6 @@ test("triggersOverlap is word-based, so the same situation spelled differently m
 });
 
 // ---- the migration --------------------------------------------------------------
-
-test("migration 0012 creates both tables and every column the rules read", () => {
-  assert.match(MIGRATION, /CREATE TABLE IF NOT EXISTS skill_evaluations/);
-  assert.match(MIGRATION, /CREATE TABLE IF NOT EXISTS skill_edits/);
-  for (const column of ["probe_set_version", "delta", "runs", "verdict"]) {
-    assert.match(MIGRATION, new RegExp(`\\b${column}\\b`), `skill_evaluations needs ${column}`);
-  }
-  for (const column of ["from_version", "to_version", "ops", "accepted", "reason"]) {
-    assert.match(MIGRATION, new RegExp(`\\b${column}\\b`), `skill_edits needs ${column}`);
-  }
-  for (const column of ["version", "status", "trigger_condition", "termination_test", "composition_interface", "source_job"]) {
-    assert.match(MIGRATION, new RegExp(`ADD COLUMN ${column}\\b`), `improve_skills needs ${column}`);
-  }
-});
-
-test("a new skill is a candidate by default, in the schema rather than only in code", () => {
-  assert.match(MIGRATION, /ADD COLUMN status TEXT NOT NULL DEFAULT 'candidate'/);
-  assert.match(MIGRATION, /ADD COLUMN version INTEGER NOT NULL DEFAULT 1/);
-});
-
-test("the constants the migration comments describe are the constants the code uses", () => {
-  assert.equal(MIN_EVALUATIONS, 2);
-  assert.equal(MAX_EDIT_FRACTION, 0.2);
-  assert.match(MIGRATION, /Two evaluations minimum/i);
-});
 
 // ---- the stored vocabularies ----------------------------------------------------
 

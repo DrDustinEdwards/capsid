@@ -235,6 +235,20 @@ test("PLANT: the two exports the holdout imports are still exported from src", (
 // regression no edit to the attempt could clear. Both directions are still
 // asserted, and the failure message still prints where each one currently lives.
 const KNOWN_SUSPECTS = [
+  // SURFACED 2026-09-25 when the audit's change-detector tests in test/ m to z and
+  // test-integration/ were deleted: each was read only by a deleted test. Left
+  // exported for the hygiene pass to decide.
+  "ADMIN_REASON",
+  "IMPROVE_OPEN_HOUR_CT",
+  "MAX_EDIT_FRACTION",
+  "MIN_CADENCE_MINUTES",
+  "MIN_EVALUATIONS",
+  "REVERIFY_PER_SWEEP",
+  "REVERIFY_WINDOW_DAYS",
+  "REVIEW_PREFIX",
+  "SWEEP_INTERVAL_MS",
+  "WATCHER_CADENCE_KEY",
+  "WORKFLOW_DIR",
   // SURFACED 2026-09-16 by teaching this guard that a comment is not a caller.
   // Both had zero call sites and were vouched for by one prose mention each:
   // `aggregate` by two comments in test/improve-fakes.ts, `assemble` by one in
