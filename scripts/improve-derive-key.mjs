@@ -34,8 +34,16 @@ import { createHmac } from "node:crypto";
 const ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"];
 
 const namespace = process.argv[2];
-const root = process.env.IMPROVE_SCORE_SECRET;
+// A whitespace-only value counts as unset: it would derive a key from spaces that no
+// report ever verifies against. The value itself is used as given, not trimmed, so a
+// key derived here matches the Worker's for the same secret.
+const rawRoot = process.env.IMPROVE_SCORE_SECRET;
+const root = rawRoot && rawRoot.trim() !== "" ? rawRoot : undefined;
 
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function die(message) {
   console.error(`improve-derive-key: ${message}`);
   process.exit(1);
