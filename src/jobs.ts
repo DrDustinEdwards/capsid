@@ -28,6 +28,7 @@ import type { Agent } from "./agents";
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
+import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { readRepoFile } from "./github/contents";
 import { signTaskBody, verifySignedBody } from "./improve-task";
 import { attributionStatements } from "./skills-records";
@@ -50,6 +51,9 @@ import {
 // carry a document write, so the count would be of the triggers as much as the row.
 // The same rule the improve state machine already runs on: `UPDATE ... WHERE status
 // = <expected> RETURNING id`, and no row back means somebody else got there first.
+// The holder transitions (heartbeat, complete, fail, block) instead put the UPDATE in
+// the same batch as its records, behind requireJobUnchanged (src/store-guards.ts),
+// which aborts the whole batch when the row is not in the state the caller read.
 //
 // THE ROW IS THE SOURCE OF TRUTH FOR STATUS. The mirrored document at
 // <namespace>/jobs/<id>.md is rewritten in the SAME BATCH as every transition, so a
@@ -590,6 +594,18 @@ export async function claimJob(
 // heartbeat, complete, fail and block are the same shape: a keyed UPDATE that only
 // fires for the CLAIMED job THIS caller holds, so an expired lease that the tick
 // already returned to the queue cannot be completed out from under its new owner.
+function holderRefusal(action: string, id: string, actor: string, current: JobRow | null): JobResult | null {
+  if (!current) return refuse(action, `no job ${id}.`);
+  if (current.status !== "claimed") {
+    return refuse(
+      action,
+      `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "Its lease expired and the tick returned it to the queue; claim it again." : "It has already been finished."}`
+    );
+  }
+  if (current.claimed_by !== actor) return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
+  return null;
+}
+
 async function holderTransition(
   env: Env,
   agent: Agent,
@@ -616,35 +632,32 @@ async function holderTransition(
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
-       lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8
-     WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?7 RETURNING id`
-  )
-    .bind(
-      id,
-      patch.status,
-      patch.result_summary ?? null,
-      patch.result_ref ?? null,
-      patch.lease_expires,
-      now.toISOString(),
-      actor,
-      patch.bumpBlocked ? 1 : 0
-    )
-    .first<{ id: string }>();
-  if (!won) {
-    const current = await readJob(env.DB, id);
-    if (!current) return refuse(action, `no job ${id}.`);
-    if (current.status !== "claimed") {
-      return refuse(
-        action,
-        `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "Its lease expired and the tick returned it to the queue; claim it again." : "It has already been finished."}`
-      );
-    }
-    return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
-  }
-  const job = (await readJob(env.DB, id)) as JobRow;
+  const read = await readJob(env.DB, id);
+  const notHeld = holderRefusal(action, id, actor, read);
+  if (notHeld) return notHeld;
+  if (!read) return refuse(action, `no job ${id}.`);
+  // The row as the UPDATE below will leave it, computed from the read so the mirror
+  // and the outcome can be built before anything is written. The guard at the head of
+  // the batch is what makes the read still true when the batch commits.
+  const job: JobRow = {
+    ...read,
+    status: patch.status,
+    result_summary: patch.result_summary ?? read.result_summary,
+    result_ref: patch.result_ref ?? read.result_ref,
+    lease_expires: patch.lease_expires,
+    updated_at: now.toISOString(),
+    blocked_count: read.blocked_count + (patch.bumpBlocked ? 1 : 0),
+  };
 
+  // THE TRANSITION AND EVERY RECORD OF IT ARE ONE BATCH (audit 2026-09-25, F1-1). The
+  // UPDATE used to commit on its own, and the mirror, audit, outcome, pull request and
+  // attribution rows followed in a second batch after the GitHub reads, so a throw in
+  // between left a finished job with no record and a retry that was refused forever.
+  // Now the first statement aborts the whole batch unless the row is still claimed by
+  // this caller at the updated_at just read; D1 runs a batch as one transaction, so
+  // either all of it commits or none of it does. id is the primary key, so the guard
+  // passing means the UPDATE moves exactly that one row.
+  //
   // THE OUTCOME ROW, ON THE TERMINAL TRANSITIONS ONLY. A job that is still running
   // has no outcome to record, and one that reached `done` or `failed` will not
   // transition again: both are keyed updates out of `claimed`, so this runs once per
@@ -654,12 +667,26 @@ async function holderTransition(
   // table exists to make visible, and recording only the successes would produce a
   // record in which every agent looks equally good.
   //
-  // VERIFICATION RUNS BEFORE THE BATCH AND CANNOT FAIL THE TRANSITION. The row is
-  // already updated by this point; verifyEvidence swallows its own errors and reports
-  // them as notes, so an unreachable GitHub costs the verified flags and not the
-  // driver's ability to close a finished job.
+  // VERIFICATION RUNS BEFORE THE BATCH AND CANNOT FAIL THE TRANSITION. verifyEvidence
+  // swallows its own errors and reports them as notes, so an unreachable GitHub costs
+  // the verified flags and not the driver's ability to close a finished job.
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
   const statements = [
+    requireJobUnchanged(env.DB, id, "claimed", actor, read.updated_at),
+    env.DB.prepare(
+      `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
+         lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?7 RETURNING id`
+    ).bind(
+      id,
+      patch.status,
+      patch.result_summary ?? null,
+      patch.result_ref ?? null,
+      patch.lease_expires,
+      now.toISOString(),
+      actor,
+      patch.bumpBlocked ? 1 : 0
+    ),
     ...(await mirrorStatements(env.DB, job, `job-${action}`, actor)),
     auditStatement(env.DB, actor, `job-${action}`, job, {
       status: job.status,
@@ -688,7 +715,14 @@ async function holderTransition(
       })
     );
   }
-  await env.DB.batch(statements);
+  try {
+    await env.DB.batch(statements);
+  } catch (err) {
+    if (!isMissingRowAbort(err)) throw err;
+    // Nothing was written. Say what the row is now, as a lost race would have.
+    const current = await readJob(env.DB, id);
+    return holderRefusal(action, id, actor, current) ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
+  }
   // The driver a resume returned the job to is already holding it and learns of the
   // resume by its next call, which is usually a heartbeat.
   const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env.DB, job) : null;

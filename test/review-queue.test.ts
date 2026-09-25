@@ -54,6 +54,15 @@ function queueDb(row: Record<string, unknown>, audit: unknown[] = reviewerAudit(
         if (/SELECT repos FROM namespaces/i.test(flat)) {
           return params[0] === "capsid" ? { repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }]) } : null;
         }
+        // The holder transition's guard (requireJobUnchanged), which aborts the batch
+        // unless the row is in the state the caller read.
+        if (/WHERE NOT EXISTS \(SELECT 1 FROM jobs/i.test(flat)) {
+          const [id, status, claimedBy, updatedAt] = params;
+          if (row.id !== id || row.status !== status || row.claimed_by !== claimedBy || row.updated_at !== updatedAt) {
+            throw new Error("NOT NULL constraint failed: document_versions.document_id");
+          }
+          return null;
+        }
         if (/^UPDATE jobs SET/i.test(flat)) {
           recorded.push({ sql: flat, params });
           if (params[0] !== row.id) return null;
@@ -85,8 +94,11 @@ function queueDb(row: Record<string, unknown>, audit: unknown[] = reviewerAudit(
     row,
     db: {
       prepare: (sql: string) => stmt(sql),
+      // Each statement runs through the same first() the fake answers single
+      // statements with, so an UPDATE carried in a batch moves the row and the guard
+      // can abort it.
       batch: async (s: unknown[]) => {
-        for (const x of s) recorded.push(x as Recorded);
+        for (const x of s) await (x as D1PreparedStatement).first();
         return [];
       },
     } as unknown as D1Database,
