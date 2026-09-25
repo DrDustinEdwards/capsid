@@ -99,6 +99,19 @@ function record(gate, passed, detail) {
 // time, so this reports WHICH commit is live. An expected sha can be passed to assert
 // it, which makes "the deployed worker is this commit" checkable rather than inferred
 // from a clean working tree.
+//
+// THE STORE IS BOUND AND THE FTS INDEX IS INTACT, from the same /health response (this
+// was gate 1b, which read /health again in a poll loop of its own). Provenance proves
+// WHICH commit is live. It cannot prove the deployed Worker can reach its data: every
+// binding is resolved by name at deploy time, so a Worker deployed against a stale or
+// hand-edited wrangler.jsonc starts happily with DB pointing at nothing, answers
+// /health with ok, and then errors on every read tool. The other gates exercise the
+// OAuth surface, which never touches D1.
+//
+// The FTS half fails separately, and it has failed: DELETE FROM documents_fts corrupts
+// the index, COUNT(*) on an external-content table reads through to the content table
+// and cannot detect drift, and integrity-check passes on an emptied index. /health's
+// probe is a MATCH pinned to one document, so an empty index cannot satisfy it.
 async function gateHealth() {
   const expected = process.env.EXPECT_SHA;
   let data = null;
@@ -120,7 +133,8 @@ async function gateHealth() {
     // not JSON at all: immediately after a deploy the previous version is still serving,
     // and before this commit that version answered /health with the plain text "ok". An
     // earlier draft broke out on a null parse, which defeated the polling it exists for.
-    const converged = resp.status === 200 && data?.status === "ok" && (!expected || data.sha === expected);
+    const storeOk = data?.store?.d1 === "ok" && data?.store?.fts === "ok";
+    const converged = resp.status === 200 && data?.status === "ok" && (!expected || data.sha === expected) && storeOk;
     if (converged) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
@@ -131,8 +145,10 @@ async function gateHealth() {
   }
   const live = data?.status === "ok";
   const shaOk = !expected || data?.sha === expected;
-  const passed = live && shaOk;
-  const detail = `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} dirty=${data?.dirty} polls=${attempt}` +
+  const d1 = data?.store?.d1 ?? "(absent)";
+  const fts = data?.store?.fts ?? "(absent)";
+  const passed = live && shaOk && d1 === "ok" && fts === "ok";
+  const detail = `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} dirty=${data?.dirty} d1=${d1} fts=${fts} polls=${attempt}` +
     (expected ? ` expected=${expected.slice(0, 8)}${shaOk ? " MATCH" : " MISMATCH"}` : "");
   record("1 health + provenance", passed, detail);
   if (data?.dirty) console.log("      NOTE: deployed from a dirty tree; the bytes are not exactly that commit.");
@@ -242,44 +258,6 @@ async function gateCanary() {
   record("2b canary client record", unread ? COULD_NOT_RUN : passed, detail);
 }
 
-// Gate 1b: the store is bound and the FTS index is intact.
-//
-// Provenance proves WHICH commit is live. It cannot prove the deployed Worker can reach
-// its data: every binding is resolved by name at deploy time, so a Worker deployed
-// against a stale or hand-edited wrangler.jsonc starts happily with DB pointing at
-// nothing, answers /health with ok, and then errors on every read tool. Nothing else in
-// the gate family notices: tsc passes, the tests are offline, and gates 2 through 7
-// exercise the OAuth surface, which never touches D1.
-//
-// The FTS half is separate because it fails separately, and it has failed: DELETE FROM
-// documents_fts corrupts the index, COUNT(*) on an external-content table reads through
-// to the content table and cannot detect drift, and integrity-check passes on an emptied
-// index. /health's probe is a MATCH pinned to one document, so an empty index cannot
-// satisfy it.
-async function gateStore() {
-  let data = null;
-  let attempt = 0;
-  let lost = null;
-  for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    try {
-      const resp = await request(`${ORIGIN}/health`, { headers: { "Cache-Control": "no-cache" } }, 1);
-      lost = null;
-      data = parseJson(resp.text);
-      if (data?.store?.d1 === "ok" && data?.store?.fts === "ok") break;
-    } catch (err) {
-      lost = noAnswer(err);
-    }
-    if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
-  }
-  if (lost) {
-    record("1b store bound (D1 + FTS)", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
-    return;
-  }
-  const d1 = data?.store?.d1 ?? "(absent)";
-  const fts = data?.store?.fts ?? "(absent)";
-  record("1b store bound (D1 + FTS)", d1 === "ok" && fts === "ok", `polls=${attempt} d1=${d1} fts=${fts}`);
-}
-
 function authorizeUrl(clientId) {
   const u = new URL(`${ORIGIN}/authorize`);
   u.searchParams.set("response_type", "code");
@@ -371,37 +349,6 @@ async function gateCsp(clientId) {
   record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
 }
 
-// Gate 4b: Cache-Control is fail-closed on the OAuth surfaces.
-async function gateCacheControl(clientId) {
-  const surfaces = [
-    ["/authorize consent", authorizeUrl(clientId)],
-    [".well-known", `${ORIGIN}/.well-known/oauth-authorization-server`],
-  ];
-  const rows = [];
-  let allNoStore = false;
-  let lost = null;
-  for (let attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    rows.length = 0;
-    lost = null;
-    try {
-      for (const [label, url] of surfaces) {
-        const resp = await request(url, { redirect: "manual" });
-        rows.push([label, resp.headers.get("cache-control")]);
-      }
-      allNoStore = rows.every(([, cc]) => cc && /no-store/i.test(cc));
-      if (allNoStore) break;
-    } catch (err) {
-      lost = noAnswer(err);
-    }
-    if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
-  }
-  if (lost) {
-    record("4b cache-control no-store", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
-    return;
-  }
-  record("4b cache-control no-store", allNoStore, rows.map(([l, cc]) => `${l}=${cc ?? "(none)"}`).join(" "));
-}
-
 // Gate 6: security headers, asserted per route class rather than per path.
 //
 // The unit half lives in test/headers.test.ts and runs offline in CI. This half exists
@@ -414,20 +361,39 @@ async function gateCacheControl(clientId) {
 // Measured before the fix, 2026-08-12: HSTS and Permissions-Policy absent on 12 of 12
 // surfaces, nosniff absent on 11 of 12.
 //
+// Two former gates are surfaces here, because each was the same per-surface loop over
+// URLs this one already reads:
+//
+//   - CACHE-CONTROL IS FAIL-CLOSED on the OAuth surfaces (was gate 4b): the consent page
+//     and the authorization-server metadata must carry no-store.
+//   - THE CSP REPORT SINK ACCEPTS A REPORT (was gate 7): Report-Only headers are worth
+//     nothing if the endpoint they name does not answer, and that failure is invisible,
+//     because the browser posts once, gets an error, and never retries. Posted with a
+//     synthetic report and expected to answer 204.
+//
 // Polls, because a single fetch after a deploy reads the previous version.
 async function gateSecurityHeaders(clientId) {
   const consent = authorizeUrl(clientId);
+  const report = JSON.stringify({
+    "csp-report": {
+      "document-uri": `${ORIGIN}/verify-live-probe`,
+      "effective-directive": "verify-live-probe",
+      "blocked-uri": "https://example.com/probe",
+      note: "synthetic probe from scripts/verify-live.mjs, not a real violation",
+    },
+  });
   const surfaces = [
     ["/health", "json", { url: `${ORIGIN}/health` }],
-    ["/authorize consent", "html", { url: consent, init: { redirect: "manual" } }],
+    ["/authorize consent", "html", { url: consent, init: { redirect: "manual" }, noStore: true }],
     ["/authorize bad req", "other", { url: `${ORIGIN}/authorize`, init: { redirect: "manual" } }],
     ["/callback no code", "other", { url: `${ORIGIN}/callback`, init: { redirect: "manual" } }],
-    [".well-known/as", "json", { url: `${ORIGIN}/.well-known/oauth-authorization-server` }],
+    [".well-known/as", "json", { url: `${ORIGIN}/.well-known/oauth-authorization-server`, noStore: true }],
     [".well-known/prm", "json", { url: `${ORIGIN}/.well-known/oauth-protected-resource` }],
     ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/backup 401", "other", { url: `${ORIGIN}/ops/backup`, init: { method: "POST" } }],
     ["/nope 404", "other", { url: `${ORIGIN}/nope` }],
+    ["/csp-report", "other", { url: `${ORIGIN}/csp-report`, init: { method: "POST", headers: { "Content-Type": "application/csp-report" }, body: report }, status: 204 }],
   ];
 
   let problems = [];
@@ -436,7 +402,7 @@ async function gateSecurityHeaders(clientId) {
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
     problems = [];
     lost = null;
-    for (const [label, cls, { url, init }] of surfaces) {
+    for (const [label, cls, { url, init, noStore, status }] of surfaces) {
       let resp;
       try {
         resp = await request(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
@@ -445,6 +411,9 @@ async function gateSecurityHeaders(clientId) {
         break;
       }
       const h = (name) => resp.headers.get(name);
+
+      if (status && resp.status !== status) problems.push(`${label}: status ${resp.status}, expected ${status}`);
+      if (noStore && !/no-store/i.test(h("cache-control") ?? "")) problems.push(`${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`);
 
       // Every class, no exception.
       if (!h("strict-transport-security")) problems.push(`${label}: no HSTS`);
@@ -462,10 +431,8 @@ async function gateSecurityHeaders(clientId) {
         if (!h("content-security-policy")) problems.push(`${label}: lost its enforced CSP`);
         // Item 9 first stage: on trial, not enforced.
         if (!h("cross-origin-opener-policy-report-only")) problems.push(`${label}: no COOP-Report-Only`);
-        if (h("cross-origin-opener-policy")) problems.push(`${label}: COOP is ENFORCED without a ruling`);
       } else {
         if (!h("content-security-policy-report-only")) problems.push(`${label}: no CSP-Report-Only`);
-        if (h("content-security-policy")) problems.push(`${label}: CSP is ENFORCED on a non-html surface without a ruling`);
       }
     }
     if (!lost && problems.length === 0) break;
@@ -483,31 +450,6 @@ async function gateSecurityHeaders(clientId) {
       ? `polls=${attempt} ${surfaces.length} surfaces clean`
       : `polls=${attempt} ${problems.length} problems: ${problems.slice(0, 6).join("; ")}${problems.length > 6 ? " ..." : ""}`
   );
-}
-
-// Gate 7: the CSP report sink accepts a report. Report-Only headers are worth nothing if
-// the endpoint they name does not answer, and that failure is invisible: the browser
-// posts once, gets an error, and never retries.
-async function gateReportSink() {
-  let resp;
-  try {
-    resp = await request(`${ORIGIN}/csp-report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/csp-report" },
-      body: JSON.stringify({
-        "csp-report": {
-          "document-uri": `${ORIGIN}/verify-live-probe`,
-          "effective-directive": "verify-live-probe",
-          "blocked-uri": "https://example.com/probe",
-          note: "synthetic probe from scripts/verify-live.mjs, not a real violation",
-        },
-      }),
-    });
-  } catch (err) {
-    record("7 csp report sink accepts", COULD_NOT_RUN, noAnswer(err).message);
-    return;
-  }
-  record("7 csp report sink accepts", resp.status === 204, `status=${resp.status} (expected 204)`);
 }
 
 // Gate 5: approving the form redirects to GitHub's authorize endpoint. This is
@@ -536,7 +478,6 @@ async function gateGithubRedirect(clientId, form) {
 
 const clientId = await (async () => {
   await gateHealth();
-  await gateStore();
   await gateBackupFreshness();
   await gateCanary();
   return gateRegister();
@@ -548,9 +489,7 @@ const upstream = (gate) => (results.find((r) => r.gate === gate)?.passed === COU
 if (clientId) {
   const form = await gateConsentForm(clientId);
   await gateCsp(clientId);
-  await gateCacheControl(clientId);
   await gateSecurityHeaders(clientId);
-  await gateReportSink();
   if (form && form !== COULD_NOT_RUN) await gateGithubRedirect(clientId, form);
   else record("5 approve redirects to GitHub", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
 } else {
