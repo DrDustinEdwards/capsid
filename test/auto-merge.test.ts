@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   AUTO_MERGE_POLICY_PATH,
   AUTO_MERGE_REFUSED_PATHS,
+  AWAITING_SEAT_KEY,
   AUTO_MERGE_REQUIRED_CI,
   FILES_LIMIT,
   POLICY_CHECKS,
@@ -925,6 +926,60 @@ test("the tick refuses when the Actions run list cannot be read", async () => {
     assert.match(report.outcomes[0].why ?? "", /403/);
     assert.equal(calls.filter((c) => c.method === "PUT").length, 0);
   });
+});
+
+// ---- audit 2026-09-25, F2-2: THE MERGE IS PINNED TO THE HEAD THE POLICY JUDGED ------
+//
+// The tick reads files, check runs and CI steps for pr.head.sha, then merges. Without
+// `sha` in the merge PUT, a push to the PR head between those reads and the merge was
+// merged without being judged, and the audit row named the old sha. GitHub answers
+// 409 when the head no longer matches the sha sent.
+
+async function pinnedEnv() {
+  const d1 = fakeD1({
+    namespaces: NS_ROW,
+    documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body: await signTaskBody(SECRET, GOOD_POLICY) }],
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "claimed" }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+  const kv = fakeKv({ seedToken: true });
+  return { d1, kv, env: fakeEnv({ DB: d1.db, APP_KV: kv.kv, IMPROVE_SCORE_SECRET: SECRET }) };
+}
+
+test("the merge request carries the head sha the policy evaluated", async () => {
+  const { env } = await pinnedEnv();
+  await withFetch(tickRoutes(["src/jobs.ts"]), async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+    const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
+    assert.equal(merges.length, 1);
+    assert.deepEqual(merges[0].body, { merge_method: "merge", sha: HEAD_SHA });
+  });
+});
+
+test("a head that moved before the merge (GitHub 409) is reported not merged, audited, and does not abort the tick", async () => {
+  const { d1, kv, env } = await pinnedEnv();
+  const routes = {
+    ...tickRoutes(["src/jobs.ts"]),
+    [`PUT ${OWNER}/pulls/23/merge`]: { status: 409, body: { message: "Head branch was modified. Review and try the merge again." } },
+  };
+  await withFetch(routes as never, async () => {
+    const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.ran, true, report.note);
+    assert.equal(report.outcomes.length, 1);
+    assert.equal(report.outcomes[0].merged, false, "a merge GitHub refused was reported as merged");
+    assert.equal(report.outcomes[0].failed, "head_moved");
+    assert.match(report.outcomes[0].why ?? "", new RegExp(HEAD_SHA));
+  });
+  const audits = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql));
+  assert.equal(audits.length, 1, "expected exactly one audit row");
+  assert.equal(audits[0].params[1], "auto-merge-declined");
+  const params = JSON.parse(String(audits[0].params[3]));
+  assert.equal(params.head_sha, HEAD_SHA);
+  assert.equal(params.failed, "head_moved");
+  const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string);
+  assert.equal(awaiting.length, 1);
+  assert.equal(awaiting[0].failed, "head_moved");
 });
 
 // ---- AUDIT-2026-09-16: THE TICK READ ONE PAGE ------------------------------------
