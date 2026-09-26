@@ -7,8 +7,9 @@ import { archivePath, chicagoDay, loopPauseReason } from "../improve-schema";
 import { postJob } from "../jobs";
 import { watcherAgent } from "../watcher";
 
-// How long a run retries a pull request that failed to open (three ticks). Past it the
-// run posts a job to open the PR, and finishes.
+// How long a run stays in finalizing retrying a pull request that failed to open:
+// fifteen minutes, three five-minute ticks. Past it the run posts a job for a driver
+// or the seat to open the PR, and finishes.
 export const PR_RETRY_WINDOW_MS = 15 * 60 * 1000;
 import type { ScoreReport } from "../improve-scorer";
 import type { MetricMap } from "../improve-scores";
@@ -28,7 +29,8 @@ import { loadScores, metricsFor, readDoc, writeTaskDoc } from "./open";
 
 export { renderObjective } from "./open";
 
-// Changed paths recovered from the archive document, the durable copy of the change.
+// Changed paths recovered from the archive document, the durable copy of the change,
+// so a monitor running at ingest reads the same bytes a human would.
 export function changedPathsFrom(change: string): string[] {
   return [...change.matchAll(/^=== (.+?) \(\d+ bytes, complete new contents\) ===$/gm)].map((m) => m[1]);
 }
@@ -142,10 +144,13 @@ export async function finalizeRun(
   };
 }
 
-// Hands a pull request the loop could not open to the queue, posted as the watcher.
-// postJob refuses a second open job with the same (namespace, title), which is the
-// deduplication. The title must not end in "[fingerprint]", or the watcher would clear
-// it as a finding no check owns. Returns the sentence the run records; never throws.
+// Hands a pull request the loop could not open to the queue, posted as the watcher,
+// the identity and path the tick already posts findings with. The queue refuses a
+// second open job with the same (namespace, title), so a later pass over the same run
+// posts nothing new, and that refusal is what the run records. The title must not end
+// in "[fingerprint]", or the watcher would clear it as a finding no check owns.
+// Returns the sentence the run records. Never throws: a job that could not be posted
+// is recorded, and the run still finishes.
 async function postPrJob(env: Env, run: RunRow, branch: string, failure: string, now: Date): Promise<string> {
   const body = [
     `The improve loop's run ${run.id} in ${run.namespace} kept work on branch ${branch}, but the loop could not open its pull request, and stopped retrying after ${PR_RETRY_WINDOW_MS / 60_000} minutes.`,

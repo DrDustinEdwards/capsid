@@ -40,11 +40,14 @@ import { finalizeRun, gatherContext, renderAttemptDoc, renderObjective } from ".
 import { unjudgedCeilingNote } from "./ingest";
 import { baselineId, enforceBudget, loadScores, readDoc, recentAttempts } from "./open";
 
-// Bounded so a tick stays within its invocation budget; the rest are reached on the
-// next tick, oldest-advanced first.
+// How many runs one tick advances. Bounded so a tick stays within its invocation
+// budget when every namespace is mid-run; the rest are reached on the next tick, five
+// minutes later, oldest-advanced first.
 const RUNS_PER_TICK = 3;
 
-// Used when capsid/improve/prompts/run.md is missing, so the system prompt is never empty.
+// Used when capsid/improve/prompts/run.md is missing, so the system prompt is never
+// empty. It is not a substitute for that document, and the run document records which
+// prompt was used.
 export const DEFAULT_RUN_PROMPT = [
   "You are improving one project in a small portfolio, one scoped change at a time.",
   "",
@@ -66,8 +69,10 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   // check: an exhausted budget must not stop them. Each is wrapped so one throw does
   // not stop the rest of the tick.
   //
-  // The work queue's lease sweep. Reported through console, not TickOutcome, because a
-  // requeued job is not a run transition.
+  // The work queue's lease sweep: one keyed UPDATE. Gated on the budget, it would leave
+  // a job held by a dead session for as long as the caps stay exceeded, the state it
+  // exists to clear. Reported through console, not TickOutcome, because a requeued job
+  // is not a run transition.
   try {
     const expired = await expireJobLeases(env, now);
     if (expired.requeued.length > 0) {
@@ -77,7 +82,9 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     console.error(`JOB_LEASE_SWEEP_THREW: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Auto-merge. The policy document decides whether it does anything; it ships disabled.
+  // Auto-merge. It spends no model tokens and no CI minutes, and an exhausted improve
+  // budget says nothing about whether a driver's finished pull request should land.
+  // The policy document decides whether it does anything; it ships disabled.
   try {
     const merged = await autoMergeTick(env, now);
     if (merged.ran) console.log(`AUTO_MERGE ${merged.note}`);
@@ -85,7 +92,8 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     console.error(`AUTO_MERGE_THREW: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // The skill evaluation cycle, gated on its own fortnightly cadence by one KV read.
+  // The skill evaluation cycle, gated on its own fortnightly cadence: the tick runs every
+  // five minutes, so all but about one call in four thousand return after one KV read.
   try {
     const cycle = await runEvaluationCycle(env, now);
     if (cycle.ran) console.log(`SKILL_CYCLE ${cycle.note}`);
@@ -93,7 +101,8 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     console.error(`SKILL_CYCLE_THREW: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // The watcher, on its own half-hourly stamp. It only posts jobs.
+  // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
+  // broken pass can do is add a row to the queue.
   try {
     const watched = await watcherTick(env, now, () => gatherFindings(env, now));
     if (watched.ran) console.log(`WATCHER ${watched.note}`);
@@ -102,8 +111,10 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   }
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
-  // written; this corrects the ones the merge path could not see (a merge done outside
-  // manage_pr). Bounded per sweep.
+  // written, because the driver blocks and the seat merges afterwards. The merge path
+  // corrects the rows it can see; this catches the rest (a merge done with gh rather
+  // than manage_pr, and rows written before the join table existed). Bounded per
+  // sweep, so the cost is fixed however far behind it is.
   try {
     const swept = await sweepIfDue(env, now);
     if (swept) console.log(`OUTCOME_SWEEP checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}`);
@@ -122,7 +133,9 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   }
   const outcomes: TickOutcome[] = [];
   for (const run of runs) {
-    // Captured before the step runs, because the claim CAS moves the row's status.
+    // Captured before the step runs, because the claim CAS moves the row's status: by
+    // the time the catch reads it, run.status can say 'awaiting-score' about work that
+    // began in 'attempting'.
     const entered = run.status;
     try {
       outcomes.push(await advanceOne(env, run, now));
@@ -132,7 +145,8 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       // A throwing step finalizes the run with the error recorded, so it cannot hold
       // the namespace's active-run slot forever. Two CAS attempts: the steps claim the
       // run before their external calls, so the first covers a throw before the claim
-      // and the re-read covers a throw after it.
+      // and the re-read covers a throw after it. A losing tick returns at the failed
+      // claim and never reaches here, and a run that went terminal has no active row.
       const finalize = (expected: RunStatus) =>
         advanceRun(env.DB, {
           runId: run.id,
@@ -170,9 +184,11 @@ async function advanceOne(env: Env, run: RunRow, now: Date): Promise<TickOutcome
     case "awaiting-score":
       return checkStaleScore(env, run, now);
     case "judging": {
-      // Only held inside an HTTP score ingest, which may still be alive. Moving a live
-      // ingest's run back would reopen it to a duplicate report, so judging is left
-      // alone until SCORE_TIMEOUT_MS has passed, which no request outlives.
+      // Only held inside an HTTP score ingest. A run found here may mean that request
+      // died mid-decision, or that it is alive now: the five-minute tick and an HTTP
+      // ingest overlap freely. Moving a live ingest's run back would reopen it to the
+      // duplicate report the judging CAS excludes, so judging is left alone until
+      // SCORE_TIMEOUT_MS has passed, which no request outlives.
       const heldMs = now.getTime() - Date.parse(`${run.advanced_at.replace(" ", "T")}Z`);
       if (heldMs < SCORE_TIMEOUT_MS) {
         return { runId: run.id, namespace: run.namespace, from: "judging", to: "judging", note: `an ingest holds this run (${Math.round(heldMs / 1000)}s); left alone` };
@@ -195,7 +211,9 @@ async function dispatchBaseline(env: Env, run: RunRow, now: Date): Promise<TickO
   const id = baselineId(run.id);
   const branch = branchName(id);
   // The claim comes before any GitHub call, so of two overlapping ticks exactly one
-  // pushes and dispatches, and the loser spends nothing.
+  // pushes and dispatches, and the loser spends nothing. Without it both would dispatch
+  // the scorer, and the loser's failed transition cannot un-run a duplicate CI job. A
+  // throw after the claim is finalized by the tick loop's catch.
   const claimed = await advanceRun(env.DB, {
     runId: run.id,
     expected: "opening",
@@ -250,9 +268,10 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
   const id = attemptId(run.id, index);
   const branch = branchName(id);
   // The claim comes before any model or GitHub call, so two overlapping ticks cannot
-  // both pay for a proposal. awaiting-score doubles as the working status: a later tick
-  // sees a young awaiting-score and waits, and a claimant that dies is resolved by the
-  // stale guard.
+  // both pay for a proposal and push it. awaiting-score doubles as the working status:
+  // the attempt id is claimed as current_attempt, a later tick sees a young
+  // awaiting-score and waits, and a claimant that dies mid-work is resolved by the
+  // stale guard as "no score report".
   const claimed = await advanceRun(env.DB, {
     runId: run.id,
     expected: "attempting",
@@ -272,13 +291,14 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
   const priorAttempts = await attemptsForRun(env.DB, run.id);
   const best = await readBest(env.APP_KV, run.namespace);
   // Condition 'no-memory': lineage history is withheld, so the run branches from the
-  // best record alone.
+  // best record alone. Withholding the input is what makes the condition mean anything.
   const lineage = run.condition === "no-memory" ? [] : await recentAttempts(env.DB, run.namespace, 50);
   const choice = selectBase(best, lineage, run.base_sha);
   const baseSha = choice.sha || run.base_sha || "";
 
   // A transferred skill is offered on the first attempt only; later attempts build on
-  // what this run learned. Condition 'no-transfer': none is offered.
+  // what this run learned, and spending every attempt on another project's ideas
+  // would leave no room for its own. Condition 'no-transfer': none is offered.
   const skills = index === 1 && run.condition !== "no-transfer" ? await candidateSkills(env.DB, run.namespace, 1) : [];
   const skill = skills[0]
     ? { id: skills[0].id, title: skills[0].title, body: await readSkillBody(env.DB, skills[0]) }
@@ -314,8 +334,9 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
   }
 
   // The deterministic path monitor runs before the push, because a pushed change (a
-  // postinstall, a workflow with `on: push`) runs in CI with secrets in scope and a
-  // revert cannot undo that. The model half still runs at ingest.
+  // package.json postinstall, a new workflow with `on: push`) runs in CI with secrets
+  // in scope and a revert cannot undo that. The model half still runs at ingest, for
+  // cases a pattern cannot name; this is the half decidable with no push and no key.
   const preflight = pathMonitor(proposal.changedPaths);
   if (preflight.flagged) {
     await env.DB.batch([
@@ -325,7 +346,8 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'flagged', ?7, ?8, 0, 1, ?5)`
         )
         .bind(id, run.namespace, run.id, proposal.summary || null, preflight.reason, choice.attemptId, baseSha, skill?.id ?? null),
-      // Used and refused: a verdict on the work itself, so the skill takes the loss.
+      // Used and refused: the model proposed following the skill and the monitor rejected
+      // it. A verdict on the work itself, so the skill takes the loss.
       ...(skill ? attributionStatements(env.DB, { offered: [skill.id], used: [skill.id], signal: "verified-failure" }) : []),
     ]);
     await recordRevertBeforePush(env, run, proposal.costUsd);
@@ -387,9 +409,15 @@ async function startAttempt(env: Env, run: RunRow, now: Date): Promise<TickOutco
 }
 
 /**
- * The one place a scorer is dispatched. The cap is checked per dispatch, not per
- * tick, and the estimated minutes are booked at dispatch so a run in flight counts;
- * `ingest` replaces the estimate with the reported figure rather than adding to it.
+ * The one place a scorer is dispatched, so the cap is read immediately before the
+ * spend and the spend is booked immediately after it.
+ *
+ * One check per dispatch: the tick reads the cap once and advances up to RUNS_PER_TICK
+ * runs, so its check is only a cheap early-out and this is the one that binds.
+ *
+ * Booked at dispatch, so every run in flight is visible to the next check. The
+ * estimate is a lien: `ingest` replaces it with the reported figure rather than adding
+ * to it, so nothing is counted twice and ingest makes no outbound call.
  *
  * Returns the refusal reason when the cap is exceeded, or null when it dispatched.
  */
@@ -446,11 +474,16 @@ async function checkStaleScore(env: Env, run: RunRow, now: Date): Promise<TickOu
             .bind(id, note),
         ]
       : []),
-    // No skill outcome: nothing was measured.
+    // No skill outcome: a scorer that never reported measured nothing, so the skill
+    // that proposed this attempt is neither better nor worse for it.
     improveAudit(env.DB, "improve-score-timeout", run.namespace, { run_id: run.id, attempt_id: id, waited_ms: waited }),
   ]);
 
-  // Unjudged, not reverted: the unjudged counter has its own ceiling and does not restore.
+  // Unjudged, not reverted. As reverts, scorers that never report would restore the
+  // namespace to best and record bad changes never measured. The unjudged counter does
+  // not restore, and its ceiling sits below the revert ceiling on purpose: a retry into
+  // a broken machine buys nothing, and an attempt that crashes its own scorer must not
+  // escape the revert counter that way.
   const consecutive = run.consecutive_unjudged + 1;
   const exhausted = consecutive >= MAX_CONSECUTIVE_UNJUDGED;
   await advanceRun(env.DB, {

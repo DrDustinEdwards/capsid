@@ -15,8 +15,9 @@ export interface SecondarySpec {
   metric: string;
   direction: Direction;
   weight: number;
-  // A stub is parsed and reported but excluded from every comparison, so a metric
-  // declared before it is wired never scores as zero.
+  // A stub is parsed, listed and reported, and excluded from every comparison until a
+  // human removes the marker. It lets a namespace declare a metric it intends to wire
+  // without that metric silently scoring as zero.
   stub: boolean;
 }
 
@@ -36,8 +37,10 @@ const ANCHOR_HEADING = /^##\s+anchors\s*$/i;
 const SECONDARY_HEADING = /^##\s+secondary\s*$/i;
 const SECTION_HEADING = /^##\s+/;
 
-// CRLF is normalized before anything else, including the hash, so a document from an
-// autocrlf checkout hashes the same as one written through MCP.
+// CRLF is normalized before anything else, including the hash (capsid/repo-structure.md
+// records the CRLF checkout hazard). A scores document from an autocrlf checkout would
+// otherwise hash differently from the same document written through MCP, and the pin
+// would mismatch for a reason unrelated to anyone editing an anchor.
 function normalize(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
@@ -131,16 +134,19 @@ export async function improveWriteRefusal(
   allow: boolean
 ): Promise<string | null> {
   if (allow) return null;
-  // The nightly task document is executed by the `/improve` driver on a machine with
-  // repo clones and a write grant.
+  // The nightly task document, `improve/run-<day>.md`, is read by the `/improve`
+  // driver and executed as its instruction list on a machine holding five repo clones,
+  // local git and a Capsid write grant.
   if (path.startsWith(RUN_TASK_PREFIX)) {
     return `${namespace}/${path} is an improve loop task document. The /improve driver executes it, so a write here steers a session with local shell and repo access. Pass allow_improve_paths: true to write it anyway; the flag is audit-logged. The loop writes and signs these itself.`;
   }
   if (path.startsWith(PROMPTS_PREFIX)) {
     return `${namespace}/${path} is the improve loop's run-prompt surface and the ordinary write tool refuses it. It steers the nightly attempt generator, so a write here is only accepted with allow_improve_paths: true, which is audit-logged.`;
   }
-  // The policy documents are read by the Worker as authority (what it may merge, which
-  // blocked commands the seat may approve), so a write here is a ruling.
+  // The policy documents are read by the Worker as authority: capsid/policy/auto-merge.md
+  // says what it may merge with no human, and capsid/policy/gates.md which blocked
+  // commands the seat may approve without one. So a write here is a ruling, accepted
+  // only with allow_improve_paths, which needs can_touch_protected.
   if (path.startsWith(POLICY_PREFIX)) {
     return `${namespace}/${path} is an autonomy policy document. It decides what this Worker may do without a human, so a write here is a ruling. Pass allow_improve_paths: true to write it anyway; the flag needs the can_touch_protected scope and is audit-logged.`;
   }
@@ -165,8 +171,10 @@ export interface AnchorVerification {
   pinned: string | null;
 }
 
-// Fails closed. A missing pin is a refusal: pinning on first sight would make whatever
-// the anchors say that day the floor. A namespace joins the loop when a human pins it.
+// Fails closed in both directions. A missing pin is a refusal, not a free pass: pinning
+// on first sight is how an attacker or an accident installs its own floor, since
+// whatever the anchors say the first time the loop looks becomes canon. A namespace
+// joins the loop when a human pins its anchors, and never before.
 export async function verifyAnchors(
   kv: KVNamespace,
   namespace: string,
@@ -220,8 +228,9 @@ export interface AnchorVerdict {
   reasons: string[];
 }
 
-// An unreported anchor fails, or a scorer that stopped running the holdout suite would
-// score like one that ran it and passed.
+// An unmeasured anchor is a failed anchor. A null means CI did not report the metric,
+// and any missing or unauthenticated score is treated as a revert. Skipping it would let
+// a scorer that stopped running the holdout suite score like one that ran it and passed.
 export function anchorVerdict(anchors: AnchorSpec[], values: MetricMap): AnchorVerdict {
   const reasons: string[] = [];
   for (const spec of anchors) {
@@ -280,18 +289,22 @@ export interface Comparison {
   reason: string;
 }
 
-// Relative improvement, so a metric in bytes cannot drown one in counts. The
-// denominator max(|before|, 1) handles a base of zero. Clamped to [-1, 1] so one
-// metric's contribution is bounded by its weight.
+// Relative improvement, so a metric in bytes cannot drown four in counts. The
+// denominator is max(|before|, 1), not |before|: a base of zero (0 lint errors) makes
+// any increase a loss rather than a division by zero, and near zero, 1 error becoming
+// 2 is a real doubling, not an infinite one. Clamped to [-1, 1] so one metric's
+// contribution is bounded by its weight.
 function relative(direction: Direction, before: number, after: number): number {
   const scale = Math.max(Math.abs(before), 1);
   const raw = direction === "maximize" ? (after - before) / scale : (before - after) / scale;
   return Math.max(-1, Math.min(1, raw));
 }
 
-// Kept only when the weighted secondary score is strictly better; a tie reverts. When
-// nothing could be compared (all stubs or unreported) the attempt reverts, so reporting
-// nothing is never the cheapest way to score well.
+// Keep or revert, and the default is revert. Kept only when the anchors hold and the
+// weighted secondary score is strictly better. Strictly, not "no worse": a change that
+// moves nothing is churn, so a tie reverts. When nothing could be compared (all stubs or
+// unreported) the attempt reverts: the cheapest way to score well is to report nothing,
+// and a system that reads silence as success rewards exactly that.
 export function compare(specs: SecondarySpec[], before: MetricMap, after: MetricMap): Comparison {
   const details: MetricDelta[] = [];
   let delta = 0;
