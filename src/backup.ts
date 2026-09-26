@@ -273,16 +273,21 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
   return pins;
 }
 
-async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
-  // One batch is one D1 transaction, so every table is read at the same instant and
-  // exported_at describes it. Sequential reads are one instant per table: a write
-  // landing between the documents read and the document_versions read puts a version
-  // row in the dump whose document is not in it, and nothing downstream can tell. The
-  // restore rehearsal checks for that signature.
-  //
-  // Cost: all row sets are live at once. Each result set is stringified, written and
-  // dropped before the next, so at most one serialized copy is alive on top of the
-  // row sets, and the largest tables are paged and streamed (PAGED_TABLES).
+type DocRow = { namespace: string; path: string; body: string | null };
+
+// Writes one JSON object per table and the two sidecars under one run prefix, and
+// returns the documents rows, which the preflight and the markdown mirror both read.
+//
+// One batch is one D1 transaction, so every table is read at the same instant and
+// exported_at describes it. Sequential reads are one instant per table: a write
+// landing between the documents read and the document_versions read puts a version
+// row in the dump whose document is not in it, and nothing downstream can tell. The
+// restore rehearsal checks for that signature.
+//
+// Cost: all row sets are live at once. Each result set is stringified, written and
+// dropped before the next, so at most one serialized copy is alive on top of the
+// row sets, and the largest tables are paged and streamed (PAGED_TABLES).
+async function exportDump(env: Env, now: string): Promise<{ jsonPrefix: string; jsonKeys: string[]; docs: DocRow[] }> {
   const jsonPrefix = `${JSON_PREFIX}${now.replace(/[:.]/g, "-")}/`;
   const jsonKeys: string[] = [];
   const snapshot = await env.DB.batch(
@@ -290,7 +295,7 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
       env.DB.prepare(PAGED_TABLES.has(table) ? `SELECT MAX(id) AS max_id FROM ${table}` : `SELECT * FROM ${table}`)
     )
   );
-  let docs: Array<{ namespace: string; path: string; body: string | null }> = [];
+  let docs: DocRow[] = [];
   const rowsPerTable: Array<unknown[] | null> = TABLES.map((_, i) => (snapshot[i]?.results ?? []) as unknown[]);
   for (let i = 0; i < TABLES.length; i++) {
     const table = TABLES[i];
@@ -327,21 +332,108 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     { httpMetadata: { contentType: "application/json" } }
   );
   jsonKeys.push(`${jsonPrefix}_holdout-manifests.json`);
+  return { jsonPrefix, jsonKeys, docs };
+}
 
-  // Preflight before anything destructive. The dangerous case is a SELECT that
-  // succeeds and returns nothing: an empty documents table, or a binding resolved to
-  // an empty or different database, makes currentKeys empty, which marks every
-  // markdown object stale and deletes the mirror in one call.
-  //
-  // Two probes: a count above zero, and the same pinned FTS probe /health uses, which
-  // catches a binding pointed at a different database that has rows.
-  //
-  // A failure refuses everything past this point as a unit: the markdown write, the R2
-  // prunes and the D1 deletes. A run that cannot trust its read of documents cannot
-  // trust content derived from it. The JSON dumps above are kept: an export deletes
-  // nothing, and an empty dump is the evidence of the day the store looked empty.
+// The preflight, run before anything destructive. The dangerous case is a SELECT that
+// succeeds and returns nothing: an empty documents table, or a binding resolved to
+// an empty or different database, makes currentKeys empty, which marks every
+// markdown object stale and deletes the mirror in one call.
+//
+// Two probes: a count above zero, and the same pinned FTS probe /health uses, which
+// catches a binding pointed at a different database that has rows. Returns the named
+// reason to refuse, or null.
+async function preflight(env: Env, docs: DocRow[]): Promise<{ fts: string; pruneRefused: string | null }> {
   const fts = await probeFts(env.DB);
   const pruneRefused = docs.length === 0 ? "documents-empty" : fts === "ok" ? null : `fts-probe-failed: ${fts}`;
+  return { fts, pruneRefused };
+}
+
+// Writes every document to the markdown mirror and deletes mirror objects no document
+// backs. Returns how many were deleted.
+async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
+  const currentKeys = new Set<string>();
+  for (let i = 0; i < docs.length; i += PUT_CONCURRENCY) {
+    await Promise.all(
+      docs.slice(i, i + PUT_CONCURRENCY).map((doc) => {
+        const key = `${MARKDOWN_PREFIX}${doc.namespace}/${doc.path}`;
+        currentKeys.add(key);
+        return env.MEDIA.put(key, doc.body ?? "", { httpMetadata: { contentType: "text/markdown" } });
+      })
+    );
+  }
+
+  const existingMarkdown = await listAllKeys(env.MEDIA, MARKDOWN_PREFIX);
+  const staleMarkdown = existingMarkdown.filter((key) => !currentKeys.has(key));
+  if (staleMarkdown.length > 0) await deleteInChunks(env.MEDIA, staleMarkdown);
+  return staleMarkdown.length;
+}
+
+// Deletes JSON dump runs past retention and above the floor, and CSP reports past
+// retention.
+async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; reports: number }> {
+  // Group objects into runs, newest run first, so the floor is runs and not objects.
+  const runs = new Map<string, string[]>();
+  for (const key of await listAllKeys(env.MEDIA, JSON_PREFIX)) {
+    const id = runIdOf(key);
+    const existing = runs.get(id);
+    if (existing) existing.push(key);
+    else runs.set(id, [key]);
+  }
+  const runIds = [...runs.keys()].sort().reverse();
+  const dumpCutoff = cutoffDay(new Date(now), JSON_RETENTION_DAYS);
+  // The floor is the newest JSON_MIN_KEPT counted runs. A marked run counts, and so
+  // does an unmarked run older than the oldest marked one: it was written before
+  // markers existed and the old rule counted it, so adding the marker prunes nothing
+  // the old rule kept. A newer unmarked run is partial or refused; it holds no floor
+  // slot and ages out on the 90-day rule like any run.
+  const isMarked = (id: string) => (runs.get(id) ?? []).includes(`${JSON_PREFIX}${id}/${COMPLETE_MARKER}`);
+  const oldestMarked = runIds.filter(isMarked).at(-1);
+  const counted = runIds.filter((id) => isMarked(id) || oldestMarked === undefined || id < oldestMarked);
+  const floor = new Set(counted.slice(0, JSON_MIN_KEPT));
+  const staleRunIds = runIds.filter((id) => !floor.has(id) && isOlderThan(id, "", dumpCutoff));
+  const staleDumpKeys = staleRunIds.flatMap((id) => runs.get(id) ?? []);
+  if (staleDumpKeys.length > 0) await deleteInChunks(env.MEDIA, staleDumpKeys);
+
+  const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
+  const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
+    isOlderThan(key, REPORT_PREFIX, reportCutoff)
+  );
+  if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
+  return { kept: runIds.length - staleRunIds.length, pruned: staleRunIds.length, reports: staleReports.length };
+}
+
+// Prunes history after the export, so the rows leaving D1 are in today's dump.
+// meta.changes is inflated by the FTS5 triggers, so each DELETE is preceded by a
+// COUNT over the same predicate in the same transaction.
+async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
+  const pruned = await env.DB.batch<{ n: number }>([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
+      `-${VERSION_RETENTION_DAYS} days`
+    ),
+    env.DB.prepare("DELETE FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
+      `-${VERSION_RETENTION_DAYS} days`
+    ),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at < datetime('now', ?1)").bind(
+      `-${AUDIT_RETENTION_DAYS} days`
+    ),
+    env.DB.prepare("DELETE FROM audit_log WHERE at < datetime('now', ?1)").bind(`-${AUDIT_RETENTION_DAYS} days`),
+    // The replay cache, appended last so the count/delete pairs above keep the
+    // positions their counters read. A jti matters only inside the signature window.
+    env.DB.prepare("DELETE FROM improve_jti WHERE seen_at < datetime('now', '-1 day')"),
+  ]);
+  return { versions: pruned[0]?.results?.[0]?.n ?? 0, audit: pruned[2]?.results?.[0]?.n ?? 0 };
+}
+
+async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
+  const { jsonPrefix, jsonKeys, docs } = await exportDump(env, now);
+
+  // A failed preflight refuses everything past this point as a unit: the markdown
+  // write, the R2 prunes and the D1 deletes. A run that cannot trust its read of
+  // documents cannot trust content derived from it. The JSON dumps above are kept: an
+  // export deletes nothing, and an empty dump is the evidence of the day the store
+  // looked empty.
+  const { fts, pruneRefused } = await preflight(env, docs);
   if (pruneRefused !== null) {
     console.error(
       `BACKUP_PREFLIGHT_REFUSED reason=${pruneRefused} documents=${docs.length} fts=${fts} ` +
@@ -373,68 +465,9 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   });
   jsonKeys.push(completeKey);
 
-  const currentKeys = new Set<string>();
-  for (let i = 0; i < docs.length; i += PUT_CONCURRENCY) {
-    await Promise.all(
-      docs.slice(i, i + PUT_CONCURRENCY).map((doc) => {
-        const key = `${MARKDOWN_PREFIX}${doc.namespace}/${doc.path}`;
-        currentKeys.add(key);
-        return env.MEDIA.put(key, doc.body ?? "", { httpMetadata: { contentType: "text/markdown" } });
-      })
-    );
-  }
-
-  const existingMarkdown = await listAllKeys(env.MEDIA, MARKDOWN_PREFIX);
-  const staleMarkdown = existingMarkdown.filter((key) => !currentKeys.has(key));
-  if (staleMarkdown.length > 0) await deleteInChunks(env.MEDIA, staleMarkdown);
-
-  // Group objects into runs, newest run first, so the floor is runs and not objects.
-  const runs = new Map<string, string[]>();
-  for (const key of await listAllKeys(env.MEDIA, JSON_PREFIX)) {
-    const id = runIdOf(key);
-    const existing = runs.get(id);
-    if (existing) existing.push(key);
-    else runs.set(id, [key]);
-  }
-  const runIds = [...runs.keys()].sort().reverse();
-  const dumpCutoff = cutoffDay(new Date(now), JSON_RETENTION_DAYS);
-  // The floor is the newest JSON_MIN_KEPT counted runs. A marked run counts, and so
-  // does an unmarked run older than the oldest marked one: it was written before
-  // markers existed and the old rule counted it, so adding the marker prunes nothing
-  // the old rule kept. A newer unmarked run is partial or refused; it holds no floor
-  // slot and ages out on the 90-day rule like any run.
-  const isMarked = (id: string) => (runs.get(id) ?? []).includes(`${JSON_PREFIX}${id}/${COMPLETE_MARKER}`);
-  const oldestMarked = runIds.filter(isMarked).at(-1);
-  const counted = runIds.filter((id) => isMarked(id) || oldestMarked === undefined || id < oldestMarked);
-  const floor = new Set(counted.slice(0, JSON_MIN_KEPT));
-  const staleRunIds = runIds.filter((id) => !floor.has(id) && isOlderThan(id, "", dumpCutoff));
-  const staleDumpKeys = staleRunIds.flatMap((id) => runs.get(id) ?? []);
-  if (staleDumpKeys.length > 0) await deleteInChunks(env.MEDIA, staleDumpKeys);
-
-  const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
-  const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
-    isOlderThan(key, REPORT_PREFIX, reportCutoff)
-  );
-  if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
-
-  // Prune history after the export, so the rows leaving D1 are in today's dump.
-  // meta.changes is inflated by the FTS5 triggers, so each DELETE is preceded by a
-  // COUNT over the same predicate in the same transaction.
-  const pruned = await env.DB.batch<{ n: number }>([
-    env.DB.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
-      `-${VERSION_RETENTION_DAYS} days`
-    ),
-    env.DB.prepare("DELETE FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
-      `-${VERSION_RETENTION_DAYS} days`
-    ),
-    env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at < datetime('now', ?1)").bind(
-      `-${AUDIT_RETENTION_DAYS} days`
-    ),
-    env.DB.prepare("DELETE FROM audit_log WHERE at < datetime('now', ?1)").bind(`-${AUDIT_RETENTION_DAYS} days`),
-    // The replay cache, appended last so the count/delete pairs above keep the
-    // positions their counters read. A jti matters only inside the signature window.
-    env.DB.prepare("DELETE FROM improve_jti WHERE seen_at < datetime('now', '-1 day')"),
-  ]);
+  const markdownPruned = await mirrorMarkdown(env, docs);
+  const dumps = await pruneR2(env, now);
+  const history = await pruneD1(env);
 
   // Stamp the last clean success, read by /health. A refused run returned above.
   await env.APP_KV.put(BACKUP_LAST_OK_KEY, now);
@@ -445,12 +478,12 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     json_keys: jsonKeys,
     documents: docs.length,
     markdown_written: docs.length,
-    markdown_pruned: staleMarkdown.length,
-    json_backups_kept: runIds.length - staleRunIds.length,
-    json_backups_pruned: staleRunIds.length,
-    reports_pruned: staleReports.length,
-    versions_pruned: pruned[0]?.results?.[0]?.n ?? 0,
-    audit_pruned: pruned[2]?.results?.[0]?.n ?? 0,
+    markdown_pruned: markdownPruned,
+    json_backups_kept: dumps.kept,
+    json_backups_pruned: dumps.pruned,
+    reports_pruned: dumps.reports,
+    versions_pruned: history.versions,
+    audit_pruned: history.audit,
     prune_refused: null,
     preflight: { documents: docs.length, fts },
   };

@@ -326,120 +326,120 @@ const SCORE_PATH_MARKER = "/improve/score";
 export const CI_DISPATCH_POLL_MS = 30_000;
 export const CI_DISPATCH_POLL_INTERVAL_MS = 3_000;
 
-/** Trigger a workflow_dispatch, or rerun a run's failed jobs. dispatchWorkflow is
- *  the only dispatch path. */
-export async function ciDispatch(
+// The scorer is not hand-dispatchable through this tool: it signs whatever it
+// measured with the repo's score key, so a dispatch against an arbitrary ref mints a
+// genuinely signed report. Ingest also binds the report to the run's in-flight
+// attempt and head sha, but that is the second lock. The loop dispatches its own
+// scorer through dispatchWorkflow (src/improve/tick.ts); a human shakedown goes
+// through GitHub.
+//
+// GitHub's dispatch endpoint accepts a numeric id or a full path as well as a file
+// name, so the refusal matches what the workflow is, not one spelling of its name,
+// in three checks in cost order. Checks 1 and 2 need no lookup and run here.
+function refuseScorerByName(workflow: string): void {
+  // 1. Shape. A workflow is a YAML file in .github/workflows. A numeric id is not
+  //    a name this tool accepts, which closes the alias without a lookup.
+  const basename = workflow.split("/").pop() ?? "";
+  if (!/^[A-Za-z0-9._-]+\.ya?ml$/.test(basename)) {
+    throw new Error(
+      `ci_dispatch refuses: '${workflow}' is not a workflow file name. Pass the file name (for example ci.yml). A numeric workflow id is refused because it names the same file by a different route and defeats the scorer refusal below.`
+    );
+  }
+  // 2. Name, on the basename, so a full path spelling is caught too.
+  if (basename === SCORER_WORKFLOW) {
+    throw new Error(
+      `ci_dispatch refuses: ${SCORER_WORKFLOW} is the improve loop's scorer, and a hand dispatch of it can mint a signed score report for an arbitrary ref. The loop dispatches it itself; run a shakedown from GitHub directly.`
+    );
+  }
+}
+
+// 3. CONTENT. A scorer renamed, copied or vendored under another file name still
+//    holds the signing key and posts to the score endpoint. Read the file on the
+//    default branch and, when a ref is given, on that ref too, and refuse anything
+//    that declares it. A read failure does NOT refuse: a workflow this tool cannot
+//    see is ordinary for a repo whose default branch differs, and failing closed here
+//    would break ci_dispatch on a network blip. Checks 1 and 2 hold without a lookup.
+async function refuseScorerByContent(
+  env: Env,
+  target: { owner: string; repo: string; full: string },
+  workflow: string,
+  ref: string | undefined
+): Promise<void> {
+  const { owner, repo, full } = target;
+  // Both copies are checked. The dispatch runs the workflow as it exists on ref, so
+  // a scorer added or renamed on a feature branch is only visible there. The default
+  // branch still matters, because GitHub only makes a workflow dispatchable if it is
+  // on the default branch, so a rename there is the other half of the same trick.
+  // Refusing if either copy is a scorer covers both.
+  const path = encodePath(`.github/workflows/${workflow.split("/").pop()}`);
+  const refs = ref ? [undefined, ref] : [undefined];
+  for (const at of refs) {
+    try {
+      const query = at ? `?ref=${encodeURIComponent(at)}` : "";
+      const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${path}${query}`);
+      if (resp.ok) {
+        const data = (await resp.json()) as { content?: string; encoding?: string };
+        const body = data.encoding === "base64" && data.content ? base64Decode(data.content) : "";
+        if (body.includes(SCORE_PATH_MARKER)) {
+          throw new Error(
+            `ci_dispatch refuses: ${workflow} on ${full}${at ? ` at ${at}` : ""} posts to ${SCORE_PATH_MARKER}, which makes it a scorer whatever it is called. A hand dispatch of it can mint a signed score report for an arbitrary ref.`
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("ci_dispatch refuses")) throw err;
+      // A lookup problem, not a verdict. Named, not swallowed, and fail-open as
+      // stated above: checks 1 and 2 hold without a lookup.
+      console.log(`CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${workflow}${at ? ` @${at}` : ""}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+// Rerunning the scorer's failed jobs re-executes the signing step against that run's
+// ref, so a scorer run is refused.
+async function rerunFailedJobs(env: Env, target: { owner: string; repo: string; full: string }, runId: number) {
+  const { owner, repo, full } = target;
+  const runResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${runId}`);
+  // A run this cannot identify is not rerun: otherwise whatever made the GET fail
+  // would also skip the one lookup that decides whether this is the scorer.
+  //
+  // Fail closed here, unlike the content check, because of what the lookup is for:
+  // there, a missing file leaves two other checks standing; here, this is the only
+  // thing between a caller and re-executing the signing step.
+  if (!runResp.ok) {
+    throw new Error(
+      `ci_dispatch refuses: run ${runId} on ${full} could not be read (${runResp.status}), so whether it is a ${SCORER_WORKFLOW} run is unknown. A rerun re-executes that run's jobs with this repo's secrets, so an unidentified run is not rerun.`
+    );
+  }
+  const runData = (await runResp.json()) as { path?: string; name?: string };
+  const runBasename = (runData.path ?? "").split("/").pop() ?? "";
+  if (runBasename === SCORER_WORKFLOW) {
+    throw new Error(
+      `ci_dispatch refuses: run ${runId} on ${full} is a ${SCORER_WORKFLOW} run, and rerunning it re-executes the signing step against that run's ref. The loop dispatches its own scorer.`
+    );
+  }
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${runId}/rerun-failed-jobs`, {
+    method: "POST",
+  });
+  if (!resp.ok) {
+    throw new Error(
+      `ci_dispatch rerun failed for run ${runId} (${resp.status}): ${(await resp.text()).slice(0, 300) || "no response body"}`
+    );
+  }
+  return { repo: full, mode: "rerun" as const, run_id: runId, rerun_requested: true };
+}
+
+// Dispatches the workflow on ref and polls until a new run for that ref appears or
+// the timeout passes.
+async function dispatchAndPoll(
   env: Env,
   namespace: string,
-  args: { workflow?: string; ref?: string; run_id?: number; inputs?: Record<string, string> },
-  repoSelector?: string,
-  // Injectable for tests only; the tool never passes it, so production uses the
-  // constants above. Without it the timeout case costs 30 seconds in the suite.
-  poll: { timeoutMs?: number; intervalMs?: number } = {}
+  full: string,
+  args: { workflow: string; ref: string; inputs?: Record<string, string> },
+  repoSelector: string | undefined,
+  timing: { timeoutMs: number; intervalMs: number }
 ) {
-  const timeoutMs = poll.timeoutMs ?? CI_DISPATCH_POLL_MS;
-  const intervalMs = poll.intervalMs ?? CI_DISPATCH_POLL_INTERVAL_MS;
-  // The scorer is not hand-dispatchable through this tool: it signs whatever it
-  // measured with the repo's score key, so a dispatch against an arbitrary ref mints a
-  // genuinely signed report. Ingest also binds the report to the run's in-flight
-  // attempt and head sha, but that is the second lock. The loop dispatches its own
-  // scorer through dispatchWorkflow (src/improve/tick.ts); a human shakedown goes
-  // through GitHub.
-  //
-  // GitHub's dispatch endpoint accepts a numeric id or a full path as well as a file
-  // name, so the refusal matches what the workflow is, not one spelling of its name,
-  // in three checks in cost order.
-  if (args.workflow !== undefined) {
-    // 1. Shape. A workflow is a YAML file in .github/workflows. A numeric id is not
-    //    a name this tool accepts, which closes the alias without a lookup.
-    const basename = args.workflow.split("/").pop() ?? "";
-    if (!/^[A-Za-z0-9._-]+\.ya?ml$/.test(basename)) {
-      throw new Error(
-        `ci_dispatch refuses: '${args.workflow}' is not a workflow file name. Pass the file name (for example ci.yml). A numeric workflow id is refused because it names the same file by a different route and defeats the scorer refusal below.`
-      );
-    }
-    // 2. Name, on the basename, so a full path spelling is caught too.
-    if (basename === SCORER_WORKFLOW) {
-      throw new Error(
-        `ci_dispatch refuses: ${SCORER_WORKFLOW} is the improve loop's scorer, and a hand dispatch of it can mint a signed score report for an arbitrary ref. The loop dispatches it itself; run a shakedown from GitHub directly.`
-      );
-    }
-  }
-  const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
-
-  // 3. CONTENT. A scorer renamed, copied or vendored under another file name still
-  //    holds the signing key and posts to the score endpoint. Read the file on the
-  //    default branch and, when args.ref is given, on that ref too, and refuse
-  //    anything that declares it. A read failure does NOT refuse: a workflow this
-  //    tool cannot see is ordinary for a repo whose default branch differs, and
-  //    failing closed here would break ci_dispatch on a network blip. Checks 1 and 2
-  //    hold without a lookup.
-  if (args.workflow) {
-    // Both copies are checked. The dispatch runs the workflow as it exists on
-    // args.ref, so a scorer added or renamed on a feature branch is only visible
-    // there. The default branch still matters, because GitHub only makes a workflow
-    // dispatchable if it is on the default branch, so a rename there is the other
-    // half of the same trick. Refusing if either copy is a scorer covers both.
-    const path = encodePath(`.github/workflows/${args.workflow.split("/").pop()}`);
-    const refs = args.ref ? [undefined, args.ref] : [undefined];
-    for (const ref of refs) {
-      try {
-        const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-        const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${path}${query}`);
-        if (resp.ok) {
-          const data = (await resp.json()) as { content?: string; encoding?: string };
-          const body = data.encoding === "base64" && data.content ? base64Decode(data.content) : "";
-          if (body.includes(SCORE_PATH_MARKER)) {
-            throw new Error(
-              `ci_dispatch refuses: ${args.workflow} on ${full}${ref ? ` at ${ref}` : ""} posts to ${SCORE_PATH_MARKER}, which makes it a scorer whatever it is called. A hand dispatch of it can mint a signed score report for an arbitrary ref.`
-            );
-          }
-        }
-      } catch (err) {
-        if (err instanceof Error && err.message.startsWith("ci_dispatch refuses")) throw err;
-        // A lookup problem, not a verdict. Named, not swallowed, and fail-open as
-        // stated above: checks 1 and 2 hold without a lookup.
-        console.log(`CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${args.workflow}${ref ? ` @${ref}` : ""}: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-  }
-
-  if (args.run_id) {
-    if (args.workflow) throw new Error("ci_dispatch: pass workflow and ref to start a run, or run_id to rerun one, not both");
-    // Rerunning the scorer's failed jobs re-executes the signing step against that
-    // run's ref, so a scorer run is refused.
-    const runResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${args.run_id}`);
-    // A run this cannot identify is not rerun: otherwise whatever made the GET fail
-    // would also skip the one lookup that decides whether this is the scorer.
-    //
-    // Fail closed here, unlike the content check above, because of what the lookup
-    // is for: there, a missing file leaves two other checks standing; here, this is
-    // the only thing between a caller and re-executing the signing step.
-    if (!runResp.ok) {
-      throw new Error(
-        `ci_dispatch refuses: run ${args.run_id} on ${full} could not be read (${runResp.status}), so whether it is a ${SCORER_WORKFLOW} run is unknown. A rerun re-executes that run's jobs with this repo's secrets, so an unidentified run is not rerun.`
-      );
-    }
-    const runData = (await runResp.json()) as { path?: string; name?: string };
-    const runBasename = (runData.path ?? "").split("/").pop() ?? "";
-    if (runBasename === SCORER_WORKFLOW) {
-      throw new Error(
-        `ci_dispatch refuses: run ${args.run_id} on ${full} is a ${SCORER_WORKFLOW} run, and rerunning it re-executes the signing step against that run's ref. The loop dispatches its own scorer.`
-      );
-    }
-    const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${args.run_id}/rerun-failed-jobs`, {
-      method: "POST",
-    });
-    if (!resp.ok) {
-      throw new Error(
-        `ci_dispatch rerun failed for run ${args.run_id} (${resp.status}): ${(await resp.text()).slice(0, 300) || "no response body"}`
-      );
-    }
-    return { repo: full, mode: "rerun" as const, run_id: args.run_id, rerun_requested: true };
-  }
-
-  if (!args.workflow || !args.ref) throw new Error("ci_dispatch: workflow and ref are both required to start a run");
-
+  const { timeoutMs, intervalMs } = timing;
   // The runs that already exist for this ref, so the new one can be told apart. The
   // dispatch endpoint answers 204 with no body and names nothing it started.
   const before = new Set((await workflowRunsForBranch(env, namespace, args.ref, repoSelector)).map((r) => r.id));
@@ -493,4 +493,37 @@ export async function ciDispatch(
     url: appeared.url,
     polls,
   };
+}
+
+/** Trigger a workflow_dispatch, or rerun a run's failed jobs. dispatchWorkflow is
+ *  the only dispatch path. */
+export async function ciDispatch(
+  env: Env,
+  namespace: string,
+  args: { workflow?: string; ref?: string; run_id?: number; inputs?: Record<string, string> },
+  repoSelector?: string,
+  // Injectable for tests only; the tool never passes it, so production uses the
+  // constants above. Without it the timeout case costs 30 seconds in the suite.
+  poll: { timeoutMs?: number; intervalMs?: number } = {}
+) {
+  const timeoutMs = poll.timeoutMs ?? CI_DISPATCH_POLL_MS;
+  const intervalMs = poll.intervalMs ?? CI_DISPATCH_POLL_INTERVAL_MS;
+  if (args.workflow !== undefined) refuseScorerByName(args.workflow);
+  const target = await resolveRepo(env, namespace, repoSelector);
+  if (args.workflow) await refuseScorerByContent(env, target, args.workflow, args.ref);
+
+  if (args.run_id) {
+    if (args.workflow) throw new Error("ci_dispatch: pass workflow and ref to start a run, or run_id to rerun one, not both");
+    return rerunFailedJobs(env, target, args.run_id);
+  }
+
+  if (!args.workflow || !args.ref) throw new Error("ci_dispatch: workflow and ref are both required to start a run");
+  return dispatchAndPoll(
+    env,
+    namespace,
+    target.full,
+    { workflow: args.workflow, ref: args.ref, inputs: args.inputs },
+    repoSelector,
+    { timeoutMs, intervalMs }
+  );
 }
