@@ -21,12 +21,12 @@ import { b64urlDecode } from "./encoding";
 
 export const RUNNER_KEY_PATH = "/ops/runner-key";
 export const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
-export const OIDC_AUDIENCE = "capsid";
-export const SEAT_SESSION_WORKFLOW = ".github/workflows/seat-session.yml";
+const OIDC_AUDIENCE = "capsid";
+const SEAT_SESSION_WORKFLOW = ".github/workflows/seat-session.yml";
 
 // What a runner may call. Enough to claim, read, heartbeat, open its pull request and
 // hand the job on; nothing that writes a document or touches a repo directly.
-export const RUNNER_TOOLS = ["jobs", "read", "list", "search", "brief", "open_pr", "improve_status"] as const;
+const RUNNER_TOOLS = ["jobs", "read", "list", "search", "brief", "open_pr", "improve_status"] as const;
 
 // Clock skew allowed on iat and nbf. exp gets none.
 const SKEW_SECONDS = 60;
@@ -69,7 +69,7 @@ function b64urlBytes(part: string): Uint8Array {
 
 /** Verify a GitHub Actions OIDC token's signature and time claims. The claims about
  *  WHICH run it is are checked by the caller, against GitHub. */
-export async function verifyGithubOidc(token: string, now: Date): Promise<{ ok: true; claims: OidcClaims } | { ok: false; status: number; refusal: string }> {
+async function verifyGithubOidc(token: string, now: Date): Promise<{ ok: true; claims: OidcClaims } | { ok: false; status: number; refusal: string }> {
   const parts = token.split(".");
   if (parts.length !== 3) return { ok: false, status: 401, refusal: "the bearer is not a JWT" };
   const header = decodePart<{ alg?: string; kid?: string }>(parts[0]);
