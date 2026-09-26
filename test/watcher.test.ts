@@ -7,7 +7,6 @@ import { anchorDriftVerdict, driftVerdict } from "../src/improve-gates.ts";
 import { loopPauseReason } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import {
-  BLOCKED_STALE_HOURS,
   BUDGET_WARN_FRACTION,
   CI_RED_HOURS,
   DEFAULT_CADENCE_MINUTES,
@@ -21,7 +20,6 @@ import {
   healthFindings,
   passDue,
   runPass,
-  staleBlockedFindings,
   statusFindings,
   identityFindings,
   mirrorFindings,
@@ -96,7 +94,6 @@ test("a corrupt stamp RUNS the pass rather than blocking it forever", () => {
 test("A HEALTHY SURFACE PRODUCES NO FINDING AT ALL", () => {
   // The innocent case first: every assertion below depends on it.
   assert.deepEqual(healthFindings(HEALTHY, HEALTHY.sha, HEALTHY.schema_version, "capsid"), []);
-  assert.deepEqual(staleBlockedFindings([], NOW), []);
   assert.deepEqual(ciFindings("capsid", [{ head_sha: "abc1234", status: "completed", conclusion: "success", created_at: hoursAgo(9) }], NOW), []);
   assert.deepEqual(
     statusFindings(
@@ -140,15 +137,6 @@ test("a backup older than the window, and one that never ran, are different find
 test("a live schema behind the newest migration is a finding", () => {
   const found = healthFindings(HEALTHY, HEALTHY.sha, "0017_something_new.sql", "capsid");
   assert.deepEqual(found.map((f) => f.fingerprint), ["schema-behind-0017_something_new.sql"]);
-});
-
-test("a blocked job over the window is a finding, and one under it is not", () => {
-  const row = { id: "job_abc", namespace: "capsid", title: "a job", result_summary: "stopped at the push\n\nRun this:", updated_at: hoursAgo(BLOCKED_STALE_HOURS + 1) };
-  const found = staleBlockedFindings([row], NOW);
-  assert.deepEqual(found.map((f) => f.fingerprint), ["blocked-job_abc"]);
-  assert.match(found[0].body, /stopped at the push/);
-  assert.doesNotMatch(found[0].body, /Run this:/, "a finding carries the headline, not the whole resume command");
-  assert.deepEqual(staleBlockedFindings([{ ...row, updated_at: hoursAgo(BLOCKED_STALE_HOURS - 1) }], NOW), []);
 });
 
 test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
@@ -300,7 +288,6 @@ test("every fingerprint the checks produce has an owning check", () => {
   const stale = new Date(NOW.getTime() - 999 * 3_600_000);
   const all: Finding[] = [
     ...healthFindings({ ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: 99 } }, "0360787", "0099_x.sql", "capsid"),
-    ...staleBlockedFindings([{ id: "job_z", namespace: "foxing", title: "t", result_summary: null, updated_at: hoursAgo(99) }], NOW),
     ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
     ...statusFindings(
       {
@@ -315,7 +302,7 @@ test("every fingerprint the checks produce has an owning check", () => {
     ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }], ["foxing"], []),
     ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }, { namespace: "foxing", block: "b", report: "a" }], [], []),
   ];
-  assert.equal(all.length, 17, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
+  assert.equal(all.length, 16, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
   for (const f of all) assert.ok(owningCheck(f.fingerprint), `${f.fingerprint} has no owning check, so a failed read would clear it`);
 });
 
@@ -378,7 +365,6 @@ test("the fingerprint round-trips through the title, which is what deduplicates"
 test("DERIVED: every finding this module can produce carries a readable fingerprint", () => {
   const all: Finding[] = [
     ...healthFindings({ ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: null } }, "0360787", "0099_x.sql", "capsid"),
-    ...staleBlockedFindings([{ id: "job_z", namespace: "foxing", title: "t", result_summary: null, updated_at: hoursAgo(99) }], NOW),
     ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
   ];
   assert.ok(all.length >= 5, `the scan produced only ${all.length} findings; it is reading nothing`);
@@ -426,5 +412,5 @@ test("newestMigration takes the last by name, and ignores what is not a migratio
   assert.equal(newestMigration([]), null);
 });
 
-// openWatcherFingerprints, clearFinding and readStaleBlocked are driven against seeded
+// openWatcherFingerprints and clearFinding are driven against seeded
 // jobs rows on a real D1 in test-integration/watcher.test.ts.
