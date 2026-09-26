@@ -36,9 +36,9 @@ test("one row per pull request the evidence named", () => {
   assert.equal(statements.length, 2);
   assert.equal(recorded.length, 2);
   assert.match(recorded[0].sql, /INSERT INTO job_outcome_prs/);
-  // merged and merge_verified_at are NULL literals in the VALUES list, not bound
-  // params, so the statement binds exactly the two identifying columns.
-  assert.deepEqual(recorded[0].params, ["job_1", "https://github.com/o/r/pull/1"]);
+  // With no merge state read for them, merged and merge_verified_at bind NULL: nobody
+  // counted, never 0. A read state is covered in test-integration/outcome-prs.test.ts.
+  assert.deepEqual(recorded[0].params, ["job_1", "https://github.com/o/r/pull/1", null, null]);
 });
 
 test("a repeated pull request is written once, because a batch conflict would abort the outcome write", () => {

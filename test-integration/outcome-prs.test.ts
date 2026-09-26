@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { dueForReverify, reverifyPr, reverifyStatements, reverifySweep } from "../src/outcome-prs";
+import { dueForReverify, outcomePrStatements, reverifyPr, reverifyStatements, reverifySweep } from "../src/outcome-prs";
 
 // OUTCOME MERGE STATE, AGAINST A REAL D1 (job_3e1596235513).
 //
@@ -120,5 +120,23 @@ describe("reverifySweep", () => {
     const pr = await env.DB.prepare("SELECT merged FROM job_outcome_prs WHERE job_id = 'job_seed'").first<{ merged: number | null }>();
     expect(pr?.merged, "a scraped URL was counted before GitHub was asked").toBeNull();
     expect((await outcomeRow("job_seed"))?.prs_merged).toBe(0);
+  });
+});
+
+describe("outcomePrStatements", () => {
+  it("records the merge state of each pull request complete read, and leaves an unread one for the sweep", async () => {
+    await outcome("job_partial");
+    const read = { [PR(1)]: true, [PR(3)]: false };
+    await env.DB.batch(outcomePrStatements(env.DB, "job_partial", [PR(1), PR(2), PR(3)], read, NOW));
+    const { results } = await env.DB.prepare("SELECT pr_url, merged, merge_verified_at FROM job_outcome_prs WHERE job_id = 'job_partial' ORDER BY pr_url").all();
+    expect(results).toEqual([
+      { pr_url: PR(1), merged: 1, merge_verified_at: NOW.toISOString() },
+      // Unread is NULL, never 0: nobody counted it.
+      { pr_url: PR(2), merged: null, merge_verified_at: null },
+      { pr_url: PR(3), merged: 0, merge_verified_at: NOW.toISOString() },
+    ]);
+    // The sweep still picks the unread one up, and the closed one, as before.
+    const due = (await dueForReverify(ENV, NOW)).map((r) => r.pr_url).sort();
+    expect(due).toEqual([PR(2), PR(3)]);
   });
 });

@@ -190,9 +190,9 @@ test("an unmerged pull request is counted as opened and not as merged", async ()
   });
 });
 
-test("PLANT: a pull request GitHub will not answer for leaves EVERY count unverified", async () => {
-  // One of two pull requests resolving would give a merged count over a subset
-  // presented as a total.
+test("a pull request GitHub will not answer for leaves prs_opened, commits and files unverified", async () => {
+  // A merged count over the subset read is kept and verified; the total named stays
+  // unverified, so the merged count is never read as a total.
   const second = "/repos/DrDustinEdwards/capsid-mcp/pulls/8";
   await withFetch(
     { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${second}`]: { status: 404, text: "nope" } },
@@ -201,14 +201,16 @@ test("PLANT: a pull request GitHub will not answer for leaves EVERY count unveri
         prs: [PR_URL, "https://github.com/DrDustinEdwards/capsid-mcp/pull/8"],
         commits: 2,
       });
+      assert.equal(verdict.prs_opened, 2);
       assert.equal(verdict.verified.prs_opened, false);
-      assert.equal(verdict.verified.prs_merged, false);
+      assert.equal(verdict.prs_merged, 1);
+      assert.equal(verdict.verified.prs_merged, true);
       assert.equal(verdict.verified.commits, false);
       assert.equal(verdict.commits, 2, "the driver's number survives; it is the FLAG that must not");
-      assert.ok(
-        verdict.notes.some((n) => /1 of 2/.test(n)),
-        `the shortfall is not named in the notes: ${verdict.notes.join(" | ")}`
-      );
+      // The last named pull request was not read, so CI was not looked up.
+      assert.equal(verdict.ci_green, null);
+      assert.equal(signalFor(verdict), "environment-failure");
+      assert.ok(verdict.notes.some((n) => /1 of 2/.test(n)), `the shortfall is not named in the notes: ${verdict.notes.join(" | ")}`);
     }
   );
 });
@@ -447,4 +449,31 @@ test("signalForRow gives a stored row the answer signalFor gave its verdict", ()
   }
   // A verified column that does not parse verified nothing.
   assert.equal(signalForRow({ prs_opened: 1, prs_merged: 1, ci_green: 1, verified: "not json" }), "environment-failure");
+});
+
+// REPRODUCTION of the observed error: two readable pull requests and one in a repo
+// the namespace does not map (a claude-skills PR on a capsid job). Before the fix the
+// row recorded prs_merged null, ci_green null and every field unverified.
+test("one unreadable pull request does not erase what the readable ones verified", async () => {
+  const nine = "/repos/DrDustinEdwards/capsid-mcp/pulls/9";
+  await withFetch(
+    { [`GET ${PR_PATH}`]: prRoute(true, 2, 4), [`GET ${nine}`]: prRoute(true, 1, 2), [`GET ${RUNS_PATH}`]: greenRuns },
+    async () => {
+      const unreadable = "https://github.com/DrDustinEdwards/claude-skills/pull/17";
+      const ninth = "https://github.com/DrDustinEdwards/capsid-mcp/pull/9";
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL, unreadable, ninth], commits: 7 });
+      assert.equal(verdict.prs_opened, 3);
+      assert.equal(verdict.verified.prs_opened, false, "a total with an unread pull request in it was marked verified");
+      assert.equal(verdict.prs_merged, 2);
+      assert.equal(verdict.verified.prs_merged, true);
+      assert.equal(verdict.commits, 7, "a sum over some of the pull requests replaced the driver's total");
+      assert.equal(verdict.verified.commits, false);
+      assert.equal(verdict.ci_green, 1, "CI on the last named pull request, which was read");
+      assert.equal(verdict.verified.ci_green, true);
+      // Which pull requests were verified: the unread one is absent, never false.
+      assert.deepEqual(verdict.pr_states, { [PR_URL]: true, [ninth]: true });
+      // Partly read is not judged: neither a win nor a loss.
+      assert.equal(signalFor(verdict), "environment-failure");
+    }
+  );
 });
