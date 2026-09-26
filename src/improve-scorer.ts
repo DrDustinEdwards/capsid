@@ -6,18 +6,23 @@ import type { MetricMap } from "./improve-scores";
 // HMAC, not operator key: an /ops/ path would invite adding the operator-key check.
 export const SCORE_PATH = "/improve/score";
 
-// Same HMAC auth as SCORE_PATH: a repo can mint read access to its own holdout prefix
-// and nothing else, so no long-lived S3 secret sits in any repo.
+// Same HMAC auth as SCORE_PATH, and not under /ops/ for the same reason. The
+// per-namespace key opens it, so a repo can mint read access to its own holdout prefix
+// and nothing else, and no long-lived S3 secret sits in any repo.
 export const CREDENTIAL_PATH = "/improve/holdout-credential";
 
-// Same envelope, signed with a backup-specific derived key, so it opens only
-// backups/json/ and no roster repo's score key opens it.
+// Same envelope, signed with a backup-specific key derived under its own context, so
+// the mirror job's key opens read access to backups/json/ on the media bucket and
+// nothing on the improve side, and no roster repo's score key opens it.
 export const BACKUP_CREDENTIAL_PATH = "/backup/credential";
 
-// A signature older than this is refused, which bounds replay.
+// A signature older than this is refused. It bounds replay to the window in which a
+// report is still plausibly in flight; a CI job that takes over half an hour to POST
+// its own result has a different problem.
 export const SIGNATURE_MAX_AGE_MS = 30 * 60 * 1000;
 
-// A score report is a few hundred bytes; this leaves wide headroom.
+// A score report is a few hundred bytes of numbers. This is three orders of magnitude
+// of headroom and still refuses a body that is trying to be something else.
 export const MAX_REPORT_BYTES = 16_384;
 
 // Reads a body from the stream and aborts once it exceeds `max` bytes, so an
@@ -50,9 +55,12 @@ export async function readBoundedText(
   return { ok: true, text: new TextDecoder().decode(joined) };
 }
 
-// Claims a report's nonce, or refuses it. An INSERT against the primary key is atomic
-// (a KV get-then-put lets two racing copies of one request both pass): a returned row
-// means this call claimed it. RETURNING, not meta.changes. Fails closed on a database
+// Claims a report's nonce, or refuses it. The database decides, not the code. A KV
+// get-then-put has nothing atomic between its round trips, so two requests carrying one
+// captured signature both read absent and both proceed, and with the signature valid 30
+// minutes either side, a captured POST could be replayed for an hour on all three signed
+// endpoints. An INSERT against the primary key has no such window: a returned row means
+// this call claimed the nonce. RETURNING, not meta.changes. Fails closed on a database
 // error, because these endpoints move the improve state machine.
 export async function claimJti(
   db: D1Database,
@@ -79,16 +87,20 @@ export async function claimJti(
   }
 }
 
-// IMPROVE_SCORE_SECRET never leaves the Worker. Each repo holds only
-// HMAC(root, "capsid-improve-score:v1:<namespace>"), so a leaked repo secret authorises
-// that namespace alone. Bumping the version segment rotates every derived key.
+// One Worker secret, N repo secrets. IMPROVE_SCORE_SECRET never leaves the Worker.
+// Each repo holds only HMAC(root, "capsid-improve-score:v1:<namespace>"), so a secret
+// leaking from one repo's Actions logs authorises that namespace alone, and rotating
+// one namespace does not touch the rest. The version segment is in the derivation
+// string so rotating every derived key at once is a one-character change here rather
+// than a new secret and five re-pastes.
 export async function deriveScoreKey(rootSecret: string, namespace: string): Promise<string> {
   return hmacHex(rootSecret, `capsid-improve-score:v1:${namespace}`);
 }
 
 // The backup mirror's key: the same root under a different context string, so it
-// differs from every score key. scripts/improve-derive-key.mjs --backup-credential
-// computes the same value.
+// differs from every namespace score key by construction and rotates with the same
+// version bump. scripts/improve-derive-key.mjs --backup-credential computes the same
+// value to set the repo secret.
 export async function deriveBackupCredentialKey(rootSecret: string): Promise<string> {
   return hmacHex(rootSecret, "capsid-backup-credential:v1");
 }
@@ -98,24 +110,31 @@ export interface ScoreReport {
   run_id: string;
   attempt_id: string;
   head_sha: string;
-  // Per-report nonce inside the signed body; claimJti rejects a reuse.
+  // Per-report nonce, inside the signed body so it cannot be swapped. claimJti records
+  // it in improve_jti, keyed on (scope, jti) with the namespace as scope, so a captured
+  // signed report cannot be posted twice. The workflow generates a fresh uuid per post.
   jti: string;
   anchors: MetricMap;
   secondary: MetricMap;
-  // What CI says it ran, checked against the manifest CI cannot write.
+  // What CI says it ran, checked against the manifest: the half CI cannot forge without
+  // also having write access to the holdout bucket.
   holdout: { total: number; passed: number };
-  // Whether the machine worked, as distinct from the score: a holdout container that
-  // failed to start gives a "0 of N" that reads like every hidden test breaking.
-  // Absent means fine, the safe default, since this field only moves an attempt out
-  // of being judged. parseScoreReport always fills it in.
+  // Whether the machine worked, as distinct from how the attempt scored. The scorer sets
+  // ok: false when a step that had to run did not, such as a holdout container that
+  // failed to start: its clean "0 of N" reads exactly like an attempt breaking every
+  // hidden test. Absent means fine, so an older workflow's report still parses and a
+  // hand-built report need not know the field. That is the safe direction: the default
+  // is to judge the attempt, and this field only moves an attempt out of being judged.
+  // parseScoreReport always fills it in.
   environment?: { ok: boolean; reason: string | null };
   ci_minutes: number;
 }
 
 export type ReportParse = { ok: true; report: ScoreReport } | { ok: false; refusal: string };
 
-// Numbers or null, nothing else. Anything else is refused rather than coerced, so a
-// string is never compared to a number.
+// Numbers or null, nothing else. A string, or an object with its own toString, is
+// refused rather than coerced: coercion is how a scorer ends up comparing a string to a
+// number and reporting an improvement that is a sort order.
 function metricMap(raw: unknown, field: string): { ok: true; map: MetricMap } | { ok: false; refusal: string } {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, refusal: `${field} must be an object of metric names to numbers` };
@@ -229,7 +248,8 @@ async function verifyHmac(
   const at = Date.parse(signed.timestamp);
   if (Number.isNaN(at)) return { ok: false, status: 400, refusal: "missing or unparseable timestamp header" };
   const age = now.getTime() - at;
-  // Both directions: a future timestamp is as much a replay handle as a past one.
+  // Both directions: a future timestamp is as much a replay handle as a past one. The
+  // tolerance is sized for a few minutes of clock skew.
   if (age > SIGNATURE_MAX_AGE_MS || age < -SIGNATURE_MAX_AGE_MS) {
     return { ok: false, status: 401, refusal: `${opts.ageNoun} timestamp is ${Math.round(age / 1000)}s from now, outside the accepted window` };
   }
@@ -241,7 +261,9 @@ async function verifyHmac(
   return { ok: true };
 }
 
-// Every failure path refuses; nothing missing admits a report.
+// Every failure path refuses; nothing missing admits a report. Any missing or
+// unauthenticated score is treated as a revert, which is what the caller does with a
+// refusal.
 export async function verifySignedReport(
   env: Pick<Env, "IMPROVE_SCORE_SECRET">,
   signed: SignedRequest,
@@ -274,16 +296,19 @@ export async function readHoldoutManifest(env: Env, namespace: string): Promise<
   }
 }
 
-// Every roster namespace's manifest, for the nightly dump. A manifest is a count and a
-// date, never a test, so the backup discloses nothing. Here rather than in
-// src/backup.ts because only this module may name the HOLDOUT binding.
+// Every roster namespace's manifest, for the nightly dump: the only copy of the hidden
+// suites' sizes outside one R2 bucket, whose loss makes every namespace refuse. A
+// manifest is a count and a date, never a test, so the backup discloses nothing. Here
+// rather than in src/backup.ts because only this module may name the HOLDOUT binding
+// (test/improve-holdout.test.ts).
 export async function readHoldoutManifests(env: Env): Promise<Record<string, HoldoutManifest | null>> {
   const manifests: Record<string, HoldoutManifest | null> = {};
   for (const namespace of ROSTER) {
     try {
       manifests[namespace] = await readHoldoutManifest(env, namespace);
     } catch {
-      // A null rather than a throw, so the D1 dump is not lost.
+      // A bucket that cannot be read is a null beside the others rather than a thrown
+      // backup: the D1 dump is the part that must not be lost.
       manifests[namespace] = null;
     }
   }
@@ -294,16 +319,18 @@ export interface HoldoutVerdict {
   ok: boolean;
   refusal: string | null;
   // True when the hidden suite did not arrive (no manifest, an empty one, a short
-  // count): the attempt is left unjudged. An impossible count is a broken or forged
-  // report and is not environmental, or it would be a free escape from judgement.
+  // count): the attempt is left unjudged rather than blamed for tests that never ran.
+  // An impossible count is a broken or forged report and is not environmental: unjudged
+  // costs an attempt nothing, so it would be a free escape from judgement.
   environmental: boolean;
   // Computed from the manifest's total, not the report's, so running 3 of 11 tests
   // and passing all 3 is not 1.0.
   passRate: number | null;
 }
 
-// No manifest is a refusal, or a namespace with no holdout set would score like one
-// with a passing set.
+// No manifest is a refusal. Trusting the report's own total would let a namespace with
+// no holdout set score like one with a passing set, and the anchor would become
+// decorative for whichever namespace forgot to upload it.
 export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreReport): HoldoutVerdict {
   if (!manifest) {
     return {
@@ -313,7 +340,9 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
       passRate: null,
     };
   }
-  // Zero tests is a refusal too: an empty hidden suite scores 1.0 by arithmetic.
+  // Zero tests is a refusal too: an empty hidden suite scores 1.0 by arithmetic, so a
+  // manifest saying total: 0 would pass the one anchor the loop rests on with no hidden
+  // test running. An empty manifest is indistinguishable from a forgotten suite.
   if (manifest.total === 0) {
     return {
       ok: false,
@@ -352,7 +381,8 @@ export function checkHoldout(manifest: HoldoutManifest | null, report: ScoreRepo
 // only this module). The temp-access-credentials API scopes by name, not binding.
 export const HOLDOUT_BUCKET_NAME = "capsid-improve-holdout";
 
-// The score job pulls the suite within minutes of asking.
+// The score job pulls the suite within minutes of asking; an hour is generous
+// headroom and far under the API's 7-day ceiling.
 export const HOLDOUT_CREDENTIAL_TTL_SECONDS = 3600;
 
 function parseJsonBody(body: string): { ok: true; parsed: unknown } | { ok: false; refusal: string } {
@@ -399,9 +429,11 @@ export interface HoldoutCredential {
   expires_in: number;
 }
 
-// The one call to the temp-access-credentials API: object-read-only, one hour, one
-// bucket, one prefix. The Worker holds only the parents' access key ids and the mint
-// token, all outside AttemptEnv, like the HOLDOUT binding.
+// The one call to the temp-access-credentials API, shared by the holdout and backup
+// mints: object-read-only, one hour, one bucket, one prefix, derived from the named
+// parent token. The parents' secrets never leave the dashboard. The Worker holds only
+// their access key ids and the mint token, all outside AttemptEnv, like the HOLDOUT
+// binding.
 async function mintScopedCredential(
   env: Env,
   scope: { bucket: string; prefix: string; parentAccessKeyId: string }
@@ -460,7 +492,8 @@ export async function mintHoldoutCredential(
   });
 }
 
-// Named for the same reason as the holdout bucket. Matches the R2 pin in bindings.mjs.
+// Named for the same reason as the holdout bucket. Matches the R2 pin in bindings.mjs;
+// the two cannot drift without the off-account mirror going dark loudly.
 export const BACKUP_BUCKET_NAME = "capsid-media";
 export const BACKUP_DUMP_PREFIX = "backups/json/";
 
@@ -491,7 +524,9 @@ export function parseBackupCredentialRequest(body: string): { ok: true; jti: str
   return jtiOf(json.parsed);
 }
 
-// Verified under the same rules as a score report, against the backup-specific key.
+// Verified under the same rules as a score report (window both directions, timing-safe
+// compare, refuse on anything missing), against the backup-specific key, so no roster
+// repo's score key opens this and this key opens nothing on the improve side.
 export async function verifyBackupCredentialRequest(
   env: Pick<Env, "IMPROVE_SCORE_SECRET">,
   signed: { timestamp: string; signature: string; body: string },

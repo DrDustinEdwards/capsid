@@ -43,8 +43,9 @@ export interface BudgetCaps {
   month?: string;
 }
 
-// The commit a namespace is known good at (where to restore to) plus the scores that
-// made it best (what a later run is compared against).
+// The commit a namespace is known good at plus the scores that made it best. Both
+// halves are needed: the sha says where to restore to, the snapshot says what a later
+// run is compared against.
 export interface BestRecord {
   sha: string;
   run_id: string;
@@ -61,8 +62,10 @@ export interface BestRecord {
 export const HOLDOUT_PREFIX = "improve/holdout/";
 export const holdoutManifestKey = (namespace: string) => `${HOLDOUT_PREFIX}${namespace}/manifest.json`;
 
-// The Worker never reads the holdout tests (CI pulls them from R2), only their count,
-// so a report claiming fewer holdout tests than the manifest lists is refused.
+// The Worker never reads the holdout tests: CI pulls those straight from R2 with its own
+// read-only token. The Worker reads only the count, and that is what makes a score
+// report checkable. A report claiming 3 holdout tests passed when the manifest says 11
+// exist is refused, so deleting the failing holdout tests is not a way to score well.
 export interface HoldoutManifest {
   namespace: string;
   total: number;
@@ -84,7 +87,8 @@ export const PROMPTS_PREFIX = "improve/prompts/";
 export const SKILLS_PREFIX = "improve/skills/";
 
 // The autonomy policy documents. Not under improve/, because they govern the work
-// queue and the merge path as well as the loop.
+// queue and the merge path as well as the loop, and a reader looking for what the
+// machine may do alone should not need to know the loop exists to find them.
 export const POLICY_PREFIX = "policy/";
 
 
@@ -102,7 +106,8 @@ export const RUN_STATUSES = [
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
 // Finished; no tick touches the run again. Must match the partial unique index in
-// migrations/0003_improve.sql (test/improve-state.test.ts asserts it).
+// migrations/0003_improve.sql (test/improve-state.test.ts asserts it): a terminal
+// status added here and not there would let two active runs exist for one namespace.
 export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = ["done", "paused"];
 
 export const RUN_CONDITIONS = ["full", "no-memory", "no-transfer"] as const;
@@ -128,8 +133,12 @@ export const ATTEMPT_STATUSES = [
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
 // Attempts per run, per namespace, because a scorer run costs a different number of
-// billed minutes in each repo (SCORER_BILLED_MINUTES). capsid is 10 because it is a
-// public repo and its runs are not billed; the others spend a fixed monthly allowance.
+// billed minutes in each repo (SCORER_BILLED_MINUTES). capsid is 10 because its runs
+// cost nothing, not because it is trusted more: GitHub bills no Actions minutes for a
+// public repo. Every other number is bought from a 2,000-minute month that is a hard
+// stop rather than a bill, and at the measured rates one attempt across the four billed
+// namespaces costs 19.2 minutes. Raising one without re-measuring spends an allowance
+// nobody is watching.
 const ATTEMPT_CAPS: Record<RosterNamespace, number> = {
   capsid: 10,
   dustinedwards: 2,
@@ -144,12 +153,15 @@ export function maxAttemptsFor(namespace: string): number {
 }
 
 // A repo GitHub bills nothing for adds nothing to the minutes meter, which counts
-// billed minutes only. For such a repo the binding cap is model_usd_month.
+// billed minutes only. capsid's scorer runs take 2.3 minutes each and cost nothing;
+// counting that wall clock would pause the entire roster after roughly 13 nights over
+// minutes nobody was charged for. For such a repo the binding cap is model_usd_month.
 export function isFreeOfCharge(namespace: string): boolean {
   return (FREE_ROSTER as readonly string[]).includes(namespace);
 }
 
-// Billed minutes per scorer run (per job, rounded up, summed). Held against the cap at
+// Billed minutes per scorer run, in the unit GitHub bills in (per job, rounded up,
+// summed), measured over the 78 runs of one monthly cycle. Held against the cap at
 // dispatch, so a scorer in flight counts, and replaced by the reported figure later.
 const SCORER_BILLED_MINUTES: Record<RosterNamespace, number> = {
   capsid: 0,
@@ -166,36 +178,48 @@ export function estimatedScorerMinutes(namespace: string): number {
 }
 
 // What a reported scorer duration adds to the monthly meter; free repos add nothing.
-// The report is wall clock, not billed minutes. Reading the billed figure from the
-// Actions API would put an outbound call on the ingest path, so the gap is accepted.
+// The report is wall clock across the scorer's two jobs, not billed minutes. Reading
+// the billed figure from the Actions API would put an outbound call on the ingest path,
+// and the revert path is worth more network-free than the meter is worth exact.
 export function meteredMinutes(namespace: string, reported: number): number {
   if (isFreeOfCharge(namespace)) return 0;
   return Number.isFinite(reported) && reported > 0 ? reported : 0;
 }
 
-// Billed namespaces open one per night, rotating. Free ones open every night.
+// Billed namespaces open one per night, rotating, so a night costs one namespace's
+// attempts rather than four. Free ones are not in the rotation and open every night.
 const FREE_ROSTER = ["capsid"] as const;
 const BILLED_ROTATION = ["foxhound", "dustinedwards", "foxing", "germomics"] as const;
 
-// Keyed on the UTC day number, so two openers on one night agree and a night the
-// loop was off does not shift the order.
+// Keyed on the UTC day number so the answer is a pure function of the date: two
+// openers on one night agree, and a night the loop was off does not shift the order
+// for every night after it.
 export function scheduledFor(now: Date): RosterNamespace[] {
   const day = Math.floor(now.getTime() / 86_400_000);
   return [...FREE_ROSTER, BILLED_ROTATION[day % BILLED_ROTATION.length]];
 }
 
 // After this many reverts in a row the run restores to improve:best and stops.
-// Consecutive, not cumulative: alternating keep and revert is slow progress.
+// Consecutive, not cumulative: a run alternating keep and revert is learning slowly, a
+// run reverting five times running has lost the thread.
 export const MAX_CONSECUTIVE_REVERTS = 5;
 
 // After this many unjudged attempts in a row (the scorer's environment failed) the
-// run stops without restoring, since nothing was measured. Lower than the revert
-// ceiling on purpose: a retry into a broken machine buys no information, and an
-// attempt that crashes the scorer to escape judgement must not escape the revert
-// counter by doing so.
+// run stops without restoring, since nothing was measured about the code.
+//
+// Lower than the revert ceiling on purpose, for two reasons. A revert at least bought
+// a measurement, but an unjudged attempt bought nothing, so more dispatches into a
+// machine that is still broken spend CI minutes and model cost to learn the same
+// nothing. Two retries ride out a transient runner eviction or a registry blip, which
+// is what most of these are. And unjudged costs an attempt nothing: it is not counted
+// and its skill is not marked, so an attempt that could tell it was about to fail
+// would rather crash the scorer, which is within reach of code the container runs. It
+// cannot get the attempt kept, so the most it buys is escaping the revert counter, and
+// a ceiling below that counter's takes the escape back.
 export const MAX_CONSECUTIVE_UNJUDGED = 3;
 
-// The scorer never produced a verdict: 'timed-out' is no report, 'unjudged' is a report
+// The scorer never produced a verdict. Two spellings, because the two failures are
+// worth telling apart in the record: 'timed-out' is no report, 'unjudged' is a report
 // saying its environment failed. Downstream treats them identically, through this list.
 export const UNJUDGED_STATUSES = ["unjudged", "timed-out"] as const;
 
@@ -220,8 +244,9 @@ export function isUnjudged(status: string): boolean {
 // test/workflow-policy.test.ts derives both sides and fails if they drift apart.
 export const SCORE_TIMEOUT_MS = 50 * 60 * 1000;
 
-// A run alive this long finalizes wherever it is, so it cannot hold the namespace's
-// one active-run slot when the next night's opener fires.
+// A run alive this long finalizes wherever it is. The nightly cadence is the reason: a
+// run still crawling at hour seven would hold the namespace's one active-run slot when
+// the next night's opener fires.
 export const RUN_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 // The drift gate. Over this share of reverts across the last three runs, or any
@@ -236,7 +261,9 @@ export const META_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 export type ModelStage = "triage" | "monitor" | "attempt" | "abstract" | "meta";
 
 export const MODEL_FOR: Record<ModelStage, string> = {
-  // Reading a diff and answering a bounded question. Bare aliases, not dated snapshots.
+  // Reading a diff and answering a bounded question. Bare aliases, not dated snapshots:
+  // the dated form resolves too, and pinning it here would make this file the one place
+  // a model upgrade has to be remembered.
   triage: "claude-haiku-4-5",
   monitor: "claude-haiku-4-5",
   // Writing the change.
@@ -350,5 +377,6 @@ export function chicagoHour(now: Date): number {
     hour12: false,
   }).format(now);
   // Some ICU versions render midnight as "24" and others as "00"; both mean zero.
+  // Normalizing keeps the opener from firing on a day boundary in one runtime only.
   return Number(hour) % 24;
 }

@@ -45,8 +45,9 @@ export async function signTaskBody(rootSecret: string, body: string): Promise<st
 export type TaskVerification = { ok: true; body: string } | { ok: false; reason: string };
 
 // The signature check alone. verifyTaskDoc adds an actor check because only the loop
-// writes a run document; a job is posted by a human seat, so for a job the signature
-// alone proves it went through `post`.
+// writes a run document. A job is posted by a human seat, so its audit actor is that
+// seat and only the signature proves it went through `post`. One implementation for
+// both callers, so the two cannot drift on what "signed" means.
 export async function verifySignedBody(
   rootSecret: string | undefined,
   stored: string,
@@ -99,9 +100,11 @@ export async function verifyTaskDoc(
   return verifySignedBody(rootSecret, stored, "task document");
 }
 
-// One reader for both signed policies (auto-merge.md and gates.md); each loader keeps
-// only what differs. It lives here because this file is already on the auto-merge
-// refused list as their verifier.
+// One reader for both signed policies (capsid/policy/auto-merge.md and gates.md). Both
+// are read, verified and parsed the same way, so a fix to that path is made once. Each
+// loader keeps only what differs: which document, and what its parsed lists must agree
+// with. It lives here because this file is already on the auto-merge refused list as
+// their verifier, so the same entry covers the reader.
 const POLICY_NAMESPACE = "capsid";
 
 /**
@@ -127,11 +130,15 @@ export async function readSignedPolicy(
 }
 
 // Anti-rollback. A signature proves the Worker signed these bytes once, not that they
-// are current: `restore` can put an older signed version back. So APP_KV records the
-// sha256 of the current signed body (plus its version, for the refusal text) and a
-// load refuses any other. The hash, not the version, because a lower version signed on
-// purpose must hold. sign_policy writes it before storing; a load writes it only when
-// no record exists yet.
+// are current. Every signed version stays in document_versions, and `restore` or a
+// plain write can put an older one back with its signature still verifying. So APP_KV
+// records, under policyPinKey(path), the sha256 of the current signed body (plus its
+// `- version:` for the refusal text), and a load refuses any other signed body.
+// The pin is the hash, not the version, because a lower version signed on purpose (the
+// seat withdrawing a change) must hold, and a higher version put back after it must
+// not. sign_policy writes it before storing the signed document, so the body it signs
+// becomes the only one that loads; re-signing the same body writes the same hash. A
+// load writes it only when no record exists yet, pinning the signed body stored then.
 export const policyPinKey = (path: string): string => `policy:signed:${path}`;
 
 export interface PolicyPin {
@@ -186,5 +193,6 @@ export function policyField(body: string, name: string): string | null {
   return line ? line.slice(line.indexOf(":") + 1).trim() : null;
 }
 
-// A backticked lowercase id at the head of a list item, so prose is not read as policy.
+// A check or class id: a backticked lowercase name at the head of a list item. Matching
+// the backticks, not any list item, keeps the prose around the list out of the policy.
 export const POLICY_ID_ITEM = /^- `([a-z_]+)`/;

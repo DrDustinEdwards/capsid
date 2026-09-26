@@ -18,8 +18,9 @@ import {
 
 export const IMPROVE_ACTOR = "improve-loop";
 
-// Unset, unrecognised or unreadable all resolve to off: wrongly running costs five
-// repos machine-authored branches, wrongly not running costs one quiet night.
+// Unset, unrecognised or unreadable all resolve to off. The asymmetry is deliberate:
+// wrongly running costs five repos machine-authored branches overnight, and wrongly
+// not running costs one quiet night.
 export async function readMode(kv: KVNamespace): Promise<{ mode: ImproveMode; reason: string | null }> {
   let raw: string | null;
   try {
@@ -33,7 +34,7 @@ export async function readMode(kv: KVNamespace): Promise<{ mode: ImproveMode; re
   return { mode: "off", reason: `${MODE_KEY} holds an unrecognised value; expected one of ${IMPROVE_MODES.join(", ")}` };
 }
 
-// A KV error also pauses, for the same reason as readMode.
+// A paused namespace is skipped. A KV error also pauses, for the same reason as readMode.
 export async function pausedReason(kv: KVNamespace, namespace: string): Promise<string | null> {
   try {
     return await kv.get(pausedKey(namespace));
@@ -42,13 +43,16 @@ export async function pausedReason(kv: KVNamespace, namespace: string): Promise<
   }
 }
 
-// No TTL: a human clears a pause, so it never resumes a namespace nobody has looked at.
+// No TTL. A pause is a decision that outlives any run and a human clears it by deleting
+// the key: an expiring pause would silently resume a namespace that was stopped for a
+// reason nobody has looked at yet.
 export async function pauseNamespace(kv: KVNamespace, namespace: string, reason: string): Promise<void> {
   await kv.put(pausedKey(namespace), reason);
 }
 
-// Defaults apply per field, and to an unreadable or malformed key, so a KV outage
-// never uncaps the loop.
+// Defaults apply per field: a partial value caps what it names and defaults the rest.
+// An unreadable or malformed key means the defaults apply rather than no cap at all, so
+// a KV outage never uncaps the loop.
 export async function readBudget(kv: KVNamespace): Promise<BudgetCaps> {
   try {
     const raw = await kv.get(BUDGET_KEY);
@@ -70,7 +74,9 @@ export async function readBudget(kv: KVNamespace): Promise<BudgetCaps> {
   }
 }
 
-// Spend since the budget month began, from the run rows, so an in-flight run counts.
+// Spend since the budget month began, from the run rows: cost_usd is the model estimate
+// the run recorded, ci_minutes the scorer-reported Actions time. Both accrue on the run
+// row as the run advances, so an in-flight run's spend counts too.
 export async function monthSpend(
   db: D1Database,
   monthStart: string
@@ -92,8 +98,8 @@ export async function readBest(kv: KVNamespace, namespace: string): Promise<Best
     const parsed = JSON.parse(raw) as BestRecord;
     return typeof parsed?.sha === "string" && parsed.sha.length > 0 ? parsed : null;
   } catch {
-    // Corrupt reads as absent, so the run branches from the default branch instead
-    // of wedging on one bad value.
+    // Corrupt reads as absent: the run branches from the default branch, a worse base
+    // but a safe one. Throwing would wedge every future run on one bad JSON value.
     return null;
   }
 }
@@ -115,8 +121,9 @@ export interface RunRow {
   ci_minutes: number;
   status: RunStatus;
   consecutive_reverts: number;
-  // Environment failures in a row, kept apart from consecutive_reverts because they
-  // say nothing about the code.
+  // Environment failures in a row: a scorer that never reported, a container that never
+  // finished, a hidden suite that never arrived. Kept apart from consecutive_reverts
+  // because they say nothing about the code.
   consecutive_unjudged: number;
   current_attempt: string | null;
   base_sha: string | null;
@@ -160,7 +167,8 @@ const ATTEMPT_COLUMNS =
   "status, branch, head_sha, base_sha, flagged, flag_reason, skill_id, anchors_json, secondary_json, dispatched_at, ts";
 
 // The one active run for a namespace, or null. The partial unique index in
-// migrations/0003_improve.sql is the guarantee; this read is the fast path.
+// migrations/0003_improve.sql makes "the one" true even when two ticks race; this read
+// is the fast path, not the guarantee.
 export async function activeRun(db: D1Database, namespace: string): Promise<RunRow | null> {
   return db
     .prepare(
@@ -203,8 +211,9 @@ export async function attemptsForRun(db: D1Database, runId: string): Promise<Att
 
 export interface Transition {
   runId: string;
-  // The update fires only if the run is still in this status; otherwise it is a
-  // no-op, which is what a replayed tick should be.
+  // The status the caller believes the run is in. The update fires only if it still
+  // is; passing the wrong one is not an error but a no-op, which is what a replayed
+  // tick should be.
   expected: RunStatus;
   next: RunStatus;
   patch?: Partial<
@@ -246,9 +255,12 @@ export async function advanceRun(db: D1Database, t: Transition): Promise<boolean
   return results.length === 1;
 }
 
-// The prior row is snapshotted into document_versions and audit_log gets a row, in the
-// same batch as the write (CLAUDE.md, snapshot rule), even for the loop's own
-// documents. Returns statements so a caller can batch them with its row update.
+// The loop writes documents under the same two invariants as every other write path
+// (CLAUDE.md, snapshot rule): the prior row is snapshotted into document_versions and
+// audit_log gets a row, in the same batch as the write, so all three land or none do.
+// This holds though nothing the loop writes is canon: an archive doc overwriting an
+// earlier one with no snapshot is the unrecoverable state the rule exists to prevent.
+// Returns statements so a caller can batch them with the row update they belong to.
 export async function improveDocStatements(
   db: D1Database,
   doc: {
@@ -262,17 +274,19 @@ export async function improveDocStatements(
     prior: { id: number; title: string | null; body: string | null } | null;
     action: string;
     // Who the audit row names. Defaults to the loop; the work queue passes the job's
-    // actor so its documents do not read as the loop's work.
+    // actor, because a job document written by an operator key must not read as the
+    // loop's work: audit_log is the one place that answers who did it.
     actor?: string;
   }
 ): Promise<D1PreparedStatement[]> {
-  // Server-side dash normalization, as the write tool applies.
+  // Server-side dash normalization, as the write tool applies. A model-written document
+  // is the likeliest source of an em dash in this store.
   const body = normalizeDashes(doc.body, "prose");
   const title = normalizeDashes(doc.title, "title");
 
   // The snapshot selects the live row inside the batch rather than binding doc.prior,
-  // so a write landing since that read is still snapshotted. With no row it inserts
-  // nothing.
+  // read earlier: a write landing in between (the job claim path waits on GitHub
+  // there) is still snapshotted. With no row it inserts nothing.
   const statements: D1PreparedStatement[] = [snapshotLive(db, doc.namespace, doc.path)];
   statements.push(
     db
@@ -306,7 +320,9 @@ export async function priorDoc(
     .first<{ id: number; title: string | null; body: string | null }>();
 }
 
-// An audit row for a loop action that is not a document write, under the same actor.
+// An audit row for a loop action that is not a document write (a run opening, a
+// namespace pausing, a scorer dispatch), under the same actor, so one query answers
+// what the loop did last night.
 export function improveAudit(
   db: D1Database,
   action: string,

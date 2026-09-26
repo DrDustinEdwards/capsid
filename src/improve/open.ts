@@ -37,7 +37,8 @@ import {
   type AttemptRow,
 } from "../improve-state";
 
-// A synthetic attempt id with no improve_attempts row, so attempt counts stay right.
+// A synthetic attempt id with no improve_attempts row. It measures the base and is not
+// an attempt at anything; giving it a row would make every attempt count off by one.
 export const baselineId = (runIdValue: string) => `${runIdValue}-baseline`;
 
 export async function readDoc(db: D1Database, namespace: string, path: string): Promise<string | null> {
@@ -60,7 +61,7 @@ export async function loadScores(env: Env, namespace: string): Promise<{ doc: Sc
 }
 
 // The metric map for a run's baseline or one attempt. One reader for both sides of a
-// comparison.
+// comparison, so the two sides can never be assembled two different ways.
 export async function metricsFor(db: D1Database, runIdValue: string, attemptIdValue: string | null): Promise<MetricMap> {
   const { results } = await db
     .prepare(
@@ -91,8 +92,10 @@ export function scoreStatements(
   );
 }
 
-// The loop's own hard stop, since Cloudflare's budget alerts cannot stop a Worker:
-// monthly caps from KV, checked by the opener and the tick before they act.
+// The loop's own hard stop, since Cloudflare's budget alerts are informational and
+// cannot stop a Worker: monthly caps on Actions minutes and model spend, read from KV
+// so they change without a deploy (defaults 300 minutes and $50), and checked by the
+// opener and the tick before they open or advance anything.
 export interface BudgetStatus {
   month: string;
   caps: { actions_minutes_month: number; model_usd_month: number };
@@ -124,8 +127,10 @@ export async function checkBudget(env: Env, now: Date): Promise<BudgetStatus> {
 }
 
 // Returns the refusal reason when a cap is exceeded, after pausing every roster
-// namespace not already paused. The pause makes the stop visible in improve_status
-// and holds against a code path that forgets to ask.
+// namespace not already paused, so a five-minute tick does not rewrite the same KV
+// keys forever. The pause is deliberate double coverage: the opener and tick refuse
+// on their own, and the pause makes the stop visible in improve_status and holds
+// against a code path that forgets to ask.
 export async function enforceBudget(env: Env, now: Date): Promise<string | null> {
   const budget = await checkBudget(env, now);
   if (!budget.exceeded) return null;
@@ -144,7 +149,8 @@ export interface OpenOutcome {
   namespace: string;
   opened: boolean;
   runId: string | null;
-  // The commit a run would branch from. Set by the dry run only.
+  // The commit a run would branch from. Set by the dry run only, because that is the
+  // question a dry run answers; a real run records it on the row.
   base?: string | null;
   note: string;
 }
@@ -165,7 +171,9 @@ export async function openRuns(
   condition: RunCondition = DEFAULT_CONDITION
 ): Promise<OpenSummary> {
   const { mode, reason } = await readMode(env.APP_KV);
-  // One billed namespace per night plus the free one (scheduledFor).
+  // One billed namespace per night plus the free one (scheduledFor). Opening every
+  // namespace each night costs 19.2 billed minutes per attempt; the rotation costs one
+  // namespace's worth. `only` still names a single namespace explicitly.
   const namespaces = only ? [only] : scheduledFor(now);
 
   // An exceeded cap opens nothing.
@@ -214,7 +222,8 @@ export async function openOne(
   const { doc, refusal } = await loadScores(env, namespace);
   if (refusal) {
     if (preview) return { namespace, opened: false, runId: null, note: `would refuse: ${refusal}` };
-    // Written as a task document a human will see, not only logged.
+    // Written as a task document a human will see, not only logged: where a check
+    // cannot run, block and name the reason (capsid/conventions.md).
     await writeTaskDoc(env, namespace, now, `# improve is blocked in ${namespace}\n\n${refusal}\n`);
     await env.DB.batch([improveAudit(env.DB, "improve-refused", namespace, { refusal })]);
     return { namespace, opened: false, runId: null, note: refusal };
