@@ -18,6 +18,7 @@ import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { commandFromSummary, failJob } from "./jobs-holder";
+import { isRunnerActor } from "./seat-start";
 import type { JobSkills } from "./job-outcomes";
 import {
   actorShapeRefusal,
@@ -428,7 +429,9 @@ export async function resumeJob(
       ? `${holder} holds ${held.id} ('${held.title}' in ${held.namespace}), so ${id} went back to the queue for the next free session.`
       : !isMintedActor(holder)
         ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
-        : null;
+        : await isRunnerActor(env.DB, holder)
+          ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
+          : null;
   if (held && !toQueue) {
     return refuse("resume", `${holder} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. Finish it before resuming another.`);
   }

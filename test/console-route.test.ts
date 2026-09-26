@@ -129,6 +129,7 @@ test("the shell renders with ZERO namespaces rather than throwing on an empty ro
       },
       protected_paths: [],
       policies: { gates: { version: "1", enabled: true }, auto_merge: { version: "3", enabled: true } },
+      seat_start: { enabled: false, max_sessions: 1, in_flight: null },
       agents: [],
       namespaces: [],
     },
