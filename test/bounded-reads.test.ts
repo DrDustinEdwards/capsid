@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
-import { sourceFile } from "./source-files.ts";
+import { allSourceText, sourceFile } from "./source-files.ts";
 
 // Every read is bounded, and says so when it cut, so a caller cannot mistake the
 // first page for the whole answer.
@@ -260,12 +260,14 @@ test("a small resource listing carries no cursor", async () => {
 test("the resources/list override cannot silently drop a statically registered resource", async () => {
   // The handler below replaces the one McpServer installs, which also serves
   // resources registered by URI rather than by template. This notices if one is added.
-  const text = sourceFile("server.ts");
+  // Counted across all of src/, so a registration added in another module is seen.
   assert.equal(
-    text.split("server.registerResource(").length - 1,
+    allSourceText().split("server.registerResource(").length - 1,
     1,
     "a second resource registration exists; the ListResources override serves only the document template"
   );
+  const text = sourceFile("resources.ts");
+  assert.equal(text.split("server.registerResource(").length - 1, 1, "the document template is no longer registered in src/resources.ts");
   assert.match(text, /setRequestHandler\(ListResourcesRequestSchema/, "the paginating list handler is gone");
 });
 
