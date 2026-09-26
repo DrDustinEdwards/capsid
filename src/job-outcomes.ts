@@ -79,7 +79,10 @@ const skillColumn = (ids: readonly string[] | undefined): string | null =>
  * retire a skill.
  */
 export function signalFor(verdict: EvidenceVerdict): RunSignal {
-  const checked = verdict.verified.prs_merged && verdict.verified.ci_green;
+  // prs_opened is verified only when every named pull request was read. A partly read
+  // run is not judged: a pull request the Worker could not read is never counted as a
+  // loss, and never as a win either.
+  const checked = verdict.verified.prs_opened && verdict.verified.prs_merged && verdict.verified.ci_green;
   if (!checked || verdict.prs_opened === null || verdict.prs_opened === 0) return "environment-failure";
   const allMerged = verdict.prs_merged !== null && verdict.prs_merged === verdict.prs_opened;
   return allMerged && verdict.ci_green === 1 ? "verified-success" : "verified-failure";
@@ -157,6 +160,10 @@ export interface EvidenceVerdict {
   verified: VerifiedFields;
   // Every verification that could not run, and why.
   notes: string[];
+  // Each named pull request's merge state as GitHub reported it, keyed by URL. A URL
+  // the Worker could not read is absent, never false. Written to job_outcome_prs at
+  // complete time, so the row says which pull requests were verified.
+  pr_states?: Record<string, boolean>;
 }
 
 export async function prFacts(env: Env, namespace: string, url: string): Promise<PrFacts | string> {
@@ -274,18 +281,44 @@ export async function verifyEvidence(
   if (urls.length === 0) return verdict;
 
   const facts: PrFacts[] = [];
+  const read = new Map<string, PrFacts>();
   for (const url of urls) {
     const one = await prFacts(env, namespace, url);
     if (typeof one === "string") verdict.notes.push(one);
-    else facts.push(one);
+    else {
+      facts.push(one);
+      read.set(url, one);
+    }
   }
+  verdict.pr_states = Object.fromEntries([...read].map(([url, f]) => [url, f.merged]));
 
-  // Partial verification is not verification: a count over the subset that resolved
-  // would be a smaller number presented as a total.
+  // A partly read list keeps what was read. prs_merged counts the pull requests that
+  // were read and is marked verified, as the re-verification sweep already does.
+  // prs_opened stays the number named and UNVERIFIED, so no reader takes the merged
+  // count for a total: the agent record's merge rate reads only rows whose prs_opened
+  // is verified, and signalFor leaves the run unjudged. Commits and files stay the
+  // driver's, since a sum over some of the pull requests is not the job's total.
   if (facts.length !== urls.length) {
+    if (facts.length > 0) {
+      verdict.prs_merged = facts.filter((f) => f.merged).length;
+      verdict.verified.prs_merged = true;
+    }
     verdict.notes.push(
-      `${facts.length} of ${urls.length} named pull requests could be read, so the counts below are the driver's own and are marked unverified.`
+      `${facts.length} of ${urls.length} named pull requests could be read. prs_merged counts the ${facts.length} read and is verified; prs_opened, commits and files_changed stay the driver's and unverified, and the run is not judged.`
     );
+    // CI on the last named pull request, when that one was read.
+    const lastUrl = urls[urls.length - 1];
+    const lastRead = read.get(lastUrl);
+    if (!lastRead) {
+      verdict.notes.push(`the last named pull request (${lastUrl}) could not be read, so CI was not looked up`);
+      return verdict;
+    }
+    const partialCi = await ciGreenForSha(env, namespace, lastRead.head_sha, lastRead.repo);
+    if (partialCi.note) verdict.notes.push(partialCi.note);
+    if (partialCi.green !== null) {
+      verdict.ci_green = partialCi.green ? 1 : 0;
+      verdict.verified.ci_green = true;
+    }
     return verdict;
   }
 

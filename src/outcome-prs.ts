@@ -16,8 +16,16 @@ const REVERIFY_PER_SWEEP = 50;
 // merge silently, and re-reading it forever would make a bounded job unbounded.
 const REVERIFY_WINDOW_DAYS = 30;
 
-/** One row per pull request the evidence named, written in the same batch as the outcome. */
-export function outcomePrStatements(db: D1Database, jobId: string, urls: readonly string[]): D1PreparedStatement[] {
+/** One row per pull request the evidence named, written in the same batch as the outcome.
+ *  A pull request complete could read carries its merge state and the time it was read;
+ *  one it could not read stays NULL, for the sweep to retry. */
+export function outcomePrStatements(
+  db: D1Database,
+  jobId: string,
+  urls: readonly string[],
+  states: Record<string, boolean> = {},
+  now?: Date
+): D1PreparedStatement[] {
   // Deduplicated here: a PRIMARY KEY conflict would abort the outcome's whole batch.
   const seen = new Set<string>();
   const statements: D1PreparedStatement[] = [];
@@ -25,13 +33,14 @@ export function outcomePrStatements(db: D1Database, jobId: string, urls: readonl
     const trimmed = url.trim();
     if (trimmed.length === 0 || seen.has(trimmed)) continue;
     seen.add(trimmed);
+    const at = now && Object.hasOwn(states, trimmed) ? now.toISOString() : null;
     statements.push(
       db
         .prepare(
           `INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at)
-           VALUES (?1, ?2, NULL, NULL) ON CONFLICT (job_id, pr_url) DO NOTHING`
+           VALUES (?1, ?2, ?3, ?4) ON CONFLICT (job_id, pr_url) DO NOTHING`
         )
-        .bind(jobId, trimmed)
+        .bind(jobId, trimmed, at ? (states[trimmed] ? 1 : 0) : null, at)
     );
   }
   return statements;
