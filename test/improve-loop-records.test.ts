@@ -148,7 +148,10 @@ test("a skill transition whose audit row fails does not move the status, and the
   const d1 = fakeD1(opts);
   d1.rows.improve_skills.push({ id: "fading", status: "live", version: 1, source_namespace: "capsid" });
   d1.rows.skill_evaluations.push(negative("01"), negative("02"));
-  const env = fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv });
+  const kv = fakeKv({ seedToken: true }).kv;
+  // Transitions are held unless the switch says apply; this test is about applying one.
+  await kv.put("skills:transitions", "apply");
+  const env = fakeEnv({ DB: d1.db, APP_KV: kv });
 
   await assert.rejects(() => runEvaluationCycle(env, NOW), /database is locked/);
   assert.equal(d1.rows.improve_skills[0].status, "live", "the status moved although its audit row was never written");

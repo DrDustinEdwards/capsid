@@ -154,7 +154,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
   await client.close();
   const served = tools.find((tool) => tool.name === "improve_run")?.inputSchema.properties?.action as { enum?: string[] } | undefined;
   const actions = served?.enum ?? [];
-  assert.equal(actions.length, 9, "improve_run's action list changed");
+  assert.equal(actions.length, 10, "improve_run's action list changed");
   const expected: Record<string, string> = {
     run: "write",
     claim: "write",
@@ -165,6 +165,7 @@ test("improve_run: run and claim are a driver's work and every other action is a
     mint_operator_key: "admin",
     sign_policy: "admin",
     register_skill: "admin",
+    skill_transitions: "admin",
   };
   for (const action of actions) {
     assert.ok(Object.hasOwn(expected, action), `improve_run gained action '${action}'; decide its requirement here and in TOOL_ACTION_GRANTS`);

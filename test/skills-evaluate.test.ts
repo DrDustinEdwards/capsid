@@ -4,6 +4,7 @@ import {
   CADENCE_KEY,
   DEFAULT_CADENCE_DAYS,
   LAST_CYCLE_KEY,
+  TRANSITIONS_KEY,
   MIN_CADENCE_DAYS,
   cadenceDays,
   cycleDue,
@@ -110,7 +111,9 @@ test("transitions are still applied, and the cycle dispatches nothing at all", a
   // The cycle no longer dispatches a probe per surviving skill, so the property is
   // that transitions still apply and neither skill produces a dispatch.
   await withFetch(DISPATCH_ROUTES, async (calls) => {
-    const { env: e, fake } = cycleEnv();
+    const { env: e, fake, kv } = cycleEnv();
+    // Transitions are held unless the switch says apply; this test is about applying them.
+    await kv.kv.put(TRANSITIONS_KEY, "apply");
     fake.rows.improve_skills.push(
       { id: "fading", status: "live", version: 1, source_namespace: "capsid" },
       { id: "fresh", status: "candidate", version: 1, source_namespace: "capsid" }
