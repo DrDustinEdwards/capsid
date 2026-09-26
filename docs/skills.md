@@ -90,17 +90,34 @@ documents; counting them as losses would retire every skill on the ordinary work
 portfolio. A skill id that does not exist is refused rather than dropped, and so is one
 named as used but not as offered.
 
-NO STATUS MOVES YET, AND THE REASON HAS CHANGED. Wins and losses now accumulate from
-verified job outcomes. What still does not exist is a way to count them AT THE CURRENT
-VERSION: `improve_skills.wins` and `losses` are cumulative counters that carry no
-version and are never reset, so they cannot answer "two results at version 3", which is
-the bar this document states and which is what makes the edit bound matter.
-`dueTransitions` therefore still reads only `skill_evaluations`, and
-`evaluationStatement` still has no production caller, so no candidate has yet been
-promoted. Having `dueTransitions` read wins and losses was part 3 of job_6464e6d62063,
-and Dustin dropped it on 2026-09-23. Status moves on evaluations only, and wins and
-losses are recorded but do not move a status. The options that were considered are in
-pull request #77.
+EVALUATIONS COME FROM VERIFIED JOB OUTCOMES, since 2026-09-26. The fortnightly cycle
+writes one `skill_evaluations` row per candidate or live skill when enough new runs
+exist. The measure (`probe_set_version` `job-outcomes-used-vs-offered-unused-v1`): among
+jobs offered the skill at its current version (the Worker's `job-skills-offered`
+records), the verified success rate of those whose driver reported using it, minus the
+verified success rate of those that were offered it and did not. A run the Worker could
+not verify counts in neither group. An evaluation needs at least 5 verified used runs and
+at least one verified offered-but-unused run since the skill's last evaluation, and a
+run is counted once. Each evaluation also writes a `skill-evaluated` audit row with the
+four counts behind the delta.
+
+THIS IS NOT A CONTROLLED COMPARISON, and anything reporting it must say so. A session
+chooses when to use a skill, so the used and unused groups differ in more than the skill:
+a driver may use it on exactly the jobs it expected to go well, or badly. The delta is an
+observed association, not an effect.
+
+STATUS CHANGES ARE HELD during the observation window (Dustin, 2026-09-26). The cycle
+records evaluations and reports the transitions they decide as `held`, and applies
+none, unless APP_KV `skills:transitions` reads `apply`. An unset key, any other value
+and an unreadable KV all mean hold. When the window closes, the seat (admin) runs
+`improve_run` action `skill_transitions` with `value: "apply"`, which is audited as
+`skill-transitions-set`; the next cycle then applies what the stored evaluations
+decide. `value: "hold"` sets it back. `improve_skills.wins` and `losses` are still
+recorded from each verified run and still move no status.
+
+FAILURE NOTES. A failed job, or a complete the Worker verified as a loss, writes one
+`skill_failures` note per skill the run reported using, from its reason or summary.
+`offerSkills` attaches the two newest to the next offer. They move no status.
 
 The console carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute

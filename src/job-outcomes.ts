@@ -85,6 +85,30 @@ export function signalFor(verdict: EvidenceVerdict): RunSignal {
   return allMerged && verdict.ci_green === 1 ? "verified-success" : "verified-failure";
 }
 
+/** signalFor over a stored outcome row, for the evaluation cycle, which reads rows
+ *  rather than live verdicts. It builds the verdict fields the row kept and calls
+ *  signalFor, so the two cannot disagree. A verified column that does not parse
+ *  verified nothing, which earns no credit either way. */
+export function signalForRow(row: Pick<JobOutcomeRow, "prs_opened" | "prs_merged" | "ci_green" | "verified">): RunSignal {
+  let verified: VerifiedFields = NOTHING_VERIFIED;
+  try {
+    const parsed = JSON.parse(row.verified) as Partial<VerifiedFields>;
+    verified = { ...NOTHING_VERIFIED, ...parsed };
+  } catch {
+    verified = NOTHING_VERIFIED;
+  }
+  return signalFor({
+    prs_opened: row.prs_opened,
+    prs_merged: row.prs_merged,
+    ci_green: row.ci_green,
+    commits: null,
+    files_changed: null,
+    tests_added: null,
+    verified,
+    notes: [],
+  });
+}
+
 const NOTHING_VERIFIED: VerifiedFields = {
   prs_opened: false,
   prs_merged: false,
