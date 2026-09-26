@@ -6,6 +6,7 @@ import {
   outcomeFrom,
   resultKindOf,
   signalFor,
+  signalForRow,
   verifyEvidence,
   type EvidenceVerdict,
 } from "../src/job-outcomes.ts";
@@ -426,4 +427,24 @@ test("a job that named no pull request earns nothing, rather than a loss", () =>
   // losses, every skill would retire on the ordinary work of the portfolio.
   assert.equal(signalFor(verdictWith({ prs_opened: null, prs_merged: null, ci_green: null })), "environment-failure");
   assert.equal(signalFor(verdictWith({ prs_opened: 0, prs_merged: 0 })), "environment-failure");
+});
+
+test("signalForRow gives a stored row the answer signalFor gave its verdict", () => {
+  // The evaluation cycle judges stored rows; a row and the verdict it came from must
+  // never disagree.
+  const cases: Array<Partial<EvidenceVerdict>> = [
+    {},
+    { prs_opened: 2, prs_merged: 1 },
+    { ci_green: 0 },
+    { prs_opened: 0 },
+    { verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false } },
+    { ci_green: null, verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: false } },
+  ];
+  for (const over of cases) {
+    const v = verdictWith(over);
+    const row = { prs_opened: v.prs_opened, prs_merged: v.prs_merged, ci_green: v.ci_green, verified: JSON.stringify(v.verified) };
+    assert.equal(signalForRow(row), signalFor(v), JSON.stringify(over));
+  }
+  // A verified column that does not parse verified nothing.
+  assert.equal(signalForRow({ prs_opened: 1, prs_merged: 1, ci_green: 1, verified: "not json" }), "environment-failure");
 });

@@ -1,3 +1,4 @@
+import { TRANSITIONS_KEY, transitionMode, type TransitionMode } from "./skills-evaluate";
 import { sha256Hex } from "./auth";
 import { bytesToHex } from "./encoding";
 import type { Env } from "./env";
@@ -394,6 +395,7 @@ export async function improveRunManual(
 // grant; every other action is admin.
 export type ImproveControlResult =
   | { action: "mode"; requested: string; mode: ImproveMode; mode_note: string | null }
+  | { action: "skill_transitions"; requested: string; mode: TransitionMode }
   | { action: "pause" | "unpause"; namespaces: string[]; paused: Record<string, string | null> }
   | { action: "budget"; caps: BudgetCaps }
   | {
@@ -422,7 +424,7 @@ export type ImproveControlResult =
 
 export async function improveControl(
   env: Env,
-  action: "mode" | "pause" | "unpause" | "budget" | "mint_operator_key" | "claim",
+  action: "mode" | "pause" | "unpause" | "budget" | "mint_operator_key" | "claim" | "skill_transitions",
   opts: {
     value?: string;
     namespace?: string;
@@ -510,6 +512,19 @@ ${next.join(",")}`,
       expires_in_seconds: DRIVER_LEASE_TTL_SECONDS,
       reason: null,
     };
+  }
+
+  // Whether the skills evaluation cycle applies the status changes its evaluations
+  // decide, or holds them (the observation window). Admin only, audited, and read
+  // back through the resolver the cycle uses.
+  if (action === "skill_transitions") {
+    const value = (opts.value ?? "").trim().toLowerCase();
+    if (value !== "hold" && value !== "apply") {
+      throw new Error(`skill_transitions must be "hold" or "apply"; got '${opts.value ?? ""}'. Nothing was changed.`);
+    }
+    await env.APP_KV.put(TRANSITIONS_KEY, value);
+    await env.DB.batch([improveAudit(env.DB, "skill-transitions-set", null, { mode: value })]);
+    return { action: "skill_transitions", requested: value, mode: await transitionMode(env) };
   }
 
   if (action === "mode") {

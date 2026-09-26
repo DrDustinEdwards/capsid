@@ -13,7 +13,7 @@ import {
 import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
-import { attributionStatements } from "./skills-records";
+import { attributionStatements, failureNoteStatements } from "./skills-records";
 import { skillsForOutcome } from "./job-skill-offers";
 import {
   outcomeFrom,
@@ -142,13 +142,22 @@ async function holderTransition(
     // The credit comes from the verified signal and nowhere else. The driver names
     // offered and used; signalFor reads merge state and CI as this Worker read them off
     // GitHub. An unverifiable job earns nothing in either direction.
+    const signal = signalFor(verdict);
     statements.push(
       ...attributionStatements(env.DB, {
         offered: patch.skills?.offered ?? [],
         used: patch.skills?.used ?? [],
-        signal: signalFor(verdict),
+        signal,
       })
     );
+    // A failed job, or one the Worker verified as a loss, leaves a note on each skill
+    // the run used. offerSkills hands the newest notes out with the next offer; nothing
+    // reads them for status.
+    if (job.status === "failed" || signal === "verified-failure") {
+      statements.push(
+        ...failureNoteStatements(env.DB, job.namespace, { kind: "job", id: job.id }, patch.skills?.used ?? [], patch.result_summary ?? "")
+      );
+    }
   }
   try {
     await env.DB.batch(statements);
