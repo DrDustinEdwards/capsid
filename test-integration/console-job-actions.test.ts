@@ -13,7 +13,7 @@ const SECRET = "console-test-cookie-secret";
 const SIGNING = "improve-score-root-secret";
 const CSRF = "11111111-2222-3333-4444-555555555555";
 const NOW = new Date("2026-09-11T15:00:00Z");
-const DRIVER = legacyAgent("write", "opkey:aaaabbbbcccc");
+const DRIVER = legacyAgent("write", "agent:capsid-driver");
 
 function consoleEnv(db: D1Database = env.DB) {
   return { ...env, DB: db, COOKIE_ENCRYPTION_KEY: SECRET, IMPROVE_SCORE_SECRET: SIGNING } as unknown as Parameters<typeof handleConsoleAction>[1];
@@ -119,7 +119,7 @@ describe("resume_job", () => {
     const stored = await row(id);
     expect(stored?.status).toBe("claimed");
     // The admin's resume returns the lease to the driver that blocked it.
-    expect(stored?.claimed_by).toBe("opkey:aaaabbbbcccc");
+    expect(stored?.claimed_by).toBe("agent:capsid-driver");
     const rows = await audits();
     expect(rows.some((r) => r.action === "job-resumed" && r.params.includes(id))).toBe(true);
     const click = rows.find((r) => r.action === "console-resume_job");
@@ -201,7 +201,7 @@ describe("release_job", () => {
     expect(stored?.status).toBe("queued");
     expect(stored?.claimed_by).toBeNull();
     const rows = await audits();
-    expect(rows.some((r) => r.action === "job-released" && r.params.includes("opkey:aaaabbbbcccc"))).toBe(true);
+    expect(rows.some((r) => r.action === "job-released" && r.params.includes("agent:capsid-driver"))).toBe(true);
     const click = rows.find((r) => r.action === "console-release_job");
     expect(click?.actor).toBe("github:DrDustinEdwards");
     expect(click?.params).toContain("no session is running");
