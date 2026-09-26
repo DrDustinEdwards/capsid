@@ -122,7 +122,7 @@ list differs from it in either direction.
 - path `^src\/improve-scorer\.ts$` the only source that reads the holdout suite.
 - path `^test\/[^/]*holdout[^/]*$` a test that keeps the holdout suite away from attempt code.
 - path `^src\/gate-policy\.ts$` the gate policy source.
-- path `^src\/auto-merge\.ts$` the auto-merge source, which holds this list.
+- path `^src\/auto-merge(-(policy|tick))?\.ts$` the auto-merge source, which holds this list.
 - path `^src\/policy-sign\.ts$` the policy signer.
 - path `^src\/improve-schema\.ts$` the protected path list.
 - path `^src\/scope\.ts$` isMoneyPath, which is the whole of the paths_not_money check.

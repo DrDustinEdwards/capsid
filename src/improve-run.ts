@@ -20,7 +20,7 @@ import {
 } from "./improve-schema";
 import { verifyAnchors } from "./improve-scores";
 import { loadGatePolicy } from "./gate-policy";
-import { loadMergePolicy } from "./auto-merge";
+import { loadMergePolicy } from "./auto-merge-policy";
 import {
   IMPROVE_ACTOR,
   improveAudit,
@@ -43,7 +43,7 @@ import {
   type BudgetStatus,
   type OpenOutcome,
 } from "./improve/open";
-import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge";
+import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
 // The barrel. Only what something outside src/improve/ actually imports: src/index.ts

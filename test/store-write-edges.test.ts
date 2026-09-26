@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { signPolicyDocument } from "../src/policy-sign.ts";
-import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge.ts";
+import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
 // Dash normalization on append and patch, and the body guard on sign_policy.
