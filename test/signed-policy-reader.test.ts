@@ -47,9 +47,10 @@ test("neither policy loader reads, verifies or parses a policy field on its own"
   // Three spellings of a private copy: a direct documents query, a direct call to the
   // verifier, and a local field parser. Each file is read, so a scan that found no
   // file would fail on the read rather than pass with nothing checked.
-  const files = ["src/auto-merge.ts", "src/gate-policy.ts"];
+  // The auto-merge loader is two modules, read as one.
+  const files = ["src/auto-merge-policy.ts + src/auto-merge-tick.ts", "src/gate-policy.ts"];
   for (const file of files) {
-    const src = readFileSync(file, "utf8");
+    const src = file.split(" + ").map((path) => readFileSync(path, "utf8")).join("\n");
     assert.match(src, /readSignedPolicy\(/, `${file} does not read its policy through readSignedPolicy`);
     assert.doesNotMatch(src, /FROM documents/, `${file} queries the documents table itself`);
     assert.doesNotMatch(src, /verifySignedBody\(/, `${file} calls the verifier itself`);

@@ -8,7 +8,7 @@ import {
   AUTO_MERGE_REQUIRED_CI,
   POLICY_CHECKS,
   requiredCiLabel,
-} from "../src/auto-merge.ts";
+} from "../src/auto-merge-policy.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 

@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { dispatchWorkflow } from "../github";
-import { autoMergeTick } from "../auto-merge";
+import { autoMergeTick } from "../auto-merge-tick";
 import { runEvaluationCycle } from "../skills-evaluate";
 import { sweepIfDue } from "../outcome-prs";
 import { expireJobLeases } from "../jobs";
