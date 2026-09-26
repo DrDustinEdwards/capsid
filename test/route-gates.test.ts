@@ -7,6 +7,7 @@ import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgent, resolveAgent } from "../src/agents.ts";
 import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
 import { REPORT_PATH } from "../src/headers.ts";
+import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
 import {
   ROUTE_GRANTS,
@@ -97,6 +98,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   CONSOLE_PATH,
   CONSOLE_JSON_PATH,
   CONSOLE_CALLBACK_PATH,
+  RUNNER_KEY_PATH,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the

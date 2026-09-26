@@ -21,6 +21,9 @@ permissions:
   contents: write
   pull-requests: read
   issues: read
+  # For the Capsid key exchange below, and nothing else: the Action is given
+  # github_token, so it never exchanges an OIDC token of its own.
+  id-token: write
 
 jobs:
   session:
@@ -52,6 +55,38 @@ jobs:
           fi
           echo "id=$JOB_ID" >> "$GITHUB_OUTPUT"
 
+      # This run's GitHub OIDC token, traded at Capsid for a key bound to this one job
+      # (capsid/research/design-seat-session-hardening.md, section 2). No long-lived
+      # runner key exists. It runs before checkout and npm ci on purpose: every step can
+      # request an OIDC token, and Capsid issues one key per start, so the exchange is
+      # spent before any dependency's install script runs. The runner's own node, since
+      # setup-node has not run yet. The key is masked and written only to the file the
+      # session's MCP client reads.
+      - name: Exchange this run's OIDC token for a key bound to the job
+        env:
+          JOB_ID: ${{ steps.job.outputs.id }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            (async () => {
+              const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL, bearer = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+              if (!url || !bearer) { console.error("no OIDC request URL: the job needs id-token: write"); process.exit(1); }
+              const oidc = await fetch(url + "&audience=capsid", { headers: { Authorization: "bearer " + bearer } });
+              if (!oidc.ok) { console.error("GitHub refused the OIDC token request: " + oidc.status); process.exit(1); }
+              const token = (await oidc.json()).value;
+              const res = await fetch("https://capsid.dustin-edwards.workers.dev/ops/runner-key", {
+                method: "POST",
+                headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+                body: JSON.stringify({ job_id: process.env.JOB_ID }),
+              });
+              if (!res.ok) { console.error("Capsid refused the exchange (" + res.status + "): " + (await res.text()).slice(0, 300)); process.exit(1); }
+              const { key } = await res.json();
+              console.log("::add-mask::" + key);
+              const config = { mcpServers: { capsid: { type: "http", url: "https://capsid.dustin-edwards.workers.dev/ops/mcp", headers: { Authorization: "Bearer " + key } } } };
+              fs.writeFileSync(process.env.RUNNER_TEMP + "/capsid-mcp.json", JSON.stringify(config), { mode: 0o600 });
+            })().catch((err) => { console.error("the exchange failed: " + err.message); process.exit(1); });
+          '
+
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -67,19 +102,6 @@ jobs:
         run: |
           git config core.hooksPath /dev/null
           git config core.fsmonitor false
-
-      # The Capsid connection for the runner key, written to a file the session reads.
-      # The key is never printed.
-      - name: Write the Capsid MCP config
-        env:
-          CAPSID_RUNNER_KEY: ${{ secrets.CAPSID_RUNNER_KEY }}
-        run: |
-          node -e '
-            const fs = require("fs");
-            const key = process.env.CAPSID_RUNNER_KEY || "";
-            if (!/^\S{20,}$/.test(key)) { console.error("CAPSID_RUNNER_KEY is missing or malformed"); process.exit(1); }
-            fs.writeFileSync(process.env.RUNNER_TEMP + "/capsid-mcp.json", JSON.stringify({ mcpServers: { capsid: { type: "http", url: "https://capsid.dustin-edwards.workers.dev/ops/mcp", headers: { Authorization: "Bearer " + key } } } }));
-          '
 
       # The subscription token and nothing else: an ANTHROPIC_API_KEY in the
       # environment would outrank it and bill the API.
