@@ -16,15 +16,13 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// THE VOCABULARY OF A SCOPED CREDENTIAL, guarded the way every other list in this
-// Worker is: the table, the tool and the enforcement point all read one module, and
-// this file asserts that module against the migration that stores it.
+// The vocabulary of a scoped credential: the table, the tool and the enforcement point
+// all read one module, and this file asserts that module against the migration that
+// stores it.
 //
-// The property that matters most here is the one a scope system gets wrong silently:
-// PARSING FAILS CLOSED. A scopes column that is empty, truncated, malformed, or
-// carrying a type nobody expected has to resolve to the least privilege there is, not
-// to "no restrictions found, allow everything". A permissive parse of a corrupt row is
-// indistinguishable from a working one until the day it matters.
+// Parsing fails closed. A scopes column that is empty, truncated, malformed, or of an
+// unexpected type resolves to the least privilege there is, not to "no restrictions
+// found, allow everything".
 
 const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0008_agents.sql"), "utf8");
 

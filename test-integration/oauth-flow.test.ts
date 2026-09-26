@@ -4,12 +4,10 @@ import worker from "../src/index";
 import { APPROVAL_MAX_AGE_SECONDS } from "../src/approval";
 import { checkRate, REGISTRATION_LIMIT } from "../src/rate-limit";
 
-// THE CONSENT AND CALLBACK FLOW, AS A BROWSER DRIVES IT (job_3e1596235513).
-//
-// These replace tests in test/oauth-flow.test.ts that read src/routes.ts and
-// src/index.ts as text, because node cannot load either. Here the Worker's own fetch
-// handler is called, the consent form is read out of the dialog and posted back, and
-// GitHub's token endpoint is stubbed, so nothing leaves the test.
+// The consent and callback flow, as a browser drives it. Node cannot load
+// src/routes.ts or src/index.ts, so this runs here: the Worker's own fetch handler is
+// called, the consent form is read out of the dialog and posted back, and GitHub's
+// token endpoint is stubbed, so nothing leaves the test.
 
 const ORIGIN = "https://capsid.test";
 const HTTPS_REDIRECT = "https://client.example.com/callback";

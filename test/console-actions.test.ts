@@ -4,21 +4,16 @@ import { handleConsoleAction } from "../src/console-actions.ts";
 import { consoleSessionCookie } from "../src/console-auth.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
-// GROUP 4: THE ACTIONS.
+// The console actions. Every control has the same shape: admin session, CSRF, a
+// confirm step that states what is about to happen, then the shared mutator the MCP
+// tool calls, then an audit row naming the human who clicked.
 //
-// Five controls, and the shape of every one is the same: admin session, CSRF, a
-// confirm step that states what is about to happen, then the SHARED mutator that the
-// MCP tool already calls, then an audit row naming the human who clicked.
+// The console never merges a pull request (a merge can start a CI deploy, and
+// manage_pr gates it behind can_merge) and never mints a credential; a page reachable
+// with a cookie is the wrong place for either. Both are tested as absences.
 //
-// TWO THINGS THE CONSOLE MUST NOT DO, and they are tested as absences rather than
-// left to good intentions: it never merges a pull request (a merge can start a CI
-// deploy in two of these repos, and manage_pr is where that decision lives behind a
-// caller holding can_merge), and it never mints a credential. A page reachable with a
-// cookie is the wrong place for either.
-//
-// THE CONFIRM IS A SECOND REQUEST, not a hidden field. A hidden field the form always
-// sends confirms nothing: the browser sends it whether or not a person read the page.
-// A first POST renders what will happen and changes nothing; only the second one,
+// The confirm is a second request, not a hidden field the browser always sends. A
+// first POST renders what will happen and changes nothing; only the second one,
 // carrying the same CSRF, performs it.
 
 const SECRET = "console-test-cookie-secret";
@@ -182,8 +177,8 @@ test("pause writes the KV pause key AND an audit row naming the admin who clicke
   assert.ok(audits.length >= 1, "pause wrote no audit row");
   const consoleRow = audits.find((r) => r.params.some((p) => typeof p === "string" && p.startsWith("console-")));
   assert.ok(consoleRow, `no console audit row: ${JSON.stringify(audits.map((a) => a.params))}`);
-  // THE HUMAN IS THE ACTOR. improveControl writes its own row as improve-loop, which
-  // records that a pause happened and not who asked for it.
+  // The human is the actor: improveControl's own row says improve-loop, which records
+  // that a pause happened and not who asked for it.
   assert.ok(
     consoleRow.params.includes("github:DrDustinEdwards"),
     `the console audit row does not name the admin: ${JSON.stringify(consoleRow.params)}`

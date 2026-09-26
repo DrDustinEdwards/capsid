@@ -4,10 +4,9 @@ import { test } from "node:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// CLOUDFLARE PLATFORM PINS (arc of 2026-09-06, from
-// capsid/references/cloudflare-changes-2026-09.md). Each block guards one
-// platform deadline or contract so a regression is a red test, not an outage
-// discovered on the deadline day.
+// Cloudflare platform pins (capsid/references/cloudflare-changes-2026-09.md). Each
+// block guards one platform deadline or contract, so a regression is a failing
+// test rather than an outage on the deadline day.
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -17,7 +16,7 @@ function filesUnder(dir: string, ext: RegExp): Array<{ path: string; text: strin
     .map((name) => ({ path: `${dir}/${name}`, text: readFileSync(join(ROOT, dir, name), "utf8") }));
 }
 
-// ---- KV REST routes (legacy path dead 2026-10-15) ---------------------------
+// KV REST routes (the legacy path stops working 2026-10-15)
 
 // Assembled, not written literally, so this file cannot trip its own guard.
 const LEGACY_KV_ROUTE = ["workers", "namespaces"].join("/");
@@ -42,7 +41,7 @@ test(`no Cloudflare API call uses the legacy KV route /${LEGACY_KV_ROUTE}/ (dead
   }
 });
 
-// ---- compatibility date and toolchain pins -----------------------------------
+// compatibility date and toolchain pins
 
 test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", () => {
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
@@ -52,18 +51,17 @@ test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", 
   const inBindings = /export const COMPATIBILITY_DATE = "(\d{4}-\d{2}-\d{2})"/.exec(bindings);
   assert.ok(inBindings, "scripts/bindings.mjs no longer exports COMPATIBILITY_DATE");
   assert.equal(inExample[1], inBindings[1], "the example and bindings.mjs disagree on the compatibility date");
-  // The date must stay at or past nodejs_compat's default-on threshold, or the
-  // explicit flag in the example stops being redundant and starts being load-bearing.
+  // The date must stay at or past nodejs_compat's default-on threshold, so the
+  // explicit flag in the example stays redundant rather than required.
   assert.ok(inExample[1] >= "2026-08-04", `compatibility date ${inExample[1]} fell behind the nodejs_compat default threshold`);
 });
 
-// ---- the per-invocation CPU ceiling ------------------------------------------
+// the per-invocation CPU ceiling
 
 test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
-  // The example is what CI writes wrangler.jsonc from; bindings.mjs is what the
-  // scripts read. Two spellings of one measured number (backup max 1390ms CPU
-  // plus 50%), pinned textually (bindings.mjs is untyped .mjs) so a retune of
-  // one cannot silently leave the other.
+  // CI writes wrangler.jsonc from the example; the scripts read bindings.mjs. Two
+  // spellings of one number, pinned textually (bindings.mjs is untyped .mjs) so a
+  // retune of one cannot silently leave the other.
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const inExample = /"limits":\s*\{\s*"cpu_ms":\s*(\d+)\s*\}/.exec(example);
   assert.ok(inExample, "wrangler.jsonc.example no longer sets limits.cpu_ms: the runaway guard is gone");

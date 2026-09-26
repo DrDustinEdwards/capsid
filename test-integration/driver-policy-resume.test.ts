@@ -6,7 +6,7 @@ import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/improve-task";
 
-// RULED 2026-09-16: THE DRIVER PUSHES ITS OWN BRANCH AND OPENS ITS OWN PULL REQUEST.
+// The driver pushes its own branch and opens its own pull request.
 //
 // On a real D1: a driver claims a job, reaches a branch push, blocks with the command,
 // and sends the job back in on the signed gate policy with no human in between. The
@@ -68,7 +68,7 @@ async function resumedAudit(id: string) {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
   await env.DB.prepare("DELETE FROM job_outcomes").run();
-  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  // jobs post requires a registered namespace.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%' OR path = ?1").bind(GATE_POLICY_PATH).run();

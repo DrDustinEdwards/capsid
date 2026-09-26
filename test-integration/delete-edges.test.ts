@@ -4,16 +4,12 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server";
 
-// A DELETE RECORDS THE EDGES IT REMOVES, INCLUDING ONE ADDED JUST BEFORE ITS BATCH
-// (audit 2026-09-25, item E1-6, finding F1-5). The delete handler used to read the
-// edges before the batch, so an edge written between that read and the batch was
-// removed by pathMutation and never recorded. The audit row is the only place a
-// deleted document's edges survive.
+// A delete records the edges it removes, including one added just before its batch.
+// The audit row is the only place a deleted document's edges survive.
 //
-// This is here rather than in test/ because the edges are now recorded by an
-// INSERT ... SELECT json_group_array inside the batch, and the node fake does not
-// evaluate that SQL. The race is staged by wrapping the real D1: the first batch()
-// call inserts an edge and then runs the handler's batch unchanged.
+// The edges are recorded by an INSERT ... SELECT json_group_array inside the batch,
+// which the node fake does not evaluate. The race is staged by wrapping the real D1:
+// the first batch() call inserts an edge and then runs the handler's batch unchanged.
 
 const EDGE = { from_ns: "sample", from_path: "other.md", type: "references", to_ns: "sample", to_path: "gone.md" };
 

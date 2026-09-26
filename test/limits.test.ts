@@ -11,18 +11,10 @@ import {
 import { sourceFiles } from "./source-files.ts";
 
 // src/limits.ts: the document path grammar and the input bounds.
-//
-// This file used to hold five unrelated subjects (quality audit 6.6): the path
-// grammar, timingSafeEqual, the encoders, the REPORT_PREFIX dedupe and the
-// confirmation wiring. It was named after one of them, so four of the five were
-// findable only by reading it. They now live with the module they describe:
-// timingSafeEqual in auth.test.ts, the encoders in encoding.test.ts, and the
-// "one definition, imported rather than re-typed" guards in
-// source-conventions.test.ts.
 
 test("the grammar accepts the paths the store actually holds", () => {
-  // Shapes measured in the live store on 2026-08-17, including the longest path
-  // (83 chars) and the archive/ prefix that 219 of 536 documents carry.
+  // Shapes taken from the live store, including the longest path and the archive/
+  // prefix.
   for (const path of [
     "core.md",
     "conventions.md",
@@ -71,15 +63,8 @@ const isComment = (line: string) => line.startsWith("//") || line.startsWith("*"
 
 // scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
-  // Widened from server.ts to the whole directory (quality audit 1.1). An
-  // unbounded field is unbounded wherever it is declared, and the day a tool
-  // schema is written in another module a server.ts-only scan reports green over
-  // a surface it never read.
-  //
-  // Widening it made the rule state itself for the first time. Scanning one file,
-  // it never had to say what "bare z.string()" excludes; over the whole directory
-  // it does, and the answer is: not a comment, and not the two primitives in
-  // limits.ts that the rule is built out of.
+  // The whole directory, because a tool schema can be declared in any module.
+  // Excluded: comments, and the two primitives in limits.ts the rule is built from.
   const offenders = sourceFiles()
     .filter((f) => f.name !== "limits.ts")
     .flatMap((f) =>
@@ -100,11 +85,10 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
   assert.ok(all.split("docPath").length - 1 >= 8, "docPath is barely used, so the grammar is probably not wired up");
 });
 
-// ---- the repo fallthrough's bounds: how they relate to each other --------------
+// The repo fallthrough's bounds, relative to each other.
 
 test("the CI log budget is larger than the tail it replaced", () => {
-  // It replaced a 2000-character job tail. Smaller than that would be a regression
-  // dressed as a ruling, so the relationship is asserted rather than assumed.
+  // It replaced a 2000-character job tail.
   assert.ok(CI_LOG_BUDGET > 2000, "the new budget is smaller than the tail it replaced");
 });
 
@@ -117,13 +101,8 @@ test("the ci_dispatch poll fits inside its own timeout with room for several pol
   assert.ok(CI_DISPATCH_POLL_MS / CI_DISPATCH_POLL_INTERVAL_MS >= 5, "too few polls fit in the timeout");
 });
 
-// ---- result_ref: a document key OR a PR URL -----------------------------------
-//
-// The jobs tool's own description has advertised "a document key or a PR URL"
-// since the queue shipped, and the field was wired to `docPath`, which refuses
-// every URL on the '//' after the scheme. Two jobs recorded the defect in their
-// result_summary rather than in a result_ref, which is the measurement: the field
-// was unusable for exactly the value it names. Fixed 2026-09-11.
+// result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
+// the '//' after the scheme.
 
 test("result_ref takes the shapes the queue actually reports", () => {
   for (const ref of [
@@ -140,8 +119,7 @@ test("result_ref takes the shapes the queue actually reports", () => {
 test("result_ref refuses a non-https scheme, credentials and the path grammar's escapes", () => {
   const cases: Array<[string, RegExp]> = [
     ["", /must not be empty/],
-    // The scheme that makes a rendered link executable. The mirror document puts
-    // this value in front of a human who may click it.
+    // The mirror document shows this value to a human who may click it.
     ["javascript:alert(1)", /must not contain '\.\.'|https/],
     ["http://github.com/a/b/pull/1", /https/],
     // Credentials in a URL are a phishing shape, not a reference.

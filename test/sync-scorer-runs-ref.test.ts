@@ -6,22 +6,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { requireLanded, requireRemoteCurrent } from "../scripts/sync-scorer.mjs";
 
-// THE REF THE COPIER READ WAS NOT THE REF THE REPO RUNS.
+// The ref the copier compares must be the ref the repo runs.
 //
 // test/sync-scorer-stale.test.ts covers a clone that is behind its remote. This
-// covers the case one step further out, where the clone is perfectly current and the
-// ref being compared is simply the wrong one.
-//
-// Measured 2026-09-18, job_3bde47744566. dustinedwards-info was compared at
-// improve/capsid, the rollout branch the copier's own last run had written, so it
-// reported identical while main ran a comment-stripped scripts/improve-report.mjs
-// (a696dd63 against 6ab6cc8c). The watcher, which reads default branches, saw the
-// drift the copier could not. Comparing a copier against its own output agrees by
-// construction and proves nothing.
-//
-// The branch was also 64 commits behind main by then, so writing the fix into it
-// would have based the fix on a stale tree. Both halves are guarded here with real
-// git rather than described.
+// covers a current clone comparing the wrong ref: a rollout branch the copier wrote
+// itself agrees with the copier by construction, while the default branch may run
+// something else. A rollout branch behind the default branch is also a stale base to
+// write into. Both halves are driven with real git.
 
 function git(dir: string, ...args: string[]): string {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
@@ -64,8 +55,8 @@ function rollout() {
 }
 
 test("A ROLLOUT BRANCH BEHIND WHAT IT MERGES INTO IS REFUSED, and the refusal names the merge", () => {
-  // ONE FIXTURE, FOUR ASSERTIONS. Each fixture costs a bare init and two clones, and
-  // this file runs inside the unit suite's 60-second budget.
+  // One fixture, four assertions: each fixture costs a bare init and two clones, and
+  // this file runs inside the unit suite's time budget.
   const { root, work, use, commit } = rollout();
   try {
     // Non-vacuity: the branch really is behind, so the refusal below is the guard
@@ -82,12 +73,11 @@ test("A ROLLOUT BRANCH BEHIND WHAT IT MERGES INTO IS REFUSED, and the refusal na
       "a rollout branch behind its default branch was accepted as a place to write"
     );
 
-    // The innocent case: once the branch carries main, writing into it is sound. A
-    // guard that refuses the ordinary run is a guard somebody deletes.
+    // The innocent case: once the branch carries main, writing into it is sound.
     git(use, "merge", "origin/main", "-m", "merge main");
     requireLanded(use, "rollout", "main", "under-test");
 
-    // AND THE COMPARE REF IS CHECKED AGAINST THE REMOTE, NOT AGAINST THE CLONE.
+    // The compare ref is checked against the remote, not against the clone.
     // main here is owned by somebody else and cannot be moved from this tree, so
     // only the remote-tracking ref is asked, and it is asked of the remote.
     requireRemoteCurrent(use, "main", "under-test");

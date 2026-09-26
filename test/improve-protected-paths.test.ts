@@ -8,7 +8,7 @@ import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// Fix 6 (audit 2026-09-06): the ordinary write tool refuses the improve loop's
+// The ordinary write tool refuses the improve loop's
 // control surface (improve/prompts/, improve/skills/, and the Anchors block of
 // improve/scores.md) unless allow_improve_paths: true is passed, which is
 // audit-logged; read and brief surface the audit actor of every document.
@@ -26,7 +26,7 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
   (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
 const parse = (r: { content: Array<{ text: string }> }) => JSON.parse(r.content[0].text);
 
-// ---- the guard, in isolation ------------------------------------------------
+// the guard, in isolation
 
 test("improveWriteRefusal refuses the run prompt and skill docs without the flag", async () => {
   assert.ok(await improveWriteRefusal("capsid", "improve/prompts/run.md", "old", "new", false));
@@ -55,7 +55,7 @@ test("an ordinary document path is never touched by the guard", async () => {
   assert.equal(await improveWriteRefusal("capsid", "improve/README.md", "old", "new", false), null);
 });
 
-// ---- the guard through the write tool ---------------------------------------
+// the guard through the write tool
 
 test("write refuses improve/prompts/run.md and writes nothing (old code allowed it)", async () => {
   const { client, recorded, close } = await connect({
@@ -97,7 +97,7 @@ test("write with allow_improve_paths lands and records the flag in the audit par
   assert.equal(params.allow_improve_paths, true);
 });
 
-// ---- provenance on read and brief -------------------------------------------
+// provenance on read and brief
 
 test("read surfaces last_actor from the most recent audit entry (old code had no such field)", async () => {
   const { client, close } = await connect({
@@ -141,17 +141,11 @@ test("brief surfaces last_actor on core and on every task", async () => {
   assert.equal(task.last_actor, "some-other-client", "brief did not surface who wrote a task");
 });
 
-// ---- C1: the override is itself scoped, on delete and move ------------------
-//
-// Audit 2026-09-13, finding C1. write and restore asked ctx.scope for
-// can_touch_protected before honouring allow_improve_paths; delete and move did not,
-// so the opt-in alone was enough and the opt-in is the CALLER's to pass. A driver
-// minted as docs/bootstrap.md says to mint one (write on its own namespace, not one
-// flag) could delete or move improve/prompts/run.md, the loop's own instruction file.
-//
-// These go through callTool against a real MCP connection, because the defect was
-// never in improveWriteRefusal: that function was asked and answered "allowed",
-// correctly, since the opt-in was true. The missing call is the one above it.
+// The override is itself scoped, on delete and move: allow_improve_paths is the
+// caller's to pass, so it is honoured only with can_touch_protected. Otherwise a
+// driver with write and no flags could delete or move improve/prompts/run.md.
+// Driven through callTool, because improveWriteRefusal correctly answers "allowed"
+// when the opt-in is true; the scope call is the one before it.
 
 function driverAgent(namespace = "capsid", flags: ScopeFlag[] = []): Agent {
   const scopes = defaultScopes([namespace]);
@@ -214,9 +208,8 @@ test("move of the run prompt with allow_improve_paths needs can_touch_protected"
   assert.equal(recorded.length, 0, "a refused move still touched the store");
 });
 
-// THE INNOCENT DIRECTION, both halves. A guard that fires on a correct call gets
-// deleted rather than fixed, and there are two correct calls to keep alive here: the
-// same driver holding the flag, and any driver on a path the override does not reach.
+// The innocent direction, both halves: the same driver holding the flag, and any
+// driver on a path the override does not reach.
 
 test("a driver holding can_touch_protected may delete and move the run prompt", async () => {
   const holder = driverAgent("capsid", ["can_touch_protected"]);
@@ -259,17 +252,10 @@ test("the flag is asked for only when the opt-in is passed, on delete and move",
   assert.equal(moved.isError ?? false, false, moved.content[0]?.text);
 });
 
-// ---- F2: the override refusal on write and restore, which was never exercised ------
-//
-// Audit 2026-09-13, finding F2. The ctx.scope block on write and restore has been
-// there since the agents arc, and no test ever made it REFUSE: the only test that sets
-// allow_improve_paths uses buildServer(..., "write", ...), which is legacyAgent("write")
-// and holds every flag, so it takes the allowed branch every time. Deleting both lines
-// left the suite green. blast-radius.test.ts plants can_touch_protected on REPO writes,
-// which is the other guard of the same name.
-//
-// C1 added the same block to delete and move; these two are the pair that already
-// existed and had no plant.
+// The override refusal on write and restore. buildServer(..., "write", ...) is
+// legacyAgent("write") and holds every flag, so these use a flagless driver to make
+// the ctx.scope block refuse. blast-radius.test.ts plants can_touch_protected on repo
+// writes, which is the other guard of the same name.
 
 test("write of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
   const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
@@ -288,8 +274,7 @@ test("write of the run prompt with allow_improve_paths needs can_touch_protected
 });
 
 test("restore of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
-  // Restore is the one that installs an OLDER system prompt, which is why it was
-  // given the block in the first place (audit 2026-09-07).
+  // Restore can install an older system prompt.
   const { client, recorded, close } = await connectAs(driverAgent(), {
     ...RUN_PROMPT,
     versions: [

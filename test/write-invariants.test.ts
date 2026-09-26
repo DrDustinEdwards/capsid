@@ -6,24 +6,14 @@ import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
 
-// THE BEHAVIOURAL HALF of the write-path invariants. test/invariants.test.ts reads the
-// source; this file DRIVES the real tool handlers over a real MCP connection and records
-// the SQL they issue.
+// The behavioural half of the write-path invariants. test/invariants.test.ts reads the
+// source; this file drives the real tool handlers over a real MCP connection and records
+// the SQL they issue. A source guard cannot tell whether a statement is reached; a
+// behavioural test cannot tell whether a new tool skipped the invariant entirely.
 //
-// Both halves exist because they fail differently. A source guard cannot tell whether a
-// statement is reached: it would keep passing if the snapshot INSERT sat behind a
-// condition that is never true. A behavioural test cannot tell whether a NEW tool
-// skipped the invariant entirely.
-//
-// The store is a fake D1 that answers by SQL shape and records everything. It proves
-// which statements a handler emits, not that the SQL is correct.
-
-// The store is the SHARED row-backed fake from ./fakes.ts (quality audit 6.1 and 6.2).
-// It replaces a local D1 dialect that answered on SQL shape alone: `WHERE id = ?1`
-// returned version 42 whatever id was asked for, and `SELECT 1 AS ok FROM documents`
-// answered ok for a row that did not exist, so every lookup assertion really asserted
-// that the handler had issued SOME statement. The rows are real now and the WHERE
-// clauses resolve against the bound values.
+// The store is the shared row-backed fake from ./fakes.ts: WHERE clauses resolve against
+// the bound values, so a lookup for a missing row finds nothing. It proves which
+// statements a handler emits, not that the SQL is correct.
 
 interface FakeOptions {
   namespaceExists?: boolean;
@@ -31,16 +21,14 @@ interface FakeOptions {
   updatedAt?: string;
   // The document does not exist, so the handler takes its create path.
   exists?: boolean;
-  // A CONCURRENT WRITER. Runs once, immediately after the handler's pre-read of the
-  // document row and therefore BEFORE its commit-time read and its batch. That is the
-  // window the write predicate closes, and with a 90 second elicitation sitting in it,
-  // it is not small.
+  // A concurrent writer. Runs once, immediately after the handler's pre-read of the
+  // document row and before its commit-time read and its batch: the window the write
+  // predicate closes.
   raceAfterPreRead?: (live: LiveState) => void;
   failBatchMatching?: RegExp;
 }
 
-// The race hook's view of the store: a thin projection over the rows, so call sites read
-// as "another writer changed the body" while the rows underneath are what the guards
+// The race hook's view of the store: a thin projection over the rows the guards
 // evaluate against.
 interface LiveState {
   body: string | null;
@@ -57,7 +45,7 @@ function connectOptions(opts: FakeOptions) {
     ? [
         { id: 7, ...DOC, title: "Prior title", body, type: "note", status: "published", tags: "a,b", updated_at: updatedAt },
         // lint finalize only archives episodic and source docs, so the fixture
-        // carries one for it to consume (quality audit 6.3).
+        // carries one for it to consume.
         { id: 8, namespace: "capsid", path: "ep.md", title: "An episodic", body: "ep body", type: "episodic", status: "published", tags: null, updated_at: updatedAt },
       ]
     : [];
@@ -142,25 +130,18 @@ const MUTATORS: Array<{ tool: string; args: Record<string, unknown>; requires: R
   },
   {
     tool: "move",
-    // move gained a confirmation on 2026-08-17 (audit 2, F25): it is
-    // destructive-class and had none.
     args: { namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true },
     // A rename has no body to snapshot; the audit row is the record.
     requires: [/INSERT INTO audit_log/],
   },
   {
-    // lint finalize is the WIDEST mutation in the file: one call renames every consumed
-    // document. It was never driven behaviourally, only source-scanned (quality audit
-    // 6.3).
+    // lint finalize is the widest mutation: one call renames every consumed document.
     tool: "lint",
     args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true },
-    // Archiving is a rename, so there is no body to snapshot; the audit row is
-    // the record, exactly as for move.
+    // Archiving is a rename, so the audit row is the record, as for move.
     requires: [/INSERT INTO audit_log/],
-    // finalize refuses an unregistered namespace by a DIFFERENT route from the other
-    // four: it does not call requireRegisteredNamespace, it fails its own per-path
-    // existence check, because a document in an unregistered namespace cannot be found
-    // to archive. Asserted as it behaves rather than as the others do.
+    // finalize does not call requireRegisteredNamespace: it fails its own per-path
+    // existence check, because a document in an unregistered namespace cannot be found.
     refusesUnregisteredWith: /not found/,
   },
 ];
@@ -181,9 +162,7 @@ for (const { tool, args, requires } of MUTATORS) {
 
   test(`${tool} lands its mutation and its audit row in ONE batch`, async () => {
     // A separate .run() after the batch is two transactions, so the mutation and its
-    // record can disagree: move worked that way until 2026-08-13, which allowed a rename
-    // with no log entry in one direction and a log entry for a rename that never happened
-    // in the other.
+    // audit record could disagree.
     const { client, recorded, close } = await connect("write");
     await client.callTool({ name: tool, arguments: args });
     await close();
@@ -202,8 +181,7 @@ test("a read-only key cannot reach any mutating tool, and writes nothing", async
     const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
     assert.equal(result.isError, true, `${tool} did not refuse a read-only key`);
-    // The refusal names the missing scope (src/scope.ts). It used to name the
-    // "write-grant operator key" because that was the only thing a caller could be.
+    // The refusal names the missing scope (src/scope.ts).
     assert.match(result.content[0].text, /requires the write grant/);
     // The refusal has to come BEFORE any statement, not after the work is done.
     assert.deepEqual(recorded, [], `${tool} wrote ${recorded.length} statement(s) while refusing a read-only key`);
@@ -225,8 +203,7 @@ test("write refuses when if_match does not describe the stored body", async () =
 });
 
 test("write accepts the if_match it just handed out", async () => {
-  // The round trip that makes the feature usable: the sha of the stored body, as the
-  // fake store reports it, is accepted.
+  // The round trip: the sha of the stored body is accepted.
   const { createHash } = await import("node:crypto");
   const sha = createHash("sha256").update("prior body").digest("hex");
   const { client, recorded, close } = await connect("write");
@@ -240,10 +217,8 @@ test("write accepts the if_match it just handed out", async () => {
 });
 
 test("write, delete and move all refuse an unregistered namespace, and write nothing", async () => {
-  // A typo in `namespace` used to open a shadow namespace: documents the namespaces list
-  // cannot see, the lint loop never counts, and brief will never assemble. restore was
-  // excluded here until 2026-08-17 (audit 2, F31); it checks the namespace like every
-  // other mutator, so the exclusion hid nothing.
+  // A typo in `namespace` must not open a shadow namespace: documents the namespaces list
+  // cannot see, the lint loop never counts, and brief will never assemble.
   for (const { tool, args, refusesUnregisteredWith } of MUTATORS) {
     const { client, recorded, close } = await connect("write", { namespaceExists: false });
     const result = (await client.callTool({
@@ -258,14 +233,9 @@ test("write, delete and move all refuse an unregistered namespace, and write not
 });
 
 test("mode meta leaves the body byte-identical, wide dash and all", async () => {
-  // The body a meta write stores must be the body it read. A normalizer running over an
-  // untouched body would rewrite prose nobody submitted, which is why mode 'meta' skips
-  // normalization entirely.
-  //
-  // The fixture body carries a real U+2014, built from its code point rather than typed.
-  // conventions.md requires detection machinery to write the character as an escape so
-  // the file stays clean and greppable, and the repo's PreToolUse hook enforces that on
-  // this file.
+  // The body a meta write stores must be the body it read, so mode 'meta' skips
+  // normalization. The fixture carries a real U+2014 built from its code point, because
+  // the repo's PreToolUse hook refuses the literal character in this file.
   const EM_DASH = String.fromCharCode(0x2014);
   const dashed = `a body with an em ${EM_DASH} dash in it`;
   const { client, recorded, close } = await connect("write", { body: dashed });
@@ -287,10 +257,8 @@ test("mode meta leaves the body byte-identical, wide dash and all", async () => 
   assert.match(JSON.stringify(audit?.params), /prior_meta/);
 });
 
-// PHASE 0, 2026-08-14: the overwrite warning. Motivating incident is
-// dustinedwards/core.md, where one session's 2,253-byte consolidation was replaced by
-// another session 44 minutes later from a stale read, with a clean response either side
-// (snapshot document_versions 1142).
+// The overwrite warning: an unguarded overwrite of a recently written document warns,
+// because a stale read can replace another session's work with a clean response.
 
 const recently = (minutesAgo: number) =>
   new Date(Date.now() - minutesAgo * 60_000).toISOString().slice(0, 19).replace("T", " ");
@@ -315,8 +283,7 @@ test("overwriting a document touched in the last hour WARNS", async () => {
 });
 
 test("overwriting an older document does NOT warn", async () => {
-  // The other side. Without this the warning could fire on every write and the test above
-  // would still pass.
+  // Without this the warning could fire on every write and the test above would pass.
   assert.equal((await writeAndRead({ updatedAt: recently(61) })).concurrency_warning, undefined);
   assert.equal((await writeAndRead({ updatedAt: "2020-01-01 00:00:00" })).concurrency_warning, undefined);
 });
@@ -352,15 +319,12 @@ test("a UTC timestamp is not read as local time", async () => {
   assert.equal(concurrentEditWarning(null, now), null);
 });
 
-// AUDIT 2 BATCH A, 2026-08-17: the write predicate.
-//
-// Every test below turns on a store that CHANGES between the handler's pre-read and its
-// commit. Before this batch the fake could not express that, so none of these could have
-// failed for the right reason.
+// The write predicate. Every test below turns on a store that changes between the
+// handler's pre-read and its commit.
 
 test("PREDICATE: a body that changes after the pre-read is refused at commit, not accepted", async () => {
   // The pre-check passes (the sha is correct when the handler reads it), so the refusal
-  // comes from the in-batch guard. That is the window the old pre-read left open.
+  // comes from the in-batch guard.
   const sha = await shaOf("prior body");
   const { client, recorded, close } = await connect("write", {
     body: "prior body",
@@ -375,8 +339,7 @@ test("PREDICATE: a body that changes after the pre-read is refused at commit, no
   assert.equal(result.isError, true, "the racing write was overwritten instead of refused");
   assert.match(result.content[0].text, /stored body changed after this write read it/);
   assert.match(result.content[0].text, /Current sha256 is [0-9a-f]{64}/);
-  // The sha reported is the RACER's body, which is what the caller must rebase
-  // onto. Reporting the sha it already knew would be useless.
+  // The sha reported is the racer's body, which is what the caller must rebase onto.
   assert.match(result.content[0].text, new RegExp(await shaOf("body written by someone else")));
   // Fail closed: the aborted batch left nothing behind.
   assert.deepEqual(recorded, [], "a refused predicate still committed statements");
@@ -384,8 +347,7 @@ test("PREDICATE: a body that changes after the pre-read is refused at commit, no
 
 test("PREDICATE: an overwrite with no confirm is refused before any commit", async () => {
   // The pre-elicitation arm. The in-memory client advertises no elicitation capability,
-  // so the handler refuses rather than waiting. The post-elicitation arm is the guard
-  // itself, which the test above proves, and both arm the same statement.
+  // so the handler refuses rather than waiting.
   const { client, recorded, close } = await connect("write", { body: "prior body" });
   const result = await call(client, "write", {
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
@@ -397,8 +359,7 @@ test("PREDICATE: an overwrite with no confirm is refused before any commit", asy
 });
 
 test("PREDICATE: an unguarded update still lands, so the guard is not a blanket refusal", async () => {
-  // The other side. Without this, a predicate that refused everything would pass every
-  // test above and break every legitimate write.
+  // Without this, a predicate that refused everything would pass every test above.
   const { client, recorded, close } = await connect("write", { body: "prior body" });
   const result = await call(client, "write", {
     namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true,
@@ -429,12 +390,8 @@ test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is
   assert.deepEqual(recorded, [], "the losing create still wrote statements");
 });
 
-// WHICH GUARD write AND restore ARM, shown by what a racing writer does to each.
-//
-// The two handlers once spelled the consent condition differently, so a change to one
-// could arm the other with a different guard. These tests used to classify the guard by
-// the SQL text of the first batch statement. They now stage the race each guard exists
-// for and assert the outcome, for both tools:
+// Which guard write and restore arm, shown by staging the race each guard exists for
+// and asserting the outcome, for both tools:
 //
 //   create: a racing create wins and the handler is refused. write: "CREATE COLLISION:
 //     exactly one of two racing creates wins" above; restore: "restore recreating a
@@ -473,16 +430,10 @@ test("CREATE COLLISION: an uncontested create still succeeds", async () => {
   assert.match(sqlFor(recorded), /INSERT INTO documents/);
 });
 
-// WHAT RESTORE BINDS, not just which statements it issues (quality audit 6.5).
-//
-// The MUTATORS loop above asserts that restore issues an INSERT INTO document_versions
-// and an INSERT INTO audit_log. Both would still be issued by a restore that wrote the
-// LIVE body back over itself: same statements, same order, same count, and the tool would
-// answer "restored" having restored nothing. Only the value bound to the upsert
-// distinguishes them.
-//
-// The fake makes the two bodies distinguishable: the version row carries "old body" and
-// the live document carries "prior body".
+// What restore binds, not just which statements it issues. A restore that wrote the live
+// body back over itself would issue the same statements; only the value bound to the
+// upsert distinguishes them. The version row carries "old body" and the live document
+// carries "prior body".
 test("restore writes the VERSION body, and snapshots the LIVE one", async () => {
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
@@ -503,22 +454,16 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
     false,
     `restore wrote the LIVE body back instead of the version body. It bound: ${JSON.stringify(upsert.params)}`
   );
-  // The title travels with the body: a restore that put back old bytes under the
-  // current title is half a restore.
+  // The title travels with the body.
   assert.ok(upsert.params.includes("Old title"), `restore did not write the version title: ${JSON.stringify(upsert.params)}`);
 
-  // The snapshot is the mirror image: it must capture the LIVE row being replaced,
-  // including a body written after the pre-read, or the restore is not itself undoable.
-  // The node fake does not evaluate INSERT ... SELECT, so that is proven against real
-  // SQLite in test-integration/live-snapshot.test.ts, for write, delete and restore.
+  // The snapshot must capture the live row being replaced, or the restore is not itself
+  // undoable. The fake does not evaluate INSERT ... SELECT, so that is proven against real
+  // SQLite in test-integration/live-snapshot.test.ts.
 });
 
-// ---- history, driven rather than described (quality audit 6.3) --------------
-//
-// history was never behaviourally tested. Its scoping rule (namespace and path are part
-// of the lookup, so an id alone cannot walk every snapshot in the store) was asserted by
-// a comment in src/server.ts and nothing else, and could not have been tested before,
-// because the old fake returned the same version row for every id, namespace and path.
+// history. Namespace and path are part of the lookup, so an id alone cannot walk every
+// snapshot in the store.
 
 test("history lists the versions of the document asked for", async () => {
   const { client, close } = await connect("write");
@@ -539,8 +484,7 @@ test("history returns nothing for a path with no snapshots", async () => {
 });
 
 test("fetching a version by id is scoped to its own document", async () => {
-  // The same id, asked for under a path it does not belong to. Under the old fake this
-  // returned the body anyway, which is the walk-the-store shape the scoping prevents.
+  // The same id, asked for under a path it does not belong to.
   const { client, close } = await connect("write");
   const wrongPath = await call(client, "history", { namespace: "capsid", path: "ep.md", version_id: 42 });
   await close();
@@ -559,13 +503,8 @@ test("fetching a version by id returns that version's body", async () => {
   assert.equal(out.bytes, "old body".length);
 });
 
-// ---- the fake can now DISAGREE (quality audit 6.1) ---------------------------
-//
-// Three tests that could not have failed before. The old fake answered on SQL shape
-// alone: `FROM document_versions WHERE id` returned version 42 for any id, `FROM
-// documents WHERE namespace = ?1 AND path = ?2` returned the one document for any path,
-// and `SELECT 1 AS ok FROM documents` answered ok unconditionally. What looked like
-// coverage was the fake agreeing with whatever it was asked.
+// Lookups that must miss: the fake resolves WHERE clauses against the bound values, so a
+// wrong id, path or namespace finds nothing.
 
 test("a version id that does not exist is refused, not silently substituted", async () => {
   const { client, recorded, close } = await connect("write");
@@ -580,8 +519,7 @@ test("a version id that does not exist is refused, not silently substituted", as
 
 test("a version belonging to another document is not reachable by id", async () => {
   // namespace and path are part of the version lookup on purpose: an id alone would let a
-  // caller walk every snapshot in the store by incrementing a number. Under the old fake
-  // this passed for any id, path or namespace.
+  // caller walk every snapshot in the store by incrementing a number.
   const { client, close } = await connect("write");
   const result = await call(client, "restore", {
     namespace: "capsid", path: "some-other-doc.md", version_id: 42, confirm: true,
@@ -592,9 +530,7 @@ test("a version belonging to another document is not reachable by id", async () 
 });
 
 test("a document that does not exist is not found at a path that does", async () => {
-  // delete reads the row before it does anything. The old fake returned the one document
-  // for every path, so a delete of a path that has never existed reported success and
-  // issued a snapshot of a body it invented.
+  // delete reads the row before it does anything, and a missing row stops it.
   const { client, recorded, close } = await connect("write");
   const result = await call(client, "delete", {
     namespace: "capsid", path: "never-existed.md", confirm: true,
@@ -659,10 +595,8 @@ test("restore recreating a deleted document refuses a racing create", async () =
 });
 
 test("the concurrency warning is read at COMMIT time, not from the pre-read", async () => {
-  // The pre-read sees a timestamp two years old, so the OLD code, which computed the
-  // warning from that row, could not warn no matter what happened next. A writer then
-  // lands during this handler's flight and the commit-time read sees it. This test fails
-  // against the pre-change code.
+  // The pre-read sees an old timestamp, so a warning computed from it could not fire. A
+  // writer then lands during the handler's flight and the commit-time read sees it.
   const fresh = new Date(Date.now() - 5 * 60_000).toISOString().slice(0, 19).replace("T", " ");
   const { client, close } = await connect("write", {
     updatedAt: "2020-01-01 00:00:00",
@@ -680,18 +614,10 @@ test("the concurrency warning is read at COMMIT time, not from the pre-read", as
   assert.match(out.concurrency_warning, new RegExp(fresh));
 });
 
-// ---- THE ELICITED ARM, reachable at last -----------------------------------
-//
-// Q3 recorded this as a hole and could not close it: the in-memory client advertises no
-// elicitation capability, so confirmDestructive returns "unsupported" and every call
-// without confirm is refused BEFORE a guard is chosen. One consequence was findable by
-// plant: collapsing write's `if_match mismatch` / `stale confirmation` ternary changed
-// nothing the suite could see.
-//
-// A client that DECLARES the capability and answers the request closes it. The two
-// refusals are different messages for different situations: "if_match mismatch" means the
-// sha you sent is not what is stored, and "stale confirmation" means a human approved an
-// overwrite of a body that changed while the prompt sat on screen for up to 90 seconds.
+// The elicited arm. A client without the elicitation capability is refused before a
+// guard is chosen, so this client declares it and answers the request. "if_match
+// mismatch" means the sha sent is not what is stored; "stale confirmation" means a human
+// approved an overwrite of a body that changed while the prompt was open.
 async function connectEliciting(opts: FakeOptions = {}, answer: "accept" | "decline" = "accept") {
   const { recorded, reads, rows, batches, db } = fakeD1(connectOptions(opts));
   const server = buildServer(fakeEnv({ DB: db }), "write", "test:guard");
@@ -709,9 +635,8 @@ async function connectEliciting(opts: FakeOptions = {}, answer: "accept" | "decl
 }
 
 test("an accepted elicitation reaches the commit, so the arm is really reachable", async () => {
-  // The harness check. Everything below depends on this path being live; if it silently
-  // reverted to "unsupported" the wording tests would pass by refusing early for a
-  // different reason.
+  // The harness check: if this path reverted to "unsupported" the wording tests below
+  // would pass by refusing early for a different reason.
   const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
   const result = await call(client, "write", {
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
@@ -725,9 +650,8 @@ test("an accepted elicitation reaches the commit, so the arm is really reachable
 
 test("RACE: after an elicitation, write, restore and delete each refuse a body changed while the prompt was open", async () => {
   // Consent given through elicitation is bound to the body it was about, in all three
-  // tools (audit MAJOR 17, and audit 2026-09-06 round 2, item 6 for delete). No call
-  // passes confirm or if_match, so the elicited signal is the only thing that can arm
-  // the body guard, and the racing writer is what the guard has to catch.
+  // tools. No call passes confirm or if_match, so the elicited signal is the only thing
+  // that can arm the body guard.
   const calls: Array<[string, Record<string, unknown>]> = [
     ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
     ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
@@ -759,8 +683,7 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
 });
 
 test("RACE: after an elicitation with no race, write, restore and delete each land", async () => {
-  // The innocent direction for the test above: a body guard that fired on every call
-  // would pass it.
+  // The innocent direction: a body guard that fired on every call would pass the test above.
   const calls: Array<[string, Record<string, unknown>]> = [
     ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
     ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
@@ -817,9 +740,8 @@ test("a declined elicitation refuses, and writes nothing", async () => {
 });
 
 test("STALE CONFIRMATION is named as itself, not as an if_match mismatch", async () => {
-  // A human approved overwriting a body that changed while the prompt was up. No if_match
-  // was ever sent, so calling this "if_match mismatch" would point the caller at an
-  // argument they did not use.
+  // No if_match was sent, so "if_match mismatch" would point the caller at an argument
+  // they did not use.
   const { client, recorded, prompts, close } = await connectEliciting({
     body: "prior body",
     raceAfterPreRead: (live) => {
@@ -842,8 +764,8 @@ test("STALE CONFIRMATION is named as itself, not as an if_match mismatch", async
 });
 
 test("IF_MATCH MISMATCH keeps its own wording, and no pending clause", async () => {
-  // The other side of the ternary. This caller DID send a sha, so the refusal names
-  // that, and the confirmation clause must not appear: there was no prompt.
+  // This caller did send a sha, so the refusal names it, and the confirmation clause
+  // must not appear: there was no prompt.
   const sha = await shaOf("prior body");
   const { client, close } = await connectEliciting({
     body: "prior body",
@@ -863,9 +785,8 @@ test("IF_MATCH MISMATCH keeps its own wording, and no pending clause", async () 
 });
 
 test("the two refusals are DIFFERENT strings for the same underlying conflict", async () => {
-  // The strongest form. Same race, same guard, same commit-time abort; only the route in
-  // differs. If these ever converge, one of the two callers is being told something untrue
-  // about what went wrong.
+  // Same race, same guard, same commit-time abort; only the route in differs. If these
+  // converge, one of the two callers is told something untrue.
   const race = (live: LiveState) => {
     live.body = "the racer";
   };
@@ -886,15 +807,11 @@ test("the two refusals are DIFFERENT strings for the same underlying conflict", 
   assert.ok(mismatchText.startsWith("if_match mismatch"), mismatchText);
 });
 
-// ---- F30: a batch failure is a clean refusal, not an exception ---------------
+// A batch failure is a clean refusal, not an exception.
 
-// The fake's batch throws whatever this holds, so a test can produce a D1 failure that is
-// NOT one of the commit-time guards. Before the fix, write and restore rethrew that, so
-// the tool call rejected while delete, move and finalize all answered with a normal error
-// result. Same failure, two shapes.
+// The fake's batch throws on a matching statement, producing a D1 failure that is not
+// one of the commit-time guards. Every mutator must answer it with a normal error result.
 async function connectExploding(sql: RegExp) {
-  // Failure injection is a capability of the shared fake now, rather than a
-  // monkey-patch over a local one.
   const { db, recorded } = fakeD1(connectOptions({ failBatchMatching: sql }));
   const server = buildServer(fakeEnv({ DB: db }), "write", "test:guard");
   const client = new Client({ name: "f30-test", version: "1.0.0" });
@@ -929,12 +846,11 @@ for (const { tool, args } of F30_CASES) {
   });
 }
 
-// ---- F17: a landed GitHub write is not reported as a failure ----------------
+// A landed GitHub write is not reported as a failure.
 
 test("write_repo_file reports success with a warning when the audit insert fails", async () => {
-  // guardedWrite commits to GitHub and THEN writes its audit row, and the two cannot share
-  // a transaction. When the row failed the caller was told the tool failed, and the
-  // natural response to that is a retry, which is a second commit.
+  // guardedWrite commits to GitHub and then writes its audit row, and the two cannot share
+  // a transaction. Reporting a failure would invite a retry, which is a second commit.
   const { db } = fakeD1(connectOptions({}));
   (db as { prepare: unknown }).prepare = ((sql: string) => {
     const base = { bind: () => base, first: async () => null, all: async () => ({ results: [], meta: { changes: 0 } }), run: async () => ({ meta: { changes: 1 } }) } as Record<string, unknown>;
@@ -982,10 +898,8 @@ test("write_repo_file reports success with a warning when the audit insert fails
   }
 });
 
-// ---- Audit 2026-09-25, F3-1 and F3-2: what guardedWrite files ------------------------
-//
-// A fake D1 that answers the namespace lookup and records every audit_log insert, and a
-// server over it. Shared by the two tests below.
+// What guardedWrite files. A fake D1 that answers the namespace lookup and records every
+// audit_log insert, and a server over it.
 async function connectAuditRecording() {
   const { db } = fakeD1(connectOptions({}));
   const audits: unknown[][] = [];
@@ -1014,9 +928,8 @@ async function connectAuditRecording() {
 }
 
 test("a pr-mode write whose commit landed but whose PR open failed is audited and reported, not failed", async () => {
-  // The commit is on the work branch before openPr runs. A throw from openPr used to
-  // reach guardedWrite as a failed call with no audit row, and the caller retried into a
-  // second commit.
+  // The commit is on the work branch before openPr runs, so a failed PR open must still
+  // be audited and reported as landed, or the caller retries into a second commit.
   const { client, audits } = await connectAuditRecording();
   const original = globalThis.fetch;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
@@ -1059,8 +972,7 @@ for (const { label, args } of [
   { label: "a comment on a merge", args: { namespace: "capsid", number: 7, action: "merge", comment: "lgtm" } },
 ]) {
   test(`manage_pr refuses ${label} as an error with no audit row`, async () => {
-    // Returned from inside guardedWrite, the refusal was filed as a landed result: an
-    // audit row and an MCP result with isError false.
+    // A refusal returned from inside guardedWrite would be filed as a landed result.
     const { client, audits } = await connectAuditRecording();
     const original = globalThis.fetch;
     let fetched = 0;
@@ -1081,16 +993,10 @@ for (const { label, args } of [
   });
 }
 
-// ---- F6: patch uniqueness, through the write TOOL ---------------------------------
-//
-// Audit 2026-09-13, finding F6. test/write-modes.test.ts drives `assembleBody` and
-// `narrowWrite` directly and proves the rule: a `find` that occurs zero times or twice
-// is refused. Nothing drove `mode: "patch"` through callTool, so nothing proved the
-// HANDLER calls assembly at all. A write handler that skipped assembleBody and treated
-// patch as replace would keep every helper test green while an ambiguous `find`
-// silently overwrote the whole body.
-//
-// The assertion that matters is the second one: refused AND nothing written.
+// Patch uniqueness, through the write tool. test/write-modes.test.ts proves the rule on
+// `assembleBody` directly; these prove the handler applies it. A handler that treated
+// patch as replace would keep every helper test green. The assertion that matters is
+// refused and nothing written.
 
 test("PLANT: a patch whose find occurs ZERO times is refused by the tool and writes nothing", async () => {
   const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
@@ -1112,8 +1018,7 @@ test("PLANT: a patch whose find occurs ZERO times is refused by the tool and wri
 });
 
 test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes nothing", async () => {
-  // The ambiguous case, which is the dangerous one: replace would have kept the last
-  // occurrence's edit and thrown the rest of the body away.
+  // The ambiguous case, the dangerous one.
   const { client, recorded, close } = await connect("write", { body: "repeat once, repeat twice" });
   const out = await call(client, "write", {
     ...DOC,
@@ -1133,8 +1038,7 @@ test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes n
 });
 
 test("THE INNOCENT DIRECTION: a patch matching exactly once lands through the tool", async () => {
-  // Without this, the two plants above pass just as well against a handler that
-  // refuses every patch, which is an outage rather than a guard.
+  // Without this, the two plants above pass against a handler that refuses every patch.
   const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
   const out = await call(client, "write", {
     ...DOC,

@@ -2,19 +2,15 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MAX_REPORT_BYTES } from "../src/improve-scorer";
 
-// THE THREE HMAC SINKS, END TO END, AGAINST A REAL D1 AND A REAL KV.
-//
+// The three HMAC endpoints end to end, against a real D1 and a real KV.
 // /improve/score, /improve/holdout-credential and /backup/credential are the only
-// unauthenticated-by-OAuth write paths in this Worker. Everything about them lives
-// in the seam this layer exists to cover: the key is DERIVED from a root secret,
-// the replay cache is an `INSERT ... ON CONFLICT DO NOTHING RETURNING` against a
-// real PRIMARY KEY, and the run lookup is a real SELECT. The unit suite proves
-// which statements are issued; only this proves SQLite accepts them and that the
-// conflict actually conflicts.
+// write paths not behind OAuth. The key is derived from a root secret, the replay
+// cache is an `INSERT ... ON CONFLICT DO NOTHING RETURNING` against a real PRIMARY
+// KEY, and the run lookup is a real SELECT; only this layer proves SQLite accepts
+// them and that the conflict conflicts.
 //
-// The keys below are derived HERE the way the Worker derives them, from the same
-// root the config binds, so a signature that verifies does so for the right reason
-// rather than because both sides are stubs.
+// The keys are derived here the way the Worker derives them, from the same root the
+// config binds, so a signature that verifies is not verifying against a stub.
 
 const ROOT = "integration-root-secret-not-a-real-one";
 const NAMESPACE = "capsid";
@@ -31,9 +27,8 @@ async function hmacHex(key: string, message: string): Promise<string> {
   return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// The two derivations, spelled the way src/improve-scorer.ts spells them. If either
-// context string changes, these tests go red, which is the point: a key derivation
-// is a contract with five repos and cannot be edited quietly.
+// The two derivations, spelled the way src/improve-scorer.ts spells them. A key
+// derivation is a contract with other repos, so a changed context string fails here.
 const scoreKey = (namespace: string) => hmacHex(ROOT, `capsid-improve-score:v1:${namespace}`);
 const backupKey = () => hmacHex(ROOT, "capsid-backup-credential:v1");
 
@@ -55,9 +50,8 @@ async function post(path: string, key: string, body: unknown, overrides: Record<
 }
 
 // /backup/credential reads X-Backup-Timestamp and X-Backup-Signature, not the
-// X-Improve-* pair. Two endpoints, two header contracts, and the difference is
-// load-bearing rather than incidental: it is what stops a captured improve request
-// being replayed at the backup mint.
+// X-Improve-* pair, which stops a captured improve request being replayed at the
+// backup mint.
 async function backupPost(key: string, body: unknown) {
   const text = JSON.stringify(body);
   const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
@@ -93,9 +87,8 @@ describe("/improve/score", () => {
       headers: { "Content-Type": "application/json", "X-Improve-Namespace": NAMESPACE },
       body: JSON.stringify(report("unsigned")),
     });
-    // 400, not 401: a missing timestamp header is a malformed request rather than
-    // a rejected credential, and the distinction is worth pinning because the two
-    // failures need different responses from whoever is looking at CI.
+    // 400, not 401: a missing timestamp header is a malformed request rather than a
+    // rejected credential.
     expect(response.status).toBe(400);
     expect(await response.text()).toMatch(/timestamp header/);
   });
@@ -117,9 +110,8 @@ describe("/improve/score", () => {
   });
 
   it("refuses a signature made with another namespace's key", async () => {
-    // The per-namespace derivation is what makes a leaked key from one repo useless
-    // against another. Signing with foxing's key and claiming to be capsid must not
-    // verify.
+    // The per-namespace derivation makes a leaked key from one repo useless against
+    // another.
     const response = await post("/improve/score", await scoreKey("foxing"), report("wrong-key"));
     expect(response.status).toBe(401);
   });
@@ -134,9 +126,8 @@ describe("/improve/score", () => {
   });
 
   it("PLANT: a captured, still-in-window report cannot be replayed", async () => {
-    // The replay cache is migrations/0004_improve_jti.sql: an INSERT ... ON CONFLICT
-    // DO NOTHING RETURNING against a PRIMARY KEY. Nothing in the unit suite can tell
-    // whether SQLite honours that conflict; this can, because the table is real.
+    // The replay cache is an INSERT ... ON CONFLICT DO NOTHING RETURNING against a
+    // PRIMARY KEY; only a real table shows SQLite honours the conflict.
     const jti = crypto.randomUUID();
     const key = await scoreKey(NAMESPACE);
     const body = report(jti);
@@ -165,8 +156,7 @@ describe("/improve/score", () => {
     expect(second.status).not.toBe(200);
     expect(secondText).toMatch(/replay|already|jti/i);
 
-    // And the claim really is in the table, rather than the refusal coming from
-    // somewhere else that happens to say the same thing.
+    // The claim is in the table, so the refusal came from the replay cache.
     const claimed = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_jti WHERE jti = ?1").bind(jti).first<{ n: number }>();
     expect(claimed?.n).toBe(1);
   });
@@ -196,18 +186,16 @@ describe("the two credential endpoints", () => {
       namespace: NAMESPACE,
       jti: crypto.randomUUID(),
     });
-    // No R2 temp-credential secrets are bound in this environment, so the mint
-    // cannot succeed. What matters is WHICH failure: a 401 would mean the key
-    // derivation is wrong, and a 500 naming the missing configuration means the
-    // signature verified and the request reached the minting step.
+    // No R2 temp-credential secrets are bound here, so the mint cannot succeed. A 401
+    // would mean the key derivation is wrong; a 500 naming the missing configuration
+    // means the signature verified.
     expect(response.status).not.toBe(401);
     expect(await response.text()).toMatch(/not configured|R2_TEMP_CRED/);
   });
 
   it("/improve/holdout-credential refuses a request signed with the BACKUP key", async () => {
-    // The two derivations are separate on purpose: the holdout parent must not be
-    // able to read backups and vice versa. A key that works on one endpoint must
-    // not work on the other, and that is a property only an end-to-end call shows.
+    // The holdout parent must not be able to read backups and vice versa, so a key
+    // that works on one endpoint must not work on the other.
     const response = await post("/improve/holdout-credential", await backupKey(), {
       namespace: NAMESPACE,
       jti: crypto.randomUUID(),
@@ -227,11 +215,8 @@ describe("the two credential endpoints", () => {
   });
 
   it("/backup/credential reads its OWN header names, which are not the improve ones", async () => {
-    // These are the "HMAC twins" the bloat proposal names: two mint paths with
-    // separate parse, verify and header contracts. Whether they should be merged is
-    // a separate question; while there are two, a test has to know that sending
-    // X-Improve-Timestamp here is a 400 rather than a 401, or a future merge will
-    // look like it changed nothing.
+    // Two mint paths with separate header contracts: X-Improve-Timestamp here is a
+    // 400, not a 401.
     const wrongHeaders = await post("/backup/credential", await backupKey(), { jti: crypto.randomUUID() });
     expect(wrongHeaders.status).toBe(400);
     expect(await wrongHeaders.text()).toMatch(/timestamp header/);
@@ -239,9 +224,8 @@ describe("the two credential endpoints", () => {
 });
 
 describe("the refusal each signed endpoint returns", () => {
-  // Replaces a unit test that checked these strings were present in src/routes.ts
-  // (job_3e1596235513). The three endpoints refuse an oversized body and a body naming
-  // the wrong namespace in their own words, and a caller reads the words.
+  // The three endpoints refuse an oversized body and a body naming the wrong namespace
+  // in their own words, and a caller reads the words.
   const oversized = "x".repeat(MAX_REPORT_BYTES + 1);
 
   function streamed(path: string, text: string, headers: Record<string, string>) {

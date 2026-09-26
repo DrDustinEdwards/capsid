@@ -9,13 +9,9 @@ import { buildServer } from "../src/server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-// JOBS AS EVIDENCE, AGAINST A REAL D1 (migrations/0011).
-//
-// Here rather than beside the unit tests for the reason test-integration/jobs.test.ts
-// already states about the queue: every property below is a property of the DATABASE.
-// "Exactly one outcome row per job" is a PRIMARY KEY, and a bar checked at the claim
-// is a refusal a real UPDATE either did or did not perform. A fake answering on SQL
-// shape would agree with whatever it was asked.
+// Jobs as evidence, against a real D1 (migrations/0011). Every property below is a
+// property of the database: "exactly one outcome row per job" is a PRIMARY KEY, and
+// a bar checked at the claim is a refusal a real UPDATE either did or did not perform.
 
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
@@ -81,11 +77,9 @@ async function plantOutcome(jobId: string, opened: number, merged: number, verif
     .run();
 }
 
-// A MINTED AGENT ROW, because agentSummaries reads the agents TABLE and the fixture
-// never wrote to it. Everything else here drives the queue as a legacy operator key,
-// which resolves to a caller without ever inserting a row, so `status.agents` was []
-// on every run and the per-credential assertions below iterated nothing. Added
-// 2026-09-13 when a count check turned that vacuous pass into a failure.
+// A minted agent row, because agentSummaries reads the agents table and a legacy
+// operator key resolves to a caller without inserting one; without it `status.agents`
+// is [] and the per-credential assertions iterate nothing.
 async function seedAgent(name: string) {
   await env.DB
     .prepare(
@@ -108,7 +102,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM agents").run();
   await env.DB.prepare("DELETE FROM job_outcome_prs").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
-  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  // jobs post requires a registered namespace.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
 });
 
@@ -129,8 +123,8 @@ describe("job outcomes", () => {
     expect(row?.namespace).toBe("capsid");
     expect(row?.result_kind).toBe("doc");
     expect(row?.duration_minutes).toBe(90);
-    // NULL, NOT ZERO. Nothing was reported and nothing was checked, and those are
-    // different from a count that came back empty.
+    // Null, not zero: nothing was reported or checked, which differs from a count
+    // that came back empty.
     expect(row?.prs_opened).toBeNull();
     expect(row?.tests_added).toBeNull();
     expect(row?.ci_green).toBeNull();
@@ -193,9 +187,8 @@ describe("job outcomes", () => {
       reason: "needs a push",
       command: "git push origin feat/x",
     });
-    // A day passes while a human runs the command. Ruled 2026-09-16: the duration still
-    // measures from the first claim, because measuring from the resume reported
-    // job_6bbd77bc4827's working life as its last few seconds.
+    // A day passes while a human runs the command. The duration still measures from
+    // the first claim; measuring from the resume would report only the last minutes.
     await resumeJob(jobsEnv(), DRIVER, at("2026-09-11T12:00:00.000Z"), id, "Dustin ran it");
     await completeJob(jobsEnv(), DRIVER, at("2026-09-11T12:20:00.000Z"), id, { result_summary: "done" });
 
@@ -206,8 +199,8 @@ describe("job outcomes", () => {
   });
 
   it("PLANT: a second insert for the same job cannot overwrite the first record", async () => {
-    // Planted rather than read off the DDL. An outcome that could be rewritten after
-    // the fact is not evidence, so the guarantee is exercised against a real insert.
+    // Exercised against a real insert rather than read off the DDL: an outcome that
+    // could be rewritten after the fact is not evidence.
     const posted = await post({ title: "cannot be rewritten" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
@@ -268,15 +261,14 @@ describe("job outcomes", () => {
     const id = posted.job!.id;
     expect(posted.job!.min_record).toBe(JSON.stringify({ prs_merged: 2 }));
 
-    // This driver has no record, so it is refused and the job STAYS QUEUED for one
-    // that can do it rather than being failed or parked on a four-hour lease.
+    // This driver has no record, so it is refused and the job stays queued rather
+    // than being failed or parked on a lease.
     const refused = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
     expect((await jobRow(id))?.status).toBe("queued");
 
-    // Give it a record the Worker verified. The same claim now succeeds, so the bar
-    // is a bar and not a wall.
+    // With a record the Worker verified, the same claim succeeds.
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
     const won = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
@@ -284,8 +276,8 @@ describe("job outcomes", () => {
   });
 
   it("an UNVERIFIED merge count does not clear a bar", async () => {
-    // What makes the bar mean anything. Otherwise a driver reports its own fifty
-    // merges and claims the work reserved for an agent with a record.
+    // Otherwise a driver could report its own fifty merges and claim work reserved
+    // for an agent with a record.
     await plantOutcome("job_selfclaim01", 50, 50, UNVERIFIED);
     await post({ title: "still needs a real record", min_record: { prs_merged: 2 } });
     const refused = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
@@ -294,10 +286,8 @@ describe("job outcomes", () => {
   });
 
   it("PLANT: the bar is enforced at a RESUME that hands the lease to a new holder, too", async () => {
-    // Moved from test/job-outcomes.test.ts (audit 2026-09-25, item C1-12), which
-    // counted recordShortfall( call sites in src/jobs.ts. Resume with take hands a
-    // caller a lease exactly as a claim does, so a driver that could not have claimed
-    // the job must not acquire it by resuming it.
+    // Resume with take hands a caller a lease exactly as a claim does, so a driver
+    // that could not have claimed the job must not acquire it by resuming it.
     const OTHER_ACTOR = "opkey:ddddeeeeffff";
     const OTHER = legacyAgent("write", OTHER_ACTOR);
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
@@ -313,7 +303,7 @@ describe("job outcomes", () => {
     expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
     expect((await jobRow(id))?.status).toBe("blocked");
 
-    // The same caller with a verified record takes it, so the bar is a bar and not a wall.
+    // The same caller with a verified record takes it.
     await env.DB.prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
          result_kind, verified, recorded_at)
@@ -350,18 +340,12 @@ describe("job outcomes", () => {
 
   it("improve_status carries a record per credential, and it is counts and rates only", async () => {
     // No scope argument, so this is the unrestricted internal caller and the inventory
-    // is attached. The ?? [] is the optional type falling in line with the SCOPED case,
-    // where improve_status omits the inventory entirely (audit 2026-09-13, finding 7),
-    // not a branch this test can take: the assertion below would read nothing.
+    // is attached. The ?? [] satisfies the optional type (a scoped caller gets no
+    // inventory); it is not a branch this test can take.
     await seedAgent("capsid-driver");
     const status = await improveStatus(jobsEnv() as never, "capsid");
     const agents = status.agents ?? [];
-    // THE COUNT CHECK IS THE POINT. Without it this test passed by iterating an empty
-    // array: the fixture seeds no agents table row, so every per-credential assertion
-    // below was skipped and a regression that emptied the inventory would have been
-    // reported as a pass. capsid/conventions.md calls this out by name, "an assertion
-    // that can pass by reading nothing", and it had been true here since the test was
-    // written.
+    // The count check, or the loop below passes by iterating an empty array.
     expect(agents.length).toBeGreaterThan(0);
     for (const agent of agents) {
       expect(agent.record).toBeDefined();
@@ -375,14 +359,9 @@ describe("job outcomes", () => {
     }
   });
 
-  // ---- audit 2026-09-13, finding 10 ----------------------------------------------
-
   it("PLANT: re-verifying the last pull request marks prs_opened verified, which is what min_record reads", async () => {
-    // The defect: reverify set verified.prs_merged and left verified.prs_opened alone,
-    // and recordFor requires prs_opened before it counts a single merge. So a job
-    // completed while GitHub was down, merged later and swept, had GitHub's merge count
-    // on its outcome row and prs_merged 0 on the agent's record, and min_record kept
-    // refusing the next claim. Real D1, real SQL, real json_set.
+    // recordFor requires verified.prs_opened before it counts a merge, so reverify must
+    // set it too, or a job merged after GitHub was down never counts toward min_record.
     await env.DB
       .prepare(
         `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
@@ -409,9 +388,8 @@ describe("job outcomes", () => {
   });
 
   it("A JOB WITH AN UNREAD PULL REQUEST LEFT does NOT get prs_opened verified", async () => {
-    // The other half, and the reason the CASE counts unread rows instead of flipping
-    // the flag on any successful read: reading one pull request of two proves nothing
-    // about the count.
+    // The CASE counts unread rows instead of flipping the flag on any successful read:
+    // reading one pull request of two proves nothing about the count.
     await env.DB
       .prepare(
         `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
@@ -438,7 +416,7 @@ describe("job outcomes", () => {
   });
 });
 
-// ---- audit 2026-09-25, F1-1: the transition and its records are one batch ----------
+// The transition and its records are one batch.
 
 describe("a holder transition commits with every record of it, or not at all", () => {
   const NS = "sample";
@@ -474,9 +452,8 @@ describe("a holder transition commits with every record of it, or not at all", (
   }
 
   it("PLANT: a complete whose GitHub token cannot be minted is done WITH its outcome, audit row and mirror", async () => {
-    // No App key in this environment and no cached token, so ghFetch throws. That
-    // throw used to land after the UPDATE had committed: the job was done, with no
-    // outcome row, no audit row, a mirror still saying claimed, and a retry refused.
+    // No App key in this environment and no cached token, so ghFetch throws. The job
+    // must still finish with its outcome row, audit row and mirror.
     const id = await claimed("token mint fails");
     const done = await completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, {
       result_summary: "landed",
@@ -527,8 +504,8 @@ describe("a holder transition commits with every record of it, or not at all", (
   });
 
   it("PLANT: a record write that fails leaves the job claimed, not done with no record", async () => {
-    // Any throw inside the batch. A trigger refuses the outcome insert; the UPDATE
-    // before it in the same batch must roll back with it.
+    // A trigger refuses the outcome insert; the UPDATE before it in the same batch
+    // must roll back with it.
     const id = await claimed("record write fails");
     await env.DB.prepare(
       "CREATE TRIGGER planted_outcome_refusal BEFORE INSERT ON job_outcomes BEGIN SELECT RAISE(ABORT, 'planted'); END"

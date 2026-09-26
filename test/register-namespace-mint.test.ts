@@ -9,28 +9,10 @@ import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// register_namespace RETURNS THE MINT COMMAND AND DOES NOT MINT (2026-09-11).
-//
-// The seam this closed: register_namespace took a plain "write" grant, which every
-// driver agent holds, while minting is gated on agent.admin so that an agent cannot
-// widen itself. Minting inside register would have handed any driver a fresh write
-// credential for a namespace of its choosing.
-//
-// THE PREMISE CHANGED ON 2026-09-13, and this test is how that was noticed. The
-// tripwire below used to assert register_namespace was "write", with a comment
-// saying whoever changed it should be told by a test rather than discover it in a
-// review. It worked exactly that way.
-//
-// What changed: register_namespace and update_namespace are now admin-only, because
-// the mapping they edit IS the authorization boundary. A driver could remap its own
-// namespace onto any repo the App reaches and, with a repos axis of "*", read and
-// write it. So the 2026-09-11 reasoning is narrower than it looked: keeping the mint
-// out of register was necessary and not sufficient, since register could still point
-// a namespace at a repo of the caller's choosing without minting anything.
-//
-// The rest of this file is unchanged and still necessary: register_namespace
-// must still not mint, because admin-gating the tool does not make minting inside it
-// a good idea.
+// register_namespace returns the mint command and does not mint. Minting is gated on
+// agent.admin so that an agent cannot widen itself; register_namespace is admin-only
+// because the mapping it edits is the authorization boundary, but it still must not
+// mint.
 
 test("register_namespace registers, mints nothing, and returns the mint instruction", async () => {
   const d1 = fakeD1({});
@@ -53,8 +35,8 @@ test("register_namespace registers, mints nothing, and returns the mint instruct
 });
 
 test("the instruction it prints is parseable by the script it names", () => {
-  // The failure this prevents: the tool tells a human to run a flag the script
-  // does not have. Both halves are derived rather than retyped.
+  // The tool must not tell a human to run a flag the script does not have. Both
+  // halves are derived rather than retyped.
   const instruction = driverMintInstruction("txasm");
   const match = instruction.match(/node scripts\/mint-agents\.mjs ([^.]+)\./);
   assert.ok(match, `no runnable command found in: ${instruction}`);

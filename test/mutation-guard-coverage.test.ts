@@ -11,24 +11,14 @@ import { buildServer } from "../src/server.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 
-// ENUMERATE EVERY SITE, audit 2026-09-07 (Opus MAJOR 5.4 and NOTE 6.1).
-//
-// Two guards, one failure mode. `improveWriteRefusal` shipped with exactly ONE
-// call site, the `write` tool, so `move` and `restore` walked straight past it;
-// nothing asserted which handlers called it, so nothing went red. That is the
-// class capsid/conventions.md names: "A fix that lands in all but one affected
-// site is not a fix", and "Where the sites are enumerable in source, add a test
-// that fails when a NEW one appears".
-//
-// test/path-mutation.test.ts already does this for pathMutation. This file does
-// it for the two guards that did not have it, and it is DERIVED: it finds the
-// mutation entry points by scanning for what makes a handler a mutation, not by
-// listing the four that exist today. A sixth tool that writes `documents` is a
-// build failure the day it is added, whether or not anyone remembers this file.
+// Enumerate every site. A guard that lands in all but one mutation handler is not
+// a fix, so this file finds the mutation entry points by scanning for what makes a
+// handler a mutation, not by listing today's tools. A new tool that writes
+// `documents` fails the build until it has a plant here. test/path-mutation.test.ts
+// does the same for pathMutation.
 
 // A handler mutates the document store if it inserts a documents row or calls the
-// one path-mutation helper. Matched by SHAPE rather than by tool name, so the
-// next mutation is caught by what it does.
+// one path-mutation helper. Matched by shape rather than by tool name.
 const MUTATION_MARKERS = [/INSERT INTO documents/i, /\bdocumentUpsert\(/, /\bpathMutation\(/];
 
 function mutationTools() {
@@ -39,16 +29,12 @@ function mutationTools() {
 test("the scan finds the mutation entry points at all, so this file cannot pass by reading nothing", () => {
   const found = mutationTools().map((t) => t.name).sort();
   assert.ok(found.length >= 4, `the mutation scan found ${found.length} tools; the walk is broken`);
-  // Named so a tool DISAPPEARING from the mutation set is also visible: that
-  // would mean it stopped mutating, or the marker stopped matching it.
+  // Named so a tool disappearing from the mutation set is also visible.
   assert.deepEqual(found, ["delete", "lint", "move", "restore", "write"]);
 });
 
-// ---- every mutation entry point, driven over MCP --------------------------
-//
-// One plant per tool the scan above finds, at the loop's run prompt. These replaced
-// source scans that checked each handler's text for the guard call, the opt-in
-// plumbing and the flag request; a call shows all three.
+// Every mutation entry point, driven over MCP: one plant per tool the scan finds,
+// at the loop's run prompt. A real call exercises the guard, the opt-in and the flag.
 
 const RUN_PROMPT = "improve/prompts/run.md";
 
@@ -124,11 +110,10 @@ test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that take
   }
 });
 
-// ---- the guard itself, at both ends of a move ------------------------------
+// the guard itself, at both ends of a move
 
 test("PLANT: a move INTO the improve control surface is refused", async () => {
-  // Installing a skill this way was the live bypass: skills are re-injected into
-  // other namespaces' runs.
+  // A moved-in skill would be re-injected into other namespaces' runs.
   assert.ok(await improveWriteRefusal("capsid", "improve/skills/planted.md", null, "body", false));
   assert.ok(await improveWriteRefusal("capsid", "improve/prompts/run.md", null, "body", false));
   assert.ok(await improveWriteRefusal("capsid", `${RUN_TASK_PREFIX}2026-09-08.md`, null, "body", false));
@@ -150,7 +135,7 @@ test("an ordinary move is untouched at both ends", async () => {
   assert.equal(await improveWriteRefusal("capsid", "improve/archive/r1/a1.md", null, "x", false), null);
 });
 
-// ---- .github/workflows/ ----------------------------------------------------
+// .github/workflows/
 
 test("PLANT: a write-grant key cannot author a workflow without the flag", async () => {
   const env = fakeEnv({

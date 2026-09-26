@@ -1,21 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 
-// THE SOURCE WALK, ONCE (quality audit 1.1).
-//
-// Four scanners located the behaviour they guard by reading src/server.ts as a
-// string: invariants, counts, limits and doc-meta. path-mutation already walked
-// the whole directory, and it walked it for the right reason, recorded in that
-// file: scanning one file makes the guard's scope an assumption about where the
-// next offender will be written, and the defect it guards had already arrived
-// three times in places nobody predicted.
-//
-// The narrow version had a second cost, and it is the one this batch exists to
-// remove. server.ts is the only legal place to add a tool AND the only file the
-// guards read, so the file cannot be split without blinding them: move a tool to
-// src/tools/documents.ts and the operator-gate guard, the tool count and the
-// bounded-argument guard all pass over a file that no longer contains what they
-// check. Widening them first is what makes that split possible later.
+// The source walk, shared by every scanner. Scanning one file would make a guard's
+// scope an assumption about where the next offender will be written, and would
+// blind the guards when a tool moves to another module.
 //
 // Everything reads through here so there is one definition of "the source", one
 // vacuity guard, and one place to change when src/ grows a subdirectory.
@@ -27,16 +15,13 @@ export interface SourceFile {
   text: string;
 }
 
-// A floor, not a count. It exists so a walk that silently returns nothing fails loudly
-// instead of making every assertion downstream vacuously true, which has happened four
-// times in this repo. It is deliberately well below the real file count so adding or
-// removing a module is not a test edit; it only catches a walk that broke.
+// A floor, not a count: a walk that returns nothing fails loudly instead of making
+// every assertion downstream vacuously true. It is well below the real file count so
+// adding or removing a module is not a test edit.
 const MIN_SOURCE_FILES = 10;
 
-// RECURSIVE, so a tool moved into a subdirectory cannot hide from the guards
-// that read through here (audit MAJOR 18: the walk that only read the top level
-// would have passed over src/tools/documents.ts, blinding the operator-gate, tool
-// count and bounded-argument checks). The name is the path relative to the root
+// Recursive, so a tool moved into a subdirectory cannot hide from the guards that
+// read through here. The name is the path relative to the root
 // with forward slashes, so a top-level file keeps its basename (env.ts) and a
 // nested one is addressable (tools/documents.ts). Exported so the recursion
 // itself is testable against a fixture tree without touching src/.
@@ -75,9 +60,7 @@ export function allSourceText(): string {
     .join("\n");
 }
 
-// The text of one named file. Kept so a scanner that genuinely is about one
-// module (the consent dialog's own headers, say) can say so explicitly rather
-// than searching everything and hoping.
+// The text of one named file, for a scanner that is about one module.
 export function sourceFile(name: string): string {
   const found = sourceFiles().find((f) => f.name === name);
   if (!found) throw new Error(`src/${name} not found by the source walk`);

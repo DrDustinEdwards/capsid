@@ -4,18 +4,12 @@ import { SCORER_MARKER, digest, normalizePins, sharedBlock } from "../src/scorer
 import { identityFindings } from "../src/watcher.ts";
 import { blockHash, normalizePins as scriptNormalizePins, splitBlock } from "../scripts/sync-scorer.mjs";
 
-// THE CROSS-REPO CLAIM, AND THE TWO SPELLINGS OF IT.
-//
 // The score job below the marker and scripts/improve-report.mjs are meant to be
-// identical in all five roster repos. Until 2026-09-16 nothing measured it: the
-// copier had thrown on every run since 2026-09-12, three commits to the shared
-// surface reached nobody, and the five were found to hold three distinct score
-// blocks. The watcher is where that is measured now, because it is the only
-// component with read access to all five.
+// identical in all five roster repos. The watcher measures that, because it is the
+// only component with read access to all five.
 //
-// Two implementations exist on purpose: the Worker cannot import the offline
-// script and the script has no Worker bindings. The first test here is what stops
-// them drifting.
+// Two implementations exist on purpose: the Worker cannot import the offline script
+// and the script has no Worker bindings. The first test stops them drifting.
 
 const SAMPLE = [
   "jobs:",
@@ -53,7 +47,7 @@ test("line endings do not change the hash", async () => {
   assert.equal(await digest(SAMPLE.replace(/\n/g, "\r\n")), await digest(SAMPLE));
 });
 
-// ---- what the finding says --------------------------------------------------
+// What the finding says.
 
 const surface = (namespace: string, block: string, report: string) => ({ namespace, block, report });
 
@@ -80,8 +74,7 @@ test("A DIVERGENCE NAMES WHICH REPOS AND WHICH BLOCK", () => {
 });
 
 test("A READ THAT RETURNED NOTHING IS A FINDING, never silent agreement", () => {
-  // The failure this guard is built against: four repos unreadable, the fifth
-  // trivially matching itself, and a clean report.
+  // Four repos unreadable and the fifth matching itself must not read as clean.
   const findings = identityFindings([surface("capsid", "aaaa", "bbbb")], ["foxhound", "foxing", "germomics"], ["dustinedwards"]);
   assert.ok(findings.length >= 1, "an unreadable roster reported nothing at all");
   const unread = findings.find((f) => /could not be read everywhere/.test(f.title));
@@ -107,10 +100,8 @@ test("zero readable repos reports the unread, and claims nothing about identity"
 });
 
 test("A REPORT SCRIPT THAT DIVERGES ALONE IS REPORTED, even when every block agrees", () => {
-  // Found by planting: the comparison read `blocks.size > 1` alone and this case
-  // went unreported, which is the exact shape of the 2026-09-13 miss. e58c3cc
-  // changed ONLY scripts/improve-report.mjs, and that change reached nobody for
-  // three days while every score block still matched.
+  // A comparison of `blocks.size > 1` alone would miss a change to only
+  // scripts/improve-report.mjs.
   const read = [
     surface("capsid", "aaaa", "bbbb"),
     surface("dustinedwards", "aaaa", "cccc"),

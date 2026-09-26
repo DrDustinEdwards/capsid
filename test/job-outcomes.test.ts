@@ -13,13 +13,9 @@ import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } fro
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
-// JOBS AS EVIDENCE: the recording half.
-//
-// The behavioural half is test-integration/jobs.test.ts, which drives a real
-// complete against a real D1 and reads the row back: "written exactly once" is a
-// property of a PRIMARY KEY and a fake would agree with whatever it was told. What is
-// here is what node can check without a database: the verification rules, the
-// null-not-zero rule, and the derivation of a row from a job.
+// Job outcomes: what node can check without a database (the verification rules, the
+// null-not-zero rule, and the derivation of a row from a job). "Written exactly once"
+// is a PRIMARY KEY property, so test-integration/jobs.test.ts checks it on a real D1.
 
 function job(overrides: Partial<JobRow> = {}): JobRow {
   return {
@@ -48,7 +44,7 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
   };
 }
 
-// ---- what the row says about itself ---------------------------------------------
+// what the row says about itself
 
 test("result_kind is derived from the result ref, not declared by the caller", () => {
   assert.equal(resultKindOf("https://github.com/o/r/pull/7"), "pr");
@@ -66,15 +62,13 @@ test("a duration that cannot be measured is null, and one that ran backwards is 
   assert.equal(durationMinutes("2026-09-11T10:00:00.000Z", now), 90);
   assert.equal(durationMinutes(null, now), null, "no claim timestamp is not a duration of zero");
   assert.equal(durationMinutes("not a date", now), null);
-  // A clock that disagrees with itself is a fact about the clock. Reporting a
-  // negative duration, or clamping it to 0, would both put it in the record as work.
+  // A negative duration, or one clamped to 0, would put a clock fault in the record as work.
   assert.equal(durationMinutes("2026-09-11T12:00:00.000Z", now), null);
 });
 
 test("the duration measures the final stretch, and the row says how many there were", () => {
-  // `resume` resets claimed_at, so a job blocked for a day and resumed reports the
-  // work after the gate rather than the wait. resumed_count is what tells a reader
-  // this number omits earlier stretches, which is why both are on the row.
+  // `resume` resets claimed_at, so the duration is the work after the gate.
+  // resumed_count tells a reader this number omits earlier stretches.
   const row = outcomeFrom(
     job({ claimed_at: "2026-09-11T11:00:00.000Z", blocked_count: 2, resumed_count: 2 }),
     empty(),
@@ -85,7 +79,7 @@ test("the duration measures the final stretch, and the row says how many there w
   assert.equal(row.resumed_count, 2);
 });
 
-// ---- null is not zero ------------------------------------------------------------
+// null is not zero
 
 function empty(): EvidenceVerdict {
   return {
@@ -101,9 +95,8 @@ function empty(): EvidenceVerdict {
 }
 
 test("a job that reported nothing records NULL everywhere, never zero", async () => {
-  // The distinction the whole table is built on. A column that spelled "nobody
-  // counted" and "the count was zero" the same way would make an average over it an
-  // average over a lie.
+  // A column that spelled "nobody counted" and "the count was zero" the same way
+  // would make any average over it wrong.
   const verdict = await verifyEvidence(fakeEnv({}), "capsid", undefined);
   for (const field of ["prs_opened", "prs_merged", "commits", "files_changed", "tests_added", "ci_green"] as const) {
     assert.equal(verdict[field], null, `${field} came back as something other than null with no evidence`);
@@ -112,8 +105,7 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
   for (const field of ["prs_opened", "prs_merged", "commits", "files_changed", "tests_added", "ci_green"] as const) {
     assert.equal(row[field], null);
   }
-  // And the counts the Worker knows first-hand are still there, because those it did
-  // not have to be told.
+  // The counts the Worker knows first-hand are still there.
   assert.equal(row.blocked_count, 0);
   assert.equal(row.agent, "agent:capsid-driver");
   assert.equal(row.namespace, "capsid");
@@ -135,12 +127,11 @@ test("nothing is marked verified when nothing was checked", async () => {
     files_changed: false,
     ci_green: false,
   });
-  // The driver's numbers are kept. An unverified count is still better than nothing
-  // on the row; what must never happen is it being PRESENTED as verified.
+  // The driver's numbers are kept, but never presented as verified.
   assert.equal(verdict.commits, 9);
 });
 
-// ---- verification against GitHub --------------------------------------------------
+// verification against GitHub
 
 const REPOS = [{ repo: "DrDustinEdwards/capsid-mcp", label: "primary" }];
 
@@ -167,8 +158,8 @@ const greenRuns: Route = {
 };
 
 test("GITHUB'S NUMBERS REPLACE THE DRIVER'S, and only then are they marked verified", async () => {
-  // The rule the arc exists for. The driver claims two commits and one file; GitHub
-  // says three and five, and the row records GitHub's.
+  // The driver claims two commits and one file; GitHub says three and five, and the
+  // row records GitHub's.
   await withFetch({ [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: greenRuns }, async () => {
     const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL], commits: 2, files_changed: 1, tests_added: 4 });
     assert.equal(verdict.commits, 3, "the driver's commit count was kept over GitHub's");
@@ -199,9 +190,8 @@ test("an unmerged pull request is counted as opened and not as merged", async ()
 });
 
 test("PLANT: a pull request GitHub will not answer for leaves EVERY count unverified", async () => {
-  // PARTIAL VERIFICATION IS NOT VERIFICATION. One of two pull requests resolving
-  // would give a merged count over a subset presented as a total, which is how a
-  // count lies without anybody writing a wrong number.
+  // One of two pull requests resolving would give a merged count over a subset
+  // presented as a total.
   const second = "/repos/DrDustinEdwards/capsid-mcp/pulls/8";
   await withFetch(
     { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${second}`]: { status: 404, text: "nope" } },
@@ -223,9 +213,8 @@ test("PLANT: a pull request GitHub will not answer for leaves EVERY count unveri
 });
 
 test("a repo the namespace does not map is refused, not read", async () => {
-  // The namespace-to-repos mapping is the authorization boundary. A driver that could
-  // name any repo here would be using the outcome recorder as an unaudited read of
-  // everything the App can reach.
+  // The namespace-to-repos mapping is the authorization boundary, or the outcome
+  // recorder becomes an unaudited read of everything the App can reach.
   await withFetch({}, async (calls) => {
     const verdict = await verifyEvidence(envWithRepo(), "capsid", {
       prs: ["https://github.com/someone/else/pull/1"],
@@ -237,8 +226,7 @@ test("a repo the namespace does not map is refused, not read", async () => {
 });
 
 test("CI THAT HAS NOT FINISHED IS NOT CI THAT FAILED", async () => {
-  // Three answers, not two. Recording an in-progress run as red would libel the job,
-  // and recording it as green would be worse.
+  // Three answers, not two: an in-progress run is neither red nor green.
   const running: Route = {
     body: { workflow_runs: [{ id: 1, name: "ci", head_sha: HEAD, status: "in_progress", conclusion: null, event: "push", created_at: "x", html_url: "u" }] },
   };
@@ -255,8 +243,7 @@ test("a sha with no runs is not green and not red", async () => {
     const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
     assert.equal(verdict.ci_green, null);
     assert.equal(verdict.verified.ci_green, false);
-    // The pull request counts still verified: one unanswerable question does not
-    // withdraw the answers to the others.
+    // The pull request counts still verified.
     assert.equal(verdict.verified.prs_merged, true);
   });
 });
@@ -280,9 +267,8 @@ test("a failed run is recorded as red, which is a verified fact", async () => {
 });
 
 test("GITHUB BEING UNREACHABLE NEVER FAILS THE JOB", async () => {
-  // A driver that finished its work must be able to close its job. Refusing the
-  // complete would leave a lease on finished work, which is worse than an unverified
-  // count, so the failure is recorded as notes and the transition goes through.
+  // Refusing the complete would leave a lease on finished work, so the failure is
+  // recorded as notes and the transition goes through.
   await withFetch({}, async () => {
     const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL], commits: 2 });
     assert.equal(verdict.verified.commits, false);
@@ -292,9 +278,8 @@ test("GITHUB BEING UNREACHABLE NEVER FAILS THE JOB", async () => {
 });
 
 test("PLANT: an installation token that cannot be minted is a note, not a throw (audit 2026-09-25, F1-1)", async () => {
-  // No cached token and no App key, so ghFetch throws before any request. prFacts
-  // caught only resolveRepo, so this reached holderTransition after the job row had
-  // committed, and the outcome, audit and mirror were never written.
+  // No cached token and no App key, so ghFetch throws before any request. A throw here
+  // would land after the job row committed and skip the outcome, audit and mirror.
   const env = fakeEnv({
     DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify(REPOS) }) }) }) },
     APP_KV: fakeKv().kv,
@@ -308,7 +293,7 @@ test("PLANT: an installation token that cannot be minted is a note, not a throw 
 });
 
 test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2026-09-25, F3-11)", async () => {
-  // One throw here used to end the daily sweep before its stamp was written.
+  // A throw here would end the daily sweep before its stamp is written.
   const env = fakeEnv({
     DB: {
       prepare: (sql: string) => ({
@@ -326,7 +311,7 @@ test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2
   });
 });
 
-// ---- the bar a job can set on a driver's history ---------------------------------
+// the bar a job can set on a driver's history
 
 test("a min_record nobody set is no requirement", () => {
   assert.deepEqual(parseMinRecord(null), { ok: true, value: {} });
@@ -336,8 +321,8 @@ test("a min_record nobody set is no requirement", () => {
 });
 
 test("a CORRUPT min_record refuses: it fails CLOSED", () => {
-  // Reversed 2026-09-17 (AUDIT-2026-09-16.md). A garbled bar is not the same as no
-  // bar; the claim marks such a job failed rather than leasing it to anyone.
+  // A garbled bar is not the same as no bar; the claim marks such a job failed rather
+  // than leasing it to anyone.
   for (const bad of ["{", "[]", "null", '{"prs_merged":"lots"}', '{"prs_merged":-1}', '{"prs_merged":1.5}']) {
     assert.equal(parseMinRecord(bad).ok, false, `${bad} parsed as a requirement`);
     const refusal = missingForRecord({ prs_merged: 99 }, bad);
@@ -352,7 +337,7 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   assert.ok(refusal, "an agent with one merged pull request cleared a bar of three");
   assert.match(refusal, /at least 3 merged pull requests/);
   assert.match(refusal, /has 1/, "the refusal does not say what the agent actually has");
-  // And the same agent one merge later clears it, so the bar is a bar and not a wall.
+  // The same agent at the bar clears it.
   assert.equal(missingForRecord({ prs_merged: 3 }, bar), null);
   // Singular reads as English rather than as "1 merged pull requests".
   assert.match(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!, /1 merged pull request\b/);
@@ -361,13 +346,10 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
 // That the claim and a resume with take both ask the record question is driven against
 // a real D1 in test-integration/job-outcomes.test.ts, one plant per path.
 
-// ---- the skills a job was offered and used --------------------------------------
+// the skills a job was offered and used
 //
-// REPRODUCTION, red before the fix. migration 0013 added skill_ids_offered and
-// skill_ids_used to job_outcomes on 2026-09-12 and nothing has ever written them, so
-// improve_status's offered-to-used rate sums NULL over every row and reports 0 of 0.
-// The recommend step is judged on that gap, so the one number that says whether it
-// works has never had an input.
+// improve_status's offered-to-used rate reads skill_ids_offered and skill_ids_used, so
+// the outcome row must carry them.
 test("REPRO: the outcome row carries the skills the job was offered and used", () => {
   const verdict: EvidenceVerdict = {
     prs_opened: 1,
@@ -388,10 +370,9 @@ test("REPRO: the outcome row carries the skills the job was offered and used", (
 });
 
 test("NULL IS NOT AN EMPTY LIST: a job that named no skills stores null, not []", () => {
-  // improve_status sums json_array_length over these columns, and SUM skips NULL. A
-  // job that never had a recommend step must contribute to neither total, which an
-  // empty array would not do: it would count as "offered nothing", which is a
-  // measurement, where NULL is the absence of one.
+  // improve_status sums json_array_length over these columns, and SUM skips NULL. An
+  // empty array would count as "offered nothing", a measurement; NULL is the absence
+  // of one.
   const verdict: EvidenceVerdict = {
     prs_opened: null, prs_merged: null, commits: null, files_changed: null,
     tests_added: null, ci_green: null,
@@ -403,12 +384,10 @@ test("NULL IS NOT AN EMPTY LIST: a job that named no skills stores null, not []"
   assert.equal(row.skill_ids_used, null);
 });
 
-// ---- the signal is the Worker's, not the driver's -------------------------------
+// the signal is the Worker's, not the driver's
 //
-// Ruled 2026-09-16, amending 2026-09-12. A driver names which skills it was offered
-// and used; the DIRECTION comes only from what this Worker verified on GitHub. These
-// drive signalFor to each of its three answers, because a signal that has only been
-// seen returning "win" is one nobody has verified.
+// A driver names which skills it was offered and used; the direction comes only from
+// what this Worker verified on GitHub. These drive signalFor to each of its three answers.
 
 const verdictWith = (over: Partial<EvidenceVerdict>): EvidenceVerdict => ({
   prs_opened: 1,
@@ -432,8 +411,7 @@ test("a named PR that did not merge is a loss, and so is red CI", () => {
 });
 
 test("UNVERIFIED EARNS NOTHING IN EITHER DIRECTION, and that is not a loss", () => {
-  // The case the 2026-09-12 ruling already decided: charging a loss for a GitHub
-  // outage would retire skills for being present during one.
+  // Charging a loss for a GitHub outage would retire skills for being present during one.
   const unread = verdictWith({ verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false } });
   assert.equal(signalFor(unread), "environment-failure");
   // CI could not be read, merge state could.

@@ -8,9 +8,9 @@ import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// OUTCOME ROWS ARE IMMUTABLE EXCEPT MERGE STATE. A driver never merges: it blocks and
-// the seat merges afterwards, so every row is written "opened, not merged" and stays
-// wrong. These cover the one narrow path that corrects it.
+// Outcome rows are immutable except merge state. A driver never merges: it blocks and
+// the seat merges afterwards, so every row is written "opened, not merged". These
+// cover the one path that corrects it.
 
 function recorder() {
   const recorded: Array<{ sql: string; params: unknown[] }> = [];
@@ -25,7 +25,7 @@ function recorder() {
   return { recorded, db };
 }
 
-// ---- the join rows written at complete --------------------------------------------
+// the join rows written at complete
 
 test("one row per pull request the evidence named", () => {
   const { recorded, db } = recorder();
@@ -53,7 +53,7 @@ test("evidence naming no pull requests writes no rows", () => {
   assert.equal(recorded.length, 0);
 });
 
-// ---- seeding a row that stored no pull request -------------------------------------
+// seeding a row that stored no pull request
 
 test("pull request URLs are found in both result_ref and the summary prose", () => {
   const urls = prUrlsFromJob({
@@ -100,8 +100,8 @@ async function connectAdmin(db: unknown) {
 }
 
 test("a merge that fails to update an outcome does not fail the merge", async () => {
-  // The merge already happened on GitHub. Reporting it as failed because the outcome
-  // bookkeeping threw would be a lie about the merge.
+  // The merge already happened on GitHub, so an outcome bookkeeping failure must not
+  // report it as failed.
   const statement = (sql: string) => {
     const stmt = {
       bind: () => stmt,
@@ -148,7 +148,7 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
   assert.ok(errors.some((e) => e.startsWith("OUTCOME_REVERIFY_FAILED pr 7")), "the planted failure did not reach the re-verification");
 });
 
-// ---- evidence as an object or a JSON string ------------------------------------------
+// evidence as an object or a JSON string
 
 test("an evidence object passes through unchanged", () => {
   const evidence = { prs: ["https://github.com/o/r/pull/1"], commits: 6, files_changed: 19, tests_added: 75 };
@@ -158,8 +158,8 @@ test("an evidence object passes through unchanged", () => {
 });
 
 test("the same evidence as a JSON string parses to the same thing", () => {
-  // The point of the whole parameter: a session whose cached tool schema predates the
-  // object form can still attach verified evidence.
+  // A session whose cached tool schema predates the object form can still attach
+  // evidence.
   const evidence = { prs: ["https://github.com/o/r/pull/1"], commits: 6, files_changed: 19, tests_added: 75 };
   const fromString = parseEvidence(JSON.stringify(evidence));
   assert.ok("evidence" in fromString);

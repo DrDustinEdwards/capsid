@@ -8,14 +8,10 @@ import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schem
 import { adminAgent, legacyAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1 } from "./fakes.ts";
 
-// GROUP 4: MINTING, over a real MCP connection.
-//
-// The property that matters is not that mint works. It is WHO may call it. A minted
-// agent that can mint another agent has a privilege-escalation path with no ceiling:
-// a driver scoped to one namespace mints itself a seat scoped to all of them, and
-// every scope below is decoration. So `admin` is not a flag (a flag would be settable
-// by update_scopes, which is the same escalation one step further out) and it is true
-// only for the two identities that predate the table.
+// Minting, over a real MCP connection. The property is who may call it: a minted
+// agent that can mint another could mint itself a seat scoped to everything. So
+// `admin` is not a flag (update_scopes could set a flag) and it is true only for the
+// two identities that predate the table.
 
 interface ToolResult {
   isError?: boolean;
@@ -40,12 +36,10 @@ async function connect(caller: Agent, rows: Array<Record<string, unknown>> = [])
 
 const parse = (result: ToolResult) => JSON.parse(result.content[0].text) as Record<string, unknown>;
 
-// TWO SHAPES OF NO, and the difference is deliberate. An AUTHORIZATION refusal is an
-// MCP error (isError), because the caller asked for something it may never have. A
-// DOMAIN refusal (this name is taken, there is no such agent) comes back as an
-// ordinary result carrying ok:false and a refusal string, which is the shape the
-// queue already uses for the same reason: the call was legitimate and the answer is
-// no.
+// Two shapes of refusal. An authorization refusal is an MCP error (isError), because
+// the caller asked for something it may never have. A domain refusal (name taken, no
+// such agent) is an ordinary result with ok:false and a refusal string, as the queue
+// uses: the call was legitimate and the answer is no.
 const refusalOf = (result: ToolResult) => String(parse(result).refusal ?? "");
 const statements = (d1: FakeD1) => [...d1.reads, ...d1.recorded];
 
@@ -99,12 +93,9 @@ test("a new agent is born with read on its named namespaces and no flags", async
 });
 
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
-  // Audit 2026-09-13, finding 3. scripts/mint-agents.mjs derived this for a driver on
-  // its --apply path and the tool's own description promised it; the handler started
-  // from defaultScopes, whose repos is "*", so every agent minted through MCP was born
-  // reaching every repo in the portfolio. Two mint paths disagreeing about the default
-  // is the same defect class as a guard with no caller: the narrow one is the one
-  // nobody uses in a hurry. Driven through a real MCP `agents` call.
+  // defaultScopes has repos "*", so the handler must derive the repos from the
+  // namespace mapping, as scripts/mint-agents.mjs does. Driven through a real MCP
+  // `agents` call.
   const { call, close } = await connect(adminAgent("DrDustinEdwards"));
   const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
   await close();
@@ -114,9 +105,8 @@ test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wild
 });
 
 test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcard included", async () => {
-  // The innocent direction, both halves. Derivation applies only when the caller named
-  // nothing; an admin that means every repo says so with the single entry "*" and gets
-  // it, which is how the seat and the auditor are minted.
+  // Derivation applies only when the caller named nothing; an admin that means every
+  // repo passes the single entry "*".
   const { call, close } = await connect(adminAgent("DrDustinEdwards"));
   const narrow = parse(await call({ action: "mint", name: "one-repo", kind: "session", namespaces: ["capsid"], repos: ["o/other"] }));
   const wide = parse(await call({ action: "mint", name: "every-repo", kind: "seat", namespaces: ["capsid"], repos: ["*"] }));
@@ -133,9 +123,8 @@ test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not 
 });
 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
-  // Fail closed, the same way scripts/mint-agents.mjs reposForNamespace does. The
-  // alternative is a silent fallback to the wildcard on exactly the namespace nobody
-  // has finished configuring.
+  // Fail closed, as scripts/mint-agents.mjs reposForNamespace does, rather than fall
+  // back to the wildcard.
   const { call, close } = await connect(adminAgent("DrDustinEdwards"), []);
   const result = await call({ action: "mint", name: "ghost-driver", kind: "driver", namespaces: ["not-registered"] });
   await close();
@@ -143,8 +132,8 @@ test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than wi
 });
 
 test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
-  // The escalation this exists to refuse. The caller here holds write on its own
-  // namespace, which is more than a driver needs and still not enough for this.
+  // The caller holds write on its own namespace, more than a driver needs and still
+  // not enough for this.
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   const minted: Agent = {

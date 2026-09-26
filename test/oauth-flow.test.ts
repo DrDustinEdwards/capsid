@@ -7,15 +7,14 @@ const checkRegistrationRate = (kv: KVNamespace | undefined, ip: string, now: Dat
 import { fakeKv } from "./fakes.ts";
 
 
-// The KV is the shared fake now (quality audit 6.2). Its failure injection came
-// from this file's local copy and is what makes the limiter's fail-open paths
-// testable at all; the merged version keeps it and adds list plus pagination.
+// The shared KV fake's failure injection is what makes the limiter's fail-open
+// paths testable.
 
 const NOW = new Date("2026-08-17T14:30:00.000Z");
 const HOUR_KEY = "dcr:rate:h:1.2.3.4:2026-08-17T14";
 const DAY_KEY = "dcr:rate:d:1.2.3.4:2026-08-17";
 
-// ---- the /register rate limit -----------------------------------------------
+// the /register rate limit
 
 test("a first registration is allowed and both counters start at 1", async () => {
   const kv = fakeKv();
@@ -48,9 +47,8 @@ test("the daily limit refuses even when the hour is quiet", async () => {
 });
 
 test("the measured 2026-08-09 burst still gets through", async () => {
-  // 22 registrations from one IP inside about two hours, which is what claude.ai
-  // legitimately did while the consent flow was broken. A limit that blocks this
-  // blocks Dustin mid-incident, so it is asserted rather than assumed.
+  // 22 registrations from one IP inside about two hours, a legitimate client retry
+  // pattern that the limit must allow.
   const kv = fakeKv();
   for (let i = 0; i < 22; i++) {
     const at = new Date(NOW.getTime() + i * 5 * 60_000); // one every 5 minutes
@@ -75,17 +73,14 @@ test("the limiter FAILS OPEN when the counter write throws", async () => {
 test("the limiter FAILS OPEN on a corrupt counter value", async () => {
   // Corrupted at the store, not at a key name this test guessed: a change to the
   // key layout must not turn this into a test that passes by reading nothing.
-  // The shared fake takes the corrupt VALUE rather than a boolean, so a test can
-  // say what kind of corruption it means.
   const kv = fakeKv({ corrupt: "not-a-number" });
   const verdict = await checkRegistrationRate(kv.kv, "1.2.3.4", NOW);
   assert.deepEqual(verdict, { allowed: true });
 });
 
 test("counters are per IP and per window", async () => {
-  // The bucket is FILLED by driving the real code, not by seeding a key name this
-  // test assumed. A single global bucket would then refuse the second address, and
-  // that is the failure this is here to catch.
+  // The bucket is filled by driving the real code, not by seeding a key name this
+  // test assumed. A single global bucket would then refuse the second address.
   const kv = fakeKv();
   for (let i = 0; i < MAX_PER_HOUR; i++) await checkRegistrationRate(kv.kv, "1.2.3.4", NOW);
   assert.equal((await checkRegistrationRate(kv.kv, "1.2.3.4", NOW)).allowed, false, "the bucket did not fill");
@@ -108,16 +103,13 @@ test("callerIp reads CF-Connecting-IP and falls back off the edge", () => {
 // listing every registered redirect, and a stale approval for a client that no longer
 // resolves.
 
-// ---- the approval cookie ----------------------------------------------------
-
-// The REAL function, not a copy of it: this is the security property of the cookie.
+// The approval cookie: the real function, not a copy, since this is its security property.
 test("the tag binds one redirect URI, so approving one does not authorize a sibling", async () => {
   const claudeUri = "https://claude.ai/api/mcp/auth_callback";
   const attackerUri = "https://evil.example/callback";
   const approvedForClaude = await approvalTag("abc", claudeUri);
-  // The phishing case: same client, a DIFFERENT redirect. On the old set-based tag,
-  // approving the client covered every URI it had registered; now the sibling has
-  // its own tag and comes back to the dialog.
+  // The phishing case: same client, a different redirect. The sibling has its own
+  // tag and comes back to the dialog.
   const forAttacker = await approvalTag("abc", attackerUri);
   assert.notEqual(approvedForClaude, forAttacker, "approving one redirect covered a sibling redirect");
   // The exact same URI is stable.
@@ -129,7 +121,7 @@ test("the tag binds one redirect URI, so approving one does not authorize a sibl
   assert.equal(await approvalTag("abc", undefined), await approvalTag("abc", ""));
 });
 
-// ---- the DCR redirect cap ---------------------------------------------------
+// the DCR redirect cap
 
 test("dcrRedirectRefusal refuses more than one non-loopback redirect (old code had no such check)", () => {
   // One non-loopback plus any number of loopbacks: allowed (native client).

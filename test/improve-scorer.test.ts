@@ -43,12 +43,11 @@ async function sign(namespace: string, body: string, at: Date = NOW): Promise<{ 
   return { namespace, timestamp, signature: await hmacHex(key, signaturePayload(timestamp, body)), body };
 }
 
-// ---- key derivation ---------------------------------------------------------
+// key derivation
 
 test("each namespace gets a DIFFERENT key, and none of them is the root secret", async () => {
-  // DERIVED FROM ROSTER rather than restated. The list was spelled out here and
-  // went stale the moment the recova namespace was renamed to foxhound, which is
-  // the drift this repo keeps ruling against, one level down.
+  // Derived from ROSTER rather than restated, so a renamed namespace cannot leave
+  // this list stale.
   const keys = await Promise.all(ROSTER.map((ns) => deriveScoreKey(ROOT, ns)));
   assert.ok(keys.length > 1, "fewer than two namespaces, so distinctness is not tested");
   assert.equal(new Set(keys).size, keys.length, "two namespaces derived the same key");
@@ -62,7 +61,7 @@ test("derivation is stable, so a repo secret does not have to be re-pasted", asy
   assert.equal(await deriveScoreKey(ROOT, "capsid"), await deriveScoreKey(ROOT, "capsid"));
 });
 
-// ---- signature verification -------------------------------------------------
+// signature verification
 
 test("a correctly signed report is admitted", async () => {
   const body = JSON.stringify(report());
@@ -71,8 +70,8 @@ test("a correctly signed report is admitted", async () => {
 });
 
 test("A KEY FOR ONE NAMESPACE CANNOT SIGN FOR ANOTHER", async () => {
-  // The whole reason the keys are derived per namespace. foxing's Actions log
-  // leaking must not let anything report for capsid.
+  // The reason the keys are derived per namespace: a leaked foxing key must not
+  // let anything report for capsid.
   const body = JSON.stringify(report());
   const signed = await sign("foxing", body);
   const verdict = await verifySignedReport({ IMPROVE_SCORE_SECRET: ROOT }, { ...signed, namespace: "capsid" }, NOW);
@@ -143,7 +142,7 @@ test("a malformed namespace or timestamp header is a 400", async () => {
   assert.equal(noTime.ok === false && noTime.status, 400);
 });
 
-// ---- report parsing ---------------------------------------------------------
+// report parsing
 
 test("a well-formed report parses", () => {
   const parsed = parseScoreReport(JSON.stringify(report()));
@@ -193,7 +192,7 @@ test("an invalid metric NAME is refused", () => {
   assert.match(parsed.ok === false ? parsed.refusal : "", /invalid metric name/);
 });
 
-// ---- Fix 5: jti nonce, body cap, replay cache -------------------------------
+// jti nonce, body cap, replay cache
 
 test("a report with no jti is refused (old code did not require one)", () => {
   const { jti, ...rest } = report();
@@ -218,10 +217,9 @@ test("readBoundedText returns the body when it is under the cap", async () => {
   assert.equal(result.ok && result.text, body);
 });
 
-// MOVED FROM KV TO D1 on 2026-09-07 (Grok MAJOR 3). The cache was a get-then-put
-// with no atomicity between the two calls; it is now an INSERT against a PRIMARY
-// KEY, so the database decides. The concurrency property that change exists for
-// is asserted in test/ingest-hardening.test.ts, which races three claims.
+// The replay cache is an INSERT against a PRIMARY KEY, so the database decides who
+// claimed a nonce. The concurrency property is driven against a real D1 in
+// test-integration/scheduled.test.ts.
 test("claimJti admits a nonce once, then refuses the replay", async () => {
   const d1 = fakeD1({});
   const first = await claimJti(d1.db, "capsid", "nonce-abc");
@@ -243,7 +241,7 @@ test("claimJti FAILS CLOSED when the database cannot be reached", async () => {
   assert.equal(verdict.ok === false && verdict.status, 503);
 });
 
-// ---- the holdout check ------------------------------------------------------
+// the holdout check
 
 const MANIFEST = { namespace: "capsid", total: 11, updated_at: "2026-09-01T00:00:00Z" };
 

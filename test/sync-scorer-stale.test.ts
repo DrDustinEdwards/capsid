@@ -6,20 +6,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { requireCurrent } from "../scripts/sync-scorer.mjs";
 
-// A CLONE THAT HAS NEVER FETCHED AGREES WITH ITSELF AND WITH NOTHING ELSE.
+// A clone that has never fetched agrees with itself and with nothing else.
 //
-// requireCurrent compared the local ref to its own remote-tracking branch and stopped
-// there. That cannot see the case it exists for: when origin/<ref> is ITSELF stale,
-// both sides are the same old commit and the check passes.
-//
-// Measured 2026-09-18 on foxhound. Its clone had never been fetched, so `main` and
-// `origin/main` were both 826b67f while the real remote was at 3360275, one merged
-// sync PR ahead. The check passed, the copier read the stale blobs, and the dry run
-// reported foxhound's scorer as diverged from capsid's. It was not: all five repos
-// were byte-identical on their actual remotes. job_63f96b1d1a32 was posted to
-// investigate a divergence that never existed.
-//
-// These build that exact shape with real git rather than describing it.
+// Comparing the local ref to its own remote-tracking branch cannot see a stale
+// origin/<ref>: both sides are the same old commit, and the copier then reads stale
+// blobs and reports a divergence that does not exist. These build that shape with
+// real git.
 
 function git(dir: string, ...args: string[]): string {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
@@ -55,13 +47,12 @@ function staleClone() {
 }
 
 test("A CLONE THAT HAS NOT FETCHED IS REFUSED, and the refusal says to fetch", () => {
-  // ONE FIXTURE, TWO ASSERTIONS, because each one costs a bare init and two clones and
-  // this file runs inside the unit suite's 60-second budget.
+  // One fixture, two assertions: each fixture costs a bare init and two clones, inside
+  // the unit suite's 60-second budget.
   const { root, stale } = staleClone();
   try {
-    // Non-vacuity first: the OLD check passes on this clone. If these ever differ, the
-    // shape being guarded is not the shape this builds and the guard below would pass
-    // for the wrong reason.
+    // Non-vacuity: a local-only comparison passes on this clone, so the fixture is the
+    // shape being guarded.
     assert.equal(git(stale, "rev-parse", "main"), git(stale, "rev-parse", "origin/main"));
     assert.throws(
       () => requireCurrent(stale, "main", "under-test"),
@@ -79,10 +70,9 @@ test("A CLONE THAT HAS NOT FETCHED IS REFUSED, and the refusal says to fetch", (
 });
 
 test("a fetched clone passes, and an unreachable remote refuses", () => {
-  // Both directions on one fixture. The innocent case matters: a guard that refuses
-  // the ordinary run becomes a guard somebody removes. The unreachable case is the
-  // answer to the original no-network design: it fails CLOSED and names the reason,
-  // rather than falling back to two local refs that agree only with each other.
+  // Both directions on one fixture. A guard that refuses the ordinary run gets
+  // removed; an unreachable remote fails closed and names the reason, rather than
+  // falling back to two local refs that agree only with each other.
   const { root, stale } = staleClone();
   try {
     git(stale, "fetch", "origin");

@@ -5,22 +5,12 @@ import { test } from "node:test";
 // @ts-expect-error - a .mjs script with no type declarations, driven here for real.
 import { rollbackTookEffect, shouldRollBack } from "../scripts/rollback-guard.mjs";
 
-// THE ROLLBACK THAT RAN TWICE AND MOVED PRODUCTION FORWARD.
+// The rollback guard: roll back only when the deploy this run shipped is what is live.
 //
-// On 2026-09-18 the live gate on run 35300342260 crashed on a transient ECONNRESET
-// after passing its first gates. The rollback step did what it was meant to and put
-// the previous version back. The seat then reran ONLY the failed live job, and:
-//
-//   - `needs.deploy.result` is preserved across a rerun of one job, so it was still
-//     'success' from attempt 1 and the step's `if:` condition held.
-//   - The rollback ran a SECOND time. `wrangler rollback` with no version id means
-//     "the previous version", which after the first rollback was the 4df1274 build
-//     the first rollback had just backed out.
-//
-// Production ended up running the exact commit the gate had refused. Nothing was
-// wrong with that commit, as it turned out, but nothing in the system knew that.
-//
-// These drive the real script with the real shas from that incident.
+// Rerunning only the failed live job preserves `needs.deploy.result`, so the rollback
+// step's `if:` still holds, and `wrangler rollback` with no version id means "the
+// previous version". A second rollback therefore puts back the very commit the first
+// one removed.
 
 const LIVE_SHA = "4df127439ed3aa19aef8e350ab6311957b8f8611";
 const PREVIOUS_SHA = "376eecb3bc27c6d744de35453cfad7a08bdc1d5f";
@@ -32,25 +22,24 @@ test("the deploy this run shipped IS live: roll it back", () => {
 });
 
 test("THE RERUN CASE: what is live is not this run's deploy, so nothing is rolled back", () => {
-  // Attempt 2's position exactly: this run's commit is 4df1274, but attempt 1's
-  // rollback already put 376eecb3 live. Rolling back here is what moved production
-  // onto the refused commit.
+  // Attempt 2: this run's commit is LIVE_SHA, but attempt 1's rollback already put
+  // PREVIOUS_SHA live. Rolling back here would put the refused commit back.
   const verdict = shouldRollBack(PREVIOUS_SHA, LIVE_SHA);
   assert.equal(verdict.roll, false, "the second rollback would run again");
   assert.match(verdict.reason, /already gone/);
 });
 
 test("an abbreviated sha on either side still compares equal", () => {
-  // /health serves the full sha today. The comparison should not depend on that.
+  // The comparison must not depend on /health serving the full sha.
   assert.equal(shouldRollBack(LIVE_SHA.slice(0, 8), LIVE_SHA).roll, true);
   assert.equal(shouldRollBack(LIVE_SHA, LIVE_SHA.slice(0, 8)).roll, true);
   assert.equal(shouldRollBack(PREVIOUS_SHA.slice(0, 8), LIVE_SHA).roll, false);
 });
 
 test("an unreadable /health REFUSES rather than rolling back blind", () => {
-  // The step's reader writes exactly these two words when /health does not answer or
-  // does not parse. A rollback is a production change; making one without knowing
-  // what is live is the move this guard exists to stop.
+  // The step's reader writes these words when /health does not answer or does not
+  // parse. A rollback is a production change and must not be made without knowing
+  // what is live.
   for (const value of ["unknown", "unreadable", "", "   "]) {
     const verdict = shouldRollBack(value, LIVE_SHA);
     assert.equal(verdict.roll, false, `'${value}' was treated as permission to roll back`);
@@ -62,8 +51,7 @@ test("a missing run sha refuses, rather than comparing against nothing", () => {
   assert.equal(shouldRollBack(LIVE_SHA, "").roll, false);
 });
 
-// The guard is only real if the workflow actually consults it. A script nothing calls
-// is a guard nobody has.
+// The guard only matters if the workflow consults it.
 test("the rollback step calls the guard BEFORE it calls wrangler rollback", () => {
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
   const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)\n      - name: /.exec(workflow);
@@ -79,10 +67,10 @@ test("the rollback step calls the guard BEFORE it calls wrangler rollback", () =
   assert.match(body, /exit 0/, "a declined rollback should leave the step green, not add a second failure");
 });
 
-// WHEN /health IS DOWN. A deploy that breaks /health answers 5xx or garbage, which the
-// step reads as "unreadable". Refusing then left the most broken deploys live. The
-// rerun case is told apart by run_attempt: the deploy job's outputs survive a rerun of
-// the live job alone, so its attempt number is the earlier one.
+// When /health is down. A deploy that breaks /health reads as "unreadable", and
+// refusing then would leave the most broken deploys live. The rerun case is told apart
+// by run_attempt: the deploy job's outputs survive a rerun of the live job alone, so
+// its attempt number is the earlier one.
 test("unreadable /health rolls back when the deploy ran in this same attempt", () => {
   const verdict = shouldRollBack("unreadable", LIVE_SHA, { deployAttempt: "1", runAttempt: "1" });
   assert.equal(verdict.roll, true, verdict.reason);
@@ -95,7 +83,7 @@ test("unreadable /health in a RERUN still refuses", () => {
 });
 
 test("a sha shorter than 7 hex characters is not a sha", () => {
-  // "4d" prefixes this run's sha, and before this matched and approved the rollback.
+  // "4d" prefixes this run's sha and must not approve the rollback.
   assert.equal(shouldRollBack("4d", LIVE_SHA).roll, false);
   assert.equal(shouldRollBack("4df127", LIVE_SHA).roll, false);
   assert.equal(shouldRollBack("4df1274", LIVE_SHA).roll, true);
@@ -104,7 +92,7 @@ test("a sha shorter than 7 hex characters is not a sha", () => {
 
 test("the rollback took effect only when a readable, different sha is live", () => {
   assert.equal(rollbackTookEffect(PREVIOUS_SHA, LIVE_SHA).moved, true);
-  // The sha never moved: before, the step printed "rolled back" anyway.
+  // The sha never moved, so the rollback did not take effect.
   const same = rollbackTookEffect(LIVE_SHA, LIVE_SHA);
   assert.equal(same.moved, false);
   assert.match(same.reason, /did not take effect/);

@@ -11,15 +11,9 @@ import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, repor
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// THE EIGHT SMALL DEFECTS FROM AUDIT-2026-09-16.md, one plant each (job_38ae28d18699).
-//
-// Each was confirmed by the seat before it was posted, so these are not hypotheses:
-// every test below was observed RED against master at 05562bc and green after the fix
-// in the same commit. They are kept because a defect that was true once in a file
-// nobody is watching is a defect that comes back the next time that file is rewritten.
-//
-// Defect 7 is planted in test/csp-rate-limit.test.ts instead, beside the fail-open
-// tests it reverses, so the two readings of the same question sit together.
+// Small defects from AUDIT-2026-09-16.md, one plant each, kept so a fixed defect
+// cannot return unnoticed when its file is rewritten. The CSP rate-limit defect is
+// planted in test/csp-rate-limit.test.ts, beside the fail-open tests it reverses.
 
 async function connect(agent: Agent | "read" | "write", rows: Record<string, unknown[]> = {}) {
   const { db, batches, recorded } = fakeD1(rows);
@@ -36,28 +30,22 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 
 const text = (result: { content: Array<{ text: string }> }) => result.content.map((c) => c.text).join("");
 
-// ---- 1: the mint instruction and TOOL_GRANTS ------------------------------------
+// the mint instruction and TOOL_GRANTS
 
 test("PLANT: the driver mint instruction agrees with what register_namespace actually requires", () => {
-  // It said register_namespace "takes a plain write grant". That had been false since
-  // 2026-09-13, when the namespace-to-repo mapping became admin work, and the sentence
-  // is the one a namespace owner reads when register_namespace refuses them.
-  //
   // The two cannot be the same expression: src/scope.ts imports src/agents-schema.ts,
-  // so the sentence importing TOOL_GRANTS would close a load-time cycle. This is what
-  // holds them together instead, and it fails in BOTH directions: a table moved back
-  // to "write" fails here as loudly as a sentence rewritten to the wrong grant.
+  // so the sentence importing TOOL_GRANTS would close a load-time cycle. This holds
+  // them together instead, and fails if either the table or the sentence changes.
   const said = driverMintInstruction("capsid");
   const required = requiredGrant("register_namespace");
   assert.match(said, new RegExp(`register_namespace is itself ${required} only`), said);
 });
 
-// ---- 2: the jobs description and the retry cap ----------------------------------
+// the jobs description and the retry cap
 
 test("PLANT: the jobs description states the correction cap rather than promising no cap", async () => {
-  // "A job may be blocked and resumed any number of times" was the whole sentence.
-  // resumeJob refuses a non-admin once CORRECTION_CAP corrections have been spent on
-  // the work, so the description promised a caller something the Worker refuses.
+  // resumeJob refuses a non-admin once CORRECTION_CAP corrections have been spent, so
+  // the description must state the cap.
   const { client, close } = await connect(adminAgent("DrDustinEdwards"));
   try {
     const { tools } = await client.listTools();
@@ -73,7 +61,7 @@ test("PLANT: the jobs description states the correction cap rather than promisin
   }
 });
 
-// ---- 3: a handler default the scope table cannot see -----------------------------
+// a handler default the scope table cannot see
 
 // An agent minted the way scripts/mint-agents.mjs mints a narrowed one: the tools axis
 // names the tool and one of its actions, which is what opts into the qualifier.
@@ -85,11 +73,9 @@ function narrowedTo(tools: string[]): Agent {
 }
 
 test("PLANT: an agent scoped to lint.gather may call lint with no mode at all", async () => {
-  // lint's handler reads an omitted mode as gather. DEFAULT_ACTION did not, so the
-  // registrar passed no action, allowsToolAction refused an unknown action on a
-  // narrowed tool, and the caller was refused the one mode it was minted for. The
-  // refusal names `lint`, not `lint.gather`, which is what made it look like a
-  // mis-minted agent rather than a missing table entry.
+  // lint's handler reads an omitted mode as gather. Unless DEFAULT_ACTION agrees, the
+  // registrar passes no action and allowsToolAction refuses an unknown action on a
+  // narrowed tool, so the caller is refused the one mode it was minted for.
   const { client, close } = await connect(narrowedTo(["lint", "lint.gather"]), {
     documents: [{ id: 1, namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core", status: "published", tags: null }],
     namespaces: [{ namespace: "capsid", repos: "[]" }],
@@ -107,8 +93,8 @@ test("PLANT: an agent scoped to lint.gather may call lint with no mode at all", 
 });
 
 test("PLANT: the same caller with no mode is still refused finalize", async () => {
-  // The innocent direction. A default that widened the narrowing would pass the test
-  // above by handing the caller the whole tool back.
+  // A default that widened the narrowing would pass the test above by handing the
+  // caller the whole tool back.
   const { client, close } = await connect(narrowedTo(["lint", "lint.gather"]));
   try {
     const result = await call(client, "lint", { namespace: "capsid", mode: "finalize" });
@@ -120,10 +106,9 @@ test("PLANT: the same caller with no mode is still refused finalize", async () =
 });
 
 test("DERIVED: every action tool whose action argument is optional has a table default", async () => {
-  // The guard against the finding recurring, derived from the SERVED schemas rather
-  // than from the source. An optional action argument IS a handler default: something
-  // has to decide what an omitted one means, and if the enforcement point does not
-  // know the answer, a narrowed caller is refused the tool's own default.
+  // Derived from the served schemas. An optional action argument is a handler default,
+  // and if the enforcement point does not know it, a narrowed caller is refused the
+  // tool's own default.
   const { client, close } = await connect(adminAgent("DrDustinEdwards"));
   const { tools } = await client.listTools();
   await close();
@@ -139,12 +124,11 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   assert.deepEqual(missing, [], `these tools make their action optional and the scope table cannot say what an omitted one means: ${missing.join(", ")}`);
 });
 
-// ---- 4: a null integrity is not a zero -------------------------------------------
+// a null integrity is not a zero
 
 test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => {
-  // buildTruthReport returns null when no check had a subject to judge, which is what
-  // an empty namespace looks like. The line rendered "integrity: 0%", which is the
-  // number a store in the worst state it can be in would carry.
+  // buildTruthReport returns null when no check had a subject to judge, as for an
+  // empty namespace. 0% would claim the worst possible state.
   const report = buildTruthReport({
     namespace: "empty",
     now: new Date("2026-09-16T12:00:00Z"),
@@ -158,15 +142,14 @@ test("PLANT: an unmeasured integrity renders as unmeasured, never as 0%", () => 
   const body = renderTruthReport(report);
   assert.doesNotMatch(body, /integrity: 0%/, "an unmeasured store reported itself as 0% integrity");
   assert.match(body, /^integrity: not measured$/m, body.split("\n").slice(0, 4).join("\n"));
-  // The parser answers the same way a missing document does, which is what
-  // improve_status reports as "no report" rather than as a number.
+  // The parser answers as for a missing document, which improve_status reports as
+  // "no report".
   assert.doesNotMatch(body, INTEGRITY_LINE);
   assert.equal(integrityOf(body), null);
 });
 
 test("a measured integrity still renders as a number the parser reads back", () => {
-  // The other direction, so a render that simply stopped printing numbers passes
-  // nothing.
+  // So a render that stopped printing numbers fails.
   const report = buildTruthReport({
     namespace: "capsid",
     now: new Date("2026-09-16T12:00:00Z"),
@@ -182,7 +165,7 @@ test("a measured integrity still renders as a number the parser reads back", () 
   assert.equal(integrityOf(body), report.integrity);
 });
 
-// ---- 5: a report overwrites a report --------------------------------------------
+// a report overwrites a report
 
 const TODAY = reportPath(new Date());
 
@@ -207,10 +190,8 @@ function reportRows(withPrior: boolean) {
 }
 
 test("PLANT: a second report the same day is REFUSED without confirmation", async () => {
-  // One report per namespace per day means the second run overwrites the first. The
-  // prior body was snapshotted, so nothing was lost, but the caller was never asked
-  // and the response never said a report had been replaced. `write` has elicited this
-  // exact confirmation for every other overwrite since it was added.
+  // One report per namespace per day means the second run overwrites the first, so it
+  // asks for the same confirmation `write` asks for on every other overwrite.
   const { client, batches, close } = await connect("write", reportRows(true));
   try {
     const result = await call(client, "lint", { namespace: "capsid", mode: "report" });
@@ -240,8 +221,8 @@ test("the same call WITH confirm: true overwrites, snapshotting first", async ()
 });
 
 test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation", async () => {
-  // There is nothing to overwrite, so asking would turn the daily report into a
-  // prompt and the cron that drives it has nobody to answer.
+  // There is nothing to overwrite, and the cron that drives the report has nobody to
+  // answer a prompt.
   const { client, batches, recorded, close } = await connect("write", reportRows(false));
   try {
     const result = await call(client, "lint", { namespace: "capsid", mode: "report" });
@@ -262,11 +243,10 @@ test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation"
   }
 });
 
-// ---- 6: the resource listing's bound was on the wrong set ------------------------
+// the resource listing's bound is on the caller's rows
 
-// Rows a scoped caller may not see, sorted before the ones it may. 'aaa' beats
-// 'capsid' in the (namespace, path) order the keyset walk uses, which is the whole
-// mechanism: nothing about the caller's namespace is unusual except where it sorts.
+// Rows a scoped caller may not see, sorted before the ones it may: 'aaa' sorts before
+// 'capsid' in the (namespace, path) order the keyset walk uses.
 const CROWDED = {
   documents: [
     ...Array.from({ length: MAX_ROWS + 2 }, (_, i) => ({
@@ -285,11 +265,8 @@ const CROWDED = {
 };
 
 test("PLANT: a caller scoped past 502 rows it cannot see still gets its own documents", async () => {
-  // The query took LIMIT 501 and the handler filtered afterwards, so this caller got
-  // 501 rows belonging to another namespace, an EMPTY page after filtering, and no
-  // cursor, because `more` was computed from the filtered length. Its own two
-  // documents were unreachable through resources/list entirely, and the response
-  // said the listing was complete.
+  // A LIMIT applied before the scope filter would give this caller an empty page and
+  // no cursor, leaving its own two documents unreachable.
   const { client, close } = await connect(narrowedTo(["read"]), CROWDED);
   try {
     const listed = await client.listResources();
@@ -321,7 +298,7 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
   }
 });
 
-// ---- 8: closing a pull request deletes a branch ---------------------------------
+// closing a pull request deletes a branch
 
 // A write-grant caller holding no flags is refused manage_pr close: driven through a
 // real MCP call, both directions, as a row of PLANTS in test/blast-radius.test.ts.

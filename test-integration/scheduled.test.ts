@@ -6,18 +6,15 @@ import { activeRun, advanceableRuns } from "../src/improve-state";
 import { claimJti } from "../src/improve-scorer";
 import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
 
-// THE SCHEDULED HANDLER, ALL FOUR CRONS, AGAINST REAL BINDINGS.
+// The scheduled handler, all four crons, against real bindings.
 //
-// Several expressions fire in the 09:00 UTC hour, and Cloudflare delivers the invocation once
-// per expression, so the handler dispatches on `controller.cron` rather than on the
-// clock. test/improve-cron.test.ts derives the handler's list and the config's list
-// from each other; what it cannot do is RUN either of them. This does, which is how
-// a cron that dispatches to a branch that throws on a real binding becomes visible.
+// Several expressions fire in the 09:00 UTC hour and Cloudflare delivers one
+// invocation per expression, so the handler dispatches on `controller.cron`.
+// test/improve-cron.test.ts derives the handler's list and the config's list from
+// each other; this runs them, so a branch that throws on a real binding is visible.
 //
-// Every one of these asserts the same shape: the invocation completes, the work it
-// was supposed to do is observable in a real store, and the branches it was not
-// supposed to take left no trace. A cron that silently does nothing is the failure
-// mode the 2026-08-09 outage was made of.
+// Each test asserts: the invocation completes, its work is observable in a real
+// store, and the branches it was not supposed to take left no trace.
 
 const controller = (cron: string) =>
   ({ cron, scheduledTime: Date.now(), noRetry() {} }) as unknown as ScheduledController;
@@ -40,11 +37,8 @@ describe("the four cron expressions", () => {
     const listed = await env.MEDIA.list();
     expect(listed.objects.length, "the backup cron produced no objects at all").toBeGreaterThan(0);
 
-    // The dump covers every real table, and the list is derived from migrations/ by
-    // test/backup.test.ts. What that cannot check is whether SELECT * FROM <table>
-    // succeeds against the real schema for each one. A dump that threw halfway
-    // leaves the earlier objects behind and looks like a partial success, so the
-    // assertion is on the table this fixture put a row in.
+    // A dump that threw halfway leaves the earlier objects behind and looks like a
+    // partial success, so the assertion is on the table this fixture put a row in.
     const documentsDump = listed.objects.find((o: { key: string }) => o.key.includes("documents"));
     expect(documentsDump, `no documents dump among ${listed.objects.map((o: { key: string }) => o.key).join(", ")}`).toBeTruthy();
     const dumped = await env.MEDIA.get(documentsDump!.key);
@@ -52,9 +46,8 @@ describe("the four cron expressions", () => {
   });
 
   it("the improve opener runs and writes nothing while the mode is off", async () => {
-    // improve_mode falls back to `off` on an unset key, which is the state a fresh
-    // store is in. The opener must complete and open nothing: an unreadable KV that
-    // starts writing to five repos is the failure this default exists to stop.
+    // improve_mode falls back to `off` on an unset key, the state of a fresh store.
+    // The opener must complete and open nothing.
     await fire(IMPROVE_OPEN_CRON);
     const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
     expect(runs?.n).toBe(0);
@@ -66,11 +59,9 @@ describe("the four cron expressions", () => {
     expect(runs?.n).toBe(0);
   });
 
-  // THE SKILLS REFRESH, added 2026-09-17: it was the fourth expression and this file
-  // fired only three, so a refresh that threw against a real binding was invisible.
-  // It fires daily and gates on its weekday inside the handler, so both halves are
-  // driven: the skip, which reads only real KV, and the run, which posts a job into
-  // real D1. The two docs fetches are stubbed; the network is not what is under test.
+  // The skills refresh fires daily and gates on its weekday inside the handler, so
+  // both halves are driven: the skip, which reads only real KV, and the run, which
+  // posts a job into real D1. The two docs fetches are stubbed.
   const skillsJobs = () =>
     env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND posted_by = ?2")
       .bind(SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR)
@@ -111,10 +102,9 @@ describe("the four cron expressions", () => {
   });
 
   it("PLANT: a cron branch that throws stays inside its own waitUntil, and the next cron still runs", async () => {
-    // Moved from test/improve-cron.test.ts (audit 2026-09-25, item C1-12), which
-    // counted ctx.waitUntil( and .catch((err) in the source. Here the backup branch
-    // throws on a real invocation: the handler still returns, the failure is logged
-    // under its own name rather than swallowed, and a later cron runs normally.
+    // The backup branch throws on a real invocation: the handler still returns, the
+    // failure is logged under its own name rather than swallowed, and a later cron
+    // runs normally.
     const planted = new Error("planted MEDIA failure");
     const brokenMedia = new Proxy({}, { get: () => async () => { throw planted; } });
     const broken = { ...env, MEDIA: brokenMedia } as typeof env;
@@ -137,9 +127,8 @@ describe("the four cron expressions", () => {
 
 describe("the improve schema is real", () => {
   it("the jti replay cache really has a PRIMARY KEY, so a duplicate claim conflicts", async () => {
-    // migrations/0004_improve_jti.sql. The unit suite proves the statement is
-    // `INSERT ... ON CONFLICT DO NOTHING RETURNING`; only a real database proves
-    // the conflict happens, and the whole replay defence rests on it.
+    // migrations/0004_improve_jti.sql. Only a real database proves the conflict
+    // happens, and the replay defence rests on it.
     const first = await env.DB.prepare(
       "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
     ).first<{ jti: string }>();
@@ -152,10 +141,8 @@ describe("the improve schema is real", () => {
   });
 
   it("PLANT: concurrent claimJti calls for one jti resolve to ONE winner", async () => {
-    // Moved from test/ingest-hardening.test.ts (audit 2026-09-25, item C1-12), where
-    // the race ran against a synchronous fake that agreed with itself. The KV version
-    // this replaced was get-then-put: both callers read absent, both wrote, both
-    // proceeded. A PRIMARY KEY has no such window, and only SQLite can show it.
+    // A PRIMARY KEY has no get-then-put window, and only real SQLite can show it; a
+    // synchronous fake would agree with itself.
     const results = await Promise.all([
       claimJti(env.DB, "capsid", "raced"),
       claimJti(env.DB, "capsid", "raced"),

@@ -5,36 +5,24 @@ import { test } from "node:test";
 import { holdoutImportsPath, parseImportsManifest } from "../../scripts/improve-report.mjs";
 import { exportsOfSrc, sourceFiles } from "../source-files.ts";
 
-// THE DEAD-EXPORT LINT. Run by `npm run lint:dead-exports` (and `npm run lint`), in
-// the checks job of .github/workflows/ci.yml; not part of `npm test` (audit
-// 2026-09-25, C1-6). It fails when an export gains no caller, which is a review
-// prompt about the code as a whole rather than a behaviour of the Worker, so it runs
-// beside the suite instead of inside it. The holdout-manifest export checks, which
-// protect a real consumer, stay in test/dead-exports.test.ts.
+// The dead-export lint. Run by `npm run lint:dead-exports` (and `npm run lint`), in
+// the checks job of .github/workflows/ci.yml; not part of `npm test`. It fails when
+// an export has no caller, which is a review prompt about the code as a whole rather
+// than a behaviour of the Worker, so it runs beside the suite instead of inside it.
+// The holdout-manifest export checks stay in test/dead-exports.test.ts.
 //
-// WHAT "DEAD" MEANS IN THIS REPO, and the definition cost a broken anchor.
+// An export is dead only when it has no caller in src/, no caller in test/, AND no
+// entry in any improve/holdout/<ns>/imports.txt (capsid/conventions.md). The hidden
+// holdout suite is invisible to anything that runs here, so the manifest is the only
+// record that it imports a name.
 //
-// On 2026-09-07 a bloat pass removed `seedScoresDoc` and `hasWideDash` from src/
-// as exports with no caller in src/ or test/. The hidden holdout suite imports
-// both, and the holdout is structurally invisible to anything that runs here:
-// that is its entire point. Master then scored 28 of 30 against an anchor of
-// `holdout_pass_rate: min 1.0`, which would have reverted every attempt this
-// repo ever made. Scoring a branch with both restored gave 30 of 30.
-//
-// So the portfolio convention, ruled 2026-09-08 and recorded in
-// capsid/conventions.md: **an export is dead only when it has no caller in src/,
-// no caller in test/, AND no entry in any improve/holdout/<ns>/imports.txt.**
-// That third place is the one no grep could reach, which is why it has to be
-// written down rather than derived.
-//
-// This file fails in one direction on purpose: it reports exports that look dead,
-// so the next bloat pass has a list it can trust. The OTHER direction, a manifest
-// that lists a name the suite does not import, is checked in the scorer's Job B,
-// where the suite is actually readable.
+// This file reports exports that look dead. The other direction, a manifest that
+// lists a name the suite does not import, is checked in the scorer's Job B, where
+// the suite is readable.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
-// The one namespace whose holdout this repo carries. Read through the shared
+// The one namespace whose holdout this repo carries, read through the shared
 // helper so the path convention has a single spelling.
 const MANIFEST = holdoutImportsPath("capsid");
 
@@ -42,14 +30,12 @@ function declaredByHoldout(): string[] {
   return parseImportsManifest(readFileSync(join(ROOT, MANIFEST), "utf8"));
 }
 
-// THIS FILE IS NOT A CALLER. It lists every suspect by name below, so counting
-// itself makes each one look used and the set collapses to empty: a check that
-// passes because it read its own answer.
+// This file is not a caller. It lists every suspect by name below, so counting
+// itself would make each one look used and the set would collapse to empty.
 const SELF = "test/lint/dead-exports.lint.ts";
 
 // Everything that could be a caller: the rest of src/, both test suites, the lints,
-// and scripts/. The ruling is that "no caller" is a claim about THREE places, and a
-// scan that read one of them is how two live exports were declared dead.
+// and scripts/.
 function otherReaders(): Array<{ name: string; text: string }> {
   const out: Array<{ name: string; text: string }> = [];
   for (const dir of ["test", "test/lint", "test-integration", "scripts"]) {
@@ -71,38 +57,21 @@ function otherReaders(): Array<{ name: string; text: string }> {
 const READERS = otherReaders();
 
 
-// A BARREL RE-EXPORT IS NOT A CALLER. `export { x } from "./y"` names x in order
-// to forward it, not to use it, so counting it hides exactly what this file
-// exists to surface: put a module behind a barrel and every symbol under it
-// looks called by the barrel. A plain `import { x } from` is left alone, because
-// importing a name in order to use it is what a caller does. This lands before
-// any barrel exists, where it is a no-op, so the guard is already correct on the
-// day one appears.
-// A COMMENT IS NOT A CALLER EITHER, and this is the half that was missing.
+// A barrel re-export is not a caller. `export { x } from "./y"` names x to forward
+// it, not to use it, so counting it would make every symbol behind a barrel look
+// called. A plain `import { x } from` is left alone, because importing a name to
+// use it is what a caller does.
 //
-// Stripping re-exports (below) landed 2026-09-10 and works: a barrel-only export
-// with no other mention IS reported. What still vouched for a dead export was
-// PROSE. `hasCallerElsewhere` looks for the bare name, so one sentence naming a
-// function in an unrelated comment made it look called, and the guard went green
-// while checking nothing. That is the shape this repo keeps finding: exit 0 on
-// success and exit 0 on failure-to-check.
+// A comment is not a caller either. `hasCallerElsewhere` looks for the bare name,
+// so one comment naming a function elsewhere would make it look called.
 //
-// Measured 2026-09-16: a planted export, re-exported through src/github.ts with no
-// real caller, is correctly reported; add one comment elsewhere naming it and the
-// report empties. That is how an export with zero callers survived a bloat pass on
-// 2026-09-15 and was deleted by hand instead of by this guard.
+// String literals are kept. A name inside a string can be a real reference (a
+// registry keyed by name, a dynamic import), and a false positive here is only a
+// red build asking for a reviewed name.
 //
-// STRING LITERALS ARE DELIBERATELY KEPT. A name inside a string is not a call
-// either, but it can be a real reference (a registry keyed by name, a dynamic
-// import), and this guard's failure mode on a false positive is a red build that
-// asks a human to add a reviewed name. The measured hole is comments; widening to
-// strings is a separate change with its own evidence.
-//
-// SCANNED CHARACTER BY CHARACTER RATHER THAN BY REGEX, because a regex that cuts
+// Scanned character by character rather than by regex, because a regex that cuts
 // from `//` to end of line also cuts the middle out of "https://example.com" and
-// would delete real code sitting after a URL on the same line. That would turn a
-// live caller invisible and report a used export as dead, which is the failure
-// that gets a guard deleted rather than fixed.
+// would hide a real caller sitting after a URL on the same line.
 function stripComments(text: string): string {
   let out = "";
   let i = 0;
@@ -151,11 +120,10 @@ function callableText(text: string): string {
   return stripComments(text).replace(RE_EXPORT_FROM, "").replace(RE_EXPORT_STAR, "");
 }
 
-// EVERY IDENTIFIER IN A FILE'S CALLABLE TEXT, computed once per file. An export name
+// Every identifier in a file's callable text, computed once per file. An export name
 // is word characters only, so `\bname\b` matches exactly when some maximal run of
-// word characters equals the name, which is a set lookup. The scan used to strip
-// comments and run that regex over every reader for every export, and that was 122
-// of the suite's 219 summed seconds (measured 2026-09-17).
+// word characters equals the name, which is a set lookup and much cheaper than a
+// regex per reader per export.
 function identifiers(text: string): Set<string> {
   return new Set(callableText(text).match(/\w+/g) ?? []);
 }
@@ -182,30 +150,17 @@ test("the scan finds the exports at all, so nothing here can pass by reading not
   assert.ok(sourceFiles().length > 20, "src/ walk returned too few files");
 });
 
-// THE SUSPECTS, NAMED. Exports with no caller in src/, no caller in test/,
-// test-integration/ or scripts/, and no entry in the holdout manifest. Every one
-// is a CANDIDATE for removal and none of them is cleared for it: the holdout is a
-// consumer no scan here can see, so the only way to clear one is to score a branch
-// without it and watch holdout_pass_rate.
+// The suspects: exports with no caller in src/, test/, test-integration/ or
+// scripts/, and no entry in the holdout manifest. Each is a candidate for removal
+// and none is cleared for it: the holdout is a consumer no scan here can see, so
+// clearing one means scoring a branch without it and reading holdout_pass_rate.
 //
-// Listed rather than counted, and asserted in BOTH directions, which is the whole
-// pattern this repo uses for a derived list. A new suspect fails the build the day
-// it appears, so it is reviewed while somebody still remembers writing it; and
-// removing one means editing this list, which is the moment to ask whether a
-// branch was scored.
-// KEYED BY EXPORT NAME, NOT BY FILE. The name is what is under review; the file
-// holding it is not. Keying on "src/<file>: <name>" turned every module move into
-// a apparent change in the no-caller set, and the scorer sandbox runs the DEFAULT
-// branch's tests against an attempt's src/, so a move surfaced there as a test
-// regression no edit to the attempt could clear. Both directions are still
-// asserted, and the failure message still prints where each one currently lives.
+// Listed rather than counted, so a new suspect fails the build the day it appears
+// and removing one means editing this list.
+// Keyed by export name, not by file, so a module move does not change the set: the
+// scorer sandbox runs the default branch's tests against an attempt's src/, where a
+// move would be a regression no edit to the attempt could clear.
 const KNOWN_SUSPECTS = [
-  // SURFACED 2026-09-16 by teaching this guard that a comment is not a caller.
-  // Both had zero call sites and were vouched for by one prose mention each:
-  // `aggregate` by two comments in test/improve-fakes.ts, `assemble` by one in
-  // test/write-invariants.test.ts. Reviewed, not cleared: the holdout is a consumer
-  // no scan here can see, so removing either still means scoring a branch without it
-  // and reading holdout_pass_rate.
   "aggregate",
   "assemble",
   "ATTEMPT_STATUSES",
@@ -224,29 +179,13 @@ const KNOWN_SUSPECTS = [
   "workflowRunsForBranch",
 ];
 
-// TWO CHECKS, AND NEITHER IS "the set still matches exactly".
+// Two checks, and neither is "the set still matches exactly": splitting a module
+// turns intra-file usage into cross-file usage, so a suspect can gain a caller
+// without a line of its own changing, and that is not a defect.
 //
-// The exact-match form was wrong in a way only a module split reveals. Splitting
-// a file turns intra-file usage into cross-file usage, so an export used only
-// inside one big module legitimately STOPS being caller-less the day that module
-// is split: assertRepoArg went from suspect to non-suspect on the 2026-09-10
-// split without a line of its own changing. Exact match called that a regression.
-// Worse, the scorer sandbox runs the DEFAULT branch's tests against an attempt's
-// src/, so that false regression was unfixable from inside the attempt: it scored
-// 845 of 846 with nothing actually wrong.
-//
-// What the guard is for, kept in full and split apart:
-//
-//   (a) A reviewed name must still be EXPORTED. This is the direction that cost
-//       an anchor: on 2026-09-07 seedScoresDoc and hasWideDash were deleted as
-//       dead, the hidden holdout imports both, and master scored 28 of 30 against
-//       an anchor of min 1.0. Deleting an export is the danger, and this checks it
-//       directly rather than inferring it from a set difference.
-//   (b) No NEW no-caller export may appear unreviewed, so dead code still fails
-//       the build the day it is written, while somebody remembers writing it.
-//
-// Deliberately NOT checked any more: that a reviewed name is STILL caller-less.
-// Gaining a caller is good news and was never a defect.
+//   (a) A reviewed name must still be exported. Deleting an export the holdout
+//       imports is the danger, and this checks it directly.
+//   (b) No new no-caller export may appear unreviewed.
 // scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("every reviewed suspect is still exported from src/", () => {
   const names = new Set(exportsOfSrc().map((e) => e.name));
@@ -267,17 +206,14 @@ test("no new no-caller export appears without review", () => {
   const declared = new Set(declaredByHoldout());
   const reviewed = new Set(KNOWN_SUSPECTS);
   const unreviewed: string[] = [];
-  // THE COUNT, ASSERTED BEFORE THE RESULT. An empty `unreviewed` is only
-  // meaningful if this walked real exports across real readers; both numbers are
-  // checked here and printed in the failure, so "0 violations" cannot be reached
-  // by parsing nothing.
+  // The count, asserted before the result: an empty `unreviewed` is only
+  // meaningful if this walked real exports across real readers.
   const examined = exportsOfSrc();
   assert.ok(examined.length > 100, `only ${examined.length} exports examined; the walk is broken`);
   assert.ok(READERS.length > 20, `only ${READERS.length} reader files loaded; the caller scan is broken`);
   for (const { file, name } of examined) {
     if (hasCallerElsewhere(name, file)) continue;
-    // The manifest is the third place to look, and it is the one that cost an
-    // anchor when it did not exist.
+    // The manifest is the third place to look.
     if (declared.has(name)) continue;
     if (reviewed.has(name)) continue;
     unreviewed.push(`${name} (src/${file})`);
@@ -293,8 +229,8 @@ test("no new no-caller export appears without review", () => {
 });
 // scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ and the holdout manifest
 test("PLANT: a name in the holdout manifest is never reported as a suspect", () => {
-  // The manifest earning its keep. Both incident exports have no caller in src/
-  // or test/ either, and only the manifest keeps them off the list above.
+  // Names the holdout imports may have no caller in src/ or test/; only the
+  // manifest keeps them off the list above.
   const declared = declaredByHoldout();
   for (const name of declared) {
     const own = exportsOfSrc().find((e) => e.name === name);
@@ -306,20 +242,16 @@ test("PLANT: a name in the holdout manifest is never reported as a suspect", () 
   }
 });
 
-// ---- the stripper itself ----------------------------------------------------
-//
-// stripComments decides what counts as a caller, so a bug in it either hides a
-// dead export (too greedy on prose) or deletes a live caller (too greedy on code).
-// The second is the dangerous one: a guard that reports a used export as dead gets
-// deleted rather than fixed.
+// The stripper itself. stripComments decides what counts as a caller, so a bug in
+// it either hides a dead export (too little stripped) or hides a live caller (too
+// much stripped).
 test("a comment does not vouch for an export, and a URL in a string is not a comment", () => {
   assert.equal(stripComments("const a = 1; // mentions ghostName").includes("ghostName"), false);
   assert.equal(stripComments("/* ghostName */ const a = 1;").includes("ghostName"), false);
   assert.equal(stripComments("/**\n * ghostName\n */\nconst a = 1;").includes("ghostName"), false);
 
-  // THE CASE A REGEX STRIPPER GETS WRONG. Cutting from the first // to end of line
-  // eats the rest of a line that merely contains a URL, and a caller sitting after
-  // one on the same line disappears.
+  // The case a regex stripper gets wrong: cutting from the first // to end of line
+  // hides a caller sitting after a URL on the same line.
   const url = 'const u = "https://example.com/x"; realCaller(u);';
   assert.equal(stripComments(url), url, "a // inside a string was treated as a comment");
   assert.ok(stripComments(url).includes("realCaller"), "a real caller after a URL was stripped");

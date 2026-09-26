@@ -8,8 +8,7 @@ import { improveControl } from "../src/improve-run.ts";
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// improve_run's mint_operator_key action. Moved here from test/public-docs.test.ts,
-// which now holds only the docs/ hygiene guards.
+// improve_run's mint_operator_key action.
 
 function mintEnv(existing?: string) {
   return fakeEnv({
@@ -27,11 +26,9 @@ test("PLANT: mint_operator_key returns a READ-ONLY key, and the prefix is what m
   assert.equal(result.grant, "read-only");
   assert.equal(result.entry, `ro:${result.hash}`, "the tier lives on the LIST ENTRY, not on the key");
 
-  // THE ASSERTION THAT MATTERS. The label on this response is a claim; resolving
-  // the minted key through the real verifier is the check. Getting the prefix
-  // backwards (onto the key instead of the entry) mints a WRITE key from a helper
-  // whose whole purpose is the read-only tier, and every assertion above would
-  // still pass.
+  // The label on this response is a claim; resolving the minted key through the real
+  // verifier is the check. A prefix put on the key instead of the entry mints a write
+  // key, and every assertion above would still pass.
   const request = new Request("https://capsid.test/ops/mcp", { headers: { Authorization: `Bearer ${result.key}` } });
   const identity = await operatorIdentity(request, { OPERATOR_KEY_HASH: result.entry });
   assert.equal(identity.grant, "read", "the minted key must resolve to the read-only tier through the real verifier");
@@ -48,8 +45,7 @@ test("PLANT: the mint does not install the key, and says why", async () => {
   const result = await improveControl(env, "mint_operator_key", {});
   if (result.action !== "mint_operator_key") throw new Error("wrong action");
 
-  // The secret is untouched. A Worker that can widen its own authorization list
-  // does not have one, and every guard downstream of it inherits that.
+  // The secret is untouched: the Worker must not widen its own authorization list.
   assert.equal(
     (env as unknown as { OPERATOR_KEY_HASH: string }).OPERATOR_KEY_HASH,
     before,
@@ -89,9 +85,8 @@ test("two mints are different keys", async () => {
 });
 
 test("the mint is a control action on the existing tool, not a new tool", async () => {
-  // CLAUDE.md, tool surface rule: the surface stays small. The tool count is asserted against the
-  // served tools in test/counts.test.ts; this checks the mint is an action of
-  // improve_run rather than a tool of its own.
+  // The tool count is asserted in test/counts.test.ts; this checks the mint is an
+  // action of improve_run rather than a tool of its own.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "improve-run-mint", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

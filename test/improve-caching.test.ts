@@ -7,17 +7,12 @@ import { costOf } from "../src/improve-anthropic.ts";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sseMessage } from "./improve-fakes.ts";
 
-// PROMPT CACHING ON THE ATTEMPT PATH.
+// Prompt caching on the attempt path.
 //
-// Caching is a PREFIX match, so the only thing that makes it work is ordering:
-// stable bytes before volatile ones, with the breakpoint between. The repository
-// context used to be the LAST thing in the user message, after the attempt
-// history, which grows by a line every attempt. Every request would have written a
-// fresh cache entry that nothing ever read, and the only symptom would have been a
-// bill.
-//
-// So these tests assert the ORDER and the STABILITY of the prefix, not just that
-// the parameter is present.
+// Caching is a prefix match, so it works only if stable bytes come before volatile
+// ones, with the breakpoint between. Otherwise every request writes a fresh cache
+// entry that nothing reads, and the only symptom is the bill. So these tests assert
+// the order and the stability of the prefix, not just that the parameter is present.
 
 const CONTEXT = `Repository: owner/repo\n${"src/thing.ts\n".repeat(400)}`;
 
@@ -72,17 +67,16 @@ test("THE REPOSITORY CONTEXT IS THE FIRST USER BLOCK, and carries the breakpoint
     assert.equal(content.length, 2, "expected a cached block and a volatile block");
     assert.match(content[0].text, /## Repository context/);
     assert.equal(content[0].cache_control?.type, "ephemeral", "the context block carries no breakpoint");
-    // And the volatile half is AFTER it, which is the whole property.
+    // The volatile half comes after it.
     assert.match(content[1].text, /Attempts already made in this run/);
     assert.equal(content[1].cache_control, undefined, "a breakpoint after the volatile content caches nothing reusable");
   });
 });
 
 test("THE CACHED PREFIX IS BYTE-IDENTICAL ACROSS ATTEMPTS, which is what makes it a cache", async () => {
-  // The real test. Two attempts in the same run differ in history and in whether a
-  // skill was offered; everything up to and including the breakpoint must not move
-  // by a single byte, or the second request writes a new entry instead of reading
-  // the first.
+  // Attempts in the same run differ in history and in whether a skill was offered;
+  // everything up to and including the breakpoint must not move by a byte, or the
+  // next request writes a new entry instead of reading the first.
   const prefixes: string[] = [];
   const systems: string[] = [];
   for (const attempt of [
@@ -105,8 +99,7 @@ test("THE CACHED PREFIX IS BYTE-IDENTICAL ACROSS ATTEMPTS, which is what makes i
 });
 
 test("the cache counters are surfaced, so a dead cache is observable", async () => {
-  // A cache that silently stops working looks exactly like one that never worked.
-  // The counters are the only signal, and the attempt logs them.
+  // The counters are the only signal that the cache works, and the attempt logs them.
   const route = {
     "POST /v1/messages": {
       contentType: "text/event-stream",
@@ -133,9 +126,8 @@ test("the cache counters are surfaced, so a dead cache is observable", async () 
 });
 
 test("cache read and write are priced differently from plain input", () => {
-  // A cache read is roughly a tenth of the input rate and a write roughly 1.25x.
-  // Pricing them as plain input would make the cost estimate wrong in the
-  // direction that hides the saving the cache exists for.
+  // A cache read is a tenth of the input rate and a write 1.25x; pricing them as
+  // plain input would hide the saving.
   const million = 1_000_000;
   const plain = costOf("claude-sonnet-5", { input_tokens: million });
   const read = costOf("claude-sonnet-5", { cache_read_input_tokens: million });
@@ -144,12 +136,11 @@ test("cache read and write are priced differently from plain input", () => {
   assert.ok(Math.abs(write / plain - 1.25) < 1e-9, `a cache write costs ${write / plain} of plain input`);
 });
 
-// ---- the dependency pin -----------------------------------------------------
+// the dependency pin
 
 test("@anthropic-ai/sdk IS PINNED TO AN EXACT VERSION", () => {
-  // A caret range means the SDK can move under this Worker on any install, and the
-  // request surface here carries model-specific rules that a minor bump can
-  // change. capsid/conventions.md: an upstream default is not a decision.
+  // A caret range lets the SDK move under this Worker on any install, and the
+  // request surface carries model-specific rules a minor bump can change.
   const pkg = JSON.parse(readFileSync(join(import.meta.dirname, "..", "package.json"), "utf8"));
   const spec = pkg.dependencies["@anthropic-ai/sdk"];
   assert.ok(spec, "@anthropic-ai/sdk is no longer a dependency");

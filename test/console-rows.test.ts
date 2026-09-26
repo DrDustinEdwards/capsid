@@ -5,17 +5,12 @@ import type { NamespaceStatus } from "../src/improve-run.ts";
 import { reputationFrom, type AgentReputation } from "../src/console-reputation.ts";
 import { agentRecord } from "./fakes.ts";
 
-// GROUP 2: THE NAMESPACE ROWS.
+// The namespace rows. A row is a projection of NamespaceStatus, what improve_status
+// returns, so these tests are about what reaches the page rather than how it was
+// queried.
 //
-// What a person opens the console to find out. The row is a projection of
-// NamespaceStatus, which is what improve_status already returns, so these tests are
-// about what reaches the page rather than about how it was queried: the second query
-// path the job rules out would show up here as a field the row can render that
-// NamespaceStatus cannot supply.
-//
-// THE BLOCKED JOB IS THE POINT. A count of blocked jobs tells nobody what to run, so
-// the row carries the command each one is waiting on, verbatim. That is the one piece
-// of this page that turns "something is stuck" into an action.
+// A count of blocked jobs tells nobody what to run, so the row carries the command
+// each one is waiting on, verbatim.
 
 function health(): ConsoleData["health"] {
   return {
@@ -209,9 +204,8 @@ test("the row names the driver agent's last_seen, matched from the agent invento
       ]
     )
   );
-  // Scoped to the namespace SECTION, not the whole page: the agents panel lists every
-  // credential and legitimately prints both timestamps, so asserting over the whole
-  // document would pass for the wrong reason once that panel exists.
+  // Scoped to the namespace section: the agents panel lists every credential and
+  // prints both timestamps, so asserting over the whole page would pass regardless.
   const row = html.slice(html.indexOf('<section class="ns">'), html.indexOf("</section>"));
   assert.match(row, /driver last seen/i);
   assert.match(row, /2026-09-11 14:12:01/);
@@ -231,16 +225,14 @@ test("a namespace that has never run, never scored and never reported renders wi
   );
   assert.match(html, /never run/i);
   assert.match(html, /no truth report/i);
-  // A namespace with no report is NOT an integrity of zero, and the page must not
-  // imply it is.
+  // A namespace with no report is not an integrity of zero.
   assert.doesNotMatch(html, /\b0%/, "a missing truth report was rendered as 0%");
 });
 
-// THE WATCHER'S HEALTH IS ITS PASS STAMP, NOT ITS KEY. The Worker runs the watcher as
+// The watcher's health is its pass stamp, not its key. The Worker runs the watcher as
 // a synthetic identity and presents no key, so the minted row's last_seen stays null
-// for as long as the watcher works, and the cell used to read "never connected". The
-// key's own last_seen is still shown, because it answers a different question: is
-// the minted credential being used by anything.
+// while the watcher works. The key's last_seen is still shown: it answers whether the
+// minted credential is used by anything.
 function watcherRow(watcherLast: string | null): string {
   const [watcher, driver] = reputationFrom(
     [
@@ -282,9 +274,7 @@ test("only the watcher row changes: another agent with no last_seen still reads 
   assert.doesNotMatch(html, /last pass/, "the pass stamp appeared on a row that is not the watcher's");
 });
 
-// Audit 2026-09-25, E2-30 (finding E2-L15). fact() escapes its value, and the skills
-// panel escaped last_evaluation a second time, so an ampersand reached the page as
-// &amp;amp;. The empty-state paragraph used a class STYLE does not define.
+// fact() escapes its value, so the skills panel must not escape last_evaluation again.
 test("the last evaluation is escaped once", () => {
   const skills = { candidate: 1, live: 0, retired: 0, offered: 0, used: 0, use_rate: null, last_evaluation: "2026-09-10 & later" };
   const html = renderConsole(data([namespaceStatus({ skills })]));

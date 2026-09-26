@@ -5,31 +5,13 @@ import { pushAttempt } from "../src/improve-attempt.ts";
 import { branchName } from "../src/improve-schema.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// THE CAPSID NAMESPACE COULD NOT MAKE AN ATTEMPT, audit 2026-09-07 (Opus MAJOR
-// 5.3; Grok records the same collision inside its section 5 CLEAN list, noting
-// that "file-changing attempts on capsid-mcp itself throw").
+// An improve attempt on the `capsid` namespace, which maps to SELF_REPO. pushAttempt
+// commits with writeRepoFile(..., "direct", <attempt branch>). The self-repo refusal
+// exists to stop a production deploy, and only the default branch deploys, so it is
+// scoped to the default branch in either mode.
 //
-// `capsid` is on the improve roster and maps to whatever SELF_REPO names
-// (DrDustinEdwards/capsid-mcp when this was written, DrDustinEdwards/capsid
-// since the 2026-09-12 rename). pushAttempt commits with writeRepoFile(..., "direct",
-// <attempt branch>), and commitOnBranch refused mode "direct" against the self
-// repo REGARDLESS OF BRANCH. So every capsid attempt threw on its first file:
-// the baseline dispatched and was scored, then startAttempt threw, the tick
-// finalized the run with the error, and the night produced one wasted CI job.
-// Every night, on a namespace with a pinned anchor and a 30-case holdout.
-//
-// The refusal exists to stop a production DEPLOY, and only the default branch
-// deploys, so it is now scoped to the default branch in either mode.
-//
-// WHY 662 TESTS MISSED IT: the improve fixtures mapped capsid to
-// "owner/capsid-mcp", one word away from the real mapping and therefore never
-// equal to SELF_REPO. Those fixtures now use the real owner, and this file
-// drives the push that no test drove at all.
-//
-// TAKEN FROM SELF_REPO, NOT SPELLED OUT. A hardcoded copy here is the same
-// defect this file was written about: the rename on 2026-09-12 would have put
-// this constant one word away from the real mapping again, and every assertion
-// below would have gone quiet rather than red.
+// Taken from SELF_REPO rather than spelled out: a hardcoded copy that drifted from
+// the real mapping would make every assertion below pass without testing anything.
 const SELF = SELF_REPO;
 
 function selfRepoEnv() {
@@ -95,7 +77,7 @@ test("the self-repo refusal still holds where it matters: the default branch", a
 });
 
 test("a non-default branch on the self repo is writable in direct mode", async () => {
-  // This is what the old refusal took away. A work branch is not a deploy.
+  // A work branch is not a deploy.
   await withFetch(ROUTES, async (calls) => {
     const res = (await writeRepoFile(
       selfRepoEnv(),
@@ -113,9 +95,7 @@ test("a non-default branch on the self repo is writable in direct mode", async (
 
 test("PLANT: pushAttempt refuses any branch that is not an improve branch", async () => {
   // writeRepoFile's direct mode falls back to the DEFAULT branch when no branch
-  // is passed, so the loop's safety rests on the branch argument being present.
-  // On capsid that default branch is this server's own master, and a dropped
-  // branch would be a production deploy rather than a bad attempt.
+  // is passed. On capsid a dropped branch would be a production deploy.
   for (const branch of ["", "master", "main", "feature/x"]) {
     await withFetch(ROUTES, async (calls) => {
       await assert.rejects(

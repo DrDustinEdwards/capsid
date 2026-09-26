@@ -2,12 +2,8 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { BLOCKED_STALE_HOURS, WATCHER_ACTOR, clearFinding, openWatcherFingerprints, readStaleBlocked } from "../src/watcher";
 
-// THE WATCHER'S THREE READS AND WRITES OF THE jobs TABLE, AGAINST A REAL D1.
-//
-// Moved from test/watcher.test.ts (audit 2026-09-25, item C2-19). Those tests handed
-// each function a stub that captured the SQL text and the bound params and asserted
-// on them (posted_by = ?1, status = 'queued', RETURNING id, LIMIT 20). Here the rows
-// are seeded and the assertions are on which rows come back or change.
+// The watcher's three reads and writes of the jobs table, against a real D1. The rows
+// are seeded and the assertions are on which rows come back or change, not on SQL text.
 
 const env_ = env as unknown as Parameters<typeof clearFinding>[0];
 const NOW = new Date("2026-09-12T12:00:00Z");
@@ -32,8 +28,8 @@ beforeEach(async () => {
 
 describe("openWatcherFingerprints", () => {
   it("reads every OPEN job the watcher itself posted, and nothing else", async () => {
-    // Queued alone was the watcher's half of the 2026-09-18 duplicate: this map is what
-    // the pass skips on, so a claimed or blocked copy was invisible to it.
+    // The pass skips on this map, so a claimed or blocked copy must be in it or the
+    // watcher posts a duplicate.
     await seed("job_000000000001", { title: "Watcher: queued [fp-queued]", status: "queued" });
     await seed("job_000000000002", { title: "Watcher: claimed [fp-claimed]", status: "claimed" });
     await seed("job_000000000003", { title: "Watcher: blocked [fp-blocked]", status: "blocked" });
@@ -55,7 +51,7 @@ describe("clearFinding", () => {
   it("closes the watcher's own queued job as cleared", async () => {
     await seed("job_000000000001");
     expect(await clearFinding(env_, "job_000000000001", NOW)).toBe(true);
-    // The reason is the honest word: nobody did the work, it stopped being true.
+    // "cleared": nobody did the work, the finding stopped being true.
     expect(await row("job_000000000001")).toEqual({ status: "failed", result_summary: "cleared" });
   });
 
@@ -78,7 +74,7 @@ describe("readStaleBlocked", () => {
       await seed(`job_stale${String(i).padStart(7, "0")}`, { status: "blocked", updated_at: hoursAgo(BLOCKED_STALE_HOURS + 1 + i) });
     }
     const stale = await readStaleBlocked(env_, NOW);
-    // An unbounded read is one that times out on the day it matters.
+    // The read is bounded.
     expect(stale).toHaveLength(20);
     expect(stale[0].id, "the oldest blocked job must come first").toBe("job_stale0000021");
     expect(stale.map((r) => r.id)).not.toContain("job_fresh0000000");

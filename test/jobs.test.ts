@@ -13,22 +13,15 @@ import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 
-// THE WORK QUEUE'S VOCABULARY, DERIVED FROM THE MIGRATION.
-//
-// The behavioural half is test-integration/jobs.test.ts, which drives the real
-// lifecycle against a real D1: the partial unique index, the claim CAS and the
-// lease sweep are all properties of SQLite, and a fake would agree with whatever it
-// was asked. This half is the part node can read that workerd cannot: the migration
-// FILE, so the statuses the code believes in and the statuses the index enforces
-// cannot drift apart.
+// The work queue's vocabulary, derived from the migration files, so the statuses the
+// code believes in and the statuses the index enforces cannot drift apart. The
+// lifecycle against a real D1 is test-integration/jobs.test.ts.
 
 const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
 /** Every definition of the jobs_open_title index across migrations/, in the order
- *  wrangler applies them. The LAST one is the index the database ends up with, which
- *  is the reason this reads the directory instead of one file: migrations/0019
- *  redefines the index 0006 created, and a guard pinned to 0006 would have gone on
- *  asserting the superseded clause. */
+ *  wrangler applies them. The last one is the index the database ends up with, so
+ *  this reads the directory rather than one file. */
 function openTitleIndexClauses(): { file: string; statuses: string[] }[] {
   const found: { file: string; statuses: string[] }[] = [];
   for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
@@ -47,13 +40,11 @@ function openTitleIndexClauses(): { file: string; statuses: string[] }[] {
 }
 
 test("the partial index and OPEN_JOB_STATUSES name the same statuses", () => {
-  // The index is what refuses a duplicate open job; OPEN_JOB_STATUSES is what the
-  // code believes it says. Both directions, so adding a status to one and not the
-  // other is a build failure rather than a duplicate nobody expected.
+  // The index refuses a duplicate open job; OPEN_JOB_STATUSES is what the code
+  // believes it says. Checked in both directions.
   const clauses = openTitleIndexClauses();
-  // TWO definitions today: 0006 created the index and 0019 widened it to blocked.
-  // Stated as a count so a regex that silently stops matching fails here rather than
-  // passing over an empty list.
+  // Stated as a count so a regex that stops matching fails here rather than passing
+  // over an empty list.
   assert.equal(clauses.length, 2, `expected 2 definitions of jobs_open_title, found ${clauses.map((c) => c.file).join(", ") || "none"}`);
   assert.equal(clauses[0].file, "0006_jobs.sql");
   const effective = clauses[clauses.length - 1];
@@ -86,8 +77,7 @@ test("isJobStatus refuses anything that is not one of them", () => {
 });
 
 test("a job id is minted, not sequential", () => {
-  // A sequential id invites addressing a job by arithmetic, and these are quoted in
-  // chat. Two mints differ, and both are the declared shape.
+  // A sequential id invites addressing a job by arithmetic.
   const a = mintJobId();
   const b = mintJobId();
   assert.match(a, /^job_[0-9a-f]{12}$/);
@@ -118,9 +108,8 @@ test("every action the schema advertises is one the tool handles", async () => {
 
 // scanner-rule: CLAUDE.md, path mutation rule: meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
 test("every queue transition is a keyed UPDATE with RETURNING, never meta.changes", () => {
-  // The rule the improve state machine already runs on, applied to the queue. A
-  // transition that read meta.changes would be counting the FTS5 triggers on the
-  // document write that rides in the same batch.
+  // A transition that read meta.changes would be counting the FTS5 triggers on the
+  // document write in the same batch.
   const jobs = sourceFile("jobs.ts");
   const updates = [...jobs.matchAll(/UPDATE jobs SET[\s\S]*?(?=`)/g)].map((m) => m[0]);
   assert.ok(updates.length >= 3, `found ${updates.length} UPDATE statements in src/jobs.ts; the scan is broken`);
@@ -128,8 +117,7 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
     assert.match(update, /\bWHERE\b/, "an unkeyed UPDATE would move every job in the table");
     assert.match(update, /RETURNING/, "a transition without RETURNING cannot tell a win from a lost race");
   }
-  // Comment lines stripped first. The file's own header says "never meta.changes",
-  // and a guard a comment can trip is one that gets deleted rather than fixed.
+  // Comment lines stripped first: the file's own header says "never meta.changes".
   const code = jobs
     .split("\n")
     .filter((line) => !line.trim().startsWith("//"))
@@ -139,27 +127,21 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
 
 // scanner-rule: CLAUDE.md, snapshot rule: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
-  // CLAUDE.md, snapshot rule: no write path skips document_versions and audit_log. The mirror
-  // uses improveDocStatements, which carries both in the same batch, rather than
-  // spelling its own upsert.
+  // The mirror uses improveDocStatements, which carries document_versions and
+  // audit_log in the same batch, rather than spelling its own upsert.
   const jobs = sourceFile("jobs.ts");
   assert.match(jobs, /improveDocStatements\(/, "the job mirror no longer uses the shared document statements");
   assert.doesNotMatch(jobs, /INSERT INTO documents/, "src/jobs.ts spells its own document upsert");
   assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "src/jobs.ts spells its own snapshot");
 });
 
-// ---- A SWALLOWED PARAMETER TAG IS A MALFORMED CALL, NOT A SUMMARY -------------
+// A swallowed parameter tag is a malformed call. A `complete` that closes a parameter
+// tag inside a value sends `result_ref` and `evidence` as literal text in
+// `result_summary`. The outcome row cannot be rewritten afterwards, so the only place
+// to catch this is before the write.
 //
-// Twice on 2026-09-11 a driver's `complete` closed a parameter tag INSIDE a value,
-// so `result_ref` and `evidence` were never sent as arguments: they arrived as
-// literal text in the middle of `result_summary`, and the outcome row recorded
-// nothing. The row cannot be rewritten afterwards (its primary key and ON CONFLICT
-// DO NOTHING are what make it evidence), so the only place to catch this is before
-// the write.
-//
-// The string below is the ACTUAL tail of job_9980f57bd359's stored summary, read
-// back from the live database rather than reconstructed, because a guard written
-// against a remembered shape is a guard against the wrong shape.
+// The string below is a real stored summary tail, read back from the database rather
+// than reconstructed.
 const SWALLOWED_REAL =
   'up.test.ts derives from migrations/ both ways.</result_summary>\n' +
   '<result_ref>https://github.com/DrDustinEdwards/capsid-mcp/pull/21</result_ref>\n' +
@@ -172,8 +154,8 @@ test("PLANT: the real malformed summary from job_9980f57bd359 is detected", () =
 });
 
 test("every parameter name the guard knows is one the tool serves", async () => {
-  // Derived from the served schema rather than retyped, so a name the guard lists and
-  // nobody can send fails here.
+  // Derived from the served schema, so a name the guard lists and nobody can send
+  // fails here.
   assert.ok(JOB_PARAM_NAMES.length > 0, "JOB_PARAM_NAMES is empty, so no name was checked");
   for (const name of JOB_PARAM_NAMES) {
     assert.equal(swallowedParamTag(`text </${name}> more`), name, `'</${name}>' is not detected`);
@@ -190,8 +172,8 @@ test("every parameter name the guard knows is one the tool serves", async () => 
 });
 
 test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RESUME_NOTE", async () => {
-  // The seat's full approval (requested 2026-09-25). reason stays at MAX_TITLE; note
-  // is the field that carries the rulings, so the served schema has to admit them.
+  // reason stays at MAX_TITLE; note carries the full approval, so the served schema
+  // has to admit it.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "jobs-note", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -205,9 +187,8 @@ test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RES
 });
 
 test("ordinary prose is not refused, including prose ABOUT the pattern", () => {
-  // The guard matches the full `</name>` spelling only. A job body explaining this
-  // rule writes the pieces apart, which is what this job's own body did, and a
-  // summary that merely mentions evidence or a result ref is ordinary text.
+  // The guard matches the full `</name>` spelling only. A summary that mentions
+  // evidence or a result ref is ordinary text.
   for (const innocent of [
     "landed the change; evidence is in the PR",
     "refuse a summary containing '</' followed by a parameter name",
@@ -221,11 +202,9 @@ test("ordinary prose is not refused, including prose ABOUT the pattern", () => {
   }
 });
 
-// The three CALL SITES, driven. The pure function above is the detector; these prove
-// each entry point actually asks it, and that nothing reaches the database when it
-// does. Every refusal here returns before any D1 call, which is why fakeEnv with no
-// DB is enough: if a handler ever stopped refusing, this test would throw on the
-// missing binding rather than pass quietly.
+// The three call sites, driven: each entry point asks the detector, and nothing reaches
+// the database. fakeEnv has no DB, so a handler that stopped refusing would throw on
+// the missing binding rather than pass quietly.
 test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothing", async () => {
   const agent = legacyAgent("write", "agent:capsid-driver");
   const now = new Date("2026-09-11T22:00:00.000Z");
@@ -242,8 +221,8 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
   assert.equal(failed.ok, false, "fail accepted a reason with a swallowed parameter tag");
   assert.match(failed.refusal ?? "", /^reason contains the literal text '<\/evidence>'\./);
 
-  // post refuses on the BODY, which matters more than the others: a body is the
-  // prompt a driver executes, and the swallowed text would be signed with it.
+  // post refuses on the body: a body is the prompt a driver executes, and the
+  // swallowed text would be signed with it.
   const posted = await postJob(fakeEnv({ IMPROVE_SCORE_SECRET: "test-secret" }), agent, now, {
     namespace: "capsid",
     title: "a job",
@@ -256,16 +235,11 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
 // The innocent direction, a clean summary driven to a completed row, is in
 // test-integration/jobs.test.ts ("the tag guard is not a wall").
 
-// ---- the skills a run names are checked before anything is written ---------------
-//
-// Ruled 2026-09-16. A driver names offered and used; the credit direction comes from
-// what the Worker verified. These are the two refusals that keep the offered-to-used
-// rate meaning something, and both refuse BEFORE the transition, so a refused call
-// writes nothing at all.
+// The skills a run names are checked before anything is written. These two refusals
+// keep the offered-to-used rate accurate, and both refuse before the transition.
 
 test("a skill id that does not exist is REFUSED, not dropped", async () => {
-  // Dropping it would record this run as having been offered nothing, which is the one
-  // way the offered-to-used rate can be wrong without anybody writing a wrong number.
+  // Dropping it would record this run as having been offered nothing.
   const d1 = fakeD1({ improveSkills: [{ id: "sk-real", status: "candidate", version: 1, source_namespace: "foxhound" }] });
   const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
     result_summary: "done",
@@ -293,11 +267,8 @@ test("a skill named as USED but not OFFERED is refused", async () => {
 // Naming no skills at all is not a refusal: test-integration/jobs.test.ts drives that
 // case to a completed row.
 
-// ---- audit 2026-09-25, F3-7: a refusal is an error to the MCP client -------------------
-
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
-  // Every JobResult went through ok(), so ok: false came back with isError false and a
-  // client keying on isError read the refusal as success.
+  // A client keying on isError must not read a refusal as success.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "jobs-iserror", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -317,14 +288,10 @@ test("a jobs refusal comes back with isError set, and a caller still reads the r
   }
 });
 
-// ---- audit 2026-09-25, F3-4: marking a job failed checks that the row moved ------------
-//
-// A job that failed its signature check is marked failed with a keyed UPDATE. When the
-// row had moved first (another driver claimed it), the three copies of this path still
-// rewrote the mirror as failed and wrote an audit row saying so. The UPDATE now rides
-// in one batch with its records behind requireJobUnchanged, so this fake aborts any
-// batch that opens with that guard, as D1 does when the row no longer matches what was
-// read. `attempted` is every batch sent, `committed` every batch that landed.
+// Marking a job failed checks that the row did not move. The UPDATE rides in one batch
+// with its records behind requireJobUnchanged, so this fake aborts any batch that opens
+// with that guard, as D1 does when the row no longer matches what was read.
+// `attempted` is every batch sent, `committed` every batch that landed.
 function movedJobDb(before: Record<string, unknown>, after: Record<string, unknown>) {
   const attempted: string[][] = [];
   const committed: string[][] = [];
@@ -421,8 +388,6 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
   assert.match(out.refusal ?? "", /now failed/);
 });
 
-// ---- audit 2026-09-25, F1-4: one job's records failing does not cost the others theirs --
-
 test("PLANT: expireJobLeases requeues the later jobs when an earlier job's batch throws", async () => {
   // Each expired job is requeued in its own batch with its mirror and audit row. A
   // throw on the first leaves it claimed and must not stop the second.
@@ -457,8 +422,6 @@ test("PLANT: expireJobLeases requeues the later jobs when an earlier job's batch
     assert.ok(sqls.some((sql) => /INSERT INTO audit_log/.test(sql)));
   }
 });
-
-// ---- audit 2026-09-25, F2-8: post needs a registered namespace -------------------------
 
 test("PLANT: post into a namespace that is not registered is refused and writes nothing", async () => {
   // A caller scoped to * could create a job and its mirror document in a namespace that

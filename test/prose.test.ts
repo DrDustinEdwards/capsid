@@ -3,14 +3,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// THE MANNERED-PROSE GUARD (capsid/conventions.md, Writing style).
+// The mannered-prose guard (capsid/conventions.md, Writing style).
 //
-// Mannered prose substitutes metaphor and flourish for direct statement. The rule
-// governs every piece of prose this repo carries; this guard covers the two that
-// a machine can check, README.md and docs/. It is deliberately narrower than the
-// rule: a phrase list cannot catch a flourish it has never seen, and comments and
-// commit messages are scanned by nothing. A hit here is not a style opinion, it is
-// a phrase the rule names.
+// The rule governs all prose this repo carries; this guard covers README.md and
+// docs/. It is deliberately narrower than the rule: a phrase list cannot catch a
+// flourish it has never seen, and comments and commit messages are not scanned.
 //
 // Adding a phrase to this list is cheap. Removing one needs a reason written down.
 
@@ -41,14 +38,9 @@ function scannable(): Array<{ rel: string; text: string }> {
   return files;
 }
 
-// The count check that stops this suite passing by reading nothing. A glob that
-// silently matches zero files, or a docs/ that moved, would otherwise report
-// "no banned phrases" as loudly as a clean repo does.
-//
-// The floor is 500 bytes rather than 1000 because docs/ now holds short topic
-// documents as well as the long ones: the rollback procedure is two commands and
-// a paragraph. The check is still "this file had content", which is the thing it
-// exists to prove; nothing this repo writes is under 500 bytes by accident.
+// The count check that stops this suite passing by reading nothing, if a glob
+// matches zero files or docs/ moves. The 500-byte floor allows short topic
+// documents while still proving each file had content.
 test("the prose guard actually read the files it claims to scan", () => {
   const files = scannable();
   assert.ok(files.length >= 10, `expected README.md plus the docs, scanned ${files.length} files`);

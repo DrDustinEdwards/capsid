@@ -3,19 +3,13 @@ import { test } from "node:test";
 import { ciDispatch } from "../src/github.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// INGEST HARDENING, audit 2026-09-07 (Grok MAJOR 3, 5, 6 and section 23 item 7;
-// Opus MAJOR 2.1 and the budget note in section 5).
-//
-// Four separate holes, one theme: every stop this system has was checked where
-// work STARTS and not where it FINISHES, and the finish is where an attempt gets
-// kept. Each assertion below fails against 3763d95.
-
-// ---- the replay cache is now atomic ----------------------------------------
+// Ingest hardening: every stop must hold where work finishes, not only where it
+// starts, because the finish is where an attempt gets kept.
 //
 // That concurrent claims of one jti resolve to one winner is a property of SQLite's
 // PRIMARY KEY, so it is driven against a real D1 in test-integration/scheduled.test.ts.
 
-// ---- ci_dispatch aliases ----------------------------------------------------
+// ci_dispatch aliases
 
 function repoEnv(repoFull: string) {
   const kv = fakeKv({ seedToken: true });
@@ -31,7 +25,7 @@ function repoEnv(repoFull: string) {
 
 test("PLANT: ci_dispatch refuses the scorer named by numeric workflow id", async () => {
   // GitHub's dispatch endpoint accepts the numeric id at the same position as the
-  // file name, so an exact-basename refusal was one `gh api` call from bypassed.
+  // file name, so a refusal by basename alone could be bypassed.
   await withFetch({}, async (calls) => {
     await assert.rejects(
       () => ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "12345678", ref: "main" }),
@@ -123,14 +117,9 @@ test("an ordinary RERUN still works", async () => {
   );
 });
 
-// ---- the three stops now apply at INGEST, not only at the start -------------
-//
-// Pause was checked in openOne, mode in openOne, budget in the opener and tick.
-// None of them was checked at ingest, so a score POST still kept the change,
-// wrote improve:best, abstracted a skill and advanced the run in a namespace a
-// human had explicitly paused, or after the mode was switched off, or past the
-// spend cap. A stop that only stops NEW work is not a stop: the in-flight
-// attempt is the one someone paused the namespace to stop.
+// Pause, mode and budget apply at ingest, not only at the start. Otherwise a score
+// POST keeps the change and advances the run in a paused namespace, after the mode
+// is off, or past the spend cap; the in-flight attempt is the one a pause is for.
 
 import { ingestScore } from "../src/improve-run.ts";
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
@@ -222,18 +211,16 @@ test("PLANT: ingest REFUSES when the budget is exceeded", async () => {
 });
 
 test("PLANT: a baseline report must match the run's in-flight attempt", async () => {
-  // The baseline used to need only the right attempt_id shape and the CAS. A
-  // rerun of the baseline job after the run moved on would overwrite the run's
-  // baseline metrics with a measurement of something else, and every later
-  // comparison is against those numbers.
+  // A rerun of the baseline job after the run moved on must not overwrite the run's
+  // baseline metrics, which every later comparison is made against.
   const { d1, env } = await ingestEnv({}, [{ ...RUN, current_attempt: "capsid-r1-a01" }]);
   const result = await ingestScore(
     env,
     scoreReport({ attempt_id: "capsid-r1-baseline", head_sha: "base000" }),
     AT
   );
-  // A stale baseline is IGNORED (ok, so a retrying sender stops), not ingested. The
-  // state below is what shows it was ignored.
+  // A stale baseline is ignored (ok, so a retrying sender stops), not ingested; the
+  // state below shows it was ignored.
   assert.match(result.message, /not awaiting its baseline.*ignored/);
   assert.equal(result.kept, undefined, "and nothing may be kept");
   assert.equal(d1.rows.improve_runs[0].status, "awaiting-score", "the run must not advance");
@@ -263,19 +250,11 @@ test("a correctly bound baseline is still ingested, so the binding is not a wall
   assert.notEqual(d1.rows.improve_runs[0].status, "awaiting-score", "the run must advance");
 });
 
-// ---- F13: the check on args.ref, which the harness could not see ------------------
-//
-// Audit 2026-09-13, finding F13. The renamed-scorer plant above puts the scorer YAML
-// on the CONTENTS route, and withFetch routes by pathname with the query string
-// dropped, so the default-branch read and the `?ref=` read are the same stub. It
-// refuses on the first iteration every time, and reverting
-//   const refs = args.ref ? [undefined, args.ref] : [undefined]
-// back to a default-only lookup leaves it green. That reversion is the exact defect
-// finding 12 fixed a day earlier.
-//
-// The case the loop exists for is the one the stub could not express: INNOCENT on the
-// default branch, scorer only on the ref being dispatched. Counting calls inside the
-// route is what tells the two reads apart.
+// The check on args.ref. withFetch routes by pathname with the query string dropped,
+// so the default-branch read and the `?ref=` read hit the same stub, and the
+// renamed-scorer plant above would stay green if the lookup read the default branch
+// only. The case here is innocent on the default branch and a scorer only on the ref
+// being dispatched; counting calls inside the route tells the two reads apart.
 
 const INNOCENT_YAML = Buffer.from("name: nightly\njobs:\n  build:\n    steps:\n      - run: npm test\n", "utf8").toString(
   "base64"
@@ -306,7 +285,7 @@ test("PLANT: ci_dispatch refuses a scorer that exists only on the ref being disp
         "a scorer on the dispatch ref must be refused even when the default branch is innocent"
       );
       assert.equal(reads, 2, `both copies must be read, not ${reads}`);
-      // The second read is the one that carries the ref, which is the whole fix.
+      // The second read is the one that carries the ref.
       const refRead = calls.find((c) => c.path.endsWith("nightly.yml") && c.search.includes("ref=topic"));
       assert.ok(refRead, `no lookup carried ?ref=topic: ${JSON.stringify(calls.map((c) => c.path + c.search))}`);
       assert.equal(
@@ -331,8 +310,8 @@ test("THE INNOCENT DIRECTION: both copies innocent, and the dispatch goes out", 
       "GET /repos/owner/repo/actions/runs": { body: { total_count: 0, workflow_runs: [] } },
     },
     async (calls) => {
-      // The fake never lists the started run, so without the short poll this test
-      // waited out the full 30-second timeout.
+      // The fake never lists the started run, so a short poll keeps this from
+      // waiting out the full timeout.
       await ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "nightly.yml", ref: "topic" }, undefined, { timeoutMs: 1, intervalMs: 1 });
       assert.equal(
         calls.filter((c) => c.method === "POST" && c.path.includes("/dispatches")).length,

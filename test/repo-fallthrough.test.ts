@@ -15,13 +15,10 @@ import {
 import { IMPROVE_BRANCH_PREFIX, branchName, isImproveBranch } from "../src/improve-schema.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// THE REPO FALLTHROUGH WIDENING (capsid/decisions.md, 2026-09-06).
-//
-// These four tools exist because the claude.ai GitHub connector 404s on private
-// repos while this Worker's App token reaches them. Everything here drives the real
-// handlers against a stubbed GitHub, because the refusals are the product: a tool
-// that deletes the default branch or bills a rerun it did not start is worse than
-// one that is missing.
+// The repo fallthrough tools, which reach private repos through this Worker's App
+// token. These drive the real handlers against a stubbed GitHub, because the
+// refusals matter most: a tool that deletes the default branch or bills a rerun it
+// did not start is worse than one that is missing.
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 
@@ -40,12 +37,11 @@ const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 const fileBody = (content: string, sha = "s") => ({ type: "file", encoding: "base64", content: b64(content), size: content.length, sha });
 const REPO_META = { body: { default_branch: "main" } };
 
-// ---- the shared branch prefix ------------------------------------------------
+// the shared branch prefix
 
 test("the improve branch prefix has ONE definition, and both readers agree", () => {
-  // A literal "improve/" in delete_branch's guard would keep matching only until
-  // this prefix changed, and the failure would be a guard that stops guarding while
-  // still looking like one.
+  // A literal "improve/" in delete_branch's guard would silently stop matching if
+  // this prefix changed.
   assert.equal(branchName("capsid-2026-09-06-a01").startsWith(IMPROVE_BRANCH_PREFIX), true);
   assert.equal(isImproveBranch(branchName("x")), true);
   assert.equal(isImproveBranch("improve/anything"), true);
@@ -53,7 +49,7 @@ test("the improve branch prefix has ONE definition, and both readers agree", () 
   assert.equal(isImproveBranch("improvements/x"), false, "the prefix matched a longer word");
 });
 
-// ---- repo_refs ---------------------------------------------------------------
+// repo_refs
 
 const BRANCHES = [
   { name: "main", commit: { sha: "m1" } },
@@ -138,7 +134,7 @@ test("repo_refs links a branch to its open PR, and leaves branches without one n
   );
 });
 
-// ---- repo_history, every mode ------------------------------------------------
+// repo_history, every mode
 
 const COMMIT_ROWS = [
   { sha: "c1", commit: { message: "first line\n\nand a body paragraph", author: { name: "Dustin", date: "2026-09-05T00:00:00Z" } } },
@@ -218,7 +214,7 @@ test("repo_history returns patch bodies only with patch:true, and budgets them",
         files: { patch_truncated: boolean; patch_bytes: number; entries: Array<{ patch?: string }> };
       };
       // Two 150KB patches cannot both fit in a 200KB budget, so the second is dropped
-      // and the caller is TOLD, rather than silently receiving one of two patches.
+      // and the caller is told.
       assert.equal(out.files.patch_truncated, true, "the budget did not trip");
       assert.ok(out.files.patch_bytes <= 200 * 1024, `spent ${out.files.patch_bytes}`);
       assert.equal(typeof out.files.entries[0].patch, "string");
@@ -265,12 +261,11 @@ test("repo_history REFUSES an ambiguous combination rather than picking one", as
   });
 });
 
-// ---- delete_branch, all three refusals ---------------------------------------
+// delete_branch, all three refusals
 
 test("delete_branch REFUSES the default branch, and force does not lift it", async () => {
   await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
     await assert.rejects(() => deleteBranch(makeEnv(), "ns", "main"), /is the default branch/);
-    // This refusal is not liftable.
     await assert.rejects(() => deleteBranch(makeEnv(), "ns", "main", { force: true }), /force does not lift/);
   });
 });
@@ -333,7 +328,7 @@ test("delete_branch REFUSES a branch that does not exist rather than reporting s
   );
 });
 
-// ---- ci_dispatch -------------------------------------------------------------
+// ci_dispatch
 
 test("ci_dispatch REFUSES a workflow with no workflow_dispatch trigger, and says so", async () => {
   await withFetch(
@@ -368,10 +363,8 @@ test("ci_dispatch requires both workflow and ref to start a run", async () => {
 });
 
 test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () => {
-  // THE RUN LOOKUP IS STUBBED NOW, and it was not before: the harness had no route for
-  // it, so the GET 500ed, the scorer-identification check was skipped, and this test
-  // passed through the fail-open branch rather than the one it describes. That branch
-  // is closed (audit 2026-09-13, finding 12), which is what turned this red.
+  // The run lookup is stubbed, so the scorer-identification check runs; an
+  // unreadable run is refused (see the next test).
   await withFetch(
     {
       "GET /repos/o/r": REPO_META,
@@ -388,10 +381,9 @@ test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () 
 });
 
 test("PLANT: a rerun whose run cannot be IDENTIFIED is refused, not rerun anyway", async () => {
-  // The identification lived inside `if (runResp.ok)` and a failed GET fell straight
-  // through to the POST, so the one lookup deciding whether this is the scorer could be
-  // skipped by whatever made the GET fail. A rerun re-executes the signing step with
-  // the repo's secrets in scope, so an unidentified run waits.
+  // A failed GET must not skip the lookup deciding whether this is the scorer. A
+  // rerun re-executes the signing step with the repo's secrets in scope, so an
+  // unidentified run waits.
   await withFetch(
     {
       "GET /repos/o/r": REPO_META,
@@ -469,7 +461,7 @@ test("ci_dispatch returns the run id of the run that appeared", async () => {
   );
 });
 
-// ---- ci_status: ref and run_id filters, and the log budget --------------------
+// ci_status: ref and run_id filters, and the log budget
 
 const RUN_ROW = (over: Record<string, unknown> = {}) => ({
   id: 42,
@@ -495,9 +487,8 @@ test("ci_status filters by branch or by sha, choosing the right query parameter"
       await ciStatus(makeEnv(), "ns", undefined, { ref: "review/blog-convergence" });
       await ciStatus(makeEnv(), "ns", undefined, { ref: "3bcf858" });
       const [byBranch, bySha] = calls.filter((c) => c.path === "/repos/o/r/actions/runs").map((c) => c.search);
-    // GitHub has two different parameters and no single one accepting either, so the
-    // tool decides from the shape of the ref. Getting this backwards would silently
-    // return an empty run list for a valid sha.
+    // GitHub has separate branch and sha parameters, so the tool decides from the
+    // shape of the ref. Backwards, a valid sha returns an empty run list.
       assert.match(byBranch, /branch=review%2Fblog-convergence/, `branch query missing: ${byBranch}`);
       assert.match(bySha, /head_sha=3bcf858/, `sha query missing: ${bySha}`);
       assert.equal(/[?&]branch=3bcf858/.test(bySha), false, "a sha was filtered as a branch");
@@ -506,9 +497,7 @@ test("ci_status filters by branch or by sha, choosing the right query parameter"
 });
 
 test("ci_status EXPANDS an abbreviated sha before filtering, because GitHub matches exactly", async () => {
-  // Measured against dustinedwards-info: head_sha=3bcf858 returns total_count 0 and
-  // the full 40-character sha returns the run. GitHub says nothing about it, so an
-  // unexpanded abbreviation is an empty answer to a valid question.
+  // GitHub's head_sha filter returns nothing for an abbreviated sha, silently.
   await withFetch(
     {
       "GET /repos/o/r/commits/3bcf858": { body: { sha: FULL_SHA } },
@@ -552,9 +541,9 @@ test("ci_status run_id returns just that run, and refuses one that does not exis
   });
 });
 
-// A REALISTIC job log: every line timestamped, groups labelled "Run <command>"
+// A realistic job log: every line timestamped, groups labelled "Run <command>"
 // rather than by step name, and post-run cleanup at the end. The step name appears
-// NOWHERE in it, which is what defeated the first implementation.
+// nowhere in it.
 const JOB_LOG = [
   "2026-09-06T00:57:25.0Z ##[group]Run actions/checkout@abc",
   "2026-09-06T00:57:26.0Z setup noise nobody asked for",
@@ -576,10 +565,6 @@ const FAILED_STEP = {
 };
 
 test("ci_status finds the failing step BY TIMESTAMP, since its name is not in the log", async () => {
-  // The first implementation searched for the step name, which appears nowhere in an
-  // Actions job log (groups are labelled "Run <command>"), matched an incidental
-  // occurrence, and then reported a region it had not located. Measured on
-  // dustinedwards-info run 34002625535.
   await withFetch(
     {
       "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
@@ -606,24 +591,20 @@ test("ci_status finds the failing step BY TIMESTAMP, since its name is not in th
   );
 });
 
-// THE TWO CLOCKS HAVE DIFFERENT PRECISION. Reproduced from this repo's run
-// 35300342260, attempt 1, step verify:live: the jobs API reported completed_at
-// 2026-09-18T02:43:48Z, truncated to the second, while the step's own failure output
-// is stamped 02:43:48.29 through 02:43:48.81. An upper bound of `at <= to` cut every
-// one of those lines and returned 1549 bytes labelled "whole", so the reader was told
-// the failing step's complete output did not contain the failure.
+// The two clocks have different precision: the jobs API truncates completed_at to
+// the second, while log lines carry sub-second stamps. An upper bound of `at <= to`
+// cuts the failure output stamped within that last second.
 const SUBSECOND_LOG = [
   "2026-09-18T02:43:45.1000000Z setup noise nobody asked for",
   "2026-09-18T02:43:46.8697156Z ##[group]Run npm run verify:live",
   "2026-09-18T02:43:47.4117562Z PASS  1 health + provenance",
   "2026-09-18T02:43:47.6486773Z PASS  1c backup freshness",
-  // Everything below here lands after the truncated second and used to be dropped.
+  // Everything below here lands after the truncated second.
   "2026-09-18T02:43:48.2975644Z PASS  2b canary client record",
   "2026-09-18T02:43:48.7756331Z PASS  2 register (fresh client)",
   "2026-09-18T02:43:48.8080189Z [TypeError: fetch failed] { [cause]: Error: read ECONNRESET }",
   "2026-09-18T02:43:48.8184600Z ##[error]Process completed with exit code 1.",
-  // And the cleanup, which must STILL be excluded: widening by one second must not
-  // reach the next step, or the fix trades one wrong region for another.
+  // The next step, which must still be excluded: widening by one second must not reach it.
   "2026-09-18T02:43:50.3555580Z ##[group]Run node scripts/reap-probe-clients.mjs",
   "2026-09-18T02:43:50.8815118Z reap: deleted client but it still reads back",
   "2026-09-18T02:43:51.9000000Z Cleaning up orphan processes",
@@ -650,7 +631,7 @@ test("ci_status keeps the failure that lands AFTER the step's truncated complete
         failed_run: { log?: string; log_region?: string };
       };
       const body = out.failed_run.log ?? "";
-      // The whole point: the error is in the sub-second tail.
+      // The error is in the sub-second tail.
       assert.match(body, /ECONNRESET/, "the uncaught exception was cut off by the truncated upper bound");
       assert.match(body, /exit code 1/, "the step's own failure marker was cut off");
       assert.match(body, /PASS {2}2b canary/, "output between the truncated second and the real end was dropped");
@@ -710,7 +691,7 @@ test("ci_status caps the failing step's log at the budget, keeping the END", asy
   );
 });
 
-// ---- read_repo_file batch ----------------------------------------------------
+// read_repo_file batch
 
 test("read_repo_file batch returns each file's error INDEPENDENTLY", async () => {
   await withFetch(

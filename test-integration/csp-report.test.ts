@@ -4,22 +4,10 @@ import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
 import { REPORT_PREFIX } from "../src/headers";
 import { describe, expect, it } from "vitest";
 
-// /csp-report's BODY CAP, measured against the real runtime (residual 11).
-//
-// The endpoint used to call request.text() and then compare raw.length against
-// 16384. Two problems, and only the second is visible from the outside:
-//
-//   1. request.text() buffers the ENTIRE body before its size can be checked, so
-//      a public unauthenticated path with no body cap in front of it decided
-//      whether to refuse a request only after it had accepted all of it.
-//   2. raw.length counts UTF-16 CODE UNITS, not bytes. A body of 16,384 three-byte
-//      characters is 49,152 bytes on the wire and 16,384 by that measure, so the
-//      cap was three times looser than the number written next to it for exactly
-//      the input someone probing this endpoint would send.
-//
-// readBoundedText, which the three signed endpoints already use, pulls from the
-// stream and aborts on the byte that crosses the cap. This suite is the layer that
-// can tell the two apart: it posts real bodies to the real handler in workerd.
+// /csp-report's body cap, measured against the real runtime. The cap must count
+// bytes, not UTF-16 code units, and must stop reading at the byte that crosses it
+// rather than buffering the whole body first. This suite posts real bodies to the
+// real handler in workerd.
 
 const ORIGIN = "https://capsid.test";
 const CAP = 16_384;
@@ -57,9 +45,8 @@ describe("/csp-report bounds the body in bytes, before buffering it", () => {
   });
 
   it("counts BYTES, not UTF-16 code units: a multi-byte body over the cap is refused", async () => {
-    // Each of these is one code unit and THREE bytes. 8,000 of them is 24,000
-    // bytes on the wire, comfortably over the cap, while String#length reads
-    // 8,000 and the old check let it through and wrote it to R2.
+    // Each of these is one code unit and three bytes: 24,000 bytes on the wire, over
+    // the cap, while String#length reads 8,000.
     const padding = "あ".repeat(8_000);
     const body = report(padding);
     const bytes = new TextEncoder().encode(body).byteLength;
@@ -70,9 +57,8 @@ describe("/csp-report bounds the body in bytes, before buffering it", () => {
   });
 
   it("still accepts a multi-byte body that is genuinely under the cap", async () => {
-    // NOT VACUOUS: the byte cap must not refuse every non-ASCII report. A cap that
-    // rejected all multi-byte input would pass the assertion above for the wrong
-    // reason.
+    // A cap that rejected all multi-byte input would pass the test above for the
+    // wrong reason.
     const body = report("あ".repeat(200));
     expect(new TextEncoder().encode(body).byteLength).toBeLessThan(CAP);
     const resp = await postReport(body);
@@ -81,8 +67,6 @@ describe("/csp-report bounds the body in bytes, before buffering it", () => {
 });
 
 describe("/csp-report is rate limited before it reads or stores anything", () => {
-  // Replaces a unit test that compared the positions of checkRate, request.text() and
-  // MEDIA.put in the source of src/routes.ts (job_3e1596235513).
   it("a limited caller gets 429 before the content type is checked, and nothing reaches R2", async () => {
     const ip = "203.0.113.77";
     let verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
@@ -114,12 +98,9 @@ describe("/csp-report is rate limited before it reads or stores anything", () =>
 });
 
 describe("a stored report is reaped by the backup cron once it ages past the window", () => {
-  // Replaces a unit test that checked src/ for a second definition of the report
-  // prefix and that backup.ts and routes.ts both mentioned REPORT_PREFIX (audit
-  // 2026-09-25, item C2-21). The property that test stood for is that the sink and the
-  // prune agree on where reports live, or reports accumulate under a prefix nothing
-  // reaps. Here the sink stores a real report, a copy of it is aged by rewriting only
-  // the date segment of the key the sink chose, and the real backup cron runs.
+  // The sink and the prune must agree on where reports live, or reports accumulate
+  // under a prefix nothing reaps. The sink stores a real report, a copy is aged by
+  // rewriting only the date segment of its key, and the real backup cron runs.
   it("the aged copy is deleted and the fresh report is kept", async () => {
     const posted = await SELF.fetch(`${ORIGIN}/csp-report`, {
       method: "POST",
