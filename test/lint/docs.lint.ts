@@ -86,7 +86,7 @@ test("the README links every document under docs/", () => {
 });
 
 test("the README states the authoritative tool count", () => {
-  // The count lives in src/counts.ts and the README quotes it.
+  // src/counts.ts derives the count from TOOL_GRANTS and the README quotes it.
   const readme = read("README.md");
   assert.match(
     readme,

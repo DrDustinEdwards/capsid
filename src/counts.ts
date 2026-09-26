@@ -1,5 +1,9 @@
-// Authoritative counts for lint. Values are a cache; test/counts.test.ts derives
-// each one from the artifact. A namespace with no entry is not scanned.
+import { TOOL_GRANTS } from "./scope";
+
+// Authoritative counts for lint. The tool count is derived from TOOL_GRANTS, which
+// test/invariants.test.ts and test/tool-grant-descriptions.test.ts hold to the served
+// surface. The rest are a cache that test/counts.test.ts derives from the artifact.
+// A namespace with no entry is not scanned.
 export interface AuthoritativeCounts {
   tools: number;
   liveGates: number;
@@ -9,7 +13,7 @@ export interface AuthoritativeCounts {
 
 export const AUTHORITATIVE: Record<string, AuthoritativeCounts> = {
   capsid: {
-    tools: 32,
+    tools: Object.keys(TOOL_GRANTS).length,
     liveGates: 8,
     htmlEnforcedHeaders: 6,
     htmlReportOnlyHeaders: 1,
