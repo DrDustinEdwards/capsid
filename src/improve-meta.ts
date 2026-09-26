@@ -20,10 +20,8 @@ export interface ProposalTarget {
 
 // Returns null when the write is allowed, or the refusal.
 //
-// THREE CONDITIONS, ALL REQUIRED: the capsid namespace, the proposals prefix, and
-// not one of the named protected documents. The third is redundant against the
-// second today and is kept anyway, because the redundancy is what survives
-// someone later deciding a scores document should live under improve/proposals/.
+// All three are required: the capsid namespace, the proposals prefix, and not a
+// protected document. The third is redundant with the second today, on purpose.
 export function assertProposalTarget(target: ProposalTarget): string | null {
   if (META_PROTECTED_PATHS.includes(target.path)) {
     return `the meta-loop may not write ${target.namespace}/${target.path}: it is one of the documents the loop is measured against. It may only propose, under ${PROPOSAL_PREFIX}.`;
@@ -34,19 +32,15 @@ export function assertProposalTarget(target: ProposalTarget): string | null {
   if (!target.path.startsWith(PROPOSAL_PREFIX)) {
     return `the meta-loop may only write under ${PROPOSAL_PREFIX}, not '${target.path}'. It proposes; a human applies.`;
   }
-  // A proposal path that climbs back out of its own prefix is the obvious
-  // evasion, and docPath's grammar refuses "..' on the write tool. This module
-  // does not go through that grammar, so it checks here too.
+  // This module bypasses docPath's grammar, which refuses "..", so it checks here.
   if (target.path.includes("..")) {
     return `the meta-loop may not write a path containing '..': '${target.path}'`;
   }
   return null;
 }
 
-// Once per week. The marker is a KV key holding an ISO timestamp; an unreadable
-// or unparseable marker means "due", because the failure mode of running the
-// meta-loop twice is a duplicate proposal document nobody has to act on, and the
-// failure mode of never running it is that the run prompt never improves.
+// Weekly. An unreadable marker means due: running twice costs a duplicate proposal,
+// never running costs a prompt that never improves.
 export async function metaIsDue(kv: KVNamespace, now: Date): Promise<boolean> {
   try {
     const raw = await kv.get(META_LAST_KEY);
@@ -134,8 +128,7 @@ export async function runMetaLoop(env: Env, now: Date): Promise<MetaResult> {
   const rows = await aggregate(env.DB, 14);
   const totalAttempts = rows.reduce((n, r) => n + r.attempts, 0);
   if (totalAttempts === 0) {
-    // Marker still written: "there was nothing to reason about" is a completed
-    // weekly run, and not writing it would make the loop retry every tick.
+    // A completed weekly run, so the marker is written.
     await env.APP_KV.put(META_LAST_KEY, now.toISOString());
     return { ran: true, proposed: false, path: null, note: "no attempts in the last 14 days; nothing to reason about", costUsd: 0 };
   }
@@ -163,9 +156,7 @@ export async function runMetaLoop(env: Env, now: Date): Promise<MetaResult> {
     ].join("\n"),
   });
 
-  // NO STAMP WITHOUT A USABLE ANSWER. A refusal or an unparseable answer used to
-  // stamp the weekly marker and silence the loop for a week. Unstamped, it is tried
-  // again when the next run finishes, which is at most once per finished run.
+  // No marker without a usable answer, so it is tried again when the next run finishes.
   if (result.refused || !result.parsed) {
     return { ran: true, proposed: false, path: null, note: "the meta-loop produced no usable answer", costUsd: result.costUsd };
   }
@@ -182,9 +173,7 @@ export async function runMetaLoop(env: Env, now: Date): Promise<MetaResult> {
   }
 
   const path = proposalPath("run-prompt", chicagoDay(now));
-  // THE GATE. Every write from this module passes through it, including this one,
-  // which is constructed from a constant and could not fail. It is checked anyway
-  // so the guard has exactly one bypass count: zero.
+  // Every write from this module passes the gate, even one that cannot fail.
   const refusal = assertProposalTarget({ namespace: "capsid", path });
   if (refusal) {
     return { ran: true, proposed: false, path: null, note: `refused by the proposal gate: ${refusal}`, costUsd: result.costUsd };
