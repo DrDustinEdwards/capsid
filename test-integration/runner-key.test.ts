@@ -68,7 +68,9 @@ function github(opts: { jwksStatus?: number } = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.href === `${OIDC_ISSUER}/.well-known/jwks`) {
-      return opts.jwksStatus ? new Response("down", { status: opts.jwksStatus }) : json({ keys: [{ ...publicJwk, kid: "k1" }] });
+      // A JSON error body, so the status check is what refuses rather than a parse
+      // failure standing in for it.
+      return opts.jwksStatus ? json({ message: "down", keys: [] }, opts.jwksStatus) : json({ keys: [{ ...publicJwk, kid: "k1" }] });
     }
     if (url.pathname === `/repos/${REPO}` && (init?.method ?? "GET") === "GET") {
       return json({ id: REPO_ID, full_name: REPO, default_branch: "master", private: false });
