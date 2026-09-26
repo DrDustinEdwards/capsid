@@ -16,7 +16,7 @@ const LIVE_SCHEMA = "0015_outcome_prs.sql";
 const NEWER = "0016_jobs_retry_cap.sql";
 
 // A D1 that answers exactly the queries /health and resolveRepo make, and throws on
-// anything else. Everything else gatherFindings reads (improve_status, blocked jobs)
+// anything else. Everything else gatherFindings reads (improve_status)
 // fails into attempt(), which is the path a real outage takes, so those checks are
 // absent from the result rather than faked.
 function healthDb(schema: string, repos = [{ repo: `${OWNER}/${REPO}`, label: "primary" }]) {
@@ -153,12 +153,12 @@ test("the mirror is read from whichever repo the namespace maps to its backups l
 });
 
 // A check whose read failed is not reported as run, so runPass does not clear the jobs
-// it owns. In this harness improve_status, the blocked-jobs read and every roster CI
+// it owns. In this harness improve_status and every roster CI
 // read fail, while /health, master head and the migrations listing succeed.
 test("gatherFindings reports only the checks whose reads succeeded", async () => {
   const { ran, failures } = await gather(NEWER);
   assert.ok(failures.some((f) => f.includes("improve_status")), "improve_status did not fail, so this proves nothing");
   assert.ok(failures.some((f) => f.includes("ci ")), "no ci read failed, so this proves nothing");
   for (const check of ["health", "master head", "migrations"] as const) assert.ok(ran.has(check), `${check} ran and was not reported`);
-  for (const check of ["improve_status", "blocked jobs", "ci"] as const) assert.ok(!ran.has(check), `${check} failed and was reported as run`);
+  for (const check of ["improve_status", "ci"] as const) assert.ok(!ran.has(check), `${check} failed and was reported as run`);
 });

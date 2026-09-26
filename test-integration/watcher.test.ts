@@ -1,8 +1,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { BLOCKED_STALE_HOURS, WATCHER_ACTOR, clearFinding, openWatcherFingerprints, readStaleBlocked } from "../src/watcher";
+import { WATCHER_ACTOR, clearFinding, gatherFindings, openWatcherFingerprints } from "../src/watcher";
 
-// The watcher's three reads and writes of the jobs table, against a real D1. The rows
+// The watcher's reads and writes of the jobs table, against a real D1. The rows
 // are seeded and the assertions are on which rows come back or change, not on SQL text.
 
 const env_ = env as unknown as Parameters<typeof clearFinding>[0];
@@ -66,24 +66,14 @@ describe("clearFinding", () => {
   });
 });
 
-describe("readStaleBlocked", () => {
-  it("returns blocked jobs older than the window, oldest first, and at most 20", async () => {
-    await seed("job_fresh0000000", { status: "blocked", updated_at: hoursAgo(BLOCKED_STALE_HOURS - 1) });
-    await seed("job_queued000000", { status: "queued", updated_at: hoursAgo(BLOCKED_STALE_HOURS + 10) });
-    for (let i = 0; i < 22; i++) {
-      await seed(`job_stale${String(i).padStart(7, "0")}`, { status: "blocked", updated_at: hoursAgo(BLOCKED_STALE_HOURS + 1 + i) });
-    }
-    const stale = await readStaleBlocked(env_, NOW);
-    // The read is bounded.
-    expect(stale).toHaveLength(20);
-    expect(stale[0].id, "the oldest blocked job must come first").toBe("job_stale0000021");
-    expect(stale.map((r) => r.id)).not.toContain("job_fresh0000000");
-    expect(stale.map((r) => r.id)).not.toContain("job_queued000000");
-  });
-
-  it("the window is BLOCKED_STALE_HOURS: a job just inside it is not stale, one just past it is", async () => {
-    await seed("job_inside000000", { status: "blocked", updated_at: new Date(NOW.getTime() - BLOCKED_STALE_HOURS * 3_600_000 + 60_000).toISOString() });
-    await seed("job_outside00000", { status: "blocked", updated_at: new Date(NOW.getTime() - BLOCKED_STALE_HOURS * 3_600_000 - 60_000).toISOString() });
-    expect((await readStaleBlocked(env_, NOW)).map((r) => r.id)).toEqual(["job_outside00000"]);
+describe("a job blocked on a human is not a watcher finding", () => {
+  it("a job blocked for two days produces no blocked- finding and no job", async () => {
+    // Every blocked job waits on a person by construction, so a reminder per blocked
+    // job was noise (Dustin, 2026-09-26). The console lists blocked jobs with their
+    // commands; alerting is a separate item.
+    await seed("job_longblocked0", { status: "blocked", posted_by: "github:DrDustinEdwards", updated_at: hoursAgo(48) });
+    const { findings, ran } = await gatherFindings(env_, NOW);
+    expect(findings.filter((f) => f.fingerprint.startsWith("blocked-"))).toEqual([]);
+    expect([...ran] as string[]).not.toContain("blocked jobs");
   });
 });
