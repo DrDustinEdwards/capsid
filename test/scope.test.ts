@@ -227,8 +227,8 @@ function noToolsAgent(): Agent {
 // A tool registered before the guard, or around it, answers here.
 test("SWEEP: every served tool refuses a caller whose tools axis is empty, by name, before its handler runs", async () => {
   const { served, results } = await sweep(noToolsAgent(), (tools) => tools.map((tool) => ({ tool: tool.name, args: argsFor(tool) })));
-  // Not vacuous: the sweep called every served tool, and that is the pinned surface.
-  assert.equal(served.length, AUTHORITATIVE.capsid.tools, "listTools did not return the pinned surface");
+  // Not vacuous: the sweep called every served tool, and that is every tool in TOOL_GRANTS.
+  assert.equal(served.length, AUTHORITATIVE.capsid.tools, "listTools did not return every tool in TOOL_GRANTS");
   assert.equal(results.size, AUTHORITATIVE.capsid.tools, "the sweep did not call every tool");
   for (const tool of served) {
     const key = [...results.keys()].find((label) => label === tool.name || label.startsWith(`${tool.name}.`));
@@ -261,7 +261,7 @@ test("SWEEP: a read-only caller is refused every write by checkScope, and no rea
   const { served, results } = await sweep(readOnly, (tools) =>
     tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) })))
   );
-  assert.equal(served.length, AUTHORITATIVE.capsid.tools, "listTools did not return the pinned surface");
+  assert.equal(served.length, AUTHORITATIVE.capsid.tools, "listTools did not return every tool in TOOL_GRANTS");
   let writes = 0;
   let reads = 0;
   for (const tool of served) {
