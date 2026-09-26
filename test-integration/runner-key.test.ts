@@ -62,12 +62,17 @@ function goodClaims(overrides: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
-// GitHub: the OIDC key set, the repo, and the dispatch the start sends.
+// GitHub: the OIDC key set, the repo, and the dispatch the start sends. Counts the
+// key-set fetches, because an exchange that is refused on the cheap checks must not
+// send anything to GitHub.
+let jwksFetches = 0;
 function github(opts: { jwksStatus?: number } = {}) {
+  jwksFetches = 0;
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.href === `${OIDC_ISSUER}/.well-known/jwks`) {
+      jwksFetches++;
       // A JSON error body, so the status check is what refuses rather than a parse
       // failure standing in for it.
       return opts.jwksStatus ? json({ message: "down", keys: [] }, opts.jwksStatus) : json({ keys: [{ ...publicJwk, kid: "k1" }] });
@@ -193,6 +198,10 @@ describe("the exchange", () => {
     const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title: "never started", body: "b" });
     const unstarted = await exchange(posted.job!.id, await signJwt(goodClaims()));
     expect(unstarted.ok).toBe(false);
+    const missing = await exchange("job_000000000000", "not-a-jwt");
+    expect(missing.ok).toBe(false);
+    if (!unstarted.ok && !missing.ok) expect(missing.refusal.replace(/job_\w+/, "")).toBe(unstarted.refusal.replace(/job_\w+/, ""));
+    expect(jwksFetches, "a refused exchange for an unstarted job fetched GitHub's key set").toBe(0);
     const id = await startedJob();
     const later = new Date(NOW.getTime() + 21 * 60_000);
     const stale = await exchange(id, await signJwt(goodClaims({ exp: Math.floor(later.getTime() / 1000) + 300 })), later);

@@ -121,14 +121,29 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
   }
   if (typeof jobId !== "string" || !/^job_[0-9a-f]{12}$/.test(jobId)) return refuse(400, "the body must name a job_id");
 
+  // The cheap checks first, and before anything is fetched: this route takes no
+  // credential until the token verifies, so an unstarted job must cost one D1 read and
+  // nothing sent to GitHub. One refusal for all four cases, so a caller without a valid
+  // token learns nothing about a job it names.
+  //
+  // The start this exchange belongs to is the newest job-seat-started row for this job
+  // inside the pending window. Its id is in the agent's name, and the name is UNIQUE, so
+  // a second exchange for the same start fails at the insert whatever order two
+  // concurrent requests commit in.
+  const noStart = refuse(403, `no seat start for ${jobId} in the last ${PENDING_START_MINUTES} minutes`);
+  const job = await readJob(env.DB, jobId);
+  if (!job || !SEAT_START_NAMESPACES.includes(job.namespace) || job.status !== "queued") return noStart;
+  const since = new Date(now.getTime() - PENDING_START_MINUTES * 60_000).toISOString();
+  const start = await env.DB.prepare(
+    `SELECT id FROM audit_log WHERE action = 'job-seat-started' AND path = ?1 AND at >= datetime(?2) ORDER BY id DESC LIMIT 1`
+  )
+    .bind(jobDocPath(jobId), since)
+    .first<{ id: number }>();
+  if (!start) return noStart;
+
   const verified = await verifyGithubOidc(token, now);
   if (!verified.ok) return verified;
   const claims = verified.claims;
-
-  const job = await readJob(env.DB, jobId);
-  if (!job) return refuse(403, `no job ${jobId}`);
-  if (!SEAT_START_NAMESPACES.includes(job.namespace)) return refuse(403, `${job.namespace} is not a namespace a session may be started for`);
-  if (job.status !== "queued") return refuse(403, `${jobId} is ${job.status}; a runner key is issued only for a queued job the seat has just started`);
 
   // Every run claim is pinned against GitHub as it is now: the repo id (a renamed or
   // recreated repo has a new one), the default branch the workflow must run from, and
@@ -152,18 +167,6 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
   for (const [claim, want] of expected) {
     if (claims[claim] !== want) return refuse(403, `claim ${claim} is '${String(claims[claim])}', expected '${want}'`);
   }
-
-  // The start this exchange belongs to: the newest job-seat-started row for this job
-  // inside the pending window. Its id is in the agent's name, and the name is UNIQUE, so
-  // a second exchange for the same start fails at the insert whatever order two
-  // concurrent requests commit in.
-  const since = new Date(now.getTime() - PENDING_START_MINUTES * 60_000).toISOString();
-  const start = await env.DB.prepare(
-    `SELECT id FROM audit_log WHERE action = 'job-seat-started' AND path = ?1 AND at >= datetime(?2) ORDER BY id DESC LIMIT 1`
-  )
-    .bind(jobDocPath(jobId), since)
-    .first<{ id: number }>();
-  if (!start) return refuse(403, `no seat start for ${jobId} in the last ${PENDING_START_MINUTES} minutes`);
 
   const scopes = defaultScopes([job.namespace]);
   scopes.repos = [repo.full];
