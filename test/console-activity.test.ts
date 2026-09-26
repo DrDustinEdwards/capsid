@@ -3,14 +3,11 @@ import { test } from "node:test";
 import { activityFilterFrom, loadActivity } from "../src/console-activity.ts";
 import { fakeD1 } from "./fakes.ts";
 
-// GROUP 5: RECENT ACTIVITY.
-//
-// The last 50 audit rows across every namespace, filterable by namespace and by
-// actor. The filter is the part worth testing: it is built from a query string a
-// browser sends, so it is untrusted input reaching a SQL statement, and the whole
-// defence is that both values are BOUND rather than interpolated. The tests below
-// check the statement's shape as well as its results, because a bound parameter that
-// later becomes a template literal passes every results-only test ever written.
+// Recent activity: the last 50 audit rows, filterable by namespace and actor. The
+// filter comes from a browser's query string, so it is untrusted input reaching SQL,
+// and the defence is that both values are bound rather than interpolated. The tests
+// check the statement's shape, because a bound parameter that becomes a template
+// literal passes every results-only test.
 
 test("no filter asks for the whole log, bounded", () => {
   const filter = activityFilterFrom(new URL("https://capsid.example/console"));

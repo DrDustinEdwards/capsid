@@ -5,17 +5,12 @@ import { reputationFrom, type ReputationRows } from "../src/console-reputation.t
 import type { AgentSummary } from "../src/improve-run.ts";
 import { agentRecord } from "./fakes.ts";
 
-// GROUP 3: THE REPUTATION PANEL.
+// The reputation panel: counts, not scores, because a score needs a weighting and a
+// weighting is an opinion. What is here is what happened: jobs this agent finished,
+// failed and blocked, pull requests it opened and merged, and for a driver, the
+// attempts its namespace kept and reverted.
 //
-// COUNTS, NOT SCORES, and the distinction is the whole design. A score would need a
-// weighting, a weighting is an opinion, and an opinion about a credential's
-// trustworthiness that a machine computed is the thing nobody should be reading off
-// a dashboard. What is here is what happened: jobs this agent finished, failed and
-// blocked, pull requests it opened and merged, and for a driver, the attempts its
-// namespace kept and reverted.
-//
-// The aggregation is a pure function over rows so it can be checked against fixtures
-// rather than through a fake that would agree with whatever it was handed.
+// The aggregation is a pure function over rows so it can be checked against fixtures.
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
@@ -50,8 +45,7 @@ test("job counts come from the actor string, not the agent name", () => {
       { actor: "agent:capsid-driver", status: "done", n: 4 },
       { actor: "agent:capsid-driver", status: "failed", n: 1 },
       { actor: "agent:capsid-driver", status: "blocked", n: 2 },
-      // A bare name is NOT this agent: the queue records agent:<name>, and counting a
-      // row that spells it differently would attribute somebody else's work.
+      // A bare name is not this agent: the queue records agent:<name>.
       { actor: "capsid-driver", status: "done", n: 99 },
       { actor: "agent:foxing-driver", status: "done", n: 7 },
     ],
@@ -81,8 +75,7 @@ test("pull requests opened and merged are counted per actor", () => {
     prsMerged: [{ actor: "github:DrDustinEdwards", n: 3 }],
   });
   assert.equal(rep.prs_opened, 5);
-  // The driver holds no can_merge flag, so zero here is the scope working rather
-  // than an agent that never got round to it.
+  // The driver holds no can_merge flag, so zero here is the scope working.
   assert.equal(rep.prs_merged, 0);
 });
 
@@ -187,8 +180,7 @@ test("the panel renders every agent, revoked ones included, and never a key", ()
   });
   assert.match(html, /capsid-driver/);
   assert.match(html, /old-driver/);
-  // A REVOKED ROW STAYS, and says so: dropping it would make "revoked" and "never
-  // existed" look the same, which is the reason listAgents keeps them too.
+  // A revoked row stays and says so, or "revoked" and "never existed" look the same.
   assert.match(html, /revoked 2026-09-01 10:00:00/);
   assert.match(html, /can_merge/);
   // The stored verifier and the fingerprint have no business here.

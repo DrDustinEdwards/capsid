@@ -12,18 +12,12 @@ import {
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 
-// EVERY DRIVER CAN LEARN THE POLICY VERSION IT MUST APPROVE UNDER.
+// Every driver can learn the policy version it must approve under.
 //
-// /improve step 4b tells a driver to read capsid/policy/gates.md and pass its version
-// as approved_by_policy. A namespace-scoped driver cannot read the capsid namespace,
-// so every driver except capsid's was refused at that first step with
-// "agent:claude-skills-driver is not scoped to the 'capsid' namespace", had nothing to
-// pass, and rightly refused to guess. Measured on claude-skills job_33d90163ad1e,
-// 2026-09-17.
-//
-// The fix serves the version and the enabled flag, and nothing else: not the body, not
-// the classes, not the never list. A driver needs to name the version it is approving
-// under. Reading the policy itself stays scoped to capsid.
+// A driver passes the version of capsid/policy/gates.md as approved_by_policy, but a
+// namespace-scoped driver cannot read the capsid namespace. So improve_status serves
+// the version and the enabled flag, and nothing else: not the body, not the classes,
+// not the never list. Reading the policy itself stays scoped to capsid.
 
 const SECRET = "test-improve-secret";
 
@@ -40,10 +34,9 @@ const GATES = [
   "- `open_pr` a pull request.",
 ].join("\n");
 
-// Built from the code's own lists rather than retyped. loadMergePolicy refuses a
-// document that describes less than the code enforces, which is the behaviour being
-// relied on two tests below, so a hand-written short fixture would only ever exercise
-// the refusal.
+// Built from the code's own lists rather than retyped: loadMergePolicy refuses a
+// document that describes less than the code enforces, so a short hand-written
+// fixture would only exercise the refusal.
 const AUTO_MERGE = [
   "# Auto-merge policy",
   "",

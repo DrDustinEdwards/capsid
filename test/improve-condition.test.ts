@@ -17,21 +17,17 @@ import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, IMPROVE_SKILL_DEFAULTS,
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// improve_runs.condition, from the arc's third ruling.
-//
-// The column exists so an ablation is a query rather than an archaeology exercise.
-// That gives it three separate obligations, and this file asserts each: the
-// vocabulary is one list rather than two, the value is recorded on the row AND in
-// the audit rows, and each value actually switches something off. A condition
-// recorded on a run that behaved identically to `full` is a label that lies, which
-// is worse than no column at all.
+// improve_runs.condition, which makes an ablation a query. Asserted: the vocabulary
+// is one list, the value is recorded on the row and in the audit rows, and each value
+// switches something off. A condition on a run that behaved like `full` would be
+// false.
 
 const SCORES = seedScoresDoc("capsid");
 const NOW = new Date("2026-09-05T08:05:00Z");
 // A run started just before NOW, so the age limit does not end it first.
 const FRESH = { started: "2026-09-05 08:00:00", advanced_at: "2026-09-05 08:00:00" };
 
-// ---- the column and the vocabulary ------------------------------------------
+// The column and the vocabulary.
 
 test("isRunCondition admits exactly the three and nothing else", () => {
   for (const value of RUN_CONDITIONS) assert.equal(isRunCondition(value), true, `${value} was rejected`);
@@ -40,7 +36,7 @@ test("isRunCondition admits exactly the three and nothing else", () => {
   }
 });
 
-// ---- set and logged on every run --------------------------------------------
+// Set and logged on every run.
 
 async function harness(kvSeed: Record<string, string> = {}) {
   const d1 = fakeD1({
@@ -84,8 +80,7 @@ test("EVERY CONDITION IS RECORDED ON THE ROW as asked for", async () => {
 });
 
 test("THE CONDITION IS IN THE OPENING AUDIT ROW, not only on the row it describes", async () => {
-  // improve_runs is pruned by nothing, but audit_log is the one table where a
-  // single query answers "what did the loop do, and under what condition".
+  // audit_log is where one query answers what the loop did and under what condition.
   await withFetch({}, async () => {
     const { d1, env } = await harness();
     await openRuns(env, NOW, "capsid", "no-memory");
@@ -99,7 +94,7 @@ test("THE CONDITION IS IN THE OPENING AUDIT ROW, not only on the row it describe
 // query covers a run's whole life: read back from a real D1 in
 // test-integration/improve-finalize.test.ts.
 
-// ---- each condition switches something off ----------------------------------
+// Each condition switches something off.
 
 // One attempt under a condition, over a store holding a kept attempt from an earlier
 // run (lineage) and a skill from another project (transfer), each carrying text or a
@@ -135,9 +130,8 @@ async function attemptUnder(condition: string) {
 }
 
 test("'no-memory' WITHHOLDS LINEAGE HISTORY from base selection", async () => {
-  // The ablation is only real if the input is actually withheld. A condition that
-  // reached selectBase with the full history would be a label that lies. With the
-  // history, the kept attempt is the best base; without it, the run's own base is.
+  // With the history, the kept attempt is the best base; without it, the run's own
+  // base is.
   const full = (await attemptUnder("full")).attempt;
   assert.equal(full.base_sha, LINEAGE.head_sha, "a full run did not branch from the kept attempt, so this test proves nothing");
   assert.equal(full.lineage_parent, LINEAGE.id);
@@ -159,7 +153,7 @@ test("'no-transfer' OFFERS NO cross-project skill", async () => {
 // changes nothing is a label that lies. A fourth value cannot be exercised by a test
 // written before it exists, so the source is what is checked.
 
-// ---- the tool surface -------------------------------------------------------
+// The tool surface.
 
 test("AN UNRECOGNISED CONDITION IS REFUSED, not silently defaulted to full", async () => {
   await withFetch({}, async () => {
@@ -168,7 +162,7 @@ test("AN UNRECOGNISED CONDITION IS REFUSED, not silently defaulted to full", asy
       () => improveRunManual(env, NOW, { namespace: "capsid", dryRun: false, condition: "no-lineage" }),
       /unknown condition 'no-lineage'/
     );
-    // And nothing was opened, so a refused condition cannot half-start a run.
+    // Nothing was opened.
     assert.deepEqual(d1.rows.improve_runs, []);
   });
 });
@@ -218,9 +212,8 @@ test("the improve_run tool serves condition, describes each value, and passes it
   });
 });
 
-// A type-level assertion: RunRow.condition is the union, not a bare string, so a typo
-// in a call site is a compile error rather than a row nobody notices. The two
-// assignments are checked by npm run check:test.
+// RunRow.condition is the union, not a bare string, so a typo in a call site is a
+// compile error. Checked by npm run check:test.
 const TYPED: RunCondition = DEFAULT_CONDITION;
 const ROW_CONDITION: RunCondition = ({ condition: DEFAULT_CONDITION } as Pick<RunRow, "condition">).condition;
 test("the condition is a union type, not a bare string", () => {

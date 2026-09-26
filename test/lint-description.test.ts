@@ -8,19 +8,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// THE TOOL DESCRIPTION IS DERIVED FROM THE REPORT, NOT RETYPED BESIDE IT.
-//
-// `lint`'s description told every connected client that mode 'report' measures
-// "documents by type, contradictions, stale decisions, unbound specs, broken links,
-// and doc-vs-code drift". Six items, five of them checks: `documents by type` is a
-// count reported beside the checks, and `unconsolidated` was missing. docs/schema.md
-// carried the same list, copied from here.
-//
-// A description that miscounts what sits beside it is the defect the count lint
-// exists for, so it gets the same treatment: the list is DERIVED from a real
-// buildTruthReport response rather than compared against a second copy of the
-// names. That is why the description spells the ids as the response spells them.
-// A paraphrase cannot be derived from anything, which is how this drifted.
+// The lint tool description is checked against the report, not a retyped list: the
+// check ids are derived from a real buildTruthReport response, which is why the
+// description spells the ids as the response spells them. A paraphrase cannot be
+// checked against anything.
 
 // The report over an empty store. Every check is pushed whatever the input holds,
 // so this is the full id list; `repoPaths: undefined` is the drift check's NOT RUN
@@ -73,8 +64,8 @@ test("DERIVED: the lint description states the number of checks the report runs"
   }
 });
 
-// The registration must actually use the exported constant, or the constant is a
-// second copy that agrees with nothing. Checked against what the server serves.
+// The registration must use the exported constant. Checked against what the server
+// serves.
 test("the served lint description is the exported one", async () => {
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
   const client = new Client({ name: "lint-description", version: "1.0.0" });

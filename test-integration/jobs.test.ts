@@ -9,11 +9,8 @@ import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from 
 import { splitSignedTask, verifyTaskDoc } from "../src/improve-task";
 import { MAX_TITLE } from "../src/limits";
 
-// THE WORK QUEUE, AGAINST A REAL D1.
-//
-// This suite lives in the integration layer rather than beside the unit tests, and
-// that is the whole point of it: every property under test is a property of the
-// DATABASE, not of a handler.
+// The work queue against a real D1. Every property under test is a property of the
+// database, not of a handler:
 //
 //   - the partial unique index over (namespace, title) is what refuses a duplicate
 //     post, and only SQLite enforces it;
@@ -23,17 +20,14 @@ import { MAX_TITLE } from "../src/limits";
 //   - the lease sweep is a keyed UPDATE with RETURNING over a real datetime
 //     comparison.
 //
-// A fake that answered these by SQL shape would agree with whatever it was asked,
-// which is the failure mode test/fakes.ts's own header records.
+// A fake that answered these by SQL shape would agree with whatever it was asked.
 
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
 const DRIVER_ACTOR = "opkey:aaaabbbbcccc";
 const OTHER_ACTOR = "opkey:ddddeeeeffff";
-// A claim is authorized against a CALLER now, not an actor string (migrations/0008).
-// These two are the legacy operator identity, which is what every existing claim in
-// the portfolio still presents and what these tests are about: the lease, the CAS and
-// the unique index are properties of SQLite and do not change with the caller.
+// The legacy operator identity. The lease, the CAS and the unique index are
+// properties of SQLite and do not change with the caller.
 const DRIVER = legacyAgent("write", DRIVER_ACTOR);
 const OTHER = legacyAgent("write", OTHER_ACTOR);
 
@@ -57,9 +51,9 @@ async function auditActions(id: string): Promise<string[]> {
   return (results ?? []).map((r) => r.action);
 }
 
-// AN ENV WHOSE FIRST BATCH RUNS `between` FIRST, against the real D1. Every job
-// transition now reads the row and then commits one guarded batch, so this puts a
-// competing write exactly in the gap the guard exists for.
+// An env whose first batch runs `between` first, against the real D1. Every job
+// transition reads the row and then commits one guarded batch, so this puts a
+// competing write in the gap the guard exists for.
 function racingEnv(between: () => Promise<void>) {
   let armed = true;
   return {
@@ -90,7 +84,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
-  // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+  // jobs post requires a registered namespace.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }])).run();
 });
@@ -132,8 +126,7 @@ describe("the lifecycle", () => {
     await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "s" });
 
-    // Both the queue's own audit row and the mirrored document's write land, which
-    // is what makes the snapshot rule hold for a job document as for any other.
+    // Both the queue's own audit row and the mirrored document's write land.
     const actions = await auditActions(id);
     expect(actions).toContain("job-posted");
     expect(actions).toContain("job-claimed");
@@ -177,9 +170,9 @@ describe("the refusals", () => {
     expect(second.ok).toBe(false);
     expect(second.refusal).toMatch(/already has an open job titled 'only once'/);
 
-    // And the index is PARTIAL, so the same title is postable again once the first
-    // one is out of the open statuses. A plain unique index would make a recurring
-    // job impossible, which is the thing the partial clause buys.
+    // The index is partial, so the same title is postable again once the first one
+    // is out of the open statuses. A plain unique index would make a recurring job
+    // impossible.
     await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
     await failJob(jobsEnv(), DRIVER, NOW, first.job!.id, "gave up");
     const third = await post({ title: "only once" });
@@ -187,11 +180,8 @@ describe("the refusals", () => {
   });
 
   it("A BLOCKED JOB IS OPEN, so the same title cannot be posted over it", async () => {
-    // Measured 2026-09-18: the watcher re-posted an identical finding 12 minutes
-    // after the first copy was blocked for the seat, because the index counted only
-    // queued and claimed. A blocked job is the most open a job can be, since somebody
-    // is waiting on it, and a second copy costs a driver run to close and tells the
-    // human the same thing twice.
+    // Somebody is waiting on a blocked job, so it is open; a second copy costs a
+    // driver run to close and tells the human the same thing twice.
     const first = await post({ title: "waiting on the seat" });
     await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
     const blocked = await blockJob(jobsEnv(), DRIVER, NOW, first.job!.id, {
@@ -203,15 +193,13 @@ describe("the refusals", () => {
 
     const second = await post({ title: "waiting on the seat" });
     expect(second.ok).toBe(false);
-    // THE REFUSAL NAMES THE ROW. "there is already one" sends the reader to the
-    // console to find out which one and whether anyone is waiting on it.
+    // The refusal names the row, so the reader does not have to look it up.
     expect(second.refusal).toMatch(new RegExp(`${first.job!.id} is blocked`));
     expect(second.refusal).toMatch(/queued, claimed or blocked/);
   });
 
   it("a failed or done job does not hold the title, so a recurring job still recurs", async () => {
-    // The other direction of the same rule, kept explicit: widening the index to
-    // blocked must not quietly make every title permanent.
+    // Widening the index to blocked must not make every title permanent.
     for (const finish of ["fail", "complete"] as const) {
       const posted = await post({ title: `recurs by ${finish}` });
       await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
@@ -298,15 +286,12 @@ describe("the lease", () => {
     await claimJob(jobsEnv(), DRIVER, NOW, { id: dead.job!.id });
     await claimJob(jobsEnv(), OTHER, NOW, { id: live.job!.id });
 
-    // One second before the lease is up: nothing moves. This is the innocent case,
-    // and a sweep that fires on it would return a job somebody is still doing.
+    // One second before the lease is up: nothing moves.
     const justBefore = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 - 1000);
     expect((await expireJobLeases(jobsEnv(), justBefore)).requeued).toEqual([]);
     expect((await row(dead.job!.id))?.status).toBe("claimed");
 
-    // The live one heartbeats and the dead one does not, so an hour later only one
-    // of them is expired. This is what the heartbeat is FOR, asserted rather than
-    // assumed.
+    // The live one heartbeats and the dead one does not, so only one of them expires.
     const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
     await heartbeatJob(jobsEnv(), OTHER, new Date(NOW.getTime() + 60_000), live.job!.id);
     const swept = await expireJobLeases(jobsEnv(), later);
@@ -349,17 +334,13 @@ describe("blocked", () => {
     expect(blocked.ok, blocked.refusal).toBe(true);
     const stored = await row(id);
     expect(stored?.status).toBe("blocked");
-    // The command is what the human needs, so it is IN the summary rather than
-    // described by it. The console shows this string.
+    // The command is in the summary verbatim; the console shows this string.
     expect(String(stored?.result_summary)).toContain("git push origin feat/thing");
     expect(String(stored?.result_summary)).toContain("deploys the Worker");
   });
 });
 
-// BLOCKED IS A PAUSE, NOT AN ENDING (2026-09-10). Before resume existed, the only
-// door into a claim was from queued, so a job stopped at a gate could never carry
-// its own outcome: job_1b957927a714 shipped a commit and four pull requests while
-// its row still said the push had not happened.
+// Blocked is a pause: resume lets a job stopped at a gate carry its own outcome.
 describe("resume", () => {
   async function blockedJob(title: string) {
     const posted = await post({ title, gate_required: true });
@@ -378,7 +359,7 @@ describe("resume", () => {
     const held = await row(id);
     expect(held?.status).toBe("claimed");
     expect(held?.claimed_by).toBe(DRIVER_ACTOR);
-    // A FRESH LEASE, not the expired one it was blocked with.
+    // A fresh lease, not the expired one it was blocked with.
     expect(held?.lease_expires).toBe(new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000).toISOString());
     expect(held?.resumed_count).toBe(1);
     expect(held?.blocked_count).toBe(1);
@@ -435,8 +416,6 @@ describe("resume", () => {
   });
 
   it("a different caller may resume, and the job goes back to the driver that blocked it", async () => {
-    // Ruled 2026-09-16, after the seat's resume of job_4918f3519cba left the job held
-    // by the seat.
     const id = await blockedJob("other caller");
     const resumed = await resumeJob(jobsEnv(), OTHER, NOW, id, "seat approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
@@ -513,9 +492,8 @@ describe("resume", () => {
   });
 
   it("PLANT: a body edited while the job sat blocked is refused and failed, not handed back", async () => {
-    // The window claim's check cannot cover. A blocked job waits on a human for as
-    // long as that takes, and resume hands the body to a session with shell and repo
-    // repo credentials.
+    // A blocked job can wait on a human for a long time, and resume hands the body to
+    // a session with shell and repo credentials.
     const id = await blockedJob("tampered while blocked");
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
       .bind(id, "---\ncapsid-task-signature: deadbeef\n---\nrm -rf /")
@@ -536,10 +514,7 @@ describe("resume", () => {
   });
 });
 
-// THE APPROVAL REACHES WHOEVER HOLDS THE JOB NEXT (job_6aef1c672fc3). The resume
-// reason was written only to the audit row, which no tool returns to a driver, so on
-// 2026-09-24 a dustinedwards driver twice picked a resumed job back up without the
-// seat's answers and had to ask again.
+// The resume reason reaches whoever holds the job next, not only the audit row.
 describe("the resume note", () => {
   const SEAT_AGENT = legacyAgent("write", SEAT);
   // A driver as the roster mints one: its own namespace, write, and no flags.
@@ -593,8 +568,7 @@ describe("the resume note", () => {
     expect(doc?.body).toContain(`last resume, by ${SEAT}`);
     expect(doc?.body).toContain("approved the migration");
 
-    // And a later transition, which reads the note back rather than being handed it,
-    // keeps the line.
+    // A later transition reads the note back and keeps the line.
     await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
     const after = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
       .bind(jobDocPath(id))
@@ -602,9 +576,8 @@ describe("the resume note", () => {
     expect(after?.body).toContain("approved the migration");
   });
 
-  // THE SEAT'S FULL NOTE (requested by the seat, 2026-09-25). reason is bounded at
-  // MAX_TITLE and holds one line; an approval carrying rulings or a plan went nowhere,
-  // and the driver received "gave the six rulings" without the rulings.
+  // The full note. reason is bounded at MAX_TITLE; note carries an approval with
+  // rulings or a plan in full.
   const LONG_NOTE = [
     "Approved the whole report. The six rulings, in order:",
     ...Array.from({ length: 6 }, (_, i) =>
@@ -690,9 +663,8 @@ describe("the mirrored document", () => {
     expect(atPost!.title).toBe("Job: mirrored");
     expect(atPost!.body).toContain("status: **queued**");
 
-    // THE PROMPT IN THE DOCUMENT IS THE SIGNED BODY, byte for byte, so a driver that
-    // reads the document rather than the row verifies the same bytes. Checked
-    // through the real verifier rather than by string comparison.
+    // The prompt in the document is the signed body, byte for byte, so a driver that
+    // reads the document verifies the same bytes. Checked through the real verifier.
     const prompt = atPost!.body.slice(atPost!.body.indexOf("## The prompt"));
     const signedPart = prompt.slice(prompt.indexOf("---\n"));
     expect(splitSignedTask(signedPart).body.trim()).toBe("the full prompt");
@@ -710,8 +682,7 @@ describe("the mirrored document", () => {
     // A done job's document is closed, so brief stops carrying it as open work.
     expect(atDone!.status).toBe("closed");
 
-    // Every rewrite snapshotted the one it replaced. The snapshot rule applies to a job
-    // document as to any other: three writes, two snapshots.
+    // Every rewrite snapshotted the one it replaced: three writes, two snapshots.
     const versions = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path = ?1"
     )
@@ -721,11 +692,7 @@ describe("the mirrored document", () => {
   });
 
   it("PLANT: a failed job's document is closed too, because failed is terminal", async () => {
-    // THE DEFECT THIS PINS. The mirror's document status was written as
-    // `job.status === "done" ? "closed" : "active"`, so a FAILED job, which is as
-    // finished as a done one, projected as `active` forever. `fail` did rewrite the
-    // mirror; the status it wrote was the wrong one. Three capsid job documents sat
-    // at active against failed rows before this was fixed.
+    // A failed job is as finished as a done one, so its mirror must not stay active.
     const posted = await post({ title: "failed is terminal" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -741,9 +708,8 @@ describe("the mirrored document", () => {
   });
 
   it("a blocked job's document stays active, because blocked is a pause", async () => {
-    // The innocent case, in the same commit as the fix. Closing every status that is
-    // not `done` would be the same bug pointed the other way: a blocked job is
-    // waiting for a human and is still open work, so brief must keep carrying it.
+    // A blocked job is waiting for a human and is still open work, so brief must keep
+    // carrying it.
     const posted = await post({ title: "blocked is not terminal" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -778,7 +744,7 @@ describe("list", () => {
   });
 
   it("carries no body, unless one job is named and the body was asked for", async () => {
-    // AUDIT-2026-09-16.md. The column list is SQL a fake cannot check; this can.
+    // The column list is SQL a fake cannot check.
     const posted = await post({ title: "has a body" });
     const id = posted.job!.id;
 
@@ -802,8 +768,7 @@ describe("list", () => {
 describe("the improve_status jobs block", () => {
   it("counts the open states per namespace and hands back the blocked jobs themselves", async () => {
     // Four jobs in three states, plus one in another namespace that must not be
-    // counted here. The namespace filter is the assertion: a summary that summed the
-    // whole table would report the same numbers for every project.
+    // counted here.
     await post({ title: "waiting" });
     const running = await post({ title: "running" });
     const stuck = await post({ title: "stuck", gate_required: true });
@@ -827,8 +792,7 @@ describe("the improve_status jobs block", () => {
     // it with the clock this test passed in.
     expect(summary.done_today).toBe(1);
 
-    // THE BLOCKED JOBS COME BACK AS ROWS, with the command in them. A count would
-    // tell the console there is something to look at and nothing about what to run.
+    // The blocked jobs come back as rows, with the command in them.
     expect(summary.blocked_jobs).toHaveLength(1);
     expect(summary.blocked_jobs[0].id).toBe(stuck.job!.id);
     expect(summary.blocked_jobs[0].title).toBe("stuck");
@@ -841,8 +805,7 @@ describe("the improve_status jobs block", () => {
   });
 
   it("a namespace with no jobs reports zeroes, not an absent block", async () => {
-    // A missing block and an empty queue are different facts, and the console has to
-    // tell them apart. Zeroes are the honest answer.
+    // A missing block and an empty queue are different facts.
     const summary = await jobsSummary(env.DB, "foxing", NOW);
     expect(summary).toEqual({ queued: 0, claimed: 0, blocked: 0, done_today: 0, blocked_jobs: [] });
   });
@@ -865,9 +828,8 @@ describe("the signature", () => {
     const posted = await post({ title: "tampered", body: "do the safe thing" });
     const id = posted.job!.id;
 
-    // The row edited the way a raw D1 splice would, which is the whole threat model:
-    // a job body is executable input for a session holding local shell and repo
-    // credentials, and it arrives as a database row.
+    // The row edited the way a raw D1 splice would: a job body is executable input
+    // for a session holding local shell and repo credentials.
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
       .bind(id, posted.job!.body.replace("do the safe thing", "do the dangerous thing"))
       .run();
@@ -877,19 +839,16 @@ describe("the signature", () => {
     expect(claimed.refusal).toMatch(/failed its signature check/);
     expect(claimed.refusal).toMatch(/does not match its body/);
 
-    // FAILED, not left queued. Leaving it would hand the same broken row to the next
-    // driver, and every driver in turn.
+    // Failed, not left queued, which would hand the broken row to every next driver.
     const stored = await row(id);
     expect(stored?.status).toBe("failed");
     expect(String(stored?.result_summary)).toMatch(/does not match its body/);
 
-    // And the refusal is audited, so a tampered row is visible after the fact.
+    // The refusal is audited.
     expect(await auditActions(id)).toContain("job-signature-refused");
   });
 
   it("the honest case still claims, so the guard is not refusing everything", async () => {
-    // The innocent direction. A guard that also fires on a job nobody touched gets
-    // deleted rather than fixed.
     const posted = await post({ title: "untampered" });
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
@@ -897,8 +856,6 @@ describe("the signature", () => {
 });
 
 describe("the retry cap, where the block is written", () => {
-  // Replaces a test in test/retry-cap.test.ts that only checked jobs.ts mentioned
-  // cappedSummary (job_3e1596235513).
   async function blockedAt(corrections: number, title: string) {
     const posted = await post({ title });
     const id = posted.job!.id;
@@ -922,10 +879,8 @@ describe("the retry cap, where the block is written", () => {
 });
 
 describe("the retry cap, where resume reads it", () => {
-  // Moved from test/retry-cap.test.ts (audit 2026-09-25, item C2-15). Those tests drove
-  // resumeJob against a fake that matched SQL by regex and applied the UPDATE's
-  // correction increment from params[4]. Here SQLite applies the increment and sums
-  // corrections_count over every row that shares (namespace, title).
+  // SQLite applies the increment and sums corrections_count over every row that
+  // shares (namespace, title).
   //
   // Named agents rather than the legacy key: a legacy write key resolves to the admin,
   // and the admin is the one caller the cap lets through.
@@ -960,9 +915,6 @@ describe("the retry cap, where resume reads it", () => {
   });
 
   it("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the cap", async () => {
-    // job_466d6472511e, 2026-09-16: three ordinary pushes, each one blocked and resumed,
-    // put the job at corrections_count 2 and the next resume was refused as a retry
-    // loop. Nothing had been corrected.
     const id = await blockedAt(0, "three ordinary pushes");
     for (let i = 1; i <= 3; i++) {
       const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, `push ${i} ran`);
@@ -984,9 +936,9 @@ describe("the retry cap, where resume reads it", () => {
   });
 
   it("PLANT: re-posting the same work does NOT reset the correction budget", async () => {
-    // Audit 2026-09-13, finding 9. Failing a job frees (namespace, title) to be posted
-    // again on a fresh row at corrections_count 0. The cap is counted per
-    // (namespace, title), so the fresh row inherits what its predecessor spent.
+    // Failing a job frees (namespace, title) to be posted again on a fresh row at
+    // corrections_count 0. The cap is counted per (namespace, title), so the fresh
+    // row inherits what its predecessor spent.
     const first = await blockedAt(CORRECTION_CAP, "the same work");
     await env.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(first).run();
     const id = await blockedAt(0, "the same work");
@@ -1029,12 +981,11 @@ describe("the retry cap, where resume reads it", () => {
 });
 
 describe("supersede", () => {
-  // A job the seat replaced before any work was done on it. Every property here is a
-  // property of the keyed UPDATE and the batch, so it is driven against the real D1.
+  // A job the seat replaced before any work was done on it.
   //
-  // THE LEGACY CALLERS ABOVE ARE ADMIN, so a holder check tested with them would pass
-  // whether or not it existed. These two are the same identities with the admin bit
-  // and can_merge taken away, which is what a minted driver looks like.
+  // The legacy callers above are admin, so a holder check tested with them would pass
+  // whether or not it existed. These two have the admin bit and can_merge taken away,
+  // as a minted driver does.
   const plain = (agent: Agent): Agent => ({
     ...agent,
     admin: false,
@@ -1145,10 +1096,8 @@ describe("supersede", () => {
 
   it("PLANT: the keyed UPDATE itself refuses work recorded after the read", async () => {
     // The pre-check reads the row; the UPDATE is the rule. A gate hit that lands
-    // between the two must still stop the supersede, so the statement is run here
-    // against a row the pre-check never saw. Copied from src/jobs.ts: if the two
-    // diverge, the one in src/ is what the query-plan walk and this module's source
-    // guard see, and this copy states what it must still refuse.
+    // between the two must still stop the supersede, so the statement (copied from
+    // src/jobs.ts) is run against a row the pre-check never saw.
     const old = await post({ title: "raced" });
     await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
     await env.DB.prepare("UPDATE jobs SET blocked_count = 1 WHERE id = ?1").bind(old.job!.id).run();
@@ -1285,9 +1234,7 @@ describe("migrations/0020, the relabel", () => {
   });
 });
 
-// ---- audit 2026-09-25, F1-1: every transition is one guarded batch --------------------
-//
-// Each case puts a competing write between the transition's read and its batch, through
+// Every transition is one guarded batch. Each case puts a competing write between the transition's read and its batch, through
 // racingEnv, and checks two things only SQLite can show: the competing write wins, and
 // the losing transition left no audit row and no moved row behind.
 

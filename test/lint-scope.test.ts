@@ -7,12 +7,10 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type FetchCall } from "./fakes.ts";
 
-// RULING E2-L16 (2026-09-25): lint is filtered to the caller's namespace and may not
-// read outside it, except capsid/schema.md and capsid/conventions.md, which every
-// caller's lint reads as its rules. Before it, a caller scoped only to "sample" saw
-// whether documents in other namespaces exist through dangling edges (and persisted
-// those into its own report), and had its namespace's repo tree read with no check
-// against its repos axis.
+// lint is filtered to the caller's namespace and may not read outside it, except
+// capsid/schema.md and capsid/conventions.md, which every caller's lint reads as its
+// rules. Otherwise a scoped caller learns through dangling edges whether documents in
+// other namespaces exist, and the repo tree is read with no check against its repos axis.
 
 const OWN_REPO = "example/sample-repo";
 
@@ -77,8 +75,8 @@ test("PLANT: gather for a caller scoped to one namespace gets the capsid rules a
     const result = await call(client, { namespace: "sample" });
     assert.ok(!result.isError, text(result));
     const packet = JSON.parse(text(result));
-    // capsid/schema.md and capsid/conventions.md are exempt from the filter (ruling,
-    // 2026-09-25): they are the rules every caller's lint runs under.
+    // capsid/schema.md and capsid/conventions.md are exempt from the filter: they are
+    // the rules every caller's lint runs under.
     assert.deepEqual(packet.rules, RULES, "the capsid rules were withheld from a caller not scoped to capsid");
     assert.equal(packet.rules_withheld, undefined);
     // The exemption is those two paths only: no other capsid document is read.

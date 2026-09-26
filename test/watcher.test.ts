@@ -29,13 +29,12 @@ import {
   type Finding,
 } from "../src/watcher.ts";
 
-// GROUP 3: A WATCHER THAT CANNOT FIX ANYTHING.
+// A watcher that cannot fix anything.
 //
-// The checks are pure functions of what a surface said, so every one of them is
-// driven here without a Worker, a database or GitHub. The property that matters most
-// is the NEGATIVE one: a healthy surface posts nothing. A watcher that cried every
-// half hour would be muted inside a week and would then be worth less than nothing,
-// because the queue would still look like it was being watched.
+// The checks are pure functions of what a surface said, so each is driven here
+// without a Worker, a database or GitHub. The most important property is the negative
+// one: a healthy surface posts nothing, or the watcher gets muted while the queue
+// still looks watched.
 
 const NOW = new Date("2026-09-12T12:00:00Z");
 const hoursAgo = (n: number) => new Date(NOW.getTime() - n * 3_600_000).toISOString();
@@ -51,12 +50,10 @@ const HEALTHY = {
   backup: { last_ok: hoursAgo(2), age_hours: 2 },
 };
 
-// ---- the identity ----------------------------------------------------------------
+// the identity
 
 test("the in-Worker watcher is the SAME authority as the mintable role, not a convenient one", () => {
-  // The role a person mints and the identity the tick uses must not drift. If the
-  // in-Worker one quietly held more, the mint command would be describing a
-  // credential that is not the one doing the work.
+  // The role a person mints and the identity the tick uses must not drift.
   const role = ROLES.find((r: (typeof ROLES)[number]) => r.name === "watcher");
   assert.ok(role);
   const agent = watcherAgent();
@@ -80,7 +77,7 @@ test("the watcher can post a job and cannot claim, complete or resume one", () =
   assert.match(String(checkScope(agent, { tool: "manage_pr", namespace: "capsid", grant: "write" })), /not scoped to the 'manage_pr' tool/);
 });
 
-// ---- the cadence -----------------------------------------------------------------
+// the cadence
 
 test("a pass is due on the first run, not due inside the cadence, and due after it", () => {
   assert.equal(passDue(null, 30, NOW).due, true);
@@ -94,11 +91,10 @@ test("a corrupt stamp RUNS the pass rather than blocking it forever", () => {
   assert.match(verdict.reason, /does not parse/);
 });
 
-// ---- a healthy surface posts nothing ----------------------------------------------
+// a healthy surface posts nothing
 
 test("A HEALTHY SURFACE PRODUCES NO FINDING AT ALL", () => {
-  // The innocent case, first and loudest. Every assertion below is worthless if this
-  // one does not hold.
+  // The innocent case first: every assertion below depends on it.
   assert.deepEqual(healthFindings(HEALTHY, HEALTHY.sha, HEALTHY.schema_version, "capsid"), []);
   assert.deepEqual(staleBlockedFindings([], NOW), []);
   assert.deepEqual(ciFindings("capsid", [{ head_sha: "abc1234", status: "completed", conclusion: "success", created_at: hoursAgo(9) }], NOW), []);
@@ -113,7 +109,7 @@ test("A HEALTHY SURFACE PRODUCES NO FINDING AT ALL", () => {
   );
 });
 
-// ---- each check, once ------------------------------------------------------------
+// each check, once
 
 test("a degraded store is a finding", () => {
   const found = healthFindings({ ...HEALTHY, status: "degraded", store: { d1: "error", fts: "ok" } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
@@ -156,8 +152,8 @@ test("a blocked job over the window is a finding, and one under it is not", () =
 });
 
 test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
-  // A human pausing a namespace is the system working. Reporting it would teach the
-  // reader to ignore the watcher, which is the failure mode that matters most.
+  // A human pausing a namespace is the system working; reporting it would teach the
+  // reader to ignore the watcher.
   const report = (paused: string | null) =>
     statusFindings(
       {
@@ -174,9 +170,8 @@ test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
   assert.deepEqual(report("budget").map((f) => f.fingerprint), ["paused-foxing"]);
 });
 
-// DERIVED FROM THE GATES, not from a hand-written reason. Until 2026-09-25 the
-// match was /budget|drift/ and neither gate's reason contains either word, so a
-// namespace the drift gate paused was never reported.
+// Derived from the gates' own reasons, not a hand-written one: neither gate's reason
+// contains the word "drift".
 test("a pause set by either drift gate is a finding", () => {
   const run = (attempts: number, reverts: number) => ({ ...({} as RunRow), attempts, reverts });
   const drift = driftVerdict([run(4, 4), run(4, 4), run(4, 4)]);
@@ -208,7 +203,7 @@ test("a budget over the warning fraction is a finding, per cap", () => {
     } as never
   );
   assert.deepEqual(found.map((f) => f.fingerprint).sort(), ["budget-actions_minutes_month-2026-09", "budget-model_usd_month-2026-09"]);
-  // Just under the line is not a finding, so the threshold is a line rather than a mood.
+  // Just under the threshold is not a finding.
   const under = statusFindings(
     {
       budget: {
@@ -235,7 +230,7 @@ test("a run still in flight is not an answer either way", () => {
   assert.deepEqual(ciFindings("capsid", inFlight, NOW), []);
 });
 
-// ---- the pass ---------------------------------------------------------------------
+// the pass
 
 function fakeFinding(fingerprint: string, namespace = "capsid"): Finding {
   return { fingerprint, namespace, title: `Watcher: something [${fingerprint}]`, body: "evidence" };
@@ -331,8 +326,8 @@ test("A HEALTHY PASS POSTS NOTHING AND CLOSES NOTHING", async () => {
 });
 
 test("clearing runs BEFORE posting, so a finding that flickers is not refused as its own duplicate", async () => {
-  // The order matters and is easy to get backwards. If the post ran first, a finding
-  // whose job was about to be closed would be refused as a duplicate of it.
+  // If the post ran first, a finding whose job was about to be closed would be
+  // refused as a duplicate of it.
   const order: string[] = [];
   await runPass({
     findings: async () => ({ findings: [fakeFinding("b")], ran: new Set(WATCHER_CHECKS) }),
@@ -373,7 +368,7 @@ test("a refused post is logged and does not stop the rest of the pass", async ()
 
 test("the fingerprint round-trips through the title, which is what deduplicates", () => {
   // The title is the dedup key, so a fingerprint that cannot be read back out of it
-  // would post the same finding every half hour forever.
+  // would post the same finding every pass.
   const f = healthFindings({ ...HEALTHY, status: "degraded" }, HEALTHY.sha, HEALTHY.schema_version, "capsid")[0];
   const match = /\[([^\]]+)\]\s*$/.exec(f.title);
   assert.ok(match, `no fingerprint in '${f.title}'`);
@@ -402,11 +397,8 @@ test("allowsToolAction is what makes the watcher's narrowing real", () => {
   assert.equal(allowsToolAction(agent.scopes.tools, "jobs", "claim"), false);
 });
 
-// ---- the pieces the pass is built from -------------------------------------------
-//
-// These are exported because they carry rules worth guarding, not because something
-// outside the module calls them. The dead-export check is what asks for this, and the
-// right answer to it is a caller rather than an exemption.
+// The pieces the pass is built from, exported because they carry rules worth
+// guarding; this file is their caller for the dead-export check.
 
 test("an unset, unusable or unreadable cadence falls back to the default", async () => {
   const env = (get: () => Promise<string | null>) => ({ APP_KV: { get } }) as never;

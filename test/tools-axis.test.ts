@@ -19,18 +19,10 @@ async function listedTools() {
   return tools;
 }
 
-// THE TOOLS AXIS, DRIVEN THROUGH THE PATH A REAL CALLER USES.
-//
-// The qualifier (`manage_pr.comment`, `jobs.post`) was a working pure function with
-// three green tests over it, and it never fired for any tool but jobs, because
-// nothing on the call path passed an action: the registrar read none, and
-// guardedWrite put none on the scope check. A minted reviewer holding
-// ["manage_pr", "manage_pr.comment"] could close a pull request, and closing deletes
-// the head branch. Audit 2026-09-13, critical 1.
-//
-// So every plant here goes through a REAL MCP client against a REAL server, which is
-// the distinction that matters: test/roles.test.ts calls allowsToolAction with the
-// action already set, which is the one thing the call path did not do.
+// The tools axis, driven through the path a real caller uses. A qualifier such as
+// `manage_pr.comment` only applies if the call path passes the action to the scope
+// check. test/roles.test.ts calls allowsToolAction with the action already set, so
+// every plant here goes through a real MCP client against a real server.
 
 const REPOS = [{ repo: "o/r", label: "primary" }];
 
@@ -95,14 +87,11 @@ function reviewer(): Agent {
   return { id: "agent_reviewer01", name: "reviewer", kind: "session", actor: "agent:reviewer", scopes, admin: false, row: null };
 }
 
-// ---- critical 1: the reviewer cannot close ----------------------------------------
+// the reviewer cannot close
 
 test("PLANT: a reviewer scoped to manage_pr.comment is REFUSED action close", async () => {
-  // The finding, exactly: close needed no flag at all when this was written, so the
-  // tools axis was the only thing standing between a reviewer and a closed pull
-  // request with its head branch deleted. close has carried can_merge since
-  // 2026-09-16, and this still asserts the AXIS refusal rather than the flag one,
-  // because checkScope names the tool before it names a missing flag.
+  // Closing deletes the head branch. close also carries can_merge; this asserts the
+  // axis refusal because checkScope names the tool before it names a missing flag.
   await withFetch({}, async (calls) => {
     const result = await callAs(reviewer(), "manage_pr", { namespace: "capsid", number: 7, action: "close" });
     assert.equal(result.isError, true, "a reviewer closed a pull request");
@@ -112,9 +101,8 @@ test("PLANT: a reviewer scoped to manage_pr.comment is REFUSED action close", as
 });
 
 test("PLANT: the same reviewer is REFUSED action merge, for the axis and not only for the flag", async () => {
-  // can_merge already stopped this one. It is planted anyway because a refusal that
-  // names the flag and a refusal that names the axis are different guards, and the
-  // axis is the one that was not running.
+  // can_merge also stops this; the flag and the axis are different guards, and this
+  // asserts the axis.
   await withFetch({}, async (calls) => {
     const result = await callAs(reviewer(), "manage_pr", { namespace: "capsid", number: 7, action: "merge" });
     assert.equal(result.isError, true);
@@ -124,8 +112,7 @@ test("PLANT: the same reviewer is REFUSED action merge, for the axis and not onl
 });
 
 test("THE INNOCENT DIRECTION: the reviewer IS allowed action comment", async () => {
-  // Without this, a manage_pr broken for everybody passes both plants above, and the
-  // reviewer role would be a credential that cannot do the one thing it exists for.
+  // Without this, a manage_pr broken for everybody passes both plants above.
   const routes = { "POST /repos/o/r/issues/7/comments": { status: 201, body: { id: 55, html_url: "https://comment" } } };
   await withFetch(routes, async (calls) => {
     const result = await callAs(reviewer(), "manage_pr", { namespace: "capsid", number: 7, action: "comment", comment: "REVIEW: fine. APPROVE" });
@@ -140,7 +127,7 @@ test("THE INNOCENT DIRECTION: the reviewer IS allowed action comment", async () 
 
 test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the qualifier changed", async () => {
   // Narrowing is opted into. An agent whose list names manage_pr and no qualified
-  // sibling keeps every action, which is what it has always meant.
+  // sibling keeps every action.
   const caller = reviewer();
   caller.scopes.tools = ["manage_pr"];
   caller.scopes.flags.can_merge = true;
@@ -156,11 +143,10 @@ test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the
   });
 });
 
-// ---- finding 5: lint's action is its mode -----------------------------------------
+// lint's action is its mode
 
 test("PLANT: an agent scoped to lint.gather is REFUSED mode finalize", async () => {
-  // lint spells its action `mode`, so a registrar that only ever read `action` left
-  // this narrowing unreachable: gather is a read and finalize archives documents.
+  // lint spells its action `mode`: gather is a read and finalize archives documents.
   const caller = reviewer();
   caller.scopes.tools = ["lint", "lint.gather"];
   const result = await callAs(caller, "lint", { namespace: "capsid", mode: "finalize" });
@@ -179,11 +165,10 @@ test("THE INNOCENT DIRECTION: the same caller IS allowed mode gather", async () 
   assert.equal(out.core?.body, "the core", "gather did not return the namespace's core document");
 });
 
-// ---- the rule itself ---------------------------------------------------------------
+// the rule itself
 
 test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the whole tool", () => {
-  // The change that makes every wiring above fail closed instead of silently open. A
-  // future call path that forgets to pass the action is refused, not waved through.
+  // Fail closed: a call path that forgets to pass the action is refused.
   assert.equal(allowsToolAction(["manage_pr", "manage_pr.comment"], "manage_pr", undefined), false);
   assert.equal(allowsToolAction(["manage_pr", "manage_pr.comment"], "manage_pr", "comment"), true);
   assert.equal(allowsToolAction(["manage_pr", "manage_pr.comment"], "manage_pr", "close"), false);
@@ -194,17 +179,13 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
   assert.equal(allowsToolAction(["manage_pr", "manage_pr.comment", "lint"], "lint", "finalize"), true);
 });
 
-// ---- DERIVED: a new action tool cannot be added without wiring its action ----------
+// a new action tool cannot be added without wiring its action
 
 test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", async () => {
-  // The guard against the finding recurring. A tool added with an `action` or `mode`
-  // enum whose name is not in the enforcement point's table would be unnarrowable in
-  // exactly the way manage_pr was, and nothing else in the suite would notice.
-  //
-  // The exclusions are reviewed, not incidental: `mode` on the three write tools
-  // already decides a FLAG (can_direct_write for a direct commit), and on `write` it
-  // chooses how a body is edited rather than what authority the call needs. Giving one
-  // setting two authorities to disagree about is worse than leaving it out.
+  // A tool with an `action` or `mode` enum missing from the enforcement point's table
+  // could not be narrowed. The exclusions are reviewed: `mode` on the three write tools
+  // already decides a flag (can_direct_write), and on `write` it chooses how a body is
+  // edited rather than what authority the call needs.
   const REVIEWED_EXCLUSIONS = new Set(["write", "write_repo_file", "delete_repo_file"]);
   // Read from the schemas the server serves, which is what a caller sees, rather than
   // from the registration source.
@@ -220,10 +201,8 @@ test("DERIVED: every tool that declares an action-shaped argument is in ACTION_A
 });
 
 test("every tool named in ACTION_ARG serves an argument by that name", async () => {
-  // The other direction. A table entry naming an argument the tool does not have is a
-  // narrowing that silently never applies, which is the same defect wearing the other
-  // hat: allowsToolAction would see undefined and, since 2026-09-13, refuse the tool
-  // outright rather than quietly allowing everything. Both are wrong; this catches it.
+  // The other direction. A table entry naming an argument the tool does not have means
+  // allowsToolAction sees undefined and refuses the narrowed tool outright.
   const wired = ["agents", "improve_run", "jobs", "lint", "manage_pr"];
   const tools = await listedTools();
   for (const tool of wired) {
@@ -238,13 +217,12 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
   }
 });
 
-// ---- finding 4: the repos axis binds the DEFAULT call -------------------------------
+// the repos axis binds the default call
 
 test("PLANT: a driver scoped to one repo is refused a write to the namespace primary when they differ", async () => {
-  // The remap escalation. The axis held owner/name entries and the registrar compared
-  // it to the `repo` ARGUMENT, which is a selector and is usually absent; omit it and
-  // resolveRepo picked the namespace primary with nothing asked. An admin remap of the
-  // mapping was therefore enough to redirect a narrowed driver.
+  // The axis must be checked against the resolved repo, not the `repo` argument, which
+  // is a selector and usually absent. Otherwise a remap of the mapping redirects a
+  // narrowed driver.
   const caller = reviewer();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
@@ -262,7 +240,7 @@ test("PLANT: a driver scoped to one repo is refused a write to the namespace pri
 });
 
 test("PLANT: the same driver is refused a READ of a repo outside its axis", async () => {
-  // Reads resolve the same mapping and were not checked at all.
+  // Reads resolve the same mapping.
   const caller = reviewer();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
@@ -272,9 +250,7 @@ test("PLANT: the same driver is refused a READ of a repo outside its axis", asyn
 });
 
 test("THE LABEL 'primary' IS A SELECTOR, NOT A SCOPE VALUE, so passing it is not refused", async () => {
-  // The other half of the same defect, and the reason it stayed hidden: comparing the
-  // argument to the axis refused the legitimate label, which pushed every caller back
-  // onto omitting it, which was the unchecked path.
+  // Comparing the argument to the axis would refuse the legitimate label.
   const caller = reviewer();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];

@@ -4,17 +4,13 @@ import { CONSOLE_JSON_PATH, consoleData, handleConsole, handleConsoleJson, rende
 import { consoleSessionCookie } from "../src/console-auth.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
-// GROUP 6: THE JSON TWIN.
-//
-// /console.json serves THE SAME OBJECT the page renders, so a dashboard or a chat can
-// read the state without scraping HTML. The thing worth guarding is that the two
-// cannot drift: if the JSON were assembled separately it would be a second
-// description of the same system, and the two would disagree on the day somebody
-// changed one of them.
+// The JSON twin. /console.json serves the same object the page renders, so a
+// dashboard or a chat can read the state without scraping HTML, and the two cannot
+// drift.
 //
 // The proof is a deep equality against consoleData itself, called with the same
-// arguments. A test that only checked a few fields would pass while the page grew a
-// panel the JSON never heard of.
+// arguments; checking a few fields would pass while the page grew a panel the JSON
+// never heard of.
 
 const SECRET = "console-test-cookie-secret";
 const NOW = new Date("2026-09-11T14:00:00Z");
@@ -51,8 +47,7 @@ test("what the JSON names, the page shows", async () => {
   const e = env();
   const data = await consoleData(e, "DrDustinEdwards", NOW, { namespace: null, actor: null });
   const html = renderConsole(data, "token");
-  // Every namespace the JSON carries appears on the page. This is the claim the twin
-  // exists to make: reading the JSON tells you what the page would have told you.
+  // Every namespace the JSON carries appears on the page.
   assert.ok(data.improve.namespaces.length > 0, "the JSON carries no namespaces, so the loop below checks nothing");
   for (const ns of data.improve.namespaces) {
     assert.ok(html.includes(ns.namespace), `${ns.namespace} is in the JSON and not on the page`);

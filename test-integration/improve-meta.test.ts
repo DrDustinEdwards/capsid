@@ -3,14 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMetaLoop } from "../src/improve-meta";
 import { META_LAST_KEY, PROPOSAL_PREFIX, RUN_PROMPT_PATH, SCORES_PATH } from "../src/improve-schema";
 
-// THE META-LOOP WRITES ONLY A DRAFT PROPOSAL, DRIVEN END TO END ON A REAL D1.
-//
-// Moved from test/improve-meta.test.ts (audit 2026-09-25, item C1-12), which counted
-// improveDocStatements( and assertProposalTarget( call sites in the source and matched
-// the status and banner text. Here runMetaLoop runs against real improve_runs rows and
-// a stubbed model, and the assertions are on what the store holds afterwards: one new
-// document, under the proposals prefix, a draft that says it is not applied, and the
-// run prompt it proposes to change left exactly as it was.
+// The meta-loop writes only a draft proposal, driven end to end on a real D1 with a
+// stubbed model. The assertions are on what the store holds afterwards: one new
+// document under the proposals prefix, a draft that says it is not applied, and the
+// run prompt it proposes to change left as it was.
 
 const PROMPT_BODY = "lorem ipsum run prompt, the one in force";
 const REVISED = "lorem ipsum revised run prompt";

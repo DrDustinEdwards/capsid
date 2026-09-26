@@ -1,5 +1,5 @@
 // `cloudflare:test` types its `env` as `Cloudflare.Env`, which is a global the
-// pool leaves for the project to declare. Declared here from the Worker's OWN Env
+// pool leaves for the project to declare. Declared here from the Worker's own Env
 // interface, so a binding added to src/env.ts and not to vitest.config.ts is a
 // typecheck failure rather than a runtime `undefined` in an integration test.
 import type { Env as WorkerEnv } from "../src/env";

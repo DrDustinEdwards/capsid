@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { assembleBody, narrowWrite } from "../src/write-modes.ts";
 
-// Batch-two item 4. These cover the two things append and patch have to get
-// right to be trusted with a 60KB canon document: the anchor guard must refuse
-// rather than corrupt, and repeated appends must not silently mangle spacing.
+// The anchor guard must refuse rather than corrupt, and repeated appends must not
+// mangle spacing.
 
 const existing = { exists: true, priorBody: "# Doc\n\nFirst section.\n" };
 
@@ -60,8 +59,7 @@ test("append puts exactly one blank line between the old body and the addition",
 
 test("append normalizes whatever trailing and leading whitespace it is handed", () => {
   // The stored body ends with several newlines and the caller also leads with
-  // one. Naive concatenation gives four blank lines; repeated over a few
-  // appends that quietly wrecks a markdown document.
+  // one. Naive concatenation gives four blank lines.
   const r = assembleBody({
     exists: true,
     priorBody: "# Doc\n\nFirst.\n\n\n",
@@ -92,8 +90,7 @@ test("patch replaces a unique anchor", () => {
 });
 
 test("patch REFUSES a missing anchor rather than writing anything", () => {
-  // The hand-run splice guarded with instr(...) > 0 for the same reason: a missed
-  // anchor must not silently corrupt the body.
+  // A missed anchor must not corrupt the body.
   const r = assembleBody({ ...existing, mode: "patch", find: "Nonexistent.", replace_with: "x" });
   assert.match((r as { error: string }).error, /anchor not found/);
   assert.ok(!("body" in r));
@@ -112,8 +109,7 @@ test("patch REFUSES an ambiguous anchor and says how many times it matched", () 
 });
 
 test("patch names CRLF as the usual cause of a missed anchor", () => {
-  // CRLF silently defeated two plants on 2026-08-11. A caller hitting this
-  // should be told the likely cause, not just that it failed.
+  // A caller whose find fails on CRLF should be told the likely cause.
   const r = assembleBody({
     exists: true,
     priorBody: "line one\r\nline two\r\n",
@@ -159,12 +155,8 @@ test("patch treats find as a literal, not a regex", () => {
   assert.deepEqual(r, { body: "cost is $6.00 (exact)" });
 });
 
-// ---- F19: the replacement is literal, not a substitution pattern ------------
-//
-// String.replace reads $ sequences in the REPLACEMENT even when the pattern is a
-// plain string, so the old implementation silently rewrote the caller's text and
-// still reported success. These are the four sequences, plus the prose case that
-// makes this a live risk rather than a curiosity: canon carries dollar amounts.
+// The replacement is literal, not a substitution pattern. String.replace reads $
+// sequences in the replacement even when the pattern is a plain string.
 
 test("patch treats every $ substitution sequence in replace_with literally", () => {
   const cases: Array<[string, string]> = [
@@ -188,13 +180,10 @@ test("patch treats every $ substitution sequence in replace_with literally", () 
 });
 
 test("patch keeps a realistic canon fragment byte-exact", () => {
-  // NOTE, and it is the point of this test: an ordinary dollar amount does NOT
-  // trigger the bug. $5 and $0 are left alone by String.replace, because only
-  // $&, $`, $', $$ and $1..$99 mean anything. A "realistic fragment with a
-  // dollar amount" therefore passes against the BROKEN code, which is how a test
-  // like this ends up asserting nothing. The realistic triggers are the ones
-  // below: $'000 is the accounting convention for thousands, $$ is a shell PID,
-  // and $& turns up the moment canon documents this very defect.
+  // An ordinary dollar amount does not trigger the bug: only $&, $`, $', $$ and
+  // $1..$99 mean anything to String.replace, so a fixture using $5 would pass
+  // against broken code. The triggers below are realistic: $'000 for thousands,
+  // $$ as a shell PID, and $& in a document describing this defect.
   const NL = String.fromCharCode(10);
   const before = "# Costs" + NL + NL;
   const after = NL + NL + "Ruled 2026-08-13.";
@@ -220,7 +209,7 @@ test("patch keeps a realistic canon fragment byte-exact", () => {
   assert.equal(result.body.split("# Costs").length - 1, 1);
 });
 
-// ---- the narrow shape (quality audit 3.1) -----------------------------------
+// the narrow shape
 
 // AssembleInput is a discriminated union: narrowWrite turns a loose wire request into
 // it, and refuses a mode/field mismatch.
@@ -238,9 +227,8 @@ test("narrowWrite turns a loose wire request into the shape assembly needs", () 
 });
 
 test("narrowWrite is where a mode/field mismatch is refused, not assembly", () => {
-  // These must keep being REFUSED rather than ignored. The wire is loose on
-  // purpose, so a client really can send them, and the union only removes the
-  // shape from the code AFTER this point.
+  // These must be refused rather than ignored. The wire is loose on purpose, so a
+  // client can send them; the union only removes the shape after this point.
   const cases: Array<[Parameters<typeof narrowWrite>[0], RegExp]> = [
     [{ mode: "meta", exists: true, priorBody: "x", body: "nope" }, /does not take body/],
     [{ mode: "append", exists: true, priorBody: "x", body: "a", find: "f" }, /belong to mode 'patch', not 'append'/],

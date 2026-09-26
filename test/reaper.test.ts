@@ -4,20 +4,11 @@ import { test } from "node:test";
 // deliberately so: it runs in the live CI job with no npm ci and no build step.
 import { reapProbeClient, reportFor } from "../scripts/reap-lib.mjs";
 
-// THE REAPER READS BEFORE IT DELETES (work queue, from the 2026-08-17 audit).
+// The reaper reads before it deletes. KV DELETE is idempotent: deleting a key that
+// was never there returns the same 200, and the read-back returns 404 either way. So
+// DELETE then confirm-404 cannot tell a normal delete from data loss.
 //
-// KV DELETE is idempotent. Deleting a key that was never there returns the same
-// 200 as deleting one that was, and the read-back afterwards returns 404 either
-// way. The old sequence was DELETE then confirm-404, so it reported "deleted and
-// confirmed gone" for three different states, one of which is data loss.
-//
-// This matters because it already happened: on 2026-08-17 an OAuth client record
-// disappeared from OAUTH_KV with no request in the window that could account for
-// it. This reaper ran against that keyspace throughout and reported success every
-// time, because success was the only thing it could report.
-//
-// Every test here therefore checks the DISTINCTION, not the cleanup. That the key
-// ends up gone was already true; that the script can say WHY is the new part.
+// Every test here checks that distinction, not the cleanup.
 
 type Call = { url: string; method: string };
 
@@ -52,8 +43,8 @@ test("a key that existed is reported as DELETED, and the read came first", async
   const result = await run(stub);
   assert.equal(result.outcome, "deleted");
   assert.equal(stub.isPresent(), false, "the key was not actually removed");
-  // The ORDER is the fix. A GET before the DELETE is the only thing that can tell
-  // this case apart from the next one.
+  // A GET before the DELETE is the only thing that tells this case apart from the
+  // next one.
   assert.deepEqual(
     stub.calls.map((c) => c.method),
     ["GET", "DELETE", "GET"],
@@ -63,16 +54,15 @@ test("a key that existed is reported as DELETED, and the read came first", async
 });
 
 test("a key that was ALREADY GONE is reported distinctly, and fails the job", async () => {
-  // THE CASE THE OLD SCRIPT COULD NOT SEE. Same final state as above, same 200
-  // from DELETE, same 404 on read-back. Only the pre-read separates them.
+  // Same final state as above, same 200 from DELETE, same 404 on read-back. Only the
+  // pre-read separates them.
   const stub = fakeKvApi({ present: false });
   const result = await run(stub);
   assert.equal(result.outcome, "already-absent", "an absent key was reported as a successful delete");
   const report = reportFor(result.outcome, "client:probe123");
   assert.equal(report.ok, false, "a vanished record did not fail the job");
   assert.match(report.message, /ALREADY ABSENT/);
-  // The message has to name both explanations, or whoever reads it at 3am has to
-  // rediscover them.
+  // The message names both explanations.
   assert.match(report.message, /vanished-client-record anomaly of 2026-08-17/);
   assert.match(report.message, /wrong KV namespace/);
   // And it must not claim this run removed something it created.
@@ -80,8 +70,7 @@ test("a key that was ALREADY GONE is reported distinctly, and fails the job", as
 });
 
 test("the two outcomes are genuinely different, given identical API responses", async () => {
-  // The strongest form of the claim: the DELETE and the read-back are byte-identical
-  // between the two runs, so anything reading only those cannot tell them apart.
+  // The DELETE and the read-back are identical between the two runs.
   const existed = fakeKvApi({ present: true });
   const vanished = fakeKvApi({ present: false });
   const a = await run(existed);
@@ -97,9 +86,7 @@ test("the two outcomes are genuinely different, given identical API responses", 
 });
 
 test("an unreadable key is NOT reported as data loss", async () => {
-  // The distinction the canary gate needs too: a bad token or a KV outage says
-  // nothing about whether the record exists. Reporting that as "already absent"
-  // would manufacture an anomaly out of an infrastructure blip.
+  // A bad token or a KV outage says nothing about whether the record exists.
   const stub = fakeKvApi({ present: true, failReadWith: 401 });
   const result = await run(stub);
   assert.equal(result.outcome, "unreadable");
@@ -113,8 +100,8 @@ test("an unreadable key is NOT reported as data loss", async () => {
 });
 
 test("the delete is still issued when the pre-read 404s, so a read blip cannot leak the key", async () => {
-  // Cleanup is the primary job. If the 404 was itself a blip, skipping the delete
-  // would leave the probe client behind on exactly the runs that look anomalous.
+  // If the 404 was itself a blip, skipping the delete would leave the probe client
+  // behind.
   const stub = fakeKvApi({ present: false });
   await run(stub);
   assert.equal(stub.calls.filter((c) => c.method === "DELETE").length, 1, "the delete was skipped on an absent pre-read");
@@ -130,8 +117,8 @@ test("a failed delete is not reported as gone", async () => {
 
 test("a key that still reads back after a 2xx delete is logged, and does not fail the job", async () => {
   // KV is eventually consistent, so the read straight after a delete can still see
-  // the value. That failed 9 live runs (one a good deploy) with nothing wrong. The
-  // 2xx DELETE is taken as done; the read-back is reported, not failed on.
+  // the value. The 2xx DELETE is taken as done; the read-back is reported, not
+  // failed on.
   const stub = fakeKvApi({ present: true, deleteReally: false });
   const result = await run(stub);
   assert.equal(result.outcome, "still-present");

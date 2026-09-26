@@ -5,16 +5,11 @@ import { test } from "node:test";
 import { TABLES } from "../../src/backup.ts";
 import { AUTHORITATIVE } from "../../src/counts.ts";
 
-// THE DOC-DRIFT LINT. Run by `npm run lint:docs` (and `npm run lint`), in the checks
-// job of .github/workflows/ci.yml; not part of `npm test` (audit 2026-09-25, C1-6).
-// These read prose, so they fail when a document falls behind the code rather than
-// when the Worker misbehaves. Each count is derived from its source of truth (TABLES,
-// migrations/, docs/, src/counts.ts), so the next drift fails here.
-//
-// The repo's README and docs carried counts the code had moved past: five backup
-// tables when there were nine, 26 tools when there were 30. The Capsid count linter
-// guards the store's documents; nothing guarded these repo files, which is how they
-// drifted.
+// The doc-drift lint. Run by `npm run lint:docs` (and `npm run lint`), in the checks
+// job of .github/workflows/ci.yml; not part of `npm test`. These read prose, so they
+// fail when a document falls behind the code rather than when the Worker misbehaves.
+// Each count is derived from its source of truth (TABLES, migrations/, docs/,
+// src/counts.ts), so the next drift fails here.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -37,18 +32,15 @@ test("the restore runbook names every backed-up table", () => {
   for (const table of TABLES) {
     assert.match(restore, new RegExp(`\\b${table}\\b`), `the restore runbook never names ${table}`);
   }
-  // The stale "five" framing is gone: the count moved to nine when 0003 added the
-  // improve tables, and a restore that applies only 0001/0002 loses four of them.
+  // A restore that applies only 0001/0002 loses the improve tables.
   assert.doesNotMatch(restore, /\bfive real tables\b/i, "the runbook still says five real tables");
   assert.doesNotMatch(restore, /The five tables are\b/i, "the runbook still enumerates only five tables");
 });
 
 test("the restore runbook states the table count TABLES actually has", () => {
   const restore = restoreRunbook();
-  // The count is spelled out in prose in three places and drifted twice already:
-  // "five real tables" when there were nine, then "the nine real tables" beside a
-  // sentence enumerating ten. Derived from TABLES, so the next addition fails here
-  // rather than being found during a restore.
+  // The count is spelled out in prose in three places. Derived from TABLES, so the
+  // next addition fails here rather than being found during a restore.
   const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"];
   const correct = words[TABLES.length - 5];
   assert.ok(correct, `TABLES has ${TABLES.length} entries, outside the words this check can spell`);
@@ -74,8 +66,8 @@ test("the restore runbook applies EVERY migration, derived from the directory", 
 });
 
 test("the restore runbook names the two dump sidecars", () => {
-  // The dump has carried the KV pins and the holdout manifests since residual 4.
-  // A restore that rebuilds D1 and stops leaves the improve loop with no mode, no
+  // The dump carries the KV pins and the holdout manifests. A restore that
+  // rebuilds D1 and stops leaves the improve loop with no mode, no
   // anchor pins and no manifests, which is a loop that refuses every run.
   const restore = restoreRunbook();
   assert.match(restore, /_kv\.json/, "the runbook does not mention the KV pins sidecar");
@@ -83,10 +75,8 @@ test("the restore runbook names the two dump sidecars", () => {
 });
 
 test("the README links every document under docs/", () => {
-  // The README was cut from 460 lines to its top-level shape by moving sections
-  // into docs/. The failure that move can produce is a file nobody links, which
-  // reads as deleted. Derived from the directory, so a new doc fails here until
-  // the README points at it.
+  // A doc nobody links reads as deleted. Derived from the directory, so a new doc
+  // fails here until the README points at it.
   const readme = read("README.md");
   const docs = readdirSync(join(ROOT, "docs")).filter((f) => f.endsWith(".md")).sort();
   assert.ok(docs.length >= 10, `the docs scan found only ${docs.length} files`);

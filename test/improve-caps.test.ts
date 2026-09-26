@@ -3,20 +3,18 @@ import { test } from "node:test";
 import { settledMinutes } from "../src/improve/ingest.ts";
 import { ROSTER, estimatedScorerMinutes, isFreeOfCharge, maxAttemptsFor, meteredMinutes, scheduledFor } from "../src/improve-schema.ts";
 
-// PER-NAMESPACE ATTEMPT CAPS AND THE NIGHTLY ROTATION (ruled 2026-09-15).
+// Per-namespace attempt caps and the nightly rotation.
 //
-// One scorer run costs a different number of BILLED minutes in each repo, so one
-// global ceiling spent 2.7 times more on foxhound than on germomics for the same
-// number of attempts. These pin the two halves of the ruling: what a namespace
-// may attempt, and how many billed namespaces may open on one night.
+// One scorer run costs a different number of billed minutes in each repo, so the
+// caps are per namespace. These pin what a namespace may attempt, and how many
+// billed namespaces may open on one night.
 
 test("every roster namespace has its own attempt cap, and capsid's is the largest because its runs are free", () => {
   const largest = Math.max(...ROSTER.map((ns) => maxAttemptsFor(ns)));
   assert.equal(maxAttemptsFor("capsid"), largest, "capsid does not have the largest cap");
 
-  // The ordering is the point, not the literals: a cheaper namespace may attempt
-  // at least as much as a dearer one. Measured billed minutes per run on
-  // 2026-09-15: foxhound 7.6, dustinedwards 4.9, foxing 3.9, germomics 2.8.
+  // The ordering is asserted, not the literals: a cheaper namespace may attempt at
+  // least as much as a dearer one.
   assert.ok(maxAttemptsFor("germomics") >= maxAttemptsFor("foxing"), "germomics is cheaper than foxing");
   assert.ok(maxAttemptsFor("foxing") >= maxAttemptsFor("dustinedwards"), "foxing is cheaper than dustinedwards");
   assert.ok(maxAttemptsFor("dustinedwards") >= maxAttemptsFor("foxhound"), "dustinedwards is cheaper than foxhound");
@@ -39,8 +37,7 @@ test("exactly ONE billed namespace opens per night, and capsid opens every night
     assert.equal(billed.length, 1, `day ${day} opened ${billed.length} billed namespaces, not 1`);
     seen.add(billed[0]!);
   }
-  // Eight nights covers the four billed namespaces twice, so the rotation
-  // reaches all of them rather than favouring one.
+  // Eight nights covers the four billed namespaces twice.
   assert.deepEqual([...seen].sort(), ["dustinedwards", "foxhound", "foxing", "germomics"]);
 });
 
@@ -48,16 +45,14 @@ test("the rotation is a pure function of the date, so two reads on one night agr
   const morning = scheduledFor(new Date("2026-09-15T00:30:00Z"));
   const evening = scheduledFor(new Date("2026-09-15T23:30:00Z"));
   assert.deepEqual(morning, evening);
-  // And the next UTC day is a different billed namespace, which is what makes it
-  // a rotation rather than a constant.
+  // The next UTC day is a different billed namespace.
   const nextDay = scheduledFor(new Date("2026-09-16T12:00:00Z"));
   assert.notDeepEqual(morning, nextDay);
 });
 
-// THE MONTHLY METER (ruled 2026-09-15). Two properties, and neither is about how
-// long a scorer takes. A repo GitHub bills nothing for contributes nothing, and
-// the estimate booked at dispatch is a lien that the report REPLACES rather than
-// adds to, so a run is never charged twice.
+// The monthly meter. A repo GitHub bills nothing for contributes nothing, and the
+// estimate booked at dispatch is a lien that the report replaces rather than adds
+// to, so a run is never charged twice.
 
 test("a free repo contributes NOTHING to the meter, however long its scorer took", () => {
   assert.equal(isFreeOfCharge("capsid"), true, "capsid's repo is public");
@@ -88,15 +83,13 @@ test("a negative or unusable reported figure meters as zero, never as a credit",
 });
 
 test("the dispatch reservation is REPLACED by the report, not added to it", () => {
-  // foxhound is billed and its dispatch estimate is 7.6. A run that has just
-  // dispatched carries that lien; the report settles it.
+  // A run that has just dispatched carries the estimate as a lien; the report settles it.
   const reserved = estimatedScorerMinutes("foxhound");
 
   const afterDispatch = { namespace: "foxhound", ci_minutes: reserved };
   assert.equal(settledMinutes(afterDispatch, 5), 5, "the lien was not released");
 
-  // The failure this pins: adding instead of replacing charges the run twice,
-  // which would read as 12.6 here.
+  // Adding instead of replacing would charge the run twice.
   assert.notEqual(settledMinutes(afterDispatch, 5), reserved + 5);
 
   // A second attempt on the same run settles only its own lien, leaving the
@@ -106,9 +99,9 @@ test("the dispatch reservation is REPLACED by the report, not added to it", () =
 });
 
 test("PLANT: an unknown scorer duration keeps the reservation instead of booking zero", () => {
-  // Audit 2026-09-25, finding 6-6. The scorer reports null when Job A's start time
-  // did not arrive, and parseScoreReport reads null as 0. Replacing the lien with
-  // meteredMinutes(0) booked a billed run at nothing against the monthly cap.
+  // The scorer reports null when Job A's start time did not arrive, and
+  // parseScoreReport reads null as 0. Replacing the lien with zero would book a
+  // billed run at nothing against the monthly cap.
   const reserved = estimatedScorerMinutes("foxhound");
   const afterDispatch = { namespace: "foxhound", ci_minutes: 3 + reserved };
   for (const unknown of [0, -1, Number.NaN]) {

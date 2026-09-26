@@ -5,13 +5,9 @@ import { consoleSessionCookie } from "../src/console-auth";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import { legacyAgent } from "../src/agents";
 
-// THE CONSOLE'S TWO JOB ACTIONS, END TO END, AGAINST A REAL D1.
-//
-// Moved from test/console-job-actions.test.ts (audit 2026-09-25, item C1-7). That file
-// ran handleConsoleAction against a private stub that matched SQL by regex and
-// reimplemented the transition's status check. Here the job is posted, claimed and
-// blocked through the real queue, the console action runs the real resumeJob and
-// adminFailJob, and every assertion reads the jobs and audit_log rows back.
+// The console's two job actions, end to end, against a real D1. The job is posted,
+// claimed and blocked through the real queue, the console action runs the real
+// resumeJob and adminFailJob, and every assertion reads the jobs and audit_log rows back.
 
 const SECRET = "console-test-cookie-secret";
 const SIGNING = "improve-score-root-secret";
@@ -133,9 +129,8 @@ describe("resume_job", () => {
   });
 
   it("REFUSES a job whose body was edited after it was signed", async () => {
-    // A blocked job sits in the table for as long as a human takes, which is the window
-    // in which a row could be edited. Resume re-verifies for that reason, and the
-    // console must surface the refusal rather than redirecting as though it worked.
+    // A blocked job can be edited while it waits for a human, so resume re-verifies,
+    // and the console must surface the refusal rather than redirecting as though it worked.
     const id = await blockedJob();
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1").bind(id, "---\ncapsid-task-signature: deadbeef\n---\ntampered").run();
     const res = await handleConsoleAction(await post({ action: "resume_job", id, reason: "approved" }), consoleEnv(), NOW);

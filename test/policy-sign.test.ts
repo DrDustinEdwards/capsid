@@ -14,10 +14,8 @@ import { adminAgent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// THE ONE THING THAT MINTS POLICY AUTHORITY. Before this, verifySignedBody had no
-// counterpart that could produce what it verifies, so both policies were inert. The
-// tests below are mostly refusals, because the value of a signer is entirely in what
-// it declines to sign.
+// The one thing that mints policy authority: the counterpart to verifySignedBody. The
+// tests are mostly refusals, because a signer's value is in what it declines to sign.
 
 const SECRET = "test-improve-secret";
 
@@ -57,7 +55,7 @@ function envWith(documents: Array<{ namespace: string; path: string; title: stri
   return { fake, env: fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: secret, APP_KV: fakeKv().kv }) };
 }
 
-// ---- what it refuses to sign ----------------------------------------------------
+// what it refuses to sign
 
 test("sign_policy refuses a namespace other than capsid", async () => {
   const { env } = envWith([{ namespace: "foxhound", path: "policy/auto-merge.md", title: "p", body: POLICY_BODY }]);
@@ -95,7 +93,7 @@ test("sign_policy refuses when the Worker has no signing secret", async () => {
   assert.match(result.ok ? "" : result.error, /signing is not configured/);
 });
 
-// ---- what it produces -----------------------------------------------------------
+// what it produces
 
 test("a signed policy verifies, and the same store then loads it", async () => {
   const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
@@ -105,14 +103,13 @@ test("a signed policy verifies, and the same store then loads it", async () => {
   assert.match(result.ok ? result.signature : "", /^[0-9a-f]{64}$/);
 
   // The fake does not apply upserts back onto its rows, so the bytes that were
-  // written are read from the statement the signer committed rather than from the
-  // table. That is the value under test either way: it is what would land in D1.
+  // written are read from the statement the signer committed: what would land in D1.
   const written = signedBodyFrom(fake.recorded);
   const verdict = await verifySignedBody(SECRET, written, "merge policy");
   assert.equal(verdict.ok, true, verdict.ok ? "" : verdict.reason);
 
-  // The end of the chain the whole part exists for: the verifier that decides whether
-  // a pull request may merge now accepts this document. Fed back in as the stored row.
+  // The verifier that decides whether a pull request may merge accepts this document,
+  // fed back in as the stored row.
   const { env: reloaded } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: written }]);
   const loaded = await loadMergePolicy(reloaded);
   assert.ok("policy" in loaded, `the signed policy must load: ${"error" in loaded ? loaded.error : ""}`);
@@ -157,7 +154,7 @@ test("signing a tampered policy produces a signature for the tampered bytes, and
   assert.notEqual(second.ok ? second.signature : "", firstSignature, "different bytes must sign differently");
 });
 
-// ---- the write invariants -------------------------------------------------------
+// the write invariants
 
 test("signing snapshots the prior body and writes an audit row, in one batch", async () => {
   const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
@@ -185,11 +182,10 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   assert.equal(fake.batches.length, 1, "the snapshot, the write and the audit row go in together or not at all");
 });
 
-// ---- admin only -----------------------------------------------------------------
+// admin only
 
 test("sign_policy is admin only in the scope table, and the refusal says why", () => {
-  // Stated in TOOL_ACTION_GRANTS and enforced by the registrar since 2026-09-16; the
-  // handler in src/tools/improve.ts used to check ctx.agent.admin itself.
+  // Stated in TOOL_ACTION_GRANTS and enforced by the registrar.
   assert.equal(requiredForAction("improve_run", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
   const driver = { ...adminAgent("DrDustinEdwards"), actor: "agent:capsid-driver", admin: false };
   const refusal = checkScope(driver, { tool: "improve_run", action: "sign_policy", namespace: "capsid", ...needFor(requiredForAction("improve_run", "sign_policy")) });
@@ -198,12 +194,10 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");
 });
 
-// ---- anti-rollback (audit 2026-09-25, E2-2) ------------------------------------------
-//
-// Every signed version stays in document_versions and still verifies, so putting an
-// older one back used to reload it. sign_policy now records which body is current, and
-// the loader refuses any other. The fake does not apply upserts to its rows, so each
-// test copies the signed text into the row by hand, as D1 would.
+// Anti-rollback. Every signed version stays in document_versions and still verifies,
+// so sign_policy records which body is current and the loader refuses any other. The
+// fake does not apply upserts to its rows, so each test copies the signed text into
+// the row by hand, as D1 would.
 
 function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
   const fake = fakeD1({ documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }] });

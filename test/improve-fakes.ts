@@ -1,21 +1,16 @@
 // The improve tables, taught to the one D1 fake.
 //
-// A SEPARATE MODULE, NOT A SECOND FAKE. test/fakes.ts still owns the single
-// fakeD1(); this file is the dialect it delegates to when a statement names an
-// improve_* table. The rule from quality audit 6.2 is that there is one fake per binding,
-// not that one file holds every SQL shape, and folding four more tables into the document
-// dialect would have made this file too large to read.
+// A separate module, not a second fake: test/fakes.ts owns the single fakeD1(),
+// and this file is the dialect it delegates to when a statement names an improve_*
+// table.
 //
-// IT IS ROW-BACKED AND BIND-AWARE, for the reason 6.1 gives: a fake that answers
-// on SQL shape alone cannot disagree with the handler, so every assertion becomes
-// "the handler issued some statement". Asking for the wrong run id gets nothing
-// back here, exactly as D1 would answer.
+// It is row-backed and bind-aware, because a fake that answers on SQL shape alone
+// cannot disagree with the handler. Asking for the wrong run id gets nothing back,
+// as D1 would answer.
 //
-// AND IT THROWS ON A STATEMENT IT DOES NOT RECOGNISE. That is the load-bearing
-// property. The alternative, returning an empty result for an unmodelled shape, is
-// how a test passes over a query the fake never understood: the handler reads
-// nothing, takes its empty-set branch, and the assertion about that branch is
-// vacuously true. Every improve statement is either modelled or a loud failure.
+// It throws on a statement it does not recognise. Returning an empty result for an
+// unmodelled shape would let the handler take its empty-set branch and make the
+// assertion about that branch vacuously true.
 
 export const IMPROVE_RUN_DEFAULTS: Record<string, unknown> = {
   id: "run-1",
@@ -79,21 +74,17 @@ export interface ImproveRows {
   improve_attempts: Array<Record<string, unknown>>;
   improve_scores: Array<Record<string, unknown>>;
   improve_skills: Array<Record<string, unknown>>;
-  // The replay cache (migrations/0004). Row-backed like the rest, so the PRIMARY
-  // KEY behaviour the code now relies on is actually modelled: a second claim of
-  // the same (scope, jti) returns no row, and the fake can therefore DISAGREE
-  // with a handler that assumed it would.
+  // The replay cache (migrations/0004). Row-backed so the PRIMARY KEY behaviour is
+  // modelled: a second claim of the same (scope, jti) returns no row.
   improve_jti: Array<Record<string, unknown>>;
   // The skill lifecycle's evidence (migrations 0012 and 0013). Row-backed like the
   // rest so a summary assertion can actually disagree with the handler.
   skill_evaluations: Array<Record<string, unknown>>;
   skill_edits: Array<Record<string, unknown>>;
   skill_failures: Array<Record<string, unknown>>;
-  // THE RECOMMEND BRANCH NEEDS THE DOCUMENT BODIES, because the query it models joins
-  // documents_fts and the match is against a skill's prose. Modelling the match
-  // against trigger_condition instead would be a fake that tests something other than
-  // the query. Optional: only that one branch reads it, and fakeD1 already passes its
-  // own rows object, which carries documents.
+  // The recommend branch needs the document bodies, because the query it models joins
+  // documents_fts and matches against a skill's prose. Optional: only that branch
+  // reads it, and fakeD1 passes its own rows object, which carries documents.
   documents?: ReadonlyArray<{ namespace: string; path: string; body?: string | null }>;
   // The skill transition's audit row lands here when its condition holds. Optional
   // for the same reason as documents: fakeD1 passes its own rows object.
@@ -115,10 +106,8 @@ export function isImproveStatement(sql: string): boolean {
 // to be 1..n in order. A literal in the VALUES list (there is one, `0`) is carried
 // through as itself.
 //
-// The VALUES list is read to its BALANCED closing parenthesis and split at top-level
-// commas. It was matched with `\(([^)]+)\)` until 2026-09-25, which stopped at the `)`
-// inside `datetime('now')`: the attempt row src/improve/tick.ts dispatches got
-// dispatched_at = NaN and the datetime branch below never ran.
+// The VALUES list is read to its balanced closing parenthesis and split at top-level
+// commas, so the `)` inside `datetime('now')` does not end it.
 function valuesList(text: string): string | undefined {
   const open = /VALUES \(/i.exec(text);
   if (!open) return undefined;
@@ -191,9 +180,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   const text = flat(sql);
   if (!isImproveStatement(text)) return { handled: false };
 
-  // THE BACKUP DUMP, which reads every table with a bare `SELECT * FROM <table>`.
-  // Handled first because it matches no WHERE clause and would otherwise fall
-  // through to the per-table readers and be mistaken for a filtered read.
+  // The backup dump, which reads every table with a bare `SELECT * FROM <table>`.
+  // Handled first so the per-table readers do not mistake it for a filtered read.
   const dump = /^SELECT \* FROM (improve_\w+)$/i.exec(text);
   if (dump) {
     // documents is excluded: this branch only matches improve_* tables, and including
@@ -204,7 +192,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: rows[table] };
   }
 
-  // ---- runs -----------------------------------------------------------------
+  // runs
 
   if (/^INSERT INTO improve_runs/i.test(text)) {
     const row = { ...IMPROVE_RUN_DEFAULTS, ...insertRow(text, params) };
@@ -278,8 +266,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
   // The per-namespace kept and reverted totals (src/agent-record.ts,
-  // src/console-reputation.ts). Until 2026-09-25 this fell to the reader below and
-  // came back as one raw row per run instead of one summed row per namespace.
+  // src/console-reputation.ts), matched before the reader below, which would return
+  // one raw row per run instead of one summed row per namespace.
   if (/^SELECT namespace, .+ FROM improve_runs GROUP BY namespace$/i.test(text)) {
     return { handled: true, results: selectRows(rows.improve_runs, text, params) };
   }
@@ -302,11 +290,10 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out.slice(0, limit) };
   }
 
-  // ---- the replay cache -----------------------------------------------------
+  // the replay cache
 
-  // INSERT ... ON CONFLICT DO NOTHING RETURNING. The DATABASE decides who claimed the
-  // nonce, so the fake models the uniqueness rather than the SQL: a row already present
-  // returns nothing.
+  // INSERT ... ON CONFLICT DO NOTHING RETURNING. The database decides who claimed the
+  // nonce, so the fake models the uniqueness: a row already present returns nothing.
   if (/^INSERT INTO improve_jti/i.test(text)) {
     const [scope, jti] = params;
     const already = rows.improve_jti.some((r) => r.scope === scope && r.jti === jti);
@@ -315,9 +302,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [{ jti }] };
   }
 
-  // The nightly prune, which drops only nonces older than a day. It cleared the whole
-  // table before 2026-09-25, so a nonce seen minutes ago was forgotten and a replay of
-  // it after a backup would have been accepted here while SQLite refused it.
+  // The nightly prune, which drops only nonces older than a day. The WHERE clause is
+  // evaluated, so a recent nonce stays and a replay of it is still refused.
   if (/^DELETE FROM improve_jti/i.test(text)) {
     const where = /^DELETE FROM improve_jti WHERE (.+)$/i.exec(text)?.[1];
     if (!where) throw new Error(`improve fake: an unfiltered DELETE on improve_jti: ${text}`);
@@ -327,7 +313,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [] };
   }
 
-  // THE WHOLE-TABLE READ the nightly dump makes, matched before the filtered ones so
+  // The whole-table read the nightly dump makes, matched before the filtered ones so
   // a `SELECT *` is not answered by a branch that expects bound parameters.
   if (/^SELECT \* FROM skill_(evaluations|edits|failures)/i.test(text)) {
     const table = /FROM (skill_\w+)/i.exec(text)?.[1] as "skill_evaluations" | "skill_edits" | "skill_failures";
@@ -335,18 +321,16 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
 
-  // THE EXISTENCE CHECK jobs.complete runs over the skill ids a driver names.
-  // Modelled so the refusal can be driven: a fake that threw here would make the
-  // refusal untestable and the test would pass for the wrong reason.
+  // The existence check jobs.complete runs over the skill ids a driver names,
+  // modelled so the refusal can be driven.
   if (/^SELECT id FROM improve_skills WHERE id IN/i.test(text)) {
     const named = params.map(String);
     const out = rows.improve_skills.filter((s) => named.includes(String(s.id))).map((s) => ({ id: s.id }));
     return { handled: true, results: out };
   }
 
-  // THE RECOMMEND QUERY, matched before the generic `FROM improve_skills s` reader
-  // below for the reason that one already documents: a less specific branch placed
-  // first claims this and answers from the wrong table.
+  // The recommend query, matched before the generic `FROM improve_skills s` reader
+  // below, which would otherwise claim it and answer from the wrong table.
   if (/JOIN documents_fts f/i.test(text)) {
     const like = String(params[1] ?? "");
     const ns = like.replace(/^%"|"%$/g, "");
@@ -370,10 +354,9 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out };
   }
 
-  // What the evaluation cycle dispatches, read after its transitions. Unmodelled until
-  // 2026-09-17, so every unit test that ran the tick saw the cycle throw here. The
-  // status filter is read from the SQL, so a cycle that stopped asking for it would
-  // dispatch retired skills here as it would against SQLite.
+  // What the evaluation cycle dispatches, read after its transitions. The status
+  // filter is read from the SQL, so a cycle that stopped asking for it would dispatch
+  // retired skills here as it would against SQLite.
   if (/^SELECT id, version, source_namespace FROM improve_skills/i.test(text)) {
     const onlyOpen = /status IN \('candidate', 'live'\)/i.test(text);
     const out = rows.improve_skills
@@ -386,9 +369,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   // The optimizer's negative feedback: refused proposals only, newest first.
   if (/FROM skill_edits/i.test(text)) {
     const skill = params[0];
-    // THE FILTER IS READ FROM THE SQL, not assumed. A fake that applied `accepted = 0`
-    // whatever the query said could not disagree with a handler that stopped asking
-    // for it, and a plant removing that clause would leave this green.
+    // The filter is read from the SQL, not assumed, so this can disagree with a
+    // handler that stopped asking for `accepted = 0`.
     const onlyRejected = /accepted = 0/i.test(text);
     const mine = rows.skill_edits.filter((e) => e.skill === skill && (!onlyRejected || Number(e.accepted) === 0));
     mine.sort((a, b) => String(b.evaluated_at).localeCompare(String(a.evaluated_at)));
@@ -398,8 +380,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   // The merge scan: live skills with a trigger, joined to their prose. Matched before
   // the generic `FROM improve_skills s` reader for the reason that one documents.
   if (/LEFT JOIN documents d/i.test(text)) {
-    // Both filters read from the SQL for the same reason as above: this branch must be
-    // able to disagree with a handler that dropped one of them.
+    // Both filters read from the SQL, for the same reason as above.
     const onlyLive = /s\.status = 'live'/i.test(text);
     const needsTrigger = /s\.trigger_condition IS NOT NULL/i.test(text);
     const out = rows.improve_skills
@@ -418,10 +399,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
 
-  // ---- the skill records summary (migrations 0012, 0013) --------------------
-  //
-  // Modelled against the rows rather than answered empty, on this fake's own rule:
-  // an empty answer would make every assertion about the summary vacuously true.
+  // The skill records summary (migrations 0012, 0013), modelled against the rows so
+  // an assertion about the summary can fail.
   if (/SELECT status, COUNT\(\*\) AS n FROM improve_skills/i.test(text)) {
     const like = String(params[0] ?? "");
     const ns = like.replace(/^%"|"%$/g, "");
@@ -464,10 +443,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
 
-  // ---- skills ---------------------------------------------------------------
-  //
-  // MATCHED BEFORE THE ATTEMPTS READERS, deliberately. The candidate query carries
-  // a `NOT EXISTS (SELECT 1 FROM improve_attempts ...)` subquery, so an attempts
+  // Skills, matched before the attempts readers: the candidate query carries a
+  // `NOT EXISTS (SELECT 1 FROM improve_attempts ...)` subquery, so an attempts
   // branch placed first would claim it and answer with the wrong table.
   if (/FROM improve_skills s/i.test(text)) {
     const ns = params[0];
@@ -487,16 +464,15 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
 
-  // ---- attempts -------------------------------------------------------------
+  // attempts
 
   if (/^INSERT INTO improve_attempts/i.test(text)) {
     rows.improve_attempts.push({ ...IMPROVE_ATTEMPT_DEFAULTS, ...insertRow(text, params) });
     return { handled: true, results: [] };
   }
 
-  // THE WHOLE WHERE CLAUSE APPLIES, including the late report's
-  // `AND status IN ('unjudged', ...)` (src/improve/ingest.ts), which this ignored until
-  // 2026-09-25 so the late-report CAS always applied.
+  // The whole WHERE clause applies, including the late report's
+  // `AND status IN ('unjudged', ...)` (src/improve/ingest.ts).
   if (/^UPDATE improve_attempts/i.test(text)) {
     const where = / WHERE (.+?)(?: RETURNING .+)?$/i.exec(text)?.[1];
     if (!where || !/^id = \?\d+\b/i.test(where)) {
@@ -519,7 +495,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out.slice(0, limit) };
   }
 
-  // ---- scores ---------------------------------------------------------------
+  // scores
 
   if (/^INSERT INTO improve_scores/i.test(text)) {
     rows.improve_scores.push(insertRow(text, params));
@@ -535,11 +511,10 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: out.map((s) => ({ metric: s.metric, value: s.value })) };
   }
 
-  // ---- skills ---------------------------------------------------------------
+  // skills
 
-  // THE TRANSITION'S AUDIT ROW (commitTransition), inserted only when the skill now
-  // holds the new status. Modelled on that condition, so a transition that did not
-  // land writes no row here, as in SQLite.
+  // The transition's audit row (commitTransition), inserted only when the skill now
+  // holds the new status, so a transition that did not land writes no row.
   if (/^INSERT INTO audit_log .* WHERE EXISTS \(SELECT 1 FROM improve_skills WHERE id = \?3 AND status = \?4\)$/i.test(text)) {
     const [actor, auditParams, id, status] = params;
     if (rows.improve_skills.some((k) => k.id === id && k.status === status)) {
@@ -550,7 +525,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
 
   // An existing id is updated only when the statement says ON CONFLICT(id) DO UPDATE
   // (src/improve-skills.ts). A plain INSERT of a taken id fails the PRIMARY KEY and
-  // aborts its batch, as in SQLite; this upserted every INSERT until 2026-09-25.
+  // aborts its batch, as in SQLite.
   if (/^INSERT INTO improve_skills/i.test(text)) {
     const row = { ...IMPROVE_SKILL_DEFAULTS, ...insertRow(text, params) };
     const existing = rows.improve_skills.find((k) => k.id === row.id);
@@ -563,7 +538,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
     return { handled: true, results: [] };
   }
 
-  // THE STATUS TRANSITION (commitTransition): keyed on the expected status, so a status
+  // The status transition (commitTransition): keyed on the expected status, so a status
   // that moved underneath the read is not overwritten, and stamped when it retires.
   if (/^UPDATE improve_skills SET status = \?3, retired_at = CASE/i.test(text)) {
     const [id, from, to, at] = params;
@@ -575,7 +550,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
   // The whole WHERE clause applies, including the version CAS in
-  // src/skills-evaluate.ts (`AND version = ?3`), which this ignored until 2026-09-25.
+  // src/skills-evaluate.ts (`AND version = ?3`).
   if (/^UPDATE improve_skills/i.test(text)) {
     const where = / WHERE (.+?)(?: RETURNING .+)?$/i.exec(text)?.[1];
     if (!where) throw new Error(`improve fake: an unfiltered UPDATE on improve_skills: ${text}`);
@@ -590,14 +565,9 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   );
 }
 
-// ONE SSE ATTEMPT RESPONSE. The attempt path uses the SDK's streaming helper, so a
-// plain JSON body is answered with "request ended without sending any chunks", and a
-// test that hands it one is exercising a non-streaming lookalike.
-//
-// Three files built this event stream: improve-run.test.ts and
-// audit-2026-09-06-round2.test.ts held byte-identical copies (the second said so in
-// a comment), and improve-caching.test.ts held a twin that differed only in the
-// cache token counters it needs.
+// One SSE attempt response. The attempt path uses the SDK's streaming helper, so a
+// plain JSON body is answered with "request ended without sending any chunks".
+// `usage` lets a test set the cache token counters it needs.
 export function sseMessage(text: string, usage: Record<string, unknown> = {}): string {
   const events: Array<[string, unknown]> = [
     [

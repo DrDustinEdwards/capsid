@@ -19,21 +19,15 @@ import { buildServer } from "../src/server.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-// EVERY ROUTE GOES THROUGH THE ONE ENFORCEMENT POINT, OR SAYS WHY IT DOES NOT.
+// Every route goes through the one enforcement point, or says why it does not. A
+// route that checks only the write grant lets a driver minted for one namespace act
+// across every namespace (for /ops/backup, a full backup and its prune).
 //
-// Two audits on 2026-09-16 found /ops/backup outside it. handleBackup checked only
-// that the caller held the write grant and never called checkScope, so a driver
-// minted for one namespace could run a full backup, and the prune that follows it,
-// across every namespace in the store. CLAUDE.md's one enforcement point rule says there is one
-// enforcement point; this route was not in it.
-//
-// THE ROUTES THEMSELVES ARE DRIVEN in test-integration/route-gates.test.ts, through
-// the whole Worker: /ops/backup with a one-namespace driver key (403), the legacy write
-// key (runs), the legacy read key (403) and no key (401); every path in ROUTE_GRANTS
-// and UNGATED_ROUTES is served; every gated path refuses a driver. node --test cannot
-// load src/routes.ts, so what stays here is routeRefusal over callers resolved for
-// real, and the one direction no request can show: every path defaultHandler
-// dispatches on is in one of the two tables.
+// The routes themselves are driven through the whole Worker in
+// test-integration/route-gates.test.ts. node --test cannot load src/routes.ts, so
+// what stays here is routeRefusal over callers resolved for real, and the one
+// direction no request can show: every path defaultHandler dispatches on is in one of
+// the two tables.
 
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 const LEGACY_WRITE_KEY = "legacy-write-key";
@@ -69,7 +63,7 @@ async function resolveWith(bearer: string) {
   return resolved.agent;
 }
 
-// ---- /ops/backup ----------------------------------------------------------------
+// /ops/backup
 
 test("/ops/backup admits the legacy write-grant operator key, which is the admin", async () => {
   const agent = await resolveWith(LEGACY_WRITE_KEY);
@@ -93,7 +87,7 @@ test("a path in neither table is refused to everyone but the admin", async () =>
   assert.equal(routeRefusal("/ops/not-a-route", adminAgent("DrDustinEdwards")), null);
 });
 
-// ---- every route ----------------------------------------------------------------
+// every route
 
 const PATH_CONSTANTS: Record<string, string> = {
   REPORT_PATH,
@@ -124,8 +118,7 @@ function dispatches(): { path: string; handler: string }[] {
     found.push({ path, handler: m[2] });
   }
   // A match written any other way (startsWith, a regex, a switch) would be missed by
-  // the pattern above and the route would be ungated without anyone deciding it. So
-  // every mention of the pathname must be one the pattern read.
+  // the pattern above, so every mention of the pathname must be one the pattern read.
   const mentions = body.match(/pathname/g)?.length ?? 0;
   assert.equal(mentions, found.length, `defaultHandler reads url.pathname ${mentions} times and this test parsed ${found.length} dispatch lines`);
   return found;
@@ -148,7 +141,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
   // test-integration/route-gates.test.ts.
 });
 
-// ---- the table is the whole statement -------------------------------------------
+// the table is the whole statement
 
 test("improve_run: run and claim are a driver's work and every other action is admin", async () => {
   // The actions come from the schema the server serves, so an action added to the tool

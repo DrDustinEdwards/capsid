@@ -9,11 +9,10 @@ import { buildServer } from "../src/server.ts";
 import { TOOL_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredGrant } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// GROUP 3: ONE ENFORCEMENT POINT, and the refusal names what is missing.
+// One enforcement point, and the refusal names what is missing.
 //
 // checkScope called directly, then two sweeps that call every served tool over a
-// real MCP connection (the SWEEP tests at the end). test/blast-radius.test.ts drives
-// the real handlers with a narrowed caller and proves each flag is refused at every
+// real MCP connection. test/blast-radius.test.ts proves each flag is refused at every
 // path that needs it.
 
 function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
@@ -24,8 +23,8 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
 }
 
 test("a caller inside every axis is not refused", () => {
-  // The innocent case first. A guard that fires on correct calls gets deleted rather
-  // than fixed, so it is asserted before any of the refusals below.
+  // The innocent case first: a guard that fires on correct calls gets deleted rather
+  // than fixed.
   const agent = scopedAgent();
   assert.equal(checkScope(agent, { tool: "write", namespace: "capsid", grant: "write" }), null);
   assert.equal(checkScope(agent, { tool: "read", namespace: "capsid", grant: "read" }), null);
@@ -95,8 +94,7 @@ test("the legacy caller passes every check, which is the one thing this migratio
 
 test("requiredGrant fails closed for a tool nobody has classified", () => {
   assert.equal(requiredGrant("a_tool_nobody_classified"), "write");
-  // And not because the lookup answers for Object.prototype, which has bitten this
-  // repo twice (counts.ts, tool-annotations.ts).
+  // And the lookup does not answer for Object.prototype keys.
   assert.equal(requiredGrant("constructor"), "write");
   assert.equal(requiredGrant("toString"), "write");
 });
@@ -105,8 +103,7 @@ test("repoWriteFlags derives the flags from the CALL, not from the tool name", (
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: "src/x.ts", mode: "pr" }), []);
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: "src/x.ts", mode: "direct" }), ["can_direct_write"]);
   assert.deepEqual(repoWriteFlags("manage_pr", { action: "merge" }), ["can_merge"]);
-  // CLOSE CARRIES can_merge TOO since 2026-09-16 (audit defect 8): closing deletes
-  // the head branch, which is the same destruction merging performs.
+  // close carries can_merge too: closing deletes the head branch, as merging does.
   assert.deepEqual(repoWriteFlags("manage_pr", { action: "close" }), ["can_merge"]);
   assert.deepEqual(repoWriteFlags("ci_dispatch", { path: "improve-score.yml" }), ["can_dispatch"]);
   assert.deepEqual(repoWriteFlags("write_repo_file", { path: ".github/workflows/ci.yml", mode: "pr", allow_workflow_write: true }), [
@@ -128,12 +125,12 @@ test("a money path is matched by name, and an innocent path is not", () => {
   }
 });
 
-// ---- the sweep: every served tool, called through a real MCP connection ----------
+// The sweep: every served tool, called through a real MCP connection.
 //
 // The tool list comes from the server's own listTools, so a tool added later is in
-// the sweep the moment it is registered. Arguments are built from each tool's served
-// input schema, because the SDK validates arguments before the wrapped handler runs
-// and an invalid call would be refused by the SDK instead of by the scope check.
+// the sweep once registered. Arguments are built from each tool's served input
+// schema, because the SDK validates arguments before the wrapped handler runs and
+// would otherwise refuse the call itself.
 
 interface JsonProp {
   type?: string;
@@ -227,13 +224,10 @@ function noToolsAgent(): Agent {
   return { id: "agent_bbbbbbbbbbbb", name: "no-tools", kind: "driver", actor: "agent:no-tools", scopes, admin: true, row: null };
 }
 
-// Replaces a source scan (2026-09-25) that asserted guardRegistrations appears in
-// src/server.ts above every register*Tools call. This proves what the ordering was
-// for: a tool registered before the guard, or registered around it, answers here.
+// A tool registered before the guard, or around it, answers here.
 test("SWEEP: every served tool refuses a caller whose tools axis is empty, by name, before its handler runs", async () => {
   const { served, results } = await sweep(noToolsAgent(), (tools) => tools.map((tool) => ({ tool: tool.name, args: argsFor(tool) })));
-  // Not vacuous: the sweep called every tool the server serves, and that is the
-  // pinned surface.
+  // Not vacuous: the sweep called every served tool, and that is the pinned surface.
   assert.equal(served.length, AUTHORITATIVE.capsid.tools, "listTools did not return the pinned surface");
   assert.equal(results.size, AUTHORITATIVE.capsid.tools, "the sweep did not call every tool");
   for (const tool of served) {
@@ -257,13 +251,11 @@ function isReadCall(tool: string, action: string | undefined): boolean {
   return action !== undefined && Object.hasOwn(READ_ACTIONS, tool) && READ_ACTIONS[tool].includes(action);
 }
 
-// Replaces a source scan (2026-09-25) that failed on any handler naming `mayWrite`.
 // A handler that decides a grant for itself is observable only where it disagrees
-// with checkScope, and it can only disagree by refusing: the registrar runs first, so
-// a handler cannot allow what it refused. Both directions are asserted here. The
-// write half proves every write refuses with checkScope's own sentence and touches
-// nothing; the read half proves no read is refused, which is what a private gate on
-// a read tool, or one that answers the grant differently, would do.
+// with checkScope, and it can only disagree by refusing, because the registrar runs
+// first. The write half proves every write refuses with checkScope's own sentence and
+// touches nothing; the read half proves no read is refused, which a private gate on a
+// read tool would do.
 test("SWEEP: a read-only caller is refused every write by checkScope, and no read", async () => {
   const readOnly = legacyAgent("read", "opkey:readonly0000");
   const { served, results } = await sweep(readOnly, (tools) =>
@@ -280,8 +272,8 @@ test("SWEEP: a read-only caller is refused every write by checkScope, and no rea
       if (isReadCall(tool.name, action)) {
         reads += 1;
         assert.doesNotMatch(result.text, /unauthorized|denied|requires the write grant/i, `${label} is a read and refused a read-only caller: ${result.text}`);
-        // The handler ran. Its own answer may be an error (the fakes serve an empty
-        // store and no GitHub routes), but it reached the store to give it.
+        // The handler ran. Its answer may be an error (empty store, no GitHub
+        // routes), but it reached the store to give it.
         assert.ok(result.prepared + result.fetched > 0, `${label} never reached its handler, so this asserts nothing about it: ${result.text}`);
       } else {
         writes += 1;
@@ -292,8 +284,8 @@ test("SWEEP: a read-only caller is refused every write by checkScope, and no rea
       }
     }
   }
-  // Not vacuous in either direction. Every tool TOOL_GRANTS does not mark read has at
-  // least one write call, and every read tool has one read call.
+  // Not vacuous in either direction: every write tool has at least one write call,
+  // and every read tool one read call.
   const writeTools = Object.values(TOOL_GRANTS).filter((r) => r !== "read").length;
   const readTools = Object.values(TOOL_GRANTS).filter((r) => r === "read").length;
   assert.ok(writes >= writeTools, `only ${writes} write calls for ${writeTools} write tools`);

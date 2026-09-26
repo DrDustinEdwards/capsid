@@ -9,22 +9,13 @@ import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFile, toolBlocks } from "./source-files.ts";
 
-// GROUP 6: THE BLAST-RADIUS SUITE.
+// The blast-radius suite. One plant per flag, driven through a real MCP connection
+// against a scoped caller, in both directions: the agent without the flag is refused,
+// and the admin holding it is not. A refusal test alone passes against a tool that is
+// broken for everybody.
 //
-// One plant per flag, driven through a REAL MCP connection against a scoped caller,
-// and each plant is asserted in both directions: the agent WITHOUT the flag is
-// refused, and the admin holding it is not.
-//
-// Both halves are load-bearing and they fail differently. A refusal test alone
-// passes just as well against a tool that is broken for everybody, which is how a
-// scope check becomes an outage nobody attributes to it. And a guard that fires on
-// correct calls gets deleted rather than fixed, so the innocent direction is what
-// keeps the refusing direction alive.
-//
-// THE STRONGEST ASSERTION HERE IS NOT THE REFUSAL, IT IS THAT NOTHING WAS FETCHED.
-// A repo write that refuses after committing to GitHub has already happened; the
-// refusal is then a description of the past. Every plant below asserts the GitHub
-// call count is zero.
+// Every refusing plant also asserts the GitHub call count is zero: a repo write that
+// refuses after committing to GitHub has already happened.
 
 const REPOS = [{ repo: "o/r", label: "primary" }];
 
@@ -62,9 +53,8 @@ async function callAs(caller: Agent, tool: string, args: Record<string, unknown>
   return result;
 }
 
-// EVERY PATH THAT NEEDS A FLAG, one row each. The tool, the arguments that make the
-// call need it, and the flag it needs. A row here is a plant: the driver is refused
-// and the admin is not.
+// Every path that needs a flag, one row each: the tool, the arguments that make the
+// call need it, and the flag it needs.
 const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknown>; what: string }> = [
   {
     flag: "can_direct_write",
@@ -137,9 +127,8 @@ const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknow
 for (const plant of PLANTS) {
   test(`PLANT: without ${plant.flag}, a driver is refused ${plant.what}`, async () => {
     await withFetch({}, async (calls) => {
-      // The driver is scoped to the namespace the call names, so the refusal that
-      // comes back is about the FLAG and not about the namespace. A plant that
-      // refuses for the wrong reason proves nothing.
+      // The driver is scoped to the namespace the call names, so the refusal is about
+      // the flag and not about the namespace.
       const caller = driver(String(plant.args.namespace));
       const result = await callAs(caller, plant.tool, plant.args);
       assert.equal(result.isError, true, `${plant.tool} was not refused without ${plant.flag}`);
@@ -149,26 +138,22 @@ for (const plant of PLANTS) {
   });
 
   test(`PLANT: the same call is NOT refused for a caller holding ${plant.flag}`, async () => {
-    // The innocent direction. Without it, a tool broken for everybody passes the
-    // test above. The call is allowed to fail afterwards for its own reasons (the
-    // fetch harness has no routes), which is why this asserts on the refusal TEXT
-    // rather than on success: what must not appear is the scope refusal.
+    // The call may fail afterwards for its own reasons (the fetch harness has no
+    // routes), so this asserts that the scope refusal text is absent, not success.
     await withFetch({}, async (calls) => {
       const result = await callAs(adminAgent("DrDustinEdwards"), plant.tool, plant.args);
       const text = result.content[0]?.text ?? "";
       assert.ok(text.length > 0, "the call returned no text, so an absent refusal proves nothing");
       assert.doesNotMatch(text, /needs the .* flag/, `the admin was refused a flag it holds: ${text}`);
       assert.doesNotMatch(text, /unauthorized:/, `the admin was refused: ${text}`);
-      // Past the scope check means GitHub was asked. A call refused before the
-      // network for any other reason would otherwise pass this direction.
+      // Past the scope check means GitHub was asked.
       assert.ok(calls.length > 0, `${plant.tool} never reached GitHub for a caller holding ${plant.flag}: ${text}`);
     });
   });
 }
 
 test("PLANT: a driver IS allowed the pull-request path, which is the whole point of scoping it this way", async () => {
-  // The shape docs/bootstrap.md prescribes has to actually work, or the advice is to
-  // mint a credential that cannot do its job. A pr-mode write needs no flag at all.
+  // The shape docs/bootstrap.md prescribes has to work. A pr-mode write needs no flag.
   await withFetch({}, async (calls) => {
     const result = await callAs(driver(), "write_repo_file", {
       namespace: "capsid",
@@ -211,16 +196,14 @@ test("PLANT: a driver cannot reach a namespace it was not minted for", async () 
 });
 
 test("PLANT: a namespace-scoped caller that omits the namespace is refused, not silently given all of them", async () => {
-  // The hole this closes: `list` and `search` treat an omitted namespace as every
-  // namespace, so a narrowed caller that leaves it out would read the whole store
-  // with no check having failed anywhere.
+  // `list` and `search` treat an omitted namespace as every namespace, so a narrowed
+  // caller that left it out would read the whole store.
   const result = await callAs(driver(), "list", {});
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /must name a namespace/);
 
-  // And naming one it holds still works, or the rule is just an outage. This one
-  // needs a store that can answer a multi-row read, so it uses the shared fake
-  // rather than the one-row repo stub the flag plants run against.
+  // Naming one it holds still works. This needs a store that can answer a multi-row
+  // read, so it uses the shared fake rather than the one-row repo stub.
   const d1 = fakeD1({ documents: [{ namespace: "capsid", path: "core.md", title: "core" }] });
   const server = buildServer(fakeEnv({ DB: d1.db }), driver());
   const client = new Client({ name: "blast-radius", version: "1.0.0" });
@@ -238,21 +221,17 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
   narrow.scopes.tools = ["read", "search", "write"];
   const result = await callAs(narrow, "manage_pr", { namespace: "capsid", number: 7, action: "close" });
   assert.equal(result.isError, true);
-  // THE REFUSAL NAMES THE ACTION, which is the evidence that the registrar now
-  // populates need.action. Before 2026-09-13 it said "the 'manage_pr' tool" here,
-  // because the registrar passed no action at all and the qualifier could not fire.
+  // The refusal names the action, which shows the registrar populates need.action.
   assert.match(result.content[0].text, /not scoped to the 'manage_pr\.close' tool/);
 });
 
-// ---- the derived half --------------------------------------------------------
+// The derived half.
 
 // scanner-rule: CLAUDE.md, one enforcement point rule: no new tool bypasses checkScope. Derived over every
 // registration, including tools added later.
 test("DERIVED: every write tool is on the enforcement point's path", () => {
-  // Not a list of tools somebody remembered to check. The registrations are walked,
-  // and each write tool must be covered by the registrar (its requirement is stated)
-  // or carry its own check. A tool added tomorrow is in this set the moment it is
-  // registered.
+  // The registrations are walked, and each write tool must be covered by the
+  // registrar (its requirement is stated) or carry its own check.
   const uncovered = toolBlocks()
     .filter((b) => TOOL_GRANTS[b.name] !== "read")
     .filter(
@@ -269,10 +248,9 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
 // scanner-rule: CLAUDE.md, one enforcement point rule: a repo mutation carries its flags through guardedWrite.
 // Derived over every GitHub mutation call site.
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
-  // The seven repo write tools reach GitHub through guardedWrite, which is where
-  // repoWriteFlags runs. A tool calling a github.ts mutation directly would skip the
-  // flag check entirely while still being write-gated at the registrar, and that is
-  // the failure this derivation exists to catch.
+  // The repo write tools reach GitHub through guardedWrite, where repoWriteFlags
+  // runs. A tool calling a github.ts mutation directly would skip the flag check
+  // while still being write-gated at the registrar.
   const repo = sourceFile("tools/repo.ts");
   const MUTATIONS = ["writeRepoFile(", "deleteRepoFile(", "createBranch(", "openPr(", "managePr(", "deleteBranch(", "ciDispatch("];
   for (const mutation of MUTATIONS) {
@@ -297,17 +275,15 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
 });
 
 test("every flag is required by some path, so none of them is decoration", () => {
-  // A flag nothing ever asks for is a checkbox that reads as protection and is not.
-  // Each one has to be produced by repoWriteFlags for some call, or be named by the
-  // document-side override, which is the only other place a flag is required.
+  // A flag nothing asks for protects nothing. Each one has to be produced by
+  // repoWriteFlags for some call, or be named by the document-side override.
   const produced = new Set<ScopeFlag>();
   for (const plant of PLANTS) {
     for (const flag of repoWriteFlags(plant.tool, plant.args as { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean })) {
       produced.add(flag);
     }
   }
-  // The document-side override is the only other place a flag is required. That it is
-  // really required, on write, restore, delete and move, is proven by the refusal tests in
+  // That the override is required on write, restore, delete and move is proven in
   // test/improve-protected-paths.test.ts.
   for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
   // The loops over SCOPE_FLAGS in the agents-* tests rely on this list being non-empty.

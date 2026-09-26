@@ -16,7 +16,7 @@ import {
   type SkillStatus,
 } from "../src/skills-lifecycle.ts";
 
-// THE SKILL RECORD LIFECYCLE. Status changes on evaluation evidence and never on a
+// The skill record lifecycle. Status changes on evaluation evidence and never on a
 // driver's judgement of its own run, so every test here drives a rule to its refusal.
 
 function evaluation(over: Partial<Evaluation> = {}): Evaluation {
@@ -35,7 +35,7 @@ function evaluation(over: Partial<Evaluation> = {}): Evaluation {
 
 const at = (n: number) => `2026-09-${String(10 + n).padStart(2, "0")}T00:00:00Z`;
 
-// ---- the minimum-evidence rule, in both directions -----------------------------
+// the minimum-evidence rule, in both directions
 
 test("one positive evaluation cannot promote a candidate", () => {
   const verdict = nextStatus("candidate", 1, [evaluation({ evaluated_at: at(1) })]);
@@ -77,8 +77,7 @@ test("two consecutive non-positive evaluations retire a live skill", () => {
 });
 
 test("a live skill that alternates is doing something and is not retired", () => {
-  // negative, positive, negative: three non-positive-ish results but not two in a
-  // row at the newest end. Retirement asks for a RUN of not helping.
+  // negative, positive, negative: not two non-positive in a row at the newest end.
   const verdict = nextStatus("live", 1, [
     evaluation({ evaluated_at: at(1), verdict: "negative", delta: -0.1 }),
     evaluation({ evaluated_at: at(2), verdict: "positive" }),
@@ -119,7 +118,7 @@ test("verdictFor calls a tie neutral rather than positive", () => {
   assert.equal(verdictFor(-0.01), "negative");
 });
 
-// ---- bounded edits --------------------------------------------------------------
+// bounded edits
 
 const BODY_20 = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n");
 
@@ -169,7 +168,7 @@ test("an edit is accepted only on strict improvement, and a tie is a rejection",
   assert.equal(acceptEdit(0.1, 0.05).accepted, false);
 });
 
-// ---- attribution ----------------------------------------------------------------
+// attribution
 
 test("attribution ignores improvised success", () => {
   const verdict = attribute(true, "improvised");
@@ -194,7 +193,7 @@ test("an environment failure is not charged to the skill", () => {
   assert.equal(attribute(true, "environment-failure").credit, "none");
 });
 
-// ---- merging --------------------------------------------------------------------
+// merging
 
 test("two live skills with overlapping triggers and near-identical bodies are proposed for merge", () => {
   const body = Array.from({ length: 20 }, (_, i) => `step ${i}`).join("\n");
@@ -244,13 +243,11 @@ test("triggersOverlap is word-based, so the same situation spelled differently m
   assert.equal(triggersOverlap("", "a slow database query"), false);
 });
 
-// ---- the migration --------------------------------------------------------------
-
-// ---- the stored vocabularies ----------------------------------------------------
+// the stored vocabularies
 
 test("an unknown status or verdict is refused rather than coerced", () => {
-  // A row carrying "Candidate" or "" read as a known status would let a retired
-  // skill be promoted, which is the one transition the rules never allow.
+  // A row carrying "Candidate" or "" read as a known status could let a retired
+  // skill be promoted.
   assert.equal(isSkillStatus("candidate"), true);
   assert.equal(isSkillStatus("live"), true);
   assert.equal(isSkillStatus("retired"), true);

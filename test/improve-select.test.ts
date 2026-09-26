@@ -61,9 +61,8 @@ test("A LOWER SCORING BASE WINS ON LINEAGE POTENTIAL, which is the whole point",
 });
 
 test("but a big enough score difference still wins", () => {
-  // The weights are a claim about how much exploration is worth, and the claim is
-  // falsifiable in this direction too: one lucky descendant does not beat a base
-  // that scores far higher.
+  // The other direction: one lucky descendant does not beat a base that scores far
+  // higher.
   const attempts: AttemptRow[] = [
     attempt({ id: "a-lucky", kept: 1, head_sha: "luckysha", score_after: -8, lineage_parent: null }),
     attempt({ id: "l1", kept: 1, lineage_parent: "a-lucky" }),
@@ -112,8 +111,7 @@ test("selection is deterministic: the same input gives the same answer", () => {
 
 test("a lineage cycle does not hang the walk", () => {
   // lineage_parent is written by this Worker and should never form a cycle, but a
-  // spliced repair or a restored dump could produce one, and a base selector that
-  // hangs takes the whole tick with it.
+  // spliced repair or a restored dump could produce one, and a hang stalls the tick.
   const attempts: AttemptRow[] = [
     attempt({ id: "x", kept: 1, head_sha: "xsha", lineage_parent: "y" }),
     attempt({ id: "y", kept: 1, head_sha: "ysha", lineage_parent: "x" }),
@@ -123,8 +121,7 @@ test("a lineage cycle does not hang the walk", () => {
 });
 
 test("every candidate reports the numbers its weight was computed from", () => {
-  // The archive document quotes these. A verdict a human cannot check is a
-  // verdict nobody will question.
+  // The archive document quotes these, so a human can check the verdict.
   const attempts: AttemptRow[] = [
     attempt({ id: "a", kept: 1, head_sha: "asha", score_after: 3 }),
     attempt({ id: "d", kept: 1, lineage_parent: "a" }),

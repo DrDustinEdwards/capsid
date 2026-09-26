@@ -10,7 +10,7 @@ import {
 } from "../src/skills-records.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 
-// GROUPS 2, 3 AND 7: what gets offered, what earns a candidate, and what a failed run
+// What gets offered, what earns a candidate, and what a failed run
 // leaves behind for the next driver to read.
 
 // A statement recorder thin enough to read the bound parameters back out.
@@ -29,7 +29,7 @@ function recorder() {
   return { recorded, db: { prepare: (sql: string) => stmt(sql) } as unknown as D1Database };
 }
 
-// ---- group 2: what earns a candidate --------------------------------------------
+// what earns a candidate
 
 test("a kept attempt earns a candidate and a reverted one does not", () => {
   assert.equal(shouldCreateCandidate({ kind: "attempt", id: "a1", kept: true }).create, true);
@@ -52,9 +52,7 @@ test("a job earns a candidate only when its outcome is fully verified", () => {
 // scanner-rule: skills lifecycle, "never live on creation" (docs/skills.md). A module
 // that holds no INSERT cannot create a row, which no call to it can demonstrate.
 
-// ---- group 3: what gets offered --------------------------------------------------
-//
-// The status, trigger, limit and failure-note rules of the recommend query, and the
+// what gets offered. The status, trigger, limit and failure-note rules of the recommend query, and the
 // retired-source lookup, are proven against a real D1 in
 // test-integration/skills-records.test.ts.
 
@@ -70,12 +68,11 @@ test("ftsQuery reduces free prose to bare words, so an operator in a description
   assert.equal((long ?? "").split(" OR ").length, 24, "the term list is bounded");
 });
 
-// ---- group 3: attribution, applied -----------------------------------------------
+// attribution, applied
 
-// Each credit is a counter update PLUS its audit row, so the statements are read by
-// kind rather than counted. The audit half arrived with the 2026-09-16 change that made
-// this the loop's only credit path: recordSkillOutcome audited every outcome it wrote,
-// and dropping it must not lose that.
+// Each credit is a counter update plus its audit row, so the statements are read by
+// kind rather than counted. This is the loop's only credit path, so every outcome it
+// writes is audited.
 const counterUpdates = (recorded: Array<{ sql: string; params: unknown[] }>) =>
   recorded.filter((r) => /UPDATE improve_skills SET (wins|losses)/.test(r.sql));
 const outcomeAudits = (recorded: Array<{ sql: string; params: unknown[] }>) =>
@@ -126,7 +123,7 @@ test("a verified failure charges a loss to the used skill only", () => {
   });
 });
 
-// ---- group 7: failure memory ------------------------------------------------------
+// failure memory
 
 test("a failure note is written per skill in use, carrying the source it came from", () => {
   const { recorded, db } = recorder();
@@ -148,9 +145,7 @@ test("a very long note is bounded before it is stored", () => {
   assert.equal(String(recorded[0].params[4]).length, 2000);
 });
 
-// ---- the migration ----------------------------------------------------------------
-
-// ---- offerSkills and dueTransitions, driven against the fake ---------------------
+// offerSkills and dueTransitions, driven against the fake
 
 test("offerSkills returns only candidate and live skills, with their recent failures", async () => {
   const { db, rows } = fakeD1({

@@ -9,27 +9,22 @@ import { HOLDOUT_R2, R2, sharedBucketProblem } from "../scripts/bindings.mjs";
 import type { AttemptEnv } from "../src/env.ts";
 import type * as Attempt from "../src/improve-attempt.ts";
 
-// THE HOLDOUT ISOLATION GUARD.
-//
-// The property: code that generates and pushes attempts must have no read path to
-// the hidden test suite. It is enforced at three layers and this file asserts all
-// three, because each can be defeated on its own.
+// The holdout isolation guard: code that generates and pushes attempts must have no
+// read path to the hidden test suite. This file asserts all three layers, because each
+// can be defeated on its own.
 //
 //   infrastructure  a separate R2 bucket, so there is a binding to withhold
 //   type            AttemptEnv is Omit<Env, "HOLDOUT">, so a reference will not compile
 //   source scan     only src/improve-scorer.ts may name it (this file)
 //
 // A type can be cast away, a scan can be evaded by an alias, and a shared bucket
-// would defeat both. Hence three.
+// would defeat both.
 
 const HOLDOUT_BINDING = "HOLDOUT";
 const BUCKET_NAME = "capsid-improve-holdout";
 
-// A COMMENT IS NOT A USE. Several modules explain this isolation at length, and
-// naming the binding while doing so is the opposite of the problem. Same
-// exclusion test/limits.test.ts applies to its bare-z.string() scan, and it is
-// stated here rather than assumed because a scan that counted comments would be
-// red on the day the isolation was best documented.
+// A comment is not a use: modules that document this isolation name the binding.
+// test/limits.test.ts applies the same exclusion to its bare-z.string() scan.
 const isComment = (line: string) => line.startsWith("//") || line.startsWith("*") || line.startsWith("/*");
 
 // scanner-rule: CLAUDE.md, improve loop rule: only src/improve-scorer.ts may reach the holdout
@@ -51,20 +46,17 @@ test("ONLY src/improve-scorer.ts uses the holdout binding", () => {
 
 // scanner-rule: CLAUDE.md, improve loop rule: only src/improve-scorer.ts may reach the holdout
 test("the guard is NOT VACUOUS: the scorer really does use the binding", () => {
-  // Without this the test above would pass by matching nothing the day the
-  // subsystem stopped reading the manifest at all.
+  // Without this the test above would pass by matching nothing if the scorer stopped
+  // reading the bucket.
   const scorer = sourceFile("improve-scorer.ts");
   assert.match(scorer, /env\.HOLDOUT\.get\(/, "the scorer no longer reads the holdout bucket");
 });
 
 // scanner-rule: CLAUDE.md, improve loop rule: only src/improve-scorer.ts may reach the holdout
 test("no source file hardcodes the bucket NAME either, except the scorer", () => {
-  // The binding is what is withheld, but a module that reached the bucket by name
-  // through some other path would be just as wrong, and would pass the binding
-  // scan above. improve-scorer.ts is exempt since the platform arc (2026-09-06):
-  // it already holds the binding, and the temp-access-credentials API it calls
-  // scopes by bucket NAME, which therefore has to be spelled somewhere the
-  // attempt path cannot reach.
+  // A module that reached the bucket by name would pass the binding scan above.
+  // improve-scorer.ts is exempt: it already holds the binding, and the
+  // temp-access-credentials API it calls scopes by bucket name.
   const offenders = sourceFiles()
     .filter((f) => f.name !== "improve-scorer.ts")
     .filter((f) =>
@@ -77,9 +69,8 @@ test("no source file hardcodes the bucket NAME either, except the scorer", () =>
   assert.deepEqual(offenders, [], "a source file outside the scorer hardcodes the holdout bucket name");
 });
 
-// THE ATTEMPT MODULE TAKES AttemptEnv, AND AttemptEnv OMITS THE BINDING. Checked by type,
-// by npm run check:test: if AttemptEnv regains a banned key, or an entry point takes the
-// whole Env back through the side door, one of these assignments stops compiling.
+// Checked by type, by npm run check:test: if AttemptEnv regains a banned key, or an
+// entry point takes the whole Env back, one of these assignments stops compiling.
 type Banned = "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID";
 type HasNone<K> = [Extract<K, Banned>] extends [never] ? true : false;
 const ATTEMPT_ENV_OMITS_THEM: HasNone<keyof AttemptEnv> = true;
@@ -116,13 +107,12 @@ test("the manifest key is namespaced under the holdout prefix", () => {
   assert.ok(holdoutManifestKey("foxing").startsWith(`${HOLDOUT_PREFIX}foxing/`));
 });
 
-// ---- temporary credentials (platform arc 2026-09-06) ------------------------
+// temporary credentials
 //
-// The score job no longer holds a long-lived S3 key: it asks the Worker for a
-// one-hour object-read-only credential scoped to its own namespace's prefix.
-// The mint needs two secrets, and those secrets are exactly as dangerous as the
-// binding, so the same three-layer isolation applies: AttemptEnv omits them
-// (asserted above), and this scan keeps them out of every module but the scorer.
+// The score job asks the Worker for a one-hour object-read-only credential scoped to
+// its own namespace's prefix. The mint's two secrets are as dangerous as the binding:
+// AttemptEnv omits them (asserted above), and this scan keeps them out of every module
+// but the scorer.
 
 const TEMP_CRED_SECRETS = ["R2_TEMP_CRED_TOKEN", "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID"];
 

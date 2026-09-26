@@ -15,12 +15,10 @@ import {
 } from "../src/improve-state.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
-// THE MODE SWITCH, THE PAUSE KEY, AND THE IDEMPOTENT TRANSITION.
-//
-// The improve document write (snapshot, audit row, actor, dash normalization) is
-// driven against a real D1 in test-integration/improve-doc-snapshot.test.ts.
+// The mode switch, the pause key, and the idempotent transition. The improve document
+// write is driven against a real D1 in test-integration/improve-doc-snapshot.test.ts.
 
-// ---- the mode switch --------------------------------------------------------
+// the mode switch
 
 test("every declared mode reads back as itself", async () => {
   assert.ok(IMPROVE_MODES.length > 0, "IMPROVE_MODES is empty, so this checks nothing");
@@ -41,8 +39,7 @@ test("AN UNSET KEY IS off, and says so", async () => {
 });
 
 test("AN UNRECOGNISED VALUE IS off, not a guess", async () => {
-  // A loop that starts writing to five repos because a KV read returned an
-  // unexpected string is the failure this default exists to make impossible.
+  // An unexpected KV string must never start the loop writing to repos.
   for (const value of ["on", "yes", "true", "1", "sub", "subscribe", "", "apix"]) {
     const { kv } = fakeKv({ seed: { improve_mode: value } });
     const read = await readMode(kv);
@@ -71,7 +68,7 @@ test("AN UNREADABLE KV IS off", async () => {
   assert.match(read.reason ?? "", /could not read improve_mode/);
 });
 
-// ---- the pause key ----------------------------------------------------------
+// the pause key
 
 test("a pause key is a reason, and an unreadable KV reads as paused", async () => {
   const set = fakeKv({ seed: { "improve:paused:foxing": "anchors dropped" } });
@@ -90,7 +87,7 @@ test("A PAUSE CARRIES NO TTL, so it cannot expire itself back into service", asy
   assert.equal(puts[0].ttl, undefined, "the pause key carries an expiry; a pause must be cleared by a human");
 });
 
-// ---- the best record --------------------------------------------------------
+// the best record
 
 test("a best record round-trips", async () => {
   const { kv } = fakeKv();
@@ -116,7 +113,7 @@ test("a CORRUPT best record reads as absent, not as a throw", async () => {
   }
 });
 
-// ---- transitions ------------------------------------------------------------
+// transitions
 
 const RUN = { id: "capsid-r1", namespace: "capsid", status: "attempting", attempts: 2 };
 
@@ -184,7 +181,7 @@ test("every transition stamps advanced_at, which the age guard reads", async () 
   assert.notEqual(rows.improve_runs[0].advanced_at, "2020-01-01 00:00:00");
 });
 
-// ---- reads ------------------------------------------------------------------
+// reads
 
 test("activeRun ignores finished runs", async () => {
   const { db } = fakeD1({
