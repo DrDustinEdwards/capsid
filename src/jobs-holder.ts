@@ -138,7 +138,7 @@ async function holderTransition(
     // One row per pull request the evidence named, in the same batch as the outcome.
     // Without them the outcome keeps counts with no way back to what they counted, and
     // the merge state recorded at complete time could never be corrected.
-    statements.push(...outcomePrStatements(env.DB, job.id, patch.evidence?.prs ?? []));
+    statements.push(...outcomePrStatements(env.DB, job.id, patch.evidence?.prs ?? [], verdict.pr_states, now));
     // The credit comes from the verified signal and nowhere else. The driver names
     // offered and used; signalFor reads merge state and CI as this Worker read them off
     // GitHub. An unverifiable job earns nothing in either direction.
