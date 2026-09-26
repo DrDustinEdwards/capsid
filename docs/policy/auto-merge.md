@@ -8,7 +8,13 @@ edited after signing, merges nothing.
 
 - version: 5
 - enabled: true
-- namespaces: capsid, dustinedwards
+- namespaces: dustinedwards
+
+Version 5 does not cover capsid (ruled by Dustin 2026-09-25, audit item A19). A capsid
+merge deploys the control plane itself: the Worker that holds the credentials, the job
+queue and this policy. So every capsid pull request is merged by the seat. capsid keeps
+its mapping to its own repo; only unattended merging is withdrawn. The tick walks only
+the namespaces listed above, so it never evaluates a capsid pull request.
 
 This file ships the value that is signed, so `enabled` reads `true` here because the
 policy is on. Turning it on or off is a ruling, and the document is on the ordinary
@@ -36,7 +42,7 @@ Version 5 also refuses `src/jobs.ts` (with the jobs-claim, jobs-holder, jobs-sea
 jobs-mirror and jobs-transition modules it re-exports) and `src/outcome-prs.ts`, the sources that write the records
 `pr_recorded_for_job` reads, and requires one merged typecheck step
 where version 4 required four (audit 2026-09-25, B1). The step runs the same four
-typecheck configs.
+typecheck configs. It also adds capsid's lint step to capsid's required steps.
 
 Version 4 adds dustinedwards and makes the required CI steps per namespace. The step
 list was one array of capsid's own step names, so naming a second namespace in it
@@ -159,7 +165,12 @@ because a green run nobody has written a step list for proves nothing.
 
 ## Required CI, capsid
 
+This policy does not cover capsid, so nothing here is checked today. The list stays
+because the code holds it and the two must agree, and because it is what a capsid
+pull request would need if the namespace is ever covered again.
+
 - step `.github/workflows/ci.yml / checks / Typecheck src, tests, integration tests and the copied scorer script`
+- step `.github/workflows/ci.yml / checks / Lint dead exports and doc drift`
 - step `.github/workflows/ci.yml / checks / Tests`
 - step `.github/workflows/ci.yml / checks / Integration tests`
 
@@ -180,9 +191,10 @@ there, because this repo does not hold that workflow.
 ## What a merge means
 
 A merge under this policy is also a deploy wherever the repo deploys on merge to its
-default branch. capsid does. Ruled 2026-09-16 by Dustin after the first real merge (PR
-#52) shipped to production with no human: the checks above are the whole condition, and
-the live gate's rollback is the backstop. Extending this policy to another namespace
+default branch. capsid does, which is why version 5 leaves it out. Under versions 1 to
+4, capsid pull requests merged and deployed with no human (the first was PR #52, ruled
+2026-09-16), with the checks above as the whole condition and the live gate's rollback
+as the backstop. Extending this policy to another namespace
 authorises unattended production deploys there too, and is decided one namespace at a
 time.
 

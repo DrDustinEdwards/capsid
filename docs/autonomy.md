@@ -7,8 +7,10 @@ Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13
 **Auto-merge** (`docs/policy/auto-merge.md`, read from `capsid/policy/auto-merge.md`).
 The five-minute tick walks every open pull request on the namespaces the policy names
 and merges only those that pass all eleven checks, evaluated in order, each refusing on
-its own. **A merge is a deploy on any repo that deploys on merge to its default branch,
-capsid included**, so passing these checks ships to production with no human:
+its own. **A merge is a deploy on any repo that deploys on merge to its default branch**,
+so passing these checks there ships to production with no human. That is why version 5
+names dustinedwards only: a capsid merge deploys the control plane, so capsid pull
+requests are merged by the seat (ruled 2026-09-25).
 
 | check | what it requires |
 | --- | --- |
@@ -22,7 +24,7 @@ capsid included**, so passing these checks ships to production with no human:
 | `job_handed_on` | that job is `blocked` or `done` |
 | `pr_recorded_for_job` | the job's `result_ref` or one of its `job_outcome_prs` rows names this PR |
 | `base_is_default_branch` | the PR targets the repo's default branch |
-| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the unit suite and the integration suite to success |
+| `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the lint step, the unit suite and the integration suite to success |
 
 Tests, `src/`, docs, `CLAUDE.md` and `.claude/` merge on green since policy version 2 (2026-09-17). The improve loop's `PROTECTED_PATH_PATTERNS` still decides what the loop may edit and no longer decides what auto-merges.
 
