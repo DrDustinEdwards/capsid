@@ -4,7 +4,7 @@ import { z } from "zod";
 import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from "../limits";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
-import { blockJob, claimJob, completeJob, failJob, heartbeatJob, listJobs, postJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
+import { blockJob, claimJob, completeJob, failAsCaller, heartbeatJob, listJobs, postJob, releaseJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
 import { parseEvidence } from "../job-outcomes";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -31,9 +31,9 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("jobs"),
       description:
-        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence against GitHub; the response carries the row and a note for each check that could not run. action "fail" needs a reason. action "block" needs a reason and the command the human must run. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. heartbeat, complete, fail and block act only on the claimed job this caller holds. An expired lease returns the job to queued on the five-minute tick.`,
+        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence against GitHub; the response carries the row and a note for each check that could not run. action "fail" needs a reason. action "block" needs a reason and the command the human must run. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. action "release" returns a claimed job held by another credential to the queue; it needs reason, is for the admin or a can_merge caller, and writes no job_outcomes row. heartbeat, complete and block act only on the claimed job this caller holds. fail does too, except for the admin or a can_merge caller, which may fail a job somebody else holds; that writes the holder's job_outcomes row. An expired lease returns the job to queued on the five-minute tick.`,
       inputSchema: {
-        action: z.enum(JOB_ACTIONS).describe("post | list | claim | heartbeat | complete | fail | block | resume | supersede."),
+        action: z.enum(JOB_ACTIONS).describe("post | list | claim | heartbeat | complete | fail | block | resume | supersede | release."),
         namespace: nsName.optional().describe('For post, the namespace the work belongs to. For list and claim, the namespace to filter or pick from.'),
         title: bounded(MAX_TITLE).optional().describe('For post: the title. One open job per (namespace, title).'),
         body: bounded(MAX_BODY).optional().describe('For post: the full prompt the driver executes. Signed on the way in.'),
@@ -58,10 +58,10 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             "For post: the minimum merged pull requests on the claiming agent's record. The claim refuses an agent below it and leaves the job queued."
           ),
         status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
-        id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for heartbeat, complete, fail, block, resume and supersede. For list, narrows to that job, with its body for a caller holding write.'),
+        id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for heartbeat, complete, fail, block, resume, supersede and release. For list, narrows to that job, with its body for a caller holding write.'),
         result_summary: bounded(MAX_TITLE).optional().describe('For complete: what happened, in one sentence.'),
         result_ref: resultRef.optional().describe('For complete: where the work landed, a document key or a PR URL.'),
-        reason: bounded(MAX_TITLE).optional().describe('For fail and block: why. For resume: what was approved, in one line; recorded in the audit row and returned as resume_note. For supersede: why the job was replaced or withdrawn.'),
+        reason: bounded(MAX_TITLE).optional().describe('For fail and block: why. For resume: what was approved, in one line; recorded in the audit row and returned as resume_note. For supersede: why the job was replaced or withdrawn. For release: why the holder is not coming back.'),
         note: bounded(MAX_RESUME_NOTE)
           .optional()
           .describe(
@@ -180,7 +180,11 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           }
           case "fail": {
             if (!args.id) return fail("fail needs the job id.");
-            return reply(await failJob(env, agent, now, args.id, args.reason ?? "", args.skills));
+            return reply(await failAsCaller(env, agent, now, args.id, args.reason ?? "", args.skills));
+          }
+          case "release": {
+            if (!args.id) return fail("release needs the job id.");
+            return reply(await releaseJob(env, agent, now, args.id, args.reason ?? ""));
           }
           case "block": {
             if (!args.id) return fail("block needs the job id.");
