@@ -5,23 +5,19 @@ import { test } from "node:test";
 import {
   AUTO_MERGE_POLICY_PATH,
   AUTO_MERGE_REFUSED_PATHS,
-  AWAITING_SEAT_KEY,
   AUTO_MERGE_REQUIRED_CI,
-  FILES_LIMIT,
   POLICY_CHECKS,
   ciVerdict,
-  declineParams,
   evaluatePolicy,
   jobIdFromBody,
   loadMergePolicy,
-  mergeParams,
   parseMergePolicy,
-  autoMergeTick,
   namespacedCiLabels,
   requiredCiFor,
   requiredCiLabel,
   type PrFacts,
-} from "../src/auto-merge.ts";
+} from "../src/auto-merge-policy.ts";
+import { AWAITING_SEAT_KEY, FILES_LIMIT, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
@@ -280,6 +276,17 @@ test("paths_not_refused: every path the ruling names refuses on its own", () => 
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", `${path}`);
     assert.match(verdict.merge === false ? verdict.why : "", new RegExp(path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")));
   }
+});
+
+test("paths_not_refused: the two auto-merge modules refuse like the file they were split from", () => {
+  const modules = ["src/auto-merge-policy.ts", "src/auto-merge-tick.ts"];
+  for (const path of modules) {
+    assert.ok(existsSync(join(import.meta.dirname, "..", path)), `${path} does not exist; the refused pattern names a module that is gone`);
+    const verdict = evaluate(greenPr({ changedPaths: ["docs/schema.md", path] }));
+    assert.equal(verdict.merge, false, `${path} merged`);
+    assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
+  }
+  assert.equal(modules.length, 2);
 });
 
 test("paths_not_refused: every pattern in the list matches at least one path above or below", () => {
