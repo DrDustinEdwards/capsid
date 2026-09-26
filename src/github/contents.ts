@@ -74,33 +74,23 @@ const SEARCH_EXCLUDE_EXTS = new Set([
 const SEARCH_BLOB_LIMIT = 200 * 1024; // skip blobs over 200KB
 const SEARCH_TREE_LIMIT = 5000; // refuse to scan a tree bigger than this whole
 
-export async function searchCode(
-  env: Env,
-  namespace: string | undefined,
-  query: string,
-  opts: { pathPrefix?: string; ref?: string; repoSelector?: string; maxResults?: number; maxFiles?: number; start?: number } = {}
-) {
-  if (!namespace) {
-    throw new Error("search_code needs a namespace: it walks one repo's tree. Pass namespace (and optional repo).");
-  }
-  const { owner, repo, full } = await resolveRepo(env, namespace, opts.repoSelector);
-  const ref = opts.ref || (await getDefaultBranch(env, owner, repo));
-  // Capped server-side, the same shape ci_status uses for its limit. Each scanned
-  // file costs one blob fetch against the App installation's hourly quota, which every
-  // later repo call shares. The tree-size refusal does not cover this: the cost is per
-  // file fetched, not per candidate listed. Over the cap it clamps rather than
-  // refusing, because the result reports truncation and carries a next_start.
-  const maxResults = Math.min(opts.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP);
-  const maxFiles = Math.min(opts.maxFiles && opts.maxFiles > 0 ? opts.maxFiles : DEFAULT_SCAN_FILES, MAX_SCAN_CAP);
-  const start = opts.start && opts.start > 0 ? Math.floor(opts.start) : 0;
-  const pathPrefix = (opts.pathPrefix ?? "").replace(/^\/+/, "");
+type TreeEntry = { path: string; type: string; sha: string; size?: number };
 
+// The files a search reads: every blob under pathPrefix in the tree at ref, minus the
+// excluded directories, files and extensions and anything over the blob limit.
+async function searchCandidates(
+  env: Env,
+  target: { owner: string; repo: string; full: string },
+  ref: string,
+  pathPrefix: string
+): Promise<TreeEntry[]> {
+  const { owner, repo, full } = target;
   // GitHub resolves a branch, tag, or sha for the tree sha here. recursive=1
   // returns the whole tree in one call.
   const treeResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
   if (!treeResp.ok) throw new Error(`search_code tree fetch failed (${treeResp.status}): ${await treeResp.text()}`);
   const tree = (await treeResp.json()) as {
-    tree: Array<{ path: string; type: string; sha: string; size?: number }>;
+    tree: TreeEntry[];
     truncated: boolean;
   };
   if (tree.truncated || tree.tree.length > SEARCH_TREE_LIMIT) {
@@ -109,7 +99,7 @@ export async function searchCode(
     );
   }
 
-  const candidates = tree.tree.filter((e) => {
+  return tree.tree.filter((e) => {
     if (e.type !== "blob") return false;
     if (pathPrefix && !e.path.startsWith(pathPrefix)) return false;
     if (SEARCH_EXCLUDE_DIRS.some((d) => e.path.startsWith(d) || e.path.includes(`/${d}`))) return false;
@@ -120,11 +110,32 @@ export async function searchCode(
     if (typeof e.size === "number" && e.size > SEARCH_BLOB_LIMIT) return false;
     return true;
   });
+}
 
-  const needle = query.toLowerCase();
-  const items: Array<{ path: string; line: number; text: string }> = [];
+interface BlobScan {
+  items: Array<{ path: string; line: number; text: string }>;
   // Blobs that returned a survivable error. Reported so a zero-result scan cannot
   // pass for one that read everything it counted.
+  unreadable: string[];
+  filesScanned: number;
+  // The index of the first candidate not searched.
+  index: number;
+  stoppedAtFileCap: boolean;
+}
+
+// Reads candidates from `start`, one blob at a time, until the file cap or the result
+// cap is reached, and collects the matching lines.
+async function scanBlobs(
+  env: Env,
+  target: { owner: string; repo: string },
+  candidates: TreeEntry[],
+  query: string,
+  limits: { start: number; maxFiles: number; maxResults: number }
+): Promise<BlobScan> {
+  const { owner, repo } = target;
+  const { start, maxFiles, maxResults } = limits;
+  const needle = query.toLowerCase();
+  const items: BlobScan["items"] = [];
   const unreadable: string[] = [];
   let filesScanned = 0;
   let index = start;
@@ -181,6 +192,36 @@ export async function searchCode(
       break;
     }
   }
+  return { items, unreadable, filesScanned, index, stoppedAtFileCap };
+}
+
+export async function searchCode(
+  env: Env,
+  namespace: string | undefined,
+  query: string,
+  opts: { pathPrefix?: string; ref?: string; repoSelector?: string; maxResults?: number; maxFiles?: number; start?: number } = {}
+) {
+  if (!namespace) {
+    throw new Error("search_code needs a namespace: it walks one repo's tree. Pass namespace (and optional repo).");
+  }
+  const target = await resolveRepo(env, namespace, opts.repoSelector);
+  const ref = opts.ref || (await getDefaultBranch(env, target.owner, target.repo));
+  // Capped server-side, the same shape ci_status uses for its limit. Each scanned
+  // file costs one blob fetch against the App installation's hourly quota, which every
+  // later repo call shares. The tree-size refusal does not cover this: the cost is per
+  // file fetched, not per candidate listed. Over the cap it clamps rather than
+  // refusing, because the result reports truncation and carries a next_start.
+  const maxResults = Math.min(opts.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP);
+  const maxFiles = Math.min(opts.maxFiles && opts.maxFiles > 0 ? opts.maxFiles : DEFAULT_SCAN_FILES, MAX_SCAN_CAP);
+  const start = opts.start && opts.start > 0 ? Math.floor(opts.start) : 0;
+  const pathPrefix = (opts.pathPrefix ?? "").replace(/^\/+/, "");
+
+  const candidates = await searchCandidates(env, target, ref, pathPrefix);
+  const { items, unreadable, filesScanned, index, stoppedAtFileCap } = await scanBlobs(env, target, candidates, query, {
+    start,
+    maxFiles,
+    maxResults,
+  });
 
   const remaining = candidates.length - index;
   const result: {
@@ -198,7 +239,7 @@ export async function searchCode(
     unreadable_sample?: string[];
     items: typeof items;
   } = {
-    repo: full,
+    repo: target.full,
     ref,
     query,
     candidates: candidates.length,
