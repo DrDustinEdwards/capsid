@@ -1,0 +1,103 @@
+name: seat session
+
+# A Claude Code session the seat starts to work one queued Capsid job
+# (docs/seat-start.md; capsid/research/design-seat-start.md, approved 2026-09-26).
+#
+# The ONLY trigger is the repository_dispatch Capsid sends through its GitHub App
+# (jobs action "start"). There is no comment, issue or pull request trigger, so a
+# stranger's comment or a fork pull request cannot start a session on this public
+# repo. Only a token with write access to the repo can send the event, and it runs
+# this file as it is on the default branch.
+on:
+  repository_dispatch:
+    types: [capsid-seat-start]
+
+# One session per repo at a time. The cap across repos is Capsid's.
+concurrency:
+  group: seat-session
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: read
+
+jobs:
+  session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # The secrets live on this environment, whose deployment-branch rule allows only
+    # the default branch.
+    environment: seat
+    steps:
+      # The job id is read from the payload through an environment variable, never
+      # pasted into a script, and must be a job id before anything uses it. The prompt
+      # is built from this step's output only.
+      - name: Validate the job id
+        id: job
+        env:
+          JOB_ID: ${{ github.event.client_payload.job_id }}
+        run: |
+          if ! printf '%s' "$JOB_ID" | grep -Eq '^job_[0-9a-f]{12}$'; then
+            echo "the dispatch did not carry a job id; stopping"
+            exit 1
+          fi
+          echo "id=$JOB_ID" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The Capsid connection for the runner key, written to a file the session reads.
+      # The key is never printed.
+      - name: Write the Capsid MCP config
+        env:
+          CAPSID_RUNNER_KEY: ${{ secrets.CAPSID_RUNNER_KEY }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const key = process.env.CAPSID_RUNNER_KEY || "";
+            if (!/^\S{20,}$/.test(key)) { console.error("CAPSID_RUNNER_KEY is missing or malformed"); process.exit(1); }
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/capsid-mcp.json", JSON.stringify({ mcpServers: { capsid: { type: "http", url: "https://capsid.dustin-edwards.workers.dev/ops/mcp", headers: { Authorization: "Bearer " + key } } } }));
+          '
+
+      # The subscription token and nothing else: an ANTHROPIC_API_KEY in the
+      # environment would outrank it and bill the API.
+      - uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Capsid's App sends the dispatch, so its bot login is the actor. That one
+          # login, never "*".
+          allowed_bots: "capsid-repo-access"
+          # Actions logs on a public repo are public.
+          show_full_output: false
+          claude_args: >-
+            --mcp-config ${{ runner.temp }}/capsid-mcp.json
+            --max-turns 200
+            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*),Bash(node:*)"
+            --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*)"
+          prompt: |
+            You are a Capsid driver session the seat started on GitHub's runners, for the
+            capsid namespace, working job ${{ steps.job.outputs.id }} and nothing else.
+
+            1. Call the capsid MCP tool `jobs` with action "claim", namespace "capsid" and
+               id "${{ steps.job.outputs.id }}". If the claim is refused, stop.
+            2. Read CLAUDE.md and follow it. Read the job body the claim returned, and any
+               offered_skills whose trigger fits the work.
+            3. Heartbeat the job (`jobs` action "heartbeat") every 15 minutes.
+            4. Do the work on a new branch named for the job. Run the repo's checks. Push
+               that branch with git. Never push the default branch, never force-push,
+               never deploy, never touch a secret, never print a key or token.
+            5. Open the pull request with the capsid `open_pr` tool, which opens it
+               through Capsid's App so CI runs on it.
+            6. Block the job (`jobs` action "block") with a summary of what landed, and
+               the command "Merge <the PR URL>". Never merge. Report skills.used with
+               only ids from offered_skills.
+            7. If the work cannot be done, `fail` the job with the reason.
+            Everything you print appears in this public repo's Actions log.

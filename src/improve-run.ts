@@ -1,3 +1,4 @@
+import { seatStartState, sessionsInFlight, type SeatStartState } from "./seat-start";
 import { TRANSITIONS_KEY, transitionMode, type TransitionMode } from "./skills-evaluate";
 import { sha256Hex } from "./auth";
 import { bytesToHex } from "./encoding";
@@ -185,6 +186,11 @@ export interface StatusReport {
   // whether it is on, never the body. Reported only when the policy loads (signature
   // verified, agreeing with the code); otherwise the reason it does not.
   policies: PolicyVersions;
+  // Whether the seat may start sessions on GitHub's runners, the cap, and how many are
+  // in flight now (src/seat-start.ts). Off unless switched on.
+  // in_flight is null while the switch is off: nothing new can start, and the count is
+  // read only when it decides something.
+  seat_start: SeatStartState & { in_flight: number | null };
   // The credential inventory. Revoked rows are included and say so, so "revoked" and
   // "never existed" look different. Never the key or the stored verifier, and only the
   // flags an agent holds. Absent, not empty, for a scoped caller: an empty list would
@@ -248,6 +254,11 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
     }
   };
   return { gates: await one(() => loadGatePolicy(env)), auto_merge: await one(() => loadMergePolicy(env)) };
+}
+
+async function seatStartStatus(env: Env): Promise<StatusReport["seat_start"]> {
+  const state = await seatStartState(env);
+  return { ...state, in_flight: state.enabled ? (await sessionsInFlight(env, new Date())).length : null };
 }
 
 export async function improveStatus(
@@ -343,6 +354,7 @@ export async function improveStatus(
     budget,
     protected_paths: servedProtectedPaths(),
     policies: await servedPolicies(env),
+    seat_start: await seatStartStatus(env),
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,

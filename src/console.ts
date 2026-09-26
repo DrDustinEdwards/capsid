@@ -171,6 +171,13 @@ function headerFacts(data: ConsoleData): string {
     backupFact(health),
     fact("improve mode", improve.mode, improve.mode === "off" ? "warn" : "good"),
     fact(
+      "seat-started sessions",
+      improve.seat_start.enabled
+        ? `on, cap ${improve.seat_start.max_sessions}, ${improve.seat_start.in_flight ?? 0} in flight`
+        : "off",
+      improve.seat_start.enabled ? "warn" : ""
+    ),
+    fact(
       "budget: ci minutes",
       `${b.spend.ci_minutes} of ${b.caps.actions_minutes_month}`,
       b.exceeded ? "bad" : ""
@@ -328,7 +335,11 @@ function reasonField(placeholder: string): string {
 
 function modeForms(data: ConsoleData, csrf: string): string {
   const modes = ["off", "subscription", "api"].filter((m) => m !== data.improve.mode);
-  return `<div class="acts">${modes.map((m) => form(csrf, "mode", { value: m }, `Set mode: ${m}`)).join("")}</div>`;
+  // The seat-start switch sits beside the mode: both decide what runs unattended.
+  const seat = data.improve.seat_start.enabled
+    ? form(csrf, "seat_start", { value: "off" }, "Seat-started sessions: turn off")
+    : form(csrf, "seat_start", { value: "on" }, "Seat-started sessions: turn on");
+  return `<div class="acts">${modes.map((m) => form(csrf, "mode", { value: m }, `Set mode: ${m}`)).join("")}${seat}</div>`;
 }
 
 // A dash when there is no denominator.

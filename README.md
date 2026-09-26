@@ -31,6 +31,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 - [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, and the two gated endpoints
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
+- [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, and its guards
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records
 - [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes, the nightly driver and the watcher
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts

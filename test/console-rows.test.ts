@@ -73,6 +73,7 @@ function data(namespaces: NamespaceStatus[], agents: AgentReputation[] = []): Co
       },
       protected_paths: [],
       policies: { gates: { version: "1", enabled: true }, auto_merge: { version: "3", enabled: true } },
+      seat_start: { enabled: false, max_sessions: 1, in_flight: null },
       agents,
       namespaces,
     },
@@ -320,4 +321,15 @@ test("the no-skills paragraph uses a class the stylesheet defines", () => {
   assert.ok(paragraph, "the no-skills paragraph is missing");
   const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] ?? "";
   assert.ok(style.includes(`.${paragraph[1]} {`), `class ${paragraph[1]} has no rule in the page's stylesheet`);
+});
+
+test("the header shows the seat-start switch, and the control flips it", () => {
+  const off = renderConsole(data([namespaceStatus()]));
+  assert.match(off, /seat-started sessions/);
+  assert.match(off, /name="action" value="seat_start"/);
+  assert.match(off, /Seat-started sessions: turn on/);
+  const base = data([namespaceStatus()]);
+  const on = renderConsole({ ...base, improve: { ...base.improve, seat_start: { enabled: true, max_sessions: 2, in_flight: 1 } } });
+  assert.match(on, /on, cap 2, 1 in flight/);
+  assert.match(on, /Seat-started sessions: turn off/);
 });

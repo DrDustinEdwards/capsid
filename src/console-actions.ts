@@ -7,6 +7,7 @@ import { escapeHtml } from "./html";
 import type { Env } from "./env";
 import { improveControl } from "./improve-run";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
+import { setSeatStart } from "./seat-start";
 import { readBoundedText } from "./improve-scorer";
 import { auditStatement } from "./store-guards";
 
@@ -20,7 +21,7 @@ import { auditStatement } from "./store-guards";
 // The confirm is a second request: the first POST renders what will happen and
 // changes nothing; the second, with the same CSRF, performs it.
 
-const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
+const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "seat_start", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 
 function isConsoleAction(value: string): value is ConsoleAction {
@@ -50,6 +51,10 @@ function describe(action: ConsoleAction, form: URLSearchParams): string {
       return `Unpause ${ns}. The loop will open a run for it on the next opener.`;
     case "mode":
       return `Set the improve mode to ${form.get("value") ?? ""} for every namespace.`;
+    case "seat_start":
+      return form.get("value") === "on"
+        ? "Turn seat-started sessions ON. The seat may then start Claude Code sessions on GitHub's runners for queued capsid and dustinedwards jobs, billed to your subscription, up to the cap. Confirm on the Anthropic billing page after the first run that nothing was billed as API usage."
+        : "Turn seat-started sessions OFF. No new session starts; one already running finishes.";
     case "resume_job":
       return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
@@ -159,6 +164,14 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         const value = required(form, "value");
         if (!value) return textResponse("mode needs a value.", 400);
         const result = await improveControl(env, "mode", { value });
+        committed = true;
+        await auditClick(env, actor, action, null, result);
+        break;
+      }
+      case "seat_start": {
+        const value = required(form, "value");
+        if (!value) return textResponse("seat_start needs a value.", 400);
+        const result = await setSeatStart(env, actor, { value });
         committed = true;
         await auditClick(env, actor, action, null, result);
         break;
