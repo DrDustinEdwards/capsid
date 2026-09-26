@@ -309,6 +309,14 @@ export async function supersedeJob(
 // it: a blocked row keeps claimed_by. A seat that took the lease would hold a job it
 // has no shell to finish. `take` is the explicit way for a resumer to acquire the job
 // instead, and it runs every check a claim runs.
+//
+// Unless that credential cannot take it back. A driver already holding another claim
+// would make the approval wait on that job, one answer at a time. A credential that is
+// not a minted agent (the admin identity every chat tab connects as, or a legacy
+// operator key) names no particular session, so a lease given to it is worked by
+// nobody until the sweep. In both cases the job goes back to the queue with its
+// approval, and whichever session claims it next gets the resume note. The job's flags
+// and record bar are asked at that claim, as for any queued job.
 export interface ResumeOptions {
   // The pre-approved gate. When set, this resume is approved on the signed gate policy
   // rather than on a human having said yes, and the value is the policy version the
@@ -332,6 +340,11 @@ export interface ResumeOptions {
 // stays the seat's to approve. The classes and the never list are the policy's own;
 // this only narrows which of them a driver may use.
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
+
+// A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
+// identity (`github:<login>`) and a legacy operator key (`opkey:<fingerprint>`) are
+// shared by whatever sessions connect with them.
+const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
 /** The head commit of the job's own pull request, and the mapped repo it is on.
  *  The pull request is the one the job records: its result_ref, or its job_outcome_prs
@@ -404,18 +417,22 @@ export async function resumeJob(
   // The claimant the lease goes to. A blocked row with no claimant (none should
   // exist, since block keys on claimed_by) goes to the caller.
   const holder = take || !current.claimed_by ? actor : current.claimed_by;
-  const acquiring = holder === actor;
 
   // The same one-claim-per-caller rule the claim path runs on, asked of whoever ends
-  // up holding the lease: a driver holding two has abandoned one.
+  // up holding the lease: a driver holding two has abandoned one. Without take, a
+  // holder that cannot take the job back sends it to the queue instead.
   const held = await heldClaim(env.DB, holder);
-  if (held) {
-    return refuse(
-      "resume",
-      `${holder} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. ` +
-        (acquiring ? "Finish it before resuming another." : `${id} stays blocked until that driver is free, or resume it with take.`)
-    );
+  const toQueue: string | null = take
+    ? null
+    : held
+      ? `${holder} holds ${held.id} ('${held.title}' in ${held.namespace}), so ${id} went back to the queue for the next free session.`
+      : !isMintedActor(holder)
+        ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
+        : null;
+  if (held && !toQueue) {
+    return refuse("resume", `${holder} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. Finish it before resuming another.`);
   }
+  const acquiring = !toQueue && holder === actor;
 
   // A resume is a claim when the caller acquires the job, so it asks the same scope
   // question a claim asks: a driver that could not have claimed this job must not
@@ -529,7 +546,7 @@ export async function resumeJob(
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
 
-  const expires = leaseUntil(now);
+  const expires = toQueue ? null : leaseUntil(now);
   // Only a correction spends the budget, and never an admin's. The 0 or 1 is bound
   // rather than interpolated for the same reason bumpBlocked is: the statement stays
   // one static string that the source guards can read and the query-plan test can
@@ -541,8 +558,8 @@ export async function resumeJob(
   const spend = correction && !agent.admin ? 1 : 0;
   const job: JobRow = {
     ...current,
-    status: "claimed",
-    claimed_by: holder,
+    status: toQueue ? "queued" : "claimed",
+    claimed_by: toQueue ? null : holder,
     lease_expires: expires,
     resumed_count: current.resumed_count + 1,
     corrections_count: current.corrections_count + spend,
@@ -556,17 +573,21 @@ export async function resumeJob(
     ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
     ...(spend ? { correction: true as const } : {}),
   };
+  // One static statement for both returns, so the source guards and the query-plan
+  // test read one shape: ?6 is 'claimed' or 'queued', and ?2 and ?4 are NULL for the
+  // queue.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, lease_expires = ?4,
+      `UPDATE jobs SET status = ?6, claimed_by = ?2, lease_expires = ?4,
          resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
        WHERE id = ?1 AND status = 'blocked' RETURNING id`
-    ).bind(id, holder, now.toISOString(), expires, spend),
+    ).bind(id, job.claimed_by, now.toISOString(), expires, spend, job.status),
     ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
     jobAudit(env.DB, actor, "job-resumed", job, {
       approved: reason,
       ...(fullNote ? { note: fullNote } : {}),
-      held_by: holder,
+      held_by: job.claimed_by,
+      ...(toQueue ? { returned_to: "queued", previous_holder: holder } : {}),
       ...(take ? { taken: true } : {}),
       ...(spend ? { correction: true } : {}),
       lease_expires: expires,
@@ -584,5 +605,5 @@ export async function resumeJob(
   if (!won) {
     return refuse("resume", `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`);
   }
-  return { ok: true, action: "resume", job, resume_note: resumeNote };
+  return { ok: true, action: "resume", job, resume_note: resumeNote, ...(toQueue ? { note: toQueue } : {}) };
 }
