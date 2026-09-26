@@ -129,10 +129,14 @@ export interface RequiredStep {
 const ciStep = (job: string) => (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
 
 export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
-  // One typecheck step runs all four configs.
-  capsid: ["Typecheck src, tests, integration tests and the copied scorer script", "Tests", "Integration tests"].map(
-    ciStep("checks")
-  ),
+  // One typecheck step runs all four configs. Version 5 of the policy does not cover
+  // capsid, so this list is held for the load-time agreement check only.
+  capsid: [
+    "Typecheck src, tests, integration tests and the copied scorer script",
+    "Lint dead exports and doc drift",
+    "Tests",
+    "Integration tests",
+  ].map(ciStep("checks")),
   // Every step of dustinedwards-info's one job. Install and the build step are named
   // alongside the three that judge, so a reordered workflow that drops one refuses
   // rather than merging on a run that skipped it.

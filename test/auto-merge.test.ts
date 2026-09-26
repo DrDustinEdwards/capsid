@@ -202,7 +202,7 @@ test("ci_green: the capsid run must show the one merged typecheck step, not the 
   const merged = "Typecheck src, tests, integration tests and the copied scorer script";
   assert.deepEqual(
     CAPSID_CI.map((r) => r.step),
-    [merged, "Tests", "Integration tests"]
+    [merged, "Lint dead exports and doc drift", "Tests", "Integration tests"]
   );
   // A run carrying the four old step names and not the merged one did not run the
   // required step.
@@ -678,6 +678,8 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
   assert.deepEqual(parsed.policy.requiredCi, namespacedCiLabels());
   assert.equal(parsed.policy.enabled, true);
+  // capsid PRs are merged by the seat: a capsid merge deploys the control plane (A19).
+  assert.deepEqual(parsed.policy.namespaces, ["dustinedwards"]);
   // The two allowed logins, exactly as GitHub reports them, and no others.
   assert.deepEqual(parsed.policy.authors, ["DrDustinEdwards", "capsid-repo-access[bot]"]);
 });
