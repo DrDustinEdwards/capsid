@@ -14,6 +14,7 @@ import { reviewGate, type GateOutcome } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { attributionStatements } from "./skills-records";
+import { skillsForOutcome } from "./job-skill-offers";
 import {
   outcomeFrom,
   outcomeStatement,
@@ -339,14 +340,13 @@ async function unknownSkills(db: D1Database, skills: JobSkills | undefined): Pro
   return `no skill exists with id ${missing.join(", ")}. A named skill that does not exist is refused rather than dropped, because dropping it would record this run as having been offered nothing.`;
 }
 
-// Used must be a subset of offered. A skill used but never offered did not come from
-// the recommend step, so crediting it would measure something this loop did not do.
-function usedNotOffered(skills: JobSkills | undefined): string | null {
-  const offered = new Set(skills?.offered ?? []);
-  const stray = [...new Set(skills?.used ?? [])].filter((id) => !offered.has(id));
-  return stray.length === 0
-    ? null
-    : `${stray.join(", ")} named as used but not as offered. A skill this run did not receive from the recommend step cannot be credited to it.`;
+// The offered list is the Worker's record from the claim, not the driver's word, and
+// used must be within it (./job-skill-offers). A job this caller does not hold is left
+// to holderTransition to refuse, with no skills to credit.
+async function creditedSkills(env: Env, id: string, reported: JobSkills | undefined): Promise<{ skills: JobSkills } | { refusal: string }> {
+  const job = await readJob(env.DB, id);
+  if (!job) return { skills: reported ?? {} };
+  return skillsForOutcome(env.DB, job, reported);
 }
 
 export async function completeJob(
@@ -372,17 +372,17 @@ export async function completeJob(
     candidateRefs: args.evidence?.prs,
   });
   if (review) return review;
-  const stray = usedNotOffered(args.skills);
-  if (stray) return refuse("complete", stray);
   const unknown = await unknownSkills(env.DB, args.skills);
   if (unknown) return refuse("complete", unknown);
+  const credited = await creditedSkills(env, id, args.skills);
+  if ("refusal" in credited) return refuse("complete", credited.refusal);
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
     result_summary: args.result_summary,
     result_ref: args.result_ref ?? null,
     lease_expires: null,
     evidence: args.evidence,
-    skills: args.skills,
+    skills: credited.skills,
   });
 }
 
@@ -393,11 +393,11 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   // The review gate (see reviewRefusal), without demanding a pull request.
   const review = await reviewRefusal(env, agent, now, "fail", id, null);
   if (review) return review;
-  const strayOnFail = usedNotOffered(skills);
-  if (strayOnFail) return refuse("fail", strayOnFail);
   const unknownOnFail = await unknownSkills(env.DB, skills);
   if (unknownOnFail) return refuse("fail", unknownOnFail);
-  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills });
+  const creditedOnFail = await creditedSkills(env, id, skills);
+  if ("refusal" in creditedOnFail) return refuse("fail", creditedOnFail.refusal);
+  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills: creditedOnFail.skills });
 }
 
 // A blocked job carries the exact command. A job that hit a gate is not a failure; it
