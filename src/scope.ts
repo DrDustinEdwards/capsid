@@ -188,6 +188,25 @@ export interface ScopeNeed {
   // Flags whose absence refuses the call. Every one is checked, and the refusal
   // names the FIRST missing one.
   flags?: readonly ScopeFlag[];
+  // The job id a jobs call names, for a caller bound to one job (boundJobRefusal).
+  jobId?: string;
+}
+
+// What a key bound to one job may do with the queue. The work actions need that job's
+// id; list may read the queue but not name another job; everything else, including an
+// action added later, is refused, so a new action is closed to a runner until listed.
+const BOUND_WORK_ACTIONS: readonly string[] = ["claim", "heartbeat", "complete", "fail", "block", "resume"];
+
+// capsid/research/design-seat-session-hardening.md, section 2b. A runner that could
+// claim a second job would be choosing its own work, and one that could post or start
+// could hand itself more.
+function boundJobRefusal(agent: Agent, action: string, jobId: string | undefined): string | null {
+  const job = agent.job as string;
+  const refusal = `unauthorized: ${agent.actor} is bound to job ${job} and may work that job only`;
+  if (action === "list") return jobId === undefined || jobId === job ? null : `${refusal}; it cannot list ${jobId}.`;
+  if (!BOUND_WORK_ACTIONS.includes(action)) return `${refusal}; it cannot ${action}.`;
+  if (jobId !== job) return `${refusal}; this call names ${jobId ?? "no job"}.`;
+  return null;
 }
 
 // Why a flag is needed, so a refusal tells the caller what to ask for.
@@ -211,6 +230,12 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     // 'jobs' after being minted with jobs in its list would look for the wrong bug.
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
+  }
+  // Only the registrar names the jobs action, and it runs before every handler, so
+  // this binds every jobs call. A handler's own namespace re-check names none.
+  if (agent.job && need.tool === "jobs" && need.action !== undefined) {
+    const bound = boundJobRefusal(agent, need.action, need.jobId);
+    if (bound) return bound;
   }
   if (need.grant && !scopes.grants.includes(need.grant)) {
     return (
@@ -356,6 +381,7 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
         namespace,
         repo,
         action,
+        jobId: name === "jobs" && typeof args.id === "string" ? args.id : undefined,
         // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
         // handler, where the namespace is known, so the registrar names no grant.
         ...needFor(requiredForAction(name, action)),
