@@ -257,17 +257,8 @@ test("a skill id that does not exist is REFUSED, not dropped", async () => {
   assert.equal(wrote, false, "a refused complete still wrote an outcome row");
 });
 
-test("a skill named as USED but not OFFERED is refused", async () => {
-  // It did not come from the recommend step, so crediting it would measure something
-  // this loop did not do.
-  const d1 = fakeD1({ improveSkills: [{ id: "sk-a", status: "candidate", version: 1, source_namespace: "foxhound" }] });
-  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
-    result_summary: "done",
-    skills: { offered: [], used: ["sk-a"] },
-  });
-  assert.equal(out.ok, false, "a used-but-not-offered skill was accepted");
-  assert.match(out.refusal ?? "", /not as offered/);
-});
+// A skill named as used but not offered is refused against the offer the Worker
+// recorded at claim, which lives in audit_log: test-integration/job-skill-offers.test.ts.
 
 // Naming no skills at all is not a refusal: test-integration/jobs.test.ts drives that
 // case to a completed row.

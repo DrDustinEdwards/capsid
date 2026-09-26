@@ -17,6 +17,7 @@ import {
 } from "./jobs-schema";
 import { signTaskBody, verifySignedBody } from "./improve-task";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
+import { offerForClaim } from "./job-skill-offers";
 import {
   actorShapeRefusal,
   guardedTransition,
@@ -354,6 +355,9 @@ export async function claimJob(
     lease_expires: expires,
     updated_at: now.toISOString(),
   };
+  // The skills this job is offered: decided at its first claim and recorded in the
+  // same batch, or read back from that record on a later claim.
+  const offer = await offerForClaim(env, claimed, actor);
   // One batch with its records, behind the guard. Two drivers reading the same
   // candidate still resolve to one winner, because the first commit moves updated_at
   // and the second batch's guard aborts before its UPDATE runs.
@@ -364,6 +368,7 @@ export async function claimJob(
     ).bind(candidate.id, actor, now.toISOString(), expires),
     ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),
     jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
+    ...(offer.record ? [offer.record] : []),
   ]);
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
@@ -371,5 +376,5 @@ export async function claimJob(
   // A job that went back to the queue after a resume (an expired lease) reaches its
   // next driver here, so the approval has to come with it.
   const claimNote = await latestResumeNote(env.DB, claimed);
-  return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}) };
+  return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}), offered_skills: offer.skills };
 }
