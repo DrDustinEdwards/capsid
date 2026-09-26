@@ -29,6 +29,14 @@ jobs:
     # The secrets live on this environment, whose deployment-branch rule allows only
     # the default branch.
     environment: seat
+    # capsid/research/design-seat-session-hardening.md, PR 1. The scrub strips
+    # credentials from the environment of Bash and its children; without it the Action
+    # hands its whole environment down. Git reads no global or system config, so the
+    # only config it reads is the repo's, which the session may not edit.
+    env:
+      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_NOSYSTEM: "1"
     steps:
       # The job id is read from the payload through an environment variable, never
       # pasted into a script, and must be a job id before anything uses it. The prompt
@@ -54,6 +62,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Git runs no hook and no fsmonitor from this checkout, whatever the session writes.
+      - name: Pin the repo's git config
+        run: |
+          git config core.hooksPath /dev/null
+          git config core.fsmonitor false
+
       # The Capsid connection for the runner key, written to a file the session reads.
       # The key is never printed.
       - name: Write the Capsid MCP config
@@ -72,16 +86,44 @@ jobs:
       - uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's own token. Without it the Action exchanges an OIDC token for a
+          # GitHub App token, which this job has no permission to request.
+          github_token: ${{ github.token }}
           # Capsid's App sends the dispatch, so its bot login is the actor. That one
           # login, never "*".
           allowed_bots: "capsid-repo-access"
           # Actions logs on a public repo are public.
           show_full_output: false
+          # User scope, where the sandbox credential keys are honoured. The Read and
+          # Edit denies bind the file tools, which run outside any sandbox. The
+          # envVars list takes effect once the sandbox is enabled (PR 4).
+          settings: |
+            {
+              "permissions": {
+                "deny": [
+                  "Read(//proc/**)",
+                  "Read(/${{ runner.temp }}/**)",
+                  "Edit(**/.git/**)",
+                  "Edit(~/.gitconfig)",
+                  "Edit(~/.config/git/**)"
+                ]
+              },
+              "sandbox": {
+                "credentials": {
+                  "envVars": [
+                    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny" },
+                    { "name": "GITHUB_TOKEN", "mode": "deny" },
+                    { "name": "GH_TOKEN", "mode": "deny" },
+                    { "name": "DEFAULT_WORKFLOW_TOKEN", "mode": "deny" }
+                  ]
+                }
+              }
+            }
           claude_args: >-
             --mcp-config ${{ runner.temp }}/capsid-mcp.json
             --max-turns 200
-            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
-            --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*)"
+            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit -m:*),Bash(git switch -c:*),Bash(git push -u origin:*),Bash(git rev-parse:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
+            --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*),Bash(git -c:*),Bash(git config:*),Bash(git -C:*),Bash(git push * --force*),Bash(git push * -f*),Bash(git push * +*),Bash(git push * --delete*)"
           prompt: |
             You are a Capsid driver session the seat started on GitHub's runners, for the
             capsid namespace, working job ${{ steps.job.outputs.id }} and nothing else.
