@@ -9,7 +9,7 @@ import {
   AUTO_MERGE_REQUIRED_CI,
   POLICY_CHECKS,
   requiredCiLabel,
-} from "../src/auto-merge.ts";
+} from "../src/auto-merge-policy.ts";
 import { adminAgent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
