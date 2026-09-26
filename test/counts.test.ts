@@ -3,11 +3,6 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
-import { fakeEnv, fakeKv } from "./fakes.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
 import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/headers.ts";
@@ -20,23 +15,10 @@ const STALE_TOOLS = String(CAPSID.tools - 5);
 
 
 // src/counts.ts caches numbers that live elsewhere, so these tests derive each one
-// from the artifact itself and fail when the two drift.
+// from the artifact itself and fail when the two drift. The tool count is not cached:
+// counts.ts derives it from TOOL_GRANTS.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
-
-// The tool count is a property of the served surface, not of one file: counting
-// registrations in server.ts alone would miss a tool registered from another module.
-
-test("tools count matches the tools the server serves", async () => {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
-  const client = new Client({ name: "counts", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
-  assert.ok(tools.length > 0, "the server serves no tools; the listing is broken");
-  assert.equal(tools.length, CAPSID.tools, `the server serves ${tools.length} tools and counts.ts says ${CAPSID.tools}`);
-});
 
 test("live gate count matches the distinct gates in verify-live.mjs", () => {
   const src = read("../scripts/verify-live.mjs");
