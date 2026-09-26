@@ -99,8 +99,9 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /^scripts\/verify-live\.mjs$/i, why: "the live gate, whose rollback is the backstop for an unattended merge" },
   // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's
   // holder writes them. These two sources are what writes them, so a green PR that
-  // loosened either could record any PR against any job.
-  { pattern: /^src\/jobs\.ts$/i, why: "the job transitions that write result_ref, which pr_recorded_for_job reads" },
+  // loosened either could record any PR against any job. The job transitions are
+  // src/jobs.ts and the jobs-* modules it re-exports; jobs-schema.ts writes nothing.
+  { pattern: /^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$/i, why: "the job transitions that write result_ref, which pr_recorded_for_job reads" },
   { pattern: /^src\/outcome-prs\.ts$/i, why: "the writer of job_outcome_prs, which pr_recorded_for_job reads" },
 ];
 

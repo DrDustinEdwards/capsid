@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -189,6 +189,17 @@ test("paths_not_refused: src/jobs.ts and src/outcome-prs.ts refuse, since they w
     assert.equal(verdict.merge, false, `${path} merged`);
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
   }
+});
+
+test("paths_not_refused: the job modules src/jobs.ts re-exports refuse like src/jobs.ts", () => {
+  const modules = ["claim", "holder", "seat", "mirror", "transition"].map((part) => `src/jobs-${part}.ts`);
+  for (const path of modules) {
+    assert.ok(existsSync(join(import.meta.dirname, "..", path)), `${path} does not exist; the refused pattern names a module that is gone`);
+    const verdict = evaluate(greenPr({ changedPaths: ["docs/schema.md", path] }));
+    assert.equal(verdict.merge, false, `${path} merged`);
+    assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
+  }
+  assert.equal(modules.length, 5);
 });
 
 test("ci_green: the capsid run must show the one merged typecheck step, not the four it replaced", () => {

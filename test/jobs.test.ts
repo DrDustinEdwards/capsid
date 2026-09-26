@@ -19,6 +19,11 @@ import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 
 const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
+// The queue's transitions: src/jobs.ts and the modules it re-exports. sourceFile
+// throws on a missing name, so a renamed module fails here rather than going unscanned.
+const JOB_MODULES = ["jobs.ts", "jobs-claim.ts", "jobs-holder.ts", "jobs-seat.ts", "jobs-mirror.ts", "jobs-transition.ts"];
+const jobModulesSource = () => JOB_MODULES.map((name) => sourceFile(name)).join("\n");
+
 /** Every definition of the jobs_open_title index across migrations/, in the order
  *  wrangler applies them. The last one is the index the database ends up with, so
  *  this reads the directory rather than one file. */
@@ -110,9 +115,9 @@ test("every action the schema advertises is one the tool handles", async () => {
 test("every queue transition is a keyed UPDATE with RETURNING, never meta.changes", () => {
   // A transition that read meta.changes would be counting the FTS5 triggers on the
   // document write in the same batch.
-  const jobs = sourceFile("jobs.ts");
+  const jobs = jobModulesSource();
   const updates = [...jobs.matchAll(/UPDATE jobs SET[\s\S]*?(?=`)/g)].map((m) => m[0]);
-  assert.ok(updates.length >= 3, `found ${updates.length} UPDATE statements in src/jobs.ts; the scan is broken`);
+  assert.ok(updates.length >= 3, `found ${updates.length} UPDATE statements in the job modules; the scan is broken`);
   for (const update of updates) {
     assert.match(update, /\bWHERE\b/, "an unkeyed UPDATE would move every job in the table");
     assert.match(update, /RETURNING/, "a transition without RETURNING cannot tell a win from a lost race");
@@ -122,17 +127,17 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
     .split("\n")
     .filter((line) => !line.trim().startsWith("//"))
     .join("\n");
-  assert.doesNotMatch(code, /meta\.changes/, "src/jobs.ts reads meta.changes, which the FTS5 triggers inflate");
+  assert.doesNotMatch(code, /meta\.changes/, "a job module reads meta.changes, which the FTS5 triggers inflate");
 });
 
 // scanner-rule: CLAUDE.md, snapshot rule: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
   // The mirror uses improveDocStatements, which carries document_versions and
   // audit_log in the same batch, rather than spelling its own upsert.
-  const jobs = sourceFile("jobs.ts");
+  const jobs = jobModulesSource();
   assert.match(jobs, /improveDocStatements\(/, "the job mirror no longer uses the shared document statements");
-  assert.doesNotMatch(jobs, /INSERT INTO documents/, "src/jobs.ts spells its own document upsert");
-  assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "src/jobs.ts spells its own snapshot");
+  assert.doesNotMatch(jobs, /INSERT INTO documents/, "a job module spells its own document upsert");
+  assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "a job module spells its own snapshot");
 });
 
 // A swallowed parameter tag is a malformed call. A `complete` that closes a parameter
