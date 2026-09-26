@@ -348,7 +348,9 @@ export async function claimJob(
     ...candidate,
     status: "claimed",
     claimed_by: actor,
-    claimed_at: now.toISOString(),
+    // A job the seat released keeps its first claim time, so its duration covers its
+    // whole working life. The lease sweep clears claimed_at, so a swept job starts over.
+    claimed_at: candidate.claimed_at ?? now.toISOString(),
     lease_expires: expires,
     updated_at: now.toISOString(),
   };
@@ -357,7 +359,7 @@ export async function claimJob(
   // and the second batch's guard aborts before its UPDATE runs.
   const won = await guardedTransition(env, candidate, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = ?3, lease_expires = ?4, updated_at = ?3
+      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3
        WHERE id = ?1 AND status = 'queued' RETURNING id`
     ).bind(candidate.id, actor, now.toISOString(), expires),
     ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),

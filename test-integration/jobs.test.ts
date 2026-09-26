@@ -807,7 +807,7 @@ describe("the improve_status jobs block", () => {
   it("a namespace with no jobs reports zeroes, not an absent block", async () => {
     // A missing block and an empty queue are different facts.
     const summary = await jobsSummary(env.DB, "foxing", NOW);
-    expect(summary).toEqual({ queued: 0, claimed: 0, blocked: 0, done_today: 0, blocked_jobs: [] });
+    expect(summary).toEqual({ queued: 0, claimed: 0, blocked: 0, done_today: 0, blocked_jobs: [], claimed_jobs: [] });
   });
 
   it("improve_status carries the block for every namespace it reports", async () => {

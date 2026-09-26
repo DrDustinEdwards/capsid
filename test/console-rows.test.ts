@@ -50,7 +50,7 @@ function namespaceStatus(overrides: Partial<NamespaceStatus> = {}): NamespaceSta
     },
     totals: { runs: 9, attempts: 20, kept: 6, reverts: 14, cost_usd: 3.2, ci_minutes: 140 },
     latest_report: { path: "capsid/reports/lint-2026-09-10.md", integrity: 97, generated: "2026-09-10 06:00:00" },
-    jobs: { queued: 2, claimed: 1, blocked: 0, done_today: 4, blocked_jobs: [] },
+    jobs: { queued: 2, claimed: 1, blocked: 0, done_today: 4, blocked_jobs: [], claimed_jobs: [] },
     ...overrides,
   };
 }
@@ -131,6 +131,7 @@ test("A BLOCKED JOB IS RENDERED WITH THE EXACT COMMAND IT WAITS ON", () => {
               resumed: 0,
             },
           ],
+          claimed_jobs: [],
         },
       }),
     ])
@@ -153,6 +154,7 @@ test("the blocked job's command is ESCAPED, not injected", () => {
           blocked_jobs: [
             { id: "job_x", title: "<script>alert(1)</script>", waiting_on: "run <b>this</b>", blocked_times: 1, resumed: 0 },
           ],
+          claimed_jobs: [],
         },
       }),
     ])
@@ -160,6 +162,36 @@ test("the blocked job's command is ESCAPED, not injected", () => {
   assert.doesNotMatch(html, /<script>alert/, "a job title reached the page as markup");
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /run <b>this<\/b>/);
+});
+
+test("a claimed job is rendered with its holder and the seat's Release and Mark failed actions", () => {
+  const html = renderConsole(
+    data([
+      namespaceStatus({
+        jobs: {
+          queued: 0,
+          claimed: 1,
+          blocked: 0,
+          done_today: 0,
+          blocked_jobs: [],
+          claimed_jobs: [
+            {
+              id: "job_00f2da97e676",
+              title: "a job whose driver went away",
+              held_by: "agent:dustinedwards-driver",
+              claimed_at: "2026-09-25T20:00:00.000Z",
+              lease_expires: "2026-09-26T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    ])
+  );
+  assert.match(html, /job_00f2da97e676/);
+  assert.match(html, /held by agent:dustinedwards-driver/);
+  assert.match(html, /lease until 2026-09-26T00:00:00.000Z/);
+  assert.match(html, /name="action" value="release_job"/, "the claimed job has no Release action");
+  assert.equal([...html.matchAll(/name="action" value="fail_job"/g)].length, 1, "the claimed job has no Mark failed action");
 });
 
 test("the row names the driver agent's last_seen, matched from the agent inventory", () => {
