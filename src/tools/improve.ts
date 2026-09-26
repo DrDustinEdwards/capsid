@@ -23,22 +23,22 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("improve_run"),
       description:
-        `Open improve runs, or control the loop. action defaults to "run": open runs for the roster (or one namespace) and advance them one step, respecting APP_KV improve_mode and skipping paused namespaces; dry_run reports the plan and writes NOTHING. mode, pause, unpause and budget each write one KV value, audit it, and read it back so the response is the value that actually landed: action "mode" sets improve_mode to value ("off" | "subscription" | "api"); action "pause"/"unpause" sets or clears improve:paused for one namespace or "all" (pause takes an optional reason); action "budget" sets the monthly caps actions_minutes_month and model_usd_month. action "mint_operator_key" generates a READ-ONLY (ro:) operator key, returns it ONCE and stores it nowhere, and prints the exact wrangler command that adds its hash to OPERATOR_KEY_HASH; it deliberately does NOT set the secret itself, because a Worker that can widen its own authorization list does not have one. action "claim" takes the SUBSCRIPTION-MODE DRIVER LEASE for one namespace (improve:driver:<ns>, six-hour TTL): it refuses if the lease is already held and never overwrites the holder, and release: true gives it back at the end of a run. It is best-effort mutual exclusion, not a lock, because KV has no compare-and-set; it stops a second /improve session, not two claims in the same millisecond. action "register_skill" registers one CANDIDATE skill abstracted from a finished job, from the skill object: the package's declared fields and its instruction body. The source job must be done with one merged pull request and green CI as the Worker verified it, and must not have produced a skill before; the namespace is read from the job. The row starts at status candidate, version 1, and the body is stored at capsid/improve/skills/<id>.md. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. improve_status reflects the control actions on its next call. run and claim need the write grant; every other action is admin only.`,
+        `Open improve runs, or control the loop. action "run" (the default) opens runs for the roster, or one roster namespace, and advances them one step; it respects improve_mode, skips paused namespaces, refuses a namespace not on the roster, and with dry_run reports the plan and writes nothing. action "mode" sets improve_mode to value ("off" | "subscription" | "api"). action "pause" or "unpause" sets or clears the pause for one namespace or "all"; pause takes an optional reason. action "budget" sets the monthly caps actions_minutes_month and model_usd_month. mode, pause, unpause and budget are audit-logged and return the value read back from KV. action "mint_operator_key" returns a new read-only (ro:) operator key once, stores it nowhere, and returns the wrangler command that adds its hash to OPERATOR_KEY_HASH; it does not set the secret. action "claim" takes the subscription-mode driver lease for one namespace (six-hour TTL) and is refused while the lease is held; release: true gives it back. The lease is best-effort. action "register_skill" registers one candidate skill from the skill object; refused unless the source job is done with one merged pull request and green CI and has produced no skill yet. The body is stored at capsid/improve/skills/<id>.md. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. run and claim need the write grant; every other action is admin only.`,
       inputSchema: {
         action: z
           .enum(["run", "mode", "pause", "unpause", "budget", "mint_operator_key", "claim", "sign_policy", "register_skill"])
           .optional()
-          .describe('What to do. Defaults to "run". The others control the loop: mode, pause, unpause, budget, mint_operator_key, claim, sign_policy, register_skill.'),
+          .describe('Defaults to "run".'),
         namespace: nsName.optional().describe('For "run", limit to one namespace (omit for the whole roster). For pause/unpause, the target namespace, or "all".'),
         value: z.enum(["off", "subscription", "api"]).optional().describe('For action "mode": the mode to set.'),
-        reason: bounded(MAX_DOC_STATUS).optional().describe('For action "pause": the reason recorded on the pause key. Defaults to a generic note.'),
+        reason: bounded(MAX_DOC_STATUS).optional().describe('For action "pause": the reason recorded on the pause key.'),
         actions_minutes_month: z.number().positive().optional().describe('For action "budget": the monthly Actions-minutes cap.'),
         model_usd_month: z.number().positive().optional().describe('For action "budget": the monthly model-spend cap in USD.'),
         dry_run: z.boolean().optional().describe('For action "run": report the plan and change nothing. Defaults to false.'),
         path: bounded(512)
           .optional()
           .describe(
-            'For action "sign_policy": the path of the policy document to sign, under "policy/" in the capsid namespace. The signer signs the body ALREADY STORED rather than any body the caller supplies, so it cannot be used to sign arbitrary bytes.'
+            'For action "sign_policy": the path of the stored policy document to sign, under "policy/" in the capsid namespace.'
           ),
         release: z
           .boolean()
@@ -60,7 +60,7 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
         condition: bounded(MAX_DOC_STATUS)
           .optional()
           .describe(
-            `For action "run", the experimental condition: ${RUN_CONDITIONS.join(" | ")}. Defaults to full. "no-memory" withholds lineage history from base selection; "no-transfer" offers no cross-project skill. Recorded on the run row and in its audit rows, so an ablation is a query. An unrecognised value is refused rather than defaulted.`
+            `For action "run", the experimental condition: ${RUN_CONDITIONS.join(" | ")}. Defaults to full. "no-memory" withholds lineage history from base selection; "no-transfer" offers no cross-project skill. Recorded on the run row and its audit rows. An unrecognised value is refused.`
           ),
       },
     },
@@ -98,13 +98,13 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("improve_status"),
       description:
-        "The improve loop's current state: the mode, and per namespace the pause reason if any, whether its anchor block is pinned, the best known commit and score, the last run, and lifetime totals for attempts, keeps, reverts, estimated model cost and CI minutes. Each namespace also carries a jobs block: how many queued, claimed and blocked, how many finished today, and the BLOCKED JOBS THEMSELVES with the command each is waiting on, because a count of blocked jobs tells nobody what to run. It also serves protected_paths, the deterministic path guard's pattern list (source and flags per entry), which the subscription-mode driver rebuilds and applies to each attempt's changed paths before any push, so that guard cannot drift from the Worker's, and agents, the credential inventory: every minted agent with its kind, the namespaces and grants it holds, the blast-radius flags it holds (only the ones it has, because a row of falses hides the one agent that can merge), when it was last seen, and whether it has been revoked. Never a key and never the stored verifier. Read-only. cost_usd is an estimate computed from token counts and published rates, not a bill.",
+        "The improve loop's current state: the mode, and per namespace the pause reason, whether its anchor block is pinned, the best known commit and score, the last run, and lifetime totals for attempts, keeps, reverts, estimated model cost and CI minutes. Each namespace carries a jobs block: queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on. Also returns protected_paths, the path guard's pattern list (source and flags per entry) for the driver to apply before a push, and agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only. cost_usd is an estimate from token counts and published rates.",
       inputSchema: {
         namespace: nsName.optional().describe("Limit to one namespace. Omit for the whole roster."),
         task_path: docPath
           .optional()
           .describe(
-            "Verify one task document before executing it: pass its path (for example improve/run-2026-09-07.md) together with its namespace. The response gains task_verification { ok, actor, reason }, which checks the HMAC signature against the key this Worker derives AND that the last audit actor is the loop itself. The /improve driver must refuse a doc that does not verify."
+            "A task document to verify, with its namespace. Adds task_verification { ok, actor, reason }: ok only when the HMAC signature matches this Worker's key and the last audit actor is the loop."
           ),
       },
     },
