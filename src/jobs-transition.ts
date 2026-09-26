@@ -1,3 +1,4 @@
+import type { OfferedSkillWithBody } from "./job-skill-offers";
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { JOB_LEASE_SECONDS, missingForRecord, type JobRow } from "./jobs-schema";
@@ -53,6 +54,8 @@ export interface JobResult {
   // The latest resume's reason, for a job resumed at least once. See
   // latestResumeNote in src/jobs-mirror.ts.
   resume_note?: ResumeNote;
+  // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
+  offered_skills?: OfferedSkillWithBody[];
 }
 
 export function refuse(action: string, refusal: string): JobResult {
