@@ -51,7 +51,7 @@ function describe(action: ConsoleAction, form: URLSearchParams): string {
     case "mode":
       return `Set the improve mode to ${form.get("value") ?? ""} for every namespace.`;
     case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, the resume is refused and the job stays blocked.`;
+      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
       return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
