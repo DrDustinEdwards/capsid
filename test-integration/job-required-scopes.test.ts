@@ -88,9 +88,12 @@ describe("required_scopes on the real queue transitions", () => {
     expect(refused.refusal).toMatch(/can_merge/);
     expect(await statusOf(id)).toBe("blocked");
 
+    // Without take the driver acquires nothing. The seat blocked it as the shared admin
+    // identity, so the job goes to the queue, where the flag is asked again at the claim.
     const returned = await resumeJob(jobsEnv(), driver(), NOW, id, "the push ran");
     expect(returned.ok, returned.refusal).toBe(true);
-    expect(returned.job?.claimed_by).toBe(SEAT_AGENT.actor);
+    expect(returned.job?.status).toBe("queued");
+    expect(returned.job?.claimed_by).toBeNull();
   });
 
   it("PLANT: another namespace's driver cannot resume a job, even to hand it back", async () => {

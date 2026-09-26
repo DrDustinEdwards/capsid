@@ -24,10 +24,12 @@ import { MAX_TITLE } from "../src/limits";
 
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
-const DRIVER_ACTOR = "opkey:aaaabbbbcccc";
-const OTHER_ACTOR = "opkey:ddddeeeeffff";
-// The legacy operator identity. The lease, the CAS and the unique index are
-// properties of SQLite and do not change with the caller.
+// Minted-agent actors on a legacy write agent. The lease, the CAS and the unique index
+// are properties of SQLite and do not change with the caller; the agent: shape matters
+// to resume, which returns a job to its own driver only when that actor is one driver's
+// credential rather than a shared one.
+const DRIVER_ACTOR = "agent:driver-aaaa";
+const OTHER_ACTOR = "agent:driver-dddd";
 const DRIVER = legacyAgent("write", DRIVER_ACTOR);
 const OTHER = legacyAgent("write", OTHER_ACTOR);
 
@@ -481,14 +483,14 @@ describe("resume", () => {
     expect((await row(blocked))?.status).toBe("blocked");
   });
 
-  it("a job does not go back to a driver that is already holding another", async () => {
+  it("a job does not go back to a driver that is already holding another: it goes to the queue", async () => {
     const blocked = await blockedJob("waiting for its driver");
     const other = await post({ title: "the driver moved on" });
     await claimJob(jobsEnv(), DRIVER, NOW, { id: other.job!.id });
-    const refused = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
-    expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/already holds .*resume it with take/s);
-    expect((await row(blocked))?.status).toBe("blocked");
+    const resumed = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect((await row(blocked))?.status).toBe("queued");
+    expect((await row(blocked))?.claimed_by).toBeNull();
   });
 
   it("PLANT: a body edited while the job sat blocked is refused and failed, not handed back", async () => {
@@ -1072,7 +1074,7 @@ describe("supersede", () => {
     await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
     const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, old.job!.id, { reason: "mine now" });
     expect(out.ok).toBe(false);
-    expect(out.refusal).toMatch(/is held by opkey:aaaabbbbcccc/);
+    expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
     expect((await row(old.job!.id))?.status).toBe("claimed");
   });
 

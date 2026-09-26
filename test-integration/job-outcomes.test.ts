@@ -15,7 +15,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
-const DRIVER_ACTOR = "opkey:aaaabbbbcccc";
+const DRIVER_ACTOR = "agent:driver-aaaa";
 const DRIVER = legacyAgent("write", DRIVER_ACTOR);
 
 function jobsEnv() {
@@ -288,7 +288,7 @@ describe("job outcomes", () => {
   it("PLANT: the bar is enforced at a RESUME that hands the lease to a new holder, too", async () => {
     // Resume with take hands a caller a lease exactly as a claim does, so a driver
     // that could not have claimed the job must not acquire it by resuming it.
-    const OTHER_ACTOR = "opkey:ddddeeeeffff";
+    const OTHER_ACTOR = "agent:driver-dddd";
     const OTHER = legacyAgent("write", OTHER_ACTOR);
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
     const posted = await post({ title: "needs a record to take over", min_record: { prs_merged: 2 }, gate_required: true });
