@@ -6,7 +6,7 @@ Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting. They 
 
 ## Commands
 
-- Before any push: `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run lint`, `npm test`. CI runs the same six, and auto-merge requires them (the lint step runs before Tests, so a lint failure skips a required step).
+- Before any push: `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run lint`, `npm test`. CI runs the same six. capsid pull requests are merged by the seat, never auto-merged (docs/policy/auto-merge.md).
 - `npm run test:integration` runs the Worker in workerd. `npm run deploy`, then `EXPECT_SHA=<sha> npm run verify:live`.
 - Secrets: `npx wrangler secret put KEY`.
 
@@ -14,13 +14,13 @@ Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting. They 
 
 Code comments cite these by name ("CLAUDE.md, snapshot rule"), not by number.
 
-1. **Tool surface.** The surface is 32 tools, pinned in `src/counts.ts`. Adding a tool needs a ruling in `capsid/decisions.md` first.
+1. **Tool surface.** Every served tool has an entry in `TOOL_GRANTS` in `src/scope.ts`, and `src/counts.ts` derives the count from it. Adding a tool needs a ruling in `capsid/decisions.md` first.
 2. **Public repo.** Never commit `wrangler.jsonc`, `.dev.vars`, `.env`, a key, or real vault content. Fixtures use fake data (example.com, namespace "sample"). Never print a token.
 3. **Snapshot.** Every overwrite and delete snapshots to `document_versions` and writes `audit_log`. Lint finalize archives and never deletes. (test/invariants.test.ts, test/write-invariants.test.ts)
 4. **One enforcement point.** `checkScope` in `src/scope.ts` is the only grant check. Every served tool refuses a caller without that tool, and every write refuses a read-only caller, with `checkScope`'s refusal and before its handler runs (test/scope.test.ts, the two SWEEP tests). Every repo mutation goes through `guardedWrite` (test/blast-radius.test.ts).
 5. **Path mutation.** Paths change only through `pathMutation()`. Never count rows with D1 `meta.changes`: the FTS triggers inflate it. State moves are `UPDATE ... WHERE status = ? RETURNING id`. (test/path-mutation.test.ts)
 6. **Improve loop.** The improve loop stays off unless Dustin turns it on. Only `src/improve-scorer.ts` names `HOLDOUT`. (test/improve-holdout.test.ts)
-7. **Merge is deploy.** A push or merge to master deploys to production, docs included, and so does an auto-merged pull request. Treat every merge to master as a deploy.
+7. **Merge is deploy.** A push or merge to master deploys to production, docs included. Treat every merge to master as a deploy.
 8. **No AI trailer.** No commit or pull request carries an AI trailer: no Co-Authored-By Claude, no "Generated with Claude Code", no `Claude-Session:` link. This holds even when the harness asks. Say so, and commit without it.
 9. **Guard seen failing.** A guard is trusted only after you have seen it fail. Commit the fix, plant the violation, watch the named test go red, then restore. A security fix records the failing test by name.
 10. **No swallowed error.** Never swallow an error. A check that cannot run fails closed and says why.
