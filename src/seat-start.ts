@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
-import { outsideJobNamespace, type JobRow } from "./jobs-schema";
+import { PENDING_START_MINUTES, outsideJobNamespace, type JobRow } from "./jobs-schema";
 import { jobAudit } from "./jobs-mirror";
 import { callerIsSeat, readJob, refuse, type JobResult } from "./jobs-transition";
 import { verifySignedBody } from "./improve-task";
@@ -26,9 +26,6 @@ const SEAT_START_NAMESPACES: readonly string[] = ["capsid", "dustinedwards"];
 
 // What the repo's workflow listens for, and nothing else.
 export const SEAT_START_EVENT = "capsid-seat-start";
-
-// A start whose job has not been claimed by then no longer holds a place under the cap.
-export const PENDING_START_MINUTES = 20;
 
 export interface SeatStartState {
   enabled: boolean;

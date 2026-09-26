@@ -52,6 +52,9 @@ export interface AgentRow {
   created_at: string;
   revoked_at: string | null;
   last_seen: string | null;
+  // The one job a runner key exists to work (migrations/0021), or null. Optional
+  // because a row read before that migration has no such column.
+  job_id?: string | null;
 }
 
 export function isAgentKind(value: unknown): value is AgentKind {

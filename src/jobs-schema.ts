@@ -36,6 +36,12 @@ export type JobAction = (typeof JOB_ACTIONS)[number];
 // session that died, not the renewal path.
 export const JOB_LEASE_SECONDS = 4 * 60 * 60;
 
+// A seat start whose job has not been claimed by then no longer holds a place under the
+// cap, and a runner key bound to that job no longer resolves. Here rather than in
+// src/seat-start.ts so the resolver in src/agents.ts can read it without importing the
+// GitHub client.
+export const PENDING_START_MINUTES = 20;
+
 export const JOBS_ROWS_MAX = 100;
 
 // Every job is also a document, so brief and search see the queue. The table is the

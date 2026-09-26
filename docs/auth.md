@@ -43,6 +43,8 @@ The reviewer and the watcher both need the write grant, because commenting and p
 
 The `agents` tool is admin only. An agent that could mint another could widen itself. `mint` returns a key once and stores only its sha256. `list` is the inventory, revoked rows included. `revoke` sets `revoked_at` rather than deleting, so rows an agent wrote still resolve to what it was allowed to do, while its key stops resolving immediately. `update_scopes` replaces named axes and leaves the rest.
 
+**A runner key can be bound to one job** (`agents.job_id`, migrations/0021; `capsid/research/design-seat-session-hardening.md`). A bound key resolves only while its job is live for it: claimed by it under an unexpired lease, or queued within the 20-minute pending-start window before its first claim. Blocked, done, failed, a lapsed lease or a claim by anyone else all end it, with no revocation to remember, and a dead bound key does not fall through to `OPERATOR_KEY_HASH`. In `checkScope` it may `claim`, `heartbeat`, `complete`, `fail`, `block` and `resume` its own job only, and `list` without naming another. Every other `jobs` action is refused, including one added later. Nothing mints a bound key yet; the `/ops/runner-key` exchange that does lands separately.
+
 Audit rows and `jobs.claimed_by` record a minted agent as `agent:<name>`.
 
 **Four of these have never connected, and what each is waiting for is written down so an unused credential reads as a plan rather than a loose end.** `improve_status` shows `last_seen: null` for all four today.
