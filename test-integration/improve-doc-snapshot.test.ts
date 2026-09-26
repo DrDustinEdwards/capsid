@@ -2,11 +2,9 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { IMPROVE_ACTOR, improveDocStatements } from "../src/improve-state";
 
-// THE IMPROVE AND JOB MIRROR WRITER SNAPSHOTS THE LIVE ROW (audit 2026-09-25, item
-// E1-2, finding F1-2). improveDocStatements used to bind the body its caller had
-// pre-read (priorDoc). The job claim path waits on GitHub between that read and the
-// batch, so a write landing in the gap was overwritten with no snapshot of it, which
-// hard rule 5 forbids.
+// The improve and job mirror writer snapshots the live row, not the body its caller
+// pre-read. The job claim path waits on GitHub between that read and the batch, so a
+// write landing in the gap must still be snapshotted (hard rule 5).
 //
 // Here rather than in test/ because the snapshot is an INSERT ... SELECT from the live
 // row, and the node fake does not evaluate that SQL.
@@ -89,11 +87,9 @@ describe("improveDocStatements snapshots the row the table holds at commit", () 
   });
 });
 
-// THE REST OF RULE 5 ON THIS PATH, read back from the rows. Moved from
-// test/improve-state.test.ts (audit 2026-09-25, item C1-7), where the same properties
-// were asserted on the SQL text and the positional params of the statements.
+// The rest of rule 5 on this path, read back from the rows.
 //
-// THE WIDE DASHES ARE BUILT FROM CODE POINTS, never written as literals:
+// The wide dashes are built from code points, never written as literals:
 // capsid/conventions.md bans the characters from source.
 const EM_DASH = String.fromCharCode(0x2014);
 const EN_DASH = String.fromCharCode(0x2013);
@@ -142,8 +138,7 @@ describe("an improve document write is a write like any other", () => {
   });
 
   it("normalizes wide dashes in the stored title and body", async () => {
-    // A document written by a model is the most likely source of a wide dash in this
-    // store, so the normalizer matters more here than anywhere else.
+    // A document written by a model is the most likely source of a wide dash.
     const path = "improve/archive/r/lorem-5.md";
     const title = `a ${EM_DASH} title`;
     const body = `a body ${EM_DASH} with a wide dash, and an ${EN_DASH} en dash`;

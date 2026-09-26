@@ -39,24 +39,14 @@ test("every backed-up table exists in the migrations", () => {
   assert.deepEqual(unknown, [], `src/backup.ts exports tables no migration creates: ${unknown.join(", ")}`);
 });
 
-// ---- the run itself ---------------------------------------------------------
+// the run itself
 //
-// FAKES, AND WHY THEY ARE SHAPED THIS WAY (audit 2 batch B). There was no fake R2 in
-// this repo, so one is added here and it is written to be capable of the thing under
-// test: it holds real state and it RECORDS EVERY DELETE. A bucket that cannot express a
-// delete would make "refuses to delete the mirror" pass whether or not anything was
-// refused, which is the vacuous-guard shape.
+// The fake R2 holds real state and records every delete. A bucket that cannot express
+// a delete would make "refuses to delete the mirror" pass whether or not anything was
+// refused.
 //
-// The fake D1 answers three shapes: SELECT * FROM <table> (the export), the pinned
-// FTS probe (the preflight), and the count-then-delete batch. Its batch deliberately
-// reports an INFLATED meta.changes, because that is what D1 does here (the FTS5
-// triggers inflate it) and it is the number the run must NOT be reading.
-
-// The fakes are shared now (quality audit 6.2). What used to be three local
-// implementations here is one import; the capabilities this file relied on
-// (recorded deletes per call, recorded puts with their ttl, an FTS probe that can
-// miss, inflated meta.changes on the prune batch) all survive in the merged
-// version, and it gained cursor pagination, which no fake had.
+// The fake D1's prune batch reports an inflated meta.changes, because the FTS5
+// triggers inflate it on real D1 and it is the number the run must not read.
 
 function makeEnv(dbOpts: FakeD1Options, seedR2: Record<string, string> = {}, seedKv: Record<string, string> = {}) {
   const r2 = fakeR2(seedR2);
@@ -94,11 +84,8 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  // Derived from TABLES in both directions: a table added to the export without an
-  // object, or an object with no table, fails here. The two underscore-prefixed
-  // sidecars (the KV pins and the holdout manifests) are named explicitly rather
-  // than matched by shape, so dropping one is a failure here too. A clean run also
-  // writes the completion marker.
+  // Derived from TABLES in both directions. The underscore-prefixed sidecars are named
+  // explicitly rather than matched by shape, so dropping one fails here too.
   const expected = [
     ...TABLES.map((t) => `${result.json_prefix}${t}.json`),
     `${result.json_prefix}_kv.json`,
@@ -127,8 +114,7 @@ test("a healthy run prunes genuinely stale markdown and keeps the current mirror
 });
 
 test("an empty documents read refuses the prune, loudly, and deletes nothing", async () => {
-  // The dangerous case: the SELECT SUCCEEDS and returns no rows. Every mirror object
-  // is then "stale" and the old code deleted all of them in one call.
+  // The SELECT succeeds and returns no rows, so every mirror object looks stale.
   const { env, r2 } = makeEnv({ documents: [] }, MIRROR);
   const { result, logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
@@ -213,9 +199,9 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   assert.equal(result.versions_pruned, 3);
   assert.equal(result.audit_pruned, 7);
   // The count and the delete must carry the identical predicate, or the count is of
-  // a different set of rows than the one that leaves. TWO batches now: the export
-  // snapshot and this one. The prune batch is found by what it contains rather than
-  // by position, so a third batch cannot silently retarget these assertions.
+  // a different set of rows than the one that leaves. The prune batch is found by
+  // what it contains rather than by position, so another batch cannot retarget these
+  // assertions.
   const pruneBatch = batches.find((b) => b.some((sql) => sql.startsWith("DELETE FROM document_versions")));
   assert.ok(pruneBatch, "no batch carried the prune");
   const [countVersions, deleteVersions, countAudit, deleteAudit] = pruneBatch;
@@ -290,16 +276,11 @@ test("a preflight-refused run does NOT stamp backup:last-ok", async () => {
   assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a refused run stamped itself as fresh");
 });
 
-// ---- the 1000-key delete ceiling (residual 5) --------------------------------
+// the 1000-key delete ceiling
 //
-// R2's bulk delete takes at most 1000 keys per call and throws on the 1001st. All
-// three of the run's deletes handed it an unbounded array, so the first day the
-// mirror shed more than a thousand documents, or the day a backlog of aged dumps
-// came due, the backup threw AFTER writing its dumps and BEFORE stamping
-// backup:last-ok. The failure would have been loud, which is the only good part.
-//
-// 1001 rather than a round 1000 because the boundary is where an off-by-one lives:
-// a chunker written with `<` instead of `<=` passes at exactly 1000.
+// R2's bulk delete takes at most 1000 keys per call and throws on the 1001st.
+// 1001 rather than 1000 because a chunker written with `<` instead of `<=` passes at
+// exactly 1000.
 const R2_DELETE_CEILING = 1000;
 
 test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
@@ -318,18 +299,16 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
     [],
     `an R2 delete call carried more than ${R2_DELETE_CEILING} keys, which R2 refuses`
   );
-  // NOT VACUOUS: the chunking must still delete everything it was asked to. A
-  // chunker that dropped the tail would satisfy the assertion above.
+  // A chunker that dropped the tail would satisfy the assertion above.
   assert.equal(result.markdown_pruned, 1001);
   const leftover = [...r2.objects.keys()].filter((k) => k.includes("/stale-"));
   assert.deepEqual(leftover, [], "chunking lost keys: stale mirror objects survived the prune");
 });
 
 test("the dump prune chunks too, not just the mirror", async () => {
-  // 22 aged runs x 10 tables is 220 keys, which is under the ceiling, so the dump
-  // prune is exercised for CHUNK SHAPE rather than for overflow: every call it
-  // makes must come from the same chunker. The guard is that the run's delete
-  // calls are all within the ceiling AND that the aged dumps are all gone.
+  // 22 aged runs x 10 tables is under the ceiling, so the dump prune is exercised for
+  // chunk shape; the 1200 CSP reports exercise overflow. Every call must be within the
+  // ceiling and every aged object gone.
   const seed: Record<string, string> = { ...MIRROR };
   for (let day = 1; day <= 22; day++) {
     const id = `2020-01-${String(day).padStart(2, "0")}T00-00-00-000Z`;
@@ -348,14 +327,11 @@ test("the dump prune chunks too, not just the mirror", async () => {
   assert.deepEqual([...r2.objects.keys()].filter((k) => k.startsWith("reports/csp/")), []);
 });
 
-// ---- one consistent snapshot (residual 4) -----------------------------------
+// one consistent snapshot
 //
-// The export used to be a `for` loop of `SELECT * FROM <table>`, each its own
-// round trip. Ten reads at ten different instants is ten snapshots, not one: a
-// write landing between the documents read and the document_versions read puts a
-// version row in the dump whose document is not in it, and NOTHING could see that
-// afterwards. D1's batch is one transaction, so the ten reads now agree with each
-// other by construction and `exported_at` is finally true rather than decorative.
+// Reads in separate round trips are separate snapshots: a write between them can put
+// a version row in the dump whose document is not in it. D1's batch is one
+// transaction, so the reads inside it agree with each other.
 
 test("every table read whole is read at ONE instant, however many writes land between D1 calls", async () => {
   // A concurrent writer adds one row to every whole-read table before EACH call the run
@@ -409,10 +385,10 @@ test("every table read whole is read at ONE instant, however many writes land be
   assert.equal(new Set(Object.values(seen)).size, 1, `the tables were read at different instants: ${JSON.stringify(seen)}`);
 });
 
-// ---- audit_log is paged too (audit finding F1-3, 2026-09-25) -------------------
+// audit_log is paged too
 //
-// audit_log is kept 180 days and was the next table read whole. It is append-only with
-// an AUTOINCREMENT id, so the same MAX(id) bound keeps the snapshot one instant.
+// It is append-only with an AUTOINCREMENT id, so a MAX(id) bound keeps the snapshot
+// one instant.
 
 function auditRow(id: number) {
   return { id, namespace: "capsid", path: "core.md", actor: "operator", action: "write", params: "{}", at: "2026-09-01 00:00:00" };
@@ -458,13 +434,12 @@ test("an audit row written after the snapshot batch is not in the dump", async (
   assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
 });
 
-// ---- the streamed table (2026-09-23, job_be450271dfa9) ------------------------
+// the streamed table
 //
-// From 2026-09-20 the cron wrote nothing: 96.4MB of database, 66.5MB of it version
-// bodies, read in one batch into a 128MB isolate. document_versions is now paged
-// and written as a multipart upload. These tests hold the three things that change
-// must not lose: the file is byte-identical to the old one, no row is dropped at a
-// page or part boundary, and the snapshot is still one instant.
+// document_versions is too large to read in one batch into a 128MB isolate, so it is
+// paged and written as a multipart upload. These tests hold that the file is
+// byte-identical to a whole-object dump, no row is dropped at a page or part boundary,
+// and the snapshot is still one instant.
 
 function version(id: number, body: string) {
   return { id, document_id: 1, namespace: "capsid", path: "core.md", title: "t", body, snapshot_at: "2026-09-01 00:00:00" };
@@ -559,9 +534,8 @@ test("the dump carries the loop's KV pins, by allowlist and never by prefix swee
     "improve:budget": '{"actions_minutes_month":300,"model_usd_month":50}',
     "improve:anchor:capsid": "sha256-of-the-anchor-block",
     "improve:paused:foxing": "paused by hand",
-    // A CACHED GITHUB TOKEN. It lives in the same namespace as the pins and must
-    // never reach a dump: the dump leaves the account, and an installation token
-    // is a credential.
+    // A cached GitHub token lives in the same namespace as the pins and must never
+    // reach a dump, which leaves the account.
     "gh:token:DrDustinEdwards": "ghs-not-a-real-token",
   });
   const result = await runBackup(env);
@@ -589,8 +563,6 @@ test("the dump carries the holdout manifests, which are counts and never tests",
   const dumped = JSON.parse(raw as string) as { manifests: Record<string, unknown> };
   assert.equal(dumped.manifests.capsid !== undefined, true, "capsid's manifest is missing from the dump");
 });
-
-// ---- audit findings F1-7, F1-8, F1-9 (2026-09-25) ------------------------------
 
 test("an unreadable KV pin is recorded as unreadable, not as an unset null", async () => {
   // A restore that put back a null would clear a mode that existed.
@@ -644,9 +616,8 @@ test("partial and refused runs take no slot in the 14-run floor", async () => {
 });
 
 test("MIGRATION: runs written before the marker existed keep the floor they had", async () => {
-  // The first run after deploy sees only unmarked runs plus its own marked one. They
-  // sort before the oldest marked run, so they count exactly as the old rule counted
-  // them, and the prune is the one the old rule made: the 7 oldest of 20.
+  // Unmarked runs that sort before the oldest marked run count toward the floor, so
+  // the prune takes the 7 oldest of 20.
   const seed: Record<string, string> = { ...MIRROR };
   const legacy = Array.from({ length: 20 }, (_, i) => day(1, i + 1));
   for (const id of legacy) seedRun(seed, id, "legacy");

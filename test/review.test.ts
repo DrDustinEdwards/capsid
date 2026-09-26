@@ -5,12 +5,11 @@ import { prUrlsFromJob } from "../src/outcome-prs.ts";
 import { VERDICTS, decidingReview, outcomeOf, readReviewComments, verdictOf } from "../src/review.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// GROUP 4: A SECOND READER BEFORE THE SEAT.
+// A second reader before the seat.
 //
-// The envelope is strict on purpose, so these tests spend most of their length on
-// what is NOT a review. A parser that guessed at intent would be guessing on the one
-// decision in this system allowed to send work back, and a wrong guess would look
-// exactly like a review that happened.
+// The envelope is strict on purpose, so most of these tests cover what is not a
+// review. A verdict can send work back, and a wrong guess would look exactly like a
+// review that happened.
 
 const at = (iso: string) => ({ user: "reviewer", created_at: iso, body: "" });
 const comment = (body: string, iso = "2026-09-12T10:00:00Z", user = "reviewer") => ({ user, created_at: iso, body });
@@ -20,8 +19,7 @@ test("a well-formed review of each verdict parses", () => {
     const parsed = verdictOf(comment(`REVIEW: the scope check looks right to me. ${verdict}`));
     assert.ok(parsed, `${verdict} did not parse`);
     assert.equal(parsed.verdict, verdict);
-    // The reviewer's own punctuation is kept. Stripping the full stop would be this
-    // parser editing what somebody wrote, and `said` exists to carry it verbatim.
+    // The reviewer's own punctuation is kept: `said` carries it verbatim.
     assert.equal(parsed.said, "the scope check looks right to me.");
     assert.equal(parsed.by, "reviewer");
   }
@@ -36,8 +34,7 @@ test("the verdict survives the punctuation and formatting a person actually writ
 });
 
 test("A COMMENT THAT IS NOT A REVIEW IS NOT ONE, whatever it ends with", () => {
-  // The failure that matters: ordinary prose being read as a verdict. Every one of
-  // these is a comment somebody would plausibly write on a pull request.
+  // Ordinary pull request prose must not be read as a verdict.
   for (const body of [
     "this looks fine, I'd APPROVE",
     "APPROVE",
@@ -51,8 +48,7 @@ test("A COMMENT THAT IS NOT A REVIEW IS NOT ONE, whatever it ends with", () => {
 });
 
 test("a review that opens correctly and ends on nothing is NOT a verdict", () => {
-  // A reviewer who did not finish. Inventing a verdict here is the one thing this
-  // parser must never do.
+  // A reviewer who did not finish: the parser must not invent a verdict.
   for (const body of ["REVIEW:", "REVIEW: I started looking at this and ran out of time", "REVIEW: LGTM", "REVIEW: 42"]) {
     assert.equal(verdictOf(comment(body)), null, `'${body}' was read as a verdict`);
   }
@@ -96,7 +92,7 @@ test("a review with an unparseable timestamp still counts, but never outranks a 
   assert.equal(decidingReview([broken, comment("REVIEW: yes. APPROVE", "2026-09-12T10:00:00Z")])?.verdict, "APPROVE");
 });
 
-// ---- what each verdict does -------------------------------------------------------
+// what each verdict does
 
 test("no review means WAITING, and the reason says what to write", () => {
   const outcome = outcomeOf(null);
@@ -119,7 +115,7 @@ test("DERIVED: every verdict maps to an outcome, so none of them falls through",
   }
 });
 
-// ---- the pull request a job finished with ------------------------------------------
+// the pull request a job finished with
 
 test("a pull request URL is recognised, with its owner, repo and number", () => {
   assert.deepEqual(parsePrUrl("https://github.com/DrDustinEdwards/capsid-mcp/pull/27"), {
@@ -135,17 +131,15 @@ test("a pull request URL is recognised, with its owner, repo and number", () => 
 });
 
 test("anything that is not a pull request URL is null, so a document key does not become one", () => {
-  // A job can finish with a document key. A review gate has nothing to read then, and
-  // a parser that coerced one into a pull request number would go asking GitHub about
-  // a number it made up.
+  // A job can finish with a document key, which must not be coerced into a pull
+  // request number.
   for (const ref of [null, undefined, "", "capsid/decisions.md", "https://github.com/DrDustinEdwards/capsid-mcp/issues/27", "https://example.com/pull/1"]) {
     assert.equal(parsePrUrl(ref), null, `'${ref}' was read as a pull request`);
   }
 });
 
 test("ONE PARSER: the gate and the prose scan agree on what a pull request URL is (F4-1)", () => {
-  // The review gate accepted any characters between the slashes and the evidence
-  // parser did not, so the gate read owner/repo strings the verifier refused.
+  // Otherwise the gate could read owner/repo strings the evidence verifier refuses.
   const odd = "https://github.com/some%20owner/repo/pull/3";
   assert.equal(parsePrUrl(odd), null);
   assert.deepEqual(prUrlsFromJob({ result_ref: odd, result_summary: null }), []);
@@ -153,12 +147,11 @@ test("ONE PARSER: the gate and the prose scan agree on what a pull request URL i
   assert.deepEqual(prUrlsFromJob({ result_ref: null, result_summary: `opened ${url} today` }), [url]);
 });
 
-// ---- reading the comments off GitHub ----------------------------------------------
+// reading the comments off GitHub
 
 test("readReviewComments asks the ISSUE comments endpoint, which is where the reviewer writes", async () => {
-  // The reviewer agent posts through manage_pr action 'comment', which is an issue
-  // comment. Reading a different endpoint from the one the reviewer writes to is how
-  // a gate waits forever on a review that was posted.
+  // The reviewer posts through manage_pr action 'comment', an issue comment. Reading
+  // another endpoint would leave the gate waiting forever.
   let asked = "";
   const env = fakeEnv({ APP_KV: fakeKv({ seedToken: true }).kv, GITHUB_APP_CLIENT_ID: "x", GITHUB_APP_PRIVATE_KEY: "x" });
   const original = globalThis.fetch;
@@ -172,10 +165,9 @@ test("readReviewComments asks the ISSUE comments endpoint, which is where the re
   try {
     const comments = await readReviewComments(env, { owner: "DrDustinEdwards", repo: "capsid-mcp", number: 27 });
     assert.match(asked, /\/repos\/DrDustinEdwards\/capsid-mcp\/issues\/27\/comments/);
-    // The comment ID IS CARRIED, because it is what the gate matches against the
-    // audit rows naming which comments Capsid posted for a reviewer. A reader that
-    // dropped it would leave the gate with nothing but the author login, which is the
-    // App installation on every comment Capsid writes.
+    // The comment ID is carried: the gate matches it against the audit rows naming
+    // which comments Capsid posted for a reviewer, since the author login is the App
+    // installation on all of them.
     assert.deepEqual(comments, [{ id: 4242, user: "reviewer", body: "REVIEW: fine. APPROVE", created_at: "2026-09-12T10:00:00Z" }]);
     assert.equal(decidingReview(comments)?.verdict, "APPROVE");
   } finally {

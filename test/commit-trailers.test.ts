@@ -72,7 +72,7 @@ test("PLANT: over a real repository, only the new commit with a trailer is repor
       return git("rev-parse", "HEAD");
     };
     git("init", "-q");
-    // An old commit with a trailer, before the range: it stays, as ruled.
+    // An old commit with a trailer, before the range, which is not checked.
     commit(`${BODY}\n\nClaude-Session: https://example.com/old`);
     const base = commit("Clean base");
     const clean = commit(BODY);

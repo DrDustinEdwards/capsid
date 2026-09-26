@@ -4,24 +4,15 @@ import { sourceFiles } from "./source-files.ts";
 
 // document_links stores (namespace, path) strings, not documents.id, and the
 // table carries no foreign key, so the database will not keep edges in step with
-// a renamed or removed document. Application code is the only thing that can.
+// a renamed or removed document. Application code is the only thing that can, so
+// delete, move and lint finalize all route through pathMutation().
 //
-// That contract was broken three separate times: delete orphaned every edge
-// touching the row, move renamed the document and left its edges on the old
-// path, and lint finalize archived with an inline path concatenation that was a
-// move by another name. All three now route through pathMutation().
-//
-// These tests are a source guard rather than a behavioural one. They fail when a
-// fourth site appears, which is the failure mode that actually happened, and
-// which a behavioural test over the three known callers would not catch.
+// These tests are a source guard rather than a behavioural one: they fail when a
+// new mutation site appears, which a behavioural test over the known callers would
+// not catch.
 
-// THE GUARD SCANS EVERY FILE UNDER src/, not just server.ts. Widened 2026-08-13.
-//
-// Scanning one file made the guard's scope an assumption about where the next
-// offender would be written, and the whole reason this test exists is that the same
-// defect arrived three times in places nobody predicted. A path mutation in
-// backup.ts, or in a new module, was invisible to it. Nothing stops a helper in
-// links.ts from renaming a document.
+// The guard scans every file under src/, because a path mutation can be written in
+// any module.
 const SOURCES = sourceFiles();
 
 const HELPER_START = "// PATH_MUTATION_HELPER_START";
@@ -45,17 +36,12 @@ function helperRange(): { file: string; text: string; start: number; end: number
 // Deliberately broad: it matches the shapes a future author is likely to write, not
 // just the ones that exist today.
 //
-// The UPDATE pattern no longer requires path to be the FIRST assignment in the SET
-// clause, which is the hole this widening closes. It only matched
-// `UPDATE documents SET path =`, so the identical bug written as
-// `UPDATE documents SET updated_at = datetime('now'), path = ?3` walked straight
-// past it. There is nothing unusual about that ordering; it is what an author
-// copying the surrounding style would naturally write.
+// The UPDATE pattern does not require path to be the first assignment in the SET
+// clause, so `UPDATE documents SET updated_at = datetime('now'), path = ?3` is caught.
 //
-// It matches the SET clause ONLY, stopping at WHERE, because `path` appears in the
-// WHERE clause of almost every statement in this file and matching there would flag
-// `UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3`, which
-// mutates no path at all. A guard that fires on innocent statements gets deleted.
+// It matches the SET clause only, stopping at WHERE, because `path` appears in the
+// WHERE clause of almost every statement, and
+// `UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3` mutates no path.
 const SET_CLAUSE = /UPDATE\s+documents\b([\s\S]{0,400}?)(?:\bWHERE\b|`|;)/gi;
 
 function pathMutationHits(text: string): number[] {
@@ -81,8 +67,7 @@ const MUTATION_PATTERNS: Array<{ label: string; find: (text: string) => number[]
 
 // scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else (count guard)
 test("the scan reads a plausible number of source files", () => {
-  // An assertion that can pass by reading nothing is not an assertion. If the
-  // directory walk broke, every offender check below would pass over an empty list.
+  // If the directory walk broke, every offender check below would pass over an empty list.
   assert.ok(SOURCES.length >= 10, `expected to scan the src/ modules, found ${SOURCES.length}`);
   assert.ok(SOURCES.some((f) => f.text.includes(HELPER_START)));
 });
@@ -115,17 +100,14 @@ test("every documents.path mutation in src/ lives inside pathMutation()", () => 
 test("the helper actually contains both mutation shapes", () => {
   const { text, start, end } = helperRange();
   const body = text.slice(start, end);
-  // Guards the guard: if the helper stopped containing these, the test above would
-  // pass vacuously over a file that no longer mutates anything here.
+  // If the helper stopped containing these, the test above would pass vacuously.
   for (const { label, find } of MUTATION_PATTERNS) {
     assert.ok(find(body).length > 0, `pathMutation() no longer contains: ${label}`);
   }
 });
 
 test("the widened UPDATE pattern catches a later path assignment", () => {
-  // The exact shape the old pattern missed. This is the plant, kept as a test
-  // rather than run by hand, because the hole was in the matcher and a matcher is
-  // cheap to check directly.
+  // A path assignment after another SET column, checked against the matcher directly.
   const later = 'db.prepare("UPDATE documents SET updated_at = datetime(\'now\'), path = ?3 WHERE namespace = ?1")';
   assert.equal(pathMutationHits(later).length, 1, "a path assignment after another SET column is not being caught");
   const pathFirst = 'db.prepare("UPDATE documents SET path = ?3 WHERE namespace = ?1")';
@@ -133,8 +115,7 @@ test("the widened UPDATE pattern catches a later path assignment", () => {
 });
 
 test("the UPDATE pattern does not fire on path in a WHERE clause", () => {
-  // The false positive that would make this guard unusable. `path` is in the WHERE
-  // clause of nearly every statement in server.ts.
+  // `path` is in the WHERE clause of nearly every statement in server.ts.
   const innocent = 'db.prepare("UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3")';
   assert.deepEqual(pathMutationHits(innocent), []);
 });

@@ -9,11 +9,9 @@ import { test } from "node:test";
 // build step.
 import { deriveTables, rehearse } from "../scripts/restore-rehearsal.mjs";
 
-// THE RESTORE REHEARSAL GUARD (session 3, group 2). Each plant confirms a check
-// fires with the right reason: a rehearsal that passed on a broken dump would be
-// the vacuous-pass the conventions warn about. The fixture is a minimal but real
-// dump: enough documents for an FTS probe, and every migrations-derived table
-// present, so a plant removes exactly one property at a time.
+// Each plant confirms a rehearsal check fires with the right reason. The fixture is a
+// minimal real dump (enough documents for an FTS probe, every migrations-derived table
+// present), so a plant removes exactly one property at a time.
 
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
 const TABLES = deriveTables(MIGRATIONS);
@@ -54,8 +52,8 @@ function goodDump(): string {
     }
     writeFileSync(join(dir, `${table}.json`), JSON.stringify({ exported_at: EXPORTED_AT, table, rows: rows.map((r) => complete(table, r)) }));
   }
-  // The two sidecars the dump has carried since residual 4. They are not tables
-  // and are named with a leading underscore so they can never collide with one.
+  // The two sidecars. They are not tables, and the leading underscore keeps them from
+  // colliding with one.
   writeFileSync(join(dir, "_kv.json"), JSON.stringify({ exported_at: "2026-09-07T09:00:00Z", keys: { improve_mode: "off" } }));
   writeFileSync(
     join(dir, "_holdout-manifests.json"),
@@ -125,9 +123,8 @@ test("a zero-document restore is refused as vacuous", () => {
 });
 
 test("a row missing a column is refused, even a nullable one", () => {
-  // Before, `row[c] ?? null` restored the missing column as NULL and the rehearsal
-  // passed, so a backup.ts that stopped dumping a nullable column stayed green.
-  // src/backup.ts dumps SELECT *, so a real row carries every column.
+  // src/backup.ts dumps SELECT *, so a real row carries every column. Restoring a
+  // missing one as NULL would hide a backup.ts that stopped dumping it.
   withDump((dir) => {
     const docs = JSON.parse(readFileSync(join(dir, "documents.json"), "utf8"));
     assert.ok("tags" in docs.rows[0], "the fixture no longer has a tags column to drop");
@@ -147,7 +144,7 @@ test("a row carrying a column the table does not have is refused", () => {
 });
 
 test("A STALE DUMP IS REFUSED: older than 26 hours", () => {
-  // 2026-09-21: the rehearsal passed on a 56 hour old dump during a backup outage.
+  // A rehearsal that passes on an old dump hides a backup outage.
   withDump((dir) => {
     const exported = Date.parse(EXPORTED_AT);
     assert.throws(() => rehearse(dir, MIGRATIONS, { now: exported + 56 * 3_600_000 }), /56\.0h ago, past the 26h threshold/);
@@ -165,20 +162,13 @@ test("a dump with no readable exported_at is refused, since its age is unknown",
   });
 });
 
-// ---- cross-table consistency (residual 4) -----------------------------------
+// cross-table consistency
 //
-// The dump is now one D1 batch, so it is a single transaction and the ten table objects
-// agree with each other. This is the half that CHECKS that: nothing else verifies the
-// consistency guarantee.
-//
-// THE CHECKS ARE THE TEARING SIGNATURE, NOT PLAIN REFERENTIAL INTEGRITY, and the
-// difference was measured rather than assumed. Live on 2026-09-08 the store held
-// 205 document_versions rows and 2,060 audit_log rows whose document is not in
-// the store at all: deleted documents, lint-finalize archiving that rewrites the
-// path column, and the recova-to-foxhound namespace rename. A rehearsal that
-// failed on those would be red on every good dump forever, and a guard that fires
-// on the innocent case gets deleted rather than fixed. So the orphan counts are
-// REPORTED, and what FAILS is the pair of signatures a torn read produces and a
+// The dump is one D1 batch, so its table objects should agree. The checks look for
+// the tearing signature, not plain referential integrity: the live store holds
+// orphaned version and audit rows from deletes, archiving and namespace renames, and a
+// guard that failed on those would be red on every good dump. So orphan counts are
+// reported, and what fails is the pair of signatures a torn read produces and a
 // deletion cannot:
 //
 //   a version row whose document_id is above the highest id in the documents
@@ -187,8 +177,6 @@ test("a dump with no readable exported_at is refused, since its age is unknown",
 //
 //   a `write` audit row NEWER than every row in the documents object, naming a
 //   path that is not there (the write landed after documents was read).
-//
-// Both measured zero against the live store before they were written.
 
 test("a dump carrying the two sidecars restores, and reports its orphan counts", () => {
   withDump((dir) => {
@@ -207,7 +195,7 @@ test("a missing sidecar is refused: the KV pins are part of the dump now", () =>
 });
 
 test("a sidecar that exists but is empty is refused", () => {
-  // Before, a sidecar only had to exist, so `{}` passed.
+  // Existing is not enough: `{}` must fail.
   withDump((dir) => {
     writeFileSync(join(dir, "_kv.json"), JSON.stringify({}));
     assert.throws(() => rehearse(dir, MIGRATIONS), /_kv\.json carries no 'keys' object/);
@@ -229,7 +217,7 @@ test("an unknown sidecar is refused too, so the set cannot quietly grow", () => 
   });
 });
 
-// The completion marker (audit finding F1-8). Optional, because older dumps lack it;
+// The completion marker. Optional, because older dumps lack it;
 // when present it must list exactly the other files in the dump.
 function writeMarker(dir: string, files: string[]): void {
   const keys = files.map((f) => `backups/json/2026-09-25T09-00-00-000Z/${f}`);
@@ -261,8 +249,7 @@ test("A TORN SNAPSHOT IS REFUSED: a version row for a document created after the
 });
 
 test("a version row for a DELETED document is not torn, and passes", () => {
-  // The innocent case, checked in the same commit as the guard: a deleted document
-  // leaves version rows behind by design, and restore exists to bring one back.
+  // A deleted document leaves version rows behind by design, so restore can bring it back.
   withDump((dir) => {
     setRows(dir, "document_versions", [
       { id: 1, document_id: 99, namespace: "sample", path: "gone.md", title: "t", body: "b", snapshot_at: "2026-09-01 00:00:00" },

@@ -8,9 +8,8 @@ import { capsidClient } from "../scripts/capsid-rpc.mjs";
 import { ROSTER } from "../src/improve-schema.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
 
-// PART 3 OF THE AUTONOMY ARC, as ruled 2026-09-12: a Windows Task Scheduler task per
-// project folder rather than a cloud routine, because a routine can only reach Capsid
-// as the OAuth admin and the whole arc exists to stop that.
+// A Windows Task Scheduler task per project folder rather than a cloud routine,
+// because a routine can only reach Capsid as the OAuth admin.
 
 const SOURCE = readFileSync(join(import.meta.dirname, "..", "scripts", "schedule-drivers.mjs"), "utf8");
 // The key reaches the network through the shared client, so its rule is checked there too.
@@ -26,7 +25,7 @@ test("the task name and the key path are per namespace, so one task is one drive
   assert.match(String(keyPath("foxing")), /agent-foxing-driver\.key$/);
 });
 
-// ---- off by default, which is the point ----------------------------------------
+// off by default
 
 test("nothing is created without --apply", () => {
   const calls: string[][] = [];
@@ -40,7 +39,7 @@ test("nothing is created without --apply", () => {
   assert.deepEqual(calls.map((c) => c[0]), ["/Query"], "a dry run called schtasks for something other than a query");
 });
 
-// ---- the task is created DISABLED, from XML, in one call --------------------------
+// the task is created disabled, from XML, in one call
 
 /** Reads a task file the way schtasks does: UTF-16 LE with a byte-order mark. */
 function readTaskFile(path: string): string {
@@ -146,18 +145,15 @@ test("a failed XML create is a failure, and the task file is still removed", () 
 });
 
 test("the scheduled command runs this script rather than claude directly", () => {
-  // A task invoking `claude` straight could not post a log for a session that died,
-  // which is exactly the run whose log matters.
-  // The task's own action is asserted in the XML test below; this is the command line.
+  // A task invoking `claude` straight could not post a log for a session that died.
+  // The task's own action is asserted in the XML test; this is the command line.
   assert.match(installCommand("capsid"), /^node "[^"]+schedule-drivers\.mjs" --run --namespace capsid$/);
 });
 
 test("the key is read only to post the log, and every use of its VALUE is a bearer header", () => {
-  // The precise property, not a keyword ban: the variable holding key material is
-  // `key`, from readKey. Every interpolation of it must be an Authorization header,
-  // which is the only place it legitimately goes. Naming the word "key" in a message
-  // about a missing FILE is fine, and an earlier version of this test wrongly failed
-  // on exactly that.
+  // Not a keyword ban: the variable holding key material is `key`, from readKey, and
+  // every interpolation of it must be an Authorization header. The word "key" in a
+  // message about a missing file is fine.
   const both = SOURCE + RPC_SOURCE;
   const uses = (both.match(/\$\{key\}/g) ?? []).length;
   const bearers = (both.match(/Authorization: `Bearer \$\{key\}`/g) ?? []).length;
@@ -169,11 +165,10 @@ test("the key is read only to post the log, and every use of its VALUE is a bear
   }
 });
 
-// ---- how the headless driver is permitted ---------------------------------------
+// how the headless driver is permitted
 
 // `claude -p` starts in Manual mode and cannot answer a prompt, so a driver started
-// without these flags is denied its first tool call. Measured 2026-09-23 on the
-// dustinedwards nightly run.
+// without these flags is denied its first tool call.
 
 const flag = (args: string[], name: string) => {
   const i = args.indexOf(name);
@@ -218,7 +213,7 @@ test("deploys, ships and force pushes are denied in both shells, and the admin c
   for (const rule of denied) assert.equal(rule.includes(","), false, `${rule} would split the comma-separated flag`);
 });
 
-// ---- the run log ----------------------------------------------------------------
+// the run log
 
 test("the log is named by the Chicago day, not the UTC day", () => {
   // 04:00 Chicago in CDT is 09:00 UTC the same day, but 23:00 Chicago is the NEXT day
@@ -253,7 +248,7 @@ test("a short transcript is not trimmed and carries no omission note", () => {
   assert.equal(/omitted/.test(body), false);
 });
 
-// ---- failures are failures -------------------------------------------------------
+// failures are failures
 
 type Call = string[];
 /** A fake schtasks: `/Query` answers whether the task exists, every other verb

@@ -6,10 +6,9 @@ import { fakeKv } from "./fakes.ts";
 
 // The referee: the scores document, the anchor pin, and keep-or-revert.
 //
-// Everything here is a pure function over a document a human wrote and a checksum
-// a human pinned. No model, no network, no database. That is deliberate in the
-// code and it is why this file can assert the loop's safety properties directly
-// rather than through a run.
+// Everything here is a pure function over a document and a checksum a human pinned,
+// with no model, network or database, so the loop's safety properties are asserted
+// directly rather than through a run.
 
 const DOC = seedScoresDoc("capsid");
 
@@ -24,31 +23,26 @@ test("the generated seed document parses to the anchors and secondaries it state
     doc.secondary.map((s) => s.metric),
     ["test_pass_rate", "lint_count", "bundle_size_bytes"]
   );
-  // Vacuity guard on the round trip: the parser is being exercised against the
-  // exact text the generator emits, so a generator change that breaks the format
-  // fails here rather than at 03:00.
+  // The parser runs against the exact text the generator emits, so a generator change
+  // that breaks the format fails here rather than at run time.
   assert.ok(doc.anchorBlock.includes("build_passes"), "the anchor block did not capture its own lines");
 });
 
 test("every namespace seeds the SAME secondary list", () => {
-  // This test used to assert that foxhound, and only foxhound, carried the two
-  // stub metrics recovery_rate and dispute_win_rate. Both were removed on
-  // 2026-09-07 with error_count and p95_latency_ms: nothing measured any of them.
-  // What survives of its subject is the uniformity it was really guarding.
-  // test/null-metrics.test.ts owns the two halves that replaced it: no namespace
-  // declares a stub, and the parser still understands one.
+  // test/null-metrics.test.ts covers stubs: no namespace declares one, and the parser
+  // still understands one.
   const lists = ["capsid", "foxing", "germomics", "dustinedwards", "foxhound"].map((namespace) =>
     parseScoresDoc(namespace, seedScoresDoc(namespace)).secondary.map((s) => s.metric).join(",")
   );
   assert.equal(new Set(lists).size, 1, `the five seeds disagree: ${JSON.stringify(lists)}`);
 });
 
-// ---- the checksum -----------------------------------------------------------
+// the checksum
 
 test("the checksum covers the ANCHOR SECTION and not the secondary section", async () => {
   const original = parseScoresDoc("capsid", DOC);
-  // A human reweights a secondary metric. This must NOT move the anchor hash,
-  // because the alternative is a refusal at 03:00 for a legitimate edit.
+  // Reweighting a secondary metric must not move the anchor hash, or a legitimate
+  // edit causes a refusal.
   const reweighted = parseScoresDoc("capsid", DOC.replace("lint_count: minimize weight 2", "lint_count: minimize weight 5"));
   assert.equal(await anchorChecksum(reweighted), await anchorChecksum(original));
 
@@ -58,11 +52,8 @@ test("the checksum covers the ANCHOR SECTION and not the secondary section", asy
 });
 
 test("CRLF does not change the anchor hash", async () => {
-  // capsid/repo-structure.md records the CRLF checkout hazard as a measured trap
-  // that has already produced two vacuous plants. A document reaching the Worker
-  // through a checkout on an autocrlf host must hash the same as one written
-  // through the MCP write path, or the pin mismatches forever for a reason nobody
-  // can find.
+  // A document from a checkout on an autocrlf host must hash the same as one written
+  // through the MCP write path, or the pin never matches.
   const lf = parseScoresDoc("capsid", DOC);
   const crlf = parseScoresDoc("capsid", DOC.replace(/\n/g, "\r\n"));
   assert.equal(await anchorChecksum(crlf), await anchorChecksum(lf));
@@ -73,9 +64,8 @@ test("a MISSING pin is a refusal, not a free pass", async () => {
   const verification = await verifyAnchors(kv, "capsid", parseScoresDoc("capsid", DOC));
   assert.equal(verification.ok, false);
   assert.match(verification.refusal ?? "", /no anchor pin for capsid/);
-  // And it hands over the value to pin, so the fix is one command rather than a
-  // hunt. Pinning on first sight is the alternative this refuses: whatever the
-  // anchors happened to say the first time the loop looked would become canon.
+  // It hands over the value to pin. Pinning on first sight is refused, because the
+  // anchors' first reading would become canon unreviewed.
   assert.match(verification.refusal ?? "", new RegExp(verification.current));
 });
 
@@ -121,13 +111,12 @@ test("a document with an Anchors heading and no anchors is refused", async () =>
   assert.ok(doc.problems.some((p) => /declares no anchors/.test(p)), doc.problems.join("; "));
 });
 
-// ---- the anchor verdict -----------------------------------------------------
+// the anchor verdict
 
 test("an UNREPORTED anchor is a FAILED anchor", () => {
   const anchors = parseScoresDoc("capsid", DOC).anchors;
-  // The cheapest way to pass an anchor is to stop reporting it. Skipping an
-  // unreported anchor would score a scorer that quietly stopped running the
-  // holdout suite exactly like one that runs it and passes.
+  // Skipping an unreported anchor would score a scorer that stopped running the
+  // holdout suite like one that runs it and passes.
   const verdict = anchorVerdict(anchors, { build_passes: 1 });
   assert.equal(verdict.passed, false);
   assert.match(verdict.reasons.join(" "), /holdout_pass_rate was not reported/);
@@ -164,7 +153,7 @@ test("anchorRegressions sees a drop that is still inside its bound", () => {
   assert.deepEqual(anchorRegressions(anchors, { build_passes: 1 }, {}), []);
 });
 
-// ---- keep or revert ---------------------------------------------------------
+// keep or revert
 
 const SECONDARY = parseScoresDoc("capsid", DOC).secondary;
 const BASE = {
@@ -195,8 +184,7 @@ test("a regression reverts", () => {
 });
 
 test("AN UNPROVABLE COMPARISON REVERTS, and says why", () => {
-  // The cheapest way to score well is to report nothing. A system that reads
-  // silence as success rewards exactly that.
+  // Reading silence as success would reward reporting nothing.
   const result = compare(SECONDARY, BASE, {});
   assert.equal(result.improved, false);
   assert.equal(result.compared, 0);
@@ -213,8 +201,7 @@ test("a metric missing on ONE side is excluded and named", () => {
 });
 
 test("a STUB metric is excluded even when both sides report a value", () => {
-  // Built here rather than from a seed: no namespace declares a stub any more, and
-  // the mechanism still has to work for the day one is genuinely half-wired.
+  // Built here rather than from a seed, since no namespace declares a stub.
   const stubbed = parseScoresDoc(
     "x",
     ["# s", "", "## Anchors", "", "- build_passes: required", "", "## Secondary", "", "- lint_count: minimize weight 2", "- recovery_rate: maximize weight 0 stub", ""].join("\n")
@@ -230,8 +217,6 @@ test("a STUB metric is excluded even when both sides report a value", () => {
 test("a metric measured in bytes cannot drown one measured in counts", () => {
   // Without the relative scaling and the clamp, a 1KB bundle reduction would
   // outweigh every other metric combined, because its raw magnitude is larger.
-  // The seed document declares three secondary metrics; lint_count is the one
-  // measured in counts.
   assert.deepEqual(SECONDARY.map((m) => m.metric).sort(), ["bundle_size_bytes", "lint_count", "test_pass_rate"]);
   const bytesOnly = compare(SECONDARY, BASE, { ...BASE, bundle_size_bytes: 99_000 });
   const countsWorse = compare(SECONDARY, BASE, {
@@ -257,8 +242,7 @@ test("a base of zero does not divide by zero, and an increase from zero still re
 });
 
 test("one metric's contribution is bounded by its weight", () => {
-  // The clamp. A metric that improved a thousandfold contributes its weight and
-  // no more, so no single number can carry an otherwise losing change.
+  // A metric that improved a thousandfold contributes its weight and no more.
   const result = compare(SECONDARY, BASE, { ...BASE, test_pass_rate: 900 });
   const rate = result.details.find((d) => d.metric === "test_pass_rate");
   assert.equal(rate?.contribution, 3);

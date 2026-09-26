@@ -5,12 +5,9 @@ import { META_INTERVAL_MS, PROPOSAL_PREFIX, RUN_PROMPT_PATH, SCORES_PATH, propos
 import { fakeKv } from "./fakes.ts";
 import { sourceFile } from "./source-files.ts";
 
-// THE META-LOOP'S BOUNDARY.
-//
-// A system that can edit its own objective has no objective. The meta-loop
-// proposes an edit to the run prompt and a human applies it; the distinction
-// between proposing and applying is the entire safety property, and
-// assertProposalTarget is where it lives.
+// The meta-loop's boundary. The meta-loop proposes an edit to the run prompt and a
+// human applies it; that distinction is the safety property, and
+// assertProposalTarget enforces it.
 
 test("THE META-LOOP CANNOT WRITE THE RUN PROMPT", () => {
   // The document it exists to comment on is the one it may not touch.
@@ -68,15 +65,15 @@ test("a real proposal path IS allowed, so the gate is not a blanket refusal", ()
 // scanner-rule: capsid/decisions.md 2026-09-04: the meta-loop writes only under capsid/improve/proposals/
 test("the module does not import anything that could apply a proposal", () => {
   // It reads the run prompt to reason about it and writes only under the
-  // proposals prefix. A path mutation, a delete, or a repo write here would be a
-  // way around the gate rather than through it.
+  // proposals prefix. A path mutation, a delete, or a repo write here would bypass
+  // the gate.
   const meta = sourceFile("improve-meta.ts");
   for (const forbidden of ["pathMutation", "writeRepoFile", "deleteRepoFile", "DELETE FROM"]) {
     assert.equal(meta.includes(forbidden), false, `src/improve-meta.ts reaches for ${forbidden}`);
   }
 });
 
-// ---- the weekly cadence -----------------------------------------------------
+// the weekly cadence
 
 const NOW = new Date("2026-09-04T12:00:00Z");
 

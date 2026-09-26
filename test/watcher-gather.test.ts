@@ -3,16 +3,10 @@ import { test } from "node:test";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 import { gatherFindings, type Finding, type WatcherCheck } from "../src/watcher.ts";
 
-// THE WATCHER'S TWO HEALTH CHECKS NEVER RAN (AUDIT-2026-09-16.md, 8.1 and 8.21).
-//
-// healthFindings was tested as a pure function and was correct. What was wrong was
-// the gathering in front of it: the master head read called repoHistory with no ref,
-// which throws, and the migrations read took `name` from listRepoTree entries, which
-// carry `path`. attempt() swallowed the first and the cast hid the second, so both
-// checks received null and reported nothing, every half hour, from the day they
-// shipped. These tests drive gatherFindings itself, through the real repo readers,
-// so the property under test is "the finding reaches the queue", not "the judgement
-// is right when handed the right input".
+// The watcher's health checks, driven through gatherFindings and the real repo
+// readers. healthFindings is tested as a pure function elsewhere; a gathering error
+// swallowed by attempt() would hand it null and report nothing. The property under
+// test is "the finding reaches the queue".
 
 const OWNER = "DrDustinEdwards";
 const REPO = "capsid";
@@ -110,17 +104,15 @@ test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gather
   assert.deepEqual(failures.filter((f) => f.includes("migrations")), [], "the migrations read must not fail");
 });
 
-// THE FIELD CONTRACT. The watcher reads repo-reader results with no cast, so the
-// field names it uses are checked by `npm run check` against what the readers
-// actually return: planted 2026-09-17 by renaming listRepoTree's `path` to `name`,
-// which failed tsc at both watcher reads and failed the schema test above.
+// The field contract. The watcher reads repo-reader results with no cast, so the
+// field names it uses are checked by `npm run check` against what the readers return.
 
 test("a live schema AT the newest migration is not a finding, so the check is not just always firing", async () => {
   const { found } = await gather(NEWER);
   assert.ok(!fingerprints(found).some((f) => f.startsWith("schema-behind-")), JSON.stringify(fingerprints(found)));
 });
 
-// THE MIRROR CHECK IS GATED ON ITS DUMP LISTING. "Cannot see the mirror" and "the
+// The mirror check is gated on its dump listing. "Cannot see the mirror" and "the
 // mirror is dead" are different facts, and posting the second during a GitHub outage
 // would file a job every half hour.
 const BACKUPS = [
@@ -160,7 +152,7 @@ test("the mirror is read from whichever repo the namespace maps to its backups l
   assert.ok(fingerprints(found).includes("mirror-no-dump"), `the mapped repo's empty listing was not judged: ${fingerprints(found).join(", ")}`);
 });
 
-// A CHECK WHOSE READ FAILED IS NOT REPORTED AS RUN, so runPass does not clear the jobs
+// A check whose read failed is not reported as run, so runPass does not clear the jobs
 // it owns. In this harness improve_status, the blocked-jobs read and every roster CI
 // read fail, while /health, master head and the migrations listing succeed.
 test("gatherFindings reports only the checks whose reads succeeded", async () => {

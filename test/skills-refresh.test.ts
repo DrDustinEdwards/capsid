@@ -30,17 +30,14 @@ test("discovers models and collapses dated snapshots", () => {
 });
 
 // The MODEL_ID regex from DrDustinEdwards/claude-skills scripts/model-guides.mjs,
-// vendored as of 2026-09-25. The test used to read that file from a path on one
-// machine and pass with no assertion when it was absent, so it never ran in CI.
-// When the claude-skills copy changes, update this line and src/skills-refresh.ts
-// together.
+// vendored so the comparison runs in CI. When the claude-skills copy changes, update
+// this line and src/skills-refresh.ts together.
 const CLAUDE_SKILLS_MODEL_ID = String.raw`/\bclaude-(fable|mythos|opus|sonnet|haiku)-\d[a-z0-9-]*/g`;
 
 // scanner-rule: conventions-verification, a list spelled in two places is derived and compared. The other copy is vendored above from the claude-skills repo
 test("THE WORKER AND THE REPO SCRIPT AGREE ON WHAT A MODEL ID LOOKS LIKE", () => {
-  // The same discovery runs in two places: here, and in claude-skills'
-  // scripts/model-guides.mjs. A list spelled twice is a list that drifts, and the
-  // copy nobody looked at is the one that stops seeing a new model family.
+  // The same discovery runs here and in claude-skills' scripts/model-guides.mjs, so
+  // the two patterns must not drift.
   const mine = /const MODEL_ID = (\/.+\/g);/.exec(sourceFile("skills-refresh.ts"));
   assert.ok(mine, "src/skills-refresh.ts no longer declares MODEL_ID");
   assert.equal(mine[1], CLAUDE_SKILLS_MODEL_ID, "the Worker and the claude-skills script disagree about what a model id looks like");
@@ -58,8 +55,8 @@ test("an unset key takes the documented default and runs", async () => {
 });
 
 test("A KV THAT THREW DISABLES THE RUN", async () => {
-  // Deliberately not the same as the unset key. An unset key is a configuration
-  // that was never written; a throw is a fault, and a fault does not start work.
+  // An unset key is a configuration never written; a throw is a fault, and a fault
+  // does not start work.
   const schedule = await readSchedule(throwingKv);
   assert.equal(schedule.enabled, false);
   assert.match(schedule.reason ?? "", /KV is down/);

@@ -5,13 +5,10 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// A GATE THAT GOT NO ANSWER HAS NOT REFUSED THE DEPLOY.
-//
-// On 2026-09-18 (run 35300342260) one ECONNRESET threw out of a fetch in
-// scripts/verify-live.mjs, the script crashed with exit 1, and ci.yml rolled back a
-// good deploy. The script now retries a thrown fetch, records a gate whose requests
-// never got an answer as could-not-run, and exits 3 rather than 1 when no gate
-// refused. ci.yml rolls back on exit 1 only.
+// A gate that got no answer has not refused the deploy. scripts/verify-live.mjs
+// retries a thrown fetch, records a gate whose requests never got an answer as
+// could-not-run, and exits 3 rather than 1 when no gate refused. ci.yml rolls back
+// on exit 1 only, so a connection reset must not roll back a good deploy.
 //
 // These run the real script against a local server that plays a healthy Worker, and
 // can drop the connection instead of answering.
@@ -111,8 +108,8 @@ test("the fake Worker passes every gate, so the cases below measure the drops al
 });
 
 test("a connection reset on the first try of every request is retried and the run passes", async () => {
-  // This is the 2026-09-18 shape, applied to every request at once. Without the retry
-  // the first reset crashed the script with exit 1, and exit 1 rolls back.
+  // One reset per request. Without the retry the first reset would exit 1, and exit 1
+  // rolls back.
   const { code, out } = await run(healthy, (_req, nth) => nth === 1);
   assert.equal(code, 0, out);
   assert.doesNotMatch(out, /FAIL|NORUN/);
@@ -135,7 +132,7 @@ test("one single-shot gate that never gets an answer makes the run exit 3", asyn
 });
 
 test("a server that answers with errors is still a refusal: exit 1", async () => {
-  // The point of the change is that an ANSWER decides. A 503 is an answer.
+  // An answer decides, and a 503 is an answer.
   const broken: Handler = (_req, res) => {
     res.writeHead(503, { "content-type": "text/plain" });
     res.end("down");
@@ -160,9 +157,8 @@ test("a refusal outranks a gate that could not run: exit 1", async () => {
   assert.match(out, /NORUN {2}5 approve redirects to GitHub/);
 });
 
-// THE FOLDED GATES (audit item B8). Gate 1 now carries the store check that was gate
-// 1b, and gate 6 carries the no-store check that was 4b and the report sink that was
-// 7. Each case breaks one thing the removed gate used to catch.
+// The folded gates: gate 1 carries the store check, and gate 6 carries the no-store
+// check and the report sink. Each case breaks one of those checks.
 function breaking(change: (req: IncomingMessage, res: ServerResponse) => boolean): Handler {
   return (req, res) => {
     if (!change(req, res)) healthy(req, res);

@@ -9,14 +9,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// GROUP 1: NAMED ROLES, AND THE ONE THING THE SCOPE VOCABULARY COULD NOT SAY.
-//
-// Three of the four roles are expressible with the axes that already exist. The
-// watcher is not: "post a job and nothing else" is an ACTION inside one tool, and
-// the tools axis names tools. So a tools entry may now be qualified, `jobs.post`,
-// and the jobs handler asks the enforcement point about the qualified name at the
-// point where the action is known. That is the same shape the one enforcement point rule already
-// permits for `jobs` and `lint`, not a second enforcement point.
+// Named roles. "Post a job and nothing else" is an action inside one tool, so a tools
+// entry may be qualified, `jobs.post`, and the jobs handler asks the enforcement point
+// about the qualified name where the action is known, the shape the one enforcement
+// point rule permits for `jobs` and `lint`.
 
 function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);
@@ -25,20 +21,17 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
   return { id: "agent_aaaaaaaaaaaa", name: "t", kind: "driver", actor: "agent:t", scopes, admin: false, row: null };
 }
 
-// ---- the qualified tool entry, as a pure rule ----------------------------------
+// the qualified tool entry, as a pure rule
 
 test("a wildcard tools axis allows every action, so no existing agent changes behaviour", () => {
-  // The innocent case first. Every agent minted before this change carries "*", and
-  // a guard that refuses them would be found by an outage rather than by a test.
+  // Agents with "*" must keep every action.
   assert.equal(allowsToolAction("*", "jobs", "post"), true);
   assert.equal(allowsToolAction("*", "jobs", "claim"), true);
   assert.equal(allowsToolAction("*", "jobs", undefined), true);
 });
 
 test("an UNQUALIFIED tool entry still allows every action of that tool", () => {
-  // Backward compatible on purpose: listing a bare tool name is how the axis has
-  // always been written, and it keeps meaning what it meant. Narrowing is something
-  // a caller OPTS INTO by naming actions, not something that happens to it.
+  // A bare tool name keeps its meaning; narrowing is opted into by naming actions.
   const list = ["jobs", "read"];
   assert.equal(allowsToolAction(list, "jobs", "post"), true);
   assert.equal(allowsToolAction(list, "jobs", "claim"), true);
@@ -54,8 +47,8 @@ test("naming ONE action narrows the tool to the actions named, and the rest are 
 });
 
 test("a qualified entry narrows ONLY its own tool", () => {
-  // The failure worth guarding: a `jobs.post` entry that also narrowed `lint` would
-  // refuse an action nobody restricted, and the refusal would read as a scope error.
+  // A `jobs.post` entry that also narrowed `lint` would refuse an action nobody
+  // restricted.
   const list = ["jobs", "jobs.post", "lint"];
   assert.equal(allowsToolAction(list, "lint", "gather"), true);
   assert.equal(allowsToolAction(list, "lint", "finalize"), true);
@@ -75,7 +68,7 @@ test("the qualified name is what a scopes column round-trips, so the narrowing s
   assert.deepEqual(back.tools, ["jobs", "jobs.post"]);
 });
 
-// ---- the same rule, at the one enforcement point --------------------------------
+// the same rule, at the one enforcement point
 
 test("checkScope refuses an action the tools axis narrowed away, and names the action", () => {
   const watcher = scopedAgent((s) => {
@@ -98,8 +91,8 @@ test("checkScope with no action is exactly what it was, so every other tool is u
 });
 
 test("the jobs tool asks the enforcement point about the qualified name", async () => {
-  // The unit rules above are worth nothing if the handler never passes the action. An
-  // agent narrowed to jobs.list is called through the real tool with two actions.
+  // The handler must pass the action. An agent narrowed to jobs.list is called through
+  // the real tool with two actions.
   const lister = scopedAgent((s) => {
     s.namespaces = "*";
     s.tools = ["jobs", "jobs.list"];
@@ -117,7 +110,7 @@ test("the jobs tool asks the enforcement point about the qualified name", async 
   assert.equal(JSON.parse(listed).ok, true, `the narrowing refused the one action it allows: ${listed}`);
 });
 
-// ---- the reviewer's flag --------------------------------------------------------
+// the reviewer's flag
 
 test("can_comment_pr is a real flag and a comment is what requires it", () => {
   assert.ok((SCOPE_FLAGS as readonly string[]).includes("can_comment_pr"));
@@ -129,7 +122,7 @@ test("commenting needs can_comment_pr and NOT can_merge, which is the whole poin
   assert.ok(!repoWriteFlags("manage_pr", { action: "comment" }).includes("can_merge"));
 });
 
-// ---- the four roles -------------------------------------------------------------
+// the four roles
 
 const byName = (name: string) => {
   const role = ROLES.find((r: (typeof ROLES)[number]) => r.name === name);
@@ -178,7 +171,7 @@ test("the site seat is one namespace and one repo, and merges nothing else", () 
 
 test("DERIVED: every role names only flags this system has", () => {
   // A flag invented in a mint command does not survive parseScopes, so it would mint
-  // an agent that silently holds nothing. Caught here rather than in production.
+  // an agent that silently holds nothing.
   for (const role of ROLES) {
     for (const flag of Object.keys(role.flags ?? {})) {
       assert.ok((SCOPE_FLAGS as readonly string[]).includes(flag), `${role.name} names '${flag}', which is not a scope flag`);
@@ -187,8 +180,7 @@ test("DERIVED: every role names only flags this system has", () => {
 });
 
 test("DERIVED: no role is a driver in disguise", () => {
-  // The arc's rule is that roles are FEW and SEPARATED. A role holding both the
-  // write grant and a repo-mutating flag beyond its own is the shape that erodes it.
+  // Roles are few and separated: one capability each, not a bundle of flags.
   for (const role of ROLES) {
     const flags = Object.keys(role.flags ?? {});
     assert.ok(flags.length <= 1, `${role.name} holds ${flags.length} flags; a role is one capability, not a bundle`);

@@ -14,9 +14,9 @@ import { ROSTER } from "../src/improve-schema.ts";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// THE OFF-ACCOUNT BACKUP CREDENTIAL (session 3, group 1). The mirror job in the
+// The off-account backup credential. The mirror job in the
 // private capsid-backups repo holds no long-lived R2 secret: it signs a request
-// with a BACKUP-SPECIFIC derived key and receives a one-hour object-read-only
+// with a backup-specific derived key and receives a one-hour object-read-only
 // credential scoped to backups/json/ on capsid-media. Same envelope as the
 // holdout credential, different key, different bucket, different parent token.
 

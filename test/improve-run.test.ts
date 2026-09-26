@@ -6,21 +6,19 @@ import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 import { ARCHIVE_DOC, ATTEMPT, AWAITING, BASELINE, harness, MODEL_ROUTE, NOW, pin, report, SCORES } from "./improve-harness.ts";
 import { sseChange } from "./improve-fakes.ts";
 
-// THE LOOP, DRIVEN. Keep and revert, the monitor's veto, the restore after five
-// consecutive reverts, the subscription task document, and the dry run that writes
-// nothing.
+// The loop, driven: keep and revert, the monitor's veto, the restore after five
+// consecutive reverts, the subscription task document, and the dry run.
 //
-// EVERY TEST RUNS INSIDE withFetch, including the ones that expect no network. An
-// unrouted call returns 500 there, so a code path that reaches for GitHub or the
-// Anthropic API fails loudly instead of silently hitting the real internet from a
-// unit test.
+// Every test runs inside withFetch, including the ones that expect no network: an
+// unrouted call returns 500, so a path that reaches for GitHub or the Anthropic API
+// fails loudly instead of hitting the real internet.
 
 const DIRTY_CHANGE = "=== test/format.test.ts (30 bytes, complete new contents) ===\nassert(true);\n";
 
 const docWrites = (recorded: Array<{ sql: string; params: unknown[] }>) =>
   recorded.filter((r) => r.sql.includes("INSERT INTO documents"));
 
-// ---- the mode switch, end to end --------------------------------------------
+// the mode switch, end to end
 
 test("MODE off records nothing and opens nothing, but still verifies the anchors", async () => {
   await withFetch({}, async () => {
@@ -36,8 +34,7 @@ test("MODE off records nothing and opens nothing, but still verifies the anchors
 
 test("MODE off is the default, so an unset key runs nothing", async () => {
   await withFetch({}, async () => {
-    // Explicitly UNSET, overriding the harness default, because "off when the key
-    // is missing" is exactly what this test is about.
+    // Explicitly unset, overriding the harness default.
     const { d1, env } = await harness({ kv: { improve_mode: "" } });
     const summary = await openRuns(env, NOW, "capsid");
     assert.equal(summary.mode, "off");
@@ -89,7 +86,7 @@ test("the task document names the transferred skills, with their win rates", asy
   });
 });
 
-// ---- the anchor refusal, end to end -----------------------------------------
+// the anchor refusal, end to end
 
 test("A MISMATCHED ANCHOR PIN REFUSES THE RUN and writes the reason where a human will see it", async () => {
   await withFetch({}, async () => {
@@ -140,15 +137,11 @@ test("ONE ACTIVE RUN PER NAMESPACE: the opener will not open a second", async ()
   });
 });
 
-// ---- the dry run ------------------------------------------------------------
+// the dry run
 
 test("A DRY RUN WRITES NOTHING, though it does READ to resolve the base", async () => {
-  // THE INVARIANT SHARPENED 2026-09-06, and it is stronger than what it replaced.
-  // It used to assert no network call AT ALL, which forced the dry run to pass null
-  // for the default branch sha; it then reported "no base could be resolved" on every
-  // namespace and proved nothing about the one question a first run needs answered.
-  // Resolving the base is two GETs. So the claim that matters is asserted directly:
-  // no MUTATING call of any kind, rather than no call.
+  // Resolving the base is two GETs, so the claim asserted is no mutating call of any
+  // kind, rather than no call.
   await withFetch(
     {
       "GET /repos/DrDustinEdwards/capsid-mcp": { body: { default_branch: "main" } },
@@ -183,7 +176,7 @@ test("a dry run still reports the refusals a real run would hit", async () => {
   });
 });
 
-// ---- keep and revert --------------------------------------------------------
+// keep and revert
 
 test("AN IMPROVEMENT IS KEPT, and becomes the new best", async () => {
   await withFetch(MODEL_ROUTE, async () => {
@@ -208,12 +201,9 @@ test("AN IMPROVEMENT IS KEPT, and becomes the new best", async () => {
     assert.equal(run.reverts, 0);
     assert.equal(run.consecutive_reverts, 0);
     assert.equal(run.status, "attempting", "a kept attempt should let the run continue");
-    // WAS 3, THE REPORTED WALL CLOCK, until 2026-09-15. Two rulings changed it.
-    // ci_minutes is now REPLACED by the report rather than accumulated, because
-    // dispatchScorer books an estimate against the cap at dispatch and adding the
-    // report on top would charge every run twice. And a repo GitHub bills nothing
-    // for contributes nothing to a meter denominated in minutes: this fixture is
-    // capsid, which is public, so its reservation and its settlement are both 0.
+    // ci_minutes is replaced by the report rather than accumulated, because
+    // dispatchScorer books an estimate at dispatch. This fixture is capsid, which is
+    // public and billed nothing, so its reservation and settlement are both 0.
     assert.equal(run.ci_minutes, 0);
 
     const best = kv.puts.find((p) => p.key === "improve:best:capsid");
@@ -259,9 +249,8 @@ test("A FAILED ANCHOR IS REVERTED EVEN WHEN THE SECONDARY SCORE IMPROVES", async
 });
 
 test("THE MONITOR'S VETO OUTRANKS A GOOD SCORE", async () => {
-  // A change that games the scorer scores WELL. This one halves the lint count by
-  // editing a test file, and the deterministic path guard refuses it without ever
-  // reaching the model.
+  // A change that games the scorer scores well: this one edits a test file, and the
+  // deterministic path guard refuses it without reaching the model.
   await withFetch({}, async (calls) => {
     const { d1, env } = await harness({
       documents: [{ ...ARCHIVE_DOC, body: DIRTY_CHANGE }],
@@ -337,10 +326,8 @@ test("A DUPLICATE REPORT IS IGNORED, not counted twice", async () => {
   });
 });
 
-// ---- Fix 2: the deterministic path monitor runs BEFORE the branch is pushed --
-
-// The change touches a protected path (package.json), which the pre-push gate must
-// catch. The stream itself is ./improve-fakes.ts.
+// The deterministic path monitor runs before the branch is pushed: a change touching
+// a protected path (package.json) is caught by the pre-push gate.
 
 const ATTEMPTING = {
   id: "capsid-r2",
@@ -382,7 +369,7 @@ test("a proposal touching a protected path is flagged BEFORE any push or dispatc
   );
 });
 
-// ---- Fix 5: ingest binds the report to the run's in-flight attempt ----------
+// ingest binds the report to the run's in-flight attempt
 
 test("a report whose head_sha does not match the attempt is refused (ci_dispatch-against-master defeat)", async () => {
   await withFetch(MODEL_ROUTE, async () => {
@@ -433,7 +420,7 @@ test("a report for an attempt the run is not currently awaiting is ignored, not 
     const result = await ingestScore(env, report({ attempt_id: "capsid-r1-a02", head_sha: "head02" }), NOW);
     assert.equal(result.ok, true);
     assert.match(result.message, /not awaiting a score for|ignored/);
-    // Old code would have advanced the run to judging and scored a02. It did not.
+    // The run did not advance to judging and score a02.
     assert.equal(d1.rows.improve_runs[0].status, "awaiting-score");
     assert.equal(d1.rows.improve_runs[0].current_attempt, "capsid-r1-a01");
   });
@@ -456,7 +443,7 @@ test("a report whose namespace does not match its run is refused", async () => {
   });
 });
 
-// ---- the transferred skill's outcome ----------------------------------------
+// the transferred skill's outcome
 
 test("a transferred skill's WIN is recorded against the skill", async () => {
   await withFetch(MODEL_ROUTE, async () => {
@@ -489,33 +476,27 @@ test("a transferred skill's LOSS is recorded too, so transfer is falsifiable", a
   });
 });
 
-// ---- the stale guard and the restore ----------------------------------------
+// the stale guard and the restore
 
-// SUPERSEDED 2026-09-16: a score that never arrives was a REVERT, and that was the
-// defect. A scorer that did not report measured nothing, so the attempt is left
-// unjudged and the run continues. What that costs and what stops it repeating is
-// pinned in test/improve-unjudged.test.ts; this keeps the half that was always
-// right, which is that the run does not wedge.
+// A score that never arrives leaves the attempt unjudged, not reverted
+// (test/improve-unjudged.test.ts). This file pins that the run does not wedge.
 
 test("a score still inside the window is WAITED for, not reverted", async () => {
   await withFetch({}, async () => {
     const soon = new Date(Date.parse("2026-09-04T08:04:00Z") + 60_000);
     const { d1, env } = await harness({ improveRuns: [AWAITING], improveAttempts: [ATTEMPT] });
     const outcomes = await tickRuns(env, soon);
-    // DERIVED from the constant. This read `1200s` until SCORE_TIMEOUT_MS was raised
-    // above the scorer workflow's own ceiling, and a hardcoded number here would have
-    // gone stale silently on the next change to it.
+    // Derived from the constant, so a change to SCORE_TIMEOUT_MS cannot leave a
+    // hardcoded number here stale.
     assert.match(outcomes[0].note, new RegExp(`waiting \\(60s of ${SCORE_TIMEOUT_MS / 1000}s\\)`));
     assert.equal(d1.rows.improve_attempts[0].status, "awaiting-score");
     assert.equal(d1.rows.improve_runs[0].reverts, 0);
   });
 });
 
-// DRIVEN BY A REAL REVERT, not by a timeout. It used to tip the counter with a
-// scorer that never reported, which no longer moves it: that path is an environment
-// failure now and has its own ceiling. The rule under test is unchanged, so it is
-// tested through the thing that still triggers it, an attempt that was measured and
-// did not improve.
+// Driven by a real revert (an attempt that was measured and did not improve), not
+// by a timeout: a scorer that never reports is an environment failure and does not
+// move the counter.
 test("AFTER FIVE CONSECUTIVE REVERTS THE RUN RESTORES TO BEST AND STOPS", async () => {
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
@@ -562,8 +543,6 @@ test("A RUN PAST ITS AGE CEILING FINALIZES wherever it is", async () => {
 
 test("a run found STALE in 'judging' by a tick is returned to awaiting-score, not stranded", async () => {
   // Stale advanced_at, past SCORE_TIMEOUT_MS: the ingest that held it is dead.
-  // The fresh-judging case (a live ingest, left alone) is pinned in
-  // test/audit-2026-09-06-round2.test.ts.
   await withFetch({}, async () => {
     const { d1, env } = await harness({
       improveRuns: [{ ...AWAITING, status: "judging", advanced_at: "2026-09-04 07:00:00" }],
@@ -576,9 +555,8 @@ test("a run found STALE in 'judging' by a tick is returned to awaiting-score, no
 });
 
 test("A STEP THAT THROWS FINALIZES THE RUN rather than holding the namespace forever", async () => {
-  // The attempting step reaches for GitHub and the model. With neither routed and
-  // no API key, it throws, and the run must not keep the namespace's one active
-  // slot for the rest of time.
+  // With neither GitHub nor the model routed and no API key, the attempting step
+  // throws, and the run must not keep the namespace's one active slot.
   await withFetch({}, async () => {
     const { d1, env } = await harness({ improveRuns: [{ ...AWAITING, status: "attempting", current_attempt: null }] });
     const outcomes = await tickRuns(env, NOW);
@@ -587,7 +565,7 @@ test("A STEP THAT THROWS FINALIZES THE RUN rather than holding the namespace for
   });
 });
 
-// ---- status -----------------------------------------------------------------
+// status
 
 test("improve_status reports the mode, the pin, the pause and the totals", async () => {
   await withFetch({}, async () => {

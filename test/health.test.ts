@@ -3,11 +3,10 @@ import { test } from "node:test";
 import { handleHealth } from "../src/health.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// GROUP 4 (deploy pipeline). /health gained two operational facts: the schema
-// version it is running against, and the age of the last successful backup. Both
-// are informational: a stale backup or an unreadable migration name is a WARNING,
+// /health reports the schema version and the age of the last successful backup. Both
+// are informational: a stale backup or an unreadable migration name is a warning,
 // never a reason to report degraded, because health is about whether the store
-// answers, and these two are about whether the operator should look.
+// answers.
 //
 // That schema_version names the newest applied migration is asserted against a real
 // D1 in test-integration/health.test.ts, which applies every file in migrations/.
@@ -63,8 +62,8 @@ test("a missing backup stamp warns rather than throwing", async () => {
 });
 
 test("an unparseable backup stamp warns instead of reporting no warning", async () => {
-  // Date.parse gives NaN, and NaN > limit is false, so before this the stamp read as
-  // fresh: no warning and an age_hours of null.
+  // Date.parse gives NaN, and NaN > limit is false, so a naive check reads the stamp
+  // as fresh.
   const env = healthEnv({
     DB: fakeD1({ migrations: ["0001_init.sql"] }).db,
     APP_KV: fakeKv({ seed: { "backup:last-ok": "not a date" } }).kv,

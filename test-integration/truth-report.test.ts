@@ -6,13 +6,10 @@ import { improveStatus } from "../src/improve-run";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-// THE OTHER HALF OF THE TRUTH REPORT. test/truth-report.test.ts proves which
-// statements the handler issues; this proves the document LANDS in a real D1 and
-// that improve_status reads its number back out.
-//
-// The split matters because the two fail differently. A fake that records SQL
-// cannot tell whether SQLite accepts the upsert, whether the FTS triggers fire on
-// it, or whether ORDER BY path DESC really returns the newest date. This can.
+// test/truth-report.test.ts proves which statements the handler issues; this proves
+// the document lands in a real D1 and improve_status reads its number back. A fake
+// that records SQL cannot tell whether SQLite accepts the upsert, whether the FTS
+// triggers fire, or whether ORDER BY path DESC returns the newest date.
 
 async function connect() {
   const server = buildServer(env as never, "write", "test:integration");
@@ -53,9 +50,7 @@ describe("lint mode report", () => {
       expect(stored!.type).toBe("reference");
       expect(integrityOf(stored!.body)).toBe(payload.integrity);
 
-      // The FTS triggers fired on the insert, which is a property only a real
-      // schema has: documents_fts is external-content and the trigger is what
-      // keeps it in step.
+      // documents_fts is external-content, and the trigger keeps it in step.
       const indexed = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'integrity'"
       ).first<{ n: number }>();
@@ -74,10 +69,8 @@ describe("lint mode report", () => {
   it("PLANT: a second run the same day snapshots the first rather than accumulating", async () => {
     const client = await connect();
     try {
-      // A report for today already exists, written by the test above against this
-      // same database. Since 2026-09-16 that makes this an OVERWRITE, and an
-      // overwrite is confirmed the way `write` confirms one: refused first, with
-      // nothing written, and then taken with confirm: true.
+      // The test above wrote today's report, so this is an overwrite, confirmed the
+      // way `write` confirms one: refused first, then taken with confirm: true.
       const unconfirmed = await callLint(client, { namespace: "capsid", mode: "report" });
       expect(unconfirmed.isError, "a report overwrote today's report without asking").toBe(true);
       expect(unconfirmed.text).toMatch(/confirmation required/);
@@ -90,8 +83,7 @@ describe("lint mode report", () => {
       ).first<{ n: number }>();
       expect(reports?.n, "one document per namespace per day, not one per invocation").toBe(1);
 
-      // The overwrite went through document_versions, like every other overwrite
-      // in this store. A write path that skips the snapshot breaks the snapshot rule.
+      // The overwrite went through document_versions (the snapshot rule).
       const versions = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'"
       ).first<{ n: number }>();
@@ -119,7 +111,7 @@ describe("lint mode report", () => {
   it("the newest DATE wins, not the most recently rewritten document", async () => {
     // improve_status takes ORDER BY path DESC LIMIT 1 because the filename is
     // ISO-dated and sorts lexically. updated_at would give the most recently
-    // REWRITTEN report, and re-running an old date is not a newer measurement.
+    // rewritten report, which is not a newer measurement.
     await env.DB.prepare(
       `INSERT OR REPLACE INTO documents (namespace, path, title, body, type, status, updated_at)
        VALUES ('capsid', 'reports/lint-2020-01-01.md', 'Old', 'integrity: 1%', 'reference', 'published', datetime('now'))`

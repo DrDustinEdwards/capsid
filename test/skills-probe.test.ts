@@ -6,24 +6,12 @@ import { tickRuns } from "../src/improve/tick.ts";
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// WHY NO SKILL'S STATUS COULD EVER CHANGE, AND WHAT WAS DONE ABOUT IT.
+// No tick path may dispatch improve-score.yml with a body the workflow refuses.
+// GitHub rejects a dispatch that carries an undeclared input or omits a required one,
+// and the caller only logs the error, so the failure is silent.
 //
-// job_513843de1e96 found that no skill can leave `candidate`, with the improve loop on
-// or off. Status moves only through commitTransition, which needs two skill_evaluations
-// rows at the skill's current version, and two things stopped those rows existing:
-//
-//   1. The evaluation cycle dispatched improve-score.yml with `mode`, `skill_id` and
-//      `skill_version`. That workflow declares none of them and REQUIRES `branch`,
-//      `run_id` and `attempt_id`, which the cycle never sent. GitHub rejects such a
-//      dispatch outright; the cycle caught the error and logged it.
-//   2. Nothing wrote skill_evaluations. evaluationStatement is the only writer and had
-//      no production caller.
-//
-// The reproduction for both is preserved below, re-pointed at the answer Dustin ruled
-// on 2026-09-16 (option C, capsid/decisions.md): SCHEDULED PROBING IS DROPPED. The
-// broken dispatch is gone rather than repaired, because a working probe needs the
-// loop's attempt path, model spend and a probe set that has never been defined.
-// Evidence now comes from verified job outcomes and scored attempts.
+// Scheduled skill probing is dropped (capsid/decisions.md); skill evidence comes from
+// verified job outcomes and scored attempts.
 
 const WORKFLOW = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "improve-score.yml"), "utf8");
 const SCORES = seedScoresDoc("capsid");
@@ -33,9 +21,8 @@ interface DeclaredInput {
   required: boolean;
 }
 
-// The workflow_dispatch inputs, read by indentation to match how the other workflow
-// guards in this suite read YAML: no dependency, and the shape checked is the shape a
-// reader sees.
+// The workflow_dispatch inputs, read by indentation like the other workflow guards in
+// this suite, with no YAML dependency.
 function declaredInputs(text: string): DeclaredInput[] {
   const lines = text.split("\n").map((l) => l.replace(/\r$/, ""));
   const start = lines.findIndex((l) => /^ {4}inputs:\s*$/.test(l));
@@ -75,7 +62,7 @@ test("the workflow's declared inputs are read at all, so the guards below cannot
   assert.ok(inputs.some((i) => i.required), "no required input parsed, so the required-input half of the guard would be vacuous");
 });
 
-// ---- no tick path may dispatch a body the workflow refuses ----------------------
+// no tick path may dispatch a body the workflow refuses
 
 const SKILL = {
   id: "sk-probe",
@@ -109,10 +96,9 @@ async function tickHarness(runs: Array<Record<string, unknown>>) {
 }
 
 test("NO TICK PATH DISPATCHES improve-score.yml WITH A BODY THE WORKFLOW REFUSES", async () => {
-  // The whole tick, not one function: the evaluation cycle rides it, and the point of
-  // this guard is that a dispatch reintroduced anywhere on the tick is caught. A run at
-  // 'opening' makes the tick dispatch the baseline, which is a real, correct dispatch,
-  // so the guard is exercised against traffic rather than against silence.
+  // The whole tick, so a dispatch reintroduced anywhere on it is caught. A run at
+  // 'opening' makes the tick dispatch the baseline, a correct dispatch, so the guard is
+  // exercised against traffic rather than against silence.
   await withFetch(
     {
       "GET /repos/owner/capsid-mcp": { body: { default_branch: "main" } },

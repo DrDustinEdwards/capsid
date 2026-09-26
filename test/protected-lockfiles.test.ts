@@ -2,22 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { protectedHits } from "../src/improve-schema.ts";
 
-// LOCKFILES THE SCORER INSTALLS FROM, audit 2026-09-07 (Opus CRITICAL 5.2, Grok
-// MAJOR 4). Every path in EXECUTED_AT_INSTALL is refused by the path monitor at
-// 257e625 for exactly one of them, package-lock.json. The rest were live: the
-// scorer's install step is package-manager agnostic and installs from whichever
-// lockfile it finds, so a lockfile an attempt can edit is arbitrary code
-// execution inside the job that holds the signing key.
+// Lockfiles the scorer installs from. The scorer's install step is package-manager
+// agnostic and installs from whichever lockfile it finds, so a lockfile an attempt can
+// edit is arbitrary code execution inside the job that holds the signing key.
 //
-// The list is DERIVED FROM WHAT A PACKAGE MANAGER READS, not from the spellings
-// that happen to exist in these five repos today, so a sixth repo on a different
-// toolchain is covered before anyone notices it joined.
+// The list is derived from what a package manager reads, not from the spellings in
+// the current repos, so a repo on a different toolchain is covered when it joins.
 
 const EXECUTED_AT_INSTALL = [
   "package.json",
   "package-lock.json",
-  // npm PREFERS this over package-lock.json, so its absence was a bypass of the
-  // pattern beside it rather than a gap next to it.
+  // npm prefers this over package-lock.json, so leaving it out bypasses the pattern
+  // beside it.
   "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
@@ -95,8 +91,7 @@ test("the guard has not become a blanket refusal", () => {
   assert.deepEqual(wrongly, [], "these must stay editable or the loop has nothing to do");
 });
 
-// Audit 2026-09-25, E2-30 (finding E2-L13): config the test runner or build reads that
-// the list did not cover.
+// Config the test runner or build reads.
 test("test runner, compiler, environment and container config are protected", () => {
   const paths = [
     "jest.config.json",

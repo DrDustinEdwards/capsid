@@ -5,19 +5,13 @@ import { IMPROVE_RUN_DEFAULTS, sseMessage } from "./improve-fakes.ts";
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// ONE CREDIT SYSTEM, AND THE LOOP WAS NOT ON IT.
+// The loop uses the one skill credit system.
 //
-// capsid/decisions.md, 2026-09-12, ruled what one run does to one offered skill:
-// a skill moves only when it was USED and a verifier reported on the work itself.
-// attribute() in src/skills-lifecycle.ts implements that ruling, and
-// attributionStatements() in src/skills-records.ts applies it.
-//
-// The loop never called either. It called recordSkillOutcome(db, id, kept), which
-// knows only "kept" and charges a LOSS for everything else. The case that makes the
-// difference visible is the one below: the model is offered a skill and declines to
-// propose anything at all. The skill was never used, so under the ruling it earns
-// nothing in either direction. Under recordSkillOutcome it takes a loss, and enough
-// of those retire a skill for having been present while a model said no.
+// A skill's record moves only when it was used and a verifier reported on the work
+// (attribute() in src/skills-lifecycle.ts, applied by attributionStatements() in
+// src/skills-records.ts). The case below: the model is offered a skill and proposes
+// nothing. The skill was never used, so it earns nothing in either direction; a
+// loss here would retire skills for being present while a model said no.
 
 const SCORES = seedScoresDoc("capsid");
 const NOW = new Date("2026-09-05T08:05:00Z");

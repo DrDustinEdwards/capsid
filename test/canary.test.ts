@@ -8,19 +8,13 @@ import { CANARY_CLIENT, OAUTH_KV } from "../scripts/bindings.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// THE LIVE-GATE CANARY (work queue, from the 2026-08-17 audit).
+// The live-gate canary. Gate 2b reads one long-lived client: record from OAUTH_KV
+// every run, so a lost client record is detected within the schedule interval rather
+// than at the owner's next failed connect.
 //
-// A client: record vanished from OAUTH_KV that day with no request in the window
-// that could account for it. Nothing watched that keyspace, so the only way such a
-// loss surfaces is the user-visible symptom: 400 on /authorize, invalid_client on
-// /token, whenever the owner next tries to connect. Gate 2b reads one long-lived
-// record every run, bounding time-to-detect at the six-hour schedule interval.
-//
-// THE ASSERTION THAT MATTERS IS NOT "the canary is there". It is that the gate can
-// tell WHY it is not there. A check that reports every failure the same way is the
-// defect the reaper had, and it is the reason the canary reads KV directly rather
-// than driving /authorize: through the Worker, a missing client and a KV outage are
-// the same error page.
+// The gate must tell why the canary is absent. That is why it reads KV directly
+// rather than driving /authorize: through the Worker, a missing client and a KV
+// outage are the same error page.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
@@ -80,14 +74,12 @@ test("a MISSING canary fails, and is named as the 2026-08-17 anomaly recurring",
   assert.equal(report.passed, false);
   assert.match(report.detail, /is GONE from capsid-app-kv/);
   assert.match(report.detail, /vanished-client-record anomaly of 2026-08-17/);
-  // It must tell the reader what to do before re-minting, or the evidence is
-  // destroyed by the first person trying to fix it.
+  // It must tell the reader what to check before re-minting destroys the evidence.
   assert.match(report.detail, /check whether live grants survived before re-minting/);
 });
 
 test("an UNREACHABLE store is NOT reported as data loss", async () => {
-  // The distinction the gate exists for. A KV blip must not read as a vanished record,
-  // or the gate produces false alarms and stops being acted on.
+  // A KV blip must not read as a vanished record.
   for (const stub of [fakeKvApi({ valueStatus: 500, value: RECORD }), fakeKvApi({ throwOnValue: "ECONNRESET" })]) {
     const result = await check(stub);
     assert.equal(result.outcome, "unreachable");
@@ -106,8 +98,8 @@ test("missing and unreachable are genuinely different outcomes", async () => {
 
 test("a canary that has acquired a TTL fails BEFORE it can expire", async () => {
   // Re-minting through /register would hand the canary the 90 day
-  // clientRegistrationTTL back. A canary that can expire on its own has a second,
-  // legitimate reason to be absent, which is the exact ambiguity it removes.
+  // clientRegistrationTTL back, and a canary that can expire on its own has a second
+  // reason to be absent.
   const stub = fakeKvApi({ value: RECORD, expiration: 1794583009 });
   const result = await check(stub);
   assert.equal(result.outcome, "has-ttl");
@@ -118,12 +110,8 @@ test("a canary that has acquired a TTL fails BEFORE it can expire", async () => 
 });
 
 test("an unreadable key listing is TTL-UNVERIFIED: neither a TTL nor non-expiring", async () => {
-  // Absence of evidence about the expiry is evidence of nothing. It used to fall
-  // through to "present", which the report prints as "non-expiring", a TTL the gate
-  // never checked.
-  //
-  // BOTH failure shapes, because they take different paths through the check: a
-  // non-200 listing and a THROWN listing.
+  // An unread expiry must not print as "non-expiring". Both failure shapes, because
+  // they take different paths: a non-200 listing and a thrown listing.
   for (const stub of [fakeKvApi({ value: RECORD, listStatus: 500 }), fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" })]) {
     const result = await check(stub);
     assert.equal(result.outcome, "ttl-unverified", "an unreadable listing was reported as a checked TTL");
@@ -142,30 +130,25 @@ test("a foreign or truncated value at the right key is not accepted", async () =
   }
 });
 
-// ---- the wiring ------------------------------------------------------------
+// The wiring.
 
 test("gate 2b is wired into the run and counted", () => {
   const gate = read("../scripts/verify-live.mjs");
   assert.match(gate, /await gateCanary\(\);/, "gate 2b is defined but never called");
-  // It runs BEFORE the register gate's client is created, so a keyspace-wide loss
-  // is reported against a record that predates this run rather than one it just
-  // wrote.
+  // It runs before the register gate's client is created, so a keyspace-wide loss is
+  // reported against a record that predates this run.
   assert.ok(
     gate.indexOf("await gateCanary()") < gate.indexOf("return gateRegister()"),
     "the canary is checked after this run registers its own client"
   );
-  // The gate total moved 9 to 10 with this gate, and 10 to 11 when the backup
-  // freshness gate landed. counts.ts is the authority and test/counts.test.ts
-  // compares it to the distinct labels in the script; what THIS asserts is that
-  // the canary is one of them, which is the claim this file is about. Pinning the
-  // total here made an unrelated eleventh gate fail the canary's test.
+  // The gate total is pinned in counts.ts and checked by test/counts.test.ts; this
+  // asserts only that the canary is one of the counted gates.
   const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
   assert.ok(labels.has("2b canary client record"), "the canary gate is no longer one of the counted gates");
 });
 
 test("the credentials the gate needs are supplied to it in CI", () => {
-  // Without these the gate SKIPS, and a gate that silently skips in CI is the
-  // failure mode this whole item exists to remove.
+  // Without these the gate skips silently in CI.
   const workflow = read("../.github/workflows/ci.yml");
   const step = workflow.slice(workflow.indexOf("- name: verify:live"), workflow.indexOf("- name: Reap this run"));
   assert.match(step, /CLOUDFLARE_API_TOKEN:/, "verify:live cannot read KV, so gate 2b will skip on every CI run");

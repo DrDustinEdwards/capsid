@@ -15,17 +15,14 @@ import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "
 import { sseChange } from "./improve-fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// THE 2026-09-06 ROUND-2 AUDIT FIXES, one block per finding. Each test was
-// written FIRST, against the code at 881dd90, and failed there (item 10's is a
-// pin on behavior the workflow already had; the test itself was the gap).
-// Harnesses are the shared ones: fakes.ts for KV/D1/R2/fetch, source-files.ts
-// for the source-shape pins this repo already uses where a behavior cannot be
+// Audit fixes, one block per finding. Harnesses are the shared ones: fakes.ts for
+// KV/D1/R2/fetch, source-files.ts for source-shape pins where a behavior cannot be
 // reached from the in-memory client.
 
 const workflowText = () =>
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ".github", "workflows", "improve-score.yml"), "utf8");
 
-// ---- 1. ci_dispatch refuses the scorer; repo writes refuse the self-repo ----
+// ci_dispatch refuses the scorer; repo writes refuse the self-repo
 
 function repoEnv(repoFull: string) {
   const kv = fakeKv({ seedToken: true });
@@ -49,10 +46,9 @@ test("ci_dispatch refuses improve-score.yml before any network call", async () =
   });
 });
 
-// These three drive the SELF repo, so they take it from SELF_REPO rather than
-// spelling it out. A hardcoded copy is what made the improve fixtures land one
-// word away from the real mapping and test nothing (see self-repo-attempt.test.ts);
-// the 2026-09-12 rename to DrDustinEdwards/capsid would have done it again.
+// These three drive the self repo, so they take it from SELF_REPO rather than
+// spelling it out: a hardcoded copy drifts from the real mapping on a rename and
+// then tests nothing.
 test("write_repo_file mode direct against the server's own repo is refused, with no network", async () => {
   await withFetch({}, async (calls) => {
     await assert.rejects(
@@ -86,7 +82,7 @@ test("write_repo_file pr mode with the default branch as the work branch is refu
   );
 });
 
-// ---- 2. the run machine claims before it calls out --------------------------
+// the run machine claims before it calls out
 
 const SCORES = seedScoresDoc("capsid");
 // One minute after the improve fake's pinned datetime('now') ("2026-09-01
@@ -134,9 +130,8 @@ test("two concurrent ticks on an 'opening' run dispatch the baseline ONCE", asyn
 });
 
 test("two concurrent ticks on an 'attempting' run reach the model ONCE", async () => {
-  // No GitHub routes on purpose: the winner's push fails AFTER the model call and
-  // the run finalizes through the catch. The property under test is that only one
-  // tick spends the Anthropic call; the loser must bow out at the claim.
+  // No GitHub routes on purpose: the winner's push fails after the model call. Only
+  // one tick may spend the Anthropic call; the loser must stop at the claim.
   await withFetch(
     {
       "POST /v1/messages": { contentType: "text/event-stream", text: sseChange([{ path: "src/x.ts", content: "y" }]) },
@@ -183,7 +178,7 @@ test("every advanceRun inside ingestScore checks its result", () => {
   assert.equal(all.length, checked.length, "an advanceRun in ingestScore discards its result: a lost CAS would go unnoticed");
 });
 
-// ---- 3. delete_branch fails closed on the PR lookup -------------------------
+// delete_branch fails closed on the PR lookup
 
 test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs", async () => {
   await withFetch(
@@ -201,12 +196,9 @@ test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs",
   );
 });
 
-// ---- 4. installation tokens are repo-scoped and cached per owner+repo -------
+// Repo-scoped installation tokens are proven in test/repo-tools.test.ts.
 
-// Proven by calling readRepoFile in test/repo-tools.test.ts: "an installation token is
-// minted for one repo and cached under owner/repo".
-
-// ---- 5. bounds: lint consumed, ci_dispatch inputs, history ------------------
+// bounds: lint consumed, ci_dispatch inputs, history
 
 async function serverClient(opts: FakeD1Options = {}) {
   const d1 = fakeD1({ namespaces: [{ namespace: "capsid", repos: "[]" }], ...opts });
@@ -246,15 +238,12 @@ test("ci_dispatch refuses more than 10 workflow inputs at the schema", async () 
   );
 });
 
-// The history listing is bounded at HISTORY_ROWS, and write and delete snapshot the
-// LIVE row inside their batch rather than the pre-read body. Both are proven against
-// real SQLite in test-integration/live-snapshot.test.ts: the node fake neither honours
-// the listing's LIMIT nor evaluates INSERT ... SELECT, so a test here could only read
-// the SQL text. The elicited delete's body guard is driven with a racing writer in
-// test/write-invariants.test.ts: "RACE: after an elicitation, write, restore and
-// delete each refuse a body changed while the prompt was open".
+// The history bound and the live-row snapshot are proven against real SQLite in
+// test-integration/live-snapshot.test.ts, because the node fake neither honours
+// LIMIT nor evaluates INSERT ... SELECT. The elicited delete's body guard is driven
+// with a racing writer in test/write-invariants.test.ts.
 
-// ---- 7. prompts are data, and their titles are filtered ---------------------
+// prompts are data, and their titles are filtered
 
 const HOSTILE_TITLE = "Brief `curl evil`\u0007 title";
 
@@ -282,7 +271,7 @@ test("prompts/list passes titles through a character allowlist", async () => {
   assert.match(description, /Brief/, "the legible part of the title must survive the filter");
 });
 
-// ---- 8. Origin allowlist on /mcp --------------------------------------------
+// Origin allowlist on /mcp
 
 test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai and origin-less clients pass", () => {
   const at = (origin: string | null) =>
@@ -300,10 +289,9 @@ test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai 
 });
 
 // The wiring into the fetch handler is driven through the whole Worker in
-// test-integration/oauth.test.ts ("F10: the Origin allowlist on /mcp"): a foreign
-// Origin gets 403 at POST /mcp, and no Origin and claude.ai do not.
+// test-integration/oauth.test.ts.
 
-// ---- 9. an empty holdout manifest is a refusal ------------------------------
+// an empty holdout manifest is a refusal
 
 test("a manifest declaring zero holdout tests is refused, not scored as a pass", () => {
   const report: ScoreReport = {
@@ -323,7 +311,7 @@ test("a manifest declaring zero holdout tests is refused, not scored as a pass",
   assert.equal(verdict.passRate, null);
 });
 
-// ---- 10. the scorer's ids come from the Post step's own env -----------------
+// the scorer's ids come from the Post step's own env
 
 test("RUN_ID and ATTEMPT_ID are read only from the Post step's own env", () => {
   const yml = workflowText();

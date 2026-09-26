@@ -1,6 +1,5 @@
-// THE IMPROVE LOOP HARNESS, shared by test/improve-run.test.ts and
-// test/improve-unjudged.test.ts. It used to be copied between the two files (audit
-// item C1-13), so a fixture fixed in one stayed wrong in the other.
+// The improve loop harness, shared by test/improve-run.test.ts and
+// test/improve-unjudged.test.ts so a fixture fix reaches both.
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import type { ScoreReport } from "../src/improve-scorer.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
@@ -70,11 +69,9 @@ export async function harness(opts: {
     improveSkills: opts.improveSkills,
   });
   // improve_mode defaults to "api" here, and opts.kv still overrides it. Ingest
-  // now refuses when the mode is off, when the namespace is paused, or when the
-  // budget is exceeded (2026-09-07, Grok MAJOR 6), so a harness that left the
-  // mode unset would make every ingest test assert the refusal instead of the
-  // thing it is about. The refusals have their own tests in
-  // test/ingest-hardening.test.ts rather than being asserted by accident here.
+  // refuses when the mode is off, so leaving it unset would make every ingest test
+  // assert the refusal instead of what it is about. The refusals have their own
+  // tests in test/ingest-hardening.test.ts.
   const kv = fakeKv({ seed: { improve_mode: "api", "improve:anchor:capsid": await pin(), ...(opts.kv ?? {}) }, seedToken: true });
   const holdout = fakeR2(
     opts.holdoutTotal === null
@@ -126,10 +123,8 @@ export const MODEL_ROUTE = {
 export const AWAITING = {
   id: "capsid-r1",
   namespace: "capsid",
-  // started IS SET EXPLICITLY. The fake's default is three days before NOW, and
-  // without this the six hour age guard fires on every tick test and every one of
-  // them fails with "aged out" rather than the thing it was checking. Which is the
-  // age guard working, and is why it is set here rather than defaulted.
+  // started is set explicitly. The fake's default is three days before NOW, which
+  // would trip the six hour age guard on every tick test.
   started: "2026-09-04 08:00:00",
   status: "awaiting-score",
   attempts: 1,
@@ -159,11 +154,9 @@ export const ARCHIVE_DOC = {
   type: "reference",
 };
 
-// ---- improve_run's control actions -------------------------------------------
-//
-// For test/improve-control.test.ts and test/improve-driver-lock.test.ts, which each
-// held an identical copy. A KV the control actions write, and a D1 that records
-// their audit batches.
+// improve_run's control actions, for test/improve-control.test.ts and
+// test/improve-driver-lock.test.ts: a KV the control actions write, and a D1 that
+// records their audit batches.
 export function controlHarness(seed: Record<string, string> = {}) {
   const kv = fakeKv({ seed });
   const d1 = fakeD1();

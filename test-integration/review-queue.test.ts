@@ -5,15 +5,10 @@ import type { Agent } from "../src/agents";
 import { blockJob, completeJob, failJob } from "../src/jobs";
 import { atCorrectionCap } from "../src/jobs-schema";
 
-// THE REVIEW GATE ON THE HOLDER TRANSITIONS, AGAINST A REAL D1.
-//
-// Moved from test/review-queue.test.ts (audit 2026-09-25, item C2-15). That file drove
-// the real completeJob, blockJob and failJob against a fake D1 that applied each
-// UPDATE only when its SQL text matched a pattern (corrections_count =
-// corrections_count + 1, SET status = ?2, COALESCE(?3), so an equivalent rewrite of
-// the SQL silently stopped the fake applying it. Here SQLite applies every statement,
-// the reviewer's identity comes from real audit_log and agents rows joined as the gate
-// joins them, and only GitHub's issue-comments and pull request endpoints are stubbed.
+// The review gate on the holder transitions, against a real D1, so an equivalent
+// rewrite of the SQL is still applied. The reviewer's identity comes from real
+// audit_log and agents rows joined as the gate joins them, and only GitHub's
+// issue-comments and pull request endpoints are stubbed.
 
 const REPO = "DrDustinEdwards/capsid-mcp";
 const JOB_ID = "job_reviewme1234";
@@ -39,7 +34,7 @@ function reviewEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: "s" } as unknown as Parameters<typeof completeJob>[0];
 }
 
-// THE AUDIT ROWS THAT SAY WHICH COMMENTS CAPSID POSTED, AND FOR WHOM. The gate reads
+// The audit rows that say which comments Capsid posted, and for whom. The gate reads
 // these to tell a reviewer's verdict from prose anybody with a `gh` token wrote on the
 // pull request. Default: every comment the fake serves was posted for an agent holding
 // can_comment_pr.
@@ -181,10 +176,9 @@ describe("the verdicts", () => {
   });
 
   it("PLANT: AT the cap, a further CHANGES BLOCKS for the seat instead of going round again", async () => {
-    // The cap was enforced only on `resume`, which this path never touches (audit
-    // 2026-09-13, finding 8). Driven through completeJob, the path a driver calls. THE
-    // DRIVER ASKED TO COMPLETE AND THE JOB WAS BLOCKED, so the call is a refusal of the
-    // complete with the block recorded (audit 2026-09-25, F3-3).
+    // Driven through completeJob, the path a driver calls, not only resume. The driver
+    // asked to complete and the job was blocked, so the call is a refusal of the
+    // complete with the block recorded.
     await claimedJob({ corrections_count: 2 });
     withComments(["REVIEW: still not right. CHANGES"]);
     const result = await finish();
@@ -271,8 +265,8 @@ describe("the gate sits on every way out", () => {
   });
 
   it("PLANT: a REVIEW comment Capsid did not post for a reviewer is not a verdict", async () => {
-    // The identity half. A driver with local `gh` can write the envelope; what it cannot
-    // do is make Capsid record that a can_comment_pr actor asked for that comment.
+    // A driver with local `gh` can write the envelope; it cannot make Capsid record
+    // that a can_comment_pr actor asked for that comment.
     await env.DB.prepare("DELETE FROM audit_log").run();
     await seedReviewer({ actor: "agent:capsid-driver", canComment: false });
     await claimedJob();
@@ -300,8 +294,6 @@ describe("the gate sits on every way out", () => {
     expect((await jobRow())?.status).toBe("failed");
   });
 });
-
-// ---- the gate is bound to the job's own pull request and head (audit 2026-09-25, F2-4)
 
 describe("the gate is bound to the job's own pull request and head", () => {
   it("PLANT: after CHANGES, completing with an older APPROVED pull request is refused", async () => {

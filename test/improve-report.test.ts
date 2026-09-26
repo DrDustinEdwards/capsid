@@ -6,11 +6,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { holdoutFilePassed, markers, parseHoldoutStream, parseTestReport, splitStream, testPassRate } from "../scripts/improve-report.mjs";
 
-// Fix 1 (audit 2026-09-06): the scorer counts holdout passes from node --test's TAP
-// reporter (node has no json reporter), not from a process exit code. These tests
-// pin the property that makes that a fix: an early process.exit, or any
-// truncated/empty report, cannot be counted as a pass, so an attempt cannot force
-// holdout_pass_rate to 1.0 by exiting 0 before its assertions run.
+// The scorer counts holdout passes from node --test's TAP reporter, not from a
+// process exit code. An early process.exit, or any truncated or empty report, cannot
+// be counted as a pass, so an attempt cannot force holdout_pass_rate to 1.0 by
+// exiting 0 before its assertions run.
 
 // A realistic node --test TAP fragment: top-level results at column 0, subtests
 // indented under "# Subtest:".
@@ -46,18 +45,14 @@ test("holdoutFilePassed requires a real pass and no failure", () => {
 });
 
 test("an early process.exit(0) cannot be counted as a holdout pass", () => {
-  // The attack: attempt code imported by a holdout case calls process.exit(0)
-  // before any assertion. No `ok` line was written for the case, so the trusted
-  // counter sees zero passes and does NOT credit it.
+  // Attempt code imported by a holdout case calls process.exit(0) before any
+  // assertion. No `ok` line is written, so the case is not credited.
   assert.equal(holdoutFilePassed(""), false);
   assert.equal(holdoutFilePassed(tap(["# Subtest: case"])), false, "a started-but-unfinished case is not a pass");
 });
 
-// ---- audit 2026-09-25, section 6: the CLI modes ------------------------------
-//
-// One plant per finding. Each drives the script the way the score workflow does,
-// as a child process, because the defects were in what the CLI printed and exited
-// with rather than in the pure functions above.
+// The CLI modes. Each test drives the script as a child process, the way the score
+// workflow does, because what matters is what the CLI prints and exits with.
 
 const SCORER = join(import.meta.dirname, "..", "scripts", "improve-report.mjs");
 const NONCE = "audit-nonce";

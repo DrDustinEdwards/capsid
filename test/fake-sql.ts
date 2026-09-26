@@ -1,15 +1,10 @@
-// THE D1 FAKE'S WHERE, SET AND SELECT EVALUATOR (audit 2026-09-25, C1-17).
-//
-// Part of the one D1 fake in test/fakes.ts, not a second fake. Before this, the fake
-// recorded every write to documents, audit_log, jobs and namespaces without applying
-// it, answered every run() with changes: 1, returned a raw job row for a COUNT, and
-// resolved a jobs or documents lookup from one or two of its filters. A handler that
-// dropped a predicate could not fail against it.
+// The D1 fake's WHERE, SET and SELECT evaluator, part of the one D1 fake in
+// test/fakes.ts. It applies every predicate, so a handler that dropped one fails.
 //
 // It covers the statement shapes src/ writes and no more: comparisons, IS, IN, LIKE,
 // GLOB, AND, OR and parentheses in a WHERE; bound markers, literals, COALESCE, substr,
 // datetime('now'), `||` and `+` in a value; single-table SELECTs with COUNT and SUM
-// aggregates, GROUP BY, ORDER BY and LIMIT. ANYTHING ELSE THROWS, so a new shape is a
+// aggregates, GROUP BY, ORDER BY and LIMIT. Anything else throws, so a new shape is a
 // loud failure to model rather than a filter silently ignored. A subquery (EXISTS,
 // IN (SELECT ...)) and a JOIN are refused here: the callers that issue one are modelled
 // by name in fakes.ts.
@@ -270,7 +265,7 @@ export function applySet(clause: string, ctx: EvalContext & { row: Row }): Row {
   return patch;
 }
 
-// ---- single-table SELECT ------------------------------------------------------
+// single-table SELECT
 
 interface SelectParts {
   list: string;
@@ -362,7 +357,7 @@ export function selectRows(table: Row[], sql: string, params: unknown[]): Row[] 
   return rows.map((row) => Object.fromEntries(items.map((i) => [i.name, evalExpr(i.expr, { ...ctx, row })])));
 }
 
-// ---- writes -------------------------------------------------------------------
+// writes
 
 export interface TableSpec {
   rows: Row[];

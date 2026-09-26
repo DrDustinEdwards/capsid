@@ -6,25 +6,15 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { SECONDARY_COMMANDS, markers, secondaryFromStream, secondaryScripts, splitStream } from "../scripts/improve-report.mjs";
 
-// THE SECONDARIES COME OUT OF THE SANDBOX, NOT OUT OF THE ARTIFACT.
+// The secondaries come out of the sandbox, not out of the artifact.
 //
-// The 2026-09-07 remediation closed the anchors (build_passes from a job output,
-// holdout_pass_rate from a container's stdout pipe) and said so about what it left
-// open: "the secondaries are still forgeable, and the CI plant proved it. In run
-// 34162010375 the forged metrics.json DID set test_pass_rate: 1, lint_count: 0 and
-// bundle_size_bytes: 1 in the signed report."
-//
-// So test_pass_rate and lint_count are now measured by the repo's own commands
-// inside the same --network none --read-only container as the holdout, and
-// metrics.json is read for bundle_size_bytes alone. Every assertion below is
-// written to FAIL against the scorer as it stood at b464cd8, which is the standard
-// capsid/conventions.md sets: a guard that has never been observed failing has not
-// been verified.
+// metrics.json is written on a runner that has already executed attempt code, so
+// test_pass_rate and lint_count are measured by the repo's own commands inside the
+// same --network none --read-only container as the holdout, and metrics.json is read
+// for bundle_size_bytes alone.
 //
 // This file runs the scorer script as a process. The checks that improve-score.yml
-// runs the sandbox the way these tests assume (nonce framing, the quoting of the
-// container script, the git sandbox, copy rather than symlink) are in
-// test/workflow-policy.test.ts.
+// runs the sandbox the way these tests assume are in test/workflow-policy.test.ts.
 
 const ROOT = join(import.meta.dirname, "..");
 const SCORER = join(ROOT, "scripts", "improve-report.mjs");
@@ -43,12 +33,9 @@ function runScorer(args: string[], env: Record<string, string>): string {
   });
 }
 
-// ---- THE PLANT --------------------------------------------------------------
-
 test("PLANT: a forged metrics.json claiming test_pass_rate 1 does not survive", () => {
-  // This is run 34162010375's payload, verbatim in shape: an artifact written on a
-  // runner that has already executed attempt code, claiming a perfect suite and a
-  // clean lint. The sandbox measured something else.
+  // An artifact claiming a perfect suite and a clean lint, while the sandbox
+  // measured something else.
   const dir = mkdtempSync(join(tmpdir(), "capsid-secondary-"));
   const metricsPath = join(dir, "metrics.json");
   writeFileSync(
@@ -107,8 +94,8 @@ test("PLANT: a forged metrics.json claiming test_pass_rate 1 does not survive", 
 });
 
 test("PLANT: with no sandbox measurement the metric is null, never the artifact's value", () => {
-  // The failure mode this exists to stop: a container that could not run the test
-  // command falling back to metrics.json, which is where the forged number lives.
+  // A container that could not run the test command must not fall back to
+  // metrics.json, which is where a forged number lives.
   const dir = mkdtempSync(join(tmpdir(), "capsid-secondary-"));
   const metricsPath = join(dir, "metrics.json");
   writeFileSync(metricsPath, JSON.stringify({ test_pass_rate: 1, lint_count: 0, bundle_size_bytes: 900 }));
@@ -161,22 +148,15 @@ test("a mismatch between the artifact and the sandbox is reported, not swallowed
   assert.match(run.stderr, /The sandbox value is used\./);
 });
 
-// ---- the run log is not a tsc report ----------------------------------------
+// the run log is not a tsc report
 
 // actions/setup-node registers GitHub's `tsc` problem matcher for the whole job, and
-// a matcher reads EVERY line of EVERY step, not just the typecheck's. The head and
-// tail lines above echo the sandbox's raw output, so a lint phase that found type
-// errors printed them at column 0 and GitHub turned them into FAILURE annotations on
-// runs that concluded success: two of them on every green master run, against
-// `.github` line 7, a path and a line nobody wrote. Both numbers came from the
-// fixture below. The regexp is greedy, so on a line holding two diagnostics it
-// captured the second one's position and carried the JSON array's trailing `"]` into
-// the message.
+// it reads every line of every step. The scorer echoes the sandbox's raw lint output,
+// so type errors at column 0 would become FAILURE annotations on green runs.
 //
-// The matcher anchors at `^([^\s].*)`, so one leading space is the whole fix, and a
-// leading space is also invisible enough that someone would tidy it away. This is the
-// guard that stops them: the regexp is verbatim from the pinned setup-node sha
-// (a0853c2, `.github/tsc.json`), and no line the scorer writes may match it.
+// The matcher anchors at `^([^\s].*)`, so a leading space prevents the match, and
+// that space is easy to tidy away. The regexp is verbatim from the pinned setup-node
+// (`.github/tsc.json`), and no line the scorer writes may match it.
 const TSC_MATCHER = /^([^\s].*)[\(:](\d+)[,:](\d+)(?:\):\s+|\s+-\s+)(error|warning|info)\s+TS(\d+)\s*:\s*(.*)$/;
 
 test("no line the scorer writes is read as a tsc error by GitHub's problem matcher", () => {
@@ -204,8 +184,8 @@ test("no line the scorer writes is read as a tsc error by GitHub's problem match
   assert.equal(run.status, 0);
 
   const lines = [...run.stdout.split("\n"), ...run.stderr.split("\n")].filter((l) => l.trim() !== "");
-  // A content check that can pass by reading nothing is not a check: these two say
-  // the scorer really did echo the tool's output before the loop below reads it.
+  // These two prove the scorer echoed the tool's output, so the loop below cannot
+  // pass by reading nothing.
   assert.ok(lines.length > 0, "no output was read, so nothing was checked");
   assert.equal(
     lines.filter((l) => l.includes("TS2554")).length,
@@ -217,7 +197,7 @@ test("no line the scorer writes is read as a tsc error by GitHub's problem match
   }
 });
 
-// ---- the trusted map --------------------------------------------------------
+// the trusted map
 
 test("every roster namespace has a command map entry, and the map is what names the trees", () => {
   for (const ns of ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"]) {
@@ -246,12 +226,12 @@ test("the sandbox commands are written as files, never interpolated into the con
   assert.deepEqual(readdirSync(dir2), ["trees.txt"]);
 });
 
-// ---- the nonce --------------------------------------------------------------
+// the nonce
 
 test("PLANT: raw lint output cannot forge a marker, because the marker carries a nonce", () => {
   // TAP escaping protects the holdout segments. It does not protect a lint tool's
   // raw stdout, and a type error message can carry attacker text at column 0. The
-  // nonce is what makes that harmless.
+  // nonce makes that harmless.
   const forged = stream([
     M.test,
     "ok 1 - one real result",

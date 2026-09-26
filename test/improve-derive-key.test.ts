@@ -6,24 +6,18 @@ import { test } from "node:test";
 import { deriveScoreKey } from "../src/improve-scorer.ts";
 import { ROSTER } from "../src/improve-schema.ts";
 
-// THE SCRIPT AND THE WORKER MUST DERIVE THE SAME KEY.
+// The script and the Worker must derive the same key.
 //
 // scripts/improve-derive-key.mjs computes the repo secret; src/improve-scorer.ts
-// verifies reports against it. Two implementations of one derivation is exactly the
-// shape that drifts, and the drift would be silent until a report failed to verify
-// at 03:00. So the two are compared here directly, by running the script.
-//
-// The script is a plain .mjs with no build step, deliberately: it cannot import the
-// TypeScript module, so it restates the derivation string, and this test is what
-// keeps the restatement honest.
+// verifies reports against it. The script is a plain .mjs that cannot import the
+// TypeScript module, so it restates the derivation; drift would be silent until a
+// report failed to verify. The two are compared here by running the script.
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "improve-derive-key.mjs");
 const ROOT = "a-test-root-secret";
 
-// spawnSync rather than execFileSync, because BOTH streams are needed on BOTH
-// paths. execFileSync returns stdout only and throws on a non-zero exit, so the
-// success path had no stderr to assert against and the assertion about it passed
-// over an empty string. Caught by this test failing for its own reason.
+// spawnSync rather than execFileSync, because both streams are needed on both paths:
+// execFileSync returns stdout only and throws on a non-zero exit.
 function run(namespace: string, env: Record<string, string | undefined> = {}): { stdout: string; status: number; stderr: string } {
   const result = spawnSync(process.execPath, [SCRIPT, namespace], {
     encoding: "utf8",
@@ -73,8 +67,7 @@ test("a missing root secret is refused, and says there is no way to read one bac
   assert.match(result.stderr, /no way to read a Worker secret back/);
 });
 
-// Audit 2026-09-25, E2-31 (finding E2-L26). A whitespace-only value passed the
-// presence check and derived a key from spaces, which then failed every report.
+// A key derived from spaces would fail every report.
 test("a whitespace-only root secret is refused like a missing one", () => {
   const result = run("capsid", { IMPROVE_SCORE_SECRET: "  \t " });
   assert.notEqual(result.status, 0, "a key was derived from a blank secret");
@@ -83,10 +76,8 @@ test("a whitespace-only root secret is refused like a missing one", () => {
 });
 
 test("THE ROSTER IN THE SCRIPT MATCHES THE ROSTER IN SOURCE", () => {
-  // The script cannot import the TypeScript module, so it restates the list. Two
-  // copies of a list is the drift class this repo keeps ruling against, and here
-  // the drift would refuse a legitimate namespace rather than admit an illegitimate
-  // one, which is the safe direction but still wrong.
+  // The script cannot import the TypeScript module, so it restates the list. Drift
+  // would refuse a legitimate namespace.
   const script = readFileSync(SCRIPT, "utf8");
   const declared = /const ROSTER = \[([^\]]+)\]/.exec(script);
   assert.ok(declared, "scripts/improve-derive-key.mjs no longer declares a ROSTER");

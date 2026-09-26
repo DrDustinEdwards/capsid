@@ -13,27 +13,16 @@ const checkCspReportRate = (kv: KVNamespace | undefined, ip: string, now: Date) 
 const checkRegistrationRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, REGISTRATION_LIMIT);
 import { fakeKv } from "./fakes.ts";
 
-// AN APP-LEVEL RATE LIMIT ON /csp-report (work queue, corrected 2026-08-17).
+// An app-level rate limit on /csp-report. Cloudflare rate limiting rules are a zone
+// feature and do not apply to *.workers.dev, so the limit lives in the Worker,
+// reusing the limiter /register has. Every accepted report becomes an R2 object.
 //
-// The board carried "add a WAF rate limiting rule" for weeks. It was never
-// possible: Cloudflare rate limiting rules are a ZONE feature and do not apply to
-// *.workers.dev, and capsid deploys with no routes and no custom domain. The
-// replacement is here, in the Worker, reusing the limiter /register already had.
+// Every test is about one of two properties: the limit fires, and it says why it
+// fired. This endpoint refuses on a KV failure, and a refusal that cannot be told
+// apart from a spent budget cannot be diagnosed during the outage that caused it.
 //
-// /csp-report is the more expensive of the two unauthenticated writes per call,
-// because every accepted report becomes an R2 object. The handler already bounded
-// content type, body size and shape; nothing bounded arrival rate.
-//
-// EVERY TEST IS ABOUT ONE OF TWO PROPERTIES: the limit actually fires, and it says
-// WHY it fired. The second matters more since 2026-09-16, when this endpoint started
-// refusing on a KV failure rather than allowing: a refusal that cannot be told apart
-// from a spent budget is one nobody can diagnose during the outage that caused it.
-//
-// WHY THE HANDLER ITSELF IS SOURCE-SCANNED rather than driven: src/routes.ts
-// imports the Agents SDK, which pulls in `cloudflare:workers`, and node --test
-// cannot load that scheme. Nothing in the suite has ever driven defaultHandler for
-// this reason. So the limiter and the response are tested directly, as modules the
-// suite can import, and the WIRING between them is asserted against the source.
+// node --test cannot load src/routes.ts (it pulls in `cloudflare:workers`), so the
+// limiter and the response are tested directly as modules.
 
 
 const NOW = new Date("2026-08-17T12:00:00Z");
@@ -58,15 +47,14 @@ test("the hourly limit fires AT the threshold, and the refusal names it", async 
   assert.equal(verdict.window, "hour");
   assert.equal(verdict.limit, MAX_REPORTS_PER_HOUR);
   assert.equal(verdict.count, MAX_REPORTS_PER_HOUR);
-  // A REFUSED CALL MUST NOT ADVANCE THE COUNTER, or a blocked caller extends their
-  // own block by retrying and can never get back under the limit.
+  // A refused call must not advance the counter, or a blocked caller extends their
+  // own block by retrying.
   assert.deepEqual(kv.puts, [], "a refused report advanced the counter");
   assert.equal(kv.store.get(HOUR_KEY), String(MAX_REPORTS_PER_HOUR));
 });
 
 test("one under the threshold still passes", async () => {
-  // The other side. A limiter that refused at limit-1 would pass the test above and
-  // quietly cost every caller one report.
+  // A limiter that refused at limit-1 would pass the test above.
   const kv = fakeKv({ seed: { [HOUR_KEY]: String(MAX_REPORTS_PER_HOUR - 1) } });
   const verdict = await checkCspReportRate(kv.kv, IP, NOW);
   assert.equal(verdict.allowed, true, "the limit fired one call early");
@@ -82,19 +70,11 @@ test("the daily limit fires even when the hour is quiet", async () => {
   assert.deepEqual(kv.puts, [], "a refused report advanced the counter");
 });
 
-// ---- WHAT AN UNREADABLE COUNTER MEANS, per endpoint ------------------------
-//
-// REVERSED 2026-09-16 (audit defect 7, job_38ae28d18699). This block used to say the
-// one rule of the module was to fail open everywhere, because the thing guarded is
-// hearing about violations. That reasoning weighed the wrong two costs against each
-// other. /csp-report is UNAUTHENTICATED and every accepted report becomes an R2
-// object, so failing open during a KV outage hands an anonymous caller an unbounded
-// write path to R2; a report dropped during that outage costs one browser diagnostic
-// nobody was waiting on. /register keeps the old answer for the opposite reason,
+// What an unreadable counter means, per endpoint. /csp-report is unauthenticated and
+// every accepted report becomes an R2 object, so failing open during a KV outage would
+// hand an anonymous caller an unbounded write path to R2. /register fails open, as
 // stated on REGISTRATION_LIMIT: refusing there locks the owner out of reconnecting.
-//
-// The two directions are planted separately below, because one function now gives two
-// answers and a test that only drove one of them could not tell them apart.
+// The two directions are planted separately.
 
 test("PLANT: a KV read that throws REFUSES a csp report, and says it could not measure", async () => {
   const kv = fakeKv({ failGet: true });
@@ -104,29 +84,24 @@ test("PLANT: a KV read that throws REFUSES a csp report, and says it could not m
 });
 
 test("PLANT: a KV write that throws REFUSES too, because the ceiling stops advancing", async () => {
-  // The read succeeded, so this one call is known to be under the limit. The counter
-  // not advancing is what matters: every later call in the window reads the same low
-  // number, and the ceiling is gone for as long as KV is unwell.
+  // The read succeeded, but a counter that does not advance means every later call
+  // in the window reads the same low number.
   const kv = fakeKv({ failPut: true });
   assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, false);
 });
 
 test("PLANT: a non-numeric counter REFUSES, and is not written back", async () => {
-  // Number("banana") is NaN and every comparison with NaN is false, so without the
-  // finite check the limiter falls through to the write and stores String(NaN + 1),
-  // the literal "NaN". Every later read of that key is non-numeric too, so the limit
-  // would be disabled for that caller for the rest of the window, silently.
+  // Every comparison with NaN is false, so without the finite check the limiter would
+  // store the literal "NaN" and disable the limit for that caller for the window.
   const kv = fakeKv({ corrupt: "banana" });
   assert.equal((await checkCspReportRate(kv.kv, IP, NOW)).allowed, false);
   assert.deepEqual(kv.puts, [], "a corrupt counter was incremented, poisoning the key for the whole window");
 });
 
 test("PLANT: no KV binding REFUSES, and is REPORTED as a binding problem", async () => {
-  // An absent binding is already caught by the read try/catch (reading .get off
-  // undefined throws inside it), so an assertion on `allowed` alone proves nothing
-  // about the explicit guard. What the guard buys is the diagnosis: "no KV binding"
-  // names a deploy missing APP_KV, where the fallback would quote a TypeError and
-  // send whoever reads it looking at KV health instead of at wrangler.jsonc.
+  // The read try/catch already refuses an absent binding, so `allowed` alone proves
+  // nothing about the explicit guard. The guard's purpose is the diagnosis: "no KV
+  // binding" names a deploy missing APP_KV rather than quoting a TypeError.
   const errors: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
@@ -152,12 +127,11 @@ test("an unavailable refusal answers 503 and not 429", async () => {
   assert.match(await response.text(), /rate limiting is unavailable/);
 });
 
-// ---- /register keeps failing open, and that is the point --------------------
+// /register fails open.
 
 test("THE OTHER DIRECTION: every KV failure still ALLOWS a registration", async () => {
-  // An outage must not lock the owner out of reconnecting his own server. Each path
-  // is driven, because they fail in different places and a single case would leave
-  // the rest free to change.
+  // An outage must not lock the owner out of reconnecting. Each path is driven,
+  // because they fail in different places.
   for (const [name, kv] of [
     ["read throws", fakeKv({ failGet: true }).kv],
     ["write throws", fakeKv({ failPut: true }).kv],
@@ -169,17 +143,14 @@ test("THE OTHER DIRECTION: every KV failure still ALLOWS a registration", async 
 });
 
 test("the two endpoints give OPPOSITE answers to the same KV failure", async () => {
-  // The property the split exists for, asserted as one statement so a refactor that
-  // collapsed the policies back into one rule cannot pass the file.
+  // Asserted together so a refactor that collapsed the policies into one rule fails.
   assert.equal((await checkCspReportRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, false);
   assert.equal((await checkRegistrationRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, true);
 });
 
-// ---- the two policies do not share a budget --------------------------------
-
 test("csp reports and registrations count in separate buckets", async () => {
   // One prefix per endpoint. Sharing would let CSP traffic exhaust the registration
-  // budget, which is the one that locks Dustin out of his own server.
+  // budget.
   const kv = fakeKv();
   await checkCspReportRate(kv.kv, IP, NOW);
   await checkRegistrationRate(kv.kv, IP, NOW);
@@ -201,36 +172,25 @@ test("a report in the next hour is not blocked by this hour's count", async () =
   assert.equal((await checkCspReportRate(kv.kv, IP, new Date("2026-08-17T13:00:00Z"))).allowed, true);
 });
 
-// ---- the refusal a caller actually receives --------------------------------
-
 test("a rate-limited caller gets a 429 with a usable Retry-After, not a 204", async () => {
-  // 204 is this endpoint's normal answer and would have been the quiet choice.
-  // Browsers ignore both, so the difference is entirely for the caller who is not a
-  // browser, and answering "stored" for a dropped report is the unconditional
-  // success this codebase keeps removing.
+  // 204 is this endpoint's normal answer; a dropped report must not read as stored.
   const hourly = rateLimitedResponse({ allowed: false, window: "hour", count: 300, limit: 300 });
   assert.equal(hourly.status, 429, "a dropped report was reported as accepted");
   assert.equal(hourly.headers.get("Retry-After"), "3600");
   assert.match(await hourly.text(), /too many reports: 300 in the last hour, limit 300/);
 
-  // The Retry-After follows the window that actually fired, or an hourly block
-  // tells the caller to come back in a day and a daily block in an hour.
+  // The Retry-After follows the window that fired.
   const daily = rateLimitedResponse({ allowed: false, window: "day", count: 1000, limit: 1000 });
   assert.equal(daily.headers.get("Retry-After"), "86400");
 });
-
-// ---- the wiring, which the source is the only witness to -------------------
 
 // That the handler checks the limit before it reads the body or writes to R2 is proven
 // against the real Worker in test-integration/csp-report.test.ts.
 
 
 test("the csp thresholds are clear of real volume, and the day allows more than an hour", async () => {
-  // 47 reports exist in R2 across the endpoint's whole life (2026-08-12 to
-  // 2026-08-15), busiest day 15. The hourly bound is set from what must not break,
-  // a CSP debugging session, NOT from that traffic, and it lands 20x the busiest
-  // DAY per HOUR. If someone later tunes these toward the measured volume, this is
-  // the note that says the two are not the same question.
+  // The busiest measured day had 15 reports. The hourly bound is set from what must
+  // not break (a CSP debugging session), not from that traffic.
   assert.ok(MAX_REPORTS_PER_HOUR > 15 * 15, "the hourly bound is no longer clear of the busiest measured day");
   assert.ok(MAX_REPORTS_PER_DAY > MAX_REPORTS_PER_HOUR, "the daily bound must allow more than a single hour");
 });

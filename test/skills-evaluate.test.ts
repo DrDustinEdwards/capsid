@@ -16,8 +16,8 @@ import {
 import { tickRuns } from "../src/improve/tick.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// GROUPS 4, 5 AND 6: the cadence that produces evidence, the gate that accepts an
-// edit, and the duplicate detector. The deciding rules live in ./skills-lifecycle and
+// The cadence that produces evidence, the gate that accepts an edit, and the
+// duplicate detector. The deciding rules live in ./skills-lifecycle and
 // are tested there; this is the half that touches rows and the clock.
 
 const NOW = new Date("2026-09-12T00:00:00Z");
@@ -43,7 +43,7 @@ function env(kv: Record<string, string> = {}, opts: Parameters<typeof fakeD1>[0]
   return { fake, env: fakeEnv({ DB: fake.db, APP_KV: fakeKv({ seed: kv }).kv }) };
 }
 
-// ---- group 4: the cadence --------------------------------------------------------
+// the cadence
 
 test("the cadence defaults to a fortnight and is KV-configurable", async () => {
   assert.equal(DEFAULT_CADENCE_DAYS, 14);
@@ -76,8 +76,8 @@ test("the cycle is due when nothing has run, and not before the cadence elapses"
 });
 
 test("a corrupt last-cycle stamp runs the cycle rather than blocking it forever", () => {
-  // The cost of one extra cycle is CI minutes. The cost of never running again is a
-  // lifecycle that silently stops moving, which nothing would report.
+  // One extra cycle costs CI minutes; never running again would silently stop the
+  // lifecycle.
   const verdict = cycleDue("not a date", 14, new Date("2026-09-12T00:00:00Z"));
   assert.equal(verdict.due, true);
   assert.match(verdict.reason, /does not parse/);
@@ -107,11 +107,8 @@ test("a throwing cycle does not stop the tick", async () => {
 });
 
 test("transitions are still applied, and the cycle dispatches nothing at all", async () => {
-  // Was: "transitions are applied before the next round is dispatched". That ordering
-  // mattered while the cycle ended by dispatching a probe per surviving skill. Option C
-  // (2026-09-16) dropped the probe, so there is no second half to order against and the
-  // property worth holding is the stronger one: the transition half still works, and
-  // neither skill produces a dispatch.
+  // The cycle no longer dispatches a probe per surviving skill, so the property is
+  // that transitions still apply and neither skill produces a dispatch.
   await withFetch(DISPATCH_ROUTES, async (calls) => {
     const { env: e, fake } = cycleEnv();
     fake.rows.improve_skills.push(
@@ -149,7 +146,7 @@ test("an evaluation row stores the verdict derived at write time", () => {
   assert.match(recorded[0].sql, /INSERT INTO skill_evaluations/);
 });
 
-// ---- group 5: the edit gate ------------------------------------------------------
+// the edit gate
 
 const L2 = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n");
 
@@ -228,7 +225,7 @@ test("rejected edits come back newest first and bounded", async () => {
   assert.deepEqual(rejected.map((r) => r.reason), ["newer", "older"], "accepted edits are not negative feedback");
 });
 
-// ---- group 6: merge proposals ----------------------------------------------------
+// merge proposals
 
 test("two live near-duplicates with overlapping triggers are proposed, and others are not", async () => {
   const body = Array.from({ length: 20 }, (_, i) => `step ${i}`).join("\n");

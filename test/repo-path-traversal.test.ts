@@ -11,13 +11,10 @@ import {
 import { repoPathProblem } from "../src/limits.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// These tests exist for the 2026-09-06 CRITICAL: a repo file path or branch
-// carrying "../.." escaped /repos/<owner>/<repo>/ once fetch() parsed the string
-// as a URL, reaching any repo the App is installed on under the same owner. The
-// point the audit made is that a fake fetch keyed on the RAW concatenated string
-// cannot see the escape, because WHATWG normalization happens inside new URL().
-// So the integration tests below build the URL through the real code path and read
-// the RECORDED call's normalized pathname, which is where the escape shows.
+// A repo file path or branch carrying "../.." would escape /repos/<owner>/<repo>/
+// once fetch() parses the string as a URL. A fake fetch keyed on the raw string
+// cannot see the escape, because WHATWG normalization happens inside new URL(), so
+// the tests below read the recorded call's normalized pathname.
 
 function makeEnv(repos: unknown[]) {
   return fakeEnv({
@@ -32,9 +29,7 @@ function makeEnv(repos: unknown[]) {
 
 const ONE_REPO = [{ repo: "owner/mapped-repo", label: "primary" }];
 
-// ---- the escape is real (documents the vulnerability) -----------------------
-
-// ---- the input-level guard --------------------------------------------------
+// The input-level guard.
 
 test("repoPathProblem rejects '.' and '..' segments and control chars", () => {
   assert.ok(repoPathProblem("../../x"));
@@ -55,7 +50,7 @@ test("repoPathProblem allows real repo paths, including dotted and dotfile names
   assert.equal(repoPathProblem("README.md"), null);
 });
 
-// ---- encodePath now refuses a traversal segment -----------------------------
+// encodePath refuses a traversal segment.
 
 test("encodePath throws on a '..' segment (old code returned it verbatim)", () => {
   assert.throws(() => encodePath("../../x"), /'\.\.' segment/);
@@ -64,26 +59,24 @@ test("encodePath throws on a '..' segment (old code returned it verbatim)", () =
   assert.equal(encodePath("a/b c/d.md"), "a/b%20c/d.md");
 });
 
-// ---- REPO_SHAPE no longer admits a traversal mapping ------------------------
+// A repo mapping cannot be a traversal.
 
 test("repoTokenOk and parseReposList reject '..' as an owner/name mapping", () => {
   assert.equal(repoTokenOk("../evil"), false);
   assert.equal(repoTokenOk("owner/.."), false);
   assert.equal(repoTokenOk("owner/repo"), true);
-  // OLD REPO_SHAPE /^[^/\s]+\/[^/\s]+$/ matched "../evil"; the new mapping refuses it.
   const bad = parseReposList(JSON.stringify([{ repo: "../evil", label: "primary" }]));
   assert.ok("error" in bad);
   const good = parseReposList(JSON.stringify([{ repo: "owner/repo", label: "primary" }]));
   assert.ok("list" in good);
 });
 
-// ---- integration: the traversal never reaches GitHub ------------------------
+// The traversal never reaches GitHub.
 
 test("read_repo_file refuses a traversal path and makes no escaping request", async () => {
   await withFetch(
     {
-      // If the OLD code ran, cachedGet would fetch this normalized URL and return
-      // the secret; the test would then NOT reject and would fail.
+      // The normalized URL an escaping path would reach.
       "GET /repos/owner/other-repo/contents/secrets.env": {
         body: { type: "file", encoding: "base64", content: Buffer.from("SECRET").toString("base64"), size: 6, sha: "x" },
       },
@@ -93,8 +86,7 @@ test("read_repo_file refuses a traversal path and makes no escaping request", as
         () => readRepoFile(makeEnv(ONE_REPO), "ns", "../../other-repo/contents/secrets.env"),
         /path segment|escapes \/repos/
       );
-      // No request escaped the mapped repo. On old code, a call to
-      // /repos/owner/other-repo/... would be recorded here.
+      // No request escaped the mapped repo.
       for (const c of calls) {
         assert.ok(
           c.path.startsWith("/repos/owner/mapped-repo/") || c.path.startsWith("/app/") || c.path === "/repos/owner/mapped-repo",

@@ -5,20 +5,12 @@ import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schem
 import { adminAgent, legacyAgent, resolveAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 
-// GROUP 2: a bearer resolves to a CALLER, not to a tier.
+// A bearer resolves to a caller, not to a tier, so the audit log can say whose
+// credential did a write. Two properties hold:
 //
-// What this replaces: `operatorIdentity` answered "write" or "read" and twelve hex of
-// the presented key's digest. Every headless caller in the portfolio spoke that
-// vocabulary, so the audit log could say a write happened and could not say whose
-// credential did it beyond a fingerprint somebody had to recognise.
-//
-// The two properties that have to hold through the transition, and they pull in
-// opposite directions:
-//
-//   1. A MINTED AGENT IS RESOLVED FIRST and carries exactly the scopes its row says.
-//   2. AN OPERATOR KEY STILL WORKS, with the authority it has today, until Dustin
-//      revokes it. A migration that breaks the existing key at the moment it lands is
-//      a migration nobody can roll back through.
+//   1. A minted agent is resolved first and carries exactly the scopes its row says.
+//   2. An operator key still works, with its current authority, until it is revoked
+//      by hand.
 
 const KEY = "capsid_agent_" + "a".repeat(64);
 
@@ -61,8 +53,8 @@ test("a minted key resolves to its agent row, with that row's scopes and audit i
 });
 
 test("the agent row is looked up before OPERATOR_KEY_HASH is consulted", async () => {
-  // Both would resolve. The row has to win, or a key that is BOTH an agent and an
-  // operator entry would silently keep the operator key's full authority.
+  // Both would resolve. The row has to win, or a key that is both an agent and an
+  // operator entry would keep the operator key's full authority.
   const { env } = await envWithAgent({ OPERATOR_KEY_HASH: await sha256Hex(KEY) });
   const resolved = await resolveAgent(bearer(KEY), env);
   assert.ok(resolved);

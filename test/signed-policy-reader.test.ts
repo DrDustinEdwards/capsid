@@ -4,11 +4,9 @@ import { test } from "node:test";
 import { policyField, readSignedPolicy, signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// ONE SIGNED-POLICY READER (audit 2026-09-25, E2-3 and E1-23). The merge policy and
-// the gate policy each carried a copy of the read, the signature check and the field
-// parser, so the frontmatter fix (E2-H1) had to be made in two places. These tests
-// drive the shared reader, and the last one keeps the two loaders from growing a
-// private copy again.
+// One signed-policy reader, shared by the merge policy and the gate policy so a fix
+// is made in one place. These tests drive it, and the last one keeps the two loaders
+// from growing a private copy.
 
 const SECRET = "test-root-secret-not-a-real-one";
 const BODY = "# Policy\n\n- version: 7\n- enabled: false\n";
