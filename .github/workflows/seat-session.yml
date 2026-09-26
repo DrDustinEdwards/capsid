@@ -80,7 +80,7 @@ jobs:
           claude_args: >-
             --mcp-config ${{ runner.temp }}/capsid-mcp.json
             --max-turns 200
-            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*),Bash(node:*)"
+            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
             --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*)"
           prompt: |
             You are a Capsid driver session the seat started on GitHub's runners, for the

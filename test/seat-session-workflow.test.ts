@@ -47,3 +47,23 @@ test("secrets come from the seat environment, the transcript stays out of the pu
   assert.doesNotMatch(CODE, /--allowedTools "[^"]*(wrangler|deploy|gh:)/);
   assert.match(CODE, /^permissions:\n {2}contents: write\n {2}pull-requests: read\n {2}issues: read$/m);
 });
+
+// An allowed interpreter runs any program, which reaches the network and the
+// environment, so it would make the refused list above decorative.
+const INTERPRETERS = ["node", "bash", "sh", "zsh", "dash", "python", "python3", "perl", "ruby", "deno", "bun", "pwsh", "powershell", "env", "xargs", "eval", "exec"];
+
+test("no allowed Bash pattern is an unbounded interpreter", () => {
+  const allowed = /--allowedTools "([^"]*)"/.exec(CODE);
+  assert.ok(allowed, "no --allowedTools parsed");
+  const entries = allowed[1].split(",").map((e) => e.trim());
+  const bash = entries.filter((e) => /^Bash(\(|$)/.test(e));
+  // The scan must see the npm entries it exists to sit beside, or it passes vacuously.
+  assert.ok(bash.includes("Bash(npm test:*)") && bash.includes("Bash(npm run check:*)"), `parsed Bash entries: ${bash.join(" ")}`);
+  for (const entry of bash) {
+    const command = /^Bash\((.*)\)$/.exec(entry)?.[1];
+    assert.ok(command && command !== "*" && command !== ":*", `${entry} allows every command`);
+    const [first, second] = command.replace(/:\*$/, "").split(/\s+/);
+    assert.ok(!INTERPRETERS.includes(first), `${entry} allows an interpreter`);
+    if (first === "npx") assert.ok(second && /^[a-z@]/.test(second), `${entry} allows npx without a named tool`);
+  }
+});
