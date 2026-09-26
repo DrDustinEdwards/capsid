@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
+import { PENDING_START_MINUTES } from "../src/jobs-schema";
 import {
-  PENDING_START_MINUTES,
   SEAT_START_CAP_KEY,
   SEAT_START_EVENT,
   SEAT_START_KEY,
