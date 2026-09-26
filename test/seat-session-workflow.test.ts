@@ -67,3 +67,79 @@ test("no allowed Bash pattern is an unbounded interpreter", () => {
     if (first === "npx") assert.ok(second && /^[a-z@]/.test(second), `${entry} allows npx without a named tool`);
   }
 });
+
+// capsid/research/design-seat-session-hardening.md, PR 1: the first-run fix, the
+// credential scrub, the read and edit denies, and git that runs no code of the
+// session's writing.
+
+function allowedList(flag: "allowedTools" | "disallowedTools"): string[] {
+  const m = new RegExp(`--${flag} "([^"]*)"`).exec(CODE);
+  assert.ok(m, `no --${flag} parsed`);
+  return m[1].split(",").map((e) => e.trim());
+}
+
+// The settings input is JSON in a YAML block scalar; the Action writes it to user
+// scope, where the sandbox credential keys are honoured.
+function settings(): { permissions?: { deny?: string[] }; sandbox?: { credentials?: { envVars?: { name: string; mode: string }[] } } } {
+  const m = /^ {10}settings: \|\n((?: {12}.*\n)+)/m.exec(CODE);
+  assert.ok(m, "no settings block parsed");
+  return JSON.parse(m[1]);
+}
+
+test("the Action gets its GitHub token from the workflow, so the first run does not need an OIDC exchange", () => {
+  // Without it, src/github/token.ts in the Action calls core.getIDToken and throws.
+  assert.match(CODE, /^ {10}github_token: \$\{\{ github\.token \}\}$/m);
+});
+
+test("subprocess credentials are scrubbed and git reads no global or system config", () => {
+  const env = /^ {4}env:\n((?: {6}.*\n)+)/m.exec(CODE);
+  assert.ok(env, "no job-level env parsed");
+  assert.match(env[1], /^ {6}CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"$/m);
+  assert.match(env[1], /^ {6}GIT_CONFIG_GLOBAL: \/dev\/null$/m);
+  assert.match(env[1], /^ {6}GIT_CONFIG_NOSYSTEM: "1"$/m);
+});
+
+test("the repo's git config runs no hooks and no fsmonitor, set after checkout and before the session", () => {
+  const checkout = CODE.indexOf("actions/checkout@");
+  const hooks = CODE.indexOf("git config core.hooksPath /dev/null");
+  const fsmonitor = CODE.indexOf("git config core.fsmonitor false");
+  const session = CODE.indexOf("anthropics/claude-code-action@");
+  assert.ok(checkout >= 0 && session >= 0, "checkout or the Action not found");
+  assert.ok(hooks > checkout && hooks < session, "core.hooksPath is not pinned between checkout and the session");
+  assert.ok(fsmonitor > checkout && fsmonitor < session, "core.fsmonitor is not pinned between checkout and the session");
+});
+
+const GIT_ALLOWED = new Set([
+  "Bash(git status)",
+  "Bash(git diff:*)",
+  "Bash(git log:*)",
+  "Bash(git add:*)",
+  "Bash(git commit -m:*)",
+  "Bash(git switch -c:*)",
+  "Bash(git push -u origin:*)",
+  "Bash(git rev-parse:*)",
+]);
+
+test("git is allowed by named subcommand only, and the config-changing forms are refused", () => {
+  const git = allowedList("allowedTools").filter((e) => /^Bash\(git\b/.test(e));
+  assert.ok(git.length > 0, "no git entries parsed");
+  for (const entry of git) assert.ok(GIT_ALLOWED.has(entry), `${entry} is not a named git subcommand`);
+  const refused = allowedList("disallowedTools");
+  for (const entry of ["Bash(git -c:*)", "Bash(git config:*)", "Bash(git -C:*)", "Bash(git push * --force*)", "Bash(git push * -f*)", "Bash(git push * +*)", "Bash(git push * --delete*)"]) {
+    assert.ok(refused.includes(entry), `${entry} is not refused`);
+  }
+});
+
+test("the session cannot read the key file or process environments, or edit git config", () => {
+  const deny = settings().permissions?.deny ?? [];
+  for (const rule of ["Read(//proc/**)", "Read(/${{ runner.temp }}/**)", "Edit(**/.git/**)", "Edit(~/.gitconfig)", "Edit(~/.config/git/**)"]) {
+    assert.ok(deny.includes(rule), `${rule} is not in permissions.deny`);
+  }
+});
+
+test("the credential variables are named in the sandbox deny list", () => {
+  const envVars = settings().sandbox?.credentials?.envVars ?? [];
+  for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "DEFAULT_WORKFLOW_TOKEN"]) {
+    assert.ok(envVars.some((v) => v.name === name && v.mode === "deny"), `${name} is not denied`);
+  }
+});
