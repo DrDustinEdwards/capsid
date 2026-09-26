@@ -29,14 +29,11 @@ import { loadScores, metricsFor, readDoc, writeTaskDoc } from "./open";
 
 export { renderObjective } from "./open";
 
-// A changed-path list recovered from the archive document's rendering. The
-// document is the durable copy of the change, so a monitor running at ingest time
-// reads the same bytes a human would.
+// Changed paths recovered from the archive document, the durable copy of the change,
+// so a monitor running at ingest reads the same bytes a human would.
 export function changedPathsFrom(change: string): string[] {
   return [...change.matchAll(/^=== (.+?) \(\d+ bytes, complete new contents\) ===$/gm)].map((m) => m[1]);
 }
-
-// ---- finalizing -------------------------------------------------------------
 
 export async function finalizeRun(
   env: Env,
@@ -48,9 +45,7 @@ export async function finalizeRun(
   let prUrl: string | null = run.pr_url;
   let prFailure: string | null = null;
 
-  // NEVER AUTO-MERGE. The PR is opened and left. For germomics that is already
-  // the norm; for the others this is the one exception to direct-to-main, and it
-  // is an exception in the safe direction.
+  // The loop opens the PR and never merges it.
   if (!prUrl && kept.length > 0) {
     const head = kept[kept.length - 1];
     try {
@@ -67,11 +62,9 @@ export async function finalizeRun(
       const message = err instanceof Error ? err.message : String(err);
       console.error(`IMPROVE_PR_FAILED ${run.id}: ${message}`);
       prFailure = `the pull request for branch ${head.branch ?? "(none)"} could not be opened: ${message.slice(0, 300)}`;
-      // A failed open is retried on later ticks while the run is inside the retry
-      // window, measured from when it entered finalizing. The row is not touched,
-      // so advanced_at keeps that entry time. Past the window a job is posted to
-      // open the PR, and the run finishes with the failure and the job recorded in
-      // its note and summary.
+      // Retried on later ticks inside the window, measured from entering finalizing
+      // (the row is not touched, so advanced_at keeps that time). Past it a job is
+      // posted and the run finishes with both recorded.
       const waited = now.getTime() - Date.parse(`${run.advanced_at.replace(" ", "T")}Z`);
       if (waited < PR_RETRY_WINDOW_MS) {
         return { runId: run.id, namespace: run.namespace, from: "finalizing", to: "finalizing", note: `${prFailure}; retrying on a later tick` };
@@ -151,17 +144,13 @@ export async function finalizeRun(
   };
 }
 
-// A PULL REQUEST THE LOOP COULD NOT OPEN IS HANDED TO THE QUEUE (ruling 2026-09-25).
-// Posted as the watcher, through postJob, which is the identity and the path the
-// tick already posts findings with. The deduplication is the queue's own: postJob
-// refuses a second open job with the same (namespace, title), so a later pass over
-// the same run posts nothing new, and its refusal is what the run records.
-//
-// The title must NOT end in "[fingerprint]": the watcher reads its open jobs'
-// fingerprints from that suffix and clears one that no check owns.
-//
-// Returns the sentence the run records about it. Never throws: a job that could not
-// be posted is recorded, and the run still finishes.
+// Hands a pull request the loop could not open to the queue, posted as the watcher,
+// the identity and path the tick already posts findings with. The queue refuses a
+// second open job with the same (namespace, title), so a later pass over the same run
+// posts nothing new, and that refusal is what the run records. The title must not end
+// in "[fingerprint]", or the watcher would clear it as a finding no check owns.
+// Returns the sentence the run records. Never throws: a job that could not be posted
+// is recorded, and the run still finishes.
 async function postPrJob(env: Env, run: RunRow, branch: string, failure: string, now: Date): Promise<string> {
   const body = [
     `The improve loop's run ${run.id} in ${run.namespace} kept work on branch ${branch}, but the loop could not open its pull request, and stopped retrying after ${PR_RETRY_WINDOW_MS / 60_000} minutes.`,
@@ -188,8 +177,6 @@ async function postPrJob(env: Env, run: RunRow, branch: string, failure: string,
     return `no job posted to open it: ${message.slice(0, 300)}`;
   }
 }
-
-// ---- context and rendering --------------------------------------------------
 
 export async function gatherContext(env: Env, namespace: string): Promise<string> {
   const parts: string[] = [];

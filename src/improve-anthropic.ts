@@ -39,20 +39,13 @@ export interface ModelCall {
   stage: ModelStage;
   system: string;
   user: string;
-  // A JSON Schema. When present the response is constrained to it and `parsed`
-  // carries the object. Constraint rather than instruction: "reply with JSON"
-  // in a prompt is a request, output_config.format is a guarantee, and the
-  // difference matters most on the monitor, whose whole job is to be parseable.
+  // A JSON Schema. The response is constrained to it (output_config.format, a
+  // guarantee rather than a prompt request) and `parsed` carries the object.
   schema?: Record<string, unknown>;
   maxTokens?: number;
-  // THE STABLE PREFIX, cached. Large content that does not change between calls in a
-  // run: the repository context an attempt is proposed against.
-  //
-  // A SEPARATE FIELD rather than part of `user`, because prompt caching is a PREFIX
-  // match and the stable bytes have to physically precede the volatile ones.
-  // Concatenating it into `user` reports 0 cache reads forever: the attempt history
-  // grows every attempt, so anything after it is a new prefix every time. See the
-  // ordering note in src/improve-attempt.ts.
+  // Content stable across a run (the repository context), cached. A separate field
+  // because prompt caching is a prefix match: the stable bytes must precede the
+  // growing attempt history. See the ordering note in src/improve-attempt.ts.
   cachedPrefix?: string;
 }
 
@@ -63,27 +56,20 @@ export interface ModelResult {
   costUsd: number;
   inputTokens: number;
   outputTokens: number;
-  // SURFACED SO THE CACHE IS OBSERVABLE. A cache that silently stops working looks
-  // exactly like one that never worked, and the only signal is cacheReadTokens staying
-  // 0 across repeated calls with the same prefix. Logged by the attempt path.
+  // Surfaced so a cache that stops working is visible (reads stay 0). Logged by the
+  // attempt path.
   cacheReadTokens: number;
   cacheWriteTokens: number;
-  // A policy decline is NOT an error and NOT an empty answer. It is a third outcome,
-  // and every caller decides what it means for the attempt it asked about. Surfaced as
-  // a field so no caller reads `text` and gets an empty string it mistakes for "the
-  // model had nothing to say".
+  // A policy decline is neither an error nor an empty answer; each caller decides what
+  // it means. A field, so no caller mistakes an empty `text` for "nothing to say".
   refused: boolean;
   refusalCategory: string | null;
 }
 
-// The stages that reason about the system rather than about one change run on
-// Opus 5, which carries safety classifiers that can decline a request. Fallbacks
-// are opt-in: without them a declined request simply stops. "default" rather than
-// a pinned model, so the routing follows the refusal category and there is no
-// second migration owed when a pinned fallback is retired.
+// These stages run on Opus 5, whose safety classifiers can decline a request, so they
+// opt in to fallbacks ("default", which follows the refusal category).
 const OPUS_STAGES = new Set<ModelStage>(["abstract", "meta"]);
-// Haiku 4.5 predates the effort parameter and adaptive thinking. Sending either
-// is a 400, so the request is built without them rather than with them defaulted.
+// Haiku 4.5 rejects the effort parameter and adaptive thinking with a 400.
 const NO_EFFORT_STAGES = new Set<ModelStage>(["triage", "monitor"]);
 
 export function clientFor(env: ModelEnv): Anthropic {
@@ -101,14 +87,12 @@ export async function callModel(env: ModelEnv, call: ModelCall): Promise<ModelRe
   const isOpus = OPUS_STAGES.has(call.stage);
   const noEffort = NO_EFFORT_STAGES.has(call.stage);
 
-  // 16,000 non-streaming keeps every request comfortably under the SDK's HTTP
-  // timeout. The attempt stage streams instead (see callModelStreaming) because
-  // a code change plus its reasoning wants far more room than that.
+  // Keeps a non-streaming request under the SDK's HTTP timeout. The attempt stage
+  // streams instead (callModelStreaming).
   const maxTokens = call.maxTokens ?? 16_000;
 
   const outputConfig: Record<string, unknown> = {};
-  // xhigh is the documented setting for coding and agentic work, and every stage
-  // here that supports effort is one or the other.
+  // xhigh is the documented setting for coding and agentic work.
   if (!noEffort) outputConfig.effort = "xhigh";
   if (call.schema) outputConfig.format = { type: "json_schema", schema: call.schema };
 
@@ -124,24 +108,15 @@ export async function callModel(env: ModelEnv, call: ModelCall): Promise<ModelRe
   return readResponse(model, response);
 }
 
-// The attempt stage, streamed. A code change is the one output here that can run
-// long, and a non-streaming request at this size is how an SDK HTTP timeout gets
-// discovered in production at 03:00 rather than in a test.
+// The attempt stage, streamed, because a code change can run long enough to hit the
+// SDK's HTTP timeout.
 export async function callModelStreaming(env: ModelEnv, call: ModelCall): Promise<ModelResult> {
   const client = clientFor(env);
   const model = MODEL_FOR[call.stage];
 
-  // TWO CACHE BREAKPOINTS, placed at the two stability boundaries.
-  //
-  // Render order is tools, then system, then messages. The system prompt is fixed for a
-  // whole run (the run prompt plus that namespace's objective), and the cached prefix
-  // is fixed for a whole run too (the repository context). The volatile part, the
-  // attempt history and any transferred skill, goes after both.
-  //
-  // A run makes up to ten attempts against that identical prefix: nine reads at roughly
-  // a tenth of the input rate instead of nine full-price reprocessings, against a
-  // one-off write premium on the first. Breakpoints at the end of the whole prompt
-  // would turn every request into its own cache entry that nothing ever reads.
+  // Two cache breakpoints, at the end of the system prompt and of the cached prefix,
+  // both fixed for a whole run. The volatile part (attempt history, any transferred
+  // skill) goes after both, so later attempts in the run read the cache.
   const cache = { type: "ephemeral" as const };
   const messages = call.cachedPrefix
     ? [
@@ -168,12 +143,9 @@ export async function callModelStreaming(env: ModelEnv, call: ModelCall): Promis
   return readResponse(model, await stream.finalMessage());
 }
 
-// One reader for both paths, so the refusal check and the cost arithmetic cannot
-// diverge between the streaming and non-streaming call sites.
+// One reader for both call paths, so the refusal check and cost cannot diverge.
 function readResponse(requestedModel: string, response: Anthropic.Beta.BetaMessage): ModelResult {
-  // CHECKED BEFORE content IS READ. On a decline `content` is empty (declined before
-  // output) or partial (declined mid-stream), and code that indexes content[0]
-  // unconditionally breaks on the responses it most needs to handle.
+  // Checked before content is read: on a decline `content` is empty or partial.
   const refused = response.stop_reason === "refusal";
   const refusalCategory = refused ? (response.stop_details?.category ?? null) : null;
 
@@ -182,9 +154,8 @@ function readResponse(requestedModel: string, response: Anthropic.Beta.BetaMessa
     .map((block) => block.text)
     .join("");
 
-  // With structured outputs the text IS the JSON, so it is parsed here rather than by
-  // every caller. A parse failure returns null rather than throwing: a caller that asked
-  // for a schema and got prose treats that as "the model did not answer".
+  // With structured outputs the text is the JSON. A parse failure gives null, which a
+  // caller reads as "the model did not answer".
   let parsed: unknown = null;
   if (text) {
     try {
@@ -194,11 +165,8 @@ function readResponse(requestedModel: string, response: Anthropic.Beta.BetaMessa
     }
   }
 
-  // COST IS SUMMED OVER ITERATIONS WHEN THERE ARE ANY. Top-level usage covers only the
-  // attempt that produced the returned message, so a request declined by Opus and served
-  // by the fallback reports the fallback's tokens at the top level and says nothing
-  // about the declined attempt. The iterations list is the per-attempt record; a
-  // declined-before-output attempt has zero token counts and is not billed.
+  // Summed over iterations when present: top-level usage covers only the attempt that
+  // produced the message, not a declined attempt before a fallback.
   const iterations = (response.usage as { iterations?: Array<{ usage?: UsageLike; model?: string }> }).iterations;
   const costUsd =
     Array.isArray(iterations) && iterations.length > 0
@@ -206,8 +174,7 @@ function readResponse(requestedModel: string, response: Anthropic.Beta.BetaMessa
       : costOf(response.model ?? requestedModel, response.usage);
 
   return {
-    // The model that actually produced the message, which is not always the one
-    // asked for once fallbacks are on.
+    // With fallbacks on, not always the model asked for.
     model: response.model ?? requestedModel,
     text,
     parsed,

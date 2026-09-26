@@ -46,16 +46,14 @@ import {
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
-// The barrel. Only what something outside src/improve/ actually imports: src/index.ts
-// and src/routes.ts take openRuns, tickRuns and ingestScore, and test/ takes
-// checkBudget. A re-export nothing imports is a name the split invented.
+// The barrel: only what something outside src/improve/ imports.
 export { ingestScore } from "./improve/ingest";
 export { checkBudget, openRuns } from "./improve/open";
 export { tickRuns } from "./improve/tick";
 
-// WHAT THE DRIVER ASKS BEFORE IT EXECUTES A PLAN. Returns the verification of one
-// task document: its signature against the Worker's derived key, and its last
-// audit actor against the loop's own actor. Both must hold. Read-only.
+// Verifies one task document before the driver executes it: its signature against the
+// Worker's derived key, and its last audit actor against the loop's own actor. Both
+// must hold. Read-only.
 export async function verifyTaskDocument(
   env: Env,
   namespace: string,
@@ -77,9 +75,7 @@ export async function verifyTaskDocument(
   return { path, namespace, ok: verdict.ok, actor, reason: verdict.ok ? null : verdict.reason };
 }
 
-// ONE PASS PER NAMESPACE over the three things a reader asks about skills: how many
-// there are in each state, whether the ones offered get used, and when the lifecycle
-// last measured anything.
+// Skill counts by state, offered versus used, and the last evaluation, per namespace.
 async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsSummary> {
   const counts = await db
     .prepare(
@@ -90,11 +86,9 @@ async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsS
     .all<{ status: string; n: number }>();
   const by = new Map((counts.results ?? []).map((r) => [r.status, r.n]));
 
-  // Counted from the outcome rows rather than from a counter, so the numbers cannot
-  // drift from the jobs they describe. json_array_length over a NULL column is NULL,
-  // and SUM skips NULLs, which is the behaviour wanted: a job that recorded nothing
-  // contributes to neither total. A superseded job's row is left out: nothing was
-  // attempted on it (migrations/0020), so it offered and used nothing that counts.
+  // Counted from the outcome rows so the numbers cannot drift from the jobs. SUM skips
+  // the NULL from json_array_length, so a job that recorded nothing counts in neither
+  // total. A superseded job attempted nothing, so its row is left out.
   const gap = await db
     .prepare(
       `SELECT COALESCE(SUM(json_array_length(skill_ids_offered)), 0) AS offered,
@@ -123,8 +117,6 @@ async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsS
   };
 }
 
-// ---- status -----------------------------------------------------------------
-
 export interface NamespaceStatus {
   namespace: string;
   paused: string | null;
@@ -146,24 +138,17 @@ export interface NamespaceStatus {
     note: string | null;
   } | null;
   totals: { runs: number; attempts: number; kept: number; reverts: number; cost_usd: number; ci_minutes: number };
-  // THE LATEST TRUTH REPORT for this namespace (2026-09-07). `lint` mode `report`
-  // stores one document per namespace per day under reports/, carrying one integrity
-  // percentage; this is the read path for it. null means no report has ever been run
-  // here, which is NOT an integrity of zero.
+  // The latest `lint` report document under reports/. null means no report was ever
+  // run here, which is not an integrity of zero.
   latest_report: { path: string; integrity: number | null; generated: string } | null;
-  // THE WORK QUEUE, per namespace. Counts for the three open states plus what moved
-  // today, and the BLOCKED JOBS THEMSELVES with the command each is waiting on. A
-  // blocked job is not a failure, it is work waiting on a human, and a count of them
-  // tells nobody what to run. This is what the console shows.
+  // Counts for the open states and today's moves, plus the blocked jobs themselves with
+  // the command each waits on, because a count alone tells nobody what to run.
   jobs: JobsSummary;
-  // PULL REQUESTS THE AUTO-MERGE POLICY DECLINED, each with the check that refused it.
-  // Recorded whole by the five-minute tick, so a PR a human merged or closed stops
-  // appearing on the next one and this needs no expiry of its own. Empty when the
-  // policy is disabled, which is how it ships.
+  // Pull requests the auto-merge policy declined, each with the refusing check. The
+  // tick rewrites the whole list, so it needs no expiry. Empty when the policy is off.
   awaiting_seat: AwaitingSeat[];
-  // THE SKILL RECORDS FOR THIS NAMESPACE. Counts by status, plus the gap that says
-  // whether the recommend step is any good: a skill offered often and used rarely is
-  // not a failing skill, it is a trigger condition that does not describe the work.
+  // Counts by status, plus offered versus used: a skill offered often and used rarely
+  // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
 }
 
@@ -171,15 +156,12 @@ export interface SkillsSummary {
   candidate: number;
   live: number;
   retired: number;
-  // Across every finished job in this namespace that recorded them. NULL-safe: a job
-  // that predates the recommend step contributes to neither.
+  // Across every finished job that recorded them; a job that recorded nothing counts in neither.
   offered: number;
   used: number;
-  // used / offered, or null when nothing has been offered yet. Not zero: nothing
-  // offered is not a use rate of nought.
+  // null, not zero, when nothing has been offered.
   use_rate: number | null;
-  // The newest evaluation anywhere in this namespace, so a reader can tell a quiet
-  // lifecycle from a stalled one.
+  // Lets a reader tell a quiet lifecycle from a stalled one.
   last_evaluation: string | null;
 }
 
@@ -189,44 +171,23 @@ export interface StatusReport {
   // Present only when the caller asked about one task document. The /improve
   // driver passes the path it is about to execute and refuses on ok:false.
   task_verification?: { path: string; namespace: string; ok: boolean; actor: string | null; reason: string | null };
-  // Named as an estimate everywhere it appears. See the RATES comment in
-  // src/improve-anthropic.ts for why a number here is not a bill.
+  // An estimate; see the RATES comment in src/improve-anthropic.ts.
   cost_note: string;
   // Monthly spend against the KV caps the opener and tick enforce.
   budget: BudgetStatus;
-  // THE DETERMINISTIC PATH GUARD'S LIST, SERVED (residual 10). The subscription-mode
-  // driver runs on a laptop, outside every guard in this Worker, and had no path
-  // monitor. It fetches these and applies them to each attempt's changed paths before
-  // any push, through scripts/path-guard.mjs. Served rather than copied so a pattern
-  // added to PROTECTED_PATH_PATTERNS is in the next call's response.
+  // The subscription-mode driver runs outside every guard in this Worker. It applies
+  // these patterns to each attempt's changed paths before any push
+  // (scripts/path-guard.mjs). Served rather than copied so a new pattern reaches it.
   protected_paths: ServedProtectedPath[];
-  // THE SIGNED POLICIES' VERSION, SERVED (2026-09-18). /improve step 4b tells a driver
-  // to read capsid/policy/gates.md for the version it must pass as approved_by_policy.
-  // A namespace-scoped driver cannot read the capsid namespace, so every driver except
-  // capsid's was refused at that first step and had nothing to pass: claude-skills
-  // job_33d90163ad1e, 2026-09-17. It refused to guess, which was right.
-  //
-  // ONLY THE VERSION AND WHETHER IT IS ON. Not the body, and not the classes: a driver
-  // needs to name the version it is approving under, and nothing else. The body stays
-  // readable only by a caller scoped to the capsid namespace.
-  //
-  // The version is reported only when the policy actually LOADS, signature verified and
-  // agreeing with the code. A policy the Worker would refuse to act on reports why
-  // instead of a version, because a driver that passed a version from an unloadable
-  // document would be refused at the resume with a less obvious message.
+  // The version a driver passes as approved_by_policy, served here because a
+  // namespace-scoped driver cannot read the capsid namespace. Only the version and
+  // whether it is on, never the body. Reported only when the policy loads (signature
+  // verified, agreeing with the code); otherwise the reason it does not.
   policies: PolicyVersions;
-  // THE CREDENTIAL INVENTORY, on the console a driver already reads. An inventory
-  // that can only be seen by calling a separate admin-only tool is one nobody looks
-  // at, and last_seen only answers "is this credential still in use" if somebody
-  // sees it. Revoked rows are included and say so, because dropping them makes
-  // "revoked" and "never existed" look the same.
-  //
-  // What is NOT here: the key (it exists nowhere), the stored verifier, and a row of
-  // six booleans per agent. A reader wants the exception, so only the flags an agent
-  // HOLDS are listed.
-  // ABSENT for a scoped caller, rather than empty. An empty inventory would read as
-  // "no agents exist", which is a different and false fact; omitting the key says the
-  // question was not answered for this caller.
+  // The credential inventory. Revoked rows are included and say so, so "revoked" and
+  // "never existed" look different. Never the key or the stored verifier, and only the
+  // flags an agent holds. Absent, not empty, for a scoped caller: an empty list would
+  // read as "no agents exist".
   agents?: AgentSummary[];
   namespaces: NamespaceStatus[];
 }
@@ -239,10 +200,8 @@ export interface AgentSummary {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
-  // WHAT THIS CREDENTIAL HAS DONE, from job_outcomes. The inventory above says what an
-  // agent MAY do; without this it said nothing about what it HAS done, and last_seen
-  // only answers "is this still in use". Counts and rates, never a composite score:
-  // see src/agent-record.ts for why that line is drawn there.
+  // What this credential has done, from job_outcomes. Counts and rates, never a
+  // composite score (src/agent-record.ts says why).
   record: AgentRecord;
 }
 
@@ -262,10 +221,7 @@ async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       revoked_at: row.revoked_at,
     };
   });
-  // THREE GROUPED READS FOR THE WHOLE INVENTORY, not three per credential. The
-  // aggregation itself is a pure function over the rows, so what it computes is
-  // checked against fixtures rather than against a fake that would agree with
-  // whatever it was handed.
+  // Three grouped reads for the whole inventory, not three per credential.
   const records = await loadAgentRecords(db, inventory);
   return inventory.map((agent) => ({ ...agent, record: records[agent.name] }));
 }
@@ -297,15 +253,10 @@ export async function improveStatus(
   env: Env,
   only?: string,
   taskPath?: string,
-  // THE CALLER'S OWN NAMESPACES, and whether it is the admin. Passed in rather than
-  // read here so this function keeps taking an Env and nothing else that knows about
-  // credentials; the tool supplies it from the agent the request resolved to.
-  //
-  // Omitted means unrestricted, which is what every internal caller is (the cron, the
-  // console). A scoped caller sees its own namespaces and no credential inventory: the
-  // roster and the agents list are both a map of the boundary this caller sits behind,
-  // and `namespaces` was filtered for the same reason on the same day (audit
-  // 2026-09-13, finding 7).
+  // The caller's namespaces and whether it is the admin, supplied by the tool from the
+  // resolved agent. Omitted means unrestricted (the cron, the console). A scoped caller
+  // sees only its own namespaces and no credential inventory, because both map the
+  // boundary it sits behind.
   scope?: { namespaces: "*" | string[]; admin: boolean }
 ): Promise<StatusReport> {
   const { mode, reason } = await readMode(env.APP_KV);
@@ -315,9 +266,8 @@ export async function improveStatus(
   const namespaces = allowed === "*" ? requested : requested.filter((n) => allowed.includes(n));
   const out: NamespaceStatus[] = [];
 
-  // ONE READ FOR EVERY NAMESPACE. An unreadable or malformed key reports an empty set
-  // rather than failing status: a PR waiting for the seat is still waiting whether or
-  // not this surface can describe it.
+  // One read for every namespace. An unreadable or malformed key reports an empty set
+  // rather than failing status.
   let awaitingAll: AwaitingSeat[] = [];
   try {
     const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
@@ -367,9 +317,8 @@ export async function improveStatus(
       best: best ? { sha: best.sha, score: best.score, recorded_at: best.recorded_at } : null,
       last_run: last ?? null,
       totals: totals ?? { runs: 0, attempts: 0, kept: 0, reverts: 0, cost_usd: 0, ci_minutes: 0 },
-      // ORDER BY path DESC gives the newest date because the filename is ISO-dated and
-      // sorts lexically. updated_at would give the most recently REWRITTEN report, and
-      // a re-run of an old date is not the latest measurement.
+      // The filename is ISO-dated, so ORDER BY path gives the newest date. updated_at
+      // would give the most recently rewritten report instead.
       latest_report: report
         ? { path: `${namespace}/${report.path}`, integrity: integrityOf(report.body), generated: report.updated_at }
         : null,
@@ -393,16 +342,11 @@ export async function improveStatus(
     budget,
     protected_paths: servedProtectedPaths(),
     policies: await servedPolicies(env),
-    // THE CREDENTIAL INVENTORY IS FOR THE SEAT. It names every agent, its namespaces,
-    // its grants and the blast-radius flags it holds, which is precisely the map an
-    // agent looking to widen itself would want, and it was attached even when the
-    // caller named one namespace.
+    // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,
   };
 }
-
-// ---- the manual entry point -------------------------------------------------
 
 export interface ManualResult {
   mode: ImproveMode;
@@ -421,9 +365,8 @@ export async function improveRunManual(
   opts: { namespace?: string; dryRun: boolean; condition?: string }
 ): Promise<ManualResult> {
   const { mode, reason } = await readMode(env.APP_KV);
-  // An unrecognised condition is REFUSED rather than silently defaulted. A run labelled
-  // 'full' that was asked to be an ablation is a row that lies, and the column exists
-  // so the label can be trusted.
+  // An unrecognised condition is refused rather than defaulted, so the label on the row
+  // can be trusted.
   if (opts.condition !== undefined && !isRunCondition(opts.condition)) {
     throw new Error(
       `unknown condition '${opts.condition}'. Valid conditions: ${RUN_CONDITIONS.join(", ")}. Nothing was opened.`
@@ -445,12 +388,10 @@ export async function improveRunManual(
   return { mode: summary.mode, mode_note: summary.modeNote, condition, dry_run: false, opened: summary.outcomes, advanced };
 }
 
-// THE CONTROL ACTIONS. improve_run's non-run verbs: set the mode, pause or unpause
-// namespaces, set the budget caps. Each is a KV write, audited, and READ BACK from KV
-// so the caller sees the value that landed rather than the one it asked for.
-// improve_status reads the same keys. The registrar gates each action by
-// TOOL_ACTION_GRANTS.improve_run in src/scope.ts: every control action is admin, and
-// only run and claim take the write grant.
+// improve_run's non-run verbs. Each KV write is audited and read back, so the caller
+// sees the value that landed. The registrar gates each action by
+// TOOL_ACTION_GRANTS.improve_run in src/scope.ts: only run and claim take the write
+// grant; every other action is admin.
 export type ImproveControlResult =
   | { action: "mode"; requested: string; mode: ImproveMode; mode_note: string | null }
   | { action: "pause" | "unpause"; namespaces: string[]; paused: Record<string, string | null> }
@@ -469,9 +410,8 @@ export type ImproveControlResult =
       action: "mint_operator_key";
       key: string;
       hash: string;
-      // The line that goes in OPERATOR_KEY_HASH: `ro:<hash>`. The tier lives on
-      // the ENTRY, which is what makes it the operator's decision rather than
-      // the caller's.
+      // The OPERATOR_KEY_HASH line, `ro:<hash>`. The tier lives on the entry, so it is
+      // the operator's decision.
       entry: string;
       grant: "read-only";
       already_listed: boolean;
@@ -492,31 +432,17 @@ export async function improveControl(
     release?: boolean;
   }
 ): Promise<ImproveControlResult> {
-  // MINT A READ-ONLY OPERATOR KEY, stopping one step short of installing it.
-  //
-  // THE LAST STEP IS MANUAL. This action generates the key and prints the command
-  // that would add its hash to OPERATOR_KEY_HASH. It does not run that command and
-  // cannot: a Worker that can widen its own authorization list has one that is
-  // decorative, and every guard downstream inherits that. Minting is cheap and
-  // reversible; installing is the gate, and it stays with a human holding Cloudflare
-  // credentials the Worker does not have.
-  //
-  // The KEY IS RETURNED ONCE and stored nowhere: not in KV, not in a document, and NOT
-  // IN THE AUDIT ROW. OPERATOR_KEY_HASH is the verifier, so writing the hash into
-  // audit_log would copy the verifier into a table this same key can read. The audit
-  // row records that a mint happened, plus a fingerprint.
+  // Mints a read-only operator key and prints the command that installs its hash. It
+  // does not install it: a Worker that can widen its own authorization list does not
+  // have one. The key is returned once and stored nowhere, not even the hash in the
+  // audit row, because OPERATOR_KEY_HASH is the verifier; the row gets a fingerprint.
   if (action === "mint_operator_key") {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    // bytesToHex, not an inline map: src/encoding.ts owns the byte encodings. A
-    // duplicated crypto-adjacent helper is the copy nobody looked at mishandling the
-    // high byte.
+    // Hex through bytesToHex (src/encoding.ts).
     const key = `capsid_${bytesToHex(bytes)}`;
-    // THE `ro:` PREFIX GOES ON THE LIST ENTRY, NOT ON THE KEY. src/auth.ts hashes the
-    // presented key and compares it against each entry with the prefix stripped, so the
-    // tier is a property of what the OPERATOR wrote down. Getting this backwards mints
-    // a WRITE key from a helper whose purpose is the read-only tier, which is why the
-    // test resolves the minted key through the real verifier.
+    // The `ro:` prefix goes on the list entry, not the key: src/auth.ts compares the
+    // key's hash to each entry with the prefix stripped. Backwards, this mints a write key.
     const hash = await sha256Hex(key);
     const entry = `ro:${hash}`;
     const existing = (env.OPERATOR_KEY_HASH ?? "").split(",").map((h) => h.trim()).filter(Boolean);
@@ -524,8 +450,7 @@ export async function improveControl(
     const next = alreadyListed ? existing : [...existing, entry];
     await env.DB.batch([
       improveAudit(env.DB, "operator-key-minted", null, {
-        // A fingerprint, not the hash. Enough to tell two mints apart in the log
-        // and useless as a verifier.
+        // Tells two mints apart without being usable as a verifier.
         fingerprint: hash.slice(0, 8),
         grant: "read-only",
       }),
@@ -547,15 +472,9 @@ ${next.join(",")}`,
     };
   }
 
-  // THE DRIVER LEASE (residual 9). Claimed before a subscription-mode run touches a
-  // clone, released when it finishes.
-  //
-  // BEST-EFFORT, AND SAID SO. KV has no compare-and-set, so this is a get then a put
-  // with nothing atomic between them, like the backup lease: it stops a second driver
-  // started minutes or hours later, not two claims landing in the same millisecond.
-  //
-  // The TTL is what makes a crashed driver cost one night rather than forever: the
-  // release does not run if the session dies, so the key expires on its own.
+  // The driver lease, claimed before a subscription-mode run touches a clone. Best
+  // effort: KV has no compare-and-set, so it stops a second driver started later, not
+  // two claims in the same millisecond. The TTL frees the lease of a driver that died.
   if (action === "claim") {
     const target = (opts.namespace ?? "").trim();
     if (!target) throw new Error('claim needs a namespace. Nothing was changed.');
@@ -570,8 +489,7 @@ ${next.join(",")}`,
     }
     const holder = await env.APP_KV.get(key);
     if (holder !== null) {
-      // REFUSED, and the holder is NOT overwritten. A claim that took the lease anyway
-      // would turn a lock into a log line.
+      // Refused, and the holder is not overwritten.
       return {
         action: "claim",
         namespace: target,
@@ -601,8 +519,7 @@ ${next.join(",")}`,
     }
     await env.APP_KV.put(MODE_KEY, value);
     await env.DB.batch([improveAudit(env.DB, "improve-mode-set", null, { mode: value })]);
-    // Read back through the same resolver the loop uses, so an unexpected stored value
-    // surfaces here rather than at 3am.
+    // Read back through the resolver the loop uses, so an unexpected value surfaces here.
     const read = await readMode(env.APP_KV);
     return { action: "mode", requested: value, mode: read.mode, mode_note: read.reason };
   }
@@ -636,8 +553,7 @@ ${next.join(",")}`,
   }
   await env.APP_KV.put(BUDGET_KEY, JSON.stringify({ actions_minutes_month, model_usd_month }));
   await env.DB.batch([improveAudit(env.DB, "improve-budget-set", null, { actions_minutes_month, model_usd_month })]);
-  // Read back through readBudget, which applies the same per-field defaulting the
-  // loop sees, so the caps returned are the caps the kill switch will enforce.
+  // Read back through readBudget so the caps returned are the ones the kill switch enforces.
   const caps = await readBudget(env.APP_KV);
   return { action: "budget", caps };
 }

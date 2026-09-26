@@ -44,18 +44,14 @@ export interface ProposedChange {
 
 export interface ProposeInput {
   namespace: string;
-  // The run prompt, read from capsid improve/prompts/run.md. It is DATA here, not
-  // code: this module never edits it, and the meta-loop that proposes edits to it
-  // can only write a proposal document a human applies.
+  // capsid improve/prompts/run.md. Read, never edited here; the meta-loop can only
+  // propose a change to it for a human to apply.
   runPrompt: string;
-  // What the scorer measures, rendered from the namespace's scores document, so
-  // the model is optimising the stated objective rather than a guess at it.
+  // What the scorer measures, rendered from the namespace's scores document.
   objective: string;
   // Repository context the caller gathered (file tree, relevant sources).
   context: string;
-  // Prior attempts this run, so the model does not re-propose a change that was
-  // already tried and reverted. Cheaper and more reliable than expecting it to
-  // infer novelty.
+  // Prior attempts this run, so the model does not re-propose a reverted change.
   history: string;
   // Set when the attempt is a transferred skill rather than a fresh idea.
   skill?: { id: string; title: string; body: string };
@@ -75,8 +71,7 @@ export async function proposeChange(env: AttemptEnv, input: ProposeInput): Promi
     "Do not add features nobody asked for, do not refactor around the change, and do not add error handling for cases that cannot happen.",
   ].join("\n");
 
-  // Cached prefix: stable content first. History used to go first, so every
-  // attempt busted the prefix cache.
+  // Cached prefix: stable content first, before the history that grows each attempt.
   const cachedPrefix = ["## Repository context", input.context].join("\n");
 
   const user = [
