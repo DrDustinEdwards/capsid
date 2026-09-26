@@ -35,9 +35,6 @@ export const DEFAULT_CADENCE_MINUTES = 30;
 // than being obeyed.
 const MIN_CADENCE_MINUTES = 5;
 
-// Long enough that an ordinary gate cleared the same afternoon never trips it.
-export const BLOCKED_STALE_HOURS = 24;
-
 // Red this long is not a flake somebody is already fixing.
 export const CI_RED_HOURS = 2;
 
@@ -240,54 +237,6 @@ export function statusFindings(status: StatusReport): Finding[] {
   return out;
 }
 
-// A blocked job's summary can run to a page; a finding wants its first line.
-function firstLine(text: string | null): string {
-  const head = (text ?? "").split("\n")[0].trim();
-  return head || "(nothing recorded)";
-}
-
-export interface BlockedRow {
-  id: string;
-  namespace: string;
-  title: string;
-  result_summary: string | null;
-  updated_at: string;
-}
-
-/** A blocked job nobody has looked at in a day.
- *
- *  Read from the table because improve_status's blocked_jobs projection carries no
- *  timestamp: it answers "what is blocked and on what command", the console's
- *  question, not "for how long". Widening it would add a field only this reads. */
-export function staleBlockedFindings(rows: BlockedRow[], now: Date): Finding[] {
-  const out: Finding[] = [];
-  for (const row of rows) {
-    const since = Date.parse(row.updated_at);
-    if (Number.isNaN(since)) continue;
-    const hours = (now.getTime() - since) / 3_600_000;
-    if (hours < BLOCKED_STALE_HOURS) continue;
-    out.push(
-      finding(row.namespace, `blocked-${row.id}`, `${row.id} has been blocked for over ${BLOCKED_STALE_HOURS} hours`, [
-        `title: ${row.title}`,
-        `blocked since: ${row.updated_at} (${hours.toFixed(1)} hours)`,
-        `waiting on: ${firstLine(row.result_summary)}`,
-      ])
-    );
-  }
-  return out;
-}
-
-export async function readStaleBlocked(env: Env, now: Date): Promise<BlockedRow[]> {
-  const cutoff = new Date(now.getTime() - BLOCKED_STALE_HOURS * 3_600_000).toISOString();
-  const { results } = await env.DB.prepare(
-    `SELECT id, namespace, title, result_summary, updated_at FROM jobs
-     WHERE status = 'blocked' AND updated_at < ?1 ORDER BY updated_at ASC LIMIT 20`
-  )
-    .bind(cutoff)
-    .all<BlockedRow>();
-  return results ?? [];
-}
-
 export interface CiRun {
   head_sha: string;
   status: string;
@@ -480,7 +429,6 @@ export const WATCHER_CHECKS = [
   "master head",
   "migrations",
   "improve_status",
-  "blocked jobs",
   "mirror dumps",
   "mirror runs",
   "scorer identity",
@@ -494,7 +442,6 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^deploy-drift-/, "master head"],
   [/^schema-behind-/, "migrations"],
   [/^(budget-|paused-)/, "improve_status"],
-  [/^blocked-/, "blocked jobs"],
   [/^mirror-no-dump$/, "mirror dumps"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "mirror runs"],
   [/^scorer-unread-/, "scorer identity"],
@@ -733,12 +680,6 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
   if (status) {
     ran.add("improve_status");
     out.push(...statusFindings(status));
-  }
-
-  const blocked = await attempt("blocked jobs", () => readStaleBlocked(env, now));
-  if (blocked) {
-    ran.add("blocked jobs");
-    out.push(...staleBlockedFindings(blocked, now));
   }
 
   // The off-account mirror, resolved through the capsid namespace mapping (selector
