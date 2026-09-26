@@ -32,8 +32,9 @@ the login GitHub reports for pull requests opened through Capsid's GitHub App. T
 is carried in this document and in no code, so adding or removing an author is a signed
 change to this document.
 
-Version 5 also refuses `src/jobs.ts` and `src/outcome-prs.ts`, the two sources that
-write the records `pr_recorded_for_job` reads, and requires one merged typecheck step
+Version 5 also refuses `src/jobs.ts` (with the jobs-claim, jobs-holder, jobs-seat,
+jobs-mirror and jobs-transition modules it re-exports) and `src/outcome-prs.ts`, the sources that write the records
+`pr_recorded_for_job` reads, and requires one merged typecheck step
 where version 4 required four (audit 2026-09-25, B1). The step runs the same four
 typecheck configs.
 
@@ -145,7 +146,7 @@ list differs from it in either direction.
 - path `(^|\/)vitest\.config\.[cm]?[jt]s$` the integration suite's configuration.
 - path `^scripts\/test-budget\.mjs$` the runner behind npm test.
 - path `^scripts\/verify-live\.mjs$` the live gate, whose rollback is the backstop for an unattended merge.
-- path `^src\/jobs\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
+- path `^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
 - path `^src\/outcome-prs\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
 
 ## Required CI
