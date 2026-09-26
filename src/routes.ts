@@ -4,6 +4,7 @@ import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
 import { runBackup } from "./backup";
+import { RUNNER_KEY_PATH, exchangeRunnerKey } from "./runner-key";
 import { routeRefusal } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
@@ -446,6 +447,22 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
+// A seat-started session's key, bought with the run's GitHub OIDC token and bound to one
+// job (src/runner-key.ts). The key goes back once, in the body, and is never logged.
+async function handleRunnerKey(request: Request, env: Env): Promise<Response> {
+  const bounded = await readSignedBody(request, `request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
+  if (!bounded.ok) return bounded.response;
+  const auth = request.headers.get("Authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
+  const result = await exchangeRunnerKey(env, token, bounded.body, new Date());
+  if (!result.ok) {
+    console.error(`RUNNER_KEY_REFUSED ${result.status}: ${result.refusal}`);
+    return textResponse(result.refusal, result.status);
+  }
+  console.log(`RUNNER_KEY_MINTED ${result.agent} for ${result.job_id}`);
+  return new Response(JSON.stringify(result), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
 // The holdout-credential mint. Same envelope as the score report: per-namespace HMAC
 // over timestamp.body, bounded body, jti replay cache. The signed namespace is the
 // authority, so a repo can mint read access to its own holdout prefix only.
@@ -548,6 +565,7 @@ export const defaultHandler = {
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
+  if (url.pathname === RUNNER_KEY_PATH && request.method === "POST") return handleRunnerKey(request, env);
     if (url.pathname === SCORE_PATH && request.method === "POST") return handleImproveScore(request, env);
     if (url.pathname === CREDENTIAL_PATH && request.method === "POST") return handleHoldoutCredential(request, env);
     if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);
