@@ -25,7 +25,7 @@ import {
   type JobOutcomeRow,
 } from "./job-outcomes";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
-import { correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, type JobResult } from "./jobs-transition";
+import { correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -130,6 +130,9 @@ async function holderTransition(
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
     }),
   ];
+  // complete, fail and block all end the run that held the job, so a runner key bound
+  // to it stops here, in the same batch.
+  if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
     const row = outcomeFrom(job, verdict, now, patch.skills);

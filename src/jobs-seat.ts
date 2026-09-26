@@ -32,6 +32,7 @@ import {
   readJob,
   recordShortfall,
   refuse,
+  revokeBoundKeys,
   type JobResult,
 } from "./jobs-transition";
 
@@ -76,6 +77,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
+    revokeBoundKeys(env.DB, id),
   ];
   // An outcome row, for the same reason `fail` writes one: a job the seat had to close
   // because its driver never came back is the kind of ending the record should show.
@@ -271,6 +273,7 @@ export async function supersedeJob(
       from: current.status,
       held_by: current.claimed_by,
     }),
+    revokeBoundKeys(env.DB, id),
   ]);
   if (!won) {
     const moved = await readJob(env.DB, id);

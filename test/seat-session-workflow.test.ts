@@ -45,7 +45,27 @@ test("secrets come from the seat environment, the transcript stays out of the pu
   assert.match(CODE, /show_full_output: false/);
   assert.match(CODE, /--disallowedTools "[^"]*Bash\(npx wrangler:\*\)[^"]*Bash\(gh:\*\)/);
   assert.doesNotMatch(CODE, /--allowedTools "[^"]*(wrangler|deploy|gh:)/);
-  assert.match(CODE, /^permissions:\n {2}contents: write\n {2}pull-requests: read\n {2}issues: read$/m);
+  // The whole block, up to the blank line after it, so a permission added below the
+  // last one is caught rather than matched past.
+  assert.match(CODE, /^permissions:\n {2}contents: write\n {2}pull-requests: read\n {2}issues: read\n {2}id-token: write\n\n/m);
+});
+
+// capsid/research/design-seat-session-hardening.md, PR 3: the runner's Capsid key is
+// bought per run with its OIDC token, before any dependency code can ask for one.
+test("the Capsid key comes from the OIDC exchange, before checkout, and no long-lived runner key is read", () => {
+  assert.doesNotMatch(CODE, /CAPSID_RUNNER_KEY/, "a long-lived runner key is still read");
+  const exchange = CODE.indexOf("name: Exchange this run's OIDC token");
+  const validate = CODE.indexOf("name: Validate the job id");
+  const checkout = CODE.indexOf("actions/checkout@");
+  const install = CODE.indexOf("run: npm ci");
+  assert.ok(exchange > validate && validate >= 0, "the exchange does not follow the job id check");
+  assert.ok(exchange < checkout && exchange < install, "the exchange runs after checkout or npm ci, where a dependency could spend it first");
+  const step = CODE.slice(exchange, checkout);
+  assert.match(step, /JOB_ID: \$\{\{ steps\.job\.outputs\.id \}\}/);
+  assert.match(step, /"&audience=capsid"/);
+  assert.match(step, /https:\/\/capsid\.dustin-edwards\.workers\.dev\/ops\/runner-key/);
+  assert.match(step, /::add-mask::" \+ key/);
+  assert.match(step, /capsid-mcp\.json/);
 });
 
 // An allowed interpreter runs any program, which reaches the network and the

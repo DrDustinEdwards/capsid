@@ -22,7 +22,7 @@ export const SEAT_START_CAP_KEY = "seat_start:max_sessions";
 // The namespaces a session may be started for, held in code so widening it is a
 // reviewed change. Each one's primary repo must also be PUBLIC at the moment of the
 // start: a repo that goes private is off for this feature.
-const SEAT_START_NAMESPACES: readonly string[] = ["capsid", "dustinedwards"];
+export const SEAT_START_NAMESPACES: readonly string[] = ["capsid", "dustinedwards"];
 
 // What the repo's workflow listens for, and nothing else.
 export const SEAT_START_EVENT = "capsid-seat-start";
