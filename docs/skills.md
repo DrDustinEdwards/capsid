@@ -67,6 +67,17 @@ one day falls back to the default rather than being obeyed. The cadence is uncha
 from the probing design, so a status moves up to a fortnight after the evidence that
 decides it lands.
 
+THE WORKER OFFERS, AND RECORDS WHAT IT OFFERED. A job's first `claim` matches its title
+and prompt against candidate and live skills (`offerSkills`, at most three) and returns them
+as `offered_skills`, each with its instructions inline, since a driver scoped to its own
+namespace cannot read `capsid/improve/skills/`. The offer is recorded in the same batch as
+the claim, as a `job-skills-offered` audit row naming each skill and its version, and a
+later claim of the same job returns that record rather than matching again. `complete` and
+`fail` store the recorded offer as `skill_ids_offered`: a driver may omit `offered`, an
+`offered` list that differs from the record is refused, and so is a `used` skill the job
+was not offered. Offered is therefore the Worker's record and used is the driver's claim,
+which is the split the observation window measures.
+
 A FINISHED JOB IS EVIDENCE, since 2026-09-18. `jobs` action `complete` and action
 `fail` take a `skills` object naming which skills the run was offered and which it
 used. Those two lists are stored separately on `job_outcomes`, and the gap between them
