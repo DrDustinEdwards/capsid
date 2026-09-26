@@ -206,6 +206,21 @@ ${form(csrf, "fail_job", { id: job.id }, "Mark failed", reasonField("why it cann
 </li>`;
 }
 
+// A claimed job, with who holds it and until when. Release returns it to the queue for
+// the next free session; Mark failed ends it. Both are for a claim whose holder is gone.
+function claimedJob(job: NamespaceStatus["jobs"]["claimed_jobs"][number], csrf: string): string {
+  const since = job.claimed_at ? `claimed ${job.claimed_at}` : "claimed";
+  const lease = job.lease_expires ? `, lease until ${job.lease_expires}` : "";
+  return `<li class="claimed">
+<strong>${escapeHtml(job.title)}</strong>
+<span class="muted"><code>${escapeHtml(job.id)}</code> held by ${escapeHtml(job.held_by ?? "nobody on record")}, ${escapeHtml(since)}${escapeHtml(lease)}</span>
+<div class="acts">
+${form(csrf, "release_job", { id: job.id }, "Release", reasonField("why the holder is not coming back"))}
+${form(csrf, "fail_job", { id: job.id }, "Mark failed", reasonField("why it cannot be done"))}
+</div>
+</li>`;
+}
+
 function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): string {
   const driver = driverFor(data, ns.namespace);
   const run = ns.last_run;
@@ -250,6 +265,9 @@ function namespaceRow(data: ConsoleData, ns: NamespaceStatus, csrf: string): str
   const blocked = ns.jobs.blocked_jobs.length
     ? `<h4>Blocked jobs, and what each waits on</h4><ul class="blocked-list">${ns.jobs.blocked_jobs.map((j) => blockedJob(j, csrf)).join("")}</ul>`
     : "";
+  const claimed = ns.jobs.claimed_jobs.length
+    ? `<h4>Claimed jobs, and who holds each</h4><ul class="blocked-list">${ns.jobs.claimed_jobs.map((j) => claimedJob(j, csrf)).join("")}</ul>`
+    : "";
 
   // A skill offered often and used rarely has a trigger condition that does not
   // describe the work, so the use rate is shown.
@@ -284,6 +302,7 @@ ${
   }
 </div>
 ${blocked}
+${claimed}
 <h4>Skills</h4>
 ${skills}
 </section>`;

@@ -17,7 +17,8 @@ import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
-import { commandFromSummary } from "./jobs-holder";
+import { commandFromSummary, failJob } from "./jobs-holder";
+import type { JobSkills } from "./job-outcomes";
 import {
   actorShapeRefusal,
   callerIsSeat,
@@ -33,8 +34,8 @@ import {
   type JobResult,
 } from "./jobs-transition";
 
-// The transitions made on a job the caller does not hold: the admin's fail, supersede
-// and resume.
+// The transitions made on a job the caller does not hold: the seat's fail and release,
+// supersede and resume.
 
 // The seat stepping in, on a job it does not hold.
 //
@@ -42,24 +43,27 @@ import {
 // treading on each other but leaves no way to close a job whose driver is gone: the
 // machine was turned off, the session died, the work was superseded from a chat.
 //
-// Admin only, for the same reason resume allows any write-grant caller: the seat that
-// decides is routinely not the session that held the job. `agent.admin` is true for
-// the OAuth admin session and a legacy write key and false for every minted agent, so
-// a driver cannot fail another driver's job.
+// The seat only: the admin, or a caller holding can_merge (callerIsSeat), the rule
+// supersede and resume use. The seat that decides is routinely not the session that
+// held the job, and the seat key holds can_merge without being the admin. No driver
+// holds can_merge, so a driver still cannot fail another driver's job.
 //
 // It refuses a job that is already finished rather than rewriting one, and says so
 // rather than reporting a no-op as success. The mirror and audit row ride in the same
 // guarded batch as every other transition.
 export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
-  if (!agent.admin) {
+  if (!callerIsSeat(agent)) {
     return refuse(
       "admin-fail",
-      `${agent.actor} may only fail a job it holds. Failing somebody else's job is the administrator's call, and a minted agent is deliberately not the administrator.`
+      `${agent.actor} may only fail a job it holds. Failing somebody else's job is the seat's act, and this caller holds neither the admin identity nor can_merge.`
     );
   }
   if (!reason?.trim()) return refuse("admin-fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const current = await readJob(env.DB, id);
   if (!current) return refuse("admin-fail", `no job ${id}.`);
+  // The job's own namespace, since a seat key may be scoped narrower than the admin.
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) return refuse("admin-fail", `${agent.actor} cannot fail ${id} ('${current.title}'): ${outside}`);
   if (current.status !== "queued" && current.status !== "claimed" && current.status !== "blocked") {
     return refuse("admin-fail", `${id} is already ${current.status}; there is nothing to fail.`);
   }
@@ -90,6 +94,80 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     );
   }
   return { ok: true, action: "admin-fail", job };
+}
+
+// fail through the jobs tool. The holder failing its own job is an ordinary fail. The
+// seat failing a job somebody else holds, or nobody holds, is adminFailJob. Anyone else
+// gets failJob's own refusal for a job it does not hold.
+export async function failAsCaller(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  reason: string,
+  skills?: JobSkills
+): Promise<JobResult> {
+  const current = await readJob(env.DB, id);
+  if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
+    return adminFailJob(env, agent, now, id, reason);
+  }
+  return failJob(env, agent, now, id, reason, skills);
+}
+
+// Release: the seat returning a claimed job to the queue when its holder is gone (the
+// session ended, the machine was turned off). Without it the job waits out its lease,
+// and a driver can hold only one claim, so nothing else reaches that driver meanwhile.
+//
+// Not an ending, so no outcome row: the job is worked again and ends with a real one.
+// A job whose work already landed is released too, and the next session completes it
+// with the pull request as evidence, which the Worker verifies. The seat did not do
+// the work, so it does not report it done.
+//
+// claimed_at is kept, so the job's duration runs from its first claim. The UPDATE is
+// keyed on the holder read, so a lease that changed hands in between is not released
+// out from under the new holder.
+export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
+  if (!callerIsSeat(agent)) {
+    return refuse(
+      "release",
+      `${agent.actor} cannot release a job. Releasing a claim somebody else holds is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+    );
+  }
+  if (!reason?.trim()) {
+    return refuse("release", "release needs a reason: why the holder is not coming back. It is recorded in the audit row.");
+  }
+  const swallowed = swallowedParamTag(reason);
+  if (swallowed) return refuse("release", swallowedTagRefusal("reason", swallowed));
+  const current = await readJob(env.DB, id);
+  if (!current) return refuse("release", `no job ${id}.`);
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) return refuse("release", `${agent.actor} cannot release ${id} ('${current.title}'): ${outside}`);
+  if (current.status !== "claimed") {
+    return refuse(
+      "release",
+      `${id} is ${current.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`
+    );
+  }
+  if (current.claimed_by === agent.actor) {
+    return refuse("release", `${id} is held by ${agent.actor} itself. A holder ends its own claim with fail or block.`);
+  }
+  const job: JobRow = { ...current, status: "queued", claimed_by: null, lease_expires: null, updated_at: now.toISOString() };
+  const won = await guardedTransition(env, current, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = 'queued', claimed_by = NULL, lease_expires = NULL, updated_at = ?2
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?3 RETURNING id`
+    ).bind(id, now.toISOString(), current.claimed_by),
+    ...(await mirrorStatements(env.DB, job, "job-released", agent.actor)),
+    jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
+  ]);
+  if (!won) {
+    const moved = await readJob(env.DB, id);
+    return refuse(
+      "release",
+      `${id} changed between reading it and releasing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written.`
+    );
+  }
+  return { ok: true, action: "release", job };
 }
 
 // Supersede: the seat replacing a job before any work was done on it, for a corrected

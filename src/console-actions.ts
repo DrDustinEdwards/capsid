@@ -6,7 +6,7 @@ import { CONSOLE_CSRF_COOKIE } from "./console-auth";
 import { escapeHtml } from "./html";
 import type { Env } from "./env";
 import { improveControl } from "./improve-run";
-import { adminFailJob, resumeJob } from "./jobs";
+import { adminFailJob, releaseJob, resumeJob } from "./jobs";
 import { readBoundedText } from "./improve-scorer";
 import { auditStatement } from "./store-guards";
 
@@ -20,7 +20,7 @@ import { auditStatement } from "./store-guards";
 // The confirm is a second request: the first POST renders what will happen and
 // changes nothing; the second, with the same CSRF, performs it.
 
-const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "revoke_agent"] as const;
+const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 
 function isConsoleAction(value: string): value is ConsoleAction {
@@ -52,6 +52,8 @@ function describe(action: ConsoleAction, form: URLSearchParams): string {
       return `Set the improve mode to ${form.get("value") ?? ""} for every namespace.`;
     case "resume_job":
       return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, the resume is refused and the job stays blocked.`;
+    case "release_job":
+      return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
       return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
     case "revoke_agent":
@@ -162,6 +164,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
         break;
       }
       case "resume_job":
+      case "release_job":
       case "fail_job": {
         const id = required(form, "id");
         const reason = required(form, "reason");
@@ -170,14 +173,18 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
           return textResponse(
             action === "resume_job"
               ? "resume needs a reason: what you approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen."
-              : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
+              : action === "release_job"
+                ? "release needs a reason: why the holder is not coming back."
+                : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
             400
           );
         }
         const result =
           action === "resume_job"
             ? await resumeJob(env, agent, now, id, reason)
-            : await adminFailJob(env, agent, now, id, reason);
+            : action === "release_job"
+              ? await releaseJob(env, agent, now, id, reason)
+              : await adminFailJob(env, agent, now, id, reason);
         if (!result.ok) return textResponse(result.refusal ?? `${action} was refused.`, 400);
         committed = true;
         await auditClick(env, actor, action, result.job?.namespace ?? null, { id, reason });

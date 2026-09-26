@@ -28,7 +28,7 @@ import { guardedTransition } from "./jobs-transition";
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, RESUME_MARKER } from "./jobs-holder";
-export { adminFailJob, resumeJob, supersedeJob } from "./jobs-seat";
+export { adminFailJob, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export type { JobResult } from "./jobs-transition";
 
 // The lease sweep, run by the five-minute improve tick. A claim whose lease has
@@ -85,6 +85,9 @@ export interface JobsSummary {
   // its third gate reads differently from one stuck at the same gate since it was
   // posted, and the count is what tells them apart.
   blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; blocked_times: number; resumed: number }>;
+  // The claimed jobs and who holds each, so the seat can see a claim whose holder is
+  // gone and release it rather than wait out the lease.
+  claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null; lease_expires: string | null }>;
 }
 
 export async function jobsSummary(db: D1Database, namespace: string, now: Date): Promise<JobsSummary> {
@@ -113,6 +116,13 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date):
     )
     .bind(namespace)
     .all<{ id: string; title: string; result_summary: string | null; blocked_count: number; resumed_count: number }>();
+  const claimed = await db
+    .prepare(
+      `SELECT id, title, claimed_by, claimed_at, lease_expires FROM jobs
+       WHERE namespace = ?1 AND status = 'claimed' ORDER BY updated_at DESC LIMIT 20`
+    )
+    .bind(namespace)
+    .all<{ id: string; title: string; claimed_by: string | null; claimed_at: string | null; lease_expires: string | null }>();
   return {
     queued: byStatus.get("queued") ?? 0,
     claimed: byStatus.get("claimed") ?? 0,
@@ -124,6 +134,13 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date):
       waiting_on: r.result_summary,
       blocked_times: r.blocked_count,
       resumed: r.resumed_count,
+    })),
+    claimed_jobs: (claimed.results ?? []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      held_by: r.claimed_by,
+      claimed_at: r.claimed_at,
+      lease_expires: r.lease_expires,
     })),
   };
 }

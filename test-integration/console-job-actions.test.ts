@@ -183,3 +183,35 @@ describe("resume_job", () => {
     expect((await audits()).some((r) => r.action === "console-resume_job")).toBe(false);
   });
 });
+
+describe("release_job", () => {
+  it("returns a claimed job to the queue and writes both audit rows", async () => {
+    const jobsEnv = consoleEnv() as unknown as Parameters<typeof postJob>[0];
+    const posted = await postJob(jobsEnv, legacyAgent("write", "github:DrDustinEdwards"), NOW, {
+      namespace: "capsid",
+      title: "a claim whose holder went away",
+      body: "do the thing",
+    });
+    const id = posted.job!.id;
+    expect((await claimJob(jobsEnv, DRIVER, NOW, { id })).ok).toBe(true);
+
+    const res = await handleConsoleAction(await post({ action: "release_job", id, reason: "no session is running" }), consoleEnv(), NOW);
+    expect(res.status, await res.clone().text()).toBe(303);
+    const stored = await row(id);
+    expect(stored?.status).toBe("queued");
+    expect(stored?.claimed_by).toBeNull();
+    const rows = await audits();
+    expect(rows.some((r) => r.action === "job-released" && r.params.includes("opkey:aaaabbbbcccc"))).toBe(true);
+    const click = rows.find((r) => r.action === "console-release_job");
+    expect(click?.actor).toBe("github:DrDustinEdwards");
+    expect(click?.params).toContain("no session is running");
+  });
+
+  it("refuses a blocked job, which is resumed rather than released", async () => {
+    const id = await blockedJob();
+    const res = await handleConsoleAction(await post({ action: "release_job", id, reason: "x" }), consoleEnv(), NOW);
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/not claimed/);
+    expect((await row(id))?.status).toBe("blocked");
+  });
+});
