@@ -4,13 +4,8 @@ import { SCOPE_FLAGS, defaultScopes } from "../src/agents-schema.ts";
 import { adminAgent, legacyAgent, type Agent } from "../src/agents.ts";
 import { missingForJob, parseRequiredScopes, serializeRequiredScopes } from "../src/jobs-schema.ts";
 
-// GROUP 5: THE QUEUE ASKS WHAT A DRIVER CAN DO BEFORE HANDING IT THE WORK.
-//
-// The claim used to authorize on one question: does this caller hold the write grant.
-// Every driver did, because there was one headless credential and it could do
-// everything. A job whose work ends in a merge was claimed by whoever asked first, and
-// the mismatch surfaced four hours later when the lease expired, or did not surface at
-// all because the driver could do it and nobody had decided that it should.
+// The queue asks what a driver can do before handing it the work: a job's required
+// scopes are checked at the claim, not discovered when the lease expires.
 
 function driver(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () => {}): Agent {
   const scopes = defaultScopes(["capsid"]);
@@ -55,9 +50,8 @@ test("the legacy key and the admin can still claim anything, which is what keeps
 });
 
 test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather than demanding nothing", () => {
-  // Reversed 2026-09-17 (AUDIT-2026-09-16.md). This used to fail open, and a job whose
-  // requirement had been damaged was leased to any driver. The claim now marks such a
-  // job failed, so the stranding the old ruling feared cannot happen either.
+  // Failing open would lease a job with a damaged requirement to any driver. The claim
+  // marks such a job failed, so it is not stranded either.
   for (const bad of ["{", "[]", "null", '{"flags":"can_merge"}', '{"flags":["can_fly","can_merge"]}']) {
     const parsed = parseRequiredScopes(bad);
     assert.equal(parsed.ok, false, `${bad} parsed as a requirement`);

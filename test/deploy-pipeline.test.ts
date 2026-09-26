@@ -3,14 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// GROUP 4 (deploy pipeline), the CONFIG and SOURCE sites. The behavioural pieces
-// (/health schema_version and backup age, the backup stamp) are tested against the
-// real handlers in health.test.ts and backup.test.ts. What is left is wiring that
-// lives in a workflow, a README and the cron entry point, none of which a node test
-// can execute: a workflow does not run here, and index.ts pulls cloudflare:workers.
-// The convention (capsid/conventions.md) is that the sites of a configuration
-// change include the tests that assert its contents, so a later edit that quietly
-// drops one of these goes red.
+// Deploy pipeline wiring that no node test can execute (a workflow, docs, and the
+// cron entry point, which pulls cloudflare:workers), asserted as text so an edit that
+// drops one goes red. The behavioural pieces are in health.test.ts and backup.test.ts.
 
 const ROOT = join(import.meta.dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -28,8 +23,8 @@ test("the deploy job refuses to ship against an unapplied migration", () => {
 
 test("the scheduled live gate asserts the live sha equals master head", () => {
   const ci = read(".github/workflows/ci.yml");
-  // EXPECT_SHA is now set on a schedule run too, so the six-hourly gate catches
-  // drift between master and the deployed sha instead of asserting nothing.
+  // EXPECT_SHA is set on a schedule run too, so the scheduled gate catches drift
+  // between master and the deployed sha.
   const expectLine = ci.split("\n").find((l) => l.includes("EXPECT_SHA:")) ?? "";
   assert.match(expectLine, /github\.event_name == 'schedule'/, "the scheduled run no longer asserts the deployed sha");
   assert.match(expectLine, /github\.sha/);
@@ -38,8 +33,8 @@ test("the scheduled live gate asserts the live sha equals master head", () => {
 // scanner-rule: conventions-verification, enumerate every site. src/index.ts cannot load under node --test
 test("both improve crons rethrow after logging, like the backup cron", () => {
   const idx = read("src/index.ts");
-  // BACKUP_CRON_THREW already rethrew; it is the known-true case that proves this
-  // matcher is not vacuously passing on a block with no rethrow.
+  // BACKUP_CRON_THREW is the known-true case that proves this matcher is not
+  // vacuously passing.
   for (const marker of ["BACKUP_CRON_THREW", "IMPROVE_OPEN_THREW", "IMPROVE_TICK_THREW"]) {
     const from = idx.indexOf(marker);
     assert.ok(from > 0, `${marker} is missing`);
@@ -49,23 +44,17 @@ test("both improve crons rethrow after logging, like the backup cron", () => {
   }
 });
 
-// The rollback section moved out of README.md into docs/rollback.md when the
-// README was cut to its top-level shape. The guard follows the content: the
-// assertions are the same three, against the file that now holds them.
-
-// ---- rollback on a failed gate (residual 7) ---------------------------------
+// rollback on a failed gate
 
 test("the live job rolls back when a gate fails on a run that deployed", () => {
   const ci = read(".github/workflows/ci.yml");
   assert.match(ci, /wrangler@[\d.]+ rollback/, "the live job has no rollback step");
-  // GUARDED TO THIS RUN'S OWN DEPLOY. On a scheduled run the deploy job is
-  // skipped and a red gate usually means the live sha is BEHIND master; rolling
-  // back there would move production further from master, not closer.
+  // Guarded to this run's own deploy. On a scheduled run a red gate usually means the
+  // live sha is behind master, and rolling back would move it further away.
   const step = ci.slice(ci.indexOf("Roll back"), ci.indexOf("Reap this run's probe client"));
   assert.match(step, /failure\(\)/, "the rollback step is not conditioned on a failure");
   assert.match(step, /needs\.deploy\.result == 'success'/, "the rollback runs on runs that did not deploy");
-  // BOTH SHAS. A rollback that does not say what it left running is a rollback
-  // nobody can check afterwards.
+  // Both shas, so the rollback can be checked afterwards.
   assert.match(step, /ROLLBACK_FROM|before/i, "the rollback does not report the sha it rolled back from");
   assert.match(step, /ROLLBACK_TO|after/i, "the rollback does not report the sha now live");
 });
@@ -75,7 +64,7 @@ test("the rollback pins the same wrangler version the deploy uses", () => {
   const pkg = JSON.parse(read("package.json")) as { devDependencies?: Record<string, string> };
   const pinned = pkg.devDependencies?.wrangler;
   assert.ok(pinned, "wrangler is no longer a pinned devDependency");
-  // The live job runs without npm ci on purpose, so its wrangler comes from npx
-  // and would otherwise float to whatever latest is on the day production breaks.
+  // The live job runs without npm ci, so an unpinned npx wrangler would float to
+  // latest.
   assert.match(ci, new RegExp(`wrangler@${pinned.replace(/\./g, "\.")} rollback`), `the rollback does not pin wrangler ${pinned}`);
 });

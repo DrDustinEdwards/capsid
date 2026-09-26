@@ -7,14 +7,9 @@ import { adminAgent } from "../src/agents.ts";
 import { TOOL_GRANTS, TOOL_ACTION_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// THE GRANT SENTENCE IN EACH TOOL DESCRIPTION IS DERIVED FROM TOOL_GRANTS.
-//
-// Thirteen descriptions said "Requires operator key" after scoped agents existed. That
-// was wrong both ways: a minted agent holding the write grant can call the write tools,
-// and register_namespace, update_namespace and the improve_run control actions are
-// admin only, which a write-grant agent does not satisfy. The sentence each tool must
-// carry is computed here from the table the registrar enforces, and checked against the
-// descriptions the server serves, so a change to either side fails this file.
+// The grant sentence in each tool description is derived from TOOL_GRANTS, the table
+// the registrar enforces, and checked against the descriptions the server serves, so
+// a change to either side fails this file.
 
 async function servedDescriptions(): Promise<Map<string, string>> {
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));

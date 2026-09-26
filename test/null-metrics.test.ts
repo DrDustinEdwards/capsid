@@ -8,18 +8,10 @@ import { REPORTED_SECONDARY } from "../scripts/improve-report.mjs";
 import { parseScoresDoc, seedScoresDoc } from "../src/improve-scores";
 import { ROSTER } from "../src/improve-schema";
 
-// A DECLARED METRIC THAT NOTHING REPORTS IS A FALSE CLAIM IN THE DOCUMENT.
-//
-// Both 2026-09-07 audits rated this MAJOR 5.7: error_count and p95_latency_ms were
-// emitted as a literal null on every run by every repo since the loop was built,
-// and were declared in all five scores documents beside three real ones. foxhound
-// carried two more, recovery_rate and dispute_win_rate, marked `stub`. The effect
-// is not cosmetic. A reader of germomics' document sees five signals; the loop
-// scores it on bundle size alone.
-//
-// The rule these tests keep: the scores canon and the scorer are derived from each
-// other and fail in BOTH directions, so a metric cannot be declared without
-// something reporting it, or reported without being declared.
+// A declared metric that nothing reports is a false claim in the scores document.
+// The scores canon and the scorer are checked against each other in both directions,
+// so a metric cannot be declared without something reporting it, or reported without
+// being declared.
 
 const SCORER = join(import.meta.dirname, "..", "scripts", "improve-report.mjs");
 
@@ -69,11 +61,8 @@ test("PLANT: the seed document declares no metric the scorer does not report", (
 });
 
 test("PLANT: no namespace parks an intention as a stub", () => {
-  // The `stub` marker stays in the parser for a metric that is genuinely
-  // half-wired. foxhound's recovery_rate and dispute_win_rate were not that: they
-  // were named products of work nobody had started, and they sat in the canon for
-  // three days reading like measurements. They live in
-  // capsid/improve/TASK-wire-the-metrics.md now.
+  // The `stub` marker is for a metric that is genuinely half-wired, not for planned
+  // work (that lives in capsid/improve/TASK-wire-the-metrics.md).
   for (const namespace of ROSTER) {
     const doc = parseScoresDoc(namespace, seedScoresDoc(namespace));
     const stubs = doc.secondary.filter((s) => s.stub).map((s) => s.metric);
@@ -83,8 +72,6 @@ test("PLANT: no namespace parks an intention as a stub", () => {
 
 test("the parser still understands a stub, for the day one is genuinely half-wired", () => {
   // Removing the stubs from the canon must not remove the ability to declare one.
-  // This is the innocent-case half of the widened matcher: a guard that also
-  // deletes the mechanism gets reverted rather than kept.
   const doc = parseScoresDoc(
     "capsid",
     ["## Anchors", "", "- build_passes: required", "", "## Secondary", "", "- half_wired: maximize weight 0 stub", ""].join("\n")
@@ -95,9 +82,8 @@ test("the parser still understands a stub, for the day one is genuinely half-wir
 });
 
 test("the anchor block is untouched by any of this, so no pin moves", () => {
-  // Removing a Secondary line cannot change the anchor checksum: sectionSlice
-  // stops at the next `## ` heading. This is the assertion that lets a reader
-  // trust the KV commands in the session report, which re-pin the same values.
+  // Removing a Secondary line cannot change the anchor checksum: sectionSlice stops
+  // at the next `## ` heading.
   for (const namespace of ROSTER) {
     const doc = parseScoresDoc(namespace, seedScoresDoc(namespace));
     assert.ok(doc.anchorBlock.startsWith("## Anchors"), "the block starts at the heading");

@@ -16,10 +16,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// KV, Env and the HTTP stub all come from ./fakes.ts now (quality audit 6.2).
-// This file's local KV was the only one that parsed the "json" get type, seeded a
-// default installation token and supported list; all three survive the merge, and
-// the shared one adds failure injection and cursor pagination.
+// KV, Env and the HTTP stub come from ./fakes.ts.
 
 function makeEnv(repos: unknown[] | null, kv = fakeKv({ seedToken: true }), extra: Record<string, unknown> = {}) {
   return fakeEnv({
@@ -42,7 +39,7 @@ const fileBody = (content: string, sha = "file-sha") => ({
   sha,
 });
 
-// ---- repo selector resolution -----------------------------------------------
+// repo selector resolution
 
 const TWO_REPOS = [
   { repo: "owner/primary-repo", label: "primary" },
@@ -75,7 +72,7 @@ test("resolveRepo rejects an unknown namespace", async () => {
   await assert.rejects(() => resolveRepo(makeEnv(null), "ghost"), /unknown namespace: ghost/);
 });
 
-// ---- namespace repos validation ---------------------------------------------
+// namespace repos validation
 
 test("parseReposList accepts a valid array and defaults the label to primary", () => {
   const result = parseReposList('[{"repo":"a/b"}]');
@@ -113,7 +110,7 @@ test("requireSinglePrimary demands exactly one primary", () => {
   );
 });
 
-// ---- delete_repo_file: mode + precondition ----------------------------------
+// delete_repo_file: mode + precondition
 
 test("delete_repo_file direct mode deletes on the default branch", async () => {
   await withFetch(
@@ -178,10 +175,8 @@ test("delete_repo_file pr mode opens a branch and a PR", async () => {
   );
 });
 
-// ---- pr mode never commits to the default branch (audit 2026-09-25, F2-3) ---
-
-// can_direct_write guards mode "direct" only, so a pr-mode call naming the default
-// branch as its work branch used to commit onto it with no flag and no pull request.
+// pr mode never commits to the default branch. can_direct_write guards mode "direct"
+// only, so a pr-mode call naming the default branch as its work branch must be refused.
 // The repo here is an ordinary mapped repo, not the server's own.
 const ONE_REPO_PR = [{ repo: "o/r", label: "primary" }];
 const PR_MODE_ROUTES = {
@@ -237,12 +232,9 @@ test("write_repo_file pr mode with a named work branch still commits there and o
   });
 });
 
-// ---- pr mode refuses a branch another open PR holds (audit 2026-09-25, F2-3) ---
-
-// A pr-mode call naming a branch that already has an open pull request used to
-// commit onto that PR's head, changing a PR the caller may not own. It is refused
-// unless the call names that PR's number with `pr`, and a call that names it
-// commits without opening a second PR.
+// A pr-mode call naming a branch that already has an open pull request would commit
+// onto a PR the caller may not own. It is refused unless the call names that PR's
+// number with `pr`, and a call that names it commits without opening a second PR.
 const OPEN_PR_ROUTES = {
   ...PR_MODE_ROUTES,
   "GET /repos/o/r/pulls": (_body: unknown, params: URLSearchParams) =>
@@ -320,7 +312,7 @@ test("write_repo_file refuses pr in direct mode, where there is no pull request 
   });
 });
 
-// ---- manage_pr: action routing ----------------------------------------------
+// manage_pr: action routing
 
 // The routes manage_pr needs for its branch cleanup, factored out because every
 // case below wants them. PR_ROUTES(head) names the head branch of PR 5.
@@ -353,14 +345,14 @@ test("manage_pr merge calls the merge endpoint and returns the merged sha", asyn
   );
 });
 
-// ---- read cache invalidation (F15) ------------------------------------------
+// read cache invalidation
 
 const ONE_REPO = [{ repo: "o/r", label: "primary" }];
 const READ_PREFIX = "gh:get:/repos/o/r/";
 
 test("a read after a write returns the new content, not the cached body", async () => {
-  // The end-to-end shape of the finding: read (caches), write, read again inside
-  // the 60 second TTL. The second read used to serve the body the write replaced.
+  // Read (caches), write, read again inside the 60 second TTL. The second read must
+  // not serve the body the write replaced.
   const kv = fakeKv({ seedToken: true });
   const env = makeEnv(ONE_REPO, kv);
   let content = "OLD";
@@ -387,8 +379,7 @@ test("a read after a write returns the new content, not the cached body", async 
 });
 
 test("every mutating path invalidates that repo's cached reads", async () => {
-  // One case per mutating call site that changes what a read would return. A site
-  // added later that skips invalidation is what this table exists to catch.
+  // One case per mutating call site that changes what a read would return.
   const cases: Array<{ name: string; run: (env: never) => Promise<unknown> }> = [
     { name: "write_repo_file direct", run: (env) => writeRepoFile(env, "ns", "doc.md", "NEW", "m", "direct") },
     { name: "write_repo_file pr", run: (env) => writeRepoFile(env, "ns", "doc.md", "NEW", "m", "pr") },
@@ -429,8 +420,7 @@ test("every mutating path invalidates that repo's cached reads", async () => {
 });
 
 test("a call that changes no content leaves the cache alone", async () => {
-  // The innocent case. A sweep that fires on everything would pass the tests above
-  // while quietly making the cache useless, so both directions are checked.
+  // The innocent case: a sweep that fires on everything would pass the tests above.
   for (const c of [
     { name: "manage_pr close", run: (env: never) => managePr(env, "ns", 5, "close") },
     { name: "create_branch", run: (env: never) => createBranch(env, "ns", "wip") },
@@ -455,8 +445,7 @@ test("a call that changes no content leaves the cache alone", async () => {
 
 test("reads of different refs are different cache entries", async () => {
   // The key carries the ref as a literal query, so a branch read cannot be served
-  // from the default branch's entry. Stated as a test because the invalidation
-  // design depends on it.
+  // from the default branch's entry. The invalidation design depends on it.
   const kv = fakeKv({ seedToken: true });
   const env = makeEnv(ONE_REPO, kv);
   await withFetch(
@@ -474,7 +463,7 @@ test("reads of different refs are different cache entries", async () => {
   );
 });
 
-// ---- per-owner installation resolution (F20) --------------------------------
+// per-owner installation resolution
 
 // A real key, so createAppJwt and importPrivateKey run rather than being stubbed
 // around. Generated once for the file.
@@ -496,8 +485,7 @@ function testPem(): Promise<string> {
 
 test("the installation id is resolved per owner, and a pinned id is not consulted", async () => {
   // Two owners in one namespace mapping, one KV, one env carrying the retired
-  // GITHUB_APP_INSTALLATION_ID. One id cannot be right for both, which is the
-  // finding: the pin was written under whichever owner asked.
+  // GITHUB_APP_INSTALLATION_ID. One id cannot be right for both owners.
   const kv = fakeKv({ seedToken: false });
   const env = makeEnv(
     [
@@ -543,7 +531,7 @@ test("the installation id is resolved per owner, and a pinned id is not consulte
 test("an installation token is minted for one repo and cached under owner/repo", async () => {
   // Two repos under ONE owner. A token keyed by owner alone would be minted once and
   // reused for the second repo, and a token minted without a repositories body would
-  // reach every repo in the installation (audit 2026-09-06, round 2, item 4).
+  // reach every repo in the installation.
   const kv = fakeKv({ seedToken: false });
   const env = makeEnv(
     [
@@ -583,7 +571,7 @@ test("a 404 on installation resolution says the credentials are fine", async () 
   });
 });
 
-// ---- ci_status degraded shapes (F34) ----------------------------------------
+// ci_status degraded shapes
 
 const FAILED_RUNS = {
   workflow_runs: [
@@ -667,14 +655,10 @@ test("ci_status still withholds the log tail from a read-only key", async () => 
 
 // The timestamp window is tested in test/repo-fallthrough.test.ts.
 
-// THE WIRING, not just the function (quality audit 2.2, found by a plant).
-//
-// The four tests above call ciStatus directly and pin both log-tail behaviours,
-// so they pass whatever the TOOL hands the function. Replacing `logTail: mayWrite`
-// with `logTail: true` in the tool registration went green across the whole suite:
-// every ro: key would have received CI job logs, which is exactly what the
-// withheld message exists to prevent, and nothing noticed. This drives the tool
-// through a server built with a read grant, which is the only way to see it.
+// The wiring, not just the function. The tests above call ciStatus directly, so they
+// pass whatever the tool hands it; `logTail: true` in the registration would give every
+// read key the CI job logs. This drives the tool through a server built with a read
+// grant.
 test("a read-grant server does not hand the CI log tail to ci_status", async () => {
   await withFetch(
     {
@@ -695,16 +679,14 @@ test("a read-grant server does not hand the CI log tail to ci_status", async () 
       const failed = (JSON.parse(result.content[0].text) as { failed_run: FailedRun }).failed_run;
       assert.match(failed.log_tail_withheld ?? "", /read-only key/);
       assert.equal(failed.log, undefined);
-      // The strongest form: the log was never REQUESTED, so it cannot leak by any
-      // other route, however the response is later assembled.
+      // The log was never requested, so it cannot leak by any other route.
       assert.equal(calls.some((c) => c.path.includes("/logs")), false, "a read-grant call fetched the job log");
     }
   );
 });
 
 test("a write-grant server does hand the log tail through, so the gate is a gate", async () => {
-  // The other side. A wiring that withheld from everyone would pass the test above
-  // and silently remove the capability from the keys that are meant to have it.
+  // A wiring that withheld from everyone would pass the test above.
   await withFetch(
     {
       "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
@@ -789,7 +771,7 @@ test("manage_pr close patches the PR state to closed, and deletes the head branc
   );
 });
 
-// ---- the branch cleanup's three refusals, and the property that it never fails ----
+// the branch cleanup's three refusals, and the property that it never fails
 
 test("manage_pr NEVER deletes the default branch, whatever the PR says", async () => {
   await withFetch(
@@ -849,7 +831,7 @@ test("manage_pr leaves a FORK's head branch alone", async () => {
 
 test("A FAILED BRANCH DELETE DOES NOT FAIL THE MERGE, because the merge already landed", async () => {
   // Reporting the whole call as failed because a cleanup step failed would misreport the
-  // merge. Same rule invalidateRepoReads follows.
+  // merge.
   await withFetch(
     {
       "PUT /repos/o/r/pulls/5/merge": { body: { sha: "merged-sha", merged: true, message: "merged" } },
@@ -894,7 +876,7 @@ test("an unreadable PR leaves the branch alone and says why, without failing the
   );
 });
 
-// ---- F25: a corrupt repos row fails closed ----------------------------------
+// a corrupt repos row fails closed
 
 test("resolveRepo names a corrupt repos mapping instead of reporting none", async () => {
   const env = {
@@ -913,8 +895,7 @@ test("resolveRepo refuses a repos value that parses but is not an array", async 
 });
 
 test("an empty mapping still reports as unconfigured, not as corrupt", async () => {
-  // The two states must stay distinguishable in both directions, or the fix has
-  // just moved the confusion.
+  // The two states must stay distinguishable in both directions.
   const env = {
     DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: "[]" }) }) }) },
     APP_KV: fakeKv().kv,
@@ -922,20 +903,11 @@ test("an empty mapping still reports as unconfigured, not as corrupt", async () 
   await assert.rejects(() => resolveRepo(env, "ns"), /has no repo mapping/);
 });
 
-// ---- F14: comment must never reach the branch cleanup -----------------------------
-//
-// Audit 2026-09-13, finding F14. tools-axis and blast-radius drive callTool with
-// action "comment" and assert the SCOPE lets it through; both use empty fetch routes
-// and assert nothing about which GitHub call was made. No test called
-// managePr(..., "comment") at all.
-//
-// So the early return at src/github/refs.ts:164 had no test. Delete it and a comment
-// falls through to the close branch: it PATCHes the pull request shut and then deletes
-// the head branch, on a call whose entire contract is that it changes nothing. Every
-// scope plant stays green, because the registrar already allows manage_pr.comment.
-//
-// The routes below are the assertion: close and delete are wired to throw, so a
-// fallthrough fails loudly rather than being caught by a missing expectation.
+// comment must never reach the branch cleanup. Without the early return in
+// src/github/refs.ts a comment falls through to the close branch: it PATCHes the pull
+// request shut and deletes the head branch. The scope tests cannot see that, because
+// the registrar allows manage_pr.comment. Close and delete are wired to throw, so a
+// fallthrough fails loudly.
 
 test("PLANT: manage_pr comment POSTs a comment and touches neither the PR state nor the branch", async () => {
   await withFetch(
@@ -962,9 +934,8 @@ test("PLANT: manage_pr comment POSTs a comment and touches neither the PR state 
       assert.equal(posted.length, 1, "the comment was not posted");
       assert.equal((posted[0].body as { body: string }).body, "REVIEW: looks right. APPROVE");
 
-      // The two calls that must NOT happen. Any route other than the comment one is
-      // unrouted and would 500, but asserting the METHODS names the defect: a comment
-      // that fell through to close would PATCH, then DELETE the head ref.
+      // The two calls that must not happen, asserted by method so the failure names the
+      // defect: a comment that fell through to close would PATCH, then DELETE the head ref.
       assert.equal(calls.some((c) => c.method === "PATCH"), false, "a comment closed the pull request");
       assert.equal(calls.some((c) => c.method === "DELETE"), false, "a comment deleted the head branch");
       assert.equal(calls.length, 1, `a comment made ${calls.length} GitHub calls: ${JSON.stringify(calls.map((c) => c.method + " " + c.path))}`);

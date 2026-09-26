@@ -5,13 +5,11 @@ import { test } from "node:test";
 import { chicagoDay, chicagoHour, RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../src/improve-schema.ts";
 import { sourceFile } from "./source-files.ts";
 
-// THE CONFIGURATION AND THE HANDLER MUST AGREE.
-//
-// wrangler.jsonc.example declares which crons fire; src/index.ts decides what to
-// do when one does. A cron declared and not handled is a wasted invocation; a
-// cron handled and not declared is a subsystem that never runs and says nothing.
-// Both are silent, which is the shape this repo keeps ruling against, so the two
-// lists are derived from each other here.
+// The configuration and the handler must agree. wrangler.jsonc.example declares
+// which crons fire; src/index.ts decides what to do when one does. A cron declared
+// and not handled is a wasted invocation; a cron handled and not declared is a
+// subsystem that never runs. Both are silent, so the two lists are derived from
+// each other here.
 
 const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
@@ -26,13 +24,9 @@ function declaredCrons(): string[] {
   return crons;
 }
 
-// THE HANDLER'S LIST IS READ FROM SOURCE, not imported.
-//
-// src/index.ts cannot be imported under node: it pulls in the OAuth provider and
-// the agents SDK, which reach for the `cloudflare:` module scheme and fail with
-// ERR_UNSUPPORTED_ESM_URL_SCHEME. Reading the exported constants out of the file
-// keeps the derivation against the real artifact, which is the property that
-// matters; it just cannot be done by evaluating it.
+// The handler's list is read from source, not imported: src/index.ts pulls in
+// modules that use the `cloudflare:` scheme and fail under node with
+// ERR_UNSUPPORTED_ESM_URL_SCHEME.
 function handlerConstant(name: string): string {
   const index = sourceFile("index.ts");
   const found = new RegExp(`export const ${name} = "([^"]+)";`).exec(index);
@@ -61,17 +55,12 @@ test("every cron the config fires is handled", () => {
   assert.deepEqual(unhandled, [], `wrangler.jsonc.example fires crons nothing handles: ${unhandled.join(", ")}`);
 });
 
-// The four handled expressions are pinned, distinct, in test-integration/scheduled.test.ts.
+// That the four expressions are distinct, and that the handler dispatches on
+// controller.cron (each does only its own work, an unrecognised one does nothing, a
+// throwing branch does not stop a later cron), is driven in
+// test-integration/scheduled.test.ts.
 
-
-// That the handler dispatches on controller.cron is driven in
-// test-integration/scheduled.test.ts: each expression is fired and does only its own
-// work, and an unrecognised expression does nothing. That a branch which throws stays
-// inside its own waitUntil, and a later cron still runs, is driven there too.
-
-// ---- the DST gate -----------------------------------------------------------
-
-// The opener's two UTC hours and its 03:00 Chicago hour are pinned in
+// The DST gate. The opener's two UTC hours and its 03:00 Chicago hour are pinned in
 // test-integration/scheduled.test.ts, which can import src/index.ts.
 
 
@@ -82,8 +71,7 @@ test("chicagoHour picks exactly one of the two UTC hours, in BOTH halves of the 
   // Winter: CST is UTC-6, so 08:00 UTC is 02:00 local and 09:00 UTC is 03:00.
   assert.equal(chicagoHour(new Date("2026-01-15T08:00:00Z")), 2);
   assert.equal(chicagoHour(new Date("2026-01-15T09:00:00Z")), 3);
-  // So exactly one invocation per night opens the run, year round. A hardcoded
-  // offset would have opened it twice in summer and at 02:00 in winter.
+  // So exactly one invocation per night opens the run, year round.
 });
 
 test("chicagoHour normalises midnight to 0, not 24", () => {
@@ -101,13 +89,11 @@ test("chicagoDay is the local day, which is what a run document is named by", ()
   assert.equal(chicagoDay(new Date("2026-09-04T12:00:00Z")), "2026-09-04");
 });
 
-// ---- the terminal statuses --------------------------------------------------
-
 test("THE TERMINAL STATUSES MATCH THE MIGRATION'S PARTIAL UNIQUE INDEX", () => {
   // One active run per namespace is enforced by a partial index that names the
   // terminal statuses in SQL. A status added to the code list and not to the index
   // would let two active runs exist; added to the index and not the code would
-  // strand a run nothing advances. Derived in both directions.
+  // strand a run nothing advances.
   const migration = readFileSync(join(import.meta.dirname, "..", "migrations", "0003_improve.sql"), "utf8");
   const clause = /WHERE status NOT IN \(([^)]+)\)/i.exec(migration);
   assert.ok(clause, "the partial unique index is gone from migrations/0003_improve.sql");

@@ -7,20 +7,14 @@ import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
 import { sourceFile } from "./source-files.ts";
 
-// EVERY READ IS BOUNDED, AND SAYS SO WHEN IT CUT (audit 9.2).
+// Every read is bounded, and says so when it cut, so a caller cannot mistake the
+// first page for the whole answer.
 //
-// Before this, `list`, `find` and the resource listing had no LIMIT at all and
-// `search` had one that it never mentioned. All four returned a bare array, and a
-// bare array cannot distinguish "these are all of them" from "these are the first
-// of them". That is the failure this file exists to prevent: not a crash, but a
-// caller reasoning confidently over a silently truncated answer.
-//
-// Two things are asserted at every site, and the second is the one that matters:
-//   1. the RESPONSE reports the truncation, and
-//   2. the QUERY asked the store for a bounded page.
-// Only the second protects the isolate. A handler that fetched every row and then
-// sliced would satisfy (1) while still materializing the whole table, so the bound
-// is asserted where it is actually enforced: the bound parameter.
+// Two things are asserted at every site:
+//   1. the response reports the truncation, and
+//   2. the query asked the store for a bounded page.
+// Only the second protects the isolate: a handler that fetched every row and then
+// sliced would satisfy (1), so the bound is asserted on the bound parameter.
 
 async function connect(opts: FakeD1Options = {}) {
   const { db, reads } = fakeD1(opts);
@@ -36,12 +30,9 @@ const call = async (client: Client, name: string, args: Record<string, unknown> 
 
 const parse = (result: { content: Array<{ text: string }> }) => JSON.parse(result.content[0].text);
 
-// The bound is enforced in SQL, so the proof is the value bound to the LIMIT.
-//
-// BY THE INDEX THE LIMIT NAMES, not by position. This read the LAST bound parameter
-// until 2026-09-16, when resources/list grew a namespace scope bound after its limit
-// and the helper started reporting that instead, which is a bound test that would
-// have passed whatever the LIMIT carried.
+// The bound is enforced in SQL, so the proof is the value bound to the LIMIT, read
+// by the index the LIMIT names rather than by position (a parameter can be bound
+// after it).
 const limitBoundTo = (recorded: Recorded[], match: RegExp): unknown => {
   const stmt = recorded.find((r) => match.test(r.sql.replace(/\s+/g, " ")));
   assert.ok(stmt, `no statement matched ${match}`);
@@ -65,13 +56,12 @@ test("list returns a bounded page and says it was cut", async () => {
   // The advice must be actionable and must fit the call that was made: this one
   // passed no namespace, so naming the namespace filter is the useful next step.
   assert.match(out.note, /Narrow with namespace/);
-  // ONE more row than it returns, which is the cheapest way to know there ARE more.
+  // One more row than it returns, which is the cheapest way to know there are more.
   assert.equal(limitBoundTo(reads, /FROM documents WHERE \(\?1 IS NULL OR namespace/), MAX_ROWS + 1);
 });
 
 test("list under the bound reports the whole answer, with no note", async () => {
-  // The other side. A bound that reported truncation always would pass the test
-  // above and make every complete answer look partial.
+  // A bound that always reported truncation would pass the test above.
   const { client, close } = await connect({ documents: docs(3) });
   const out = parse(await call(client, "list", {}));
   await close();
@@ -81,9 +71,8 @@ test("list under the bound reports the whole answer, with no note", async () => 
 });
 
 test("a namespace-scoped list is not truncated by another namespace's documents", async () => {
-  // MAX_ROWS is set above the largest real namespace (245 of 557 documents on
-  // 2026-08-17) precisely so scoped reads keep working untouched. If the filter
-  // were dropped, these 30 rows would arrive with 600 others and truncate.
+  // MAX_ROWS is set above the largest real namespace so scoped reads are not cut.
+  // If the filter were dropped, these 30 rows would arrive with 600 others and truncate.
   const { client, close } = await connect({
     documents: [...docs(600, "recova"), ...docs(30, "capsid")],
   });
@@ -133,10 +122,10 @@ test("search with few hits is not reported as truncated", async () => {
   assert.equal(out.count, 2);
 });
 
-// ---- gather ------------------------------------------------------------------
+// gather
 
-// A packet that trims must still be a USABLE packet: core and the rules survive
-// whatever else goes, because they are the instructions for the job.
+// A packet that trims must still be usable: core and the rules survive whatever
+// else goes, because they are the instructions for the job.
 const BIG = "x".repeat(40_000);
 
 const gatherFixture = (): FakeD1Options => ({
@@ -162,7 +151,7 @@ const gatherFixture = (): FakeD1Options => ({
 
 test("gather trims an oversized packet and names what it dropped", async () => {
   // 8 x 40KB of body against a 150KB budget, so the packet cannot fit and the
-  // tool must choose. Before this it simply returned all 320KB with a warning.
+  // tool must choose.
   const { client, close } = await connect(gatherFixture());
   const out = parse(await call(client, "lint", { namespace: "capsid", mode: "gather" }));
   await close();
@@ -223,7 +212,7 @@ test("a gather that fits is not trimmed at all", async () => {
   assert.equal(out.unconsolidated[0].body, "small");
 });
 
-// ---- resources/list ----------------------------------------------------------
+// resources/list
 
 test("resources/list is bounded, and hands back a cursor to the rest", async () => {
   const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 7) });
@@ -270,8 +259,7 @@ test("a small resource listing carries no cursor", async () => {
 // scanner-rule: bounded reads (audit 9.2), the paginating list override serves only the template. A resource registered later cannot be exercised by a test written now
 test("the resources/list override cannot silently drop a statically registered resource", async () => {
   // The handler below replaces the one McpServer installs, which also serves
-  // resources registered by URI rather than by template. There are none today and
-  // this is what notices if one is added.
+  // resources registered by URI rather than by template. This notices if one is added.
   const text = sourceFile("server.ts");
   assert.equal(
     text.split("server.registerResource(").length - 1,
@@ -281,17 +269,12 @@ test("the resources/list override cannot silently drop a statically registered r
   assert.match(text, /setRequestHandler\(ListResourcesRequestSchema/, "the paginating list handler is gone");
 });
 
-// ---- what the read tools RETURN --------------------------------------------
-//
-// Same family as the bounds above: a limit or a column list that the code enforces
-// and the prose or the sibling tool disagrees with. Each of these was added after a
-// plant changed the behaviour and the whole suite stayed green.
+// What the read tools return: a column list the code enforces must agree with the
+// sibling tool.
 
 test("read returns the named columns, and not the two dead CMS ones", async () => {
-  // `list` dropped frontmatter and publish_at on 2026-08-13 after measuring both
-  // NULL on every document; `read` kept SELECT * and went on advertising them.
-  // Re-measured 2026-08-17: still NULL on all 559. One tool offering a scheduling
-  // field that does not exist, while its sibling does not, is the drift this pins.
+  // `list` does not return frontmatter or publish_at (always NULL); `read` must not
+  // advertise them either.
   const { client, close } = await connect({
     documents: [{ namespace: "capsid", path: "doc.md", title: "T", body: "the body", type: "note", status: "published" }],
   });
@@ -300,9 +283,8 @@ test("read returns the named columns, and not the two dead CMS ones", async () =
   assert.equal(out.body, "the body", "read stopped returning the body");
   assert.deepEqual(
     Object.keys(out).sort(),
-    // list's columns plus body, plus last_actor (the provenance field added
-    // 2026-09-06, deliberately on read/brief and not on list). Still NOT the two
-    // dead CMS columns frontmatter/publish_at, which is what this pins.
+    // list's columns plus body, plus last_actor (on read/brief and not on list).
+    // Not frontmatter/publish_at.
     ["body", "created_at", "id", "last_actor", "namespace", "path", "status", "tags", "title", "type", "updated_at"],
     "read's column set drifted from list's"
   );

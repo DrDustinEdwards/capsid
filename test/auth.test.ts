@@ -69,11 +69,7 @@ test("isAdminUser matches login case-insensitively and numeric ids exactly", () 
   assert.equal(isAdminUser({ ADMIN_GITHUB_LOGIN: "" }, { id: 1, login: "anyone" }), false);
 });
 
-// ---- principal binding (audit_log.actor) ------------------------------------
-// audit_log.actor was a hardcoded 'operator' literal at all eight write sites,
-// so 1,631 rows answered "what happened" and never "who". Establishing who
-// deleted three parity documents on 2026-08-10 needed the Workers Observability
-// 7-day window plus prose in two session docs.
+// Principal binding: audit_log.actor records who made a write, not a fixed literal.
 
 function keyRequest(key: string): Request {
   return new Request("https://example.com/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
@@ -107,18 +103,13 @@ test("a rejected key yields no grant and no fingerprint", async () => {
   assert.deepEqual(bad, { grant: null, fingerprint: null });
 });
 
-// ---- timingSafeEqual, moved here from limits.test.ts (quality audit 6.6) ------
-//
-// It is an auth helper and it lives in src/auth.ts; it was findable only inside a
-// file named for the input-bounds module.
+// timingSafeEqual
 
 // scanner-rule: secret comparisons are constant time. Timing cannot be observed in a test, so the loop's shape is what is checked
 test("timingSafeEqual accumulates rather than short-circuiting", () => {
-  // The behavioural test below pins the ANSWER, and an implementation of
-  // `return a === b` would give the same answers. The property that matters is not
-  // observable from outside the function and timing assertions in a unit test are
-  // flaky, so the shape is what gets guarded: a running xor over every character,
-  // with no early return inside the loop.
+  // The behavioural test below pins the answer, which `return a === b` would also
+  // give. Timing assertions are flaky, so the shape is guarded: a running xor over
+  // every character, with no early return inside the loop.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
   const body = auth.slice(auth.indexOf("export function timingSafeEqual"), auth.indexOf("export function isAdminUser"));
   assert.ok(body.length > 100, "could not bound timingSafeEqual in src/auth.ts");

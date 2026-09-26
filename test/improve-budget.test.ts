@@ -5,10 +5,9 @@ import { checkBudget, improveStatus, openRuns, tickRuns } from "../src/improve-r
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// THE BUDGET KILL SWITCH (Cloudflare platform arc 2026-09-06). Budget alerts
-// cannot stop a Worker, so the opener and the tick check monthly caps from KV
-// before opening or advancing anything. These drive both refusals, the pause
-// fan-out, the KV override, and the status surface.
+// The budget kill switch. Budget alerts cannot stop a Worker, so the opener and the
+// tick check monthly caps from KV before opening or advancing anything. These drive
+// both refusals, the pause fan-out, the KV override, and the status surface.
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 const SCORES = seedScoresDoc("capsid");
@@ -34,21 +33,13 @@ async function harness(opts: { runs?: Array<Record<string, unknown>>; budget?: s
     seed: {
       "improve:anchor:capsid": pin,
       improve_mode: "subscription",
-      // THE WATCHER IS NOT WHAT THESE TESTS ARE ABOUT, and it rides the same tick on
-      // its own half-hourly stamp. Seeded fresh so it is not due, which keeps the
-      // "an exceeded budget reached the network zero times" assertion below guarding
-      // exactly what it was written to guard: the improve RUN path. The watcher is
-      // deliberately outside the budget (it spends no model tokens and no CI minutes,
-      // and an exhausted budget is when nobody is looking at the surface), so folding
-      // it into that assertion would be asserting the opposite of the design.
+      // The watcher rides the same tick and is deliberately outside the budget.
+      // Seeded fresh so it is not due, which keeps the "an exceeded budget reached the
+      // network" assertion below about the improve run path only.
       //
-      // DERIVED FROM NOW AND STAMPED UTC, not typed. This was written as
-      // "2026-09-15 08:04:00" and passed on a workstation and failed in CI: V8 parses
-      // a space-separated timestamp as LOCAL time, so on America/Chicago it resolved
-      // to 13:04Z, AFTER this NOW, and the watcher was never due; on the UTC runner it
-      // resolved to 08:04Z, nearly four hours before, and the watcher ran and reached
-      // the network. The Worker itself only ever writes toISOString(), so this is the
-      // fixture matching production rather than a workaround.
+      // Derived from NOW with toISOString(), as the Worker writes it: V8 parses a
+      // space-separated timestamp as local time, which makes the fixture depend on
+      // the machine's timezone.
       "watcher:last": new Date(NOW.getTime() - 60_000).toISOString(),
       ...(opts.budget === undefined ? {} : { "improve:budget": opts.budget }),
     },
@@ -164,11 +155,11 @@ test("improve_status reports spend against cap", async () => {
   });
 });
 
-// ---- audit 2026-09-25, F1-4: the lease sweep cannot stop the tick --------------------
+// the lease sweep cannot stop the tick
 
 test("PLANT: a lease sweep that throws does not stop the rest of the tick", async () => {
-  // expireJobLeases ran first in tickRuns and outside any try, so a D1 error there ended
-  // auto-merge, the skill cycle and every run transition for that tick.
+  // A D1 error in expireJobLeases must not end auto-merge, the skill cycle and every
+  // run transition for that tick.
   await withFetch({}, async () => {
     const { d1, env } = await harness({
       runs: [

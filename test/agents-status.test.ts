@@ -5,12 +5,8 @@ import { sha256Hex } from "../src/auth.ts";
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
 
-// GROUP 7: THE INVENTORY IS VISIBLE FROM THE CONSOLE THE DRIVER ALREADY READS.
-//
-// improve_status is what a session calls at the start of a run and what the console
-// renders. A credential inventory that can only be read by calling a separate
-// admin-only tool is one nobody looks at, and last_seen only answers "is this still
-// in use" if somebody sees it.
+// The agent inventory is in improve_status, which a session calls at the start of a
+// run and the console renders, so last_seen is seen by someone who can act on it.
 
 async function statusEnv(agents: Array<Record<string, unknown>>) {
   const d1 = fakeD1({ agents });
@@ -47,8 +43,7 @@ test("improve_status carries the agent inventory, with last_seen", async () => {
 });
 
 test("the report names the flags an agent HOLDS, not all six with a boolean beside each", async () => {
-  // A row of six falses per agent is noise that hides the one agent holding
-  // can_merge. What a reader wants from an inventory is the exception.
+  // A row of six falses per agent hides the one agent holding can_merge.
   const scopes = defaultScopes(["*"]);
   scopes.grants = ["read", "write"];
   scopes.flags.can_merge = true;
@@ -62,8 +57,7 @@ test("the report names the flags an agent HOLDS, not all six with a boolean besi
 });
 
 test("a revoked agent is reported as revoked rather than dropped", async () => {
-  // Dropping it makes "revoked" and "never existed" look the same to whoever is
-  // reading the inventory to decide what is still live.
+  // Dropping it makes "revoked" and "never existed" look the same.
   const env = await statusEnv([await row("old-laptop", { revoked_at: "2026-09-10 12:00:00" })]);
   const status = await improveStatus(env);
   assert.equal((status.agents ?? []).length, 1);
@@ -79,8 +73,7 @@ test("the report never carries a key or the stored verifier", async () => {
 });
 
 test("a Worker with no agents yet reports an empty inventory rather than failing", async () => {
-  // The state every deployment is in on the morning this ships, and the state the
-  // portfolio stays in until the mint commands are run by hand.
+  // The state of a deployment until the mint commands are run by hand.
   const status = await improveStatus(await statusEnv([]));
   assert.deepEqual(status.agents, []);
 });

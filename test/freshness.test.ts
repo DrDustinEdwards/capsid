@@ -7,11 +7,8 @@ import { BACKUP_STALE_HOURS as HEALTH_THRESHOLD } from "../src/health.ts";
 // live gate runs with no npm ci so it can run even when install is broken.
 import { BACKUP_STALE_HOURS, checkBackupFreshness } from "../scripts/freshness-lib.mjs";
 
-// THE BACKUP FRESHNESS GATE (residual 7, closed 2026-09-08).
-//
-// /health has carried backup.last_ok and an age since 2026-09-07 and NOTHING READ
-// IT. Measured during the audit, the live value was null and no gate said a word.
-// These drive the check directly, because verify-live.mjs runs on import.
+// The backup freshness gate, which reads /health's backup.last_ok. These drive the
+// check directly, because verify-live.mjs runs on import.
 
 const NOW = Date.parse("2026-09-08T12:00:00Z");
 const health = (lastOk: string | null, ageHours?: number) => ({
@@ -20,8 +17,8 @@ const health = (lastOk: string | null, ageHours?: number) => ({
 });
 
 test("the gate's threshold is the same number /health warns at", () => {
-  // Two files, one claim. A gate that failed at 26h against a health endpoint
-  // warning at 48h would report a different fact than the one it names.
+  // A gate that failed at a different age than /health warns at would report a
+  // different fact than the one it names.
   assert.equal(BACKUP_STALE_HOURS, HEALTH_THRESHOLD);
 });
 
@@ -50,8 +47,7 @@ test("NO STAMP AT ALL FAILS CLOSED, which is the condition measured on live", ()
   assert.equal(r.outcome, "unknown");
   assert.equal(r.passed, false);
   assert.match(r.detail, /no clean backup has completed/);
-  // And a /health that carries no backup field at all is the same verdict, not a
-  // crash and not a pass.
+  // A /health with no backup field is the same verdict, not a crash or a pass.
   const missing = checkBackupFreshness({ status: "ok" }, { assert: true, now: NOW });
   assert.equal(missing.passed, false);
   assert.equal(checkBackupFreshness(null, { assert: true, now: NOW }).passed, false);
@@ -64,7 +60,7 @@ test("an unparseable stamp is a failure, not a NaN that compares false", () => {
 });
 
 test("a stamp in the future FAILS: a negative age is not fresh", () => {
-  // Before, now - last_ok came out negative and passed the "under 26h" test.
+  // now - last_ok is negative here, which would pass a plain "under 26h" test.
   const r = checkBackupFreshness(health("2026-09-09T12:00:00Z"), { assert: true, now: NOW });
   assert.equal(r.passed, false);
   assert.equal(r.outcome, "unknown");
@@ -82,8 +78,8 @@ test("a non-scheduled run SKIPS, says so, and never reports a pass as an asserti
 });
 
 test("the age is computed here, and a clock disagreement is reported", () => {
-  // The Worker reporting 2h for a stamp that is 27h old is a clock problem, and
-  // the gate must fail on ITS OWN arithmetic rather than the reported number.
+  // The Worker reports 2h for a stamp 27h old; the gate must fail on its own
+  // arithmetic rather than the reported number.
   const r = checkBackupFreshness(health("2026-09-07T09:00:00Z", 2), { assert: true, now: NOW });
   assert.equal(r.passed, false);
   assert.match(r.detail, /DISAGREEING/);

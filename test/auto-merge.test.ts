@@ -25,21 +25,17 @@ import {
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// PART 1 OF THE AUTONOMY ARC. The Worker may merge a pull request with no human when
-// every check in capsid/policy/auto-merge.md passes. These tests drive each check to
-// its refusal on its own, because a policy whose checks have only ever been seen
-// passing together is a policy nobody has verified: capsid/conventions.md, "a guard
-// that has never been observed failing has not been verified".
+// The Worker may merge a pull request with no human when every check in
+// capsid/policy/auto-merge.md passes. These tests drive each check to its refusal on
+// its own, because a check only ever seen passing together with the others is unverified.
 
 const SECRET = "test-improve-secret";
 
-// The required steps are per namespace since version 4. Every fixture below is a
-// capsid pull request, so these are the steps its CI has to show.
+// The required steps are per namespace. Every fixture below is a capsid pull request.
 const CAPSID_CI = AUTO_MERGE_REQUIRED_CI.capsid;
 
-// The PR author allowlist, which since version 5 lives only in the signed document and
-// reaches evaluatePolicy from the loaded policy. These are the two logins the ruling of
-// 2026-09-25 names, as GitHub reports them.
+// The PR author allowlist lives only in the signed document and reaches evaluatePolicy
+// from the loaded policy. These are the two allowed logins, as GitHub reports them.
 const ALLOWED_AUTHORS = ["DrDustinEdwards", "capsid-repo-access[bot]"];
 const evaluate = (facts: PrFacts) => evaluatePolicy(facts, ALLOWED_AUTHORS);
 
@@ -71,7 +67,7 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
   };
 }
 
-// ---- the baseline, which every plant below is measured against ------------------
+// the baseline, which every plant below is measured against
 
 test("the unmodified green PR merges, and passes every check the code enforces", () => {
   const verdict = evaluate(greenPr());
@@ -83,7 +79,7 @@ test("the unmodified green PR merges, and passes every check the code enforces",
   );
 });
 
-// ---- each check, refused on its own ---------------------------------------------
+// each check, refused on its own
 
 test("body_names_job: a PR body with no job id never merges", () => {
   const verdict = evaluate(greenPr({ body: "a tidy little change", jobId: null }));
@@ -123,7 +119,7 @@ test("author_is_driver: a claim by an opkey rather than an agent never merges", 
   assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
 });
 
-// ---- audit 2026-09-25, finding F2-1: the PR itself, not only the job it names ------
+// the PR itself, not only the job it names
 
 test("head_in_base_repo: a fork's PR never merges, nor one whose fork GitHub no longer reports", () => {
   for (const headRepo of ["someone-else/capsid-mcp", null]) {
@@ -161,7 +157,7 @@ test("pr_recorded_for_job: a PR the job's holder never recorded never merges", (
   assert.equal(evaluate(greenPr({ jobPrUrls: ["https://github.com/drdustinedwards/capsid-mcp/pull/23/"] })).merge, true);
 });
 
-// ---- policy version 5, ruled 2026-09-25: who opened the PR -----------------------
+// who opened the PR
 
 test("pr_author_allowed: a PR opened by an account not on the allowlist never merges", () => {
   for (const prAuthor of ["someone-else", "dependabot[bot]", "capsid-repo-access", null]) {
@@ -201,8 +197,8 @@ test("ci_green: the capsid run must show the one merged typecheck step, not the 
     CAPSID_CI.map((r) => r.step),
     [merged, "Tests", "Integration tests"]
   );
-  // A run carrying the four old step names and not the merged one did not run the step
-  // version 5 requires.
+  // A run carrying the four old step names and not the merged one did not run the
+  // required step.
   const old = ["Typecheck", "Typecheck tests", "Typecheck integration tests", "Typecheck the copied scorer script", "Tests", "Integration tests"];
   const verdict = evaluate(greenPr({ ciSteps: old.map((step) => ({ workflow: ".github/workflows/ci.yml", job: "checks", step, conclusion: "success" })) }));
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
@@ -238,9 +234,6 @@ test("ci_green: a PR nothing has reported on never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
 });
 
-// Policy version 2 (ruled 2026-09-17): tests, src/, docs, CLAUDE.md and .claude/ merge
-// on green. Under version 1 every one of these was left for the seat by
-// paths_unprotected, which is what this job existed to change.
 test("paths_not_refused: tests, src/, docs, CLAUDE.md and .claude/ merge on green", () => {
   for (const changedPaths of [
     ["src/limits.ts", "test/jobs.test.ts"],
@@ -288,10 +281,10 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
     "src/scope.ts", "src/improve-task.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
     "scripts/path-guard.mjs", "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
     "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
-    // VERSION 4: dustinedwards-info's judge files, on the same one list.
+    // dustinedwards-info's judge files, on the same list.
     ".github/workflows/ci.yml", "scripts/check-all.mjs", "scripts/lib/slop.mjs", ".aislop/allow.txt",
     "workers/og/index.ts", "package-lock.json",
-    // VERSION 5: the writers of the records pr_recorded_for_job reads.
+    // The writers of the records pr_recorded_for_job reads.
     "src/jobs.ts", "src/outcome-prs.ts",
   ];
   for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
@@ -303,11 +296,8 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
   }
 });
 
-// VERSION 3 (2026-09-17). Version 2 refused the file that asks each question without
-// refusing the file that holds the answer, so each of these was a two-step route: a
-// green driver PR weakens the source, merges on its own, and the next PR passes the
-// check it weakened. Reproduced against the version 2 code before the patterns were
-// added: every one of these five returned merge: true on otherwise-passing facts.
+// The files that hold each check's answer must refuse too, or a green driver PR could
+// weaken the source, merge on its own, and let the next PR pass the weakened check.
 test("paths_not_refused: the sources the checks read their answers from refuse on their own", () => {
   const sources = [
     ["src/scope.ts", "isMoneyPath, the whole of paths_not_money"],
@@ -330,7 +320,7 @@ test("paths_not_refused: similar-looking paths that are ordinary code are not re
   for (const path of [
     "src/improve/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
     "scripts/mint-agents.mjs", "src/environment.ts",
-    // Near-misses of the version 3 and version 5 patterns, each a real file this repo carries.
+    // Near-misses of the refused patterns, each a real file this repo carries.
     "src/github/refs.ts", "src/improve-state.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
     "test/jobs.test.ts",
   ]) {
@@ -355,9 +345,8 @@ test("paths_not_money: a billing surface never merges", () => {
 });
 
 test("no_migration_workflow_lockfile: a workflow and a lockfile refuse on their own", () => {
-  // The only lockfile still refused by this check alone. Version 4 put every workflow
-  // and package-lock.json on the refused list as well, and the refused list runs
-  // first, so those two are asserted below instead.
+  // The only lockfile refused by this check alone. Workflows and package-lock.json are
+  // also on the refused list, which runs first, so those are asserted below.
   const verdict = evaluate(greenPr({ changedPaths: ["pnpm-lock.yaml"] }));
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile");
@@ -403,7 +392,7 @@ test("ci_green: a same-named step in another job or workflow does not count", ()
   assert.equal(evaluate(greenPr({ ciSteps: other })).merge, false);
 });
 
-// ---- version 4: the required steps are the namespace's, not the policy's ----------
+// the required steps are the namespace's, not the policy's
 
 test("requiredCiFor answers per namespace, and a namespace nobody wrote down gets null", () => {
   assert.equal(requiredCiFor("foxhound"), null, "a roster namespace with no steps written down");
@@ -411,8 +400,8 @@ test("requiredCiFor answers per namespace, and a namespace nobody wrote down get
 });
 
 test("ci_green: a namespace with no required steps refuses instead of passing on an empty list", () => {
-  // THE ONE WAY THIS COULD HAVE BEEN QUIET. An empty required list makes `notRun`
-  // empty, so ci_green would have passed any run that reported at all.
+  // An empty required list makes `notRun` empty, so ci_green would pass any run that
+  // reported at all.
   const verdict = evaluate(greenPr({ namespace: "foxhound", ciSteps: [] }));
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
@@ -428,8 +417,7 @@ test("ci_green: one namespace's green steps do not satisfy another's", () => {
   assert.equal(wrong.merge === false && wrong.failed, "ci_green");
   assert.match(wrong.merge === false ? wrong.why : "", /checks \/ Typecheck/);
 
-  // And the same facts under the namespace they belong to do merge, so the refusal
-  // above is the namespace and not something else about the steps.
+  // The same facts under their own namespace merge, so the refusal above is the namespace.
   const right = evaluate(greenPr({ namespace: "dustinedwards", ciSteps: asDustinedwards }));
   assert.equal(right.merge, true, right.merge ? "" : right.why);
 });
@@ -451,7 +439,7 @@ test("a failing check reports only the checks that actually passed before it", (
   assert.deepEqual(early.merge === false ? early.passed : null, [], "the never-list is checked first");
 });
 
-// ---- the job id in a PR body ----------------------------------------------------
+// the job id in a PR body
 
 test("jobIdFromBody finds the id in prose and refuses a malformed one", () => {
   assert.equal(jobIdFromBody("Closes job_4c0ecc28548b."), "job_4c0ecc28548b");
@@ -460,7 +448,7 @@ test("jobIdFromBody finds the id in prose and refuses a malformed one", () => {
   assert.equal(jobIdFromBody(""), null);
 });
 
-// ---- CI, where an unreported check is not a pass --------------------------------
+// CI, where an unreported check is not a pass
 
 test("ciVerdict calls no checks, pending checks and a failure all not-green", () => {
   assert.equal(ciVerdict([]).conclusion, null);
@@ -477,7 +465,7 @@ test("ciVerdict calls no checks, pending checks and a failure all not-green", ()
   );
 });
 
-// ---- the policy document --------------------------------------------------------
+// the policy document
 
 const GOOD_POLICY = [
   "# Auto-merge policy",
@@ -498,9 +486,8 @@ const GOOD_POLICY = [
   "",
   ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
   "",
-  // ONE SECTION PER NAMESPACE, which is what makes a step's repo readable. The
-  // document has to carry every namespace the code holds steps for, not just the ones
-  // it covers, because loadMergePolicy compares the two lists in both directions.
+  // One section per namespace. The document carries every namespace the code holds
+  // steps for, because loadMergePolicy compares the two lists in both directions.
   ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
     `## Required CI, ${ns}`,
     "",
@@ -553,8 +540,7 @@ test("loadMergePolicy refuses a policy that is absent, unsigned, or edited after
 
 test("PLANT: a field added to the frontmatter of a signed policy does not change what loadMergePolicy reads", async () => {
   // The signature covers the body below the frontmatter only, and the parser returns
-  // the first `- <name>:` line in what it is given. Handed the whole stored text, it
-  // read a line placed beside the signature ahead of the signed one.
+  // the first `- <name>:` line it sees, so a frontmatter line must not be read.
   const signed = await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false"));
   const inject = (line: string) => signed.replace(/^---\n/, `---\n${line}\n`);
 
@@ -575,9 +561,8 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
   assert.ok("policy" in ok, "the signed policy must load");
   assert.equal(ok.policy.version, "1");
 
-  // A check the Worker enforces and the document does not describe. The document is
-  // what a human reads to know what the machine may do alone, so a code check it does
-  // not name is a merge nobody authorised.
+  // The document is what a human reads to know what the machine may do alone, so a
+  // code check it does not name is a merge nobody authorised.
   const short = GOOD_POLICY.replace(`- \`ci_green\` refuses on its own.\n`, "");
   const refused = await loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, short)));
   assert.ok("error" in refused);
@@ -589,8 +574,7 @@ test("loadMergePolicy refuses a signed policy whose refused paths or required st
   const migrations = AUTO_MERGE_REFUSED_PATHS.find((p) => p.pattern.source.includes("migrations"))!;
   const migrationLine = `- path \`${migrations.pattern.source}\` ${migrations.why}\n`;
 
-  // Dropped from the document: the version 1 document, which has no such section, is
-  // this case for every entry, so a version 1 policy loads nothing under this code.
+  // Dropped from the document.
   const dropped = await load(GOOD_POLICY.replace(migrationLine, ""));
   assert.ok("error" in dropped);
   assert.match(dropped.error, /refused paths does not list .*migrations/);
@@ -639,15 +623,14 @@ test("parseMergePolicy does not read a refused path or a step as a check id", ()
   assert.deepEqual(parsed.policy.authors, ALLOWED_AUTHORS);
 });
 
-// ---- version 5: the author allowlist is carried in the signed document ---------------
+// the author allowlist is carried in the signed document
 
 test("parseMergePolicy reads the author allowlist, and refuses a document without one", () => {
   const parsed = parseMergePolicy(GOOD_POLICY);
   assert.ok("policy" in parsed);
   assert.deepEqual(parsed.policy.authors, ALLOWED_AUTHORS);
 
-  // No author lines at all, and a section heading with nothing under it: both fail
-  // closed, because an empty allowlist would authorise no PR and say nothing about why.
+  // No author lines, and a heading with nothing under it: both fail closed with a reason.
   const noAuthors = GOOD_POLICY.split("\n").filter((l) => !l.startsWith("- author ")).join("\n");
   for (const body of [noAuthors, noAuthors.replace("## Allowed PR authors\n\n", "")]) {
     const refused = parseMergePolicy(body);
@@ -663,7 +646,7 @@ test("loadMergePolicy refuses a signed document with no author allowlist", async
   assert.match(loaded.error, /no PR author/);
 });
 
-// ---- the document that actually ships -------------------------------------------
+// the document that ships
 
 test("the shipped policy document names exactly the checks the code enforces", () => {
   const shipped = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8");
@@ -677,7 +660,7 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
   assert.deepEqual(parsed.policy.requiredCi, namespacedCiLabels());
   assert.equal(parsed.policy.enabled, true);
-  // The two logins ruled on 2026-09-25, exactly as GitHub reports them, and no others.
+  // The two allowed logins, exactly as GitHub reports them, and no others.
   assert.deepEqual(parsed.policy.authors, ["DrDustinEdwards", "capsid-repo-access[bot]"]);
 });
 
@@ -685,10 +668,8 @@ test("every required CI step is a step the CI workflow actually has", () => {
   // A required step the workflow does not have refuses every PR, silently, from the
   // day the step is renamed. Checked against the shipped workflow text.
   //
-  // CAPSID ONLY, AND THAT IS A REAL GAP. Version 4 added dustinedwards steps, and this
-  // repo does not hold dustinedwards-info's workflow, so nothing here can catch a
-  // rename there. Those five step names were read off that repo's ci.yml on
-  // 2026-09-19 and nothing keeps them honest afterwards.
+  // Capsid only: this repo does not hold dustinedwards-info's workflow, so nothing here
+  // catches a rename of the dustinedwards steps.
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
   const stepNames = [...workflow.matchAll(/^\s+- name: (.+)$/gm)].map((m) => m[1].trim());
   assert.match(workflow, /^  checks:\n    name: checks$/m);
@@ -698,7 +679,7 @@ test("every required CI step is a step the CI workflow actually has", () => {
   }
 });
 
-// ---- the audit rows -------------------------------------------------------------
+// the audit rows
 
 test("the decline audit row names the policy version, the PR, the failing check and why", () => {
   const facts = greenPr({ ciConclusion: "failure", ciNote: "checks=failure" });
@@ -746,17 +727,12 @@ test("the merge audit row names the policy version, the job, the driver and both
   });
 });
 
-// ---- F4: the TICK, which nothing had ever run -------------------------------------
+// the tick
 //
-// Audit 2026-09-13, finding F4. Every check above drives `evaluatePolicy`, a pure
-// function with hand-built facts. `autoMergeTick` is what production calls
-// (src/improve/tick.ts), and no test imported it. So the seven checks were verified
-// and the thing that consults them was not: a tick that skipped loadMergePolicy, or
-// ignored `enabled: false`, or merged regardless of the verdict, would have left this
-// file entirely green.
-//
-// auto-merge is the one policy still shipping disabled, which makes the first two
-// cases the ones that matter: they are the code that runs today.
+// Every check above drives `evaluatePolicy`, a pure function with hand-built facts.
+// `autoMergeTick` is what production calls (src/improve/tick.ts). A tick that skipped
+// loadMergePolicy, ignored `enabled: false`, or merged regardless of the verdict would
+// leave the tests above green.
 
 const NS_ROW = [{ namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) }];
 
@@ -776,8 +752,7 @@ test("PLANT: a disabled policy makes the tick reach GitHub not once", async () =
     assert.equal(report.ran, false, "a disabled policy ran the tick");
     assert.match(report.note, /disabled/);
     assert.equal(report.outcomes.length, 0);
-    // The strongest assertion is not that nothing merged, it is that nothing was
-    // even LOOKED at: `enabled` is read before any repo is resolved.
+    // Nothing was even looked at: `enabled` is read before any repo is resolved.
     assert.equal(calls.length, 0, `a disabled policy still called GitHub: ${JSON.stringify(calls)}`);
   });
 });
@@ -802,7 +777,7 @@ test("PLANT: no policy document at all makes the tick reach GitHub not once", as
   });
 });
 
-// The enabled cases. These are what the tick WOULD do, and nothing has ever run them.
+// The enabled cases.
 
 const OWNER = "/repos/DrDustinEdwards/capsid";
 const HEAD_SHA = "bfae8ca9012345678901234567890123456789ab";
@@ -898,8 +873,8 @@ test("PLANT: an enabled policy merges a green PR, through the tick and not throu
 });
 
 test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge", async () => {
-  // The innocent direction of the plant above, and the one that matters: a tick that
-  // called evaluatePolicy and merged anyway would pass the test above and fail here.
+  // A tick that called evaluatePolicy and merged anyway would pass the test above and
+  // fail here.
   const env = await enabledEnv();
   await withFetch(tickRoutes([".github/workflows/nightly.yml"]), async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
@@ -912,10 +887,10 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
   });
 });
 
-// ---- policy version 2, the five plants the job names, through the tick ----------------
+// path and CI plants, through the tick
 //
-// job_61cc059c8083. Each runs the real tick against a signed version 2 document, so a
-// tick that ignored the verdict, or read the version 1 list, fails here.
+// Each runs the real tick against a signed document, so a tick that ignored the
+// verdict fails here.
 
 async function tickPlant(files: string[], opts: { claimedBy?: string; steps?: string[] } = {}) {
   const env = await enabledEnv(opts.claimedBy);
@@ -965,11 +940,10 @@ test("PLANT v2: a PR from the seat's job is refused by the tick", async () => {
   assert.match(outcome.why ?? "", /kind 'seat', not a driver/);
 });
 
-// ---- audit 2026-09-25, finding F2-1, through the tick ------------------------------
+// the PR itself, through the tick
 //
-// Before version 5 the tick read only number, body, base and head sha of each open PR,
-// and judged the job the body named. Each plant below names a finished driver job with
-// green CI and src/-only changes, which is everything version 4 asked for.
+// Each plant below names a finished driver job with green CI and src/-only changes, so
+// the refusal can only come from a fact about the PR itself.
 
 async function tickWith(env: Awaited<ReturnType<typeof enabledEnv>>, routes: Record<string, unknown>) {
   let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
@@ -1011,8 +985,7 @@ test("PLANT v5: a PR touching src/jobs.ts is refused by the tick", async () => {
 
 test("PLANT: a PR that renames a refused file to an ordinary path is refused by the tick", async () => {
   // GitHub lists a rename once, under the new name, with the old one in
-  // previous_filename. Judging only the new name let src/auto-merge.ts be moved away
-  // (removing it from where the Worker loads it) on green CI.
+  // previous_filename. Both names must be judged.
   const routes = {
     ...tickRoutes([]),
     [`GET ${OWNER}/pulls/23/files`]: {
@@ -1082,12 +1055,10 @@ test("the tick refuses when the Actions run list cannot be read", async () => {
   });
 });
 
-// ---- audit 2026-09-25, F2-2: THE MERGE IS PINNED TO THE HEAD THE POLICY JUDGED ------
+// the merge is pinned to the head the policy judged
 //
-// The tick reads files, check runs and CI steps for pr.head.sha, then merges. Without
-// `sha` in the merge PUT, a push to the PR head between those reads and the merge was
-// merged without being judged, and the audit row named the old sha. GitHub answers
-// 409 when the head no longer matches the sha sent.
+// Without `sha` in the merge PUT, a push to the PR head between the reads and the merge
+// would be merged unjudged. GitHub answers 409 when the head no longer matches the sha.
 
 async function pinnedEnv() {
   const d1 = fakeD1({
@@ -1136,12 +1107,10 @@ test("a head that moved before the merge (GitHub 409) is reported not merged, au
   assert.equal(awaiting[0].failed, "head_moved");
 });
 
-// ---- AUDIT-2026-09-16: THE TICK READ ONE PAGE ------------------------------------
+// paging: every page of files and check runs is read
 //
-// files and check-runs were fetched with per_page=100 and no next page was ever
-// followed, so a PR with 101 changed files was judged on 100, and a protected path on
-// page two passed paths_unprotected. The routes below answer the way GitHub does: at
-// most `per_page` rows per call, and a Link rel="next" header while more remain.
+// The routes below answer the way GitHub does: at most `per_page` rows per call, and a
+// Link rel="next" header while more remain.
 
 function paged<T>(rows: T[], wrap: (page: T[]) => unknown = (page) => page) {
   return (_body: unknown, search: URLSearchParams) => {
@@ -1222,8 +1191,7 @@ test("a page that fails partway is refused, not judged on the pages that loaded"
   assert.match(report.outcomes[0].why ?? "", /502/);
 });
 
-// ---- audit 2026-09-25, F3-6 and F7-1: one PR cannot end the tick, and a PR naming no
-// job costs no GitHub read --------------------------------------------------------------
+// one PR cannot end the tick, and a PR naming no job costs no GitHub read
 
 const NO_JOB_SHA = "cccc000000000000000000000000000000000000";
 

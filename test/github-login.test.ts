@@ -3,13 +3,11 @@ import { afterEach, test } from "node:test";
 import { handleConsoleCallback, readConsoleSession, startConsoleLogin } from "../src/console-auth.ts";
 import { fakeKv } from "./fakes.ts";
 
-// THE CONSOLE'S CALLBACK THROUGH THE SHARED GITHUB LOGIN (src/github-login.ts).
-//
-// The MCP callback's refusals are covered in test-integration/oauth.test.ts and
-// oauth-flow.test.ts. The console callback had no test, and it now runs the same
-// module with different parameters (callback path, cookie name and Path, KV prefix,
-// restart hint), so these drive a real round trip through it: start, then call back
-// with GitHub's two endpoints stubbed.
+// The console's callback through the shared GitHub login (src/github-login.ts). The
+// MCP callback is covered in test-integration/oauth.test.ts and oauth-flow.test.ts.
+// The console runs the same module with different parameters (callback path, cookie
+// name and Path, KV prefix, restart hint), so these drive a real round trip: start,
+// then call back with GitHub's two endpoints stubbed.
 
 const ORIGIN = "https://capsid.example";
 const SECRET = "github-login-test-cookie-secret";

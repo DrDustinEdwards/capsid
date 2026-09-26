@@ -6,15 +6,9 @@ import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { BUDGET_KEY, MODE_KEY, ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
-// GROUP 1: THE ROUTE AND THE SHELL.
-//
-// The console is the one surface a human reads to answer "what is the state of every
-// namespace" without asking a chat, so the thing worth guarding first is who may read
-// it. Three callers and three different answers: the admin session renders, a browser
-// with no session is sent to GitHub, and a BEARER TOKEN IS REFUSED OUTRIGHT rather
-// than redirected. That last one is the case the job names and the one a redirect
-// would get wrong: an agent key presented to /console must not be answered with a
-// login page it cannot follow, and it must not be treated as an anonymous browser.
+// The route and the shell. Three callers and three answers: the admin session
+// renders, a browser with no session is sent to GitHub, and a bearer token is refused
+// outright rather than redirected to a login page it cannot follow.
 
 const SECRET = "console-test-cookie-secret";
 
@@ -73,16 +67,14 @@ test("the CSP is at least as strict as the consent dialog's", () => {
   assert.match(CONSOLE_CSP, /default-src 'none'/);
   assert.match(CONSOLE_CSP, /base-uri 'none'/);
   assert.match(CONSOLE_CSP, /frame-ancestors 'none'/);
-  // The console's forms post back to the console and nowhere else, which is the one
-  // place it can be STRICTER than /authorize: that page's form starts a four hop
-  // redirect chain out to a client, so it cannot name a form-action at all.
+  // The console's forms post back to the console only, so it can be stricter than
+  // /authorize, whose form starts a redirect chain out to a client.
   assert.match(CONSOLE_CSP, /form-action 'self'/);
   assert.doesNotMatch(CONSOLE_CSP, /script-src/, "no script source is allowed, not even 'self'");
 });
 
 test("the header carries the live sha, the schema version, the backup age, the budget and the mode", async () => {
-  // Every value is seeded to something the defaults would not produce, so each
-  // assertion below can only pass if the header read it from where it lives.
+  // Every value is seeded to something the defaults would not produce.
   const cookie = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
   const seeded = env({
     DB: fakeD1({ migrations: ["0001_init.sql", "0042_seeded_newest.sql"] }).db,

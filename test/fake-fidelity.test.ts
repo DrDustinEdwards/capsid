@@ -1,10 +1,7 @@
-// THE D1 FAKE DISAGREES WITH A HANDLER WHERE SQLITE WOULD (audit 2026-09-25, C1-17,
-// C1-18, C1-19).
-//
-// Each test drives one statement shape that src/ issues, in the words src/ issues it,
-// and asserts the row state SQLite would leave. Each one failed against the fake before
-// the fix named in its title: the fake either ignored the write, ignored a predicate,
-// or parsed the statement wrong.
+// The D1 fake disagrees with a handler where SQLite would. Each test drives one
+// statement shape that src/ issues, in the words src/ issues it, and asserts the row
+// state SQLite would leave, so the fake cannot ignore a write, ignore a predicate, or
+// parse the statement wrong.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeD1 } from "./fakes.ts";

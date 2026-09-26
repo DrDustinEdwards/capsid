@@ -4,25 +4,11 @@ import { searchCode } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
 
 // search_code walks a repo tree and greps every blob, one HTTP request per
-// candidate file. That makes it the tool most likely to run out of GitHub quota
-// mid-scan, and until 2026-08-11 it handled that by silently skipping the blob:
-//
-//   const blob = await ghFetch(...);
-//   if (!blob.ok) continue;
-//
-// So an exhausted rate limit produced total_results 0 with truncated false over
-// a repository it had not read. Measured on 2026-08-10: a scan for EMAIL_QUEUE
-// across foxhound returned zero while that string sat on three lines of
-// app/lib/email/dispatch.ts, and two downstream reports were written against
-// that false negative before it was caught.
-//
-// These tests fix the distinction the tool must preserve: "not found" and
-// "could not check" are different answers, and only one of them is a finding.
+// candidate file, so it is the tool most likely to run out of GitHub quota
+// mid-scan. A skipped blob must not turn into total_results 0 over a repository it
+// did not read: "not found" and "could not check" are different answers.
 
-// Env and the HTTP stub come from ./fakes.ts (quality audit 6.2). The local
-// withFetch here was the second of two copies; the shared one records every call,
-// which is what this file's cap tests already needed, so the fetched-blob list is
-// derived from the recorded calls rather than maintained separately.
+// Env and the HTTP stub come from ./fakes.ts.
 
 function makeEnv() {
   return fakeEnv({
@@ -49,13 +35,11 @@ function blob(text: string) {
   return { encoding: "base64", content: Buffer.from(text, "utf8").toString("base64") };
 }
 
-// Builds the route map the shared stub takes. The stub records every call, so the
-// list of blob paths actually requested is DERIVED from those calls rather than
-// tracked separately: one source of truth for "what did the scan fetch".
+// Builds the route map the shared stub takes. The list of blob paths requested is
+// derived from the recorded calls.
 //
 // blobsOf is how a cap is proven. files_scanned is the tool's own account of itself,
-// and a cap reporting 1 while fetching 3 still burns three requests of the quota the
-// cap exists to protect.
+// and a cap reporting 1 while fetching 3 still burns three requests of quota.
 const blobsOf = (calls: FetchCall[], paths: string[]) =>
   calls
     .filter((c) => c.path.includes("/git/blobs/sha"))
@@ -94,8 +78,7 @@ test("rate-limited blob fetch ABORTS the scan instead of returning empty", async
     {
       paths: ["a.ts", "b.ts"],
       contents: { "a.ts": "const EMAIL_QUEUE = 1;", "b.ts": "x" },
-      // The exact shape of the 2026-08-10 incident: the tree resolves, then
-      // every blob fetch is refused for quota.
+      // The tree resolves, then every blob fetch is refused for quota.
       blobStatus: { "a.ts": 403, "b.ts": 403 },
     },
     async () => {
@@ -166,15 +149,10 @@ test("a clean zero-result scan reports no unreadable files at all", async () => 
   });
 });
 
-// ---- the quota cap (quality audit 6.4) --------------------------------------
-//
-// max_files is the only thing standing between one search_code call and the App
-// installation's hourly quota, because the cost is one HTTP request per candidate
-// file FETCHED. The 5,000-entry tree refusal does not cover it: a tree of 4,000
-// files is accepted and would be 4,000 blob GETs. Until now nothing tested the cap
-// at all, so an off-by-one in `filesScanned >= maxFiles` would have shipped, and
-// its symptom is quota exhaustion for every later call by any tool, not a wrong
-// answer here.
+// The quota cap. max_files bounds one search_code call's cost against the App
+// installation's hourly quota, one HTTP request per candidate file fetched. The
+// 5,000-entry tree refusal does not cover it. An off-by-one here shows up as quota
+// exhaustion for every later call by any tool, not a wrong answer.
 
 const THREE = ["a.ts", "b.ts", "c.ts"];
 const CONTENTS = { "a.ts": "needle here", "b.ts": "needle again", "c.ts": "needle third" };
@@ -228,8 +206,7 @@ test("max_results stops the scan too, and says more may exist", async () => {
 });
 
 test("an uncapped scan of the same tree reads everything, so the caps are what stopped it", async () => {
-  // The negative control. Without it, every assertion above could be passing
-  // because the fixture only ever had one readable file.
+  // The negative control: the fixture really has more than one readable file.
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", {});
     assert.deepEqual(blobsOf(calls, THREE), THREE);

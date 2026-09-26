@@ -7,16 +7,9 @@ import { buildServer } from "../src/server.ts";
 import { adminAgent } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// ONE DEFINITION, IMPORTED. The conventions that are about the SHAPE of src/
-// rather than the behaviour of any one module.
-//
-// Every guard here answers the same question: is this fact still stated once? Each
-// was added after the same fact was found stated twice and the two copies had
-// drifted or were about to. They were scattered through limits.test.ts under a
-// name that described none of them (quality audit 6.6), and each scanned a
-// hardcoded list of two or three files, which made the guard's scope a guess about
-// where the next copy would be written (quality audit 1.1). They scan all of src/
-// now, which is also what lets server.ts be split later without losing them.
+// One definition, imported. Conventions about the shape of src/ rather than the
+// behaviour of any one module: each guard asks whether a fact is still stated once,
+// and scans all of src/ rather than a list of files where a copy might appear.
 //
 // That the CSP report sink and the backup prune agree on the report prefix is driven
 // in test-integration/csp-report.test.ts: a stored report, aged, is reaped by the cron.
@@ -33,8 +26,8 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   assert.match(githubLogin, /timingSafeEqual\(stateCookie, await sha256Hex/);
 
   // And no file anywhere has gone back to a short-circuiting compare of a secret.
-  // Matched by SHAPE rather than by the three spellings that exist today, since a
-  // fourth secret compared with !== is the thing this is here to catch.
+  // Matched by shape rather than by the spellings that exist today, so a new secret
+  // compared with !== is caught.
   const offenders = sourceFiles().flatMap((f) =>
     f.text
       .split("\n")

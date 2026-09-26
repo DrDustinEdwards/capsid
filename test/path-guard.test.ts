@@ -6,15 +6,10 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { servedProtectedPaths } from "../src/improve-schema.ts";
 
-// scripts/path-guard.mjs, RUN AS THE DRIVER RUNS IT, against a real git repository.
-//
-// The guard used to read a file of paths the driver produced with
-// `git diff --name-only <base>..HEAD > changed.txt`. Three inputs got past it:
-// a rename printed only its new path, so a protected file moved out of test/ was
-// never checked; core.quotePath printed a non-ASCII path C-quoted, starting with a
-// double quote, so no anchored pattern matched; and a failed diff still created an
-// empty file, which the guard reported as "changed no files" and passed. The guard
-// now runs the diff itself with --no-renames -z, and these tests drive that.
+// scripts/path-guard.mjs, run as the driver runs it, against a real git repository.
+// The guard runs the diff itself with --no-renames -z, so a rename shows its old path,
+// a non-ASCII path is not C-quoted past an anchored pattern, and a failed diff is not
+// read as "changed no files".
 //
 // One repository serves every case: each case starts from a detached checkout of
 // the base commit, because a git call costs seconds on a Windows host.
@@ -80,7 +75,7 @@ test("a rename OUT of a protected path is refused, because the old path is liste
   fromBase();
   git(["mv", "test/x.test.ts", "src/x.ts"]);
   git(["commit", "-q", "-m", "move"]);
-  // The plain --name-only listing the driver used to write shows only the new path.
+  // A plain --name-only listing shows only the new path.
   assert.equal(git(["diff", "--name-only", `${base}..HEAD`]), "src/x.ts");
   const r = guard([served, base, "HEAD"]);
   assert.equal(r.status, 1, r.stdout + r.stderr);

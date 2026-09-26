@@ -2,24 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { holdoutImportRefusal, holdoutImportsPath, importedNames, parseImportsManifest } from "../scripts/improve-report.mjs";
 
-// THE HOLDOUT IMPORT MANIFEST, both directions.
+// The holdout import manifest.
 //
-// improve/holdout/<ns>/imports.txt lists every name the hidden suite imports out
-// of the repo's own source. It exists because a bloat pass removed two exports on
-// a scan that found no caller in src/ or test/, the holdout imported both, and
-// master scored 28 of 30 against an anchor of min 1.0. The holdout is a consumer
-// no scan running in the repo can see, which is its entire point, so the names it
-// reaches for have to be written down.
+// improve/holdout/<ns>/imports.txt lists every name the hidden suite imports out of
+// the repo's own source. The holdout is a consumer no scan in the repo can see, so
+// without the list a dead-export pass can delete an export it depends on.
 //
 // test/lint/dead-exports.lint.ts owns the direction where a listed name counts as a
 // caller. This file owns the parser and the refusal, which is what Job B runs.
 
-// THE SHAPE THAT BROKE IT, kept as the first fixture. The first spelling of the
-// clause matcher used a lazy [\s\S]*? and crossed statement boundaries, so in a
-// file whose first RELATIVE import is the third line the match began at line one
-// and swallowed the node-builtin imports above it. All five roster repos reported
-// names like `assert`, `from`, `import` and `test } from "node:test";` as things
-// their hidden suite imports. An import clause never contains a semicolon.
+// Builtin imports before the first relative one: a matcher that crosses statement
+// boundaries would report `assert`, `from` and `import` as imported names.
 const REALISTIC = [
   'import assert from "node:assert/strict";',
   'import { test } from "node:test";',
@@ -40,9 +33,8 @@ test("PLANT: a builtin import before a relative one is not swallowed into the cl
   }
 });
 
-// THE SAME SHAPE WITHOUT SEMICOLONS (audit 2026-09-25, finding 6-9). The second
-// spelling stopped the clause at a `;`, which this file does not have, so the match
-// crossed statements again: it reported assert, from and import and lost foo.
+// The same shape without semicolons, so a matcher that stops a clause at `;` cannot
+// pass.
 const NO_SEMICOLONS = [
   'import assert from "node:assert/strict"',
   'import { test } from "node:test"',
@@ -93,7 +85,7 @@ test("a multi-line import clause is one statement", () => {
   assert.deepEqual([...importedNames(text)].sort(), ["alpha", "beta"]);
 });
 
-// ---- the manifest ------------------------------------------------------------
+// the manifest
 
 test("the manifest is names only, and reads past comments and blank lines", () => {
   const text = ["# what this is", "", "alpha", "beta", "  gamma  ", ""].join("\n");
@@ -105,7 +97,7 @@ test("the path convention has one spelling", () => {
   assert.equal(holdoutImportsPath("foxing"), "improve/holdout/foxing/imports.txt");
 });
 
-// ---- the refusal, which is what Job B acts on -------------------------------
+// the refusal, which is what Job B acts on
 
 const CASE = 'import { test } from "node:test";\nimport { alpha, beta } from "../src/x.ts";';
 
@@ -120,13 +112,13 @@ test("PLANT: no manifest at all is refused, and hands over the list to create", 
   const refusal = holdoutImportRefusal([CASE], null, "capsid");
   assert.ok(refusal);
   assert.match(refusal!, /no improve\/holdout\/capsid\/imports\.txt/);
-  // Actionable rather than merely correct: the refusal IS the file to write.
+  // The refusal contains the file to write.
   assert.match(refusal!, /alpha\nbeta/);
 });
 
 test("a complete manifest passes, so the guard is not simply always red", () => {
   assert.equal(holdoutImportRefusal([CASE], ["alpha", "beta"], "capsid"), null);
-  // And a manifest listing MORE than the suite uses is fine: that is the
-  // dead-export direction, where an extra name only makes an export undeletable.
+  // A manifest listing more than the suite uses is fine: an extra name only makes
+  // an export undeletable.
   assert.equal(holdoutImportRefusal([CASE], ["alpha", "beta", "gamma"], "capsid"), null);
 });

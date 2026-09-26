@@ -9,7 +9,7 @@ import { IMPROVE_RUN_DEFAULTS } from "./improve-fakes.ts";
 
 // The two gates. Both halves of the monitor and both halves of the drift gate.
 
-// ---- the deterministic monitor ----------------------------------------------
+// the deterministic monitor
 
 test("the path monitor flags every class of protected path", () => {
   const cases: Array<[string, RegExp]> = [
@@ -30,7 +30,7 @@ test("the path monitor flags every class of protected path", () => {
     [".eslintrc", /lint configuration/],
     [".claude/settings.json", /agent steering layer/],
     ["CLAUDE.md", /repo briefing/],
-    // Added 2026-09-04 audit fixes: toolchain and build-glue the scorer runs through.
+    // Toolchain and build glue the scorer runs through.
     [".nvmrc", /Node version/],
     [".node-version", /Node version/],
     [".npmrc", /npm registry/],
@@ -51,8 +51,7 @@ test("the path monitor flags every class of protected path", () => {
 });
 
 test("the path monitor does NOT fire on ordinary source, which is what keeps it alive", () => {
-  // A guard that fires on innocent code gets deleted rather than fixed
-  // (capsid/conventions.md). These are the paths a real scoped change touches.
+  // The paths a real scoped change touches must not be flagged.
   const innocent = [
     "src/routes.ts",
     "src/lib/format.ts",
@@ -87,12 +86,11 @@ test("protectedHits reports one reason per path, not one per pattern", () => {
   assert.equal(hits.length, 1);
 });
 
-// ---- the model half ---------------------------------------------------------
+// the model half
 
 test("THE MONITOR FAILS CLOSED when it cannot run", () => {
-  // A monitor that cannot run is not a monitor that approves. With no API key the
-  // model call throws, and the attempt must be reverted with the unavailability
-  // named rather than accepted unreviewed.
+  // With no API key the model call throws, and the attempt must be reverted with the
+  // unavailability named rather than accepted unreviewed.
   return monitorAttempt(fakeEnv({}), {
     changedPaths: ["src/a.ts"],
     changeSummary: "something",
@@ -118,7 +116,7 @@ test("the deterministic half runs FIRST, so a protected path never reaches the m
   assert.equal(verdict.source, "paths", "the model half ran for a path the pattern already refused");
 });
 
-// ---- the drift gate ---------------------------------------------------------
+// the drift gate
 
 function run(over: Partial<RunRow>): RunRow {
   return { ...(IMPROVE_RUN_DEFAULTS as unknown as RunRow), ...over };
@@ -150,8 +148,8 @@ test("a ratio under the ceiling does not pause", () => {
 });
 
 test("FEWER THAN THREE RUNS NEVER PAUSES", () => {
-  // A single bad night is noise. Pausing on it would stop every namespace on its
-  // first night, before the loop had done anything to judge.
+  // A single bad night is noise, and pausing on it would stop every namespace on
+  // its first night.
   const bad = run({ attempts: 10, reverts: 10 });
   assert.equal(driftVerdict([bad]).pause, false);
   assert.equal(driftVerdict([bad, bad]).pause, false);

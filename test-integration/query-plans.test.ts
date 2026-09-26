@@ -1,24 +1,15 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// EXPLAIN QUERY PLAN OVER EVERY READ IN src/, AGAINST THE REAL SCHEMA.
+// EXPLAIN QUERY PLAN over every read in src/, against the real schema.
 //
-// The statements are WALKED out of the source (scripts/sql-statements.mjs) rather
-// than listed here, so a query added tomorrow is covered tomorrow. A hand-kept list
-// of queries-to-check is a list that goes stale the first time somebody adds one,
-// and the query nobody added is the one that scans a growing table at 03:00.
+// The statements are walked out of the source (scripts/sql-statements.mjs) rather
+// than listed here, so a newly added query is covered without anyone adding it.
 //
-// WHAT COUNTS AS A FINDING, and this distinction is the whole test. SQLite writes
-// "SCAN" for two different things: walking a TABLE with no usable index, and
-// walking an INDEX in order. Only the first is a defect. So the rule is a bare
-// `SCAN <table>` with no ` USING INDEX` and no ` VIRTUAL TABLE`, on one of the
-// tables that grows without bound.
-//
-// Measured at b464cd8: 17 SCAN lines over 62 reads, six of them bare scans of
-// document_versions, audit_log, improve_runs and improve_skills. document_versions
-// and audit_log carried NO INDEX AT ALL, and `lastActor` (every read, and once per
-// row of every brief) was a full scan of the largest append-only table in the
-// store. migrations/0005_query_plan_indexes.sql is the fix; this is the guard.
+// What counts as a finding: SQLite writes "SCAN" both for walking a table with no
+// usable index and for walking an index in order. Only the first is a defect, so the
+// rule is a bare `SCAN <table>` with no ` USING INDEX` and no ` VIRTUAL TABLE`, on
+// one of the tables that grows without bound.
 
 const HOT_TABLES = [
   "documents",
@@ -32,9 +23,8 @@ const HOT_TABLES = [
   "improve_jti",
 ];
 
-// The one read that is SUPPOSED to walk a whole table: the nightly dump. Named
-// with its reason rather than filtered by a pattern, so a second exception has to
-// be argued for in this file rather than slipped past a regex.
+// Reads that walk a whole table on purpose, each named with its reason, so a new
+// exception has to be added here explicitly.
 const WHOLE_TABLE_BY_DESIGN = [
   { file: "backup.ts", sql: /^SELECT \* FROM /i, why: "the nightly dump reads every row of a table on purpose" },
   {
@@ -77,26 +67,23 @@ const reads = () => env.TEST_SQL_STATEMENTS.filter((s) => /^SELECT\b/i.test(s.sq
 
 describe("query plans", () => {
   it("the walk found the statements at all, so nothing below can pass by reading nothing", () => {
-    // DERIVED, NOT A FIXED FLOOR. Every src/ file that calls `.prepare(` (listed by a
-    // separate fs walk in vitest.config.ts) must have yielded at least one statement,
-    // extracted or skipped. That catches the walk missing a file or a directory, which
-    // is what the old "more than 80" floor caught once, without going red when a
-    // refactor moves statements between files.
+    // Every src/ file that calls `.prepare(` (listed by a separate fs walk in
+    // vitest.config.ts) must have yielded at least one statement, extracted or
+    // skipped. That catches the walk missing a file or directory without a fixed
+    // floor that breaks when statements move between files.
     const files = env.TEST_SQL_PREPARE_FILES;
     expect(files.length, "no src/ file calls .prepare(; the file listing is broken").toBeGreaterThan(0);
     const seen = new Set([...env.TEST_SQL_STATEMENTS, ...env.TEST_SQL_SKIPPED].map((s) => s.file));
     const unseen = files.filter((f) => !seen.has(f));
     expect(unseen, `files that call .prepare( but yielded no statement: ${unseen.join(", ")}`).toEqual([]);
     expect(reads().length, "no SELECTs among them").toBeGreaterThan(0);
-    // A statement the walk could not reconstruct is REPORTED rather than dropped.
-    // A plan check that quietly covers 40 of 60 statements is the "assertion that
-    // can pass by reading nothing" failure capsid/conventions.md names.
+    // A statement the walk could not reconstruct is reported rather than dropped, so
+    // the plan check cannot quietly cover only part of the reads.
     expect(
       env.TEST_SQL_SKIPPED.length,
       `${env.TEST_SQL_SKIPPED.length} statements could not be reconstructed: ${env.TEST_SQL_SKIPPED.map((s) => `${s.file}: ${s.sql.slice(0, 70)}`).join(" | ")}`
-      // Three as of 2026-09-25: advanceRun's built SET list, and two .prepare() calls
-      // that take an expression (backup.ts's dump, improve/open.ts's attempt read),
-      // which are now counted rather than left out.
+      // Three: advanceRun's built SET list, and two .prepare() calls that take an
+      // expression (backup.ts's dump, improve/open.ts's attempt read).
     ).toBeLessThanOrEqual(3);
   });
 
@@ -128,9 +115,8 @@ describe("query plans", () => {
   });
 
   it("PLANT: the two hottest reads use the indexes 0005 added, by name", async () => {
-    // Named rather than inferred. The point of `id DESC` inside these indexes is
-    // that the LIMIT 1 stops at the first entry instead of sorting what it found,
-    // and a plan that says SEARCH but then TEMP B-TREE FOR ORDER BY has lost that.
+    // `id DESC` inside these indexes lets the LIMIT 1 stop at the first entry instead
+    // of sorting; a plan that says SEARCH but then TEMP B-TREE FOR ORDER BY has lost that.
     const lastActor = await planOf(
       "SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1"
     );
@@ -144,20 +130,10 @@ describe("query plans", () => {
     expect(prunePlan).toContain("document_versions_snapshot");
   });
 
-  // THE HOLE THE WALKER LEAVES, CLOSED BY HAND (PR #20).
-  //
-  // scripts/sql-statements.mjs substitutes an optional `${clause}` with `WHERE 1 = 1`,
-  // on the stated assumption that "an optional filter can only narrow the scan the plan
-  // reports". THAT ASSUMPTION IS FALSE, and this is where it was measured: the console's
-  // activity read planned clean as a tautology and, with `WHERE namespace = ?`, found its
-  // rows through audit_log_doc and then SORTED ALL OF THEM to take the newest 50, because
-  // that index is (namespace, path, id DESC) and an unconstrained `path` puts its id
-  // ordering out of reach.
-  //
-  // A substituted statement is therefore checked for the shape it plans as, and the
-  // variants it stands in for are checked here, by name. Same reasoning as the 0005 test
-  // below: a plan that says SEARCH and then TEMP B-TREE FOR ORDER BY has lost the point of
-  // the index.
+  // The walker substitutes an optional `${clause}` with `WHERE 1 = 1`, but a filter
+  // can change the plan, not only narrow it: with `WHERE namespace = ?` the activity
+  // read can pick an index whose id ordering is out of reach and sort every row to
+  // take the newest 50. So the filtered variants are checked here by name.
   const ACTIVITY_VARIANTS: Array<[string, string, number, string]> = [
     [
       "by namespace",

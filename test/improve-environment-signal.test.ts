@@ -6,18 +6,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { holdoutPassCount, markers, parseHoldoutStream } from "../scripts/improve-report.mjs";
 
-// THE SCORER'S HALF OF "AN EMPTY STREAM IS NOT A RESULT".
+// The scorer's half of "an empty stream is not a result". test/improve-unjudged.test.ts
+// pins what the Worker does with an environment failure; this file proves the scorer
+// reports one, so a container that fails to start says "nothing was measured" rather
+// than "0 of 11 hidden tests passed".
 //
-// test/improve-unjudged.test.ts pins what the Worker does with an environment
-// failure. Nothing there can prove the scorer ever REPORTS one, and the report is
-// the only thing the Worker sees, so this file covers the other half: the container
-// that fails to start must leave the run saying "nothing was measured" rather than
-// "0 of 11 hidden tests passed".
-//
-// The two numbers are indistinguishable by design: holdoutPassCount returns 0 for an
-// unterminated stream, which is the correct SCORE (a container that proved nothing
-// cannot be credited with passes) and a useless DIAGNOSIS. The terminated flag is
-// what separates them, and it was computed and discarded.
+// holdoutPassCount returns 0 for an unterminated stream, which is the correct score
+// and a useless diagnosis. The terminated flag separates the two.
 
 const SCORER = join(import.meta.dirname, "..", "scripts", "improve-report.mjs");
 const NONCE = "test-nonce";
@@ -52,9 +47,8 @@ function terminatedExit(text: string): number {
 }
 
 test("A CONTAINER THAT NEVER STARTED SCORES THE SAME AS ONE THAT FAILED EVERY CASE", () => {
-  // The defect, stated as an equality. This is why the count alone cannot be the
-  // signal, and it stays true after the fix: the fix adds a second fact, it does not
-  // change the score.
+  // Why the count alone cannot be the signal. The terminated flag is a second fact;
+  // it does not change the score.
   assert.equal(holdoutPassCount(NEVER_STARTED, NONCE), 0);
   assert.equal(holdoutPassCount(FINISHED_ALL_FAILED, NONCE), 0);
 });
@@ -76,7 +70,7 @@ test("an unreadable stream is an environment failure, never a pass", () => {
   assert.equal(result.status, 1, "a missing stream file must fail closed");
 });
 
-// ---- the signed body carries it ---------------------------------------------
+// The signed body carries it.
 
 function signedBody(env: Record<string, string>): {
   environment: { ok: boolean; reason: string | null };
@@ -107,8 +101,7 @@ test("THE SIGNED BODY REPORTS THE ENVIRONMENT FAILURE, so the Worker can see it 
   const body = signedBody({ ENV_FAILURE: "1", ENV_FAILURE_REASON: "the holdout container did not finish" });
   assert.equal(body.environment.ok, false);
   assert.match(String(body.environment.reason), /did not finish/);
-  // The score is still reported. Unjudged is a verdict about the measurement, not a
-  // reason to withhold the numbers the run did produce.
+  // The score is still reported; unjudged is a verdict about the measurement.
   assert.deepEqual(body.holdout, { total: 11, passed: 0 });
 });
 
@@ -123,13 +116,11 @@ test("only an explicit ENV_FAILURE=1 sets it: a stray value does not spare an at
   assert.equal(signedBody({ ENV_FAILURE: "" }).environment.ok, true);
 });
 
-// ---- the workflow wires it through ------------------------------------------
+// The workflow wires it through.
 
 test("THE WORKFLOW COMPUTES THE FLAG AND PASSES IT TO THE POST STEP", () => {
-  // The chain is three links and a break anywhere leaves the Worker never seeing an
-  // environment failure, silently, with every broken machine scored as a bad change
-  // exactly as before. Read from the file rather than assumed, because none of it
-  // can be exercised offline.
+  // A break anywhere in the chain leaves the Worker scoring every broken machine as a
+  // bad change. Read from the file because none of it can be exercised offline.
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "improve-score.yml"), "utf8");
   assert.match(workflow, /--holdout-terminated/, "the count step never checks whether the container finished");
   assert.match(workflow, /env_failure=1/, "the count step never sets the flag");
@@ -139,7 +130,6 @@ test("THE WORKFLOW COMPUTES THE FLAG AND PASSES IT TO THE POST STEP", () => {
     /ENV_FAILURE_REASON:\s*\$\{\{\s*steps\.holdout_count\.outputs\.env_reason\s*\}\}/,
     "the post step does not receive the reason"
   );
-  // The sync failing is the other way to measure nothing, and it is checked from the
-  // step's own outcome rather than from anything the container wrote.
+  // A failed sync is checked from the step's own outcome, not from container output.
   assert.match(workflow, /HOLDOUT_SYNC:\s*\$\{\{\s*steps\.holdout\.outcome\s*\}\}/, "a failed holdout sync is not detected");
 });

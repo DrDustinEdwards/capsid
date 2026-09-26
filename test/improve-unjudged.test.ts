@@ -6,23 +6,16 @@ import type { ScoreReport } from "../src/improve-scorer.ts";
 import { withFetch } from "./fakes.ts";
 import { ARCHIVE_DOC, ATTEMPT, AWAITING, BASELINE, harness, MODEL_ROUTE, NOW, report as baseReport } from "./improve-harness.ts";
 
-// A BROKEN MACHINE IS NOT A BAD CHANGE.
+// A broken machine is not a bad change.
 //
-// Every environment failure used to land as a revert: the attempt row said
-// "reverted", run.reverts and run.consecutive_reverts both moved, and
-// recordSkillOutcome(false) marked the proposing skill bad. Five broken runners in a
-// row therefore restored a namespace to its best commit and blamed the code, and the
-// loop's own memory (lineage selection and the skill records) reads that verdict
-// later as though it were a measurement.
+// A revert moves the revert counters and marks the proposing skill bad, and lineage
+// selection and the skill records later read that verdict as a measurement. So the
+// verdict for an environment failure is UNJUDGED: the attempt is not kept, not
+// reverted, and not counted. It has its own ceiling, so an attempt that produced no
+// measurement is not retried forever.
 //
-// The verdict for an environment failure is UNJUDGED: the attempt is not kept, not
-// reverted, and not counted. It has its own ceiling, because an attempt that
-// produced no measurement must still not be retried forever.
-//
-// WHAT IS NOT AN ENVIRONMENT FAILURE is pinned here too, in the last two tests of
-// the holdout section and in the late-report section. Unjudged costs the attempt
-// nothing, so anything that can be provoked by the attempt itself must stay a
-// revert.
+// Unjudged costs the attempt nothing, so anything the attempt itself can provoke
+// must stay a revert; that side is pinned in the holdout and late-report sections.
 
 const LATE = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60_000);
 
@@ -31,7 +24,7 @@ const LATE = new Date(Date.parse("2026-09-04T08:04:00Z") + SCORE_TIMEOUT_MS + 60
 const report = (over: Partial<ScoreReport> = {}): ScoreReport =>
   baseReport({ environment: { ok: true, reason: null }, ...over });
 
-// ---- the timeout path: a score that never arrives ---------------------------
+// the timeout path: a score that never arrives
 
 test("A SCORE THAT NEVER ARRIVES LEAVES THE ATTEMPT UNJUDGED, and moves no revert counter", async () => {
   await withFetch({}, async () => {
@@ -47,9 +40,8 @@ test("A SCORE THAT NEVER ARRIVES LEAVES THE ATTEMPT UNJUDGED, and moves no rever
 });
 
 test("FIVE BROKEN MACHINES IN A ROW DO NOT RESTORE THE NAMESPACE TO BEST", async () => {
-  // The exact shape the job was posted about. With consecutive_reverts one short of
-  // the ceiling, a timeout used to tip the run into finalizing and restore the
-  // namespace to its best known commit, blaming code that was never measured.
+  // With consecutive_reverts one short of the ceiling, a timeout must not tip the run
+  // into restoring the namespace to best, blaming code that was never measured.
   await withFetch({}, async () => {
     const { d1, env } = await harness({
       improveRuns: [{ ...AWAITING, consecutive_reverts: MAX_CONSECUTIVE_REVERTS - 1, reverts: 4, attempts: 5 }],
@@ -102,12 +94,11 @@ test("a broken machine does NOT mark the proposing skill bad", async () => {
   });
 });
 
-// ---- the container that never finished --------------------------------------
+// the container that never finished
 
 test("A REPORT WHOSE CONTAINER NEVER FINISHED IS UNJUDGED, not a clean 0 of N", async () => {
-  // The worst case in the finding: the holdout container fails to start, the count
-  // step reads an empty stream and echoes 0, and the report is indistinguishable
-  // from an attempt that broke every hidden test.
+  // A container that fails to start yields an empty stream and a count of 0, which
+  // would otherwise look like an attempt that broke every hidden test.
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",
@@ -133,8 +124,7 @@ test("A REPORT WHOSE CONTAINER NEVER FINISHED IS UNJUDGED, not a clean 0 of N", 
 });
 
 test("a finished container reporting 0 of N IS a revert, because that is a real measurement", async () => {
-  // The other side of the same line. Unjudged is for a measurement that did not
-  // happen, never for one that happened and came out badly.
+  // Unjudged is for a measurement that did not happen, never for one that came out badly.
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",
@@ -150,7 +140,7 @@ test("a finished container reporting 0 of N IS a revert, because that is a real 
   });
 });
 
-// ---- the holdout refusals ---------------------------------------------------
+// the holdout refusals
 
 test("A MISSING HOLDOUT MANIFEST LEAVES THE ATTEMPT UNJUDGED", async () => {
   await withFetch(MODEL_ROUTE, async () => {
@@ -204,8 +194,8 @@ test("a ZERO-TEST manifest leaves the attempt unjudged", async () => {
 
 test("AN IMPOSSIBLE HOLDOUT COUNT IS STILL A REVERT, never an environment failure", async () => {
   // A report claiming more passes than the manifest declares is a broken or forged
-  // report, not a machine that failed to run. Unjudged costs the attempt nothing, so
-  // routing this there would hand every attempt a free escape from being judged.
+  // report, not a machine that failed to run. Routing it to unjudged would let an
+  // attempt escape being judged.
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",
@@ -221,14 +211,12 @@ test("AN IMPOSSIBLE HOLDOUT COUNT IS STILL A REVERT, never an environment failur
   });
 });
 
-// ---- the late report --------------------------------------------------------
+// the late report
 
 test("AN UNJUDGED ATTEMPT ACCEPTS A LATE REAL SCORE onto its own row", async () => {
-  // The run has moved on: it is attempting again and holds no current_attempt. The
-  // late report cannot drive the state machine, but it is the only real measurement
-  // this attempt will ever have, and the attempt row is what lineage selection and
-  // the skill records read later. Recording it there is strictly more information
-  // than leaving the row saying the machine broke.
+  // The run has moved on and holds no current_attempt, so the late report cannot
+  // drive the state machine. It is still the attempt's only real measurement, and
+  // lineage selection and the skill records read the attempt row.
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",
@@ -265,8 +253,7 @@ test("a late score does NOT rewind the run's counters or its state", async () =>
 });
 
 test("a late score for an attempt ALREADY JUDGED is still ignored", async () => {
-  // The existing duplicate and replay guard. A report for an attempt that was
-  // already kept or reverted changes nothing, whenever it arrives.
+  // A report for an attempt already kept or reverted changes nothing, whenever it arrives.
   await withFetch(MODEL_ROUTE, async () => {
     const { d1, env } = await harness({
       apiKey: "sk-test",

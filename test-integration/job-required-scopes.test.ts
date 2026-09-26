@@ -4,16 +4,10 @@ import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
-// AUDIT 2026-09-13, FINDING F1: required_scopes at the claim and the resume.
-//
-// test/jobs-agents.test.ts drives `missingForJob` directly and scans the source for
-// the call appearing before the claiming UPDATE. Neither is the real path. Dropping
-// the `if (missing)` block while keeping the call leaves both green, and a job that
-// names a flag is then leased to a driver that does not hold it.
-//
-// Here rather than beside the unit tests for the reason the rest of this directory
-// states: "the job stays queued" is a claim about what a real keyed UPDATE did or did
-// not do, and a fake answering on SQL shape would agree with whatever it was asked.
+// required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
+// drives `missingForJob` directly, which stays green if the `if (missing)` block is
+// dropped. Integration, because "the job stays queued" is a claim about what a real
+// keyed UPDATE did.
 
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
@@ -23,8 +17,8 @@ function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
 }
 
-// A driver as the roster mints one: its own namespace, write, and not one flag. The
-// legacy write key below holds EVERY flag, which is why it cannot plant this.
+// A driver as the roster mints one: its own namespace, write, and no flags. The legacy
+// write key holds every flag, so it cannot plant this.
 function driver(namespace = "capsid"): Agent {
   const name = `${namespace}-driver`;
   const scopes = defaultScopes([namespace]);
@@ -34,11 +28,9 @@ function driver(namespace = "capsid"): Agent {
 
 const SEAT_AGENT = legacyAgent("write", SEAT);
 
-// No cast here on purpose. The first version of this helper spread an untyped
-// `over` through `as Parameters<typeof postJob>[3]`, so passing the TOOL's parameter
-// name (required_flags) instead of the function's (required_scopes) typechecked
-// cleanly and posted a job with no requirement at all. Both plants then went green
-// against a bar that was never set.
+// No cast on purpose: a cast would let a misspelled field (the tool's required_flags
+// instead of the function's required_scopes) typecheck and post a job with no
+// requirement, and the plants would pass against a bar never set.
 async function post(over: Partial<Parameters<typeof postJob>[3]> = {}) {
   return postJob(jobsEnv(), SEAT_AGENT, NOW, {
     namespace: "capsid",
@@ -57,7 +49,7 @@ describe("required_scopes on the real queue transitions", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
-    // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+    // jobs post requires a registered namespace.
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   });
 
@@ -123,17 +115,14 @@ describe("required_scopes on the real queue transitions", () => {
   });
 });
 
-// AUDIT-2026-09-16: A GARBLED REQUIREMENT IS NOT THE SAME AS NONE.
-//
-// parseRequiredScopes and parseMinRecord returned "no requirement" on a value they
-// could not read, so a row whose requirement had been damaged was leased to any
-// driver at all. Corrupted here by a raw splice, which is the way such a row arises:
-// post validates both fields before it writes them.
+// A garbled requirement is not the same as none: a row whose requirement cannot be
+// read must not be leased to any driver. Corrupted here by a raw splice, because post
+// validates both fields before it writes them.
 describe("a corrupt job requirement fails closed at the claim", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
-    // jobs post requires a registered namespace (audit 2026-09-25, F2-8).
+    // jobs post requires a registered namespace.
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   });
 

@@ -8,11 +8,9 @@ import { ROSTER } from "../src/improve-schema.ts";
 
 // scripts/mint-agents.mjs: the six credentials of docs/bootstrap.md.
 //
-// The roster is DERIVED from src/improve-schema.ts rather than retyped, so a
-// sixth project joining the loop fails here instead of silently having no driver
-// agent and no key file. That is the "derive the expected list from the source of
-// truth" rule in capsid/conventions.md, and the direction that bites is the one
-// where the roster grows.
+// The roster is derived from src/improve-schema.ts rather than retyped, so a project
+// joining the loop fails here instead of silently having no driver agent and no key
+// file.
 
 test("every roster namespace has exactly one driver agent, named <ns>-driver", () => {
   for (const ns of ROSTER) {
@@ -27,8 +25,7 @@ test("every roster namespace has exactly one driver agent, named <ns>-driver", (
 });
 
 test("a driver carries no flags, and only the seat may merge", () => {
-  // The blast radius, asserted rather than described. A driver opens pull
-  // requests; a human merges them.
+  // A driver opens pull requests; a human merges them.
   for (const a of AGENTS.filter((x) => x.kind === "driver")) {
     assert.deepEqual(a.flags ?? {}, {}, `${a.name} carries flags`);
     assert.deepEqual(a.grants, ["read", "write"]);
@@ -37,9 +34,9 @@ test("a driver carries no flags, and only the seat may merge", () => {
   assert.ok(seat, "the seat is gone");
   assert.deepEqual(seat.namespaces, ["*"]);
   assert.deepEqual(seat.flags, { can_merge: true });
-  // can_direct_write is off even for the seat, and the way to assert that without
-  // naming an absent property is to pin the whole key set: anything granted later
-  // shows up here as a new key rather than passing on a nullish default.
+  // can_direct_write is off even for the seat. The whole key set is pinned, so
+  // anything granted later shows up as a new key rather than passing on a nullish
+  // default.
   assert.deepEqual(Object.keys(seat.flags ?? {}), ["can_merge"]);
 });
 
@@ -52,13 +49,11 @@ test("--namespace selects one project without touching the rest", () => {
   assert.deepEqual(selectAgents("*").map((a) => a.name), ["seat"]);
 });
 
-// ---- a registered namespace that is not on the roster ------------------------
+// A registered namespace that is not on the roster.
 //
-// THE ROSTER IS NOT THE LIST OF NAMESPACES. AGENTS is derived from the improve
-// roster, which is the five projects the loop proposes changes to. A namespace
-// can own a repo and a job queue without joining that roster, and claude-skills
-// is the first that does: it refused to mint until --namespace stopped treating
-// the roster as the universe.
+// The roster is not the list of namespaces: AGENTS is derived from the improve
+// roster, and a namespace (claude-skills) can own a repo and a job queue without
+// joining it.
 
 const REGISTERED = ["bsw", "capsid", "claude-skills", "dustinedwards", "foxhound", "foxing", "germomics", "julieedwards", "txasm"];
 
@@ -70,25 +65,22 @@ test("A REGISTERED NON-ROSTER NAMESPACE MINTS, with a driver of the roster shape
   assert.equal(driver.kind, "driver");
   assert.deepEqual(driver.namespaces, ["claude-skills"]);
   assert.deepEqual(driver.grants, ["read", "write"]);
-  // The property that matters: a synthesized driver is not a wider credential
-  // than a listed one. Compared against a real roster driver rather than against
-  // a description of one, so the two cannot drift apart.
+  // A synthesized driver is not a wider credential than a listed one. Compared
+  // against a real roster driver, so the two cannot drift apart.
   const rosterDriver = AGENTS.find((a) => a.name === "foxing-driver");
   assert.deepEqual(Object.keys(driver).sort(), Object.keys(rosterDriver!).sort());
   assert.deepEqual(driver.flags ?? {}, {}, "a synthesized driver must carry no flags");
 });
 
 test("the namespace is confirmed REGISTERED, not merely well-formed", () => {
-  // Registration is the authority. A plausible name that nobody registered is a
-  // typo, and minting a credential for it would leave a live agent scoped to a
-  // namespace that does not exist.
+  // A plausible name that nobody registered is a typo; minting for it would leave a
+  // live agent scoped to a namespace that does not exist.
   assert.throws(() => selectAgents("claude-skilz", REGISTERED), /no agent is scoped to 'claude-skilz'/);
   assert.throws(() => selectAgents("claude-skilz", REGISTERED), /Registered in Capsid:.*claude-skills/);
 });
 
 test("WITHOUT a registered list, only AGENTS matches, so a failed lookup cannot widen the mint", () => {
-  // The safe direction, asserted. An empty or absent list must never mint more
-  // than the old behaviour did.
+  // An empty or absent list must never mint more than AGENTS names.
   assert.throws(() => selectAgents("claude-skills"), /no agent is scoped to 'claude-skills'/);
   assert.throws(() => selectAgents("claude-skills", []), /no agent is scoped to 'claude-skills'/);
   // And a roster namespace still resolves from AGENTS with no list at all.
@@ -96,9 +88,7 @@ test("WITHOUT a registered list, only AGENTS matches, so a failed lookup cannot 
 });
 
 test("a roster namespace resolves to its LISTED agent, never a synthesized one", () => {
-  // If a listed entry ever gains a flag or a different scope, the listed entry is
-  // what must win. Passing a registered list that also contains it must not change
-  // the answer.
+  // If a listed entry gains a flag or a different scope, the listed entry must win.
   assert.deepEqual(selectAgents("foxing", REGISTERED), selectAgents("foxing"));
   for (const ns of ROSTER) {
     assert.deepEqual(selectAgents(ns, REGISTERED), AGENTS.filter((a) => a.namespaces.includes(ns)));
@@ -111,8 +101,8 @@ test("driverFor is the one spelling of a driver", () => {
 });
 
 test("parseNamespaces reads the real response shape, and refuses a changed one", () => {
-  // The shape the namespaces tool actually returned on 2026-09-11: a bare array
-  // of rows, each with a `namespace` key alongside repos and counts.
+  // The namespaces tool's real shape: a bare array of rows, each with a `namespace`
+  // key alongside repos and counts.
   const real = JSON.stringify([
     { namespace: "capsid", repos: "[]", created_at: "2026-07-06 20:06:59", unconsolidated: 6 },
     { namespace: "claude-skills", repos: "[]", created_at: "2026-09-11 06:33:45", unconsolidated: 0 },
@@ -126,8 +116,7 @@ test("parseNamespaces reads the real response shape, and refuses a changed one",
 });
 
 test("an unknown namespace is refused, and the refusal names the known ones", () => {
-  // Matching nothing must not read as success: "minted 0 agents" and "minted the
-  // one you meant" are the same output to a caller who is not counting.
+  // Matching nothing must not read as success.
   assert.throws(() => selectAgents("foxhoud"), /no agent is scoped to 'foxhoud'/);
   assert.throws(() => selectAgents("foxhoud"), /Known:.*foxhound/);
 });
@@ -144,17 +133,15 @@ test("parseArgs reads the role selectors, and refuses the two selectors together
   assert.deepEqual(parseArgs(["--role", "auditor", "--apply"]), { apply: true, namespace: undefined, role: "auditor", roles: false });
   assert.deepEqual(parseArgs(["--roles"]), { apply: false, namespace: undefined, role: undefined, roles: true });
   assert.throws(() => parseArgs(["--role"]), /needs a value/);
-  // The two select different lists. Accepting both and preferring one would mint
-  // something the caller did not name, which is the failure --namespace already
-  // refuses for an unknown value.
+  // The two select different lists; accepting both and preferring one would mint
+  // something the caller did not name.
   assert.throws(() => parseArgs(["--namespace", "capsid", "--role", "auditor"]), /one or the other/);
 });
 
 test("the key file path is the one docs/bootstrap.md and the driver both name", () => {
-  // The driver refuses a namespace whose file is missing and names it, so this
-  // shape is a contract between three places rather than a detail of this script.
-  // Built with join() rather than matched with a regex, so it is the same answer
-  // on the Windows workstation the driver runs on and the POSIX runner CI uses.
+  // The driver refuses a namespace whose file is missing, so this shape is a
+  // contract between three places. Built with join() so it is the same answer on
+  // Windows and on the POSIX CI runner.
   const expected = (name: string) => join(homedir(), ".capsid", `agent-${name}.key`);
   assert.equal(keyPath("foxing-driver"), expected("foxing-driver"));
   for (const ns of ROSTER) {
@@ -163,10 +150,9 @@ test("the key file path is the one docs/bootstrap.md and the driver both name", 
   assert.equal(keyPath("seat"), expected("seat"));
 });
 
-// ---- the key file is created before the mint ---------------------------------
-//
-// A mint that succeeded followed by a write that failed left a live credential that
-// nothing on disk could present, under a name that can never be minted again.
+// The key file is created before the mint: a mint followed by a failed write would
+// leave a live credential nothing on disk can present, under a name that cannot be
+// minted again.
 
 function tempDir() {
   return mkdtempSync(join(tmpdir(), "mint-agents-"));

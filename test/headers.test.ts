@@ -11,13 +11,9 @@ import {
   withSecurityHeaders,
 } from "../src/headers.ts";
 
-// The offline half of batch-two item 8. The live half is gate 6 in
-// scripts/verify-live.mjs; this one runs with no network and is what CI checks
-// on every push.
-//
-// These assert the CLASSES, not a list of paths. A path list would pass happily
-// on the day a fourteenth response exit appears, which is the exact shape
-// capsid/conventions.md rules against.
+// The offline half of the security header checks; the live half is in
+// scripts/verify-live.mjs. These assert the classes, not a list of paths, because a
+// path list would still pass when a new response exit appears.
 
 test("classifySurface maps every content type capsid actually emits", () => {
   assert.equal(classifySurface("text/html;charset=utf-8"), "html");
@@ -27,8 +23,7 @@ test("classifySurface maps every content type capsid actually emits", () => {
   assert.equal(classifySurface("application/reports+json"), "json");
   assert.equal(classifySurface("text/plain;charset=UTF-8"), "other");
   assert.equal(classifySurface("text/event-stream"), "other");
-  // Measured on the live worker: the provider's /mcp 401 carries NO
-  // Content-Type at all. It must still be classified, not crash.
+  // The provider's /mcp 401 carries no Content-Type. It must still be classified.
   assert.equal(classifySurface(null), "other");
 });
 
@@ -44,7 +39,7 @@ test("HTML carries the six enforced headers", () => {
   assert.equal(h["Referrer-Policy"], "no-referrer");
   assert.equal(h["X-Frame-Options"], "DENY");
   assert.equal(h["Permissions-Policy"], PERMISSIONS_POLICY);
-  // The seventh is on trial, not enforced. Ruled 2026-08-12.
+  // The seventh is on trial, not enforced.
   assert.equal(h["Cross-Origin-Opener-Policy-Report-Only"], COOP_REPORT_ONLY);
   assert.equal(h["Cross-Origin-Opener-Policy"], undefined);
 });
@@ -65,14 +60,13 @@ test("every class gets HSTS and nosniff, with no exception", () => {
   }
 });
 
-// The load-bearing assertion for item 9. If a future change promotes either
-// trial policy to enforced without a ruling, this fails by name.
+// If a change promotes either trial policy to enforced, this fails by name.
 test("NOTHING is enforced that is meant to be Report-Only", () => {
   for (const cls of ["html", "json", "other"] as const) {
     const h = securityHeadersFor(cls);
     assert.equal(h["Cross-Origin-Opener-Policy"], undefined, `${cls} enforces COOP without a ruling`);
-    // The consent dialog sets its own enforced CSP in routes.ts and that
-    // one is ruled. This layer must never add an enforced CSP of its own.
+    // The consent dialog sets its own enforced CSP in routes.ts. This layer must
+    // never add an enforced CSP of its own.
     assert.equal(h["Content-Security-Policy"], undefined, `${cls} enforces a CSP from the header layer`);
   }
 });
@@ -86,9 +80,8 @@ test("the report-only policies point at the report sink", () => {
 });
 
 test("form-action appears in no policy this layer emits", () => {
-  // e7a0dff removed form-action from the consent CSP after it broke the OAuth
-  // redirect chain for 26 days. It must not reappear anywhere, including in a
-  // Report-Only policy that could later be promoted.
+  // form-action breaks the OAuth redirect chain. It must not appear anywhere,
+  // including in a Report-Only policy that could later be promoted.
   for (const cls of ["html", "json", "other"] as const) {
     for (const value of Object.values(securityHeadersFor(cls))) {
       assert.doesNotMatch(value, /form-action/, `${cls} names form-action`);
@@ -98,7 +91,7 @@ test("form-action appears in no policy this layer emits", () => {
 
 test("withSecurityHeaders preserves headers that are already set", () => {
   // The consent dialog's own CSP, nosniff, Referrer-Policy and X-Frame-Options
-  // must survive untouched. This is the batch-one Cache-Control rule.
+  // must survive untouched.
   const consentCsp = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'";
   const original = new Response("<!doctype html>", {
     status: 200,
@@ -121,12 +114,8 @@ test("withSecurityHeaders preserves headers that are already set", () => {
 
 test("withSecurityHeaders does not overwrite a deliberately different value", () => {
   // Every header here IS in the html set, and every value differs from the
-  // default. That combination is the only one that can detect a preserve bug.
-  //
-  // The first version of this test used a JSON response and Referrer-Policy,
-  // which is not in the json set at all, and asserted values in the html case
-  // that happened to equal the defaults. A planted "overwrite everything" bug
-  // stayed GREEN against it. Found by planting, not by review.
+  // default. That combination is the only one that can detect a preserve bug: a
+  // value equal to the default passes against an "overwrite everything" bug.
   const original = new Response("<!doctype html>", {
     status: 200,
     headers: {
@@ -171,7 +160,7 @@ test("a bodyless 302 survives the rebuild", () => {
 
 test("HSTS does not claim preload", () => {
   // preload is a submission to a browser-vendor list and is effectively
-  // irreversible. It is not something a header sweep should commit to.
+  // irreversible.
   assert.doesNotMatch(HSTS, /preload/);
   assert.match(HSTS, /max-age=31536000/);
 });

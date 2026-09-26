@@ -7,12 +7,9 @@ import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-sc
 import { ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// THE TWO TOOLS, over a real MCP connection.
-//
-// The gate under test is the one test/invariants.test.ts asserts structurally for
-// every other mutating tool: an `ro:` operator key must not reach improve_run.
-// improve_run's own SQL lives in a helper, so the source scan there cannot see it,
-// which is exactly why it is driven here instead.
+// improve_run and improve_status, over a real MCP connection. A read-only key must
+// not reach improve_run; its SQL lives in a helper the source scan in
+// test/invariants.test.ts cannot see, so the gate is driven here.
 
 const SCORES = seedScoresDoc("capsid");
 
@@ -51,10 +48,9 @@ test("A READ-ONLY KEY CANNOT REACH improve_run, and writes nothing while refusin
     const result = (await client.callTool({ name: "improve_run", arguments: { namespace: "capsid" } })) as ToolResult;
     await close();
     assert.equal(result.isError, true, "a read-only key reached improve_run");
-    // The refusal names the missing scope (src/scope.ts). It used to name the
-    // "write-grant operator key" because that was the only thing a caller could be.
+    // The refusal names the missing scope (src/scope.ts).
     assert.match(result.content[0].text, /requires the write grant/);
-    // The refusal has to come BEFORE any statement, not after the work is done.
+    // The refusal has to come before any statement.
     assert.deepEqual(d1.recorded, [], "improve_run wrote statements while refusing a read-only key");
     assert.deepEqual(kv.puts, [], "improve_run wrote to KV while refusing a read-only key");
   });

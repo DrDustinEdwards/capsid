@@ -11,63 +11,49 @@ import { TOOL_GRANTS, requiredGrant } from "../src/scope.ts";
 //   2. Every mutating tool is gated on the write grant, so an `ro:` key cannot
 //      reach it.
 //
-// Until 2026-08-13 both were enforced by nothing but review, and the failure is silent in
-// both directions: a write path with no snapshot works perfectly until someone needs the
-// snapshot, and a missing operator gate is invisible because the tool it exposes does its
+// Both failures are silent: a write path with no snapshot works until someone needs
+// the snapshot, and a missing gate is invisible because the tool it exposes does its
 // job.
 //
 // This file is the source-guard half (invariant 2, plus a structural check that
 // invariant 1's statements exist per tool). The behavioural half is
-// test/write-invariants.test.ts, which drives the real handlers against a fake D1
-// and asserts the statements are actually issued.
+// test/write-invariants.test.ts, which drives the real handlers against a fake D1.
 //
-// IT SCANS EVERY FILE UNDER src/, not just server.ts (quality audit 1.1). These
-// are properties of a TOOL, and server.ts is only where the tools happen to live
-// today. A tool registered from a new module was invisible here and the suite
-// reported green over a surface it had never read. Widening it is also what lets
-// server.ts be split later without blinding the guard.
+// It scans every file under src/, because these are properties of a tool, wherever
+// the tool is registered.
 
 const MUTATING_SQL = /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i;
-// THE GATE MOVED, AND THERE IS STILL EXACTLY ONE PER WRITE TOOL.
+// The gate is src/scope.ts, reached two ways, and a write tool has to be covered by
+// one of them:
 //
-// It used to be the line `if (!mayWrite) return fail(DENIED)`, spelled once inside
-// each write handler. It is now src/scope.ts, reached two ways, and a write tool has
-// to be covered by one of them:
-//
-//   - THE REGISTRAR, for a tool that writes whatever action it is called with. Its
+//   - The registrar, for a tool that writes whatever action it is called with. Its
 //     requirement is `write` in TOOL_GRANTS and the wrapper checks it before the
-//     handler runs, so the handler carries no gate of its own and cannot forget one.
-//   - AN INLINE ctx.scope call asking for the write grant, for the two tools whose
+//     handler runs.
+//   - An inline ctx.scope call asking for the write grant, for the two tools whose
 //     requirement depends on their action (`jobs` has a read action, `lint` has
-//     gather). The registrar cannot decide those, so they check at the point where
-//     the action is known.
+//     gather), checked at the point where the action is known.
 //
-// Asserting coverage rather than a spelling is what makes this stronger than what it
-// replaces: the old scan could only see a gate in a handler that contained its own
-// SQL, so every tool whose writes happen a module away (the queue, the improve loop,
-// every repo write) had to be trusted or named by hand.
+// Coverage is asserted rather than a spelling, so a tool whose writes happen a
+// module away (the queue, the improve loop, every repo write) is still covered.
 const SCOPE_GATE = /ctx\.scope\(\{[^}]*grant: "write"/;
 
 const BLOCKS: ToolBlock[] = toolBlocks();
 
 // scanner-rule: CLAUDE.md, one enforcement point rule (count guard for the scans in this file)
 test("the block scan found the whole tool surface", () => {
-  // Vacuity guard. If this parse broke, every assertion below would pass over an
-  // empty list and the file would be worthless while looking green.
+  // Vacuity guard: if this parse broke, every assertion below would pass over an
+  // empty list.
   assert.ok(BLOCKS.length >= 20, `expected the full tool surface, parsed ${BLOCKS.length} blocks`);
   for (const name of ["write", "delete", "move", "lint", "restore", "read", "search"]) {
     assert.ok(BLOCKS.some((b) => b.name === name), `did not parse a block for the ${name} tool`);
   }
-  // And the walk itself reached the whole directory. sourceFiles() throws below
-  // its own floor; this is the second half, asserting the scan is not reading one
-  // file that happens to contain everything today.
+  // And the walk reached the whole directory, not one file that happens to contain
+  // everything today.
   assert.ok(sourceFiles().length >= 10, "the src/ walk collapsed to a handful of files");
 });
 
-// "admin" is the write grant PLUS the admin identity, so a tool marked admin is
-// gated MORE tightly than one marked write, not less. Added 2026-09-13 with
-// register_namespace and update_namespace; without it this scan reads the stronger
-// requirement as no requirement and reports the two tools as ungated.
+// "admin" is the write grant plus the admin identity, so a tool marked admin is
+// gated more tightly than one marked write, and counts as gated here.
 const WRITE_GATED: ReadonlyArray<string> = ["write", "admin"];
 
 // scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
@@ -84,19 +70,17 @@ test("every tool whose handler contains mutating SQL is gated on the write grant
 
 // scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
 test("EVERY registered tool has a stated requirement, in both directions", () => {
-  // The registrar reads TOOL_GRANTS to decide what a call needs. A tool missing from
-  // it falls back to `write`, which is the safe direction and is still a drift: the
-  // table would be describing a surface it no longer covers. An entry with no tool is
-  // the other direction, and means a tool was renamed or removed and its requirement
-  // was left behind.
+  // A tool missing from TOOL_GRANTS falls back to `write`, safe but still drift. An
+  // entry with no tool means a tool was renamed or removed and its requirement left
+  // behind.
   const registered = BLOCKS.map((b) => b.name).sort();
   assert.deepEqual(Object.keys(TOOL_GRANTS).sort(), registered);
 });
 
 // scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
 test("a tool marked read does not mutate, which is the claim it would be dangerous to get wrong", () => {
-  // The direction that matters. A write tool wrongly marked `read` is admitted for a
-  // read-only caller by the registrar and then writes.
+  // A write tool wrongly marked `read` is admitted for a read-only caller by the
+  // registrar and then writes.
   const lying = BLOCKS.filter((b) => requiredGrant(b.name) === "read" && MUTATING_SQL.test(b.body)).map((b) => b.name);
   assert.deepEqual(lying, [], `these tools are marked read in TOOL_GRANTS and contain mutating SQL: ${lying.join(", ")}`);
   // Vacuity: the classification is not simply empty of read tools.

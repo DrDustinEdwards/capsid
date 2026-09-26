@@ -1,29 +1,23 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// THE OAUTH SURFACE, WITH A REAL KV UNDER IT.
+// The OAuth surface with a real KV under it. The provider is
+// @cloudflare/workers-oauth-provider, wired into src/index.ts; unit tests stop at the
+// handlers on either side of that wiring.
 //
-// This is the part of the Worker that has actually broken in production. The
-// 2026-08-09 incident was a consent dialog that stopped rendering, undetected for
-// 26 days, and the cause was four hops down a CSP chain nothing exercised. The
-// provider itself is @cloudflare/workers-oauth-provider, a library this repo does
-// not own, wired into src/index.ts; before this file nothing ran that wiring at
-// all, and every unit test stopped at the handlers on either side of it.
-//
-// What is asserted here is what a browser and a client actually depend on: the
-// discovery documents exist and describe this server, /register writes a real
-// client record to a real KV, the consent dialog renders with the headers that
-// broke, and the state cookie is scoped so a stolen one is not reusable.
+// Asserted here is what a browser and a client depend on: the discovery documents
+// describe this server, /register writes a real client record to a real KV, the
+// consent dialog renders with its security headers, and the state cookie is scoped
+// so a stolen one is not reusable.
 
 describe("discovery", () => {
   it("serves protected-resource and authorization-server metadata", async () => {
     const resource = await SELF.fetch("https://capsid.test/.well-known/oauth-protected-resource");
     expect(resource.status).toBe(200);
     const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
-    // THE AUDIENCE IS PINNED TO THE DEPLOYED ORIGIN, not to the request's. That is
-    // the RFC 8707 fix both audits recorded as closed, and it is exactly why this
-    // does not say capsid.test: a token minted for this server must not be
-    // presentable at whatever host happened to ask for the metadata.
+    // The audience is pinned to the deployed origin, not to the request's (RFC 8707),
+    // which is why this does not say capsid.test: a token minted for this server must
+    // not be presentable at whatever host asked for the metadata.
     expect(resourceDoc.resource).toBe("https://capsid.dustin-edwards.workers.dev/mcp");
 
     const server = await SELF.fetch("https://capsid.test/.well-known/oauth-authorization-server");
@@ -36,8 +30,7 @@ describe("discovery", () => {
     };
     expect(serverDoc.authorization_endpoint).toContain("/authorize");
     expect(serverDoc.token_endpoint).toContain("/token");
-    // PKCE is the provider default and the audits recorded it as a positive
-    // finding. A default is not a decision until something asserts it.
+    // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
   });
 });
@@ -58,9 +51,7 @@ describe("dynamic client registration", () => {
     expect(typeof client.client_id).toBe("string");
     expect(client.redirect_uris).toEqual(["https://client.example.com/callback"]);
 
-    // The record is in KV, under the provider's own prefix. This is the half the
-    // 2026-08-17 vanished-client anomaly was about, and the live gate's canary
-    // exists because nothing else could see it.
+    // The record is in KV, under the provider's own prefix.
     const keys = await env.OAUTH_KV.list({ prefix: "client:" });
     expect(keys.keys.length).toBeGreaterThan(0);
     expect(keys.keys.some((k: { name: string }) => k.name.includes(String(client.client_id)))).toBe(true);
@@ -104,14 +95,12 @@ describe("authorize", () => {
     const response = await SELF.fetch(url.toString());
     expect(response.status).toBe(200);
     const html = await response.text();
-    // The dialog itself. On 2026-08-09 this rendered blank because its own inline
-    // style and form were blocked by a policy set four hops away.
+    // The dialog itself, which a CSP set elsewhere can blank by blocking its inline
+    // style and form.
     expect(html).toContain('action="/authorize"');
     expect(html).toContain("method=\"post\"");
 
-    // The enforced CSP is set by the dialog rather than by src/headers.ts,
-    // because that policy was ruled on separately. If it stops allowing what the
-    // page itself needs, this test is where that shows.
+    // The enforced CSP is set by the dialog rather than by src/headers.ts.
     const csp = response.headers.get("content-security-policy");
     expect(csp, "the consent dialog must carry its own enforced CSP").toBeTruthy();
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
@@ -161,12 +150,9 @@ describe("the token endpoint", () => {
   });
 });
 
-// ---- F9 and F10: two guards that had only ever been called as functions ------------
-//
-// Audit 2026-09-13. Both were tested by calling the helper directly and then grepping
-// src/index.ts for the identifier. A source scan cannot see whether the RESULT is used:
-// a callback that computes the refusal and returns the client anyway keeps the name in
-// the file and both tests green. These are the same cases through real HTTP.
+// Two guards driven through real HTTP. A source scan cannot see whether a helper's
+// result is used: a callback that computes the refusal and returns the client anyway
+// keeps the name in the file.
 
 describe("F9: dynamic client registration refuses more than one non-loopback redirect", () => {
   it("PLANT: two https redirect_uris are refused at POST /register", async () => {
@@ -183,8 +169,7 @@ describe("F9: dynamic client registration refuses more than one non-loopback red
     const body = (await response.json()) as { error?: string };
     expect(body.error).toBe("invalid_redirect_uri");
 
-    // Nothing was registered. A refusal that still writes the client record is a
-    // description of the past.
+    // Nothing was registered.
     const keys = await env.OAUTH_KV.list({ prefix: "client:" });
     const names = keys.keys.map((k: { name: string }) => k.name).join(" ");
     expect(names).not.toContain("evil.example.com");
@@ -218,9 +203,8 @@ describe("F10: the Origin allowlist on /mcp", () => {
   });
 
   it("THE INNOCENT DIRECTION: no Origin and claude.ai are not refused by THIS guard", async () => {
-    // Both still fail auth, which is a different guard and a different status. What
-    // this asserts is that the origin check is not what stopped them: a guard that
-    // refuses every browser would take the whole MCP surface down.
+    // Both still fail auth, a different guard with a different status; the origin
+    // check is not what stopped them.
     const noOrigin = await SELF.fetch("https://capsid.test/mcp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

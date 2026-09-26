@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadAgentRecords, recordFor, recordsFrom, type RecordRows, type RecordSubject } from "../src/agent-record.ts";
 
-// THE AGENT RECORD: counts and rates over the outcome rows.
-//
-// A PURE FUNCTION OVER FIXTURES, on purpose. The aggregation is the part that can be
-// subtly wrong in a way nothing notices: a denominator that counts the wrong rows
-// still produces a plausible percentage. Checked against rows written here rather
-// than through a fake that would agree with whatever it was handed.
+// The agent record: counts and rates over the outcome rows, tested as a pure function
+// over fixtures, because a denominator that counts the wrong rows still produces a
+// plausible percentage.
 
 const ACTOR = "agent:capsid-driver";
 
@@ -25,8 +22,7 @@ function outcome(overrides: Partial<RecordRows["outcomes"][number]> = {}): Recor
   };
 }
 
-// A row the Worker checked. Written as a helper because "verified" is the whole
-// distinction this module turns on and spelling it out per row would bury it.
+// A row the Worker checked.
 function verified(overrides: Partial<RecordRows["outcomes"][number]> = {}) {
   return outcome({
     verified: JSON.stringify({ prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true }),
@@ -37,8 +33,8 @@ function verified(overrides: Partial<RecordRows["outcomes"][number]> = {}) {
 const EMPTY: RecordRows = { outcomes: [], jobs: [], runs: [] };
 
 test("a credential that has done nothing reports zero counts and NULL rates", () => {
-  // The asymmetry is the point. A count of zero is a fact: this agent finished no
-  // jobs. A rate of zero would be a claim it has a bad record, and it has no record.
+  // A count of zero is a fact: this agent finished no jobs. A rate of zero would claim
+  // a bad record, and it has no record.
   const record = recordFor(ACTOR, EMPTY, null);
   assert.equal(record.jobs_done, 0);
   assert.equal(record.prs_opened, 0);
@@ -67,9 +63,8 @@ test("job states come from the jobs table, because a blocked job has no outcome 
 });
 
 test("ONLY A VERIFIED FIELD FEEDS A RATE", () => {
-  // The load-bearing rule. An unverified count is still stored on its row, because it
-  // is better than nothing; a RATE built from it would be a credential grading its
-  // own work and presenting the result as measurement.
+  // An unverified count is stored on its row; a rate built from it would be a
+  // credential grading its own work.
   const record = recordFor(ACTOR, {
     ...EMPTY,
     outcomes: [
@@ -187,15 +182,14 @@ test("recordsFrom keys by agent name and fills the loop columns only for drivers
   assert.equal(records["seat"].jobs_done, 0);
   assert.equal(records["seat"].attempts_kept, null);
   // Object.create(null), so a credential named for a prototype member cannot collide
-  // with one. The same bug counts.ts fixed with Object.hasOwn.
+  // with one.
   assert.equal(Object.getPrototypeOf(records), null);
 });
 
 // scanner-rule: agent records are counts and rates, never a score (jobs as evidence, capsid/decisions.md 2026-09-11). The second half checks a comment, which is prose
 test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
-  // The rule stated as a guard. Every field is a count with a name on it or a rate
-  // with a stated denominator; the moment one number stands for all of them,
-  // somebody gates on it and the gate is an opinion nobody wrote down.
+  // Every field is a count with a name on it or a rate with a stated denominator; a
+  // single number standing for all of them would invite a gate nobody specified.
   const record = recordFor(ACTOR, EMPTY, null);
   const named = Object.keys(record);
   for (const forbidden of ["score", "rating", "trust", "grade", "rank"]) {
@@ -227,9 +221,8 @@ test("the inventory is read with grouped queries, not one set per credential", a
   assert.equal(await countFor(50), 3, "the query count grew with the number of credentials");
 });
 
-// Audit 2026-09-25, E2-30 (finding E2-L12). The merge rate's numerator needed both
-// counts verified and its denominator only the opened count, so a row whose merge
-// count was not yet verified pulled the rate down with nothing on top.
+// Numerator and denominator must use the same rows: a row whose merge count is not
+// yet verified must not pull the rate down.
 test("the merge rate counts only rows where both counts were verified", () => {
   const openedOnly = outcome({
     prs_opened: 4,

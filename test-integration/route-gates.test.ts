@@ -4,13 +4,9 @@ import { sha256Hex } from "../src/auth";
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope";
 
-// EVERY ROUTE GOES THROUGH THE ONE ENFORCEMENT POINT, DRIVEN THROUGH THE WHOLE WORKER.
-//
-// Moved from test/route-gates.test.ts (audit 2026-09-25, item C2-16). node --test cannot
-// load src/routes.ts, so that file read handleBackup's source for
-// `routeRefusal("/ops/backup", caller.agent)` and parsed defaultHandler's dispatch
-// lines. Here each request goes through SELF.fetch, the whole Worker, with the
-// credential a caller would present.
+// Every route goes through the one enforcement point, driven through the whole
+// Worker: each request goes through SELF.fetch with the credential a caller would
+// present.
 
 const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
@@ -27,8 +23,7 @@ async function dumpCount(): Promise<number> {
 }
 
 beforeEach(async () => {
-  // A driver minted for one namespace with the write grant: the caller the 2026-09-16
-  // finding describes.
+  // A driver minted for one namespace with the write grant.
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   await env.DB.prepare("DELETE FROM agents").run();

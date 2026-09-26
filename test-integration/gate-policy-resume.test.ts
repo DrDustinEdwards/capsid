@@ -6,14 +6,10 @@ import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/improve-task";
 
-// THE GATE POLICY'S RESUME PATH, AGAINST A REAL D1.
-//
-// Moved from test/gate-policy.test.ts (audit 2026-09-25, item C1-7). Those tests drove
-// resumeJob against a private stub (resumeDb) that matched SQL by regex and applied
-// the UPDATE's bound params by position. Here every job is posted, claimed and blocked
-// through the real queue, the policy document is a real signed row, and every
-// assertion reads the jobs and audit_log rows back. The classifier itself stays in
-// test/gate-policy.test.ts, where it is pure.
+// The gate policy's resume path, against a real D1. Every job is posted, claimed and
+// blocked through the real queue, the policy document is a real signed row, and every
+// assertion reads the jobs and audit_log rows back. The classifier itself is tested
+// in test/gate-policy.test.ts, where it is pure.
 
 const SECRET = "test-improve-secret";
 const SEAT_POSTER = legacyAgent("write", "github:DrDustinEdwards");
@@ -35,8 +31,7 @@ function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
 }
 
-// THE SEAT AS IT IS ACTUALLY MINTED: all namespaces, write, and can_merge, which is
-// the flag no driver holds and the one that separates the two.
+// The seat as it is minted: write, and can_merge, the flag no driver holds.
 function seatAgent(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
@@ -79,9 +74,8 @@ async function jobRow(id: string) {
   return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
 }
 
-// The mirror document write audits under the SAME action name, so there is more than
-// one audit row per transition. The one these tests are about is the job row, which is
-// the one carrying `approved`.
+// The mirror document write audits under the same action name, so this picks the job
+// row's audit entry, the one carrying `approved`.
 async function approvalRow(id: string): Promise<Record<string, unknown> | null> {
   const { results } = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1 ORDER BY id")
     .bind(`%${id}%`)
@@ -146,11 +140,8 @@ describe("the audit row of a policy resume", () => {
   });
 });
 
-// ---- ruled 2026-09-16: a driver approves its own branch push and pull request -------
-//
-// Finding 12 closed approval to everyone but the seat. The ruling reopens exactly two
-// classes to the driver that blocked the job, and nothing else: a migration, a force
-// push, somebody else's job and a command that classifies as nothing all still wait.
+// A driver may policy-approve its own branch push and pull request, and nothing else:
+// a migration, a force push, somebody else's job and an unclassified command all wait.
 
 async function driverResume(command: string, opts: { claimant?: Agent; take?: boolean } = {}) {
   const id = await blockedJob(command, opts.claimant ?? driverAgent());
@@ -230,12 +221,9 @@ describe("a driver's policy resume", () => {
   });
 });
 
-// ---- audit 2026-09-25, finding F2-6: the claimant's own plain resume ----------------
-//
-// A plain resume records "approved: <reason>" in the audit row. The driver that blocked
-// the job could write that row for itself, on a deploy, a secret or a force push, and
-// it read as a human approval. The claimant's plain resume is now refused unless it is
-// the admin or holds can_merge; everyone else who could resume before still can.
+// The claimant's own plain resume. A plain resume records "approved: <reason>" in the
+// audit row, which reads as a human approval, so the claimant may not write it for
+// itself unless it is the admin or holds can_merge. Other write-grant callers still can.
 
 async function plainResume(agent: Agent, command: string, opts: { take?: boolean } = {}) {
   const id = await blockedJob(command);
@@ -282,7 +270,7 @@ describe("a plain resume", () => {
   });
 });
 
-// ---- a migration is read at the job's own pull request head -------------------------
+// a migration is read at the job's own pull request head
 
 const JOB_PR = `https://github.com/${REPO}/pull/40`;
 const JOB_HEAD = "1234567890abcdef1234567890abcdef12345678";
@@ -326,8 +314,7 @@ describe("a migration resume", () => {
   });
 
   it("PLANT: a migration that exists only on the job's branch is read there and approved", async () => {
-    // Absent from the default branch, which is the normal state of a new migration. Read
-    // from the default branch, it was refused as unreadable.
+    // Absent from the default branch, which is the normal state of a new migration.
     const reads = githubWithMigrationAt({ head: "CREATE TABLE IF NOT EXISTS x (a TEXT);", defaultBranch: null });
     const { id, result } = await seatMigrationResume(JOB_PR);
     expect(result.ok, `the job's own migration was refused: ${JSON.stringify(result)}`).toBe(true);

@@ -6,11 +6,10 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { type DocRow, fakeD1, fakeEnv } from "./fakes.ts";
 
-// THE BLAST RADIUS OF CLOSURE is brief's task list. Nothing else filters on it, and
-// in particular the lint loop must not, because the archive/ prefix is the ONLY thing
-// that takes a document out of memory. A closed task is finished, not forgotten.
-// Driven through the tools rather than counted in the source: a closed document is
-// still in lint gather, and brief leaves a closed task out.
+// Closure affects only brief's task list. The lint loop must not filter on it,
+// because the archive/ prefix is the only thing that takes a document out of memory.
+// Driven through the tools: a closed document is still in lint gather, and brief
+// leaves a closed task out.
 async function toolOut(name: string, documents: DocRow[]) {
   const fake = fakeD1({ documents, namespaces: [{ namespace: "capsid", repos: "[]" }] });
   const server = buildServer(fakeEnv({ DB: fake.db }), "write", "test:doc-meta");
@@ -60,9 +59,7 @@ test("every valid type is accepted", () => {
   }
 });
 
-// The planted violation. Before this validation existed, a write carrying any
-// string at all was stored, and the lint loop then filtered on status, so a
-// plausible-looking value took the doc out of memory with no error anywhere.
+// An unvalidated status would be stored silently, with no error anywhere.
 test("an off-schema status is rejected and the message lists the valid set", () => {
   const error = validateDocStatus("in-progress");
   assert.ok(error, "expected 'in-progress' to be rejected");
@@ -77,10 +74,8 @@ test("an off-schema type is rejected and the message names episodic", () => {
   assert.match(error, /episodic/);
 });
 
-// 'active' is VALID, and that is the point of the fix. The 22 recova episodics
-// written as 'active' were never malformed; the defect was that the counter and
-// gather treated status as a visibility filter. Rejecting 'active' here would
-// "fix" the incident by breaking the callers instead.
+// 'active' is valid: status is not a visibility filter, and rejecting it would break
+// the callers that write it.
 
 test("status validation does not accept the empty string", () => {
   assert.ok(validateDocStatus(""), "expected the empty string to be rejected");

@@ -12,10 +12,8 @@ import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, sseChange } from "./improve-fakes.ts";
 
-// THE IMPROVE LOOP'S RECORDS SAY WHAT HAPPENED (audit 2026-09-25, E2 items 12 to 18).
-// Each test drives the public function and reads the rows, the KV keys or the
-// documents it left, because every defect here was a record that said something
-// other than what happened.
+// The improve loop's records say what happened. Each test drives the public function
+// and reads the rows, the KV keys or the documents it left.
 
 const SCORES = seedScoresDoc("capsid");
 // One minute after the improve fake's pinned datetime('now') ("2026-09-01 08:05:00"),
@@ -46,7 +44,7 @@ async function harness(opts: Partial<FakeD1Options> = {}, kvSeed: Record<string,
   return { d1, kv, env };
 }
 
-// ---- E2-12: a pull request that failed to open -------------------------------
+// A pull request that failed to open.
 
 const KEPT = { ...IMPROVE_ATTEMPT_DEFAULTS, id: "run-1-a01", run_id: "run-1", status: "kept", kept: 1, branch: "improve/run-1-a01", change_summary: "a kept change" };
 
@@ -121,7 +119,7 @@ test("a second pass over the same run does not post a duplicate job", async () =
   assert.match(String(d1.rows.improve_runs[0].note), /already has an open job titled/);
 });
 
-// ---- E2-15: which skills an attempt is offered ---------------------------------
+// Which skills an attempt is offered.
 
 test("candidateSkills offers only candidate or live skills that claim this namespace or none", async () => {
   const skill = (id: string, status: string, namespaces: string | null) => ({
@@ -139,7 +137,7 @@ test("candidateSkills offers only candidate or live skills that claim this names
   assert.deepEqual(offered.map((s) => s.id).sort(), ["anywhere", "capsid-too"]);
 });
 
-// ---- E2-16: a skill transition and its audit row -------------------------------
+// A skill transition and its audit row.
 
 const negative = (day: string) => ({
   skill: "fading", version: 1, namespace: "capsid", probe_set_version: "p1", delta: -0.1, runs: 5, verdict: "negative", evaluated_at: `2026-09-${day}`,
@@ -164,7 +162,7 @@ test("a skill transition whose audit row fails does not move the status, and the
   assert.equal(JSON.parse(String(moved[0].params)).to, "retired");
 });
 
-// ---- E2-18 (E2-L1): the budget refuses a dispatch after the push ---------------
+// The budget refuses a dispatch after the push.
 
 // The tick's own budget check passes and the dispatch-time check refuses: the budget
 // key reads as the default caps until the branch is pushed, and after that as a cap
@@ -235,7 +233,7 @@ test("an attempt refused at dispatch is marked refused-budget and the run ends",
   );
 });
 
-// ---- E2-18 (E2-L3): the meta-loop's weekly marker -------------------------------
+// The meta-loop's weekly marker.
 
 test("the meta-loop does not stamp its weekly marker on an unusable answer", async () => {
   const answer = (text: string) => ({

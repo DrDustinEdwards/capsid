@@ -7,12 +7,10 @@ import { signPolicyDocument } from "../src/policy-sign.ts";
 import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow, type FakeD1Options } from "./fakes.ts";
 
-// Audit 2026-09-25, item E1-6. Two of its three findings are driven here against the
-// node fake: dash normalization on append and patch (F1-6), and the body guard on
-// sign_policy (F1-10). The third, recording a delete's edges inside the batch (F1-5),
-// is in test-integration/delete-edges.test.ts: the fake does not evaluate the
-// INSERT ... SELECT json_group_array that records them, so only real SQLite can show
-// that an edge added just before the batch is recorded.
+// Dash normalization on append and patch, and the body guard on sign_policy.
+// Recording a delete's edges inside the batch is in
+// test-integration/delete-edges.test.ts, because only real SQLite evaluates the
+// INSERT ... SELECT json_group_array that records them.
 
 // Built from its code point so this file carries no literal wide dash.
 const EM = String.fromCharCode(0x2014);

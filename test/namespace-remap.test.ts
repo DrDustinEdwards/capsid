@@ -9,26 +9,14 @@ import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/ag
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { parseNamespaceRepos, reposForNamespace } from "../scripts/mint-agents.mjs";
 
-// THE NAMESPACE-REMAP ESCALATION, CLOSED IN BOTH DIRECTIONS (ruled 2026-09-13).
+// The namespace-remap escalation, closed in both directions. A namespace-scoped
+// driver with the write grant must not be able to call update_namespace on its own
+// namespace, add any repo the GitHub App reaches, and then read and write it.
 //
-// What was true until this commit: a namespace-scoped driver holding the write grant
-// could call update_namespace on its OWN namespace, add any repo the GitHub App
-// reaches, and then read and write it. Three facts composed into it, each defensible
-// alone:
-//
-//   1. TOOL_GRANTS.update_namespace was "write", so the registrar admitted the call.
-//   2. The handler validated the JSON shape and the single-primary rule, and said
-//      nothing about WHICH repos could be named.
-//   3. Every driver's repos axis was the "*" wildcard, because AGENTS set no repos
-//      and an omitted axis mints wide. allowsScope("*", v) is unconditionally true.
-//
-// Found the way it should be found: a driver was handed a job whose own body told it
-// to make the mapping, and refused on the rule that a job cannot widen its reach.
-//
-// Both halves are fixed and both are tested here, because either alone leaves a hole.
-// Admin-gating the mapping without narrowing the axis means one forgotten admin call
-// re-opens it. Narrowing the axis without gating the mapping leaves the boundary
-// editable by the party it binds.
+// Both halves are tested, because either alone leaves a hole: admin-gating the
+// mapping without narrowing the repos axis means one forgotten admin call re-opens it,
+// and narrowing the axis without gating the mapping leaves the boundary editable by
+// the party it binds.
 
 function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
   return {
@@ -49,13 +37,12 @@ function agentWith(scopes: Partial<AgentScopes>, admin = false): Agent {
   } as Agent;
 }
 
-// ---- half one: the mapping is admin work ---------------------------------------
+// half one: the mapping is admin work
 
 for (const tool of ["update_namespace", "register_namespace"] as const) {
   test(`${tool} refuses a minted agent and names why`, () => {
     // The driver is scoped to the namespace it is asking about and holds write, so
-    // every other axis passes. Only the admin check can refuse this call, which is
-    // what makes it a test of the admin check rather than of the namespace check.
+    // every other axis passes. Only the admin check can refuse this call.
     const refusal = checkScope(agentWith({}), {
       tool,
       namespace: "capsid",
@@ -95,13 +82,9 @@ test("the admin refusal comes BEFORE the namespace refusal", () => {
   assert.doesNotMatch(refusal, /not scoped to the 'foxhound' namespace/);
 });
 
-// ---- the registrar actually applies it, over a real connection -----------------
-//
-// THE ASSERTIONS ABOVE CALL checkScope DIRECTLY and pass `admin: true` themselves,
-// so they prove what checkScope does with that need and nothing about who builds it.
-// The link they cannot see is the registrar turning a TOOL_GRANTS entry of "admin"
-// into that need. Without this case, the table could say "admin" and the registrar
-// could ignore it, and every test above would still be green.
+// The registrar applies it, over a real connection. The assertions above call
+// checkScope directly with `admin: true`; this proves the registrar turns a
+// TOOL_GRANTS entry of "admin" into that need.
 
 interface ToolResult {
   isError?: boolean;
@@ -136,8 +119,7 @@ test("END TO END: a driver is refused update_namespace through a real connection
   assert.equal(result.isError, true, "a driver remapped its own namespace");
   const text = result.content.map((c) => c.text).join("");
   assert.match(text, /admin only/);
-  // The exact escalation, named in the refusal so the next reader of a log knows
-  // what was attempted rather than only that something was refused.
+  // The refusal names the escalation, so a log shows what was attempted.
   assert.match(text, /widen itself/);
 });
 
@@ -151,7 +133,7 @@ test("END TO END: a driver is refused register_namespace through a real connecti
 });
 
 test("END TO END: the admin still maps namespaces", async () => {
-  // The fix must not lock the admin out of the tool it moved behind the admin gate.
+  // The admin is not locked out of the tool.
   const result = await callAs(adminAgent("DrDustinEdwards"), "update_namespace", {
     namespace: "capsid",
     repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
@@ -165,12 +147,11 @@ test("END TO END: the admin still maps namespaces", async () => {
   assert.deepEqual(out.repos, [{ repo: "DrDustinEdwards/capsid", label: "primary" }]);
 });
 
-// ---- half two: the repos axis refuses independently of the mapping -------------
+// half two: the repos axis refuses independently of the mapping
 
 test("PLANT: a driver narrowed to its own repos is refused on another, remap or not", () => {
-  // This is the case the escalation ran through. Even if the mapping named
-  // capsid-backups, a driver whose axis lists only its own repo is refused here,
-  // and the refusal does not depend on what the mapping says.
+  // Even if the mapping named capsid-backups, a driver whose axis lists only its own
+  // repo is refused here, whatever the mapping says.
   const driver = agentWith({ repos: ["DrDustinEdwards/capsid"] });
   assert.equal(checkScope(driver, { tool: "read_repo_file", namespace: "capsid", repo: "DrDustinEdwards/capsid", grant: "read" }), null);
   const refusal = checkScope(driver, {
@@ -184,9 +165,7 @@ test("PLANT: a driver narrowed to its own repos is refused on another, remap or 
 });
 
 test("the wildcard still means everything for an agent legitimately scoped to it", () => {
-  // The fix must not break the seat, the auditor or the reviewer, none of which are
-  // narrowed. A change that closed the hole by making "*" stop working would be a
-  // different and larger change than the one ruled.
+  // The seat, the auditor and the reviewer are not narrowed, so "*" must keep working.
   assert.equal(allowsScope("*", "DrDustinEdwards/anything"), true);
   const seat = agentWith({ namespaces: "*", repos: "*" });
   assert.equal(checkScope(seat, { tool: "read_repo_file", namespace: "foxhound", repo: "DrDustinEdwards/recova", grant: "read" }), null);
@@ -199,7 +178,7 @@ test("a list containing the literal star is NOT a wildcard on the read path", ()
   assert.equal(allowsScope(["*"], "DrDustinEdwards/capsid"), false);
 });
 
-// ---- the mint script derives the axis rather than copying the mapping ----------
+// the mint script derives the axis rather than copying the mapping
 
 const NAMESPACES_RESPONSE = JSON.stringify([
   { namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) },

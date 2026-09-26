@@ -6,15 +6,9 @@ import { buildServer } from "../src/server.ts";
 import { BRIEF_BUDGET } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// BRIEF REPORTED A TRIM IT DID NOT MAKE (AUDIT-2026-09-16.md).
-//
-// The trim pushed "N episodic bodies" and "N task bodies" whenever the running total
-// was still over budget, with N = 0 included, and it trimmed task bodies even when
-// the three documents it never trims were over budget on their own, so the trim
-// could not bring the packet under the budget. On 2026-09-17 the live capsid brief returned
-// ["0 episodic bodies", "18 task bodies"] over a floor of 48,361 characters against
-// a 40,000 budget: one claim was false and the other removed 1,065 characters for
-// nothing.
+// The brief's trim reports only sections it actually cut, and does not cut task
+// bodies when the three documents it never trims are over budget on their own,
+// because then no trim can bring the packet under the budget.
 
 async function brief(opts: FakeD1Options) {
   const fake = fakeD1(opts);
@@ -96,8 +90,7 @@ test("a packet under budget carries neither field", async () => {
 });
 
 test("provenance costs ONE audit_log query however many documents the brief carries", async () => {
-  // Was one per document: 3 + open tasks + episodics. On the live capsid brief of
-  // 2026-09-17 (18 open tasks, 0 episodics) that was 21 of its 28 queries.
+  // One query, not one per document.
   const tasks = Array.from({ length: 6 }, (_, i) => task(i, 10));
   const { out, reads } = await brief({
     documents: [...floor(10), ...tasks, episodic(0, 10), episodic(1, 10)],
@@ -110,7 +103,7 @@ test("provenance costs ONE audit_log query however many documents the brief carr
     links: [{ from_ns: "capsid", from_path: "core.md", type: "references", to_ns: "capsid", to_path: "decisions.md" }],
   });
   // The edge reads run in the same Promise.all as the section reads, so a slip there
-  // drops core_links silently. Moved here from test/bounded-reads.test.ts.
+  // drops core_links silently.
   assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
   assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 3 documents, 4 section reads and 1 provenance`);

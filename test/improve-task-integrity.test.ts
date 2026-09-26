@@ -11,20 +11,16 @@ import {
 } from "../src/improve-task.ts";
 import { deriveScoreKey, deriveBackupCredentialKey } from "../src/improve-scorer.ts";
 
-// TASK DOCUMENT INTEGRITY, audit 2026-09-07 (Opus 3.1 and 22.1, Grok MAJOR 8).
+// Task document integrity.
 //
 // `improve/run-<day>.md` is executed by the /improve driver as its instruction
-// list, on a machine holding five repo clones, local git and a Capsid write
-// grant. Before this it was an ordinary D1 row: any write-grant key could author
-// it, with no flag and an audit row indistinguishable from any other edit.
-//
-// Every assertion here fails against 257e625: `improveWriteRefusal` returned null
-// for the task prefix, and none of the signing surface existed.
+// list, on a machine holding repo clones, local git and a Capsid write grant, so an
+// ordinary write-grant key must not be able to author it.
 
 const ROOT = "test-root-secret-not-a-real-one";
 const ACTOR = "improve-loop";
 
-// ---- the write guard --------------------------------------------------------
+// the write guard
 
 test("PLANT: the ordinary write tool refuses a task document without the flag", async () => {
   const path = runTaskPath("2026-09-07");
@@ -42,7 +38,7 @@ test("the guard matches the prefix, not one spelling of the day", async () => {
   for (const day of ["2026-01-01", "2026-12-31", "9999-99-99"]) {
     assert.ok(await improveWriteRefusal("foxing", runTaskPath(day), null, "x", false), `run-${day} must be guarded`);
   }
-  // And it is a prefix match, so a future naming scheme under it is covered too.
+  // A prefix match, so a future naming scheme under it is covered too.
   assert.ok(await improveWriteRefusal("foxing", `${RUN_TASK_PREFIX}anything.md`, null, "x", false));
 });
 
@@ -51,7 +47,7 @@ test("an ordinary document is still writable, so the guard is not a blanket refu
   assert.equal(await improveWriteRefusal("capsid", "improve/archive/r1/a1.md", null, "x", false), null);
 });
 
-// ---- the signature ----------------------------------------------------------
+// the signature
 
 test("the task key is derived under its own context, unequal to the other two", async () => {
   const task = await deriveTaskKey(ROOT);
@@ -114,11 +110,11 @@ test("PLANT: a document signed with the wrong key is refused", async () => {
   assert.match(String(verdict.ok === false && verdict.reason), /does not match its body/);
 });
 
-// ---- the provenance half ----------------------------------------------------
+// the provenance half
 
 test("PLANT: a correctly signed document whose actor is not the loop is refused", async () => {
-  // This is the half that survives the signing key leaking: a leaked key still
-  // cannot make D1 record a different actor on the audit row.
+  // This half survives the signing key leaking: a leaked key still cannot make D1
+  // record a different actor on the audit row.
   const signed = await signTaskBody(ROOT, "# improve run\n\nDo the thing.\n");
   for (const actor of ["github:DrDustinEdwards", "opkey:abc123def456", null]) {
     const verdict = await verifyTaskDoc(ROOT, signed, actor, ACTOR);

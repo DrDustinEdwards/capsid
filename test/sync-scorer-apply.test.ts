@@ -6,13 +6,9 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { MARKER, REPORT, WORKFLOW, sync } from "../scripts/sync-scorer.mjs";
 
-// --apply VALIDATES EVERY TARGET BEFORE IT WRITES ANY, and writes only into a clean
-// tree on the branch it checked.
-//
-// Before this, --apply compared committed refs but wrote into whatever each clone had
-// checked out, over uncommitted edits, one target at a time. A refusal on the second
-// target left the first one written while the message said "Nothing was written."
-// Built with real git, because the defect is in how the copier treats a working tree.
+// --apply validates every target before it writes any, and writes only into a clean
+// tree on the branch it checked. Built with real git, because what is tested is how
+// the copier treats a working tree.
 
 function git(dir: string, ...args: string[]): string {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
@@ -41,7 +37,7 @@ function repo(root: string, name: string, branch: string, wf: string, report: st
 }
 
 test("a refusal on any target leaves every target unwritten, and a clean run writes them all", () => {
-  // ONE FIXTURE, THREE RUNS, because each repo costs two git inits and this file runs
+  // One fixture, three runs, because each repo costs two git inits and this file runs
   // inside the unit suite's 60-second budget.
   const root = mkdtempSync(join(tmpdir(), "sync-scorer-apply-"));
   try {
@@ -80,8 +76,7 @@ test("a refusal on any target leaves every target unwritten, and a clean run wri
     );
     assert.equal(readFileSync(join(a, WORKFLOW), "utf8"), OLD_WF, "a was written although b refused");
 
-    // 3. The innocent case: both clean and on the branch that was checked. A guard
-    // that refuses the ordinary run is a guard somebody removes.
+    // 3. The innocent case: both clean and on the branch that was checked.
     git(b, "checkout", "-q", "main");
     assert.equal(sync({ source, targets, apply: true, log: quiet }), 2);
     for (const dir of [a, b]) {
