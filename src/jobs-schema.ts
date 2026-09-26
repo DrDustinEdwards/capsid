@@ -27,7 +27,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // Four hours. Long enough for a driver to do a real job without heartbeating on a
