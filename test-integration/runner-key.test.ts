@@ -6,6 +6,9 @@ import { defaultScopes } from "../src/agents-schema";
 import { b64urlEncode, b64urlFromBytes } from "../src/encoding";
 import { OIDC_ISSUER, exchangeRunnerKey } from "../src/runner-key";
 import { SEAT_START_CAP_KEY, SEAT_START_KEY, setSeatStart, startSeatSession } from "../src/seat-start";
+import { buildServer } from "../src/server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 // /ops/runner-key against real D1, with GitHub's OIDC key set and REST API stubbed at
 // fetch and a real RSA key signing the token (capsid/research/design-seat-session-
@@ -227,6 +230,43 @@ describe("the exchange", () => {
     const refused = await exchange(id, await signJwt(goodClaims()));
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.status).toBe(503);
+  });
+});
+
+// The path the canary session takes: a key minted by the exchange, resolved as the
+// Worker resolves it, then the jobs TOOL, so the registrar and the handler's own scope
+// re-check both run. The first two hardened canary runs claimed nothing because the
+// handler's re-check refused a bound key; claimJob called directly, as the tests above
+// do, never passes through it.
+describe("a minted key works its job through the jobs tool", () => {
+  async function jobsTool(agent: Agent, args: Record<string, unknown>) {
+    const server = buildServer(jobsEnv(), agent);
+    const client = new Client({ name: "runner-key", version: "1.0.0" });
+    const [c, s] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(s), client.connect(c)]);
+    const result = (await client.callTool({ name: "jobs", arguments: { namespace: "capsid", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
+    await client.close();
+    return { isError: result.isError === true, text: result.content[0]?.text ?? "" };
+  }
+
+  it("claims and heartbeats its own job, and is refused another", async () => {
+    github();
+    const id = await startedJob("through the tool");
+    const minted = await exchange(id, await signJwt(goodClaims()));
+    if (!minted.ok) throw new Error(minted.refusal);
+    const agent = (await resolveAgent(bearer(minted.key), env, NOW))!.agent;
+
+    const claimed = await jobsTool(agent, { action: "claim", id });
+    expect(claimed.isError, claimed.text.slice(0, 200)).toBe(false);
+    const row = await env.DB.prepare("SELECT status, claimed_by FROM jobs WHERE id = ?1").bind(id).first<{ status: string; claimed_by: string }>();
+    expect(row).toEqual({ status: "claimed", claimed_by: agent.actor });
+
+    const beat = await jobsTool(agent, { action: "heartbeat", id });
+    expect(beat.isError, beat.text.slice(0, 200)).toBe(false);
+
+    const other = await jobsTool(agent, { action: "claim", id: "job_000000000000" });
+    expect(other.isError).toBe(true);
+    expect(other.text).toMatch(/bound to job/);
   });
 });
 
