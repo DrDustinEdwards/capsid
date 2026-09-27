@@ -12,13 +12,20 @@ import { describe, expect, it } from "vitest";
 
 describe("discovery", () => {
   it("serves protected-resource and authorization-server metadata", async () => {
-    const resource = await SELF.fetch("https://capsid.test/.well-known/oauth-protected-resource");
+    // workers-oauth-provider 1.x serves RFC 9728 metadata for the canonical resource at
+    // its path-suffixed location only, on the canonical host, and every 401 challenge
+    // names that URL. Measured 2026-09-27: 0.10.3 also answered the bare
+    // /.well-known/oauth-protected-resource and any host; 1.1.0 answers 404 to both.
+    const resource = await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource/mcp");
     expect(resource.status).toBe(200);
     const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
-    // The audience is pinned to the deployed origin, not to the request's (RFC 8707),
-    // which is why this does not say capsid.test: a token minted for this server must
-    // not be presentable at whatever host asked for the metadata.
+    // The audience is pinned to the deployed origin (RFC 8707): a token minted for this
+    // server must not be presentable at whatever host asked for the metadata.
     expect(resourceDoc.resource).toBe("https://capsid.dustin-edwards.workers.dev/mcp");
+    expect(resourceDoc.authorization_servers).toEqual(["https://capsid.dustin-edwards.workers.dev"]);
+    expect((await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource")).status).toBe(404);
+    const challenge = await SELF.fetch("https://capsid.dustin-edwards.workers.dev/mcp", { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } });
+    expect(challenge.headers.get("WWW-Authenticate")).toContain('resource_metadata="https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource/mcp"');
 
     const server = await SELF.fetch("https://capsid.test/.well-known/oauth-authorization-server");
     expect(server.status).toBe(200);
@@ -32,6 +39,8 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
+    // DCR is still how existing connections registered, until the design's PR 4.
+    expect(serverDoc.registration_endpoint).toContain("/register");
   });
 });
 
