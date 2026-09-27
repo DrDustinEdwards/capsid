@@ -56,6 +56,9 @@ The hardened run must also show that:
 - the commit and the push both succeed
 - the Claude Code Action step completes after the lockdown
 - the `runner-key-minted` audit row lists the claim names the token carried, including whether it carries `job_workflow_ref`
+- the `SESSION_DIAG` line, printed by the step after the Action, shows the `capsid` MCP server connected, `capsid_jobs_loaded: true`, and no denied tools. That step prints only server names and statuses, denied tool names and booleans. The Action's own log hides the transcript.
+
+The session runs with `ENABLE_TOOL_SEARCH: "false"`, so its MCP tools load at startup. Left unset, Claude Code defers every MCP tool behind `ToolSearch`, which the allowed tools do not name. The first hardened run (actions run 36286555290) logged in to Capsid and never claimed its job for that reason.
 
 harden-runner is in `audit` for these runs. Its job summary links to StepSecurity's insights page, which lists every endpoint the run reached, and that list becomes `allowed-endpoints` when the policy moves to `block`. After the move, the hardened run is repeated in block mode.
 
