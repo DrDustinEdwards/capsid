@@ -21,7 +21,9 @@ The seat (a chat acting only through Capsid) can start a Claude Code session on 
   1. `step-security/harden-runner`, pinned, controls egress for every process on the runner. It is in `block`, with the endpoint list below. It carries no sudo option, because its pre hook runs before every step.
   2. The sandbox's prerequisites: bubblewrap and socat, and Anthropic's bwrap AppArmor profile for Ubuntu 24.04. The step then proves bwrap can create namespaces.
   3. A lockdown step that does what harden-runner's `disable-sudo-and-containers` does (step-security/agent `sudo.go`): it stops and purges Docker and containerd, removes their sockets, and empties every `/etc/sudoers.d` file, sudo last. It then checks that sudo and the sockets are gone and stops the job if not.
-  4. The key exchange, checkout, `npm ci`, and the session.
+  4. The key exchange, checkout, `npm ci`, a hook tripwire, and the session.
+
+  The session runs with every hook off: `--settings '{"disableAllHooks":true}'` in `claude_args`. Flag settings outrank a repo's project and local settings, including a repo that sets `disableAllHooks` to false. Repo hooks run outside the sandbox, so a push hook that runs lint would run code the session wrote. CI runs those checks instead. The tripwire is a local-scope hook of our own, written after checkout, that only touches a file in the runner temp folder. The report step fails the run if the file exists. On Claude Code 2.1.283, the pinned Action's version, the tripwire was seen firing without the flag and staying silent with it (capsid job_5765103c658f, 2026-09-27). The prompt also tells the session that the runner checkout is its own clone and not a main checkout a repo's CLAUDE.md reserves for another session. The dustinedwards block-mode canary (actions run 36308451713) stopped before its first commit because of that rule.
 
   In the session, every Bash command runs in Claude Code's sandbox. The sandbox is required (`failIfUnavailable`), has no unsandboxed retry, allows network to `github.com` only (`strictAllowlist`), denies writes to the repo's `.git/config` and `.git/hooks`, and denies reads of the runner temp folder, where the Capsid key is. So the session pushes with `git push origin <branch>`, since `-u` would write the config.
 
@@ -56,7 +58,7 @@ The hardened run must also show that:
 - the commit and the push both succeed
 - the Claude Code Action step completes after the lockdown
 - the `runner-key-minted` audit row lists the claim names the token carried, including whether it carries `job_workflow_ref`
-- the `SESSION_DIAG` line, printed by the step after the Action, shows the `capsid` MCP server connected, `capsid_jobs_loaded: true`, and no denied tools. That step prints only server names and statuses, denied tool names and booleans. The Action's own log hides the transcript.
+- the `SESSION_DIAG` line, printed by the step after the Action, shows the `capsid` MCP server connected, `capsid_jobs_loaded: true`, `hooks_fired: false`, and no denied tools. That step prints only server names and statuses, denied tool names, booleans, and in `denied_bash` the first two words of each denied Bash command, each word replaced by `<redacted>` unless it looks like a command or flag word. The Action's own log hides the transcript.
 
 The session runs with `ENABLE_TOOL_SEARCH: "false"`, so its MCP tools load at startup. Left unset, Claude Code defers every MCP tool behind `ToolSearch`, which the allowed tools do not name. The first hardened run (actions run 36286555290) logged in to Capsid and never claimed its job for that reason.
 

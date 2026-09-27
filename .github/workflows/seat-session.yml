@@ -195,6 +195,23 @@ jobs:
           git config core.hooksPath /dev/null
           git config core.fsmonitor false
 
+      # A hook of our own at local scope, the strongest scope below the --settings flag
+      # the session gets, that only touches a file. The session runs with every hook off
+      # (--settings disableAllHooks below), so the file must not exist afterwards; the
+      # report step fails the run if it does. Seen firing without the flag and silent
+      # with it, on Claude Code 2.1.283 (capsid job_5765103c658f, 2026-09-27). Refuses
+      # a checkout that already carries the file rather than overwriting it, and keeps
+      # it out of git status.
+      - name: Plant a hook tripwire
+        run: |
+          set -euo pipefail
+          if [ -e .claude/settings.local.json ]; then echo "::error::the checkout already has .claude/settings.local.json"; exit 1; fi
+          mkdir -p .claude
+          cat > .claude/settings.local.json <<'EOF'
+          {"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"touch ${{ runner.temp }}/hook-tripwire"}]}],"UserPromptSubmit":[{"hooks":[{"type":"command","command":"touch ${{ runner.temp }}/hook-tripwire"}]}],"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"touch ${{ runner.temp }}/hook-tripwire"}]}]}}
+          EOF
+          echo ".claude/settings.local.json" >> .git/info/exclude
+
       # The subscription token and nothing else: an ANTHROPIC_API_KEY in the
       # environment would outrank it and bill the API.
       - uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
@@ -234,6 +251,11 @@ jobs:
           # key exchange wrote the Capsid key: sandbox reads default to everywhere, and
           # the Read deny above binds the file tools only. Absolute paths, because in
           # user settings a relative sandbox path resolves against ~/.claude.
+          # Hooks are off through --settings in claude_args instead, because flag settings
+          # outrank project and local settings (code.claude.com/docs/en/hooks) and a repo
+          # could set disableAllHooks false at either. Repo hooks run outside the sandbox,
+          # so a push hook running lint would run code the session wrote; CI runs those
+          # checks instead.
           settings: |
             {
               "permissions": {
@@ -270,11 +292,14 @@ jobs:
           claude_args: >-
             --mcp-config ${{ runner.temp }}/capsid-mcp.json
             --max-turns 200
+            --settings '{"disableAllHooks":true}'
             --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit -m:*),Bash(git switch -c:*),Bash(git push origin:*),Bash(git rev-parse:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
             --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*),Bash(git -c:*),Bash(git config:*),Bash(git -C:*),Bash(git push * --force*),Bash(git push * -f*),Bash(git push * +*),Bash(git push * --delete*)"
           prompt: |
             You are a Capsid driver session the seat started on GitHub's runners, for the
             capsid namespace, working job ${{ steps.job.outputs.id }} and nothing else.
+            This runner checkout is your own clone. It is not the main checkout that
+            CLAUDE.md or a ruling reserves for another session; work here, on a new branch.
 
             0. If the capsid `jobs` tool (mcp__capsid__jobs) is not available, stop at once
                and do nothing else: the job cannot be claimed without it.
@@ -300,18 +325,25 @@ jobs:
       # It reads the Action's execution file, a JSON array of Agent SDK messages: from
       # the init message, each MCP server's name and status and whether the Capsid jobs
       # tool loaded; from the result, the names of denied tools (SDKPermissionDenial's
-      # tool_name, never its tool_input). Shapes from @anthropic-ai/claude-agent-sdk
-      # 0.3.283 sdk.d.ts, the version the pinned Action uses. Always runs, so a failed
-      # session is still explained.
+      # tool_name) and, for a denied Bash call, the command's first two words and nothing
+      # after them. A word that does not look like a command or flag word (a letter first,
+      # at most 24 characters of letters, digits, dot, dash and underscore) prints as
+      # <redacted>, so a token or key in either position cannot reach the log. Shapes from
+      # @anthropic-ai/claude-agent-sdk 0.3.283 sdk.d.ts, the version the pinned Action
+      # uses. Then whether the hook tripwire fired, which fails the run. Always runs, so a
+      # failed session is still explained.
       - name: Report the session's MCP servers and denied tools, names only
         if: always()
         env:
           EXECUTION_FILE: ${{ steps.session.outputs.execution_file }}
+          TRIPWIRE: ${{ runner.temp }}/hook-tripwire
         run: |
           node -e '
             const fs = require("fs");
             const name = (v) => String(v).slice(0, 64);
-            const out = { init_seen: false, result_seen: false, capsid_jobs_loaded: false, mcp_servers: [], denied_tools: [], read_error: false };
+            const word = (w) => (/^-{0,2}[A-Za-z][A-Za-z0-9._-]{0,23}$/.test(w) ? w : "<redacted>");
+            const firstTwo = (command) => String(command ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word).join(" ");
+            const out = { init_seen: false, result_seen: false, capsid_jobs_loaded: false, mcp_servers: [], denied_tools: [], denied_bash: [], hooks_fired: false, read_error: false };
             let messages = [];
             try {
               messages = JSON.parse(fs.readFileSync(process.env.EXECUTION_FILE, "utf8"));
@@ -326,8 +358,13 @@ jobs:
               }
               if (m && m.type === "result") {
                 out.result_seen = true;
-                out.denied_tools = (Array.isArray(m.permission_denials) ? m.permission_denials : []).map((d) => name(d.tool_name));
+                const denials = Array.isArray(m.permission_denials) ? m.permission_denials : [];
+                out.denied_tools = denials.map((d) => name(d.tool_name));
+                out.denied_bash = denials.filter((d) => d && d.tool_name === "Bash").map((d) => firstTwo(d.tool_input && d.tool_input.command));
               }
             }
+            if (!process.env.TRIPWIRE) { console.error("::error::no TRIPWIRE path, so whether a hook ran cannot be checked"); process.exit(1); }
+            out.hooks_fired = fs.existsSync(process.env.TRIPWIRE);
             console.log("SESSION_DIAG " + JSON.stringify(out));
+            if (out.hooks_fired) { console.error("::error::a hook ran in the session, so disableAllHooks did not hold"); process.exit(1); }
           '
