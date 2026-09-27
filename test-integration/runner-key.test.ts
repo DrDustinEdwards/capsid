@@ -138,6 +138,12 @@ describe("the exchange", () => {
     expect(resolved?.agent.job).toBe(id);
     const claimed = await claimJob(jobsEnv(), resolved!.agent, NOW, { namespace: "capsid", id });
     expect(claimed.ok, claimed.refusal).toBe(true);
+    // The audit row names the claims the token carried, and no claim's value, so the
+    // canary can say which of workflow_ref and job_workflow_ref a real run sends.
+    const audit = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'runner-key-minted'").first<{ params: string }>();
+    const params = JSON.parse(audit!.params);
+    expect(params.claims_present).toEqual(Object.keys(goodClaims()).sort());
+    expect(audit!.params).not.toContain("refs/heads/master");
   });
 
   it("issues one key per start", async () => {
