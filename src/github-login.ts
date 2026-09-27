@@ -22,7 +22,19 @@ export interface GithubLoginFlow {
   kvPrefix: string;
   // Appended to each state refusal, telling the user where to start again.
   restartHint: string;
+  // "console" uses the console's own OAuth App (GITHUB_CONSOLE_CLIENT_ID), whose one
+  // callback host is the console's. Absent, the MCP login's app.
+  client?: "console";
 }
+
+// The OAuth App a flow logs in with, or null when its credentials are not set.
+function oauthClient(env: Env, flow: GithubLoginFlow): { id: string; secret: string } | null {
+  const id = flow.client === "console" ? env.GITHUB_CONSOLE_CLIENT_ID : env.GITHUB_CLIENT_ID;
+  const secret = flow.client === "console" ? env.GITHUB_CONSOLE_CLIENT_SECRET : env.GITHUB_CLIENT_SECRET;
+  return id && secret ? { id, secret } : null;
+}
+
+const UNCONFIGURED = "the GitHub login for this page is not configured (GITHUB_CONSOLE_CLIENT_ID, GITHUB_CONSOLE_CLIENT_SECRET)";
 
 export interface GithubUser {
   id: number;
@@ -51,11 +63,13 @@ export async function startGithubLogin(
   stored: string,
   extraCookies: string[] = []
 ): Promise<Response> {
+  const client = oauthClient(env, flow);
+  if (!client) return refusal(UNCONFIGURED, 503);
   const stateToken = crypto.randomUUID();
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, stored, { expirationTtl: STATE_TTL_SECONDS });
   const origin = new URL(request.url).origin;
   const target = new URL(GITHUB_AUTHORIZE_URL);
-  target.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
+  target.searchParams.set("client_id", client.id);
   target.searchParams.set("redirect_uri", `${origin}${flow.callbackPath}`);
   target.searchParams.set("scope", "read:user");
   target.searchParams.set("state", stateToken);
@@ -81,6 +95,8 @@ export async function completeGithubLogin<T>(
   parse: (stored: string) => T
 ): Promise<GithubLoginResult<T>> {
   const fail = (message: string, status: number): GithubLoginResult<T> => ({ ok: false, response: refusal(message, status) });
+  const client = oauthClient(env, flow);
+  if (!client) return fail(UNCONFIGURED, 503);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const stateToken = url.searchParams.get("state");
@@ -106,8 +122,8 @@ export async function completeGithubLogin<T>(
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: env.GITHUB_CLIENT_ID,
-      client_secret: env.GITHUB_CLIENT_SECRET,
+      client_id: client.id,
+      client_secret: client.secret,
       code,
       redirect_uri: `${url.origin}${flow.callbackPath}`,
     }),

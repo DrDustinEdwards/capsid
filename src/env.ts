@@ -9,6 +9,15 @@ export interface Env {
   OPERATOR_KEY_HASH: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  // A second GitHub OAuth App for the console's login. The console is served on
+  // capsid.dustinedwards.info behind Cloudflare Access, and an OAuth App accepts one
+  // callback host, which the MCP login's workers.dev host already holds.
+  GITHUB_CONSOLE_CLIENT_ID?: string;
+  GITHUB_CONSOLE_CLIENT_SECRET?: string;
+  // The console's Cloudflare Access application: https://<team>.cloudflareaccess.com
+  // and its AUD tag (src/access-jwt.ts). Unset closes the console.
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
   COOKIE_ENCRYPTION_KEY: string;
   ADMIN_GITHUB_LOGIN: string;
   // GitHub App. No pinned installation id: resolved per owner and repo.

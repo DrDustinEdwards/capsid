@@ -90,6 +90,11 @@ export default defineConfig({
           ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
           GITHUB_CLIENT_ID: "test-oauth-client-id",
           GITHUB_CLIENT_SECRET: "test-oauth-client-secret",
+          // The console's Cloudflare Access application (src/access-jwt.ts). A fake team
+          // domain nothing resolves, so a console request without a token is refused
+          // before any certs fetch.
+          ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
+          ACCESS_AUD: "sample-aud-tag",
           BUILD_SHA: "integration",
         },
       },

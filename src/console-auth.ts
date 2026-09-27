@@ -25,6 +25,7 @@ const CONSOLE_LOGIN: GithubLoginFlow = {
   cookiePath: "/console",
   kvPrefix: "capsid:console-state:",
   restartHint: "Open /console again.",
+  client: "console",
 };
 
 export interface ConsoleUser {

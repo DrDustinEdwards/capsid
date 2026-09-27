@@ -28,6 +28,8 @@ function env(overrides: Record<string, unknown> = {}) {
     ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
     GITHUB_CLIENT_ID: "gh-client",
     GITHUB_CLIENT_SECRET: "gh-secret",
+    GITHUB_CONSOLE_CLIENT_ID: "gh-console-client",
+    GITHUB_CONSOLE_CLIENT_SECRET: "gh-console-secret",
     ...overrides,
   } as never;
 }

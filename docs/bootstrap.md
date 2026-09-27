@@ -43,6 +43,10 @@ nothing starts fine and answers healthy while every read errors.
 ```
 npx wrangler secret put GITHUB_APP_PRIVATE_KEY   # the .pem contents
 npx wrangler secret put GITHUB_CLIENT_SECRET     # the OAuth app secret
+npx wrangler secret put GITHUB_CONSOLE_CLIENT_ID      # the console's own OAuth app (docs/console.md)
+npx wrangler secret put GITHUB_CONSOLE_CLIENT_SECRET
+npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareaccess.com
+npx wrangler secret put ACCESS_AUD               # the console Access application's AUD tag
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys
 npx wrangler secret put ANTHROPIC_API_KEY        # only for the fully automated mode

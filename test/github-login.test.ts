@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { handleConsoleCallback, readConsoleSession, startConsoleLogin } from "../src/console-auth.ts";
+import { startGithubLogin } from "../src/github-login.ts";
 import { fakeKv } from "./fakes.ts";
 
 // The console's callback through the shared GitHub login (src/github-login.ts). The
@@ -24,6 +25,8 @@ function env(overrides: Record<string, unknown> = {}) {
     ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
     GITHUB_CLIENT_ID: "gh-client",
     GITHUB_CLIENT_SECRET: "gh-secret",
+    GITHUB_CONSOLE_CLIENT_ID: "gh-console-client",
+    GITHUB_CONSOLE_CLIENT_SECRET: "gh-console-secret",
     ...overrides,
   } as never;
 }
@@ -66,10 +69,25 @@ test("the start sets the console state cookie on Path=/console and sends GitHub 
   const res = await startConsoleLogin(new Request(`${ORIGIN}/console`), e, "/console");
   const location = new URL(String(res.headers.get("Location")));
   assert.equal(location.searchParams.get("redirect_uri"), `${ORIGIN}/console/callback`);
+  // The console's own OAuth App, whose one callback host is the console's.
+  assert.equal(location.searchParams.get("client_id"), "gh-console-client");
   assert.equal(location.searchParams.get("scope"), "read:user");
   const setCookie = setCookies(res);
   assert.equal(setCookie.length, 1);
   assert.match(setCookie[0], /^capsid_console_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/console; Max-Age=600$/);
+});
+
+test("a flow that names no client logs in with the MCP flow's OAuth App, not the console's", async () => {
+  const flow = { callbackPath: "/callback", stateCookie: "s", cookiePath: "/", kvPrefix: "k:", restartHint: "again" };
+  const res = await startGithubLogin(new Request(`${ORIGIN}/authorize`), env(), flow, "{}");
+  assert.equal(new URL(String(res.headers.get("Location"))).searchParams.get("client_id"), "gh-client");
+});
+
+test("the console login is refused with 503, naming what is missing, when its OAuth App is not configured", async () => {
+  const e = env({ GITHUB_CONSOLE_CLIENT_ID: undefined });
+  const res = await startConsoleLogin(new Request(`${ORIGIN}/console`), e, "/console");
+  assert.equal(res.status, 503);
+  assert.match(await res.text(), /GITHUB_CONSOLE_CLIENT_ID/);
 });
 
 test("the admin completes the login: session cookie set, state cookie cleared, state consumed", async () => {
@@ -80,6 +98,8 @@ test("the admin completes the login: session cookie set, state cookie cleared, s
   assert.equal(res.status, 302);
   assert.equal(res.headers.get("Location"), "/console/json");
   assert.equal(exchanges[0]?.get("redirect_uri"), `${ORIGIN}/console/callback`);
+  assert.equal(exchanges[0]?.get("client_id"), "gh-console-client");
+  assert.equal(exchanges[0]?.get("client_secret"), "gh-console-secret");
   const cookies = setCookies(res);
   assert.equal(cookies.length, 2);
   assert.equal(cookies[1], "capsid_console_state=; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=0");

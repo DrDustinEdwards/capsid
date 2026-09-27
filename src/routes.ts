@@ -36,6 +36,7 @@ import {
   handleConsole,
   handleConsoleJson,
 } from "./console";
+import { throughAccess } from "./access-jwt";
 import { handleConsoleAction } from "./console-actions";
 import { handleConsoleCallback } from "./console-auth";
 import { clearStateCookie, completeGithubLogin, type GithubLoginFlow, startGithubLogin, STATE_TTL_SECONDS } from "./github-login";
@@ -572,10 +573,12 @@ export const defaultHandler = {
     if (url.pathname === "/authorize" && request.method === "GET") return handleAuthorizeGet(request, env);
     if (url.pathname === "/authorize" && request.method === "POST") return handleAuthorizePost(request, env);
     if (url.pathname === "/callback") return handleCallback(request, env);
-    if (url.pathname === CONSOLE_PATH && request.method === "GET") return handleConsole(request, env);
-    if (url.pathname === CONSOLE_PATH && request.method === "POST") return handleConsoleAction(request, env);
-    if (url.pathname === CONSOLE_JSON_PATH && request.method === "GET") return handleConsoleJson(request, env);
-    if (url.pathname === CONSOLE_CALLBACK_PATH) return handleConsoleCallback(request, env, new Date());
+    // Every console route answers only through Cloudflare Access (src/access-jwt.ts);
+    // test/access-jwt.test.ts requires throughAccess on each one, and on no other.
+    if (url.pathname === CONSOLE_PATH && request.method === "GET") return throughAccess(request, env, () => handleConsole(request, env));
+    if (url.pathname === CONSOLE_PATH && request.method === "POST") return throughAccess(request, env, () => handleConsoleAction(request, env));
+    if (url.pathname === CONSOLE_JSON_PATH && request.method === "GET") return throughAccess(request, env, () => handleConsoleJson(request, env));
+    if (url.pathname === CONSOLE_CALLBACK_PATH) return throughAccess(request, env, () => handleConsoleCallback(request, env, new Date()));
 
     return new Response("not found", { status: 404 });
   },
