@@ -100,7 +100,16 @@ function allowedList(flag: "allowedTools" | "disallowedTools"): string[] {
 
 // The settings input is JSON in a YAML block scalar; the Action writes it to user
 // scope, where the sandbox credential keys are honoured.
-function settings(): { permissions?: { deny?: string[] }; sandbox?: { credentials?: { envVars?: { name: string; mode: string }[] } } } {
+interface SandboxSettings {
+  enabled?: boolean;
+  failIfUnavailable?: boolean;
+  allowUnsandboxedCommands?: boolean;
+  network?: { allowedDomains?: string[]; strictAllowlist?: boolean };
+  filesystem?: { denyWrite?: string[] };
+  credentials?: { envVars?: { name: string; mode: string }[] };
+}
+
+function settings(): { permissions?: { deny?: string[] }; sandbox?: SandboxSettings } {
   const m = /^ {10}settings: \|\n((?: {12}.*\n)+)/m.exec(CODE);
   assert.ok(m, "no settings block parsed");
   return JSON.parse(m[1]);
@@ -136,7 +145,8 @@ const GIT_ALLOWED = new Set([
   "Bash(git add:*)",
   "Bash(git commit -m:*)",
   "Bash(git switch -c:*)",
-  "Bash(git push -u origin:*)",
+  // No -u: it records the upstream in .git/config, which the sandbox denies writes to.
+  "Bash(git push origin:*)",
   "Bash(git rev-parse:*)",
 ]);
 
@@ -162,4 +172,88 @@ test("the credential variables are named in the sandbox deny list", () => {
   for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "DEFAULT_WORKFLOW_TOKEN"]) {
     assert.ok(envVars.some((v) => v.name === name && v.mode === "deny"), `${name} is not denied`);
   }
+});
+
+// capsid/research/design-seat-session-hardening.md, PR 4, ruled C (capsid/decisions.md,
+// 2026-09-26, "sandbox and sudo conflict ruled C"): harden-runner watches egress with
+// sudo still on, the sandbox's prerequisites go in, then our own step removes sudo and
+// containers before any repo code or the session runs.
+
+// The workflow's steps in order, each as its own text, so a property can be asserted
+// of one step rather than of the whole file.
+function steps(): string[] {
+  const body = CODE.slice(CODE.indexOf("\n    steps:\n"));
+  return body.split(/\n {6}- /).slice(1);
+}
+
+const stepIndex = (marker: RegExp) => steps().findIndex((s) => marker.test(s));
+
+test("harden-runner is the first step, pinned, and carries no sudo option", () => {
+  const all = steps();
+  assert.ok(all.length > 5, `only ${all.length} steps parsed`);
+  assert.match(all[0], /^uses: step-security\/harden-runner@[0-9a-f]{40} # v\d+\.\d+\.\d+/, "harden-runner is not the first step, pinned by sha");
+  // Its pre hook would remove sudo before the sandbox setup could run.
+  assert.doesNotMatch(all[0], /disable-sudo/, "harden-runner carries a sudo option");
+  // Audit until the PR 5 canary records the endpoint list; PR 5 flips it to block.
+  assert.match(all[0], /^ {10}egress-policy: audit$/m);
+});
+
+test("the steps run in the ruled order: harden-runner, sandbox setup, lockdown, key exchange, checkout, session", () => {
+  const order = [
+    /^uses: step-security\/harden-runner@/,
+    /^name: Validate the job id/,
+    /^name: Install the sandbox's prerequisites/,
+    /^name: Remove sudo and containers/,
+    /^name: Exchange this run's OIDC token/,
+    /^uses: actions\/checkout@/,
+    /^name: Install dependencies/,
+    /^uses: anthropics\/claude-code-action@/,
+  ].map(stepIndex);
+  for (const [i, at] of order.entries()) assert.ok(at >= 0, `step ${i} of the ruled order is missing`);
+  for (let i = 1; i < order.length; i++) assert.ok(order[i] > order[i - 1], `step ${i} of the ruled order runs before step ${i - 1}`);
+});
+
+test("the sandbox setup installs bubblewrap and socat and writes Anthropic's bwrap profile as published", () => {
+  const setup = steps()[stepIndex(/^name: Install the sandbox's prerequisites/)] ?? "";
+  assert.match(setup, /apt-get install -y --no-install-recommends bubblewrap socat/);
+  // The profile text from code.claude.com/docs/en/sandboxing, Ubuntu 24.04 and later.
+  const profile = ["abi <abi/4.0>,", "include <tunables/global>", "", "profile bwrap /usr/bin/bwrap flags=(unconfined) {", "  userns,", "  include if exists <local/bwrap>", "}"];
+  const body = /sudo tee \/etc\/apparmor\.d\/bwrap > \/dev\/null <<'EOF'\n([\s\S]*?)\n {10}EOF\n/.exec(setup);
+  assert.ok(body, "the bwrap profile heredoc is not there");
+  assert.deepEqual(body[1].split("\n").map((l) => l.replace(/^ {10}/, "")), profile, "the bwrap profile differs from Anthropic's");
+  assert.match(setup, /sudo systemctl reload apparmor/);
+  // Proves namespaces work before anything relies on them.
+  assert.match(setup, /bwrap --ro-bind \/ \/ --dev \/dev --unshare-all true/);
+});
+
+test("the lockdown mirrors disable-sudo-and-containers, removes every sudo grant last, and fails closed", () => {
+  const lock = steps()[stepIndex(/^name: Remove sudo and containers/)] ?? "";
+  assert.match(lock, /set -euo pipefail/);
+  for (const line of [
+    /sudo systemctl disable --now docker\.socket docker\.service containerd\.service/,
+    /sudo rm -f \/var\/run\/docker\.sock \/run\/containerd\/containerd\.sock/,
+    /sudo apt-get purge -y docker-ce docker-ce-cli containerd\.io/,
+    /sudo rm -rf \/var\/lib\/docker \/var\/lib\/containerd/,
+    /sudo rm -f \/etc\/apt\/sources\.list\.d\/docker\.list \/etc\/apt\/keyrings\/docker\.asc/,
+  ]) {
+    assert.match(lock, line, `the lockdown lacks ${line}`);
+  }
+  // Every file under sudoers.d, in one sudo call, after the container teardown that
+  // needs sudo.
+  const revoke = lock.indexOf(`sudo sh -c 'for f in /etc/sudoers.d/*; do : > "$f"; done'`);
+  assert.ok(revoke > lock.indexOf("apt-get purge"), "sudo is not revoked last");
+  // Then checked, and a lockdown that did not take stops the job.
+  assert.match(lock, /if sudo -n true 2>\/dev\/null; then[^\n]*exit 1/);
+  assert.match(lock, /\/var\/run\/docker\.sock[^\n]*exit 1|exit 1[^\n]*\/var\/run\/docker\.sock/);
+});
+
+test("the sandbox is required, allows only github.com, and denies writes to the repo's git config and hooks", () => {
+  const sandbox = settings().sandbox ?? {};
+  assert.equal(sandbox.enabled, true);
+  assert.equal(sandbox.failIfUnavailable, true, "a sandbox that cannot start would fall back to unsandboxed Bash");
+  assert.equal(sandbox.allowUnsandboxedCommands, false, "Claude could retry a command outside the sandbox");
+  assert.deepEqual(sandbox.network?.allowedDomains, ["github.com"]);
+  assert.equal(sandbox.network?.strictAllowlist, true);
+  // Absolute: in user settings a relative sandbox path resolves against ~/.claude.
+  assert.deepEqual(sandbox.filesystem?.denyWrite, ["${{ github.workspace }}/.git/config", "${{ github.workspace }}/.git/hooks"]);
 });
