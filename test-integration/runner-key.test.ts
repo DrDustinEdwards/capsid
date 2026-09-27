@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { blockJob, claimJob, completeJob, failJob, heartbeatJob, postJob, supersedeJob } from "../src/jobs";
+import { blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, postJob, releaseJob, supersedeJob } from "../src/jobs";
 import { legacyAgent, resolveAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { b64urlEncode, b64urlFromBytes } from "../src/encoding";
@@ -230,6 +230,27 @@ describe("revoked when the job's run ends", () => {
   }
   const revokedAt = async (id: string) =>
     (await env.DB.prepare("SELECT revoked_at FROM agents WHERE job_id = ?1").bind(id).first<{ revoked_at: string | null }>())?.revoked_at ?? null;
+
+  // Seat review of #174: a job put back to the queue, by release or by an expired lease,
+  // is queued again, and the resolver accepts a bound key on a queued job for 20
+  // minutes after the key was minted. So the key has to be revoked by the move itself.
+  it("is revoked when the job is released, inside the pending window", async () => {
+    github();
+    const released = await claimedBound("released");
+    expect((await releaseJob(jobsEnv(), seatAgent(), NOW, released.id, "runner not coming back")).ok).toBe(true);
+    expect(await revokedAt(released.id), "release left the key live").not.toBeNull();
+    expect(await resolveAgent(bearer(released.key), env, NOW), "a released job's key still resolves").toBeNull();
+  });
+
+  it("is revoked when the job's lease expires, inside the pending window", async () => {
+    github();
+    const expired = await claimedBound("expired");
+    await env.DB.prepare("UPDATE jobs SET lease_expires = ?2 WHERE id = ?1").bind(expired.id, new Date(NOW.getTime() - 1000).toISOString()).run();
+    const { requeued } = await expireJobLeases(jobsEnv(), NOW);
+    expect(requeued).toContain(expired.id);
+    expect(await revokedAt(expired.id), "an expired lease left the key live").not.toBeNull();
+    expect(await resolveAgent(bearer(expired.key), env, NOW), "an expired job's key still resolves").toBeNull();
+  });
 
   it("stays live across a heartbeat", async () => {
     github();
