@@ -1,0 +1,57 @@
+name: seat session canary (weakened)
+
+# The weakened half of the seat-session canary (capsid/research/design-seat-session-
+# hardening.md, PR 5). It runs test/canary/probe.canary.ts with none of the session's
+# layers: no Claude sandbox, no lockdown, harden-runner in audit, and fake credentials
+# planted where the real ones would be. Every exposure must show here, or the probe
+# cannot see the thing the hardened run claims to prevent, and that run's clean report
+# would mean nothing.
+#
+# It holds no secret and names no environment, and its token can only read. Planted
+# values are fakes, so nothing real is exposed when the probe finds them. Started by
+# hand only (workflow_dispatch, which needs write access to the repo).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  weakened:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Plant fake credentials where the session's real ones would be
+        run: |
+          printf '%s' '{"mcpServers":{"capsid":{"type":"http","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer canary-not-a-key"}}}}' > "$RUNNER_TEMP/capsid-mcp.json"
+
+      - name: Run the probe with no sandbox and no lockdown
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: canary-not-a-token
+          GITHUB_TOKEN: canary-not-a-token
+        run: node --import ./test/resolve-ts.mjs --test test/canary/probe.canary.ts | tee "$RUNNER_TEMP/probe.log"
+
+      # Every exposure the hardened run must show false has to be true here.
+      # oidc_request_in_env stays false: this job has no id-token permission.
+      - name: Every exposure must be visible without the layers
+        run: |
+          node -e '
+            const fs = require("fs");
+            const line = fs.readFileSync(process.env.RUNNER_TEMP + "/probe.log", "utf8").split("\n").find((l) => l.includes("CANARY_RESULT "));
+            if (!line) { console.error("the probe printed no CANARY_RESULT line"); process.exit(1); }
+            const result = JSON.parse(line.slice(line.indexOf("CANARY_RESULT ") + "CANARY_RESULT ".length));
+            const mustBeTrue = ["example_fetch", "example_curl", "raw_socket_1111", "github_curl", "oauth_token_in_env", "github_token_in_env", "proc_environ_leaks", "key_file_readable", "git_config_writable", "git_hooks_writable", "sudo_available", "docker_reachable"];
+            const blind = mustBeTrue.filter((k) => result[k] !== true);
+            console.log("CANARY_WEAKENED " + JSON.stringify(result));
+            if (blind.length) { console.error("the probe could not see: " + blind.join(", ")); process.exit(1); }
+          '

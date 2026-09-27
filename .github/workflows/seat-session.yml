@@ -177,8 +177,10 @@ jobs:
           # (failIfUnavailable), with no unsandboxed retry, network to github.com only
           # for git push, and no writes to the repo's git config or hooks. The sandbox
           # already protects those two by default; they are named here so the rule is
-          # stated rather than inherited. Absolute paths, because in user settings a
-          # relative sandbox path resolves against ~/.claude.
+          # stated rather than inherited. No reads of the runner temp folder, where the
+          # key exchange wrote the Capsid key: sandbox reads default to everywhere, and
+          # the Read deny above binds the file tools only. Absolute paths, because in
+          # user settings a relative sandbox path resolves against ~/.claude.
           settings: |
             {
               "permissions": {
@@ -199,7 +201,8 @@ jobs:
                   "strictAllowlist": true
                 },
                 "filesystem": {
-                  "denyWrite": ["${{ github.workspace }}/.git/config", "${{ github.workspace }}/.git/hooks"]
+                  "denyWrite": ["${{ github.workspace }}/.git/config", "${{ github.workspace }}/.git/hooks"],
+                  "denyRead": ["${{ runner.temp }}"]
                 },
                 "credentials": {
                   "envVars": [
