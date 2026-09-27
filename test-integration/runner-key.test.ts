@@ -53,6 +53,7 @@ function goodClaims(overrides: Record<string, unknown> = {}): Record<string, unk
     repository_id: String(REPO_ID),
     ref: "refs/heads/master",
     job_workflow_ref: `${REPO}/.github/workflows/seat-session.yml@refs/heads/master`,
+    workflow_ref: `${REPO}/.github/workflows/seat-session.yml@refs/heads/master`,
     environment: "seat",
     event_name: "repository_dispatch",
     runner_environment: "github-hosted",
@@ -157,6 +158,11 @@ describe("the exchange", () => {
       ["ref", "refs/heads/feature"],
       ["job_workflow_ref", `${REPO}/.github/workflows/other.yml@refs/heads/master`],
       ["job_workflow_ref", `${REPO}/.github/workflows/seat-session.yml@refs/heads/feature`],
+      // GitHub documents job_workflow_ref for reusable workflows and workflow_ref for
+      // every job, so both are pinned, and a token missing either is refused.
+      ["workflow_ref", `${REPO}/.github/workflows/other.yml@refs/heads/master`],
+      ["workflow_ref", undefined],
+      ["job_workflow_ref", undefined],
       ["environment", "production"],
       ["event_name", "workflow_dispatch"],
       ["runner_environment", "self-hosted"],
