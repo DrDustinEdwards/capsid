@@ -180,9 +180,10 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   const text = flat(sql);
   if (!isImproveStatement(text)) return { handled: false };
 
-  // The backup dump, which reads every table with a bare `SELECT * FROM <table>`.
-  // Handled first so the per-table readers do not mistake it for a filtered read.
-  const dump = /^SELECT \* FROM (improve_\w+)$/i.exec(text);
+  // The backup dump, which reads every table with a bare `SELECT * FROM <table>`, the
+  // name quoted as @dustinedwards/d1-dump writes it. Handled first so the per-table
+  // readers do not mistake it for a filtered read.
+  const dump = /^SELECT \* FROM "?(improve_\w+)"?$/i.exec(text);
   if (dump) {
     // documents is excluded: this branch only matches improve_* tables, and including
     // it would widen the result type to the read-only shape the recommend branch uses.
@@ -315,8 +316,8 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
 
   // The whole-table read the nightly dump makes, matched before the filtered ones so
   // a `SELECT *` is not answered by a branch that expects bound parameters.
-  if (/^SELECT \* FROM skill_(evaluations|edits|failures)/i.test(text)) {
-    const table = /FROM (skill_\w+)/i.exec(text)?.[1] as "skill_evaluations" | "skill_edits" | "skill_failures";
+  if (/^SELECT \* FROM "?skill_(evaluations|edits|failures)"?$/i.test(text)) {
+    const table = /FROM "?(skill_\w+)/i.exec(text)?.[1] as "skill_evaluations" | "skill_edits" | "skill_failures";
     return { handled: true, results: rows[table] };
   }
 
