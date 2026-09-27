@@ -192,6 +192,9 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
         start_audit_id: start.id,
         run_id: claims.run_id ?? null,
         run_attempt: claims.run_attempt ?? null,
+        // The names only, never a value: what the canary reads to say which claims a
+        // real run carries (job_workflow_ref is documented for reusable workflows only).
+        claims_present: Object.keys(claims).sort(),
       }),
     ]);
   } catch (err) {
