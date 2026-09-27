@@ -10,7 +10,14 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   COOKIE_ENCRYPTION_KEY: string;
+  // The console's login until the design's PR 3 moves it to Access.
   ADMIN_GITHUB_LOGIN: string;
+  // The MCP login's upstream: Cloudflare Access for SaaS (OIDC), src/access-login.ts.
+  // Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody.
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_SAAS_CLIENT_ID?: string;
+  ACCESS_SAAS_CLIENT_SECRET?: string;
+  ADMIN_EMAIL?: string;
   // GitHub App. No pinned installation id: resolved per owner and repo.
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
@@ -37,8 +44,9 @@ export interface Env {
 // Everything except the holdout bucket and the credentials that could mint read access to it.
 export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID">;
 
+// A grant's props: the email Access verified at sign-in. Grants issued before the move
+// to Access carry { id, login, name } from GitHub instead, fail the per-request email
+// check, and the client signs in again once.
 export interface Props extends Record<string, unknown> {
-  id: number;
-  login: string;
-  name: string | null;
+  email: string;
 }

@@ -64,7 +64,13 @@ The operator hash is removed once every machine runs as its folder's driver agen
 
 Two gated endpoints:
 
-1. **OAuth (`/mcp`)** for human clients. The client discovers the server via `.well-known`, registers dynamically, and goes through `/authorize` and a one-time approval screen to GitHub. On return the user is checked against `ADMIN_GITHUB_LOGIN`: the GitHub username, or the numeric user id (find it at `https://api.github.com/users/<login>`). Any other account gets a 403. The check runs again on every `/mcp` request. An admitted admin holds a full write grant.
+1. **OAuth (`/mcp`)** for human clients. The client discovers the server via `.well-known` and registers by Client ID Metadata Document (CIMD) or, until DCR is removed, dynamically. It then goes through `/authorize` and a one-time approval screen to Cloudflare Access for SaaS (OIDC), the app "Capsid" on the `dustinedwards.cloudflareaccess.com` team (capsid/research/design-capsid-access-login.md, since 2026-09-27; GitHub was the upstream before).
+   - **The sign-in** uses PKCE and a nonce. `src/access-jwt.ts` verifies the ID token: RS256 against the app's `/jwks` by kid, `iss` the app's issuer, `aud` its client id, `exp`, `nbf`, the nonce, and `email_verified` not false.
+   - **The admin check:** the email must equal `ADMIN_EMAIL` exactly (trimmed, no case folding). Any other identity gets a 403, and the check runs again on every `/mcp` request.
+   - **Grants from before the switch** carry a GitHub login and no email, fail that check, and the client signs in again once.
+   - **The audit actor** is `access:<email>`. The console still signs in with GitHub until the design's PR 3.
+   - An admitted admin holds a full write grant.
+   - **Settings:** `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`. Any unset closes the sign-in with a 503.
 2. **Agent and operator keys (`/ops/mcp`)** for agents and cron, gated by sha256-hashed bearer keys. An agent key resolves to its row. Failing that, `OPERATOR_KEY_HASH` holds comma-separated hashes: a plain entry is a write key, an entry prefixed `ro:` is read-only and is denied every tool `TOOL_GRANTS` marks write: write, delete, move, restore, register_namespace, update_namespace, repo writes, PR management, improve_run, agents, lint finalize, and every `jobs` action but `list`. Revoke by removing a hash; the others keep working. The OAuth library never sees this route.
 
 Login and repo access use two different GitHub credentials: an OAuth App for login (OAuth Apps cannot mint installation tokens) and a GitHub App for repo access. Keep both.

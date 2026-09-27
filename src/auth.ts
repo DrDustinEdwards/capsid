@@ -65,6 +65,22 @@ export async function operatorIdentity(
   return { grant: null, fingerprint: null };
 }
 
+// The admin, by the email Access verified: equal to ADMIN_EMAIL exactly, after trimming,
+// with no case folding. An unset ADMIN_EMAIL admits nobody.
+export function isAdminEmail(env: { ADMIN_EMAIL?: string }, email: string): boolean {
+  const admin = (env.ADMIN_EMAIL ?? "").trim();
+  if (!admin) return false;
+  return timingSafeEqual(email.trim(), admin);
+}
+
+// A grant's props on /mcp, checked on every request: only a grant whose email Access
+// verified as ADMIN_EMAIL passes. A grant from before the move to Access carries a
+// GitHub login and no email, and fails here, so its client signs in again once.
+export function adminGrantEmail(env: { ADMIN_EMAIL?: string }, props: unknown): string | null {
+  const email = props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
+  return typeof email === "string" && isAdminEmail(env, email) ? email : null;
+}
+
 export function isAdminUser(
   env: { ADMIN_GITHUB_LOGIN?: string },
   user: { id: number | string; login: string }
