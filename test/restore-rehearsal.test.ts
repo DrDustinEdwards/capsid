@@ -234,7 +234,7 @@ test("a dump carrying _schema.json that names every migrations table restores, m
 
 test("a _schema.json missing a migrations table is refused, naming it", () => {
   withDump((dir) => {
-    writeSchema(dir, TABLES.filter((t) => t !== "jobs"));
+    writeSchema(dir, TABLES.filter((t: string) => t !== "jobs"));
     assert.throws(() => rehearse(dir, MIGRATIONS), /_schema\.json does not name every migrations table: jobs/);
   });
 });
