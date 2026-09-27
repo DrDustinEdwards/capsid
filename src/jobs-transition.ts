@@ -64,12 +64,13 @@ export function refuse(action: string, refusal: string): JobResult {
 
 export const leaseUntil = (now: Date) => new Date(now.getTime() + JOB_LEASE_SECONDS * 1000).toISOString();
 
-// A runner key bound to this job (migrations/0021) is revoked in the same batch as a
-// transition that ends the job's run: done, failed, blocked, superseded. The resolver
-// already refuses a bound key once its job leaves the claimed state, so this is the
-// record, not the only lock: `agents` action "list" shows when the key stopped. A job
-// returned to the queue (release, an expired lease) is left to the resolver, which
-// refuses the key once the pending-start window has passed.
+// A runner key bound to this job (migrations/0021) is revoked in the same batch as
+// every transition that ends the run that held it: done, failed, blocked, superseded,
+// and a return to the queue by release or an expired lease. The queue returns are the
+// ones the resolver alone does not cover: it accepts a bound key on a queued job for
+// the pending-start window, so a key minted less than 20 minutes earlier would claim
+// its job again (seat review of #174). For the others this is the record of when the
+// key stopped, which `agents` action "list" shows.
 export function revokeBoundKeys(db: D1Database, jobId: string): D1PreparedStatement {
   return db.prepare("UPDATE agents SET revoked_at = datetime('now') WHERE job_id = ?1 AND revoked_at IS NULL").bind(jobId);
 }

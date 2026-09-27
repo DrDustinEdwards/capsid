@@ -47,6 +47,7 @@ interface OidcClaims {
   repository_id?: string;
   ref?: string;
   job_workflow_ref?: string;
+  workflow_ref?: string;
   environment?: string;
   event_name?: string;
   runner_environment?: string;
@@ -159,6 +160,11 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
     ["repository_id", String(facts.id)],
     ["repository", repo.full],
     ["ref", `refs/heads/${facts.default_branch}`],
+    // GitHub's OIDC reference documents workflow_ref for every job and job_workflow_ref
+    // "for jobs using a reusable workflow". seat-session.yml calls none, so both must
+    // name it; a token missing either is refused rather than trusted on the other. The
+    // PR 5 canary reports which of the two a real run carries.
+    ["workflow_ref", `${repo.full}/${SEAT_SESSION_WORKFLOW}@refs/heads/${facts.default_branch}`],
     ["job_workflow_ref", `${repo.full}/${SEAT_SESSION_WORKFLOW}@refs/heads/${facts.default_branch}`],
     ["environment", "seat"],
     ["event_name", "repository_dispatch"],

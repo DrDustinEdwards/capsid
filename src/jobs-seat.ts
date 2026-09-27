@@ -162,6 +162,8 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
     ).bind(id, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env.DB, job, "job-released", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
+    // Back in the queue, a bound key would resolve again inside its pending window.
+    revokeBoundKeys(env.DB, id),
   ]);
   if (!won) {
     const moved = await readJob(env.DB, id);
