@@ -18,7 +18,7 @@ The seat (a chat acting only through Capsid) can start a Claude Code session on 
 - **The runner's key.** Minted per start by `/ops/runner-key` (`src/runner-key.ts`); no long-lived runner key exists. The exchange verifies the OIDC token against GitHub's key set and pins `repository_id`, `repository`, `ref` and `job_workflow_ref` (this workflow on the default branch) against the repo as GitHub reports it, plus `environment: seat`, `event_name: repository_dispatch` and `runner_environment: github-hosted`. It needs a `job-seat-started` row for the job in the last 20 minutes, and issues one key per start. The key is an agent of kind `session` named `runner-<job>-s<start>`: one namespace, one repo, read and write, the tools `jobs`, `read`, `list`, `search`, `brief`, `open_pr` and `improve_status`, no flags. It resolves only while its job is live for it and works that job only (`docs/auth.md`), and it is revoked in the same batch as a complete, fail, block, seat fail or supersede. It cannot merge, and auto-merge refuses its pull requests because they are not a driver's. A job a runner blocked resumes to the queue, since the runner's session ended when it blocked; the seat starts a new session for it, which buys a new key.
 - **Never deploy.** The runner's `GITHUB_TOKEN` has `contents: write` only; both default branches have a ruleset requiring a pull request; no Cloudflare secret is passed; deploy commands and `gh` are refused tools.
 - **The runner itself** (ruled C, capsid/decisions.md 2026-09-26). The steps run in this order, and a test fails if the order changes:
-  1. `step-security/harden-runner`, pinned, watches egress for every process on the runner. It is in `audit` until the canary run records the endpoint list, then `block`. It carries no sudo option, because its pre hook runs before every step.
+  1. `step-security/harden-runner`, pinned, controls egress for every process on the runner. It is in `block`, with the endpoint list below. It carries no sudo option, because its pre hook runs before every step.
   2. The sandbox's prerequisites: bubblewrap and socat, and Anthropic's bwrap AppArmor profile for Ubuntu 24.04. The step then proves bwrap can create namespaces.
   3. A lockdown step that does what harden-runner's `disable-sudo-and-containers` does (step-security/agent `sudo.go`): it stops and purges Docker and containerd, removes their sockets, and empties every `/etc/sudoers.d` file, sudo last. It then checks that sudo and the sockets are gone and stops the job if not.
   4. The key exchange, checkout, `npm ci`, and the session.
@@ -60,7 +60,25 @@ The hardened run must also show that:
 
 The session runs with `ENABLE_TOOL_SEARCH: "false"`, so its MCP tools load at startup. Left unset, Claude Code defers every MCP tool behind `ToolSearch`, which the allowed tools do not name. The first hardened run (actions run 36286555290) logged in to Capsid and never claimed its job for that reason.
 
-harden-runner is in `audit` for these runs. Its job summary links to StepSecurity's insights page, which lists every endpoint the run reached, and that list becomes `allowed-endpoints` when the policy moves to `block`. After the move, the hardened run is repeated in block mode.
+The first passing hardened run (actions run 36296347138) ran harden-runner in `audit`. Its post-step log lists every host the run reached and the process that reached it, and that list, less two hosts, is now `allowed-endpoints` with the policy in `block`:
+
+| host | reached by |
+| --- | --- |
+| `capsid.dustin-edwards.workers.dev` | node (the key exchange), claude (MCP) |
+| `github.com` | git (checkout), node (setup-node, the Action's setup), claude (the sandbox proxy: `git push`, the probe's `github_curl`) |
+| `api.github.com` | node (setup-node), bun and gh (the Action) |
+| `release-assets.githubusercontent.com` | node (setup-node, the Action's setup) |
+| `registry.npmjs.org` | node (`npm ci`), bun (the Action's install) |
+| `claude.ai`, `downloads.claude.ai` | curl (the Action's Claude Code installer), claude (its update check) |
+| `api.anthropic.com` | claude |
+| `azure.archive.ubuntu.com:80`, `packages.microsoft.com`, `esm.ubuntu.com`, `motd.ubuntu.com` | apt (the sandbox setup's `apt-get update`) |
+
+GitHub's Actions hosts (`*.actions.githubusercontent.com`, for the OIDC token and the cache, and `productionresultssa*.blob.core.windows.net`) are allowed by the harden-runner agent itself. The two hosts left out:
+
+- `1.1.1.1:443`, the probe's raw socket. The sandbox refused it (`raw_socket_1111: false`); in block mode the runner refuses it too.
+- `http-intake.logs.us5.datadoghq.com`, reached by Claude Code itself. Claude Code's docs say its metrics go "to Anthropic and to third-party logging infrastructure" without naming the host. The Action step sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which turns off auto-updates, telemetry and error reporting (code.claude.com/docs/en/env-vars), so the session has no reason to reach it.
+
+The hardened run is repeated once in block mode before the switch may go on. It must show every hardened value in the probe table and the four checks after it, and harden-runner's post-step log must show no connection to the metrics host.
 
 ## Dustin's setup steps
 
