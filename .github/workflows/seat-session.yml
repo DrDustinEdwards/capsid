@@ -161,6 +161,14 @@ jobs:
       # The subscription token and nothing else: an ANTHROPIC_API_KEY in the
       # environment would outrank it and bill the API.
       - uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
+        id: session
+        # MCP tools load at startup. "Unset, Claude Code defers all MCP tools by
+        # default ... `false` loads all tools upfront" (code.claude.com/docs/en/env-vars,
+        # ENABLE_TOOL_SEARCH, read 2026-09-27). Deferred, the Capsid tools sit behind
+        # ToolSearch, which the allowed tools do not name: the first canary run
+        # (actions run 36286555290) logged in to Capsid and never claimed its job.
+        env:
+          ENABLE_TOOL_SEARCH: "false"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The job's own token. Without it the Action exchanges an OIDC token for a
@@ -223,6 +231,8 @@ jobs:
             You are a Capsid driver session the seat started on GitHub's runners, for the
             capsid namespace, working job ${{ steps.job.outputs.id }} and nothing else.
 
+            0. If the capsid `jobs` tool (mcp__capsid__jobs) is not available, stop at once
+               and do nothing else: the job cannot be claimed without it.
             1. Call the capsid MCP tool `jobs` with action "claim", namespace "capsid" and
                id "${{ steps.job.outputs.id }}". If the claim is refused, stop.
             2. Read CLAUDE.md and follow it. Read the job body the claim returned, and any
@@ -239,3 +249,40 @@ jobs:
                only ids from offered_skills.
             7. If the work cannot be done, `fail` the job with the reason.
             Everything you print appears in this public repo's Actions log.
+
+      # What the session could reach, in names and booleans only, because the Action's
+      # own log hides the transcript (show_full_output: false) and this log is public.
+      # It reads the Action's execution file, a JSON array of Agent SDK messages: from
+      # the init message, each MCP server's name and status and whether the Capsid jobs
+      # tool loaded; from the result, the names of denied tools (SDKPermissionDenial's
+      # tool_name, never its tool_input). Shapes from @anthropic-ai/claude-agent-sdk
+      # 0.3.283 sdk.d.ts, the version the pinned Action uses. Always runs, so a failed
+      # session is still explained.
+      - name: Report the session's MCP servers and denied tools, names only
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.session.outputs.execution_file }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const name = (v) => String(v).slice(0, 64);
+            const out = { init_seen: false, result_seen: false, capsid_jobs_loaded: false, mcp_servers: [], denied_tools: [], read_error: false };
+            let messages = [];
+            try {
+              messages = JSON.parse(fs.readFileSync(process.env.EXECUTION_FILE, "utf8"));
+            } catch {
+              out.read_error = true;
+            }
+            for (const m of Array.isArray(messages) ? messages : []) {
+              if (m && m.type === "system" && m.subtype === "init") {
+                out.init_seen = true;
+                out.capsid_jobs_loaded = Array.isArray(m.tools) && m.tools.includes("mcp__capsid__jobs");
+                out.mcp_servers = (Array.isArray(m.mcp_servers) ? m.mcp_servers : []).map((s) => ({ name: name(s.name), status: name(s.status) }));
+              }
+              if (m && m.type === "result") {
+                out.result_seen = true;
+                out.denied_tools = (Array.isArray(m.permission_denials) ? m.permission_denials : []).map((d) => name(d.tool_name));
+              }
+            }
+            console.log("SESSION_DIAG " + JSON.stringify(out));
+          '

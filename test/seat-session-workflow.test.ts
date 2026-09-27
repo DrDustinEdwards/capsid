@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -259,4 +261,68 @@ test("the sandbox is required, allows only github.com, and denies writes to the 
   // The design's section 2d: sandbox reads default to everywhere, so without this a
   // test file could read the Capsid key the exchange wrote to the runner temp folder.
   assert.deepEqual(sandbox.filesystem?.denyRead, ["${{ runner.temp }}"]);
+});
+
+// capsid/research/design-seat-session-hardening.md, PR 5a. The first hardened canary run
+// (actions run 36286555290) logged in to Capsid but never claimed: with
+// ENABLE_TOOL_SEARCH unset, Claude Code defers every MCP tool behind ToolSearch, which
+// the allowed-tools list does not name, and the one permission denial was the result.
+
+const actionStep = () => steps()[stepIndex(/^uses: anthropics\/claude-code-action@/)] ?? "";
+
+test("the session loads its MCP tools at startup, so the Capsid tools need no ToolSearch", () => {
+  const step = actionStep();
+  assert.match(step, /^ {8}id: session$/m, "the Action step has no id for the diagnostics step to read");
+  assert.match(step, /^ {8}env:\n {10}ENABLE_TOOL_SEARCH: "false"$/m, "ENABLE_TOOL_SEARCH is not false on the Action step");
+});
+
+test("the prompt stops the session at once when the Capsid jobs tool is missing", () => {
+  assert.match(actionStep(), /If the capsid `jobs` tool \(mcp__capsid__jobs\) is not available, stop at once/);
+});
+
+const DIAG_KEYS = ["capsid_jobs_loaded", "denied_tools", "init_seen", "mcp_servers", "read_error", "result_seen"];
+
+function runDiagnostics(executionFile: string): string {
+  const all = steps();
+  const at = stepIndex(/^name: Report the session's MCP servers and denied tools/);
+  assert.ok(at > stepIndex(/^uses: anthropics\/claude-code-action@/), "the diagnostics step does not follow the Action");
+  const step = all[at];
+  assert.match(step, /^ {8}if: always\(\)$/m, "the diagnostics step is skipped when the session fails");
+  assert.match(step, /EXECUTION_FILE: \$\{\{ steps\.session\.outputs\.execution_file \}\}/);
+  const script = /node -e '\n([\s\S]*?)\n {10}'/.exec(step)?.[1];
+  assert.ok(script, "no node script parsed in the diagnostics step");
+  const r = spawnSync(process.execPath, ["-e", script], { env: { ...process.env, EXECUTION_FILE: executionFile }, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout;
+}
+
+test("the diagnostics step prints names, statuses and booleans only, from a transcript full of secrets", () => {
+  const dir = mkdtempSync(join(tmpdir(), "seat-diag-"));
+  const file = join(dir, "claude-execution-output.json");
+  const SECRET = "sk-ant-oat01-canary-not-a-real-token";
+  writeFileSync(
+    file,
+    JSON.stringify([
+      { type: "system", subtype: "init", model: "m", apiKeySource: SECRET, cwd: `/home/${SECRET}`, tools: ["Read", "mcp__capsid__jobs"], mcp_servers: [{ name: "capsid", status: "connected", config: { headers: { Authorization: `Bearer ${SECRET}` } } }] },
+      { type: "assistant", message: { content: [{ type: "text", text: SECRET }] } },
+      { type: "result", subtype: "success", result: SECRET, permission_denials: [{ tool_name: "ToolSearch", tool_use_id: "x", tool_input: { query: SECRET } }] },
+    ])
+  );
+  const out = runDiagnostics(file);
+  assert.doesNotMatch(out, /canary-not-a-real-token/, "the diagnostics step printed a value from the transcript");
+  const lines = out.trim().split("\n");
+  assert.equal(lines.length, 1, `the diagnostics step printed ${lines.length} lines`);
+  assert.match(lines[0], /^SESSION_DIAG \{/);
+  const diag = JSON.parse(lines[0].slice("SESSION_DIAG ".length));
+  assert.deepEqual(Object.keys(diag).sort(), DIAG_KEYS);
+  assert.deepEqual(diag.mcp_servers, [{ name: "capsid", status: "connected" }]);
+  assert.deepEqual(diag.denied_tools, ["ToolSearch"]);
+  assert.equal(diag.capsid_jobs_loaded, true);
+  assert.equal(diag.read_error, false);
+});
+
+test("the diagnostics step says so when there is no transcript, rather than printing nothing", () => {
+  const diag = JSON.parse(runDiagnostics(join(tmpdir(), "no-such-execution-file.json")).trim().slice("SESSION_DIAG ".length));
+  assert.equal(diag.read_error, true);
+  assert.equal(diag.init_seen, false);
 });
