@@ -233,8 +233,12 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
   }
-  // Only the registrar names the jobs action, and it runs before every handler, so
-  // this binds every jobs call. A handler's own namespace re-check names none.
+  // Binds every jobs call that names an action: the registrar's check, which runs
+  // before every handler, and the jobs handler's own re-checks (src/tools/jobs.ts),
+  // which name the action too. So every caller that names an action must also name
+  // the call's id, or a bound key reads as naming no job. That omission refused every
+  // claim in the first two hardened canary runs. A check with no action (the namespace
+  // re-checks in src/jobs-schema.ts) is not bound here.
   if (agent.job && need.tool === "jobs" && need.action !== undefined) {
     const bound = boundJobRefusal(agent, need.action, need.jobId);
     if (bound) return bound;

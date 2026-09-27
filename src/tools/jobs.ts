@@ -122,7 +122,10 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           // The read action needs the read grant. The registrar names no grant for
           // an "action" tool, so it is checked here, and a read the caller may not
           // make is refused for its own reason rather than by a neighbouring check.
-          const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace });
+          // Every re-check here names the call's id as well as its action: a runner key
+          // bound to one job is checked against the job the call names, and a re-check
+          // with an action and no id reads as a call naming no job (src/scope.ts).
+          const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace, jobId: args.id });
           if (listRefusal) return fail(listRefusal);
           if (args.status !== undefined && !isJobStatus(args.status)) {
             return fail(`'${args.status}' is not a job status. One of: ${JOB_STATUSES.join(", ")}.`);
@@ -131,13 +134,13 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           // Asked through ctx.scope, the one shape a handler may use for a grant that
           // depends on the action.
           const withBody =
-            Boolean(args.id) && ctx.scope({ tool: "jobs", action: "list", grant: "write", namespace: args.namespace }) === null;
+            Boolean(args.id) && ctx.scope({ tool: "jobs", action: "list", grant: "write", namespace: args.namespace, jobId: args.id }) === null;
           return ok(await listJobs(env, { namespace: args.namespace, status: args.status, id: args.id }, { withBody }));
         }
         // Every other action changes the queue, so it needs the write grant, checked
         // here with the action so the tools axis can narrow it (a watcher scoped to
         // `jobs.post` may post and may not claim).
-        const refusal = ctx.scope({ tool: "jobs", action: args.action, grant: "write", namespace: args.namespace });
+        const refusal = ctx.scope({ tool: "jobs", action: args.action, grant: "write", namespace: args.namespace, jobId: args.id });
         if (refusal) return fail(refusal);
         switch (args.action) {
           case "post": {

@@ -4,7 +4,10 @@ import { sha256Hex } from "../src/auth.ts";
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { resolveAgent, type Agent } from "../src/agents.ts";
 import { checkScope, guardRegistrations } from "../src/scope.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { buildServer } from "../src/server.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // capsid/research/design-seat-session-hardening.md, section 2b. A runner key is bound
 // to one job: it resolves only while that job is live for it, and it may work that job
@@ -127,4 +130,38 @@ test("the registrar passes the job id, so the binding holds before the handler r
   assert.equal(ran, 0);
   await handler({ action: "claim", namespace: "capsid", id: JOB });
   assert.equal(ran, 1, "a claim of its own job did not reach the handler");
+});
+
+// Through the real server: the registrar AND the jobs handler, which re-checks scope
+// with the action. The first two hardened canary runs (actions runs 36286555290 and
+// 36291002816) claimed nothing because that re-check passed the action without the id,
+// and the binding read the missing id as "names no job". The registrar test above uses
+// a stand-in handler, which is how it passed.
+async function callJobs(agent: Agent, args: Record<string, unknown>): Promise<string> {
+  const d1 = fakeD1({ jobs: [{ id: JOB, namespace: "capsid", title: "t", body: "b", status: "queued" }] });
+  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), agent);
+  const client = new Client({ name: "bound-key", version: "1.0.0" });
+  const [c, s] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(s), client.connect(c)]);
+  const result = (await client.callTool({ name: "jobs", arguments: { namespace: "capsid", ...args } })) as { content: Array<{ text: string }> };
+  await client.close();
+  return result.content[0]?.text ?? "";
+}
+
+test("through the server, a bound key's own job passes the binding on every work action", async () => {
+  for (const action of ["claim", "heartbeat", "complete", "fail", "block"]) {
+    const text = await callJobs(bound(JOB), { action, id: JOB, result_summary: "s", reason: "r", command: "c" });
+    assert.doesNotMatch(text, /bound to job/, `${action} on its own job was refused by the binding: ${text.slice(0, 160)}`);
+  }
+});
+
+test("through the server, a bound key is refused another job, a claim naming none, and post", async () => {
+  assert.match(await callJobs(bound(JOB), { action: "claim", id: OTHER }), /bound to job/);
+  assert.match(await callJobs(bound(JOB), { action: "claim" }), /bound to job/);
+  assert.match(await callJobs(bound(JOB), { action: "post", title: "t", body: "b" }), /bound to job/);
+  assert.match(await callJobs(bound(JOB), { action: "list", id: OTHER }), /bound to job/);
+});
+
+test("through the server, an unbound key is not narrowed by the binding", async () => {
+  assert.doesNotMatch(await callJobs(bound(null), { action: "claim", id: OTHER }), /bound to job/);
 });
