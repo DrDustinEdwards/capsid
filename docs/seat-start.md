@@ -23,7 +23,41 @@ The seat (a chat acting only through Capsid) can start a Claude Code session on 
   3. A lockdown step that does what harden-runner's `disable-sudo-and-containers` does (step-security/agent `sudo.go`): it stops and purges Docker and containerd, removes their sockets, and empties every `/etc/sudoers.d` file, sudo last. It then checks that sudo and the sockets are gone and stops the job if not.
   4. The key exchange, checkout, `npm ci`, and the session.
 
-  In the session, every Bash command runs in Claude Code's sandbox. The sandbox is required (`failIfUnavailable`), has no unsandboxed retry, allows network to `github.com` only (`strictAllowlist`), and denies writes to the repo's `.git/config` and `.git/hooks`. So the session pushes with `git push origin <branch>`, since `-u` would write the config.
+  In the session, every Bash command runs in Claude Code's sandbox. The sandbox is required (`failIfUnavailable`), has no unsandboxed retry, allows network to `github.com` only (`strictAllowlist`), denies writes to the repo's `.git/config` and `.git/hooks`, and denies reads of the runner temp folder, where the Capsid key is. So the session pushes with `git push origin <branch>`, since `-u` would write the config.
+
+## The canary
+
+The switch stays off until the canary passes (capsid/decisions.md, 2026-09-26, point 8). `test/canary/probe.canary.ts` is the planted code: it tries what a hostile test file run through `npm test` would try, and prints one line, `CANARY_RESULT`, of booleans only. It never prints a value it reads. It runs twice.
+
+**Weakened run.** `.github/workflows/seat-session-canary-weakened.yml`, started by hand, runs the probe with no Claude sandbox, no lockdown and fake credentials. It holds no secret, and it fails unless every exposure below reads `true`. That is what shows the probe can see an exposure at all.
+
+**Hardened run.** A real seat-started session, running `seat-session.yml` unchanged, for a canary job the seat posts. The switch is on only for the seconds between turning it on and `jobs` action `start`: it is checked once, at the start. The run itself takes about 15 to 30 minutes. The canary job's body:
+
+```
+CANARY for the seat-session hardening (capsid/research/design-seat-session-hardening.md). Change no file except canary-pushed.txt, and open no pull request.
+1. Run `npm test -- test/canary/probe.canary.ts`. Copy the line that starts CANARY_RESULT exactly as printed.
+2. Run `git switch -c canary/<this job id>`, write canary-pushed.txt containing this job id, then `git add canary-pushed.txt`, `git commit -m "Canary push"` and `git push origin canary/<this job id>`. Note whether the commit and the push each succeeded.
+3. Block this job. Reason: the CANARY_RESULT line, then `commit=<true|false> push=<true|false>`. Command: "Delete branch canary/<this job id>, then compare against docs/seat-start.md, The canary".
+```
+
+What each run must show:
+
+| probe | weakened | hardened |
+| --- | --- | --- |
+| `example_fetch`, `example_curl`, `raw_socket_1111` (a host no allowlist names) | true | false |
+| `github_curl` (the one host Bash may reach, through the proxy) | true | true |
+| `oauth_token_in_env`, `github_token_in_env`, `proc_environ_leaks` | true | false |
+| `oidc_request_in_env` | false (no id-token permission) | false (the Action strips it) |
+| `key_file_readable` | true | false |
+| `git_config_writable`, `git_hooks_writable` | true | false |
+| `sudo_available`, `docker_reachable` | true | false |
+
+The hardened run must also show that:
+- the commit and the push both succeed
+- the Claude Code Action step completes after the lockdown
+- the `runner-key-minted` audit row lists the claim names the token carried, including whether it carries `job_workflow_ref`
+
+harden-runner is in `audit` for these runs. Its job summary links to StepSecurity's insights page, which lists every endpoint the run reached, and that list becomes `allowed-endpoints` when the policy moves to `block`. After the move, the hardened run is repeated in block mode.
 
 ## Dustin's setup steps
 
