@@ -105,7 +105,7 @@ interface SandboxSettings {
   failIfUnavailable?: boolean;
   allowUnsandboxedCommands?: boolean;
   network?: { allowedDomains?: string[]; strictAllowlist?: boolean };
-  filesystem?: { denyWrite?: string[] };
+  filesystem?: { denyWrite?: string[]; denyRead?: string[] };
   credentials?: { envVars?: { name: string; mode: string }[] };
 }
 
@@ -256,4 +256,7 @@ test("the sandbox is required, allows only github.com, and denies writes to the 
   assert.equal(sandbox.network?.strictAllowlist, true);
   // Absolute: in user settings a relative sandbox path resolves against ~/.claude.
   assert.deepEqual(sandbox.filesystem?.denyWrite, ["${{ github.workspace }}/.git/config", "${{ github.workspace }}/.git/hooks"]);
+  // The design's section 2d: sandbox reads default to everywhere, so without this a
+  // test file could read the Capsid key the exchange wrote to the runner temp folder.
+  assert.deepEqual(sandbox.filesystem?.denyRead, ["${{ runner.temp }}"]);
 });
