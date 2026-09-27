@@ -196,8 +196,53 @@ test("harden-runner is the first step, pinned, and carries no sudo option", () =
   assert.match(all[0], /^uses: step-security\/harden-runner@[0-9a-f]{40} # v\d+\.\d+\.\d+/, "harden-runner is not the first step, pinned by sha");
   // Its pre hook would remove sudo before the sandbox setup could run.
   assert.doesNotMatch(all[0], /disable-sudo/, "harden-runner carries a sudo option");
-  // Audit until the PR 5 canary records the endpoint list; PR 5 flips it to block.
-  assert.match(all[0], /^ {10}egress-policy: audit$/m);
+  // PR 5b: block, now that the audit canary (actions run 36296347138) recorded the list.
+  assert.match(all[0], /^ {10}egress-policy: block$/m);
+  assert.doesNotMatch(all[0], /egress-policy: audit/);
+});
+
+// capsid/research/design-seat-session-hardening.md, PR 5b. Every host the audit-mode
+// canary (actions run 36296347138) reached, less the probe's raw socket and Claude
+// Code's metrics host. GitHub's Actions hosts are the agent's own implicit list.
+const ALLOWED_ENDPOINTS = [
+  "capsid.dustin-edwards.workers.dev:443",
+  "github.com:443",
+  "api.github.com:443",
+  "release-assets.githubusercontent.com:443",
+  "registry.npmjs.org:443",
+  "claude.ai:443",
+  "downloads.claude.ai:443",
+  "api.anthropic.com:443",
+  "azure.archive.ubuntu.com:80",
+  "packages.microsoft.com:443",
+  "esm.ubuntu.com:443",
+  "motd.ubuntu.com:443",
+];
+
+// The input as the agent receives it: a folded scalar joins its lines with spaces, and
+// step-security/agent config.go parseEndpoints splits on spaces only.
+function allowedEndpoints(): { indicator: string; entries: string[] } {
+  const m = /^ {10}allowed-endpoints: ([>|][+-]?)\n((?: {12}.*\n)+)/m.exec(steps()[0] ?? "");
+  assert.ok(m, "no allowed-endpoints block parsed on the harden-runner step");
+  const lines = m[2].split("\n").filter((l) => l.length > 0).map((l) => l.slice(12));
+  const value = m[1].startsWith(">") ? lines.join(" ") : lines.join("\n");
+  return { indicator: m[1], entries: value.split(" ").filter((e) => e.length > 0) };
+}
+
+test("the egress list is the recorded one, folded so the agent reads one entry per host", () => {
+  const { indicator, entries } = allowedEndpoints();
+  // A literal block keeps its newlines, and the agent would read "a:443\nb:443" as one host.
+  assert.ok(indicator.startsWith(">"), `allowed-endpoints is a ${indicator} scalar, not folded`);
+  assert.deepEqual(entries, ALLOWED_ENDPOINTS);
+  for (const entry of entries) assert.match(entry, /^[a-z0-9.-]+\.[a-z]+:(443|80)$/, `${entry} is not a named host with a port`);
+});
+
+test("the probe's raw socket and the metrics host stay off the egress list", () => {
+  const { entries } = allowedEndpoints();
+  for (const entry of entries) {
+    assert.doesNotMatch(entry, /^\d+\.\d+\.\d+\.\d+:/, `${entry} is an IP address`);
+    assert.doesNotMatch(entry, /datadoghq|\*/, `${entry} is the metrics host or a wildcard`);
+  }
 });
 
 test("the steps run in the ruled order: harden-runner, sandbox setup, lockdown, key exchange, checkout, session", () => {
@@ -274,6 +319,11 @@ test("the session loads its MCP tools at startup, so the Capsid tools need no To
   const step = actionStep();
   assert.match(step, /^ {8}id: session$/m, "the Action step has no id for the diagnostics step to read");
   assert.match(step, /^ {8}env:\n {10}ENABLE_TOOL_SEARCH: "false"$/m, "ENABLE_TOOL_SEARCH is not false on the Action step");
+});
+
+// PR 5b: the metrics host is off the egress list, so the session must not need it.
+test("the session sends no nonessential traffic, so nothing needs the metrics host", () => {
+  assert.match(actionStep(), /^ {8}env:\n(?: {10}.*\n)*? {10}CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"$/m);
 });
 
 test("the prompt stops the session at once when the Capsid jobs tool is missing", () => {

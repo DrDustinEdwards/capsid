@@ -45,10 +45,47 @@ jobs:
       # ones the Claude sandbox does not (MCP, hooks, WebFetch). Ruled C, 2026-09-26: no
       # disable-sudo option, because its pre hook runs before every step and would
       # remove sudo before the sandbox setup below; the lockdown step does that instead.
-      # Audit until the PR 5 canary run records the endpoint list, then block with it.
+      #
+      # Block, with the list the audit-mode canary recorded (actions run 36296347138,
+      # harden-runner's post-step log). Each host, and the process that reached it:
+      #   capsid.dustin-edwards.workers.dev   node (the key exchange), claude (MCP)
+      #   github.com                          git-remote-http (checkout), node (setup-node,
+      #                                       the Action's setup), claude (the sandbox proxy:
+      #                                       git push and the canary's github_curl)
+      #   api.github.com                      node (setup-node), bun and gh (the Action)
+      #   release-assets.githubusercontent.com  node (setup-node, the Action's setup)
+      #   registry.npmjs.org                  node (npm ci), bun (the Action's install)
+      #   claude.ai, downloads.claude.ai      curl (the Action's Claude Code installer),
+      #                                       claude (its update check)
+      #   api.anthropic.com                   claude (the installer and the session)
+      #   azure.archive.ubuntu.com:80, packages.microsoft.com, esm.ubuntu.com,
+      #   motd.ubuntu.com                     apt's http method (the sandbox setup's apt-get)
+      # GitHub's own Actions hosts the run also reached (*.actions.githubusercontent.com
+      # for the OIDC token and the cache, productionresultssa*.blob.core.windows.net) are
+      # allowed by the agent itself (step-security/agent agent.go, addImplicitEndpoints).
+      # github.com and api.github.com are named here as well, because the agent's other
+      # GitHub hosts come from a meta API fetch that is empty when the fetch fails.
+      # Left out on purpose: 1.1.1.1:443, the canary probe's raw socket (node under npm
+      # test), and http-intake.logs.us5.datadoghq.com, Claude Code's metrics, which
+      # CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC on the Action step turns off.
+      # The agent splits this list on spaces only (agent config.go, parseEndpoints), so
+      # it is a folded scalar: a literal block would leave newlines inside the entries.
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >-
+            capsid.dustin-edwards.workers.dev:443
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            claude.ai:443
+            downloads.claude.ai:443
+            api.anthropic.com:443
+            azure.archive.ubuntu.com:80
+            packages.microsoft.com:443
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
 
       # The job id is read from the payload through an environment variable, never
       # pasted into a script, and must be a job id before anything uses it. The prompt
@@ -167,8 +204,16 @@ jobs:
         # ENABLE_TOOL_SEARCH, read 2026-09-27). Deferred, the Capsid tools sit behind
         # ToolSearch, which the allowed tools do not name: the first canary run
         # (actions run 36286555290) logged in to Capsid and never claimed its job.
+        # No nonessential traffic: "auto-updates, telemetry, error reporting, the
+        # /feedback command ..." (code.claude.com/docs/en/env-vars,
+        # CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, read 2026-09-27). The docs send
+        # metrics "to Anthropic and to third-party logging infrastructure" without naming
+        # it; the audit canary saw claude reach http-intake.logs.us5.datadoghq.com, so
+        # that host stays off the egress list above and the block-mode canary shows
+        # whether anything still asks for it.
         env:
           ENABLE_TOOL_SEARCH: "false"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The job's own token. Without it the Action exchanges an OIDC token for a
