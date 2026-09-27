@@ -8,6 +8,7 @@
 // The improve tables live in their own dialect module (./improve-fakes.ts),
 // delegated to below; it is still one fakeD1.
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
+import { TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
 import { applyWrite, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
 import {
@@ -209,6 +210,9 @@ export interface FakeD1Options {
   auditLog?: Array<{ id?: number; namespace: string; path: string; actor: string | null }>;
   // Applied migration names in apply order, for /health's schema_version query.
   migrations?: string[];
+  // Tables sqlite_master lists beyond the ones the migrations create, for the backup's
+  // check that the live schema matches TABLES.
+  extraTables?: string[];
   // The scoped credentials (migrations/0008). Absent by default, so a test
   // resolves through the OPERATOR_KEY_HASH fallback.
   agents?: Array<Record<string, unknown>>;
@@ -598,18 +602,36 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
       return rows.job_outcome_prs.filter((r) => r.job_id === params[0]).map((r) => ({ pr_url: r.pr_url }));
     }
+    // What @dustinedwards/d1-dump reads to find the tables: every table the
+    // migrations create, documents_fts with its shadow tables, and wrangler's
+    // d1_migrations ledger, as a deployed database holds them.
+    if (/^SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid$/i.test(flat.trim())) {
+      const table = (name: string) => ({ type: "table", name, tbl_name: name, sql: `CREATE TABLE ${name} (id INTEGER PRIMARY KEY)` });
+      return [
+        table("d1_migrations"),
+        ...BACKUP_TABLES.map(table),
+        ...(opts.extraTables ?? []).map(table),
+        {
+          type: "table",
+          name: "documents_fts",
+          tbl_name: "documents_fts",
+          sql: "CREATE VIRTUAL TABLE documents_fts USING fts5(title, body, content='documents', content_rowid='id')",
+        },
+        ...["data", "idx", "docsize", "config"].map((s) => table(`documents_fts_${s}`)),
+      ];
+    }
     // The backup's paged tables: the bound, read inside the snapshot batch, and the
     // pages, read after it. Matched before the plain dump below, which would
-    // otherwise answer a page with every row. An audit row seeded without an id
-    // counts as id 0, so it is below every bound and never paged.
+    // otherwise answer a page with every row. Identifiers may arrive quoted, as the
+    // package writes them.
     const pagedRows = (table: string): Array<{ id?: number }> | null =>
       table === "document_versions" ? rows.versions : table === "audit_log" ? rows.audit_log : null;
-    const maxIdOf = flat.match(/^SELECT MAX\(id\) AS max_id FROM (\w+)$/i);
+    const maxIdOf = flat.match(/^SELECT MAX\("?id"?\) AS max_id FROM "?(\w+)"?$/i);
     const maxIdRows = maxIdOf ? pagedRows(maxIdOf[1]) : null;
     if (maxIdRows) {
       return [{ max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null }];
     }
-    const pageOf = flat.match(/^SELECT \* FROM (\w+) WHERE id > \?1 AND id <= \?2 ORDER BY id LIMIT \?3$/i);
+    const pageOf = flat.match(/^SELECT \* FROM "?(\w+)"? WHERE "?id"? > \?1 AND "?id"? <= \?2 ORDER BY "?id"? LIMIT \?3$/i);
     const pageRows = pageOf ? pagedRows(pageOf[1]) : null;
     if (pageRows) {
       const [after, max, limit] = params as [number, number, number];
@@ -620,7 +642,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     }
     // The backup dump: SELECT * FROM <table>, no WHERE. Anchored at the end, or a
     // `SELECT * FROM jobs WHERE ...` read is answered with every row.
-    const dump = flat.trim().match(/^SELECT \* FROM (\w+)$/i);
+    const dump = flat.trim().match(/^SELECT \* FROM "?(\w+)"?$/i);
     if (dump) {
       const table = dump[1];
       if (table === "documents") return rows.documents;

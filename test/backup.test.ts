@@ -90,6 +90,7 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
     ...TABLES.map((t) => `${result.json_prefix}${t}.json`),
     `${result.json_prefix}_kv.json`,
     `${result.json_prefix}_holdout-manifests.json`,
+    `${result.json_prefix}_schema.json`,
     `${result.json_prefix}_complete.json`,
   ].sort();
   assert.deepEqual([...result.json_keys].sort(), expected);
@@ -128,7 +129,8 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")), logged.join("\n"));
   // The dumps are still written: an export deletes nothing, and an empty dump is
   // the evidence of the day the store looked empty.
-  assert.equal(result.json_keys.length, TABLES.length + 2);
+  // Every table, _schema.json and the two sidecars.
+  assert.equal(result.json_keys.length, TABLES.length + 3);
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
@@ -142,6 +144,23 @@ test("a failing FTS probe refuses the prune even when documents has rows", async
 
   assert.match(result.prune_refused ?? "", /^fts-probe-failed/);
   assert.deepEqual(r2.deleted, []);
+  assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")));
+});
+
+// The package dumps every table sqlite_master lists. A table no migration creates is
+// one the restore procedure does not know, so the run keeps its dumps as evidence and
+// is refused, never marked complete.
+test("a live table TABLES does not list refuses the run, keeps the dumps, and marks nothing", async () => {
+  const { env, r2, kv } = makeEnv({ documents: DOCS, extraTables: ["stray"] }, MIRROR);
+  const { result, logged } = await captureErrors(() => runBackup(env));
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.equal(result.prune_refused, "tables-mismatch: missing none; unlisted stray");
+  assert.ok(r2.objects.has(`${result.json_prefix}stray.json`), "the unlisted table was not dumped");
+  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a mismatched run was marked complete");
+  assert.deepEqual(r2.deleted, []);
+  assert.equal(await kv.kv.get("backup:last-ok"), null);
   assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")));
 });
 
@@ -407,8 +426,8 @@ test("audit_log is streamed in pages, every row once and in id order, in the sam
   const exportedAt = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string).exported_at;
   const sorted = [...audit].sort((a, b) => a.id - b.id);
   assert.equal(r2.objects.get(key), JSON.stringify({ exported_at: exportedAt, table: "audit_log", rows: sorted }));
-  const exportBatch = batches.find((b) => b.includes("SELECT * FROM documents"));
-  assert.ok(exportBatch && !exportBatch.includes("SELECT * FROM audit_log"), "audit_log was read whole inside the batch");
+  const exportBatch = batches.find((b) => b.includes('SELECT * FROM "documents"'));
+  assert.ok(exportBatch && !exportBatch.includes('SELECT * FROM "audit_log"'), "audit_log was read whole inside the batch");
 });
 
 test("an audit row written after the snapshot batch is not in the dump", async () => {
