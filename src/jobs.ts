@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { JobRow } from "./jobs-schema";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
-import { guardedTransition } from "./jobs-transition";
+import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 
 // The work queue. The seat posts a job from a chat; a driver session on a machine
 // claims it, does it, and reports back.
@@ -60,6 +60,8 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
         ).bind(read.id, stamp),
         ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
         jobAudit(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
+        // Back in the queue, a bound key would resolve again inside its pending window.
+        revokeBoundKeys(env.DB, read.id),
       ]);
       if (moved) requeued.push(read.id);
     } catch (err) {
