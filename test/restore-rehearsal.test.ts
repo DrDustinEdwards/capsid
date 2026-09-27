@@ -217,6 +217,35 @@ test("an unknown sidecar is refused too, so the set cannot quietly grow", () => 
   });
 });
 
+// _schema.json, which @dustinedwards/d1-dump writes. Optional, because dumps from
+// before the move lack it; when present it must name every migrations table.
+function writeSchema(dir: string, tables: string[]): void {
+  const schema = tables.map((name) => ({ type: "table", name, tbl_name: name, sql: `CREATE TABLE ${name} (id INTEGER)` }));
+  writeFileSync(join(dir, "_schema.json"), JSON.stringify({ exported_at: EXPORTED_AT, schema }));
+}
+
+test("a dump carrying _schema.json that names every migrations table restores, marked", () => {
+  withDump((dir) => {
+    writeSchema(dir, [...TABLES]);
+    writeMarker(dir, readdirSync(dir));
+    assert.equal(rehearse(dir, MIGRATIONS).marked, true);
+  });
+});
+
+test("a _schema.json missing a migrations table is refused, naming it", () => {
+  withDump((dir) => {
+    writeSchema(dir, TABLES.filter((t: string) => t !== "jobs"));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /_schema\.json does not name every migrations table: jobs/);
+  });
+});
+
+test("an empty _schema.json is refused", () => {
+  withDump((dir) => {
+    writeFileSync(join(dir, "_schema.json"), JSON.stringify({ exported_at: EXPORTED_AT, schema: [] }));
+    assert.throws(() => rehearse(dir, MIGRATIONS), /_schema\.json carries no 'schema' entries/);
+  });
+});
+
 // The completion marker. Optional, because older dumps lack it;
 // when present it must list exactly the other files in the dump.
 function writeMarker(dir: string, files: string[]): void {

@@ -1,3 +1,4 @@
+import { COMPLETE_MARKER, dumpDatabase, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./headers";
@@ -23,9 +24,6 @@ const JSON_RETENTION_DAYS = 90;
 // A floor under the age rule. If the cron stops for months every dump ages out,
 // so the newest N survive regardless of age.
 const JSON_MIN_KEPT = 14;
-// Written last into a run's prefix by a run whose dump is complete and whose
-// preflight passed. Underscore-prefixed like the sidecars.
-const COMPLETE_MARKER = "_complete.json";
 // Retention for the history tables. Both are covered by the dump shelf life above.
 const VERSION_RETENTION_DAYS = 90;
 const AUDIT_RETENTION_DAYS = 180;
@@ -61,86 +59,25 @@ function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
 }
 
+// The dump itself is @dustinedwards/d1-dump, the package every site installs, so
+// Capsid and the sites run one implementation (capsid/decisions.md, 2026-09-27,
+// "shared functions across the sites", point 1).
+//
 // Tables paged rather than read whole. Reading every table in one batch holds the
 // whole database in the isolate, and once version bodies grew past what the isolate
-// holds the cron died before its first put. These tables are read in pages bounded
-// by a MAX(id) taken inside the snapshot batch and streamed to R2 as a multipart
-// upload, so each object has the same {exported_at, table, rows} shape as every
-// other table and a restore reads it the same way.
-//
-// A table qualifies only if it is append-only with an AUTOINCREMENT id, so the bound
-// keeps the one-instant snapshot: rows at or below it cannot have changed, and only
-// this run's own prune (after the export, under the lease) deletes them. documents
-// and jobs are updated in place, so they stay in the batch.
-//
-// The value is the page size in rows. A version row can be a few hundred KB; an
-// audit row carries no document body.
-const PAGED_TABLES: ReadonlyMap<string, number> = new Map([
-  ["document_versions", 100],
-  ["audit_log", 1000],
-]);
-// R2 requires every part except the last to be the same size, and at least 5MiB.
-const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
-
-// Writes {exported_at, table, rows} with the rows supplied a page at a time. The
-// bytes are identical to JSON.stringify of the whole object, held at most one part
-// and one page at a time.
-async function putJsonStreamed(
-  bucket: R2Bucket,
-  key: string,
-  head: string,
-  pages: AsyncIterable<unknown[]>
-): Promise<void> {
-  const upload = await bucket.createMultipartUpload(key, { httpMetadata: { contentType: "application/json" } });
-  const parts: R2UploadedPart[] = [];
-  const encoder = new TextEncoder();
-  let part = new Uint8Array(MULTIPART_PART_BYTES);
-  let filled = 0;
-  const flush = async () => {
-    parts.push(await upload.uploadPart(parts.length + 1, part.slice(0, filled)));
-    part = new Uint8Array(MULTIPART_PART_BYTES);
-    filled = 0;
-  };
-  const write = async (text: string) => {
-    let bytes = encoder.encode(text);
-    while (bytes.length > 0) {
-      const n = Math.min(bytes.length, MULTIPART_PART_BYTES - filled);
-      part.set(bytes.subarray(0, n), filled);
-      filled += n;
-      bytes = bytes.subarray(n);
-      if (filled === MULTIPART_PART_BYTES) await flush();
-    }
-  };
-  try {
-    await write(head);
-    let first = true;
-    for await (const rows of pages) {
-      for (const row of rows) {
-        await write((first ? "" : ",") + JSON.stringify(row));
-        first = false;
-      }
-    }
-    await write("]}");
-    if (filled > 0 || parts.length === 0) await flush();
-    await upload.complete(parts);
-  } catch (err) {
-    await upload.abort().catch(() => {});
-    throw err;
-  }
-}
-
-async function* tablePages(db: D1Database, table: string, maxId: number, pageRows: number): AsyncGenerator<unknown[]> {
-  let after = 0;
-  while (after < maxId) {
-    const { results } = await db
-      .prepare(`SELECT * FROM ${table} WHERE id > ?1 AND id <= ?2 ORDER BY id LIMIT ?3`)
-      .bind(after, maxId, pageRows)
-      .all<{ id: number }>();
-    if (results.length === 0) return;
-    yield results;
-    after = results[results.length - 1].id;
-  }
-}
+// holds the cron died before its first put. A table qualifies only if it is
+// append-only with an AUTOINCREMENT id, so the MAX(id) bound read inside the snapshot
+// keeps the one-instant dump: rows at or below it cannot have changed, and only this
+// run's own prune (after the export, under the lease) deletes them. documents and jobs
+// are updated in place, so they stay in the batch. A version row can be a few hundred
+// KB; an audit row carries no document body.
+const PAGED = {
+  document_versions: { idColumn: "id", pageRows: 100 },
+  audit_log: { idColumn: "id", pageRows: 1000 },
+};
+// wrangler's migration ledger. A restore builds the schema from migrations/, which
+// writes its own, and the rehearsal refuses a file that is not a migrations table.
+const EXCLUDED = ["d1_migrations"];
 
 // Every real table in the schema. test/backup.test.ts derives this list from
 // migrations/ and fails in both directions. Excluded: documents_fts and its
@@ -275,64 +212,49 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
 
 type DocRow = { namespace: string; path: string; body: string | null };
 
-// Writes one JSON object per table and the two sidecars under one run prefix, and
-// returns the documents rows, which the preflight and the markdown mirror both read.
+// Writes one JSON object per table, _schema.json and the two sidecars under one run
+// prefix, WITHOUT the completion marker, which exportAndPrune writes only once the
+// preflight passes. Returns the documents rows as dumped, which the preflight and the
+// markdown mirror both read, and any difference between the tables dumped and TABLES.
 //
-// One batch is one D1 transaction, so every table is read at the same instant and
-// exported_at describes it. Sequential reads are one instant per table: a write
-// landing between the documents read and the document_versions read puts a version
-// row in the dump whose document is not in it, and nothing downstream can tell. The
-// restore rehearsal checks for that signature.
+// The package reads every unpaged table in one D1 batch, which is one transaction, so
+// every table describes the same instant and exported_at describes it. The restore
+// rehearsal checks for the signature a torn read leaves.
 //
-// Cost: all row sets are live at once. Each result set is stringified, written and
-// dropped before the next, so at most one serialized copy is alive on top of the
-// row sets, and the largest tables are paged and streamed (PAGED_TABLES).
-async function exportDump(env: Env, now: string): Promise<{ jsonPrefix: string; jsonKeys: string[]; docs: DocRow[] }> {
-  const jsonPrefix = `${JSON_PREFIX}${now.replace(/[:.]/g, "-")}/`;
-  const jsonKeys: string[] = [];
-  const snapshot = await env.DB.batch(
-    TABLES.map((table) =>
-      env.DB.prepare(PAGED_TABLES.has(table) ? `SELECT MAX(id) AS max_id FROM ${table}` : `SELECT * FROM ${table}`)
-    )
-  );
-  let docs: DocRow[] = [];
-  const rowsPerTable: Array<unknown[] | null> = TABLES.map((_, i) => (snapshot[i]?.results ?? []) as unknown[]);
-  for (let i = 0; i < TABLES.length; i++) {
-    const table = TABLES[i];
-    const results = rowsPerTable[i] ?? [];
-    if (table === "documents") docs = results as typeof docs;
-    const key = `${jsonPrefix}${table}.json`;
-    const pageRows = PAGED_TABLES.get(table);
-    if (pageRows !== undefined) {
-      const maxId = Number((results[0] as { max_id: number | null } | undefined)?.max_id ?? 0);
-      const head = `{"exported_at":${JSON.stringify(now)},"table":${JSON.stringify(table)},"rows":[`;
-      await putJsonStreamed(env.MEDIA, key, head, tablePages(env.DB, table, maxId, pageRows));
-    } else {
-      await env.MEDIA.put(key, JSON.stringify({ exported_at: now, table, rows: results }), {
-        httpMetadata: { contentType: "application/json" },
-      });
-    }
-    jsonKeys.push(key);
-    // documents is retained: the preflight and the markdown mirror both read it.
-    if (table !== "documents") rowsPerTable[i] = null;
-  }
-
-  // The two sidecars, underscore-prefixed so they cannot collide with a table name and
-  // the restore rehearsal can tell a sidecar from a table file without an exception
-  // list. Neither is in D1. Without them a restored improve loop has no mode, pins,
-  // pauses, best commits or holdout manifests, so every namespace scores as "no
-  // manifest" and every run refuses.
-  await env.MEDIA.put(`${jsonPrefix}_kv.json`, JSON.stringify({ exported_at: now, keys: await readKvPins(env) }), {
-    httpMetadata: { contentType: "application/json" },
+// The two sidecars, underscore-prefixed so they cannot collide with a table name, are
+// not in D1. Without them a restored improve loop has no mode, pins, pauses, best
+// commits or holdout manifests, so every namespace scores as "no manifest" and every
+// run refuses.
+async function exportDump(env: Env, now: string): Promise<{ dump: DumpResult; docs: DocRow[]; tablesMismatch: string | null }> {
+  const dump = await dumpDatabase(env.DB, env.MEDIA, {
+    prefix: JSON_PREFIX,
+    now: new Date(now),
+    paged: PAGED,
+    exclude: EXCLUDED,
+    sidecars: {
+      kv: { keys: await readKvPins(env) },
+      "holdout-manifests": { manifests: await readHoldoutManifests(env) },
+    },
+    markComplete: false,
   });
-  jsonKeys.push(`${jsonPrefix}_kv.json`);
-  await env.MEDIA.put(
-    `${jsonPrefix}_holdout-manifests.json`,
-    JSON.stringify({ exported_at: now, manifests: await readHoldoutManifests(env) }),
-    { httpMetadata: { contentType: "application/json" } }
-  );
-  jsonKeys.push(`${jsonPrefix}_holdout-manifests.json`);
-  return { jsonPrefix, jsonKeys, docs };
+
+  // Read back rather than kept from the snapshot: the package drops each table once it
+  // is written. A documents object that cannot be read fails the run.
+  const docsKey = dump.tables.find((t) => t.name === "documents")?.key;
+  const docsObject = docsKey ? await env.MEDIA.get(docsKey) : null;
+  if (!docsObject) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  const docs = (JSON.parse(await docsObject.text()) as { rows: DocRow[] }).rows;
+
+  // The package dumps what sqlite_master holds; TABLES is what the migrations create
+  // (test/backup.test.ts). A difference means the live schema is not the one the
+  // restore procedure knows, so the run is refused rather than marked complete.
+  const dumped = new Set(dump.tables.map((t) => t.name));
+  const listed = new Set<string>(TABLES);
+  const missing = TABLES.filter((t) => !dumped.has(t));
+  const extra = [...dumped].filter((t) => !listed.has(t));
+  const tablesMismatch =
+    missing.length || extra.length ? `tables-mismatch: missing ${missing.join(",") || "none"}; unlisted ${extra.join(",") || "none"}` : null;
+  return { dump, docs, tablesMismatch };
 }
 
 // The preflight, run before anything destructive. The dangerous case is a SELECT that
@@ -426,14 +348,18 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
 }
 
 async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
-  const { jsonPrefix, jsonKeys, docs } = await exportDump(env, now);
+  const { dump, docs, tablesMismatch } = await exportDump(env, now);
+  const jsonPrefix = dump.prefix;
+  const jsonKeys = dump.keys;
 
-  // A failed preflight refuses everything past this point as a unit: the markdown
-  // write, the R2 prunes and the D1 deletes. A run that cannot trust its read of
-  // documents cannot trust content derived from it. The JSON dumps above are kept: an
-  // export deletes nothing, and an empty dump is the evidence of the day the store
+  // A failed preflight refuses everything past this point as a unit: the marker, the
+  // markdown write, the R2 prunes and the D1 deletes. A run that cannot trust its read
+  // of documents cannot trust content derived from it. The JSON dumps above are kept:
+  // an export deletes nothing, and an empty dump is the evidence of the day the store
   // looked empty.
-  const { fts, pruneRefused } = await preflight(env, docs);
+  const checked = await preflight(env, docs);
+  const fts = checked.fts;
+  const pruneRefused = tablesMismatch ?? checked.pruneRefused;
   if (pruneRefused !== null) {
     console.error(
       `BACKUP_PREFLIGHT_REFUSED reason=${pruneRefused} documents=${docs.length} fts=${fts} ` +
@@ -458,12 +384,9 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
 
   // The completion marker, written after every object and only once the preflight
   // passed, so a run that threw or was refused carries none. Only a marked run counts
-  // toward the retention floor. It lists the objects it vouches for.
-  const completeKey = `${jsonPrefix}${COMPLETE_MARKER}`;
-  await env.MEDIA.put(completeKey, JSON.stringify({ exported_at: now, keys: jsonKeys }), {
-    httpMetadata: { contentType: "application/json" },
-  });
-  jsonKeys.push(completeKey);
+  // toward the retention floor. It lists the objects it vouches for, and the call adds
+  // its own key to jsonKeys.
+  await writeCompleteMarker(env.MEDIA, dump);
 
   const markdownPruned = await mirrorMarkdown(env, docs);
   const dumps = await pruneR2(env, now);

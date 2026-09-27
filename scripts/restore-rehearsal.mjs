@@ -56,6 +56,11 @@ export function deriveTables(migrationsDir) {
 
 // The sidecars src/backup.ts writes beside the table objects.
 export const SIDECARS = ["_holdout-manifests.json", "_kv.json"];
+// Written by @dustinedwards/d1-dump since Capsid moved onto it: the CREATE statements
+// sqlite_master held. Optional, because dumps written before the move do not carry it;
+// this rehearsal still builds the schema from migrations/. When present it must name
+// every migrations table.
+export const OPTIONAL_SIDECARS = ["_schema.json"];
 // The completion marker src/backup.ts writes last, on a run whose preflight passed.
 // Optional: older dumps do not carry it. When present, the files
 // it lists must be exactly the other files in the dump.
@@ -84,6 +89,18 @@ function checkSidecar(dumpDir, file, field, valueOk) {
   const bad = entries.filter(([, v]) => !valueOk(v)).map(([k]) => k);
   if (bad.length > 0) fail(`${file} has '${field}' entries of the wrong shape: ${bad.slice(0, 5).join(", ")}`);
   if (typeof parsed.exported_at !== "string") fail(`${file} carries no exported_at`);
+}
+
+function checkSchema(dumpDir, tables) {
+  const parsed = readJson(dumpDir, "_schema.json");
+  const schema = parsed?.schema;
+  if (!Array.isArray(schema) || schema.length === 0) fail("_schema.json carries no 'schema' entries");
+  const bad = schema.filter((e) => !e || typeof e.type !== "string" || typeof e.name !== "string" || typeof e.sql !== "string");
+  if (bad.length > 0) fail(`_schema.json has ${bad.length} entries without a type, name and sql`);
+  const named = new Set(schema.filter((e) => e.type === "table").map((e) => e.name));
+  const missing = tables.filter((t) => !named.has(t));
+  if (missing.length > 0) fail(`_schema.json does not name every migrations table: ${missing.join(", ")}`);
+  if (typeof parsed.exported_at !== "string") fail("_schema.json carries no exported_at");
 }
 
 // A STALE DUMP IS A FAILED REHEARSAL. The workflow takes the newest dump in R2, so
@@ -117,13 +134,14 @@ export function rehearse(dumpDir, migrationsDir, opts = {}) {
   // one is a file nothing here knows how to verify.
   const sidecars = files.filter((f) => f.startsWith("_") && f !== COMPLETE_MARKER).sort();
   const missingSidecars = SIDECARS.filter((f) => !sidecars.includes(f));
-  const unknownSidecars = sidecars.filter((f) => !SIDECARS.includes(f));
+  const unknownSidecars = sidecars.filter((f) => !SIDECARS.includes(f) && !OPTIONAL_SIDECARS.includes(f));
   if (missingSidecars.length > 0) fail(`the dump is missing sidecars: ${missingSidecars.join(", ")}`);
   if (unknownSidecars.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknownSidecars.join(", ")}`);
   // Present is not enough: `{}` exists too. Each sidecar must carry the object
   // src/backup.ts writes, with at least one entry.
   checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof v.unreadable === "string"));
   checkSidecar(dumpDir, "_holdout-manifests.json", "manifests", (v) => v === null || (typeof v === "object" && !Array.isArray(v)));
+  if (sidecars.includes("_schema.json")) checkSchema(dumpDir, tables);
   const marked = files.includes(COMPLETE_MARKER);
   if (marked) {
     const marker = JSON.parse(readFileSync(join(dumpDir, COMPLETE_MARKER), "utf8"));
