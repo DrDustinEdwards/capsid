@@ -88,3 +88,18 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
 - **A healthy surface posts nothing.** A pause a human set is not a finding.
 - **Deduplication is the queue's own rule.** The finding's fingerprint goes in the job title, and `post` already refuses a duplicate while one is open, so a finding posts once and stays posted until it clears. A finding that stops being found has its job failed with `cleared`, keyed on `queued` so a job a driver has claimed is never closed underneath it.
 - **Cadence** is `watcher:cadence-minutes` in `APP_KV`, 30 by default, with a floor of 5. It rides the tick before the budget check, with the lease sweep and auto-merge. It spends no model tokens and no CI minutes. An exhausted budget is when nobody is looking.
+- **It keeps each pass in `ops:snapshot`** (`APP_KV`, `src/ops-snapshot.ts`), the data the operations dashboard reads (capsid/research/design-ops-console.md). The snapshot holds:
+  - every check as clear, finding or could not run;
+  - `/health`;
+  - the mirror's newest dump and last run;
+  - each roster repo's latest CI run;
+  - the site map compared with the registered namespaces;
+  - a probe of every site in `src/ops-sites.ts`.
+
+  **Probes.** Each site's health route is read, or its root where it has none, and the root as well when the health route fails. So a broken health route on a site that is up reads as degraded, not down. Capsid itself is read in-process.
+
+  **Uptime ring.** Each site keeps a 7-day ring of half-hour slots aligned to the clock. A slot no pass reached is marked as no data, never as up.
+
+  **Write order.** The snapshot is written before `watcher:last`, so a snapshot that cannot be written fails the pass and the next tick runs it again.
+
+  **Site map.** A registered namespace the map neither covers nor lists as having no site, or a map entry whose namespace is not registered, is a finding.
