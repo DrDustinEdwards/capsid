@@ -5,6 +5,7 @@ import { legacyAgent, resolveAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { b64urlEncode, b64urlFromBytes } from "../src/encoding";
 import { OIDC_ISSUER, exchangeRunnerKey } from "../src/runner-key";
+import { opsLive } from "../src/ops-feed";
 import { SEAT_START_CAP_KEY, SEAT_START_KEY, setSeatStart, startSeatSession } from "../src/seat-start";
 import { buildServer } from "../src/server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -147,6 +148,16 @@ describe("the exchange", () => {
     const params = JSON.parse(audit!.params);
     expect(params.claims_present).toEqual(Object.keys(goodClaims()).sort());
     expect(audit!.params).not.toContain("refs/heads/master");
+    // The run, which the repository_dispatch that started it could not return: the
+    // OIDC run_id claim and the run's page, joined into the Watch Floor's seat list.
+    expect(params.run_id).toBe("99");
+    expect(params.run_url).toBe(`https://github.com/${REPO}/actions/runs/99`);
+    const live = await opsLive(env, NOW);
+    const start = live.seat_start.recent.find((s) => s.job_id === id);
+    expect(start, "the feed does not list this start").toBeDefined();
+    expect(start!.run_id).toBe(99);
+    expect(start!.run_url).toBe(`https://github.com/${REPO}/actions/runs/99`);
+    expect(start!.namespace).toBe("capsid");
   });
 
   it("issues one key per start", async () => {

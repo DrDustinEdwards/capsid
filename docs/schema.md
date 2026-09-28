@@ -416,7 +416,7 @@ body is exactly what an attacker controls.
 
 ## The console's JSON twin
 
-`GET /console.json` serves the object the `/console` page renders, so a dashboard
+`GET /console/json` serves the object the `/console` page renders, so a dashboard
 or a chat reads the same state without scraping HTML. Admin session only, on the
 same gate as the page. The two cannot drift: the page is rendered from this
 object, and a test asserts a deep equality between the response and the function

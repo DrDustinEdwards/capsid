@@ -49,7 +49,8 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
-- `GET /console`, `POST /console`, `GET /console.json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403
+- `GET /console`, `POST /console`, `GET /console/json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403. `/console.json` answers 301 to `/console/json`
+- `GET /console/api/ops`, `POST /console/api/ops/refresh`, `GET /console/app/` the Watch Floor: its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes) and the app's files. Same gate as the console (docs/console.md)
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
