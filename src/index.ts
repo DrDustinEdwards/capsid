@@ -3,7 +3,6 @@ import { createMcpHandler } from "agents/mcp";
 import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { runBackup } from "./backup";
-import { callerIp, checkRate, dcrRedirectRefusal, REGISTRATION_LIMIT } from "./rate-limit";
 import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
 import type { Env, Props } from "./env";
@@ -50,11 +49,6 @@ function withCacheDefault(response: Response, pathname: string): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-const CLIENT_REGISTRATION_TTL_SECONDS = 90 * 24 * 60 * 60;
-
-// The DCR callback receives no env; the fetch handler stashes it.
-let currentEnv: Env | null = null;
-
 const CANONICAL_MCP_URL = "https://capsid.dustin-edwards.workers.dev/mcp";
 
 const provider = new OAuthProvider({
@@ -63,45 +57,18 @@ const provider = new OAuthProvider({
   defaultHandler,
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",
-  clientRegistrationEndpoint: "/register",
-  clientRegistrationTTL: CLIENT_REGISTRATION_TTL_SECONDS,
   resourceMetadata: { resource: CANONICAL_MCP_URL },
-  // CIMD: claude.ai and Claude Code send their client_id as a metadata document URL
-  // (capsid/mcp-wrapper-standard.md, amendment 2026-09-27). DCR stays beside it until
-  // the design's PR 4, because existing connections registered that way.
+  // CIMD only (capsid/mcp-wrapper-standard.md, amendment 2026-09-27; design PR 4 of
+  // capsid/research/design-capsid-access-login.md): a client's id is the URL of its
+  // metadata document, and there is no registration endpoint. Clients registered by
+  // DCR before PR 4 keep their KV records until the registration TTL they were given.
+  // The provider advertises CIMD only while the global_fetch_strictly_public
+  // compatibility flag is set (wrangler.jsonc.example).
   clientIdMetadataDocumentEnabled: true,
-  clientRegistrationCallback: async ({ clientMetadata, request }) => {
-    const redirectRefusal = dcrRedirectRefusal(clientMetadata);
-    if (redirectRefusal) {
-      console.error(`DCR_REDIRECT_REFUSED ${redirectRefusal.description}`);
-      return redirectRefusal;
-    }
-
-    const env = currentEnv;
-    if (!env) {
-      console.error("DCR_RATE_LIMIT_UNAVAILABLE env was not available, allowing");
-      return;
-    }
-    const ip = callerIp(request);
-    const verdict = await checkRate(env.APP_KV, ip, new Date(), REGISTRATION_LIMIT);
-    if (verdict.allowed) return;
-    if (verdict.window === "unavailable") {
-      // Unreachable while REGISTRATION_LIMIT allows on unavailable; handled so
-      // flipping that policy cannot produce a refusal with an unmeasured count.
-      return { code: "temporarily_unavailable", status: 503, description: `Registration rate limiting is unavailable: ${verdict.detail}. Retry shortly.` };
-    }
-    console.error(`DCR_RATE_LIMITED ${ip} hit the ${verdict.window} limit (${verdict.count} of ${verdict.limit})`);
-    return {
-      code: "access_denied",
-      status: 429,
-      description: `Too many client registrations from this address: ${verdict.count} in the last ${verdict.window}, limit ${verdict.limit}. Retry later.`,
-    };
-  },
 });
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    currentEnv = env;
     const pathname = new URL(request.url).pathname;
     if (pathname === "/mcp") {
       const originProblem = mcpOriginProblem(request);

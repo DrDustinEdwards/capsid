@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type FetchCall } from "./fakes.ts";
 
 // lint is filtered to the caller's namespace and may not read outside it, except
@@ -110,7 +110,7 @@ test("PLANT: report for a caller scoped to one namespace persists nothing about 
 });
 
 test("THE INNOCENT DIRECTION: an unrestricted caller still gets the rules, every edge and the repo tree", async () => {
-  const { client, recorded, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, recorded, close } = await connect(adminAgentForEmail("admin@example.com"));
   try {
     const gathered = JSON.parse(text(await call(client, { namespace: "sample" })));
     assert.equal(gathered.rules.length, 1);

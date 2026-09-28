@@ -87,8 +87,8 @@ function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: s
   const name = escapeHtml(clientName);
   const redirect = escapeHtml(oauthReq.redirectUri);
   const req = b64urlEncode(JSON.stringify(oauthReq));
-  // Every registered redirect URI is shown, not just the requested one. A dynamically
-  // registered client may hold several and the approval covers only the requested
+  // Every registered redirect URI is shown, not just the requested one. A client's
+  // metadata document may name several and the approval covers only the requested
   // one, so listing the rest is what shows the admin that a client with a familiar
   // name also carries an attacker's redirect.
   const others = (registeredUris ?? []).filter((u) => u !== oauthReq.redirectUri);

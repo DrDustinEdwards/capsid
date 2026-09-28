@@ -1,5 +1,5 @@
 // The canary CHECK, separated from the gate so it can be driven by a test, for the same
-// reason scripts/reap-lib.mjs exists: verify-live.mjs is a program that runs on import.
+// reason scripts/freshness-lib.mjs exists: verify-live.mjs is a program that runs on import.
 //
 // What the canary is and why it has no expiry: scripts/bindings.mjs, CANARY_CLIENT.
 //
@@ -40,9 +40,9 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
     return { outcome: "corrupt", detail: body.slice(0, 120) };
   }
 
-  // It must still be NON-EXPIRING. Re-minting the canary through /register would give it
-  // the 90 day clientRegistrationTTL back, and a canary that can expire on its own has a
-  // second legitimate reason to be absent.
+  // It must still be NON-EXPIRING. A record put back with a TTL (the 90 day one DCR gave
+  // every client) is a canary that can expire on its own, a second legitimate reason to
+  // be absent.
   //
   // An unreadable key LIST is neither a TTL nor "no TTL"; it is its own failing
   // outcome.
@@ -72,9 +72,9 @@ export function canaryReport(result, clientId, namespaceName) {
       return {
         passed: false,
         detail:
-          `MISSING: ${key} is GONE from ${namespaceName}. This record has no expiry and the reaper never touches it, ` +
+          `MISSING: ${key} is GONE from ${namespaceName}. This record has no expiry and nothing in this repo deletes it, ` +
           `so this is the vanished-client-record anomaly of 2026-08-17 recurring. Every OAuth client in this keyspace is suspect; ` +
-          `check whether live grants survived before re-minting.`,
+          `check whether live grants survived before restoring it (scripts/bindings.mjs, CANARY_CLIENT).`,
       };
     case "unreachable":
       return {

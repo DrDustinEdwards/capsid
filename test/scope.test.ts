@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { adminAgent, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { AUTHORITATIVE } from "../src/counts.ts";
 import { buildServer } from "../src/server.ts";
 import { TOOL_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredGrant } from "../src/scope.ts";
@@ -28,7 +28,7 @@ test("a caller inside every axis is not refused", () => {
   const agent = scopedAgent();
   assert.equal(checkScope(agent, { tool: "write", namespace: "capsid", grant: "write" }), null);
   assert.equal(checkScope(agent, { tool: "read", namespace: "capsid", grant: "read" }), null);
-  assert.equal(checkScope(adminAgent("DrDustinEdwards"), { tool: "manage_pr", namespace: "foxhound", grant: "write", flags: SCOPE_FLAGS }), null);
+  assert.equal(checkScope(adminAgentForEmail("admin@example.com"), { tool: "manage_pr", namespace: "foxhound", grant: "write", flags: SCOPE_FLAGS }), null);
 });
 
 test("the refusal names the axis that failed, and names the scope the caller actually has", () => {

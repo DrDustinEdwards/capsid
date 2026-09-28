@@ -250,7 +250,6 @@ jobs:
         env:
           EXPECT_SHA: ${{ (needs.deploy.result == 'success' || github.event_name == 'schedule') && github.sha || '' }}
           VERIFY_POLL_ATTEMPTS: "40"
-          PROBE_CLIENT_FILE: ${{ runner.temp }}/probe-client-id
           # GATE 1c ASSERTS BACKUP FRESHNESS ON THE SCHEDULED RUN ONLY (residual 7).
           # /health has reported backup.last_ok since 2026-09-07 and nothing read it. A
           # push runs minutes after a deploy and says nothing about last night's backup;
@@ -321,25 +320,4 @@ jobs:
           echo "::error::the rollback did not take effect: /health still reports ${ROLLBACK_TO} after 20 reads (this run's commit ${GITHUB_SHA}). Production may still be serving the refused deploy; a human decides."
           echo "rollback_did_not_take_effect: from=${ROLLBACK_FROM} now=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
           exit 1
-
-      # Gate 2 registers a fresh client every run, and it must: reusing one would take
-      # the approved-client fast path that hid the 26-day outage. The registration is
-      # cleaned up here instead, AFTER the gate has finished with its client.
-      #
-      # It deletes ONE key: the id gate 2 recorded in PROBE_CLIENT_FILE. It does not list
-      # the namespace and does not match on client names; see the script's header.
-      #
-      # Runs even when verify:live failed (always()), because a failed gate still
-      # registered a client. It cannot turn the job green, and its own failure still
-      # fails the job.
-      #
-      # No npm ci needed here either; the script uses global fetch against the KV REST
-      # API so this job stays install-free.
-      - name: Reap this run's probe client registration
-        if: always()
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PROBE_CLIENT_FILE: ${{ runner.temp }}/probe-client-id
-        run: node scripts/reap-probe-clients.mjs
 

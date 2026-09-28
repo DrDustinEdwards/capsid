@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { checkScope } from "../src/scope.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { parseNamespaceRepos, reposForNamespace } from "../scripts/mint-agents.mjs";
@@ -134,7 +134,7 @@ test("END TO END: a driver is refused register_namespace through a real connecti
 
 test("END TO END: the admin still maps namespaces", async () => {
   // The admin is not locked out of the tool.
-  const result = await callAs(adminAgent("DrDustinEdwards"), "update_namespace", {
+  const result = await callAs(adminAgentForEmail("admin@example.com"), "update_namespace", {
     namespace: "capsid",
     repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
   });

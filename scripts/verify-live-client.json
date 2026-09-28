@@ -1,0 +1,8 @@
+{
+  "client_id": "https://raw.githubusercontent.com/DrDustinEdwards/capsid/master/scripts/verify-live-client.json",
+  "client_name": "capsid verify-live probe",
+  "redirect_uris": ["https://example.com/verify-live-callback"],
+  "token_endpoint_auth_method": "none",
+  "grant_types": ["authorization_code"],
+  "response_types": ["code"]
+}

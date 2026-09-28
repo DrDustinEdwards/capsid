@@ -1,6 +1,6 @@
 // THE BACKUP FRESHNESS CHECK, separated from the gate so a test can drive it, for the
-// same reason scripts/canary-lib.mjs and scripts/reap-lib.mjs exist: verify-live.mjs is
-// a program that runs on import.
+// same reason scripts/canary-lib.mjs and scripts/cimd-probe-lib.mjs exist: verify-live.mjs
+// is a program that runs on import.
 //
 // A gate rather than only a /health field, so a failing backup cron is reported.
 //

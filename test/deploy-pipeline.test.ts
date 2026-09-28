@@ -51,7 +51,8 @@ test("the live job rolls back when a gate fails on a run that deployed", () => {
   assert.match(ci, /wrangler@[\d.]+ rollback/, "the live job has no rollback step");
   // Guarded to this run's own deploy. On a scheduled run a red gate usually means the
   // live sha is behind master, and rolling back would move it further away.
-  const step = ci.slice(ci.indexOf("Roll back"), ci.indexOf("Reap this run's probe client"));
+  // The rollback is the job's last step since the probe-client reaper went with DCR.
+  const step = ci.slice(ci.indexOf("Roll back"));
   assert.match(step, /failure\(\)/, "the rollback step is not conditioned on a failure");
   assert.match(step, /needs\.deploy\.result == 'success'/, "the rollback runs on runs that did not deploy");
   // Both shas, so the rollback can be checked afterwards.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { operatorIdentity, sha256Hex } from "../src/auth.ts";
 import { improveControl } from "../src/improve-run.ts";
 import { buildServer } from "../src/server.ts";
@@ -87,7 +87,7 @@ test("two mints are different keys", async () => {
 test("the mint is a control action on the existing tool, not a new tool", async () => {
   // The tool count is asserted in test/counts.test.ts; this checks the mint is an
   // action of improve_run rather than a tool of its own.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "improve-run-mint", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

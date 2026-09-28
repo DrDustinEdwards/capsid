@@ -10,7 +10,7 @@ import {
   POLICY_CHECKS,
   requiredCiLabel,
 } from "../src/auto-merge-policy.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -187,7 +187,7 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 test("sign_policy is admin only in the scope table, and the refusal says why", () => {
   // Stated in TOOL_ACTION_GRANTS and enforced by the registrar.
   assert.equal(requiredForAction("improve_run", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
-  const driver = { ...adminAgent("DrDustinEdwards"), actor: "agent:capsid-driver", admin: false };
+  const driver = { ...adminAgentForEmail("admin@example.com"), actor: "agent:capsid-driver", admin: false };
   const refusal = checkScope(driver, { tool: "improve_run", action: "sign_policy", namespace: "capsid", ...needFor(requiredForAction("improve_run", "sign_policy")) });
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);

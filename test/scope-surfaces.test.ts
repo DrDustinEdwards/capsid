@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { watcherAgent } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -83,7 +83,7 @@ test("PLANT: resources/list shows only the namespaces the caller is scoped to", 
 });
 
 test("THE ADMIN STILL SEES EVERY NAMESPACE, so the filter is a scope and not a ceiling", async () => {
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   const listed = (await client.listResources()) as { resources: Array<{ uri: string }> };
   await close();
   const uris = listed.resources.map((r) => r.uri);
@@ -133,7 +133,7 @@ test("PLANT: `namespaces` shows a scoped caller only its own row", async () => {
 });
 
 test("THE ADMIN STILL SEES THE WHOLE MAPPING", async () => {
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   const result = (await client.callTool({ name: "namespaces", arguments: {} })) as { content: Array<{ text: string }> };
   await close();
   const rows = JSON.parse(result.content[0].text) as Array<{ namespace: string }>;
@@ -153,7 +153,7 @@ test("PLANT: improve_status hands a scoped caller NO credential inventory", asyn
 });
 
 test("THE ADMIN STILL GETS THE INVENTORY, which is who it is for", async () => {
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   const result = (await client.callTool({ name: "improve_status", arguments: {} })) as { content: Array<{ text: string }> };
   await close();
   const body = JSON.parse(result.content[0].text) as { agents?: unknown[] };

@@ -7,6 +7,8 @@ import { test } from "node:test";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
 import { ACCESS_SAAS } from "../scripts/bindings.mjs";
+// @ts-expect-error as above
+import { PROBE_REDIRECT } from "../scripts/cimd-probe-lib.mjs";
 
 // A gate that got no answer has not refused the deploy. scripts/verify-live.mjs
 // retries a thrown fetch, records a gate whose requests never got an answer as
@@ -43,7 +45,13 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
     res.end(JSON.stringify(body));
   };
   if (url.pathname === "/health") return json(200, { status: "ok", sha: SHA, dirty: false, store: { d1: "ok", fts: "ok" } });
-  if (url.pathname === "/register" && req.method === "POST") return json(201, { client_id: "probe-client" });
+  // CIMD only: no registration, and the probe document served here, at the URL the
+  // script is pointed at through VERIFY_PROBE_CLIENT_ID.
+  if (url.pathname === "/register") return json(404, { error: "not found" });
+  if (url.pathname === "/.well-known/oauth-authorization-server") return json(200, { client_id_metadata_document_supported: true });
+  if (url.pathname === "/probe-client.json") {
+    return json(200, { client_id: `http://${req.headers.host}/probe-client.json`, client_name: "probe", redirect_uris: [PROBE_REDIRECT], token_endpoint_auth_method: "none" });
+  }
   if (url.pathname === "/authorize" && req.method === "POST") {
     // The Access sign-in, as src/access-login.ts builds it, for this stub's own origin.
     const signIn = new URL(`${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`);
@@ -92,6 +100,7 @@ async function run(handler: Handler, drop: (req: IncomingMessage, nth: number) =
       VERIFY_POLL_ATTEMPTS: "2",
       VERIFY_POLL_INTERVAL_MS: "5",
       VERIFY_FETCH_TRIES: "2",
+      VERIFY_PROBE_CLIENT_ID: `http://127.0.0.1:${port}/probe-client.json`,
     };
     delete env.CLOUDFLARE_ACCOUNT_ID;
     delete env.CLOUDFLARE_API_TOKEN;
@@ -125,7 +134,7 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
   const { code, out } = await run(healthy, () => true);
   assert.equal(code, 3, out);
   assert.match(out, /NORUN {2}1 health \+ provenance/);
-  assert.match(out, /NORUN {2}2 register/);
+  assert.match(out, /NORUN {2}2 CIMD only, no registration/);
   // The gates that depend on a client id inherit could-not-run rather than failing.
   assert.match(out, /NORUN {2}3 consent form renders/);
   assert.doesNotMatch(out, /FAIL {2}/);
@@ -224,4 +233,50 @@ test("an enforced COOP or a non-html CSP no longer fails gate 6: those arms pinn
     () => false
   );
   assert.equal(code, 0, out);
+});
+
+// Gate 2 since registration was removed: the script wiring, beside the decisions in
+// test/cimd-probe.test.ts.
+test("gate 2 refuses a Worker that still registers clients", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/register") return false;
+      res.writeHead(201, { ...NON_HTML, "content-type": "application/json" });
+      res.end(JSON.stringify({ client_id: "registered" }));
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}2 CIMD only, no registration\n.*answered 201; DCR is meant to be off/);
+});
+
+test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 5 do not run on it", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/probe-client.json") return false;
+      res.writeHead(200, { ...NON_HTML, "content-type": "application/json" });
+      res.end(JSON.stringify({ client_id: "https://example.com/elsewhere.json", client_name: "probe", redirect_uris: ["https://example.com/verify-live-callback"], token_endpoint_auth_method: "none" }));
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}2 CIMD only, no registration\n.*not its own URL/);
+  assert.match(out, /FAIL {2}3 consent form renders\n.*skipped: no probe client from gate 2/);
+});
+
+test("a probe document GitHub does not serve is could-not-run, not a refusal", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/probe-client.json") return false;
+      res.writeHead(404, NON_HTML);
+      res.end();
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 3, out);
+  assert.match(out, /NORUN {2}2 CIMD only, no registration\n.*answered 404/);
+  assert.match(out, /NORUN {2}3 consent form renders/);
 });

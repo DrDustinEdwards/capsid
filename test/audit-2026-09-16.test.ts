@@ -8,7 +8,7 @@ import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, reportPath } from "../src/truth-report.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // Small defects from AUDIT-2026-09-16.md, one plant each, kept so a fixed defect
@@ -46,7 +46,7 @@ test("PLANT: the driver mint instruction agrees with what register_namespace act
 test("PLANT: the jobs description states the correction cap rather than promising no cap", async () => {
   // resumeJob refuses a non-admin once CORRECTION_CAP corrections have been spent, so
   // the description must state the cap.
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   try {
     const { tools } = await client.listTools();
     const jobs = tools.find((t) => t.name === "jobs");
@@ -109,7 +109,7 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   // Derived from the served schemas. An optional action argument is a handler default,
   // and if the enforcement point does not know it, a narrowed caller is refused the
   // tool's own default.
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"));
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   const { tools } = await client.listTools();
   await close();
   const wired = tools.filter((t) => actionArgFor(t.name) !== undefined);
@@ -285,7 +285,7 @@ test("PLANT: a caller scoped past 502 rows it cannot see still gets its own docu
 test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounded and with a cursor", async () => {
   // Without this, a query that filtered everything out would pass the plant above by
   // returning two rows for the wrong reason.
-  const { client, close } = await connect(adminAgent("DrDustinEdwards"), CROWDED);
+  const { client, close } = await connect(adminAgentForEmail("admin@example.com"), CROWDED);
   try {
     const first = await client.listResources();
     assert.equal(first.resources.length, MAX_ROWS, "the admin listing is not bounded");
