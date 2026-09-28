@@ -15,14 +15,16 @@ import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 // claimed_by carries the same shape as audit_log.actor (migrations/0006), so one
 // query joins a job to what its driver did. A minted agent speaks that vocabulary as
 // `agent:<name>` (agentActor in src/agents-schema.ts), and the name is unique in the
-// agents table and never reused, so the string identifies exactly one credential.
-const ACTOR_SHAPE = /^(github:|opkey:|agent:)/;
+// agents table and never reused, so the string identifies exactly one credential. The
+// admin is `access:<email>` on the MCP login since it moved to Cloudflare Access
+// (docs/auth.md, 2026-09-27) and `github:<login>` on the console until it moves too.
+const ACTOR_SHAPE = /^(access:|github:|opkey:|agent:)/;
 
 export function actorShapeRefusal(action: string, actor: string): JobResult | null {
   if (ACTOR_SHAPE.test(actor)) return null;
   return refuse(
     action,
-    `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against a github: login, an opkey: fingerprint, or an agent: name.`
+    `'${actor}' is not a caller identity this queue can hold a lease for. A claim is recorded against an access: email, a github: login, an opkey: fingerprint, or an agent: name.`
   );
 }
 
