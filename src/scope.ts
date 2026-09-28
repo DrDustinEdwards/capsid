@@ -157,8 +157,14 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and GitHub login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
   "/console": "the admin console, gated by its own GitHub OAuth session",
-  "/console.json": "the admin console's data, gated by the same console session",
+  "/console.json": "a permanent redirect to /console/json that serves nothing itself; the session cookie is scoped to /console",
+  "/console/json": "the admin console's data, gated by the same console session",
   "/console/callback": "the console's OAuth callback, which validates state before issuing a session",
+  "/console/api/ops": "the Watch Floor feed, gated by consoleGate: the administrator's Access session, and a 403 for any bearer",
+  "/console/api/ops/refresh":
+    "one watcher pass on demand, gated by consoleGate, then a same-origin header, then a KV rate limit that fails closed",
+  "/console/app": "the Watch Floor app's page, served from ASSETS only after consoleGate admits the administrator's session",
+  "/console/app/*": "the Watch Floor app's files, served from ASSETS only after consoleGate admits the administrator's session",
 };
 
 // The refusal for a gated route, or null. The same checkScope the tools use.

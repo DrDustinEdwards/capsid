@@ -31,11 +31,15 @@ import { handleHealth } from "./health";
 import { escapeHtml } from "./html";
 import {
   CONSOLE_CALLBACK_PATH,
+  CONSOLE_JSON_LEGACY_PATH,
   CONSOLE_JSON_PATH,
   CONSOLE_PATH,
+  consoleJsonMoved,
   handleConsole,
   handleConsoleJson,
 } from "./console";
+import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX, handleConsoleApp } from "./console-app";
+import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { handleConsoleAction } from "./console-actions";
 import { handleConsoleCallback } from "./console-auth";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
@@ -576,7 +580,12 @@ export const defaultHandler = {
     if (url.pathname === CONSOLE_PATH && request.method === "GET") return handleConsole(request, env);
     if (url.pathname === CONSOLE_PATH && request.method === "POST") return handleConsoleAction(request, env);
     if (url.pathname === CONSOLE_JSON_PATH && request.method === "GET") return handleConsoleJson(request, env);
+    if (url.pathname === CONSOLE_JSON_LEGACY_PATH) return consoleJsonMoved(request);
     if (url.pathname === CONSOLE_CALLBACK_PATH) return handleConsoleCallback(request, env, new Date());
+    if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
+    if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
+    // The app and everything under it, every method: the handler gates first.
+    if (url.pathname === CONSOLE_APP_PATH || url.pathname.startsWith(CONSOLE_APP_PREFIX)) return handleConsoleApp(request, env);
 
     return new Response("not found", { status: 404 });
   },

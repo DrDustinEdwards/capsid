@@ -212,7 +212,9 @@ export interface AgentSummary {
   record: AgentRecord;
 }
 
-async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
+// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
+// with the same records rather than a second reading of the agents table.
+export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const { results } = await db
     .prepare("SELECT name, kind, scopes, last_seen, revoked_at FROM agents ORDER BY revoked_at IS NOT NULL, name")
     .all<{ name: string; kind: string; scopes: string; last_seen: string | null; revoked_at: string | null }>();

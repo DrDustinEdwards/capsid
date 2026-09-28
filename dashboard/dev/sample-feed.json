@@ -1,0 +1,1587 @@
+{
+  "snapshot": {
+    "version": 1,
+    "pass_at": "2026-09-28T11:47:20.000Z",
+    "pass_ms": 4180,
+    "cadence_min": 30,
+    "checks": [
+      {
+        "id": "health",
+        "state": "clear",
+        "findings": []
+      },
+      {
+        "id": "deploy-drift",
+        "state": "clear",
+        "findings": []
+      },
+      {
+        "id": "schema",
+        "state": "clear",
+        "findings": []
+      },
+      {
+        "id": "budget",
+        "state": "clear",
+        "findings": []
+      },
+      {
+        "id": "mirror",
+        "state": "finding",
+        "findings": [
+          "mirror-run-failed"
+        ]
+      },
+      {
+        "id": "ci",
+        "state": "finding",
+        "findings": [
+          "ci-red-sample-b-c91d7aa"
+        ]
+      },
+      {
+        "id": "site-probes",
+        "state": "finding",
+        "findings": [
+          "probe-sample-f"
+        ]
+      },
+      {
+        "id": "errors",
+        "state": "finding",
+        "findings": [
+          "errors-sample-c"
+        ]
+      },
+      {
+        "id": "cf-deploys",
+        "state": "could-not-run",
+        "findings": [
+          "Cloudflare API answered 429 on one call; retried next pass"
+        ]
+      }
+    ],
+    "health": {
+      "status": "ok",
+      "sha": "2b75d85",
+      "dirty": false,
+      "builtAt": "2026-09-28T10:24:00.000Z",
+      "schema_version": "0042",
+      "store": {
+        "d1": "ok",
+        "fts": "ok"
+      },
+      "bindings": {
+        "media": "ok",
+        "app_kv": "ok"
+      },
+      "backup": {
+        "last_ok": "2026-09-28T08:48:00.000Z",
+        "age_hours": 3.2
+      }
+    },
+    "mirror": {
+      "newest_dump": "2026-09-18T07:12:00.000Z",
+      "last_run": {
+        "at": "2026-09-28T08:36:00.000Z",
+        "conclusion": "failure",
+        "url": "https://github.com/example-org/sample-backups/actions/runs/1000000001"
+      }
+    },
+    "ci": [
+      {
+        "namespace": "sample",
+        "latest": {
+          "head_sha": "2b75d85e0c1f",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-09-28T10:18:00.000Z",
+          "url": "https://github.com/example-org/sample-a/actions/runs/1000000002"
+        }
+      },
+      {
+        "namespace": "sample-b",
+        "latest": {
+          "head_sha": "c91d7aa31b20",
+          "status": "completed",
+          "conclusion": "startup_failure",
+          "created_at": "2026-09-26T09:36:00.000Z",
+          "url": "https://github.com/example-org/sample-b/actions/runs/1000000003"
+        }
+      },
+      {
+        "namespace": "sample-c",
+        "latest": {
+          "head_sha": "a70e3d1f9e02",
+          "status": "in_progress",
+          "conclusion": null,
+          "created_at": "2026-09-28T11:54:00.000Z",
+          "url": "https://github.com/example-org/sample-c/actions/runs/1000000004"
+        }
+      },
+      {
+        "namespace": "sample-d",
+        "latest": null
+      }
+    ],
+    "site_map": {
+      "unmapped": [],
+      "unknown": [
+        "sample-legacy"
+      ]
+    },
+    "sites": [
+      {
+        "namespace": "sample",
+        "name": "Sample A",
+        "origin": "https://sample-a.example.com",
+        "health_path": "/health",
+        "platform": "cloudflare",
+        "state": "ok",
+        "http_status": 200,
+        "latency_ms": 133,
+        "sha": "2b75d85",
+        "error": null,
+        "checked_at": "2026-09-28T11:47:13.405Z",
+        "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-a",
+          "deploys": [
+            {
+              "id": "8ceaf8df-18e3-4716-835d-fe97e2e58f69",
+              "created_on": "2026-09-28T05:50:19.382Z",
+              "version_id": "45bf45ec-a392-fc3f-be43-9d22c08f42cd",
+              "message": "Deploy 97fe911 from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "03271a14-5777-81cf-cc8a-88a568977101",
+              "created_on": "2026-09-27T20:26:35.592Z",
+              "version_id": "79ec2afc-1d2b-504a-56a4-31c8fb942939",
+              "message": "Deploy 06510da from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "035a5d3e-ae2a-1352-2349-da9038a22745",
+              "created_on": "2026-09-27T11:43:59.848Z",
+              "version_id": "7a6b1e66-cf3f-5e9d-5910-242ef16346e2",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "777b7492-4f7a-f1d5-f2d7-98cc88fcd6ba",
+              "created_on": "2026-09-24T20:33:12.900Z",
+              "version_id": "07fc67fb-3683-db15-65c3-27b55cd029e3",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "1a4a2dac-a880-c1ee-ef47-805c6208424f",
+              "created_on": "2026-09-24T12:36:56.164Z",
+              "version_id": null,
+              "message": "Deploy e9c6961 from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "9d387433-6787-1947-ef6b-a2a34b7a0103",
+              "created_on": "2026-09-22T18:32:46.084Z",
+              "version_id": "324ee1b7-4883-3668-7647-019253bd06a0",
+              "message": "Deploy 88eaa37 from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "2c8d8f36-8be1-33de-5354-8e2c7f1a724d",
+              "created_on": "2026-09-22T06:18:50.781Z",
+              "version_id": "1fbfedd3-ae85-d1de-e6a7-7360d5319f08",
+              "message": "Deploy b4702db from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "e8d34e71-909d-1962-344c-a837ea6b4737",
+              "created_on": "2026-09-21T22:28:51.153Z",
+              "version_id": "effaa7f3-eaa7-d12d-1bf5-9ce8c6d63cf5",
+              "message": "Deploy e87b431 from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            }
+          ],
+          "errors24": [
+            {
+              "hour": "2026-09-27T12:00:00.000Z",
+              "requests": 192,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T13:00:00.000Z",
+              "requests": 150,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T14:00:00.000Z",
+              "requests": 301,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T15:00:00.000Z",
+              "requests": 291,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-27T16:00:00.000Z",
+              "requests": 294,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T17:00:00.000Z",
+              "requests": 197,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T18:00:00.000Z",
+              "requests": 187,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T19:00:00.000Z",
+              "requests": 145,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T20:00:00.000Z",
+              "requests": 177,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-27T21:00:00.000Z",
+              "requests": 193,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T22:00:00.000Z",
+              "requests": 230,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-27T23:00:00.000Z",
+              "requests": 163,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T00:00:00.000Z",
+              "requests": 253,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T01:00:00.000Z",
+              "requests": 300,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T02:00:00.000Z",
+              "requests": 163,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T03:00:00.000Z",
+              "requests": 277,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T04:00:00.000Z",
+              "requests": 248,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T05:00:00.000Z",
+              "requests": 179,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T06:00:00.000Z",
+              "requests": 168,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T07:00:00.000Z",
+              "requests": 192,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T08:00:00.000Z",
+              "requests": 202,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T09:00:00.000Z",
+              "requests": 279,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T10:00:00.000Z",
+              "requests": 233,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-28T11:00:00.000Z",
+              "requests": 296,
+              "errors": 1
+            }
+          ],
+          "errors_reason": null
+        }
+      },
+      {
+        "namespace": "sample-b",
+        "name": "Sample B",
+        "origin": "https://sample-b.example.com",
+        "health_path": "/api/health",
+        "platform": "cloudflare",
+        "state": "degraded",
+        "http_status": 404,
+        "latency_ms": 293,
+        "sha": null,
+        "error": "Health route answered 404; the root answered 200",
+        "checked_at": "2026-09-28T11:47:04.353Z",
+        "ring": "111111111111111111111111111111111111111111111111111011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111011111011111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-b",
+          "deploys": [
+            {
+              "id": "b149eb16-cf09-9a7a-cb98-5b8aa196df13",
+              "created_on": "2026-09-28T11:10:00.000Z",
+              "version_id": "ca5e5d67-352e-d65e-a6b9-1e87f3e2ae1a",
+              "message": "Deploy fad974d from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "0b351b56-a924-9011-27e4-c9e82bc47b64",
+              "created_on": "2026-09-24T03:21:26.720Z",
+              "version_id": "4aff93de-aa0a-3195-1c7f-5f0880d8157e",
+              "message": null,
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "062ba155-958b-8dc8-9bab-8ca4cf8d8e92",
+              "created_on": "2026-09-23T23:10:39.089Z",
+              "version_id": "a33b94b9-4d0f-eeaa-dd32-e1f3a4eb28e1",
+              "message": "Deploy ea40078 from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "ca4b7ead-f08f-526d-01d6-485c63d2690e",
+              "created_on": "2026-09-21T21:03:48.719Z",
+              "version_id": "92518459-f8f1-831d-fd07-63f520938a0a",
+              "message": "Deploy 3e84034 from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "cf043a75-c71f-1a03-a4db-364a1ff34201",
+              "created_on": "2026-09-21T17:49:16.202Z",
+              "version_id": "9379df30-e1f8-4dc0-26f1-310250fbec29",
+              "message": "Deploy cfe57f6 from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            }
+          ],
+          "errors24": [
+            {
+              "hour": "2026-09-27T12:00:00.000Z",
+              "requests": 474,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-27T13:00:00.000Z",
+              "requests": 753,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-27T14:00:00.000Z",
+              "requests": 529,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-27T15:00:00.000Z",
+              "requests": 597,
+              "errors": 1
+            },
+            {
+              "hour": "2026-09-27T16:00:00.000Z",
+              "requests": 1013,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-27T17:00:00.000Z",
+              "requests": 551,
+              "errors": 4
+            },
+            {
+              "hour": "2026-09-27T18:00:00.000Z",
+              "requests": 942,
+              "errors": 5
+            },
+            {
+              "hour": "2026-09-27T19:00:00.000Z",
+              "requests": 763,
+              "errors": 5
+            },
+            {
+              "hour": "2026-09-27T20:00:00.000Z",
+              "requests": 721,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-27T21:00:00.000Z",
+              "requests": 737,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-27T22:00:00.000Z",
+              "requests": 1018,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-27T23:00:00.000Z",
+              "requests": 820,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T00:00:00.000Z",
+              "requests": 660,
+              "errors": 4
+            },
+            {
+              "hour": "2026-09-28T01:00:00.000Z",
+              "requests": 520,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T02:00:00.000Z",
+              "requests": 538,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T03:00:00.000Z",
+              "requests": 1005,
+              "errors": 4
+            },
+            {
+              "hour": "2026-09-28T04:00:00.000Z",
+              "requests": 1033,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-28T05:00:00.000Z",
+              "requests": 926,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T06:00:00.000Z",
+              "requests": 877,
+              "errors": 5
+            },
+            {
+              "hour": "2026-09-28T07:00:00.000Z",
+              "requests": 597,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T08:00:00.000Z",
+              "requests": 586,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T09:00:00.000Z",
+              "requests": 875,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T10:00:00.000Z",
+              "requests": 908,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-28T11:00:00.000Z",
+              "requests": 462,
+              "errors": 1
+            }
+          ],
+          "errors_reason": null
+        }
+      },
+      {
+        "namespace": "sample-c",
+        "name": "Sample C",
+        "origin": "https://sample-c.example.com",
+        "health_path": "/health",
+        "platform": "cloudflare",
+        "state": "ok",
+        "http_status": 200,
+        "latency_ms": 279,
+        "sha": "a70e3d1",
+        "error": null,
+        "checked_at": "2026-09-28T11:47:00.138Z",
+        "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101111111111111110011111111111111111111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-c",
+          "deploys": [
+            {
+              "id": "77cfa794-5d53-a225-b23c-5bbc6672feb2",
+              "created_on": "2026-09-28T08:48:00.000Z",
+              "version_id": "c3111b21-f090-56dd-bbc9-2fa3aa15c68c",
+              "message": "Raise the image cache limit",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "a3212792-13b3-1b18-7e03-a313090a389a",
+              "created_on": "2026-09-24T01:11:14.536Z",
+              "version_id": "c218ba94-8af2-4ab2-92df-8499620f03e1",
+              "message": "Deploy dadc7e5 from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "64495611-24f6-4f93-a5e5-c865fb8dd915",
+              "created_on": "2026-09-24T00:49:26.583Z",
+              "version_id": "f00b3cab-1322-7365-1ce9-3ece1706a2c4",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "e46d3dbf-3a25-49ce-f6b7-59c0defd08d0",
+              "created_on": "2026-09-22T15:00:18.308Z",
+              "version_id": "cccb4349-8fae-0b53-fd6a-e25259353fe4",
+              "message": "Deploy 7d7671b from main",
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            }
+          ],
+          "errors24": [
+            {
+              "hour": "2026-09-27T12:00:00.000Z",
+              "requests": 338,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-27T13:00:00.000Z",
+              "requests": 489,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-27T14:00:00.000Z",
+              "requests": 301,
+              "errors": 6
+            },
+            {
+              "hour": "2026-09-27T15:00:00.000Z",
+              "requests": 507,
+              "errors": 13
+            },
+            {
+              "hour": "2026-09-27T16:00:00.000Z",
+              "requests": 439,
+              "errors": 9
+            },
+            {
+              "hour": "2026-09-27T17:00:00.000Z",
+              "requests": 442,
+              "errors": 8
+            },
+            {
+              "hour": "2026-09-27T18:00:00.000Z",
+              "requests": 298,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-27T19:00:00.000Z",
+              "requests": 266,
+              "errors": 4
+            },
+            {
+              "hour": "2026-09-27T20:00:00.000Z",
+              "requests": 249,
+              "errors": 5
+            },
+            {
+              "hour": "2026-09-27T21:00:00.000Z",
+              "requests": 462,
+              "errors": 8
+            },
+            {
+              "hour": "2026-09-27T22:00:00.000Z",
+              "requests": 364,
+              "errors": 9
+            },
+            {
+              "hour": "2026-09-27T23:00:00.000Z",
+              "requests": 455,
+              "errors": 11
+            },
+            {
+              "hour": "2026-09-28T00:00:00.000Z",
+              "requests": 504,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-28T01:00:00.000Z",
+              "requests": 339,
+              "errors": 7
+            },
+            {
+              "hour": "2026-09-28T02:00:00.000Z",
+              "requests": 404,
+              "errors": 11
+            },
+            {
+              "hour": "2026-09-28T03:00:00.000Z",
+              "requests": 271,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-28T04:00:00.000Z",
+              "requests": 517,
+              "errors": 10
+            },
+            {
+              "hour": "2026-09-28T05:00:00.000Z",
+              "requests": 316,
+              "errors": 8
+            },
+            {
+              "hour": "2026-09-28T06:00:00.000Z",
+              "requests": 401,
+              "errors": 2
+            },
+            {
+              "hour": "2026-09-28T07:00:00.000Z",
+              "requests": 517,
+              "errors": 5
+            },
+            {
+              "hour": "2026-09-28T08:00:00.000Z",
+              "requests": 493,
+              "errors": 3
+            },
+            {
+              "hour": "2026-09-28T09:00:00.000Z",
+              "requests": 419,
+              "errors": 14
+            },
+            {
+              "hour": "2026-09-28T10:00:00.000Z",
+              "requests": 508,
+              "errors": 17
+            },
+            {
+              "hour": "2026-09-28T11:00:00.000Z",
+              "requests": 460,
+              "errors": 16
+            }
+          ],
+          "errors_reason": null
+        }
+      },
+      {
+        "namespace": "sample-d",
+        "name": "Sample D",
+        "origin": "https://sample-d.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "state": "liveness",
+        "http_status": 200,
+        "latency_ms": 203,
+        "sha": null,
+        "error": null,
+        "checked_at": "2026-09-28T11:47:04.909Z",
+        "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111110111111111111111111111111111111111111111111111111111111111111111111111011111111111111111111111111111111111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-d",
+          "deploys": [
+            {
+              "id": "78f3eeff-f474-aaf6-62ab-2fe342764241",
+              "created_on": "2026-09-28T09:04:57.455Z",
+              "version_id": "0e27a468-c966-2fdd-edf8-aa35bd215e41",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "c6712b69-c0f1-2a2c-4a41-7dafa72611bf",
+              "created_on": "2026-09-26T06:04:16.652Z",
+              "version_id": "b754815f-8b3b-1af7-8b0e-54f9ae0b677b",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "operator@example.com"
+            },
+            {
+              "id": "37be3dff-f53d-3143-0b5f-c577d5fc6af7",
+              "created_on": "2026-09-26T04:10:09.256Z",
+              "version_id": "9de71060-bb28-0d93-3747-dcaa7cd44fdd",
+              "message": "Deploy 6a9496b from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "024e3d5d-39d3-18b3-0c3f-7ac243e836cf",
+              "created_on": "2026-09-25T05:39:24.266Z",
+              "version_id": "2da20df7-a1a1-035b-daa6-81c3bc97a098",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "af6b1da2-30cb-1546-b895-969ccb8ef338",
+              "created_on": "2026-09-22T17:16:24.315Z",
+              "version_id": "95afe99a-5e87-e08a-2011-fe3152d9503b",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "operator@example.com"
+            }
+          ],
+          "errors24": [
+            {
+              "hour": "2026-09-27T12:00:00.000Z",
+              "requests": 87,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T13:00:00.000Z",
+              "requests": 119,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T14:00:00.000Z",
+              "requests": 91,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T15:00:00.000Z",
+              "requests": 112,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T16:00:00.000Z",
+              "requests": 86,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T17:00:00.000Z",
+              "requests": 108,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T18:00:00.000Z",
+              "requests": 109,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T19:00:00.000Z",
+              "requests": 118,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T20:00:00.000Z",
+              "requests": 78,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T21:00:00.000Z",
+              "requests": 74,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T22:00:00.000Z",
+              "requests": 78,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T23:00:00.000Z",
+              "requests": 107,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T00:00:00.000Z",
+              "requests": 101,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T01:00:00.000Z",
+              "requests": 107,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T02:00:00.000Z",
+              "requests": 97,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T03:00:00.000Z",
+              "requests": 59,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T04:00:00.000Z",
+              "requests": 122,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T05:00:00.000Z",
+              "requests": 98,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T06:00:00.000Z",
+              "requests": 87,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T07:00:00.000Z",
+              "requests": 92,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T08:00:00.000Z",
+              "requests": 111,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T09:00:00.000Z",
+              "requests": 109,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T10:00:00.000Z",
+              "requests": 112,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T11:00:00.000Z",
+              "requests": 114,
+              "errors": 0
+            }
+          ],
+          "errors_reason": null
+        }
+      },
+      {
+        "namespace": "sample-d",
+        "name": "Sample E",
+        "origin": "https://sample-e.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "state": "liveness",
+        "http_status": 200,
+        "latency_ms": 93,
+        "sha": null,
+        "error": null,
+        "checked_at": "2026-09-28T11:47:15.215Z",
+        "ring": "----------------------------------------11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111011111111111111111111111111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-e",
+          "deploys": [
+            {
+              "id": "8c972079-cb41-d73c-1f6f-453beb532945",
+              "created_on": "2026-09-27T12:06:05.152Z",
+              "version_id": "e16d7f3f-d15b-0111-788d-869c1fb017b6",
+              "message": "Deploy 17e2e1c from main",
+              "triggered_by": "version_upload",
+              "author_email": "ci@example.com"
+            },
+            {
+              "id": "ae11bd28-662b-b8e9-d78f-eadbba920ba7",
+              "created_on": "2026-09-23T19:37:49.040Z",
+              "version_id": "57831391-6969-b017-2958-42a2131abd34",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "ci@example.com"
+            }
+          ],
+          "errors24": null,
+          "errors_reason": "Analytics query answered 429; deployments were read"
+        }
+      },
+      {
+        "namespace": "sample-f",
+        "name": "Sample F",
+        "origin": "https://sample-f.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "state": "down",
+        "http_status": 522,
+        "latency_ms": 283,
+        "sha": null,
+        "error": "Root answered 522 on the last 3 passes",
+        "checked_at": "2026-09-28T11:47:04.021Z",
+        "ring": "111111111111111111111011111111111111111111111111111111111111111111111111111111111011111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111101111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111011111111111111111111111111111111111111111111111111111111111110000",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "ok",
+          "script": "sample-f",
+          "deploys": [
+            {
+              "id": "bfaf78d2-0f95-2610-c0c7-e314dd858491",
+              "created_on": "2026-09-28T06:28:03.744Z",
+              "version_id": "b9199b6a-7767-a184-279e-d6a812de3cee",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "operator@example.com"
+            },
+            {
+              "id": "4c4fff40-cbba-1d0d-e346-ea32fc0faedd",
+              "created_on": "2026-09-24T13:22:32.357Z",
+              "version_id": "7a425c27-857d-f547-7431-76be13aa0235",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "operator@example.com"
+            },
+            {
+              "id": "0734c2b6-5b80-839d-0af7-00f5abe4e95b",
+              "created_on": "2026-09-22T18:46:18.223Z",
+              "version_id": "9acdb2c7-2b6b-f6b6-0ff2-470c8c69c52f",
+              "message": null,
+              "triggered_by": "deployment",
+              "author_email": "operator@example.com"
+            }
+          ],
+          "errors24": [
+            {
+              "hour": "2026-09-27T12:00:00.000Z",
+              "requests": 50,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T13:00:00.000Z",
+              "requests": 76,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T14:00:00.000Z",
+              "requests": 56,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T15:00:00.000Z",
+              "requests": 45,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T16:00:00.000Z",
+              "requests": 51,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T17:00:00.000Z",
+              "requests": 76,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T18:00:00.000Z",
+              "requests": 59,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T19:00:00.000Z",
+              "requests": 81,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T20:00:00.000Z",
+              "requests": 73,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T21:00:00.000Z",
+              "requests": 50,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T22:00:00.000Z",
+              "requests": 78,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-27T23:00:00.000Z",
+              "requests": 79,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T00:00:00.000Z",
+              "requests": 49,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T01:00:00.000Z",
+              "requests": 77,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T02:00:00.000Z",
+              "requests": 71,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T03:00:00.000Z",
+              "requests": 78,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T04:00:00.000Z",
+              "requests": 62,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T05:00:00.000Z",
+              "requests": 45,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T06:00:00.000Z",
+              "requests": 41,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T07:00:00.000Z",
+              "requests": 66,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T08:00:00.000Z",
+              "requests": 38,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T09:00:00.000Z",
+              "requests": 46,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T10:00:00.000Z",
+              "requests": 56,
+              "errors": 0
+            },
+            {
+              "hour": "2026-09-28T11:00:00.000Z",
+              "requests": 54,
+              "errors": 0
+            }
+          ],
+          "errors_reason": null
+        }
+      },
+      {
+        "namespace": "sample-g",
+        "name": "Sample G",
+        "origin": "https://sample-g.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "state": "liveness",
+        "http_status": 200,
+        "latency_ms": 104,
+        "sha": null,
+        "error": null,
+        "checked_at": "2026-09-28T11:47:10.505Z",
+        "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "no-token",
+          "reason": "No Cloudflare token for this site's account"
+        }
+      },
+      {
+        "namespace": "sample-h",
+        "name": "Sample H",
+        "origin": "https://sample-h.example.com",
+        "health_path": "/api/health",
+        "platform": "vercel",
+        "state": "ok",
+        "http_status": 200,
+        "latency_ms": 147,
+        "sha": "8e41c02",
+        "error": null,
+        "checked_at": "2026-09-28T11:47:06.694Z",
+        "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101111111111111111111111111111111",
+        "ring_slot": 994775,
+        "cloudflare": {
+          "state": "not-cloudflare",
+          "reason": "Runs on Vercel; the Cloudflare read does not apply"
+        }
+      }
+    ]
+  },
+  "live": {
+    "generated": "2026-09-28T12:00:00.000Z",
+    "jobs": [
+      {
+        "id": "job_7c1e44b0a912",
+        "namespace": "sample",
+        "title": "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]",
+        "status": "blocked",
+        "priority": 0,
+        "posted_by": "agent:watcher",
+        "claimed_by": "agent:sample-driver",
+        "created_at": "2026-09-18T16:48:00.000Z",
+        "updated_at": "2026-09-18T19:12:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 1,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": "Clear the billing hold on the backup account, then run the mirror.",
+        "command": "gh workflow run mirror --repo example-org/sample-backups",
+        "result_ref": null,
+        "finding": {
+          "fingerprint": "mirror-run-failed"
+        }
+      },
+      {
+        "id": "job_e946e3196ab8",
+        "namespace": "sample",
+        "title": "Operations dashboard: every site in one view",
+        "status": "claimed",
+        "priority": 2,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-driver",
+        "created_at": "2026-09-27T00:00:00.000Z",
+        "updated_at": "2026-09-28T11:40:00.000Z",
+        "lease_expires": "2026-09-28T15:36:00.000Z",
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_91b3c0de5a24",
+        "namespace": "sample",
+        "title": "Design only: paired comparison for the methods note",
+        "status": "blocked",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-driver",
+        "created_at": "2026-09-26T07:12:00.000Z",
+        "updated_at": "2026-09-26T09:36:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 1,
+        "resumed_count": 0,
+        "gate_required": true,
+        "waits_on": "Read the design and answer its DECIDE list in a resume note.",
+        "command": "Read sample/research/design-paired-comparison.md and answer its DECIDE list (9 points) in a resume note.",
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_15e10168e61c",
+        "namespace": "sample-b",
+        "title": "Sync the score block onto the open scorer PR",
+        "status": "blocked",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-b-driver",
+        "created_at": "2026-09-22T12:00:00.000Z",
+        "updated_at": "2026-09-23T00:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 2,
+        "resumed_count": 1,
+        "gate_required": false,
+        "waits_on": "Merge sample-b #15 when its CI runs green.",
+        "command": "gh pr merge 15 --repo example-org/sample-b --squash",
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_9ab0bcf483ae",
+        "namespace": "sample-b",
+        "title": "Find why /api/health answers 404 on the live site",
+        "status": "queued",
+        "priority": 1,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": null,
+        "created_at": "2026-09-28T07:00:00.000Z",
+        "updated_at": "2026-09-28T07:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_0cdf2803f0ba",
+        "namespace": "sample-c",
+        "title": "Report the deployed sha from /health",
+        "status": "queued",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": null,
+        "created_at": "2026-09-27T10:00:00.000Z",
+        "updated_at": "2026-09-27T10:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_09db004529f4",
+        "namespace": "sample-c",
+        "title": "Watcher: error rate above 1% of requests [errors-sample-c]",
+        "status": "queued",
+        "priority": 2,
+        "posted_by": "agent:watcher",
+        "claimed_by": null,
+        "created_at": "2026-09-28T09:30:00.000Z",
+        "updated_at": "2026-09-28T09:30:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": {
+          "fingerprint": "errors-sample-c"
+        }
+      },
+      {
+        "id": "job_6db2b533410e",
+        "namespace": "sample-f",
+        "title": "Watcher: sample-f.example.com failed 3 probes in a row [probe-sample-f]",
+        "status": "queued",
+        "priority": 3,
+        "posted_by": "agent:watcher",
+        "claimed_by": null,
+        "created_at": "2026-09-28T10:54:00.000Z",
+        "updated_at": "2026-09-28T10:54:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": {
+          "fingerprint": "probe-sample-f"
+        }
+      },
+      {
+        "id": "job_6b5a4c3d2e1f",
+        "namespace": "sample",
+        "title": "Record the login switch dates in the auth doc",
+        "status": "done",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-driver",
+        "created_at": "2026-09-28T02:00:00.000Z",
+        "updated_at": "2026-09-28T11:10:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": "https://github.com/example-org/sample-a/pull/190",
+        "finding": null
+      },
+      {
+        "id": "job_195c11e2667b",
+        "namespace": "sample-b",
+        "title": "Publish queue shows scheduled posts",
+        "status": "done",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-b-driver",
+        "created_at": "2026-09-27T22:00:00.000Z",
+        "updated_at": "2026-09-28T06:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_4173dbeb8cc3",
+        "namespace": "sample-c",
+        "title": "Rotate the image cache key",
+        "status": "failed",
+        "priority": 0,
+        "posted_by": "access:operator@example.com",
+        "claimed_by": "agent:sample-c-driver",
+        "created_at": "2026-09-27T16:00:00.000Z",
+        "updated_at": "2026-09-28T03:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": null
+      },
+      {
+        "id": "job_f71dff903287",
+        "namespace": "sample",
+        "title": "Watcher: deploy drift, live sha behind main [deploy-drift-d88c043]",
+        "status": "superseded",
+        "priority": 0,
+        "posted_by": "agent:watcher",
+        "claimed_by": null,
+        "created_at": "2026-09-27T13:00:00.000Z",
+        "updated_at": "2026-09-27T18:00:00.000Z",
+        "lease_expires": null,
+        "blocked_count": 0,
+        "resumed_count": 0,
+        "gate_required": false,
+        "waits_on": null,
+        "command": null,
+        "result_ref": null,
+        "finding": {
+          "fingerprint": "deploy-drift-d88c043"
+        }
+      }
+    ],
+    "agents": [
+      {
+        "name": "sample-driver",
+        "kind": "driver",
+        "namespaces": [
+          "sample"
+        ],
+        "flags": [],
+        "last_seen": "2026-09-28T11:57:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 41,
+        "jobs_failed": 3,
+        "jobs_blocked": 58,
+        "prs_opened": 36,
+        "prs_merged": 31,
+        "pr_merge_rate": 0.86,
+        "ci_green_rate": 0.94,
+        "median_duration_minutes": 212
+      },
+      {
+        "name": "sample-b-driver",
+        "kind": "driver",
+        "namespaces": [
+          "sample-b"
+        ],
+        "flags": [],
+        "last_seen": "2026-09-28T06:12:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 64,
+        "jobs_failed": 5,
+        "jobs_blocked": 22,
+        "prs_opened": 71,
+        "prs_merged": 66,
+        "pr_merge_rate": 0.93,
+        "ci_green_rate": 0.9,
+        "median_duration_minutes": 96
+      },
+      {
+        "name": "sample-c-driver",
+        "kind": "driver",
+        "namespaces": [
+          "sample-c"
+        ],
+        "flags": [],
+        "last_seen": "2026-09-27T07:12:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 12,
+        "jobs_failed": 2,
+        "jobs_blocked": 4,
+        "prs_opened": 13,
+        "prs_merged": 11,
+        "pr_merge_rate": 0.85,
+        "ci_green_rate": null,
+        "median_duration_minutes": 118
+      },
+      {
+        "name": "sample-d-driver",
+        "kind": "driver",
+        "namespaces": [
+          "sample-d"
+        ],
+        "flags": [],
+        "last_seen": "2026-09-20T09:36:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 6,
+        "jobs_failed": 0,
+        "jobs_blocked": 3,
+        "prs_opened": 5,
+        "prs_merged": 5,
+        "pr_merge_rate": 1,
+        "ci_green_rate": null,
+        "median_duration_minutes": 77
+      },
+      {
+        "name": "seat",
+        "kind": "seat",
+        "namespaces": "*",
+        "flags": [
+          "can_merge"
+        ],
+        "last_seen": "2026-09-28T11:22:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 11,
+        "jobs_failed": 0,
+        "jobs_blocked": 9,
+        "prs_opened": 3,
+        "prs_merged": 58,
+        "pr_merge_rate": null,
+        "ci_green_rate": null,
+        "median_duration_minutes": null
+      },
+      {
+        "name": "watcher",
+        "kind": "cron",
+        "namespaces": "*",
+        "flags": [],
+        "last_seen": "2026-09-28T11:48:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 0,
+        "jobs_failed": 17,
+        "jobs_blocked": 0,
+        "prs_opened": 0,
+        "prs_merged": 0,
+        "pr_merge_rate": null,
+        "ci_green_rate": null,
+        "median_duration_minutes": null
+      },
+      {
+        "name": "reviewer",
+        "kind": "session",
+        "namespaces": "*",
+        "flags": [
+          "can_comment_pr"
+        ],
+        "last_seen": "2026-09-24T07:12:00.000Z",
+        "revoked_at": null,
+        "jobs_done": 0,
+        "jobs_failed": 0,
+        "jobs_blocked": 0,
+        "prs_opened": 0,
+        "prs_merged": 0,
+        "pr_merge_rate": null,
+        "ci_green_rate": null,
+        "median_duration_minutes": null
+      },
+      {
+        "name": "old-auditor",
+        "kind": "session",
+        "namespaces": "*",
+        "flags": [],
+        "last_seen": null,
+        "revoked_at": "2026-09-17T12:00:00.000Z",
+        "jobs_done": 0,
+        "jobs_failed": 0,
+        "jobs_blocked": 0,
+        "prs_opened": 0,
+        "prs_merged": 0,
+        "pr_merge_rate": null,
+        "ci_green_rate": null,
+        "median_duration_minutes": null
+      }
+    ],
+    "prs": [
+      {
+        "job_id": "job_6b5a4c3d2e1f",
+        "pr_url": "https://github.com/example-org/sample-a/pull/190",
+        "merged": null,
+        "merge_verified_at": null,
+        "recorded_at": "2026-09-28T11:10:00.000Z"
+      },
+      {
+        "job_id": "job_195c11e2667b",
+        "pr_url": "https://github.com/example-org/sample-b/pull/214",
+        "merged": true,
+        "merge_verified_at": "2026-09-28T06:12:00.000Z",
+        "recorded_at": "2026-09-28T06:00:00.000Z"
+      },
+      {
+        "job_id": "job_91b3c0de5a24",
+        "pr_url": "https://github.com/example-org/sample-a/pull/188",
+        "merged": false,
+        "merge_verified_at": "2026-09-26T12:00:00.000Z",
+        "recorded_at": "2026-09-26T07:12:00.000Z"
+      }
+    ],
+    "awaiting_seat": [
+      {
+        "namespace": "sample-c",
+        "repo": "example-org/sample-c",
+        "number": 32,
+        "failed": "auto-merge",
+        "why": "namespace not in the auto-merge policy",
+        "at": "2026-09-23T00:00:00.000Z"
+      }
+    ],
+    "seat_start": {
+      "enabled": false,
+      "max_sessions": 1,
+      "in_flight": 0,
+      "recent": [
+        {
+          "job_id": "job_91b3c0de5a24",
+          "namespace": "sample",
+          "at": "2026-09-26T07:12:00.000Z",
+          "run_id": 1000000011,
+          "run_url": "https://github.com/example-org/sample-a/actions/runs/1000000011"
+        },
+        {
+          "job_id": "job_7c1e44b0a912",
+          "namespace": "sample",
+          "at": "2026-09-24T12:00:00.000Z",
+          "run_id": null,
+          "run_url": null
+        }
+      ]
+    },
+    "loop": {
+      "mode": "off",
+      "budget": {
+        "month": "2026-09",
+        "caps": {
+          "actions_minutes_month": 300,
+          "model_usd_month": 50
+        },
+        "spend": {
+          "ci_minutes": 212,
+          "cost_usd": 18.4
+        },
+        "exceeded": false
+      }
+    }
+  },
+  "refresh_allowed_at": null,
+  "cloudflare_configured": true
+}

@@ -5,7 +5,9 @@ import { test } from "node:test";
 import { sha256Hex } from "../src/auth.ts";
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
-import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
+import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_LEGACY_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
+import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX } from "../src/console-app.ts";
+import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
@@ -97,8 +99,13 @@ const PATH_CONSTANTS: Record<string, string> = {
   BACKUP_CREDENTIAL_PATH,
   CONSOLE_PATH,
   CONSOLE_JSON_PATH,
+  CONSOLE_JSON_LEGACY_PATH,
   CONSOLE_CALLBACK_PATH,
   RUNNER_KEY_PATH,
+  OPS_FEED_PATH,
+  OPS_REFRESH_PATH,
+  CONSOLE_APP_PATH,
+  CONSOLE_APP_PREFIX,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the
@@ -108,17 +115,16 @@ function dispatches(): { path: string; handler: string }[] {
   assert.ok(body.length > 0, "defaultHandler not found in src/routes.ts");
   const found: { path: string; handler: string }[] = [];
   const line = /url\.pathname === ("[^"]+"|[A-Z_]+)[^\n]*?\breturn (\w+)\(/g;
-  for (const m of body.matchAll(line)) {
-    const raw = m[1];
-    let path: string;
-    if (raw.startsWith('"')) {
-      path = raw.slice(1, -1);
-    } else {
-      assert.ok(Object.hasOwn(PATH_CONSTANTS, raw), `defaultHandler matches on ${raw}, which this test cannot resolve. Import it into PATH_CONSTANTS.`);
-      path = PATH_CONSTANTS[raw];
-    }
-    found.push({ path, handler: m[2] });
-  }
+  const resolve = (raw: string): string => {
+    if (raw.startsWith('"')) return raw.slice(1, -1);
+    assert.ok(Object.hasOwn(PATH_CONSTANTS, raw), `defaultHandler matches on ${raw}, which this test cannot resolve. Import it into PATH_CONSTANTS.`);
+    return PATH_CONSTANTS[raw];
+  };
+  for (const m of body.matchAll(line)) found.push({ path: resolve(m[1]), handler: m[2] });
+  // A prefix match covers every path under it, so it is a route of its own, named in
+  // the tables as the prefix with a trailing `*` ("/console/app/*").
+  const prefix = /url\.pathname\.startsWith\(("[^"]+"|[A-Z_]+)\)[^\n]*?\breturn (\w+)\(/g;
+  for (const m of body.matchAll(prefix)) found.push({ path: `${resolve(m[1])}*`, handler: m[2] });
   // A match written any other way (startsWith, a regex, a switch) would be missed by
   // the pattern above, so every mention of the pathname must be one the pattern read.
   const mentions = body.match(/pathname/g)?.length ?? 0;

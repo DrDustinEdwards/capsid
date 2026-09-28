@@ -106,6 +106,14 @@ async function verifyGithubOidc(token: string, now: Date): Promise<{ ok: true; c
   return { ok: true, claims };
 }
 
+/** A run's Actions page, or null for a run id that is not a positive integer. GitHub
+ *  sends run_id as a string; a number is accepted too rather than dropped. */
+export function runUrl(repository: string, runId: unknown): string | null {
+  const id = typeof runId === "number" ? String(runId) : runId;
+  if (typeof id !== "string" || !/^[1-9][0-9]{0,14}$/.test(id)) return null;
+  return `https://github.com/${repository}/actions/runs/${id}`;
+}
+
 // D1's datetime text form, so the minted row's created_at is the instant the resolver's
 // pending window counts from.
 const sqliteTime = (now: Date) => now.toISOString().slice(0, 19).replace("T", " ");
@@ -192,6 +200,13 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
         start_audit_id: start.id,
         run_id: claims.run_id ?? null,
         run_attempt: claims.run_attempt ?? null,
+        // The run's page, for the Watch Floor's seat-start list (src/ops-feed.ts). A
+        // repository_dispatch returns no run id, so this row is the first place the
+        // Worker learns which run a start became. run_id is GitHub's OIDC claim "The ID
+        // of the workflow run that triggered the workflow"
+        // (https://docs.github.com/en/actions/reference/security/oidc), and the
+        // repository is repo.full, which the claim was pinned to above.
+        run_url: runUrl(repo.full, claims.run_id),
         // The names only, never a value: what the canary reads to say which claims a
         // real run carries (job_workflow_ref is documented for reusable workflows only).
         claims_present: Object.keys(claims).sort(),

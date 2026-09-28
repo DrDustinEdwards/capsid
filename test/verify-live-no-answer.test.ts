@@ -64,6 +64,10 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
     return res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
   }
   if (url.pathname.startsWith("/.well-known/")) return json(200, {});
+  if (url.pathname === "/console/app/") {
+    res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization" });
+    return res.end();
+  }
   if (url.pathname === "/csp-report") {
     res.writeHead(204, NON_HTML);
     return res.end();
@@ -279,4 +283,18 @@ test("a probe document GitHub does not serve is could-not-run, not a refusal", a
   assert.equal(code, 3, out);
   assert.match(out, /NORUN {2}2 CIMD only, no registration\n.*answered 404/);
   assert.match(out, /NORUN {2}3 consent form renders/);
+});
+
+test("gate 6 refuses a Watch Floor app that answers without a session", async () => {
+  const { code, out } = await run(
+    breaking((req, res) => {
+      if (req.url !== "/console/app/") return false;
+      res.writeHead(200, { ...HTML });
+      res.end("<!doctype html><title>app</title>");
+      return true;
+    }),
+    () => false
+  );
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}6 security headers per class\n.*\/console\/app no session: status 200, expected 302/);
 });

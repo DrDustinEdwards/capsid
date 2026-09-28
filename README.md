@@ -37,6 +37,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts
 - [docs/skills.md](docs/skills.md) how an idea abstracted from work that landed is offered to other projects
 - [docs/console.md](docs/console.md) what the admin page shows, who gets in, and what it cannot do
+- [docs/watch-floor.md](docs/watch-floor.md) the operations dashboard: its data, what "no data" means, the Cloudflare token, and building it
 - [docs/consolidation.md](docs/consolidation.md) the wiki maintenance loop, and the confirmation step on destructive writes
 - [docs/backups.md](docs/backups.md) what the daily dump contains, and three restore paths in the order to try them
 - [docs/rollback.md](docs/rollback.md) serving the previous Worker version when a deploy shipped a bad one
@@ -49,7 +50,8 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
-- `GET /console`, `POST /console`, `GET /console.json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403
+- `GET /console`, `POST /console`, `GET /console/json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403. `/console.json` answers 301 to `/console/json`
+- `GET /console/api/ops`, `POST /console/api/ops/refresh`, `GET /console/app/` the Watch Floor: its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes) and the app's files. Same gate as the console (docs/console.md)
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
