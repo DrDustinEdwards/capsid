@@ -4,6 +4,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
+// @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
+// runs in the live CI job with no npm ci and no build step.
+import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 
 // A gate that got no answer has not refused the deploy. scripts/verify-live.mjs
 // retries a thrown fetch, records a gate whose requests never got an answer as
@@ -42,7 +45,10 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
   if (url.pathname === "/health") return json(200, { status: "ok", sha: SHA, dirty: false, store: { d1: "ok", fts: "ok" } });
   if (url.pathname === "/register" && req.method === "POST") return json(201, { client_id: "probe-client" });
   if (url.pathname === "/authorize" && req.method === "POST") {
-    res.writeHead(302, { ...NON_HTML, location: "https://github.com/login/oauth/authorize?client_id=x" });
+    // The Access sign-in, as src/access-login.ts builds it, for this stub's own origin.
+    const signIn = new URL(`${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`);
+    for (const [k, v] of Object.entries({ client_id: ACCESS_SAAS.clientId, redirect_uri: `http://${req.headers.host}/callback`, response_type: "code", scope: "openid email profile", state: "s", nonce: "n", code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method: "S256" })) signIn.searchParams.set(k, v);
+    res.writeHead(302, { ...NON_HTML, location: signIn.href });
     return res.end();
   }
   if (url.pathname === "/authorize" && url.searchParams.get("client_id")) {
@@ -128,7 +134,7 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
 test("one single-shot gate that never gets an answer makes the run exit 3", async () => {
   const { code, out } = await run(healthy, (req) => req.method === "POST" && req.url === "/authorize");
   assert.equal(code, 3, out);
-  assert.match(out, /NORUN {2}5 approve redirects to GitHub/);
+  assert.match(out, /NORUN {2}5 approve redirects to Access/);
 });
 
 test("a server that answers with errors is still a refusal: exit 1", async () => {
@@ -154,7 +160,7 @@ test("a refusal outranks a gate that could not run: exit 1", async () => {
   const { code, out } = await run(wrongSha, (req) => req.method === "POST" && req.url === "/authorize");
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}1 health \+ provenance/);
-  assert.match(out, /NORUN {2}5 approve redirects to GitHub/);
+  assert.match(out, /NORUN {2}5 approve redirects to Access/);
 });
 
 // The folded gates: gate 1 carries the store check, and gate 6 carries the no-store
