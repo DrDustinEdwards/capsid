@@ -348,8 +348,8 @@ export interface ResumeOptions {
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`github:<login>`) and a legacy operator key (`opkey:<fingerprint>`) are
-// shared by whatever sessions connect with them.
+// identity (`access:<email>`, or `github:<login>` from the console) and a legacy
+// operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
 /** The head commit of the job's own pull request, and the mapped repo it is on.
