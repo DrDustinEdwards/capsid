@@ -45,6 +45,16 @@ for (const [placeholder, value] of SUBSTITUTIONS) {
   config = config.split(placeholder).join(value);
 }
 
+// The dashboard's assets block is removed: the dry run measures the Worker bundle, and
+// the scorer's build job builds no dashboard, so the assets directory would not exist.
+// Between the markers only; a missing marker is a loud failure, not a silent keep.
+const ASSETS = /\n[ \t]*\/\/ ASSETS-BEGIN\n[\s\S]*?\n[ \t]*\/\/ ASSETS-END\n/;
+if (!ASSETS.test(config)) {
+  console.error("dry-run-config: wrangler.jsonc.example has no ASSETS-BEGIN / ASSETS-END block to remove; fix this script and the example together.");
+  process.exit(1);
+}
+config = config.replace(ASSETS, "\n");
+
 // Nothing that still looks like a placeholder may survive. A dry run tolerates a wrong
 // id, so an unnoticed leftover would be invisible here and visible only as a bundle that
 // never got measured.
