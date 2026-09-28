@@ -8,6 +8,17 @@ import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { OPS_SITES, siteMapDrift, type SiteMapDrift } from "./ops-sites";
+import {
+  buildSnapshot,
+  probeSite,
+  readSnapshot,
+  writeSnapshot,
+  type CiObservation,
+  type MirrorObservation,
+  type OpsSnapshot,
+  type SiteProbe,
+} from "./ops-snapshot";
 
 // The watcher looks at the surface every half hour and, when something is wrong,
 // posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
@@ -242,6 +253,7 @@ export interface CiRun {
   status: string;
   conclusion: string | null;
   created_at: string;
+  url?: string;
 }
 
 /** A default branch that has been red for longer than a flake. Reads the most recent
@@ -434,6 +446,8 @@ export const WATCHER_CHECKS = [
   "scorer identity",
   "scorer surface",
   "ci",
+  "site map",
+  "site probes",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -447,20 +461,55 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^scorer-unread-/, "scorer identity"],
   [/^(scorer-diverged-|scorer-identity-unknown$)/, "scorer surface"],
   [/^ci-red-/, "ci"],
+  [/^site-map-drift-/, "site map"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
   return OWNERS.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? null;
 }
 
+// What a pass saw, kept for the operations dashboard (src/ops-snapshot.ts). Null
+// where the read failed, so the snapshot says "could not read" rather than "none".
+export interface Observed {
+  health: HealthReport | null;
+  mirror: MirrorObservation | null;
+  ci: CiObservation[];
+  siteMap: SiteMapDrift | null;
+  probes: SiteProbe[] | null;
+}
+
 export interface Gathered {
   findings: Finding[];
   // The checks whose reads all succeeded this pass.
   ran: ReadonlySet<WatcherCheck>;
+  observed: Observed;
+}
+
+/** A registered namespace the site map neither covers nor excludes, or a map entry
+ *  whose namespace is not registered. The fingerprint names the drift, so a different
+ *  drift is a new finding. */
+export function siteMapFindings(drift: SiteMapDrift): Finding[] {
+  if (drift.unmapped.length === 0 && drift.unknown.length === 0) return [];
+  const names = [...drift.unmapped.map((n) => "add-" + n), ...drift.unknown.map((n) => "drop-" + n)].join("-");
+  return [
+    finding("capsid", "site-map-drift-" + names, "the operations site map does not match the registered namespaces", [
+      ...drift.unmapped.map((n) => n + ": registered, but neither in OPS_SITES nor in NO_SITE_NAMESPACES (src/ops-sites.ts)"),
+      ...drift.unknown.map((n) => n + ": in src/ops-sites.ts, but not a registered namespace"),
+      "The dashboard shows only mapped sites, so an unmapped site is one nobody is watching.",
+    ]),
+  ];
+}
+
+/** The snapshot's check list: every check, as clear, finding, or could not run. */
+export function checkStates(gathered: Pick<Gathered, "findings" | "ran">): OpsSnapshot["checks"] {
+  return WATCHER_CHECKS.map((id) => {
+    const findings = gathered.findings.filter((f) => owningCheck(f.fingerprint) === id).map((f) => f.fingerprint);
+    return { id, state: !gathered.ran.has(id) ? "could-not-run" : findings.length ? "finding" : "clear", findings };
+  });
 }
 
 export interface PassReaders {
-  findings: () => Promise<Gathered>;
+  findings: () => Promise<Pick<Gathered, "findings" | "ran">>;
   open: () => Promise<Map<string, string>>;
   clear: (id: string) => Promise<boolean>;
   post: (f: Finding) => Promise<{ ok: boolean; refusal?: string }>;
@@ -499,8 +548,10 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   if (!due.due) return { ran: false, note: due.reason, posted: [], cleared: [] };
 
   const agent = watcherAgent();
+  const started = Date.now();
+  const gathered = await gather();
   const { posted, cleared } = await runPass({
-    findings: gather,
+    findings: async () => gathered,
     open: () => openWatcherFingerprints(env),
     clear: (id) => clearFinding(env, id, now),
     post: async (f) =>
@@ -514,6 +565,24 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
         gate_required: false,
       }),
   });
+
+  // The pass, kept for the dashboard. Before the stamp: a snapshot that fails to write
+  // throws, the stamp is not written, and the next tick runs the pass again.
+  const o = gathered.observed;
+  await writeSnapshot(
+    env,
+    buildSnapshot(await readSnapshot(env), {
+      now,
+      pass_ms: Date.now() - started,
+      cadence_min: minutes,
+      checks: checkStates(gathered),
+      health: o.health,
+      mirror: o.mirror,
+      ci: o.ci,
+      site_map: o.siteMap,
+      probes: o.probes,
+    })
+  );
 
   // Written last and only on a pass that ran. A stamp written first would make a
   // throwing pass look completed and skip the next several ticks.
@@ -654,14 +723,16 @@ export function identityFindings(read: ScorerSurface[], unreadable: string[], ma
   return out;
 }
 
-export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
+export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetch = fetch): Promise<Gathered> {
   const out: Finding[] = [];
   const ran = new Set<WatcherCheck>();
+  const observed: Observed = { health: null, mirror: null, ci: [], siteMap: null, probes: null };
 
   // No casts on a repo reader's result, so a renamed field fails `npm run check`.
   // attempt() swallows a throw, so a cast would hide a check that never runs.
   // test/watcher-gather.test.ts drives both reads end to end.
   const health = await attempt("health", () => healthReport(env));
+  observed.health = health;
   if (health) {
     ran.add("health");
     const head = await attempt("master head", () => defaultBranchSha(env, "capsid"));
@@ -694,7 +765,13 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
     ran.add("mirror dumps");
     const runs: MirrorRun[] | null = await attempt("mirror runs", async () => (await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 })).runs);
     if (runs) ran.add("mirror runs");
-    out.push(...mirrorFindings("capsid", newestDump(dumps), runs ?? [], now));
+    const newest = newestDump(dumps);
+    out.push(...mirrorFindings("capsid", newest, runs ?? [], now));
+    const last = runs ? latestMirrorRun(runs) : null;
+    observed.mirror = {
+      newest_dump: newest?.toISOString() ?? null,
+      last_run: last ? { at: last.created_at ?? null, conclusion: last.conclusion ?? null, url: last.url ?? null } : null,
+    };
   }
 
   const scorer = await attempt("scorer identity", () => scorerIdentityFindings(env));
@@ -716,8 +793,38 @@ export async function gatherFindings(env: Env, now: Date): Promise<Gathered> {
       ciRead++;
       out.push(...ciFindings(namespace, runs, now));
     }
+    const latest = runs?.find((r) => r.status === "completed") ?? runs?.[0] ?? null;
+    observed.ci.push({
+      namespace,
+      latest: latest
+        ? { head_sha: latest.head_sha, status: latest.status, conclusion: latest.conclusion, created_at: latest.created_at, url: latest.url ?? null }
+        : null,
+    });
   }
   if (ciRead === ROSTER.length) ran.add("ci");
 
-  return { findings: out, ran };
+  // The site map against the registered namespaces, both ways (src/ops-sites.ts).
+  const registered = await attempt("site map", async () => {
+    const { results } = await env.DB.prepare("SELECT namespace FROM namespaces ORDER BY namespace").all<{ namespace: string }>();
+    return (results ?? []).map((r) => r.namespace);
+  });
+  if (registered) {
+    ran.add("site map");
+    observed.siteMap = siteMapDrift(registered);
+    out.push(...siteMapFindings(observed.siteMap));
+  }
+
+  // Every mapped site, probed in turn. A probe that gets no answer is a result, not a
+  // failure of the check; the check fails only if probing itself throws.
+  const probes = await attempt("site probes", async () => {
+    const results: SiteProbe[] = [];
+    for (const site of OPS_SITES) results.push(await probeSite(site, fetchImpl, now, health));
+    return results;
+  });
+  if (probes) {
+    ran.add("site probes");
+    observed.probes = probes;
+  }
+
+  return { findings: out, ran, observed };
 }
