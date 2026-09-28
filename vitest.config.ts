@@ -87,10 +87,7 @@ export default defineConfig({
           // this root exactly as the Worker does, so a signature that verifies here
           // verifies for the right reason rather than because both sides are stubs.
           IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one",
-          ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
-          GITHUB_CLIENT_ID: "test-oauth-client-id",
-          GITHUB_CLIENT_SECRET: "test-oauth-client-secret",
-          // The MCP login's Access for SaaS app (src/access-login.ts). A fake team domain;
+          // The MCP and console logins' Access for SaaS app (src/access-login.ts). A fake team domain;
           // the tests stub its token and JWKS endpoints.
           ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
           ACCESS_SAAS_CLIENT_ID: "sample-client",

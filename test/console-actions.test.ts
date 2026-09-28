@@ -25,15 +25,16 @@ function env(overrides: Record<string, unknown> = {}) {
     APP_KV: fakeKv().kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
-    ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
-    GITHUB_CLIENT_ID: "gh-client",
-    GITHUB_CLIENT_SECRET: "gh-secret",
+    ADMIN_EMAIL: "admin@example.com",
+    ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
+    ACCESS_SAAS_CLIENT_ID: "sample-client",
+    ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
     ...overrides,
   } as never;
 }
 
 async function sessionCookie(): Promise<string> {
-  const full = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
+  const full = await consoleSessionCookie({ email: "admin@example.com" }, SECRET, new Date());
   return full.split(";")[0];
 }
 
@@ -180,7 +181,7 @@ test("pause writes the KV pause key AND an audit row naming the admin who clicke
   // The human is the actor: improveControl's own row says improve-loop, which records
   // that a pause happened and not who asked for it.
   assert.ok(
-    consoleRow.params.includes("github:DrDustinEdwards"),
+    consoleRow.params.includes("access:admin@example.com"),
     `the console audit row does not name the admin: ${JSON.stringify(consoleRow.params)}`
   );
 });

@@ -21,16 +21,17 @@ function env(overrides: Record<string, unknown> = {}) {
     APP_KV: fakeKv().kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
-    ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
-    GITHUB_CLIENT_ID: "gh-client",
-    GITHUB_CLIENT_SECRET: "gh-secret",
+    ADMIN_EMAIL: "admin@example.com",
+    ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
+    ACCESS_SAAS_CLIENT_ID: "sample-client",
+    ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
     BUILD_SHA: "abc1234",
     ...overrides,
   } as never;
 }
 
 async function signedRequest(path = CONSOLE_JSON_PATH): Promise<Request> {
-  const cookie = (await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, NOW)).split(";")[0];
+  const cookie = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   return new Request(`https://capsid.example${path}`, { headers: { Cookie: cookie } });
 }
 
@@ -39,13 +40,13 @@ test("console.json IS the page's data source, field for field", async () => {
   const res = await handleConsoleJson(await signedRequest(), e, NOW);
   assert.equal(res.status, 200);
   const body = await res.json();
-  const direct = await consoleData(e, "DrDustinEdwards", NOW, { namespace: null, actor: null });
+  const direct = await consoleData(e, "admin@example.com", NOW, { namespace: null, actor: null });
   assert.deepEqual(body, JSON.parse(JSON.stringify(direct)));
 });
 
 test("what the JSON names, the page shows", async () => {
   const e = env();
-  const data = await consoleData(e, "DrDustinEdwards", NOW, { namespace: null, actor: null });
+  const data = await consoleData(e, "admin@example.com", NOW, { namespace: null, actor: null });
   const html = renderConsole(data, "token");
   // Every namespace the JSON carries appears on the page.
   assert.ok(data.improve.namespaces.length > 0, "the JSON carries no namespaces, so the loop below checks nothing");
@@ -81,7 +82,7 @@ test("the JSON carries no CSRF token", async () => {
 
 test("the JSON honours the activity filter the query string asked for", async () => {
   const e = env();
-  const cookie = (await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, NOW)).split(";")[0];
+  const cookie = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   const res = await handleConsoleJson(
     new Request(`https://capsid.example${CONSOLE_JSON_PATH}?namespace=capsid&actor=agent%3Acapsid-driver`, {
       headers: { Cookie: cookie },

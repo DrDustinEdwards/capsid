@@ -65,10 +65,10 @@ export async function consoleData(
 
 // A bearer token is refused, not redirected. An agent or operator key presented to
 // /console is a caller that cannot follow a login redirect: a 302 would send a
-// machine to GitHub and look, from its side, like the console being down. The
-// refusal names what was presented and what the page admits instead.
+// machine to the Access sign-in and look, from its side, like the console being down.
+// The refusal names what was presented and what the page admits instead.
 const BEARER_REFUSAL =
-  "forbidden: /console admits the GitHub admin session only. An operator key or an agent key authenticates to /ops/mcp, not to this page; the same state is served by the improve_status and jobs tools there. Open /console in a browser to sign in as the administrator.";
+  "forbidden: /console admits the administrator's Access session only. An operator key or an agent key authenticates to /ops/mcp, not to this page; the same state is served by the improve_status and jobs tools there. Open /console in a browser to sign in as the administrator.";
 
 export type ConsoleGate = { ok: true; user: ConsoleUser } | { ok: false; response: Response };
 
@@ -87,7 +87,7 @@ export async function consoleGate(request: Request, env: Env, now: Date, returnT
 export async function handleConsole(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gate = await consoleGate(request, env, now, CONSOLE_PATH);
   if (!gate.ok) return gate.response;
-  const data = await consoleData(env, gate.user.login, now, activityFilterFrom(new URL(request.url)));
+  const data = await consoleData(env, gate.user.email, now, activityFilterFrom(new URL(request.url)));
   // Double-submit CSRF: a fresh token per render, as a cookie and in every form. The
   // action handler compares the two in constant time, and a cross-site POST can carry
   // neither.
@@ -107,7 +107,7 @@ export async function handleConsole(request: Request, env: Env, now: Date = new 
 export async function handleConsoleJson(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gate = await consoleGate(request, env, now, CONSOLE_JSON_PATH);
   if (!gate.ok) return gate.response;
-  return Response.json(await consoleData(env, gate.user.login, now, activityFilterFrom(new URL(request.url))));
+  return Response.json(await consoleData(env, gate.user.email, now, activityFilterFrom(new URL(request.url))));
 }
 
 const STYLE = `

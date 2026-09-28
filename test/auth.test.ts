@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isAdminUser, sha256Hex, operatorIdentity, timingSafeEqual } from "../src/auth.ts";
+import { sha256Hex, operatorIdentity, timingSafeEqual } from "../src/auth.ts";
 import { sourceFiles } from "./source-files.ts";
 
 async function grantOf(request: Request, env: { OPERATOR_KEY_HASH?: string }) {
@@ -62,13 +62,6 @@ test("a raw key pasted as the secret never matches (hashes only)", async () => {
   assert.equal(await grantOf(req("full-key"), env), null);
 });
 
-test("isAdminUser matches login case-insensitively and numeric ids exactly", () => {
-  assert.equal(isAdminUser({ ADMIN_GITHUB_LOGIN: "DrDustinEdwards" }, { id: 1, login: "drdustinedwards" }), true);
-  assert.equal(isAdminUser({ ADMIN_GITHUB_LOGIN: "12345" }, { id: 12345, login: "whoever" }), true);
-  assert.equal(isAdminUser({ ADMIN_GITHUB_LOGIN: "12345" }, { id: 54321, login: "12345" }), false);
-  assert.equal(isAdminUser({ ADMIN_GITHUB_LOGIN: "" }, { id: 1, login: "anyone" }), false);
-});
-
 // Principal binding: audit_log.actor records who made a write, not a fixed literal.
 
 function keyRequest(key: string): Request {
@@ -111,7 +104,7 @@ test("timingSafeEqual accumulates rather than short-circuiting", () => {
   // give. Timing assertions are flaky, so the shape is guarded: a running xor over
   // every character, with no early return inside the loop.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
-  const body = auth.slice(auth.indexOf("export function timingSafeEqual"), auth.indexOf("export function isAdminUser"));
+  const body = auth.slice(auth.indexOf("export function timingSafeEqual"), auth.indexOf("export type OperatorGrant"));
   assert.ok(body.length > 100, "could not bound timingSafeEqual in src/auth.ts");
   assert.match(body, /diff \|= a\.charCodeAt\(i\) \^ b\.charCodeAt\(i\)/, "timingSafeEqual no longer accumulates");
   assert.doesNotMatch(body, /return a === b/, "timingSafeEqual short-circuits on ===");
