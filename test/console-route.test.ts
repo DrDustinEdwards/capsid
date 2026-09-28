@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONSOLE_CSP, CONSOLE_PATH, consoleData, handleConsole, renderConsole } from "../src/console.ts";
+import { hmacHex } from "../src/auth.ts";
 import { consoleSessionCookie } from "../src/console-auth.ts";
+import { b64urlEncode } from "../src/encoding.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { BUDGET_KEY, MODE_KEY, ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
 // The route and the shell. Three callers and three answers: the admin session
-// renders, a browser with no session is sent to GitHub, and a bearer token is refused
-// outright rather than redirected to a login page it cannot follow.
+// renders, a browser with no session is sent to Access to sign in, and a bearer token
+// is refused outright rather than redirected to a login page it cannot follow.
 
 const SECRET = "console-test-cookie-secret";
 
@@ -20,9 +22,10 @@ function env(overrides: Record<string, unknown> = {}) {
     APP_KV: kv.kv,
     OAUTH_KV: oauthKv.kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
-    ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
-    GITHUB_CLIENT_ID: "gh-client",
-    GITHUB_CLIENT_SECRET: "gh-secret",
+    ADMIN_EMAIL: "admin@example.com",
+    ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
+    ACCESS_SAAS_CLIENT_ID: "sample-client",
+    ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
     BUILD_SHA: "abc1234",
     ...overrides,
   } as never;
@@ -40,18 +43,47 @@ test("a bearer token is REFUSED with 403, not redirected to a login it cannot fo
   assert.match(body, /admin/i, "the refusal should say what the console does admit");
 });
 
-test("an anonymous browser is sent to GitHub to sign in", async () => {
+test("an anonymous browser is sent to the Access app to sign in", async () => {
   const res = await handleConsole(get(), env());
   assert.equal(res.status, 302);
-  const location = res.headers.get("Location") ?? "";
-  assert.match(location, /^https:\/\/github\.com\/login\/oauth\/authorize\?/);
-  assert.match(location, /redirect_uri=[^&]*%2Fconsole%2Fcallback/);
+  const location = new URL(res.headers.get("Location") ?? "");
+  assert.equal(location.origin + location.pathname, "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client/authorization");
+  assert.equal(location.searchParams.get("client_id"), "sample-client");
+  assert.equal(location.searchParams.get("redirect_uri"), "https://capsid.example/console/callback");
   // The state cookie is what binds the callback to this browser.
   assert.match(res.headers.get("Set-Cookie") ?? "", /HttpOnly/);
 });
 
+test("with the Access settings unset the console's sign-in is closed, not sent elsewhere", async () => {
+  const res = await handleConsole(get(), env({ ACCESS_SAAS_CLIENT_ID: undefined }));
+  assert.equal(res.status, 503);
+  assert.equal(res.headers.get("Location"), null);
+});
+
+// A cookie the GitHub login issued, signed with the live key and unexpired: a login and
+// an id, no email. The design says it is refused and the console asks to sign in once.
+test("a signed, unexpired cookie from the GitHub login is refused and sent to sign in", async () => {
+  const encoded = b64urlEncode(JSON.stringify({ login: "DrDustinEdwards", id: 7, exp: Math.floor(Date.now() / 1000) + 3600 }));
+  const cookie = `capsid_console=${await hmacHex(SECRET, encoded)}.${encoded}`;
+  const res = await handleConsole(get({ Cookie: cookie }), env());
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get("Location") ?? "", /^https:\/\/sample\.cloudflareaccess\.com\//);
+});
+
+test("a session for another email, or a differently cased one, or with ADMIN_EMAIL unset, is sent to sign in", async () => {
+  for (const [email, overrides] of [
+    ["someone@example.com", {}],
+    ["Admin@example.com", {}],
+    ["admin@example.com", { ADMIN_EMAIL: undefined }],
+  ] as const) {
+    const cookie = await consoleSessionCookie({ email }, SECRET, new Date());
+    const res = await handleConsole(get({ Cookie: cookie.split(";")[0] }), env(overrides));
+    assert.equal(res.status, 302, `${email} ${JSON.stringify(overrides)} was admitted`);
+  }
+});
+
 test("the admin session renders the page, with the strict CSP and no external references", async () => {
-  const cookie = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
+  const cookie = await consoleSessionCookie({ email: "admin@example.com" }, SECRET, new Date());
   const res = await handleConsole(get({ Cookie: cookie.split(";")[0] }), env());
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Content-Type"), "text/html;charset=utf-8");
@@ -75,7 +107,7 @@ test("the CSP is at least as strict as the consent dialog's", () => {
 
 test("the header carries the live sha, the schema version, the backup age, the budget and the mode", async () => {
   // Every value is seeded to something the defaults would not produce.
-  const cookie = await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, new Date());
+  const cookie = await consoleSessionCookie({ email: "admin@example.com" }, SECRET, new Date());
   const seeded = env({
     DB: fakeD1({ migrations: ["0001_init.sql", "0042_seeded_newest.sql"] }).db,
     APP_KV: fakeKv({

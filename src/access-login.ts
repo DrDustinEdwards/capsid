@@ -1,18 +1,36 @@
 import { verifyIdToken, type KeysFetcher } from "./access-jwt";
 import { getCookie, isAdminEmail, sha256Hex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
-import { STATE_TTL_SECONDS, type GithubLoginFlow } from "./github-login";
-
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
-// identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27). It
-// keeps the state handling src/github-login.ts has always had: a state token stored in
-// OAUTH_KV for ten minutes, bound to the browser by a cookie holding its digest, used
-// once. What changes is the upstream: Access, with PKCE and an OIDC nonce kept in the
-// stored state, and an ID token verified in src/access-jwt.ts. The person is the
-// email in the token, admitted only when it equals ADMIN_EMAIL exactly.
+// identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
+// by the MCP authorization flow (src/routes.ts) and the console login
+// (src/console-auth.ts). What differs between them is passed in as a LoginFlow; what
+// each stores and does with the admitted email stays in the caller. A state token is
+// stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding its
+// digest, and used once. PKCE and an OIDC nonce are kept in the stored state, and the
+// ID token is verified in src/access-jwt.ts. The person is the email in the token,
+// admitted only when it equals ADMIN_EMAIL exactly.
 //
 // Every endpoint derives from the team domain and the client id, as the SaaS app's
 // discovery document states them (measured 2026-09-27).
+
+// How long a started login stays usable: the KV state entry and the state cookie.
+export const STATE_TTL_SECONDS = 600;
+
+export interface LoginFlow {
+  // The path Access redirects back to, on this Worker's origin.
+  callbackPath: string;
+  stateCookie: string;
+  // The state cookie's Path attribute.
+  cookiePath: string;
+  kvPrefix: string;
+  // Appended to each state refusal, telling the user where to start again.
+  restartHint: string;
+}
+
+export function clearStateCookie(flow: LoginFlow): string {
+  return `${flow.stateCookie}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
+}
 
 export interface AccessSaas {
   clientId: string;
@@ -55,7 +73,7 @@ interface StoredSignIn {
 export async function startAccessLogin(
   request: Request,
   env: Env,
-  flow: GithubLoginFlow,
+  flow: LoginFlow,
   stored: string,
   extraCookies: string[] = []
 ): Promise<Response> {
@@ -92,7 +110,7 @@ export type AccessLoginResult<T> = { ok: true; email: string; state: T } | { ok:
 export async function completeAccessLogin<T>(
   request: Request,
   env: Env,
-  flow: GithubLoginFlow,
+  flow: LoginFlow,
   parse: (stored: string) => T,
   now: Date = new Date(),
   fetchKeys?: KeysFetcher

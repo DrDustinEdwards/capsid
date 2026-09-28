@@ -10,7 +10,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 - Cloudflare Worker (TypeScript), stateless MCP via `createMcpHandler` from the Agents SDK
 - [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, client ID metadata documents (and dynamic registration until it is retired), tokens in KV
-- Cloudflare Access for SaaS (OIDC) for the MCP login, locked to one admin email (docs/auth.md); the console still uses a GitHub OAuth App until it moves too
+- Cloudflare Access for SaaS (OIDC) for the MCP and console logins, locked to one admin email (docs/auth.md)
 - A separate GitHub App for repo access, minting short-lived installation tokens
 - D1 for documents, versions, namespaces, jobs, agents and the audit log, with FTS5 search
 - R2: `MEDIA` for backups, the markdown mirror and CSP reports (the binding name is historical; nothing stores or serves media, and the Worker never reads this bucket back); `HOLDOUT` for the loop's hidden test suites, bound separately so attempt code cannot reach it
@@ -48,7 +48,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /mcp` MCP over Streamable HTTP, requires an OAuth access token (admin only)
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
-- `GET /authorize`, `POST /authorize`, `GET /callback` GitHub OAuth flow
+- `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
 - `GET /console`, `POST /console`, `GET /console.json`, `GET /console/callback` the admin console, its actions and its JSON twin. Admin session only; a bearer token is refused with 403
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
@@ -98,21 +98,22 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
    The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (`docs/bootstrap.md`), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.mjs` authenticates with `CAPSID_OPERATOR_KEY` and nothing else. `docs/bootstrap.md` carries that sequence under "Minting once no operator key exists".
 
-6. Create a GitHub **OAuth App** (for login) at https://github.com/settings/developers:
+6. Create a Cloudflare Access for SaaS application (for login) in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
 
-   - Homepage URL: `https://capsid.<your-subdomain>.workers.dev`
-   - Authorization callback URLs, both of them, spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow and `https://capsid.<your-subdomain>.workers.dev/console/callback` for the console. Wildcard matching should be off: each redirect is granted for the exact URI it was issued against.
+   - Redirect URLs, both of them, spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow and `https://capsid.<your-subdomain>.workers.dev/console/callback` for the console.
+   - Scopes openid, email and profile, PKCE on, and a policy that allows your email only.
 
    Then set the secrets:
 
    ```
-   npx wrangler secret put GITHUB_CLIENT_ID
-   npx wrangler secret put GITHUB_CLIENT_SECRET
-   npx wrangler secret put COOKIE_ENCRYPTION_KEY   # openssl rand -hex 32
-   npx wrangler secret put ADMIN_GITHUB_LOGIN      # your GitHub username, or your numeric GitHub user id
+   npx wrangler secret put ACCESS_TEAM_DOMAIN          # https://<team>.cloudflareaccess.com
+   npx wrangler secret put ACCESS_SAAS_CLIENT_ID
+   npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
+   npx wrangler secret put ADMIN_EMAIL                 # the one email both logins admit, exactly
+   npx wrangler secret put COOKIE_ENCRYPTION_KEY       # openssl rand -hex 32
    ```
 
-7. For repo access, create a GitHub **App**, separate from the OAuth App. Permissions: Repository contents read and write, Pull requests read and write, Metadata read, Actions read and write, Workflows write (confirmed by probe 2026-09-07: a pull request authoring a workflow file succeeded, and was closed immediately; that probe proves write and says nothing about read, so read is not claimed here). The last two are what let the Worker dispatch a workflow and write under `.github/workflows/`; both are gated behind agent flags (`can_dispatch` and `can_write_workflows`), so the App holding the permission does not mean a caller can use it. Install it on the repositories you want reachable. Note its Client ID, generate a private key (`.pem`), then:
+7. For repo access, create a GitHub **App**. Permissions: Repository contents read and write, Pull requests read and write, Metadata read, Actions read and write, Workflows write (confirmed by probe 2026-09-07: a pull request authoring a workflow file succeeded, and was closed immediately; that probe proves write and says nothing about read, so read is not claimed here). The last two are what let the Worker dispatch a workflow and write under `.github/workflows/`; both are gated behind agent flags (`can_dispatch` and `can_write_workflows`), so the App holding the permission does not mean a caller can use it. Install it on the repositories you want reachable. Note its Client ID, generate a private key (`.pem`), then:
 
    ```
    # put the App client id in wrangler.jsonc vars as GITHUB_APP_CLIENT_ID

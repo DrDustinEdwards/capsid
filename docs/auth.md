@@ -68,11 +68,12 @@ Two gated endpoints:
    - **The sign-in** uses PKCE and a nonce. `src/access-jwt.ts` verifies the ID token: RS256 against the app's `/jwks` by kid, `iss` the app's issuer, `aud` its client id, `exp`, `nbf`, the nonce, and `email_verified` not false.
    - **The admin check:** the email must equal `ADMIN_EMAIL` exactly (trimmed, no case folding). Any other identity gets a 403, and the check runs again on every `/mcp` request.
    - **Grants from before the switch** carry a GitHub login and no email, fail that check, and the client signs in again once.
-   - **The audit actor** is `access:<email>`. The console still signs in with GitHub until the design's PR 3.
+   - **The audit actor** is `access:<email>`.
+   - **The console** (`/console`) signs in through the same Access app with its own redirect URL, `/console/callback`, since the design's PR 3, and keeps a signed twelve-hour cookie carrying the email. The same `ADMIN_EMAIL` check runs on every console request, so a cookie from the GitHub login, which carries no email, is refused and the console asks to sign in once. A console click is audited as `access:<email>`.
    - An admitted admin holds a full write grant.
    - **Settings:** `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`. Any unset closes the sign-in with a 503.
 2. **Agent and operator keys (`/ops/mcp`)** for agents and cron, gated by sha256-hashed bearer keys. An agent key resolves to its row. Failing that, `OPERATOR_KEY_HASH` holds comma-separated hashes: a plain entry is a write key, an entry prefixed `ro:` is read-only and is denied every tool `TOOL_GRANTS` marks write: write, delete, move, restore, register_namespace, update_namespace, repo writes, PR management, improve_run, agents, lint finalize, and every `jobs` action but `list`. Revoke by removing a hash; the others keep working. The OAuth library never sees this route.
 
-Login and repo access use two different GitHub credentials: an OAuth App for login (OAuth Apps cannot mint installation tokens) and a GitHub App for repo access. Keep both.
+Login and repo access use different credentials: the Access for SaaS app for both logins, and a GitHub App for repo access. The GitHub OAuth App that was the login before is no longer read by any code; its secrets (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ADMIN_GITHUB_LOGIN`) and DCR are removed in the design's PR 4.
 
 `register_namespace` returns the command that mints the new namespace's driver agent, `node scripts/mint-agents.mjs --namespace <ns> --apply`. It does not mint it, and since 2026-09-13 it is admin only itself, so the separation is now belt and braces: registering a namespace and minting a credential for it are two acts by the same caller rather than one act that quietly does both.

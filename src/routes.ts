@@ -38,15 +38,14 @@ import {
 } from "./console";
 import { handleConsoleAction } from "./console-actions";
 import { handleConsoleCallback } from "./console-auth";
-import { completeAccessLogin, startAccessLogin } from "./access-login";
-import { clearStateCookie, type GithubLoginFlow, STATE_TTL_SECONDS } from "./github-login";
+import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 
 const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
 
 // The MCP authorization flow's sign-in, through Cloudflare Access for SaaS
 // (src/access-login.ts). The state stored against the token is the JSON AuthRequest.
-const MCP_LOGIN: GithubLoginFlow = {
+const MCP_LOGIN: LoginFlow = {
   callbackPath: "/callback",
   stateCookie: "capsid_state",
   cookiePath: "/callback",

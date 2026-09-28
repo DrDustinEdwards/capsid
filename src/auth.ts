@@ -80,13 +80,3 @@ export function adminGrantEmail(env: { ADMIN_EMAIL?: string }, props: unknown): 
   const email = props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
   return typeof email === "string" && isAdminEmail(env, email) ? email : null;
 }
-
-export function isAdminUser(
-  env: { ADMIN_GITHUB_LOGIN?: string },
-  user: { id: number | string; login: string }
-): boolean {
-  const admin = (env.ADMIN_GITHUB_LOGIN ?? "").trim();
-  if (!admin) return false;
-  if (/^\d+$/.test(admin)) return String(user.id) === admin;
-  return user.login.toLowerCase() === admin.toLowerCase();
-}
