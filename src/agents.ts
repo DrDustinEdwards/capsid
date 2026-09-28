@@ -37,9 +37,10 @@ export interface Agent {
   name: string;
   kind: AgentKind;
   // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
-  // agent; `github:<login>` and `opkey:<fingerprint>` for the two identities that
-  // predate the table, because those are more specific than a synthetic name and
-  // every audit query already reads them.
+  // agent; `opkey:<fingerprint>` for a legacy operator key; the admin as
+  // `access:<email>` on the MCP login (Cloudflare Access, since 2026-09-27) or
+  // `github:<login>` on the console until it moves too. Those are more specific than a
+  // synthetic name, and every audit query already reads them.
   actor: string;
   scopes: AgentScopes;
   // May this caller mint, revoke and re-scope other agents? True only for the OAuth
