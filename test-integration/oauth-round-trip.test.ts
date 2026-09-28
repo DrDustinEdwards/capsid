@@ -2,8 +2,9 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { ISSUER, stubAccess } from "./access-stub";
+import { cimdClient } from "./cimd-stub";
 
-// THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: register, consent,
+// THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: a CIMD client, consent,
 // the Access for SaaS sign-in (stubbed, with a real signed ID token), the code exchange with PKCE, an MCP call
 // with the issued token, and a refresh. workers-oauth-provider 1.0 binds every token to
 // the canonical resource and requires the exchange's redirect_uri to equal the
@@ -62,15 +63,7 @@ async function mcpInitialize(accessToken: string): Promise<Response> {
 
 // Runs the flow up to the code, as `login`. Returns the client id and the code.
 async function authorize(email: string, extra: Record<string, unknown> = {}): Promise<{ clientId: string; code: string | null; callback: Response; tokenBodies: URLSearchParams[]; signIn: URL }> {
-  const registered = await call(
-    new Request(`${ORIGIN}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "CF-Connecting-IP": "198.51.100.77" },
-      body: JSON.stringify({ client_name: "round-trip", redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" }),
-    })
-  );
-  expect(registered.status).toBe(201);
-  const clientId = ((await registered.json()) as { client_id: string }).client_id;
+  const clientId = cimdClient([REDIRECT], "round-trip");
 
   const url = new URL(`${ORIGIN}/authorize`);
   for (const [k, v] of Object.entries({ client_id: clientId, redirect_uri: REDIRECT, response_type: "code", code_challenge: CHALLENGE, code_challenge_method: "S256", state: "client-state" })) {

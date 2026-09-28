@@ -6,7 +6,7 @@ import { JOB_ACTIONS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, isJobSta
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
 import { claimJob, completeJob, expireJobLeases, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
@@ -95,7 +95,7 @@ test("every action the schema advertises is one the tool handles", async () => {
   // called through the real tool; an action with no branch falls through to the
   // "unknown jobs action" refusal.
   const d1 = fakeD1({});
-  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "jobs-actions", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -165,7 +165,7 @@ test("every parameter name the guard knows is one the tool serves", async () => 
   for (const name of JOB_PARAM_NAMES) {
     assert.equal(swallowedParamTag(`text </${name}> more`), name, `'</${name}>' is not detected`);
   }
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "jobs-params", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -179,7 +179,7 @@ test("every parameter name the guard knows is one the tool serves", async () => 
 test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RESUME_NOTE", async () => {
   // reason stays at MAX_TITLE; note carries the full approval, so the served schema
   // has to admit it.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "jobs-note", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -265,7 +265,7 @@ test("a skill id that does not exist is REFUSED, not dropped", async () => {
 
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
   // A client keying on isError must not read a refusal as success.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "jobs-iserror", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -373,7 +373,7 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
   );
   const out = await resumeJob(
     fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }),
-    adminAgent("DrDustinEdwards"),
+    adminAgentForEmail("admin@example.com"),
     new Date("2026-09-25T09:00:00Z"),
     "job_abc123abc123",
     "ran it"

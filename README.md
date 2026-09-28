@@ -9,7 +9,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 ## Stack
 
 - Cloudflare Worker (TypeScript), stateless MCP via `createMcpHandler` from the Agents SDK
-- [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, client ID metadata documents (and dynamic registration until it is retired), tokens in KV
+- [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, clients known by their Client ID Metadata Document (no dynamic registration), tokens in KV
 - Cloudflare Access for SaaS (OIDC) for the MCP and console logins, locked to one admin email (docs/auth.md)
 - A separate GitHub App for repo access, minting short-lived installation tokens
 - D1 for documents, versions, namespaces, jobs, agents and the audit log, with FTS5 search
@@ -54,7 +54,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
 - `POST /backup/credential` mints the credential the off-account backup writes with
-- `POST /token`, `POST /register` token exchange and dynamic client registration (served by the library)
+- `POST /token` token exchange (served by the library). There is no `/register`: a client's id is the URL of its metadata document (CIMD)
 - `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
 - `GET /health` no auth. Reports deploy provenance (git sha, whether the tree was dirty, build time) and probes the store: `SELECT 1` against D1 plus an FTS5 MATCH pinned to one known document. Either probe failing returns 503 with `status: "degraded"` and a `store` object naming which one. A Worker whose bindings resolved to nothing starts normally and would otherwise answer `ok` while every read tool errors.
 

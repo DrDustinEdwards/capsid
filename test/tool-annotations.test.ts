@@ -6,7 +6,7 @@ import { toolBlocks } from "./source-files.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Tool annotations are derived, not declared.
@@ -57,7 +57,7 @@ const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body))
 // The annotations a client receives, read from tools/list rather than from the
 // registration source.
 async function servedAnnotations(): Promise<Map<string, Record<string, unknown> | undefined>> {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "tool-annotations", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

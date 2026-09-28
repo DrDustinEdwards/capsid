@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { cimdResponse } from "./cimd-stub";
 
 // Cloudflare Access for SaaS, as the login callback reaches it: the token endpoint,
 // answering with an ID token signed by a key made here, and the JWKS endpoint serving
@@ -37,6 +38,8 @@ export function stubAccess(email: string, authorizationUrl: string, extra: Recor
       return Response.json({ id_token: await idToken({ email, nonce, ...extra }), token_type: "bearer" });
     }
     if (url === `${ISSUER}/jwks`) return Response.json({ keys: [publicJwk] });
+    const cimd = cimdResponse(url);
+    if (cimd) return cimd;
     throw new Error(`unexpected fetch in the sign-in: ${url}`);
   });
   return bodies;

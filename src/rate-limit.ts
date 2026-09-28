@@ -10,53 +10,6 @@ export interface RateLimitPolicy {
   onUnavailable: "allow" | "refuse";
 }
 
-export const MAX_PER_HOUR = 30;
-export const MAX_PER_DAY = 100;
-
-// Fail open. /register is how a client is enrolled, and only the owner enrolls one.
-// Refusing registrations during a KV outage would lock the owner out of reconnecting
-// at the moment the platform is already unwell, and a few extra registrations cost a
-// few KV rows.
-export const REGISTRATION_LIMIT: RateLimitPolicy = {
-  prefix: "dcr:rate:",
-  perHour: MAX_PER_HOUR,
-  perDay: MAX_PER_DAY,
-  label: "DCR",
-  onUnavailable: "allow",
-};
-
-// At most one non-loopback redirect_uri per registered client. Loopback is exempt
-// so a native client can cycle ports.
-export function isLoopbackRedirect(uri: string): boolean {
-  try {
-    const host = new URL(uri).hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
-  } catch {
-    // Non-loopback, so a malformed entry cannot slip the cap.
-    return false;
-  }
-}
-
-export interface DcrRefusal {
-  code: string;
-  status: number;
-  description: string;
-}
-
-export function dcrRedirectRefusal(clientMetadata: unknown): DcrRefusal | null {
-  const raw = (clientMetadata as { redirect_uris?: unknown } | null | undefined)?.redirect_uris;
-  const uris = Array.isArray(raw) ? raw.filter((u): u is string => typeof u === "string") : [];
-  const nonLoopback = uris.filter((u) => !isLoopbackRedirect(u));
-  if (nonLoopback.length > 1) {
-    return {
-      code: "invalid_redirect_uri",
-      status: 400,
-      description: `A client may register at most one non-loopback redirect_uri; this one declared ${nonLoopback.length}. Register a single redirect, or use loopback addresses for a native client.`,
-    };
-  }
-  return null;
-}
-
 export const MAX_REPORTS_PER_HOUR = 300;
 export const MAX_REPORTS_PER_DAY = 1000;
 

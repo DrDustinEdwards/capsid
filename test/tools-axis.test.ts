@@ -4,13 +4,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes, allowsToolAction } from "../src/agents-schema.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { actionArgFor } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The schemas the server actually serves, as the admin sees them.
 async function listedTools() {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "tools-axis-list", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

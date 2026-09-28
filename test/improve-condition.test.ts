@@ -10,7 +10,7 @@ import { improveRunManual, openRuns } from "../src/improve-run.ts";
 import { tickRuns } from "../src/improve/tick.ts";
 import type { RunRow } from "../src/improve-state.ts";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, IMPROVE_SKILL_DEFAULTS, sseMessage } from "./improve-fakes.ts";
@@ -195,7 +195,7 @@ test("the manual result reports the condition it ran under, including on a dry r
 test("the improve_run tool serves condition, describes each value, and passes it through", async () => {
   await withFetch({}, async () => {
     const { env } = await harness();
-    const server = buildServer(env, adminAgent("DrDustinEdwards"));
+    const server = buildServer(env, adminAgentForEmail("admin@example.com"));
     const client = new Client({ name: "condition-tool", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

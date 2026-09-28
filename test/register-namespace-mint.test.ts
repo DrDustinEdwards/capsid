@@ -6,7 +6,7 @@ import { sep } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // register_namespace returns the mint command and does not mint. Minting is gated on
@@ -16,7 +16,7 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 test("register_namespace registers, mints nothing, and returns the mint instruction", async () => {
   const d1 = fakeD1({});
-  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "register-mint", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

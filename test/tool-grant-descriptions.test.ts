@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { TOOL_GRANTS, TOOL_ACTION_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -12,7 +12,7 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // a change to either side fails this file.
 
 async function servedDescriptions(): Promise<Map<string, string>> {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "tool-grant-descriptions", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

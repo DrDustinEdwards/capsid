@@ -4,7 +4,7 @@ import { sourceFiles } from "./source-files.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // One definition, imported. Conventions about the shape of src/ rather than the
@@ -42,7 +42,7 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
 });
 
 test("move and lint finalize still accept an optional boolean confirm", async () => {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "confirm-schema", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

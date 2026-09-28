@@ -1,13 +1,12 @@
 // The pinned Cloudflare binding identities, in ONE place. scripts/ci-config.mjs asserts
-// the deploy against them and scripts/reap-probe-clients.mjs deletes from the OAuth KV
-// namespace, so two copies could drift and leave the reaper deleting from the wrong
-// keyspace while reporting success (KV DELETE is idempotent).
+// the deploy against them and verify-live gate 2b reads the OAuth KV namespace, so two
+// copies could drift and leave the gate reading the wrong keyspace.
 //
 // SIDE-EFFECT FREE, so it can be imported. ci-config.mjs cannot hold these: it runs at
 // module scope.
 //
-// NO node_modules IMPORTS. reap-probe-clients.mjs runs in the live job, which skips npm
-// ci on purpose so the gate still works when install is broken.
+// NO node_modules IMPORTS. verify-live.mjs runs in the live job, which skips npm ci on
+// purpose so the gate still works when install is broken.
 //
 // These values are published in capsid/core.md and are inert without an API token: an
 // assertion, not a credential.
@@ -79,7 +78,7 @@ export const GITHUB_APP_CLIENT_ID = "Iv23lik2O8SPPksxbc6O";
 // lost client: record in OAUTH_KV is detected by verify-live gate 2b rather than by
 // the owner's next failed connect.
 //
-// IT HAS NO EXPIRY, unlike every /register client (90 day clientRegistrationTTL): a
+// IT HAS NO EXPIRY, unlike every client DCR registered (90 day clientRegistrationTTL): a
 // canary that could expire would have a second legitimate reason to be absent. The gate
 // asserts it stays non-expiring.
 //
@@ -88,8 +87,9 @@ export const GITHUB_APP_CLIENT_ID = "Iv23lik2O8SPPksxbc6O";
 //   wrangler kv key get "client:<id>" --namespace-id <OAUTH_KV> --remote --text > canary.json
 //   wrangler kv key put "client:<id>" --namespace-id <OAUTH_KV> --remote --path canary.json
 //
-// The reaper cannot touch it: that script deletes only the id recorded in
-// PROBE_CLIENT_FILE by gate 2 of the same run, and never lists the namespace.
+// /register was removed in design PR 4 of capsid/research/design-capsid-access-login.md,
+// so it cannot be minted again that way. If it is lost, restore the record from a
+// backup of OAUTH_KV or a saved canary.json with the second command above.
 export const CANARY_CLIENT = {
   id: "eZK0jwhRDvjSc_SN",
   name: "capsid live-gate canary (do not delete; asserted by verify-live gate 2b)",

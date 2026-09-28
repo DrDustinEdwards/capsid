@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFile, toolBlocks } from "./source-files.ts";
@@ -141,7 +141,7 @@ for (const plant of PLANTS) {
     // The call may fail afterwards for its own reasons (the fetch harness has no
     // routes), so this asserts that the scope refusal text is absent, not success.
     await withFetch({}, async (calls) => {
-      const result = await callAs(adminAgent("DrDustinEdwards"), plant.tool, plant.args);
+      const result = await callAs(adminAgentForEmail("admin@example.com"), plant.tool, plant.args);
       const text = result.content[0]?.text ?? "";
       assert.ok(text.length > 0, "the call returned no text, so an absent refusal proves nothing");
       assert.doesNotMatch(text, /needs the .* flag/, `the admin was refused a flag it holds: ${text}`);

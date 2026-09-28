@@ -5,7 +5,7 @@ import { parseEvidence } from "../src/job-outcomes.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // Outcome rows are immutable except merge state. A driver never merges: it blocks and
@@ -92,7 +92,7 @@ test("a near-miss URL is not mistaken for a pull request", () => {
 // never-checked rows first, and skips what is known merged.
 
 async function connectAdmin(db: unknown) {
-  const server = buildServer(fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "outcome-prs", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
