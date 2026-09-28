@@ -39,8 +39,10 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // DCR is still how existing connections registered, until the design's PR 4.
+    // DCR is still how existing connections registered, until the design's PR 4, and
+    // CIMD is on beside it: both Claude clients send a metadata document URL.
     expect(serverDoc.registration_endpoint).toContain("/register");
+    expect((serverDoc as { client_id_metadata_document_supported?: boolean }).client_id_metadata_document_supported).toBe(true);
   });
 });
 

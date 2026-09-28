@@ -68,15 +68,25 @@ function readEverythingScopes(): AgentScopes {
   return { namespaces: "*", repos: "*", tools: "*", grants: ["read"], flags: flagsAll(false) };
 }
 
-// The OAuth admin session. The provider has already checked the login against
-// ADMIN_GITHUB_LOGIN (once at consent, once per request), so this function grants
-// rather than decides.
+// The admin, as the console's GitHub login knows it (until the design's PR 3). The
+// login was checked against ADMIN_GITHUB_LOGIN before this is called, so this function
+// grants rather than decides.
 export function adminAgent(login: string): Agent {
+  return adminWithActor(`github:${login}`);
+}
+
+// The admin, as the MCP login knows it: the email Access verified, already checked
+// against ADMIN_EMAIL at sign-in and on every request.
+export function adminAgentForEmail(email: string): Agent {
+  return adminWithActor(`access:${email}`);
+}
+
+function adminWithActor(actor: string): Agent {
   return {
-    id: `github:${login}`,
+    id: actor,
     name: "admin",
     kind: "seat",
-    actor: `github:${login}`,
+    actor,
     scopes: unrestrictedScopes(),
     admin: true,
     row: null,

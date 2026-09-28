@@ -90,6 +90,12 @@ export default defineConfig({
           ADMIN_GITHUB_LOGIN: "DrDustinEdwards",
           GITHUB_CLIENT_ID: "test-oauth-client-id",
           GITHUB_CLIENT_SECRET: "test-oauth-client-secret",
+          // The MCP login's Access for SaaS app (src/access-login.ts). A fake team domain;
+          // the tests stub its token and JWKS endpoints.
+          ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
+          ACCESS_SAAS_CLIENT_ID: "sample-client",
+          ACCESS_SAAS_CLIENT_SECRET: "sample-client-secret-not-a-real-one",
+          ADMIN_EMAIL: "admin@example.com",
           BUILD_SHA: "integration",
         },
       },
