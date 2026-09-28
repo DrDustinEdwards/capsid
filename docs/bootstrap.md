@@ -42,7 +42,11 @@ nothing starts fine and answers healthy while every read errors.
 
 ```
 npx wrangler secret put GITHUB_APP_PRIVATE_KEY   # the .pem contents
-npx wrangler secret put GITHUB_CLIENT_SECRET     # the OAuth app secret
+npx wrangler secret put GITHUB_CLIENT_SECRET     # the OAuth app secret (the console's login until it moves to Access)
+npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareaccess.com, the MCP login (docs/auth.md)
+npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Capsid"
+npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
+npx wrangler secret put ADMIN_EMAIL              # the one email the MCP login admits, exactly
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys
 npx wrangler secret put ANTHROPIC_API_KEY        # only for the fully automated mode

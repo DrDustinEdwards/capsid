@@ -9,8 +9,8 @@ Every write snapshots the prior version into `document_versions` and appends to 
 ## Stack
 
 - Cloudflare Worker (TypeScript), stateless MCP via `createMcpHandler` from the Agents SDK
-- [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, dynamic client registration, tokens in KV
-- A GitHub OAuth App for login, locked to one admin account
+- [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, client ID metadata documents (and dynamic registration until it is retired), tokens in KV
+- Cloudflare Access for SaaS (OIDC) for the MCP login, locked to one admin email (docs/auth.md); the console still uses a GitHub OAuth App until it moves too
 - A separate GitHub App for repo access, minting short-lived installation tokens
 - D1 for documents, versions, namespaces, jobs, agents and the audit log, with FTS5 search
 - R2: `MEDIA` for backups, the markdown mirror and CSP reports (the binding name is historical; nothing stores or serves media, and the Worker never reads this bucket back); `HOLDOUT` for the loop's hidden test suites, bound separately so attempt code cannot reach it
@@ -135,7 +135,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
    npm run deploy
    ```
 
-9. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the GitHub login. Only the `ADMIN_GITHUB_LOGIN` account gets in.
+9. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity gets in (docs/auth.md).
 
    Or test the flow first with the MCP Inspector:
 

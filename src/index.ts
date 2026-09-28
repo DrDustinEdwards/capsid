@@ -1,7 +1,7 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp";
-import { isAdminUser } from "./auth";
-import { adminAgent } from "./agents";
+import { adminGrantEmail } from "./auth";
+import { adminAgentForEmail } from "./agents";
 import { runBackup } from "./backup";
 import { callerIp, checkRate, dcrRedirectRefusal, REGISTRATION_LIMIT } from "./rate-limit";
 import { defaultHandler } from "./routes";
@@ -26,14 +26,15 @@ const IMPROVE_OPEN_HOUR_CT = 3;
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const props = (ctx as ExecutionContext & { props?: Props }).props;
-    if (!props || !isAdminUser(env, props)) {
+    // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
+    const email = adminGrantEmail(env, (ctx as ExecutionContext & { props?: Props }).props);
+    if (!email) {
       return new Response("forbidden: capsid is a single-user server and this grant does not belong to its administrator", {
         status: 403,
       });
     }
-    // The admin agent holds every scope; the GitHub login stays the audit actor.
-    return createMcpHandler(buildServer(env, adminAgent(props.login)), { route: "/mcp" })(request, env, ctx);
+    // The admin agent holds every scope; the email Access verified is the audit actor.
+    return createMcpHandler(buildServer(env, adminAgentForEmail(email)), { route: "/mcp" })(request, env, ctx);
   },
 };
 
@@ -65,6 +66,10 @@ const provider = new OAuthProvider({
   clientRegistrationEndpoint: "/register",
   clientRegistrationTTL: CLIENT_REGISTRATION_TTL_SECONDS,
   resourceMetadata: { resource: CANONICAL_MCP_URL },
+  // CIMD: claude.ai and Claude Code send their client_id as a metadata document URL
+  // (capsid/mcp-wrapper-standard.md, amendment 2026-09-27). DCR stays beside it until
+  // the design's PR 4, because existing connections registered that way.
+  clientIdMetadataDocumentEnabled: true,
   clientRegistrationCallback: async ({ clientMetadata, request }) => {
     const redirectRefusal = dcrRedirectRefusal(clientMetadata);
     if (redirectRefusal) {

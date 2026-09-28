@@ -9,7 +9,7 @@ import { routeRefusal } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
-import type { Env } from "./env";
+import type { Env, Props } from "./env";
 import { buildServer } from "./server";
 import { ingestScore } from "./improve-run";
 import {
@@ -38,13 +38,14 @@ import {
 } from "./console";
 import { handleConsoleAction } from "./console-actions";
 import { handleConsoleCallback } from "./console-auth";
-import { clearStateCookie, completeGithubLogin, type GithubLoginFlow, startGithubLogin, STATE_TTL_SECONDS } from "./github-login";
+import { completeAccessLogin, startAccessLogin } from "./access-login";
+import { clearStateCookie, type GithubLoginFlow, STATE_TTL_SECONDS } from "./github-login";
 
 const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
 
-// The MCP authorization flow's half of the GitHub login (src/github-login.ts). The
-// state stored against the token is the JSON AuthRequest.
+// The MCP authorization flow's sign-in, through Cloudflare Access for SaaS
+// (src/access-login.ts). The state stored against the token is the JSON AuthRequest.
 const MCP_LOGIN: GithubLoginFlow = {
   callbackPath: "/callback",
   stateCookie: "capsid_state",
@@ -136,13 +137,13 @@ ${othersHtml}
   });
 }
 
-async function startGithubFlow(
+async function startSignIn(
   request: Request,
   env: Env,
   oauthReq: AuthRequest,
   extraCookies: string[] = []
 ): Promise<Response> {
-  return startGithubLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), extraCookies);
+  return startAccessLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), extraCookies);
 }
 
 async function handleAuthorizeGet(request: Request, env: Env): Promise<Response> {
@@ -160,7 +161,7 @@ async function handleAuthorizeGet(request: Request, env: Env): Promise<Response>
   if (!client) return textResponse("unknown client", 400);
   const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
   if (approved.includes(await approvalTag(oauthReq.clientId, oauthReq.redirectUri))) {
-    return startGithubFlow(request, env, oauthReq);
+    return startSignIn(request, env, oauthReq);
   }
   return renderApprovalDialog(oauthReq, client.clientName ?? oauthReq.clientId, crypto.randomUUID(), client.redirectUris);
 }
@@ -200,20 +201,21 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
     await approvalCookie(approved, env.COOKIE_ENCRYPTION_KEY),
     `${CSRF_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`,
   ];
-  return startGithubFlow(request, env, oauthReq, cookies);
+  return startSignIn(request, env, oauthReq, cookies);
 }
 
 async function handleCallback(request: Request, env: Env): Promise<Response> {
-  const login = await completeGithubLogin(request, env, MCP_LOGIN, (stored) => JSON.parse(stored) as AuthRequest);
+  const login = await completeAccessLogin(request, env, MCP_LOGIN, (stored) => JSON.parse(stored) as AuthRequest);
   if (!login.ok) return login.response;
-  const { user, state: oauthReq } = login;
+  const { email, state: oauthReq } = login;
 
+  const props: Props = { email };
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReq,
-    userId: String(user.id),
-    metadata: { login: user.login },
+    userId: email,
+    metadata: { email },
     scope: oauthReq.scope,
-    props: { id: user.id, login: user.login, name: user.name ?? null },
+    props,
   });
 
   const headers = new Headers({ Location: redirectTo });
