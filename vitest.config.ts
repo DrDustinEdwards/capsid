@@ -79,7 +79,10 @@ export default defineConfig({
         // invoke_user_worker_ahead_of_assets is what wrangler's run_worker_first
         // becomes, and it is what production must set: with it off, the router serves
         // /index.html and /assets/* at the origin's root before the Worker, and so
-        // before the console gate. test-integration/console-app.test.ts asserts it.
+        // before the console gate. Set here to match, but NOT PROVEN HERE: in this pool
+        // SELF is ctx.exports.default (dist/worker/lib/cloudflare/test-internal.mjs),
+        // the Worker itself, so no test request passes through the router. Flipping
+        // this to false was tried and every test stayed green.
         assets: {
           directory: path.join(import.meta.dirname, "test-integration", "fixtures", "dashboard"),
           binding: "ASSETS",

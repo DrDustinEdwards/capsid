@@ -10,8 +10,9 @@ import type { Env } from "./env";
 // config must set `assets.run_worker_first: true` (docs/console.md): without it,
 // Cloudflare serves a request that matches a file (the assets directory's own
 // /index.html and /assets/*, at the root of the origin) without invoking this Worker.
-// test-integration/console-app.test.ts runs with the same setting and asserts the root
-// paths reach the Worker.
+// No test here can prove that setting: the integration pool's SELF is the Worker
+// itself, not the assets router (vitest.config.ts says more), so it is a deploy-config
+// check, not a test.
 
 export const CONSOLE_APP_PATH = "/console/app";
 export const CONSOLE_APP_PREFIX = "/console/app/";

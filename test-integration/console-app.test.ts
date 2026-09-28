@@ -4,11 +4,12 @@ import worker from "../src/index";
 import { consoleSessionCookie } from "../src/console-auth";
 import { DASHBOARD_CSP, HASHED_ASSET_CACHE } from "../src/console-app";
 
-// The Watch Floor app's files through the whole Worker, with miniflare's real assets
-// router in front of it (vitest.config.ts, `assets`), holding the fake build in
-// test-integration/fixtures/dashboard. SELF goes through the router exactly as a
-// request to the deployed origin does; a signed-in request is sent to the Worker's own
-// fetch with a cookie key, because the pool binds none (as oauth-flow.test.ts does).
+// The Watch Floor app's files through the whole Worker, with miniflare's real ASSETS
+// binding (vitest.config.ts, `assets`) holding the fake build in
+// test-integration/fixtures/dashboard. SELF is the Worker's own default export, not the
+// assets router in front of it, so what the router does is the deploy config's
+// business (docs/console.md, run_worker_first). A signed-in request is sent to the
+// Worker's fetch with a cookie key, because the pool binds none (as oauth-flow.test.ts does).
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-console-cookie-key";
@@ -49,8 +50,10 @@ describe("/console/app through the assets router", () => {
     expect(await response.text()).not.toContain(SCRIPT_MARK);
   });
 
-  it("PLANT: the build's files at the origin's root reach the Worker, not the router, so nothing is served around the gate", async () => {
-    // What run_worker_first protects: the assets directory's own paths.
+  it("the Worker serves none of the build's files at the origin's root", async () => {
+    // The Worker's half only. Whether the assets router serves these paths ahead of the
+    // Worker is decided by run_worker_first in the deploy config, which this pool
+    // cannot exercise: SELF is the Worker itself (vitest.config.ts, `assets`).
     for (const path of ["/index.html", "/assets/app-abc123.js", "/"]) {
       const response = await SELF.fetch(`${ORIGIN}${path}`, { headers: NAV, redirect: "manual" });
       const body = await response.text();
