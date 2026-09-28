@@ -16,7 +16,7 @@ import {
 import { checkStates, siteMapFindings, watcherTick, WATCHER_CHECKS, WATCHER_LAST_KEY, type Finding, type Gathered } from "../src/watcher.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The watcher's pass, kept for the operations dashboard (PR 1 of the Watch Floor
+// The watcher's pass, kept for the operations dashboard (PR 1 of the Capsid Portal
 // build, capsid/research/design-ops-console.md).
 
 const NOW = new Date("2026-09-28T12:10:00.000Z");

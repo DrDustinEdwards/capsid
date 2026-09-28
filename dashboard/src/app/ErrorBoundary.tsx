@@ -9,7 +9,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   }
 
   componentDidCatch(error: Error) {
-    console.error("Watch Floor: render failed", error);
+    console.error("Capsid Portal: render failed", error);
   }
 
   render() {

@@ -1,4 +1,4 @@
-// The Watch Floor contract: what GET /console/api/ops returns
+// The Capsid Portal contract: what GET /console/api/ops returns
 // (capsid/research/design-ops-console.md). Types only, no runtime code, so the
 // dashboard app under dashboard/ imports it with `import type` and src/ never imports
 // from the app. Changing a field here changes both sides, and both typecheck against it.

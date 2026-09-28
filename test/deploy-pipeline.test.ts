@@ -70,7 +70,7 @@ test("the rollback pins the same wrangler version the deploy uses", () => {
   assert.match(ci, new RegExp(`wrangler@${pinned.replace(/\./g, "\.")} rollback`), `the rollback does not pin wrangler ${pinned}`);
 });
 
-// The Watch Floor app (dashboard/) is its own package, outside every root gate, so CI
+// The Capsid Portal app (dashboard/) is its own package, outside every root gate, so CI
 // has to name it: its typecheck against src/ops-types.ts, its build and size budget,
 // and its install in both the checks job and the deploy job (scripts/deploy.mjs builds
 // it into the Worker's assets).

@@ -1,7 +1,7 @@
 import { consoleGate } from "./console";
 import type { Env } from "./env";
 
-// The Watch Floor app's built files, served under /console/app/ (capsid/research/
+// The Capsid Portal app's built files, served under /console/app/ (capsid/research/
 // design-ops-console.md). Every request goes through consoleGate first, the same gate
 // as /console, and only then reaches env.ASSETS: the files are the admin's dashboard,
 // and a file served before the gate is a file served to anyone.
@@ -29,7 +29,7 @@ export const HASHED_ASSET_CACHE = "private, max-age=31536000, immutable";
 const HASHED_ASSET_PREFIX = "/assets/";
 
 const NOT_DEPLOYED =
-  "the dashboard is not deployed: this Worker has no ASSETS binding. The built app (dashboard/dist) is served only when the deploy config declares it; the server-rendered console at /console is unaffected.";
+  "the dashboard is not deployed: this Worker has no ASSETS binding. The built app (dashboard/dist) is served only when the deploy config declares it; Capsid Portal's summary page at /console is unaffected.";
 
 function text(message: string, status: number, extra: Record<string, string> = {}): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });

@@ -17,7 +17,7 @@ import {
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// The watcher's read of Cloudflare for the Watch Floor (src/ops-cloudflare.ts), and the
+// The watcher's read of Cloudflare for Capsid Portal (src/ops-cloudflare.ts), and the
 // two findings built on the snapshot: a site down on two probes in a row, and a
 // Worker's error rate over the approved threshold.
 

@@ -36,7 +36,7 @@ test("the scorer's dry run names the file the script writes", () => {
   assert.match(workflow, /wrangler deploy --dry-run --config wrangler\.dryrun\.jsonc/, "the dry run would read wrangler.jsonc, which nothing writes on the runner");
 });
 
-// The Watch Floor app's assets block (wrangler.jsonc.example). run_worker_first true is
+// The Capsid Portal app's assets block (wrangler.jsonc.example). run_worker_first true is
 // what keeps a browser's /authorize and /console/callback navigations reaching the
 // Worker; not_found_handling "none" leaves the single-page fallback to the Worker, after
 // the console gate.

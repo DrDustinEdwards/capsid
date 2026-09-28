@@ -1,9 +1,9 @@
 {
-  "name": "capsid-watch-floor",
+  "name": "capsid-portal",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Watch Floor: the operations dashboard the capsid Worker serves at /console/app/",
+  "description": "Capsid Portal: the operations dashboard the capsid Worker serves at /console/app/",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

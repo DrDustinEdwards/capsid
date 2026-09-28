@@ -8,7 +8,7 @@ import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src
 import type { OpsFeed } from "../src/ops-types";
 import { WATCHER_ACTOR } from "../src/watcher";
 
-// The Watch Floor feed against a real D1 and KV: which rows each list keeps, and how
+// The Capsid Portal feed against a real D1 and KV: which rows each list keeps, and how
 // many reads one request costs (src/ops-feed.ts states the count; this counts).
 
 const ORIGIN = "https://capsid.test";

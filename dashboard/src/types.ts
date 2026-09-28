@@ -1,4 +1,4 @@
-// The Watch Floor contract lives in the Worker's src/ops-types.ts. Types only: the
+// The Capsid Portal contract lives in the Worker's src/ops-types.ts. Types only: the
 // app never imports runtime code from the Worker.
 export type {
   CfDeploy,

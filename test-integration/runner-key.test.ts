@@ -149,7 +149,7 @@ describe("the exchange", () => {
     expect(params.claims_present).toEqual(Object.keys(goodClaims()).sort());
     expect(audit!.params).not.toContain("refs/heads/master");
     // The run, which the repository_dispatch that started it could not return: the
-    // OIDC run_id claim and the run's page, joined into the Watch Floor's seat list.
+    // OIDC run_id claim and the run's page, joined into Capsid Portal's seat list.
     expect(params.run_id).toBe("99");
     expect(params.run_url).toBe(`https://github.com/${REPO}/actions/runs/99`);
     const live = await opsLive(env, NOW);

@@ -285,7 +285,7 @@ test("a probe document GitHub does not serve is could-not-run, not a refusal", a
   assert.match(out, /NORUN {2}3 consent form renders/);
 });
 
-test("gate 6 refuses a Watch Floor app that answers without a session", async () => {
+test("gate 6 refuses a Capsid Portal app that answers without a session", async () => {
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.url !== "/console/app/") return false;

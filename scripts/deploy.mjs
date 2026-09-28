@@ -19,7 +19,7 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
 
-// The Watch Floor app (dashboard/) is served from dashboard/dist as the Worker's static
+// The Capsid Portal app (dashboard/) is served from dashboard/dist as the Worker's static
 // assets (wrangler.jsonc.example, "assets"). It is built and held to its size budget
 // here, before every deploy, so a deploy never ships a stale or missing app. A failed
 // build or budget stops the deploy. dist/ is gitignored, so building does not dirty the

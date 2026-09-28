@@ -14,7 +14,7 @@ export interface Env {
   ACCESS_SAAS_CLIENT_ID?: string;
   ACCESS_SAAS_CLIENT_SECRET?: string;
   ADMIN_EMAIL?: string;
-  // The Watch Floor's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
+  // Capsid Portal's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
   // with Account Analytics Read and Workers Scripts Read, and the account it reads.
   // Unset, the deploy and error columns show no data and say why.
   CF_OPS_TOKEN?: string;

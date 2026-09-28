@@ -200,7 +200,7 @@ export async function exchangeRunnerKey(env: Env, token: string, rawBody: string
         start_audit_id: start.id,
         run_id: claims.run_id ?? null,
         run_attempt: claims.run_attempt ?? null,
-        // The run's page, for the Watch Floor's seat-start list (src/ops-feed.ts). A
+        // The run's page, for Capsid Portal's seat-start list (src/ops-feed.ts). A
         // repository_dispatch returns no run id, so this row is the first place the
         // Worker learns which run a start became. run_id is GitHub's OIDC claim "The ID
         // of the workflow run that triggered the workflow"

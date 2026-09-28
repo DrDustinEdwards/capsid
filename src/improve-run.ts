@@ -212,7 +212,7 @@ export interface AgentSummary {
   record: AgentRecord;
 }
 
-// Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
+// Exported for the Capsid Portal feed (src/ops-feed.ts), which lists the same inventory
 // with the same records rather than a second reading of the agents table.
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const { results } = await db

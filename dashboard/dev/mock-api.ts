@@ -56,7 +56,7 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
   return {
-    name: "watch-floor-mock-ops",
+    name: "capsid-portal-mock-ops",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {

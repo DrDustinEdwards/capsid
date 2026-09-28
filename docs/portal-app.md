@@ -1,8 +1,8 @@
-# Watch Floor
+# Capsid Portal: the operations app
 
-The operations dashboard: every site, the job queue across every namespace, the watcher's findings, deploys, agents, backups and CI in one app at `/console/app/`. The design and its rulings are in Capsid at `capsid/research/design-ops-console.md`. The routes and their gate are in [console.md](console.md).
+Capsid Portal's operations dashboard: every site, the job queue across every namespace, the watcher's findings, deploys, agents, backups and CI in one app at `/console/app/`. The design and its rulings are in Capsid at `capsid/research/design-ops-console.md`. The routes and their gate are in [console.md](console.md).
 
-**It is read only.** It can refresh and it links out, and nothing else. It shows the resume call for a blocked job with a Copy button; the seat or the console makes the call. The one action is Refresh, which reads the feed again and runs one watcher pass on demand, at most once per two minutes.
+**It is read only.** It can refresh and it links out, and nothing else. It shows the resume call for a blocked job with a Copy button; the seat, or the Portal's summary page at `/console`, makes the call. The one action is Refresh, which reads the feed again and runs one watcher pass on demand, at most once per two minutes.
 
 ## Where each view gets its data
 

@@ -6,7 +6,7 @@ export function readPref(key: string): string | null {
   try {
     return localStorage.getItem(key);
   } catch (e) {
-    console.warn(`Watch Floor: could not read ${key} from localStorage`, e);
+    console.warn(`Capsid Portal: could not read ${key} from localStorage`, e);
     return null;
   }
 }
@@ -15,7 +15,7 @@ export function writePref(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch (e) {
-    console.warn(`Watch Floor: could not save ${key} to localStorage`, e);
+    console.warn(`Capsid Portal: could not save ${key} to localStorage`, e);
   }
 }
 

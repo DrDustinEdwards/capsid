@@ -4,7 +4,7 @@ import worker from "../src/index";
 import { consoleSessionCookie } from "../src/console-auth";
 import { DASHBOARD_CSP, HASHED_ASSET_CACHE } from "../src/console-app";
 
-// The Watch Floor app's files through the whole Worker, with miniflare's real ASSETS
+// The Capsid Portal app's files through the whole Worker, with miniflare's real ASSETS
 // binding (vitest.config.ts, `assets`) holding the fake build in
 // test-integration/fixtures/dashboard. SELF is the Worker's own default export, not the
 // assets router in front of it, so what the router does is the deploy config's
@@ -13,8 +13,8 @@ import { DASHBOARD_CSP, HASHED_ASSET_CACHE } from "../src/console-app";
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-console-cookie-key";
-const INDEX_MARK = "watch-floor-fixture-index";
-const SCRIPT_MARK = "watch-floor-fixture-script";
+const INDEX_MARK = "capsid-portal-fixture-index";
+const SCRIPT_MARK = "capsid-portal-fixture-script";
 const NAV = { Accept: "text/html,application/xhtml+xml", "Sec-Fetch-Mode": "navigate" };
 
 async function signedFetch(path: string, headers: Record<string, string> = {}): Promise<Response> {

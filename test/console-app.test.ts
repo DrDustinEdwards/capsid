@@ -6,7 +6,7 @@ import { assetPath, DASHBOARD_CSP, handleConsoleApp, HASHED_ASSET_CACHE, isNavig
 import { CONSENT_DIALOG_HEADERS } from "../src/headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The Watch Floor app's files behind the console gate (src/console-app.ts), with a fake
+// The Capsid Portal app's files behind the console gate (src/console-app.ts), with a fake
 // ASSETS binding that records what it was asked for. The same routes run through the
 // whole Worker, with miniflare's real assets router, in
 // test-integration/console-app.test.ts.
@@ -14,7 +14,7 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 const SECRET = "console-app-test-cookie-secret";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 const FILES: Record<string, { body: string; type: string }> = {
-  "/": { body: "<!doctype html><title>Watch Floor</title>", type: "text/html" },
+  "/": { body: "<!doctype html><title>Capsid Portal</title>", type: "text/html" },
   "/assets/app-abc123.js": { body: "console.log('app')", type: "text/javascript" },
   "/favicon.svg": { body: "<svg/>", type: "image/svg+xml" },
 };
@@ -67,7 +67,7 @@ test("a signed-in administrator gets the app's page, uncached, under its own CSP
   for (const path of ["/console/app", "/console/app/", "/console/app/index.html"]) {
     const res = await handleConsoleApp(await signed(path), env(), NOW);
     assert.equal(res.status, 200, path);
-    assert.match(await res.text(), /Watch Floor/);
+    assert.match(await res.text(), /Capsid Portal/);
     assert.equal(res.headers.get("Cache-Control"), "no-store");
     assert.equal(res.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
     assert.equal(res.headers.get("X-Frame-Options"), "DENY");
@@ -87,7 +87,7 @@ test("an unknown path falls back to the page for a navigation only; a missing fi
   const { assets, asked } = fakeAssets();
   const nav = await handleConsoleApp(await signed("/console/app/jobs/job_000000000001", { "Sec-Fetch-Mode": "navigate" }), env(assets), NOW);
   assert.equal(nav.status, 200);
-  assert.match(await nav.text(), /Watch Floor/);
+  assert.match(await nav.text(), /Capsid Portal/);
   assert.equal(nav.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
   assert.deepEqual(asked, ["/jobs/job_000000000001", "/"]);
 

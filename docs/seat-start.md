@@ -11,7 +11,7 @@ The seat (a chat acting only through Capsid) can start a Claude Code session on 
 
 ## The guards
 
-- **The switch.** APP_KV `seat_start:enabled`. Only `on` enables; unset, any other value or an unreadable KV is off. It ships off. The admin sets it with `improve_run` action `seat_start` (value `on` or `off`) or from the console; both are audited. `improve_status` and the console header show it.
+- **The switch.** APP_KV `seat_start:enabled`. Only `on` enables; unset, any other value or an unreadable KV is off. It ships off. The admin sets it with `improve_run` action `seat_start` (value `on` or `off`) or from Capsid Portal; both are audited. `improve_status` and the Portal's summary header show it.
 - **The cap.** APP_KV `seat_start:max_sessions`, 1 unless it reads `2`, set with the same action's `max_sessions`. A session is in flight while a runner holds a claimed job, or for 20 minutes after a start whose job is still queued. At most one session runs per repo; the workflow's `concurrency` group is the backstop.
 - **Public repos only.** Checked against GitHub at every start. A repo that goes private is off for this feature, and a seat-started job carries nothing private, because Actions logs on a public repo are public.
 - **Who can start one.** The workflow has no comment, issue or pull request trigger, so a stranger's comment or a fork pull request cannot start a session. Only a token with write access can send the dispatch. The Action rejects non-human actors unless listed, and lists exactly `capsid-repo-access`.

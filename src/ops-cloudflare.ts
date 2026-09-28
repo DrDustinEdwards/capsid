@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { OpsSite } from "./ops-sites";
 import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types";
 
-// The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
+// The watcher's read of Cloudflare, for Capsid Portal's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
 // per dashboard request: src/watcher.ts is the one module that imports it
 // (test/ops-cloudflare.test.ts).
@@ -155,7 +155,7 @@ export function errorWindow(now: Date): { start: Date; end: Date; hours: string[
 
 function errorsQuery(scripts: string[]): string {
   for (const s of scripts) if (!SCRIPT_NAME.test(s)) throw new Error(`script name ${JSON.stringify(s)} is not one the query will carry`);
-  return `query WatchFloorErrors($accountTag: string, $datetimeStart: string, $datetimeEnd: string) {
+  return `query CapsidPortalErrors($accountTag: string, $datetimeStart: string, $datetimeEnd: string) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       workersInvocationsAdaptive(

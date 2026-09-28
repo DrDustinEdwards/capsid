@@ -233,7 +233,7 @@ stored text of the first job it happened to.
 ### agent_record
 
 `src/agent-record.ts` aggregates those rows into one record per credential, served
-in `improve_status`'s `agents` and rendered on the console: jobs done, failed and
+in `improve_status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
 blocked, gates hit, resumes, pull requests opened and merged, a merge rate, a CI
 green rate with `ci_checked` as its stated denominator, a median duration, and for
 drivers the loop's kept and reverted counts.
@@ -414,7 +414,7 @@ document. A document is data, and a document another client wrote is untrusted
 input. The stamp is on the response envelope rather than in the body, because the
 body is exactly what an attacker controls.
 
-## The console's JSON twin
+## Capsid Portal's JSON twin
 
 `GET /console/json` serves the object the `/console` page renders, so a dashboard
 or a chat reads the same state without scraping HTML. Admin session only, on the
@@ -478,7 +478,7 @@ that builds it.
 ```
 
 `improve` is the whole
-`improve_status` report rather than a copy of parts of it, so the console and the
+`improve_status` report rather than a copy of parts of it, so Capsid Portal and the
 tool serve one description of the loop. `agents` is that report's inventory with
 counts attached, and `attempts_kept` and `attempts_reverted` are `null` for every
 kind except `driver`, because an attempt belongs to a namespace's runs and

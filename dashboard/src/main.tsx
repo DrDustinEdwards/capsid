@@ -18,7 +18,7 @@ import { ErrorBoundary } from "./app/ErrorBoundary";
 applySavedTheme();
 
 const root = document.getElementById("root");
-if (!root) throw new Error("Watch Floor: index.html has no #root");
+if (!root) throw new Error("Capsid Portal: index.html has no #root");
 
 // The base matches vite.config.ts `base`, without the trailing slash.
 createRoot(root).render(

@@ -24,7 +24,7 @@ import { runUrl } from "../src/runner-key.ts";
 import { openWatcherFingerprints, watcherTick, WATCHER_ACTOR, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
 import { agentRecord, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The Watch Floor feed and its Refresh (src/ops-feed.ts). The live reads are driven
+// The Capsid Portal feed and its Refresh (src/ops-feed.ts). The live reads are driven
 // against real D1 in test-integration/ops-feed.test.ts, which also counts them; these
 // cover the shaping, the gate, the header and the rate limit.
 

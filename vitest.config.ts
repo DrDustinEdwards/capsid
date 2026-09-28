@@ -70,7 +70,7 @@ export default defineConfig({
         d1Databases: ["DB"],
         kvNamespaces: ["APP_KV", "OAUTH_KV"],
         r2Buckets: ["MEDIA", "HOLDOUT"],
-        // The Watch Floor app's files (src/console-app.ts), a small fake build in
+        // The Capsid Portal app's files (src/console-app.ts), a small fake build in
         // test-integration/fixtures/dashboard. Miniflare's own assets option
         // (AssetsOptionsSchema in miniflare's types; the pool forwards
         // `miniflare.assets` and sets has_user_worker, @cloudflare/vitest-pool-workers

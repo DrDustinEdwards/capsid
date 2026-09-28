@@ -13,7 +13,7 @@ import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 
-// The Watch Floor's one read (capsid/research/design-ops-console.md): GET
+// Capsid Portal's one read (capsid/research/design-ops-console.md): GET
 // /console/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
 // plus what changes between passes, read live. POST /console/api/ops/refresh runs one
 // watcher pass now and returns the new feed.

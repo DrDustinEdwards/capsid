@@ -161,7 +161,7 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <div>
               <p className="section-title">Then resume it</p>
               <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy resume call" />
-              <p className="faint small">Read only: the dashboard copies the call, the seat or console makes it.</p>
+              <p className="faint small">Read only: this page copies the call. The seat, or the summary page at /console, makes it.</p>
             </div>
           </>
         )}

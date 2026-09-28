@@ -96,7 +96,7 @@ jobs:
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
       # @cloudflare/workers-types rather than from generated bindings. That is why this
       # job needs no config and no secrets.
-      # The Watch Floor app (dashboard/) is its own package with its own lockfile, so
+      # The Capsid Portal app (dashboard/) is its own package with its own lockfile, so
       # it installs separately; none of the root gates can see it.
       - name: Install dependencies
         run: |
@@ -127,7 +127,7 @@ jobs:
       # shipped ten type errors in it that only dustinedwards-info's stricter gate could
       # see. This is the guard, in the repo the file is authored in.
       #
-      # check:dashboard: the Watch Floor app, typechecked against src/ops-types.ts, the
+      # check:dashboard: the Capsid Portal app, typechecked against src/ops-types.ts, the
       # contract its data endpoint returns. The step keeps its name because the name is
       # on the auto-merge policy's required CI list.
       - name: Typecheck src, tests, integration tests and the copied scorer script
@@ -159,7 +159,7 @@ jobs:
       - name: Integration tests
         run: npm run test:integration
 
-      # The Watch Floor app builds, and stays inside its size budget
+      # The Capsid Portal app builds, and stays inside its size budget
       # (dashboard/scripts/size-budget.mjs, which fails closed on a missing build).
       # scripts/deploy.mjs runs the same two before every deploy.
       - name: Build the dashboard and hold its size budget
