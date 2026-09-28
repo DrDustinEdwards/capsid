@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
-import type { OpsSite, SiteMapDrift } from "./ops-sites";
+import type { OpsSite } from "./ops-sites";
+import type { CiObservation, MirrorObservation, OpsSnapshot, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -18,60 +19,11 @@ export const RING_SLOTS = (7 * 24 * 60) / RING_SLOT_MINUTES;
 
 const PROBE_TIMEOUT_MS = 5000;
 
+// The shapes live in src/ops-types.ts, the contract the dashboard app reads.
 // ok: the health route answered 2xx. degraded: it did not, but the root did.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type ProbeState = "ok" | "degraded" | "liveness" | "down";
-
-export interface SiteProbe {
-  namespace: string;
-  name: string;
-  origin: string;
-  health_path: string | null;
-  platform: OpsSite["platform"];
-  state: ProbeState;
-  // The status of the URL the state rests on: the health route, or the root.
-  http_status: number | null;
-  latency_ms: number | null;
-  // Reported by the site's own health route, where it reports one.
-  sha: string | null;
-  error: string | null;
-  checked_at: string;
-}
-
-export interface SiteSnapshot extends SiteProbe {
-  ring: string;
-  // The clock slot (minutes since the epoch / RING_SLOT_MINUTES) of the ring's last
-  // character.
-  ring_slot: number;
-}
-
-export type CheckState = "clear" | "finding" | "could-not-run";
-
-export interface CiObservation {
-  namespace: string;
-  // Null when the repo's runs could not be read this pass.
-  latest: { head_sha: string; status: string; conclusion: string | null; created_at: string; url: string | null } | null;
-}
-
-export interface MirrorObservation {
-  newest_dump: string | null;
-  // Null when the runs could not be read, or none has completed.
-  last_run: { at: string | null; conclusion: string | null; url: string | null } | null;
-}
-
-export interface OpsSnapshot {
-  version: 1;
-  pass_at: string;
-  pass_ms: number;
-  cadence_min: number;
-  checks: Array<{ id: string; state: CheckState; findings: string[] }>;
-  health: HealthReport | null;
-  mirror: MirrorObservation | null;
-  ci: CiObservation[];
-  site_map: SiteMapDrift | null;
-  sites: SiteSnapshot[];
-}
+export type { CheckState, CiObservation, MirrorObservation, OpsSnapshot, ProbeState, SiteProbe, SiteSnapshot } from "./ops-types";
 
 export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * 60_000));
 

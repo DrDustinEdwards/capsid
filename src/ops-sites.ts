@@ -36,12 +36,10 @@ export const OPS_SITES: readonly OpsSite[] = [
 // decision rather than an omission.
 export const NO_SITE_NAMESPACES: readonly string[] = ["claude-skills"];
 
-export interface SiteMapDrift {
-  // Registered, but neither mapped nor listed as having no site.
-  unmapped: string[];
-  // Mapped or listed, but not registered.
-  unknown: string[];
-}
+// unmapped: registered, but neither mapped nor listed as having no site. unknown:
+// mapped or listed, but not registered.
+export type { SiteMapDrift } from "./ops-types";
+import type { SiteMapDrift } from "./ops-types";
 
 export function siteMapDrift(registered: readonly string[]): SiteMapDrift {
   const covered = new Set([...OPS_SITES.map((s) => s.namespace), ...NO_SITE_NAMESPACES]);
