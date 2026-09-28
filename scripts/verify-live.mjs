@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // verify-live: exercises capsid's OAuth consent surface against a deployed worker.
-// Read-only. Stops at the GitHub 302 and never drives GitHub.
+// Read-only. Stops at the Access 302 and never drives Access.
 //
 // Usage: node scripts/verify-live.mjs [origin]
 //        npm run verify:live
@@ -20,6 +20,7 @@
 
 import { writeFileSync } from "node:fs";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
+import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 
@@ -398,9 +399,12 @@ async function gateSecurityHeaders(clientId) {
   );
 }
 
-// Gate 5: approving the form redirects to GitHub's authorize endpoint. This is
-// where the run stops. It never follows the 302 and never touches GitHub.
-async function gateGithubRedirect(clientId, form) {
+// Gate 5: approving the form redirects to the Access for SaaS sign-in
+// (scripts/access-redirect-lib.mjs says exactly what is checked). This is where the run
+// stops. It never follows the 302 and never touches Access. Until 2026-09-27 the
+// upstream was GitHub, and the old expectation rolled back the deploy that moved it
+// (actions run 36360666932).
+async function gateAccessRedirect(clientId, form) {
   const body = new URLSearchParams({ csrf: form.csrf, req: form.req });
   let resp;
   try {
@@ -413,13 +417,15 @@ async function gateGithubRedirect(clientId, form) {
       redirect: "manual",
     });
   } catch (err) {
-    record("5 approve redirects to GitHub", COULD_NOT_RUN, noAnswer(err).message);
+    record("5 approve redirects to Access", COULD_NOT_RUN, noAnswer(err).message);
     return;
   }
   const location = resp.headers.get("location") ?? "";
-  const passed = resp.status === 302 && location.startsWith("https://github.com/login/oauth/authorize");
-  const shown = passed ? new URL(location).origin + new URL(location).pathname : location || "(none)";
-  record("5 approve redirects to GitHub", passed, `status=${resp.status} location=${shown} (not followed)`);
+  const problem = accessRedirectProblem(resp.status, location, ORIGIN);
+  // The origin and path only: the query carries this run's state and nonce.
+  const parsed = URL.canParse(location) ? new URL(location) : null;
+  const shown = parsed ? parsed.origin + parsed.pathname : location || "(none)";
+  record("5 approve redirects to Access", problem === null, `status=${resp.status} location=${shown}${problem ? `: ${problem}` : ""} (not followed)`);
 }
 
 const clientId = await (async () => {
@@ -436,8 +442,8 @@ if (clientId) {
   const form = await gateConsentForm(clientId);
   await gateCsp(clientId);
   await gateSecurityHeaders(clientId);
-  if (form && form !== COULD_NOT_RUN) await gateGithubRedirect(clientId, form);
-  else record("5 approve redirects to GitHub", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
+  if (form && form !== COULD_NOT_RUN) await gateAccessRedirect(clientId, form);
+  else record("5 approve redirects to Access", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
 } else {
   record("3 consent form renders", upstream("2 register (fresh client)"), "skipped: no client id from gate 2");
 }

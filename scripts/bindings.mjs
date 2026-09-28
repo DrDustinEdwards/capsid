@@ -26,6 +26,15 @@ export const LIMITS = { cpu_ms: 3500 };
 
 export const D1 = { name: "capsid", id: "f24921c8-5e6f-499e-96a1-f124f52f12f7" };
 
+// THE MCP LOGIN'S ACCESS FOR SAAS APP ("Capsid", created 2026-09-27; docs/auth.md).
+// verify-live's gate 5 asserts /authorize's approval redirects here. Neither value is a
+// secret: the client id is in every sign-in URL a browser is sent to. The client secret
+// is a Worker secret and never appears in this repo.
+export const ACCESS_SAAS = {
+  teamDomain: "https://dustinedwards.cloudflareaccess.com",
+  clientId: "b7122cf1f57ab7e092476f63dfc895bb98101499c8b9799d6ed9f4a43202111b",
+};
+
 // TWO KV NAMESPACES, each pinned and asserted independently.
 //
 // APP_KV holds ONLY the Worker's own state: the gh:install, gh:token and gh:get caches,
