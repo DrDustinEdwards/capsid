@@ -7,13 +7,9 @@ export interface Env {
   OAUTH_KV: KVNamespace;
   OAUTH_PROVIDER: OAuthHelpers;
   OPERATOR_KEY_HASH: string;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
   COOKIE_ENCRYPTION_KEY: string;
-  // The console's login until the design's PR 3 moves it to Access.
-  ADMIN_GITHUB_LOGIN: string;
-  // The MCP login's upstream: Cloudflare Access for SaaS (OIDC), src/access-login.ts.
-  // Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody.
+  // The MCP and console logins' upstream: Cloudflare Access for SaaS (OIDC),
+  // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody.
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_SAAS_CLIENT_ID?: string;
   ACCESS_SAAS_CLIENT_SECRET?: string;

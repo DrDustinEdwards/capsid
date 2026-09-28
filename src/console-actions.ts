@@ -1,4 +1,4 @@
-import { adminAgent } from "./agents";
+import { adminAgentForEmail } from "./agents";
 import { revokeAgent } from "./agents-admin";
 import { getCookie, timingSafeEqual } from "./auth";
 import { CONSOLE_PATH, consoleGate } from "./console";
@@ -144,8 +144,8 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
 
   if (form.get("confirm") !== "yes") return confirmPage(action, form, csrfField);
 
-  const actor = `github:${gate.user.login}`;
-  const agent = adminAgent(gate.user.login);
+  const agent = adminAgentForEmail(gate.user.email);
+  const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
   let committed = false;
   try {

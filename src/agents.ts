@@ -69,15 +69,15 @@ function readEverythingScopes(): AgentScopes {
   return { namespaces: "*", repos: "*", tools: "*", grants: ["read"], flags: flagsAll(false) };
 }
 
-// The admin, as the console's GitHub login knows it (until the design's PR 3). The
-// login was checked against ADMIN_GITHUB_LOGIN before this is called, so this function
-// grants rather than decides.
+// The admin under a GitHub login's actor. No login in src/ reaches it since the console
+// moved to Access (design PR 3); the suites use it as their admin fixture, and PR 4
+// retires it with the rest of the GitHub login.
 export function adminAgent(login: string): Agent {
   return adminWithActor(`github:${login}`);
 }
 
-// The admin, as the MCP login knows it: the email Access verified, already checked
-// against ADMIN_EMAIL at sign-in and on every request.
+// The admin, as the MCP and console logins know it: the email Access verified, already
+// checked against ADMIN_EMAIL at sign-in and on every request.
 export function adminAgentForEmail(email: string): Agent {
   return adminWithActor(`access:${email}`);
 }

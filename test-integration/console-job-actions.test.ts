@@ -20,7 +20,7 @@ function consoleEnv(db: D1Database = env.DB) {
 }
 
 async function post(fields: Record<string, string>, confirm = true): Promise<Request> {
-  const session = (await consoleSessionCookie({ login: "DrDustinEdwards", id: 7 }, SECRET, NOW)).split(";")[0];
+  const session = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   return new Request("https://capsid.example/console", {
     method: "POST",
     headers: {
@@ -80,7 +80,7 @@ describe("fail_job", () => {
     // The transition's own row, and the console's row naming the human.
     expect(rows.some((r) => r.action === "job-admin-fail" && r.params.includes(id))).toBe(true);
     const click = rows.find((r) => r.action === "console-fail_job");
-    expect(click?.actor).toBe("github:DrDustinEdwards");
+    expect(click?.actor).toBe("access:admin@example.com");
     expect(click?.params).toContain(id);
   });
 
@@ -124,7 +124,7 @@ describe("resume_job", () => {
     expect(rows.some((r) => r.action === "job-resumed" && r.params.includes(id))).toBe(true);
     const click = rows.find((r) => r.action === "console-resume_job");
     expect(click, "the click was not audited").toBeTruthy();
-    expect(click?.actor).toBe("github:DrDustinEdwards");
+    expect(click?.actor).toBe("access:admin@example.com");
     expect(click?.params).toContain("I ran the push myself");
   });
 
@@ -203,7 +203,7 @@ describe("release_job", () => {
     const rows = await audits();
     expect(rows.some((r) => r.action === "job-released" && r.params.includes("agent:capsid-driver"))).toBe(true);
     const click = rows.find((r) => r.action === "console-release_job");
-    expect(click?.actor).toBe("github:DrDustinEdwards");
+    expect(click?.actor).toBe("access:admin@example.com");
     expect(click?.params).toContain("no session is running");
   });
 
