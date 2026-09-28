@@ -9,6 +9,8 @@ import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, s
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { OPS_SITES, siteMapDrift, type SiteMapDrift } from "./ops-sites";
+import { readCloudflare } from "./ops-cloudflare";
+import type { SiteCloudflare } from "./ops-types";
 import {
   buildSnapshot,
   probeSite,
@@ -448,6 +450,7 @@ export const WATCHER_CHECKS = [
   "ci",
   "site map",
   "site probes",
+  "cloudflare",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -462,6 +465,8 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^(scorer-diverged-|scorer-identity-unknown$)/, "scorer surface"],
   [/^ci-red-/, "ci"],
   [/^site-map-drift-/, "site map"],
+  [/^site-down-/, "site probes"],
+  [/^site-errors-/, "cloudflare"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -476,6 +481,9 @@ export interface Observed {
   ci: CiObservation[];
   siteMap: SiteMapDrift | null;
   probes: SiteProbe[] | null;
+  // Each site's Cloudflare state, keyed by namespace. Optional so a pass assembled
+  // without it (a test's Gathered) still builds a snapshot.
+  cloudflare?: Record<string, SiteCloudflare>;
 }
 
 export interface Gathered {
@@ -498,6 +506,53 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
       "The dashboard shows only mapped sites, so an unmapped site is one nobody is watching.",
     ]),
   ];
+}
+
+/** A site down on two probes in a row: the previous snapshot's ring ended in '0' and
+ *  this pass's probe is down too. One failed probe is a blip; a ring that ended in '-'
+ *  (no pass reached that slot) is not a failed probe. */
+export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]): Finding[] {
+  const before = new Map((prev?.sites ?? []).map((s) => [s.namespace, s]));
+  const out: Finding[] = [];
+  for (const p of probes) {
+    const last = before.get(p.namespace);
+    if (p.state !== "down" || !last || !last.ring.endsWith("0")) continue;
+    out.push(
+      finding(p.namespace, `site-down-${p.namespace}`, `${p.name} is down on two probes in a row`, [
+        `site: ${p.origin}`,
+        `this probe: ${p.error ?? `answered ${p.http_status ?? "nothing"}`} at ${p.checked_at}`,
+        `the previous probe was down too, at ${last.checked_at}`,
+      ])
+    );
+  }
+  return out;
+}
+
+// The error-rate threshold (capsid/research/design-ops-console.md, approved): more
+// than 1 percent of requests errored in the most recent complete hour, over at least
+// 100 requests, so a quiet site's single error is not an alert.
+export const ERROR_RATE_THRESHOLD = 0.01;
+export const ERROR_RATE_MIN_REQUESTS = 100;
+
+/** A site whose Worker errored on more than ERROR_RATE_THRESHOLD of its requests in
+ *  the most recent complete hour, the last of its hourly buckets. A site with no
+ *  analytics this pass is not judged. */
+export function siteErrorFindings(sites: ReadonlyArray<{ namespace: string; name: string }>, cloudflare: Record<string, SiteCloudflare>): Finding[] {
+  const out: Finding[] = [];
+  for (const site of sites) {
+    const cf = cloudflare[site.namespace];
+    if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
+    const hour = cf.errors24[cf.errors24.length - 1];
+    if (hour.requests < ERROR_RATE_MIN_REQUESTS || hour.errors / hour.requests <= ERROR_RATE_THRESHOLD) continue;
+    out.push(
+      finding(site.namespace, `site-errors-${site.namespace}`, `${site.name} errored on more than ${ERROR_RATE_THRESHOLD * 100} percent of requests`, [
+        `script: ${cf.script}`,
+        `hour from ${hour.hour}: ${hour.errors} errors of ${hour.requests} requests (${((hour.errors / hour.requests) * 100).toFixed(1)} percent)`,
+        "Cloudflare counts an invocation that threw, exceeded its resources or hit an internal error.",
+      ])
+    );
+  }
+  return out;
 }
 
 /** The snapshot's check list: every check, as clear, finding, or could not run. */
@@ -581,6 +636,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       ci: o.ci,
       site_map: o.siteMap,
       probes: o.probes,
+      cloudflare: o.cloudflare,
     })
   );
 
@@ -821,9 +877,30 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     for (const site of OPS_SITES) results.push(await probeSite(site, fetchImpl, now, health));
     return results;
   });
+  // The previous pass's rings, for "down on two probes in a row". A snapshot that is
+  // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
+  // KV read that throws means the check cannot judge, so it does not count as run and
+  // an open site-down job is not cleared on no evidence.
+  const prev = await attempt("previous snapshot", async () => ({ snapshot: await readSnapshot(env) }));
   if (probes) {
-    ran.add("site probes");
     observed.probes = probes;
+    if (prev) {
+      ran.add("site probes");
+      out.push(...siteDownFindings(prev.snapshot, probes));
+    }
+  }
+
+  // Cloudflare's view of each site: deploys and hourly errors (src/ops-cloudflare.ts).
+  // With no token nothing is fetched, each site says why, and the check is not run.
+  const cf = await attempt("cloudflare", () => readCloudflare(env, OPS_SITES, fetchImpl, now));
+  if (cf) {
+    observed.cloudflare = cf.bySite;
+    if (cf.ran) ran.add("cloudflare");
+    out.push(...siteErrorFindings(OPS_SITES, cf.bySite));
+  } else {
+    observed.cloudflare = Object.fromEntries(
+      OPS_SITES.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
+    );
   }
 
   return { findings: out, ran, observed };
