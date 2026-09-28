@@ -37,6 +37,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts
 - [docs/skills.md](docs/skills.md) how an idea abstracted from work that landed is offered to other projects
 - [docs/console.md](docs/console.md) what the admin page shows, who gets in, and what it cannot do
+- [docs/watch-floor.md](docs/watch-floor.md) the operations dashboard: its data, what "no data" means, the Cloudflare token, and building it
 - [docs/consolidation.md](docs/consolidation.md) the wiki maintenance loop, and the confirmation step on destructive writes
 - [docs/backups.md](docs/backups.md) what the daily dump contains, and three restore paths in the order to try them
 - [docs/rollback.md](docs/rollback.md) serving the previous Worker version when a deploy shipped a bad one

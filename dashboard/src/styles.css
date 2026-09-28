@@ -350,7 +350,7 @@ dialog { color: var(--text); }
 .note { margin: 0; font-size: 12px; }
 .stack-gap { display: grid; gap: 12px; }
 .tl-pad { padding: 6px 8px 0; }
-.src.hot { color: var(--crit); }
+.src.hot, .mono.hot { color: var(--crit); }
 .spark { overflow: visible; display: block; }
 .chart { width: 100%; height: auto; display: block; }
 .nodata-cell { display: grid; gap: 2px; }

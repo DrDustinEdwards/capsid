@@ -87,6 +87,28 @@ export function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   );
 }
 
+// Capsid's own backup is the only one the feed carries (snapshot.health.backup, against
+// the 26-hour window /health uses). Every other site's backup is not reported until its
+// health contract says so, and that is shown as no data, never as "none" or a zero.
+const BACKUP_LIMIT_HOURS = 26;
+
+export function BackupCell({ s }: { s: SiteSnapshot }) {
+  const { feed } = useApp();
+  const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
+  if (!backup) return <NoData reason="not reported by the site" />;
+  if (backup.age_hours == null) return <St kind="crit">Never</St>;
+  const over = backup.age_hours > BACKUP_LIMIT_HOURS;
+  const width = Math.min(100, (backup.age_hours / BACKUP_LIMIT_HOURS) * 100);
+  return (
+    <>
+      <span className={over ? "mono hot" : "mono"}>{backup.age_hours.toFixed(1)}h</span> <span className="faint mono">/ {BACKUP_LIMIT_HOURS}h</span>
+      <div className="backupbar" role="img" aria-label={`Backup age ${backup.age_hours.toFixed(1)} of ${BACKUP_LIMIT_HOURS} hours`}>
+        <i className={over ? "crit" : backup.age_hours > BACKUP_LIMIT_HOURS * 0.75 ? "warn" : ""} style={{ width: `${width}%` }} />
+      </div>
+    </>
+  );
+}
+
 export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
   const { now } = useApp();
   return (
@@ -99,6 +121,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
             <th>Uptime, 2-hour ticks</th>
             <th>Live deploy</th>
             <th>Errors 24h</th>
+            <th>Backup age</th>
             <th>Probe</th>
           </tr>
         </thead>
@@ -124,6 +147,9 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                 </td>
                 <td>
                   <ErrorTotalsCell s={s} />
+                </td>
+                <td>
+                  <BackupCell s={s} />
                 </td>
                 <td>
                   <span className="mono">{s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}</span>
