@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
-import { adminAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { registerSkill, type SkillRegistration } from "../src/skills-register.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
@@ -199,7 +199,7 @@ test("PLANT: a driver calling register_skill over a real connection is refused a
 
 test("the admin making the same call registers the skill", async () => {
   const fake = fakeDb({ job: DONE_JOB, outcome: VERIFIED });
-  const result = await callAs(adminAgent("DrDustinEdwards"), fake);
+  const result = await callAs(adminAgentForEmail("admin@example.com"), fake);
   assert.notEqual(result.isError, true, result.content[0]?.text);
   assert.equal(JSON.parse(result.content[0].text).skill.status, "candidate");
   assert.equal(fake.batches.length, 1);

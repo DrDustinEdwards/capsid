@@ -10,18 +10,21 @@
 // Two hard requirements. Violating either makes this gate pass against a fully broken
 // server:
 //
-//   1. FRESH CLIENT EVERY RUN. handleAuthorizeGet short-circuits for a client id
+//   1. NEVER THE APPROVED FAST PATH. handleAuthorizeGet short-circuits for a client id
 //      already in the capsid_approved cookie and 302s straight out of the GET, never
-//      rendering a form. This registers a new client per run and asserts the consent
-//      FORM renders. A 302 at gate 3 means the fast path was hit and the run is VOID.
+//      rendering a form. This script sends no capsid_approved cookie, and gate 3
+//      asserts the consent FORM renders. A 302 at gate 3 means the fast path was hit
+//      and the run is VOID. The probe client is a fixed metadata document
+//      (scripts/cimd-probe-lib.mjs) since registration was removed; the fast path is
+//      keyed on the cookie, not on the client being new.
 //
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
 //      return the previous version's headers.
 
-import { writeFileSync } from "node:fs";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
 import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
+import { PROBE_CLIENT_ID, PROBE_REDIRECT, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 
 const ORIGIN = (process.argv[2] ?? "https://capsid.dustin-edwards.workers.dev").replace(/\/$/, "");
@@ -135,39 +138,50 @@ async function gateHealth() {
   if (data?.dirty) console.log("      NOTE: deployed from a dirty tree; the bytes are not exactly that commit.");
 }
 
-// Gate 2: dynamic client registration. Returns a client id never seen before,
-// which is what keeps gate 3 off the approved-client fast path.
-async function gateRegister() {
-  let resp;
+// The probe client for gates 3 to 5. Overridable only so test/verify-live-no-answer.test.ts
+// can serve the document from its stub; CI never sets it.
+const PROBE_CLIENT = process.env.VERIFY_PROBE_CLIENT_ID ?? PROBE_CLIENT_ID;
+
+// Gate 2: CIMD only, no registration (scripts/cimd-probe-lib.mjs says what is checked).
+// Returns the probe client id when gates 3 to 5 can use it, or null.
+//
+// The probe document is fetched from GitHub, not from the Worker. If GitHub does not
+// serve it, the Worker cannot resolve the client either, and that says nothing about
+// this deploy, so it is could-not-run. A document that is served and wrong is a fail.
+async function gateCimdOnly() {
+  let metadata;
+  let register;
   try {
-    // A retry after a lost response can register a second client. That one is not
-    // recorded for the reaper and expires on the registration TTL; a missed gate would
-    // cost more.
-    resp = await request(`${ORIGIN}/register`, {
+    metadata = await request(`${ORIGIN}/.well-known/oauth-authorization-server`, { headers: { "Cache-Control": "no-cache" } });
+    // Safe to retry: with registration off, nothing is written.
+    register = await request(`${ORIGIN}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: "capsid verify-live probe",
-        redirect_uris: ["https://example.com/verify-live-callback"],
-        token_endpoint_auth_method: "none",
-        grant_types: ["authorization_code"],
-        response_types: ["code"],
-      }),
+      body: JSON.stringify({ client_name: "capsid verify-live probe", redirect_uris: [PROBE_REDIRECT], token_endpoint_auth_method: "none" }),
     });
   } catch (err) {
-    record("2 register (fresh client)", COULD_NOT_RUN, noAnswer(err).message);
+    record("2 CIMD only, no registration", COULD_NOT_RUN, noAnswer(err).message);
     return null;
   }
-  const data = parseJson(resp.text) ?? {};
-  const clientId = data.client_id;
-  const passed = resp.ok && typeof clientId === "string" && clientId.length > 0;
-  record("2 register (fresh client)", passed, `status=${resp.status} client_id=${clientId ?? "(none)"}`);
-  // Hand the id to scripts/reap-probe-clients.mjs, which has no other way to find it.
-  // Written before any later gate can fail, so a failed run still gets cleaned up.
-  if (passed && process.env.PROBE_CLIENT_FILE) {
-    writeFileSync(process.env.PROBE_CLIENT_FILE, clientId, "utf8");
+  const refused = registrationProblem(parseJson(metadata.text), register.status);
+  if (refused) {
+    record("2 CIMD only, no registration", false, `register=${register.status}: ${refused}`);
+    return null;
   }
-  return passed ? clientId : null;
+  let doc;
+  try {
+    doc = await request(PROBE_CLIENT, { headers: { Accept: "application/json" } });
+  } catch (err) {
+    record("2 CIMD only, no registration", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
+    return COULD_NOT_RUN;
+  }
+  if (!doc.ok) {
+    record("2 CIMD only, no registration", COULD_NOT_RUN, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
+    return COULD_NOT_RUN;
+  }
+  const bad = probeDocumentProblem(parseJson(doc.text), PROBE_CLIENT, PROBE_REDIRECT);
+  record("2 CIMD only, no registration", bad === null, `register=${register.status} probe=${PROBE_CLIENT}${bad ? `: ${bad}` : ""}`);
+  return bad === null ? PROBE_CLIENT : null;
 }
 
 // Gate 2b: the canary client record is still there (scripts/bindings.mjs,
@@ -226,7 +240,7 @@ function authorizeUrl(clientId) {
   const u = new URL(`${ORIGIN}/authorize`);
   u.searchParams.set("response_type", "code");
   u.searchParams.set("client_id", clientId);
-  u.searchParams.set("redirect_uri", "https://example.com/verify-live-callback");
+  u.searchParams.set("redirect_uri", PROBE_REDIRECT);
   u.searchParams.set("code_challenge", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
   u.searchParams.set("code_challenge_method", "S256");
   u.searchParams.set("state", "verify-live");
@@ -299,8 +313,8 @@ async function gateCsp(clientId) {
     record("4 consent CSP permits the chain", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
     return;
   }
-  // The consent form's redirect chain terminates at a dynamically registered client
-  // redirect_uri, so no static form-action allowlist can be correct. Absent is required;
+  // The consent form's redirect chain terminates at whatever redirect_uri a client's
+  // metadata document names, so no static form-action allowlist can be correct. Absent is required;
   // present is a fail regardless of value.
   const passed = !csp || !/form-action/i.test(csp);
   record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
@@ -309,8 +323,8 @@ async function gateCsp(clientId) {
 // Gate 6: security headers, asserted per route class rather than per path.
 //
 // test/headers.test.ts proves the header function is right; only a live request proves
-// every response reaches it. workers-oauth-provider generates /token, /register and both
-// .well-known documents itself, outside src/, which is why those are listed.
+// every response reaches it. workers-oauth-provider generates /token and both .well-known
+// documents itself, outside src/, which is why those are listed.
 //
 // Two more checks ride the same loop:
 //
@@ -432,20 +446,20 @@ const clientId = await (async () => {
   await gateHealth();
   await gateBackupFreshness();
   await gateCanary();
-  return gateRegister();
+  return gateCimdOnly();
 })();
 
 // Whether a skipped gate is a refusal or could-not-run follows the gate it depends on.
 const upstream = (gate) => (results.find((r) => r.gate === gate)?.passed === COULD_NOT_RUN ? COULD_NOT_RUN : false);
 
-if (clientId) {
+if (clientId && clientId !== COULD_NOT_RUN) {
   const form = await gateConsentForm(clientId);
   await gateCsp(clientId);
   await gateSecurityHeaders(clientId);
   if (form && form !== COULD_NOT_RUN) await gateAccessRedirect(clientId, form);
   else record("5 approve redirects to Access", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
 } else {
-  record("3 consent form renders", upstream("2 register (fresh client)"), "skipped: no client id from gate 2");
+  record("3 consent form renders", upstream("2 CIMD only, no registration"), "skipped: no probe client from gate 2");
 }
 
 // process.exitCode rather than process.exit(): exiting with fetch sockets still closing

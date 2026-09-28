@@ -1,14 +1,16 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { cimdClient } from "./cimd-stub";
 
 // The OAuth surface with a real KV under it. The provider is
 // @cloudflare/workers-oauth-provider, wired into src/index.ts; unit tests stop at the
 // handlers on either side of that wiring.
 //
 // Asserted here is what a browser and a client depend on: the discovery documents
-// describe this server, /register writes a real client record to a real KV, the
-// consent dialog renders with its security headers, and the state cookie is scoped
-// so a stolen one is not reusable.
+// describe this server, there is no /register (CIMD only, design PR 4 of
+// capsid/research/design-capsid-access-login.md), the consent dialog renders for a
+// client known by its metadata document with its security headers, and the state
+// cookie is scoped so a stolen one is not reusable.
 
 describe("discovery", () => {
   it("serves protected-resource and authorization-server metadata", async () => {
@@ -39,15 +41,16 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // DCR is still how existing connections registered, until the design's PR 4, and
-    // CIMD is on beside it: both Claude clients send a metadata document URL.
-    expect(serverDoc.registration_endpoint).toContain("/register");
+    // CIMD only: both Claude clients send a metadata document URL, and nothing
+    // advertises a registration endpoint.
+    expect(serverDoc.registration_endpoint).toBeUndefined();
     expect((serverDoc as { client_id_metadata_document_supported?: boolean }).client_id_metadata_document_supported).toBe(true);
   });
 });
 
-describe("dynamic client registration", () => {
-  it("registers a client and writes a real record to OAUTH_KV", async () => {
+describe("no dynamic client registration", () => {
+  it("PLANT: POST /register is not an endpoint, and writes no client record", async () => {
+    const before = (await env.OAUTH_KV.list({ prefix: "client:" })).keys.length;
     const response = await SELF.fetch("https://capsid.test/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -57,44 +60,19 @@ describe("dynamic client registration", () => {
         token_endpoint_auth_method: "none",
       }),
     });
-    expect(response.status).toBe(201);
-    const client = (await response.json()) as { client_id?: string; redirect_uris?: string[] };
-    expect(typeof client.client_id).toBe("string");
-    expect(client.redirect_uris).toEqual(["https://client.example.com/callback"]);
-
-    // The record is in KV, under the provider's own prefix.
-    const keys = await env.OAUTH_KV.list({ prefix: "client:" });
-    expect(keys.keys.length).toBeGreaterThan(0);
-    expect(keys.keys.some((k: { name: string }) => k.name.includes(String(client.client_id)))).toBe(true);
-  });
-
-  it("refuses a registration with no redirect_uri", async () => {
-    const response = await SELF.fetch("https://capsid.test/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_name: "no-redirect" }),
-    });
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBe(404);
+    expect((await env.OAUTH_KV.list({ prefix: "client:" })).keys.length).toBe(before);
   });
 });
 
 describe("authorize", () => {
-  async function registerClient(): Promise<string> {
-    const response = await SELF.fetch("https://capsid.test/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: "authorize-client",
-        redirect_uris: ["https://client.example.com/callback"],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    const client = (await response.json()) as { client_id: string };
-    return client.client_id;
+  // A client known only by its metadata document (./cimd-stub).
+  function registerClient(): string {
+    return cimdClient(["https://client.example.com/callback"], "authorize-client");
   }
 
   it("PLANT: the consent dialog renders, with the headers whose absence caused the 26-day outage", async () => {
-    const clientId = await registerClient();
+    const clientId = registerClient();
     const url = new URL("https://capsid.test/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", "https://client.example.com/callback");
@@ -119,7 +97,7 @@ describe("authorize", () => {
   });
 
   it("refuses an authorize with a redirect_uri the client never registered", async () => {
-    const clientId = await registerClient();
+    const clientId = registerClient();
     const url = new URL("https://capsid.test/authorize");
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", "https://attacker.example.com/collect");
@@ -161,46 +139,8 @@ describe("the token endpoint", () => {
   });
 });
 
-// Two guards driven through real HTTP. A source scan cannot see whether a helper's
-// result is used: a callback that computes the refusal and returns the client anyway
-// keeps the name in the file.
-
-describe("F9: dynamic client registration refuses more than one non-loopback redirect", () => {
-  it("PLANT: two https redirect_uris are refused at POST /register", async () => {
-    const response = await SELF.fetch("https://capsid.test/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: "two-redirects",
-        redirect_uris: ["https://client.example.com/callback", "https://evil.example.com/callback"],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as { error?: string };
-    expect(body.error).toBe("invalid_redirect_uri");
-
-    // Nothing was registered.
-    const keys = await env.OAUTH_KV.list({ prefix: "client:" });
-    const names = keys.keys.map((k: { name: string }) => k.name).join(" ");
-    expect(names).not.toContain("evil.example.com");
-  });
-
-  it("THE INNOCENT DIRECTION: several LOOPBACK redirects still register", async () => {
-    // Native clients legitimately declare more than one loopback port, which is why
-    // the guard counts non-loopback URIs rather than URIs.
-    const response = await SELF.fetch("https://capsid.test/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: "native-client",
-        redirect_uris: ["http://127.0.0.1:8976/callback", "http://127.0.0.1:49152/callback"],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    expect(response.status).toBe(201);
-  });
-});
+// A guard driven through real HTTP. A source scan cannot see whether a helper's result
+// is used.
 
 describe("F10: the Origin allowlist on /mcp", () => {
   it("PLANT: a foreign Origin is refused 403 at POST /mcp", async () => {

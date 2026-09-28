@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { LINT_DESCRIPTION } from "../src/tools/lint.ts";
 import { buildTruthReport } from "../src/truth-report.ts";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { fakeEnv, fakeKv } from "./fakes.ts";
@@ -67,7 +67,7 @@ test("DERIVED: the lint description states the number of checks the report runs"
 // The registration must use the exported constant. Checked against what the server
 // serves.
 test("the served lint description is the exported one", async () => {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "lint-description", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

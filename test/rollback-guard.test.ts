@@ -54,7 +54,9 @@ test("a missing run sha refuses, rather than comparing against nothing", () => {
 // The guard only matters if the workflow consults it.
 test("the rollback step calls the guard BEFORE it calls wrangler rollback", () => {
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
-  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)\n      - name: /.exec(workflow);
+  // Up to the next step, or to the end of the file: it has been the job's last step
+  // since the probe-client reaper went with DCR.
+  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(workflow);
   assert.ok(step, "the rollback step was not found; this test is pinned to its name");
   const body = step[1];
   const guardAt = body.indexOf("scripts/rollback-guard.mjs");
@@ -102,7 +104,9 @@ test("the rollback took effect only when a readable, different sha is live", () 
 
 test("the rollback step runs on a refusal only, reads /health without -f, and checks the sha moved", () => {
   const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
-  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)\n      - name: /.exec(workflow);
+  // Up to the next step, or to the end of the file: it has been the job's last step
+  // since the probe-client reaper went with DCR.
+  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(workflow);
   assert.ok(step, "the rollback step was not found");
   const body = step[1];
   // Exit 3 from verify:live is "could not run" and must not roll back.

@@ -2,12 +2,13 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { APPROVAL_MAX_AGE_SECONDS } from "../src/approval";
-import { checkRate, REGISTRATION_LIMIT } from "../src/rate-limit";
+import { cimdClient, withdrawCimdClient } from "./cimd-stub";
 
 // The consent and callback flow, as a browser drives it. Node cannot load
 // src/routes.ts or src/index.ts, so this runs here: the Worker's own fetch handler is
-// called, the consent form is read out of the dialog and posted back, and GitHub's
-// token endpoint is stubbed, so nothing leaves the test.
+// called, the consent form is read out of the dialog and posted back, and the
+// upstream's token endpoint is stubbed, so nothing leaves the test. Clients are CIMD
+// documents served by ./cimd-stub.
 
 const ORIGIN = "https://capsid.test";
 const HTTPS_REDIRECT = "https://client.example.com/callback";
@@ -25,20 +26,8 @@ async function call(request: Request): Promise<Response> {
   return response as unknown as Response;
 }
 
-async function register(redirects: string[], ip = "198.51.100.10"): Promise<Response> {
-  return call(
-    new Request(`${ORIGIN}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
-      body: JSON.stringify({ client_name: "flow-client", redirect_uris: redirects, token_endpoint_auth_method: "none" }),
-    })
-  );
-}
-
 async function clientId(redirects: string[]): Promise<string> {
-  const response = await register(redirects);
-  expect(response.status).toBe(201);
-  return ((await response.json()) as { client_id: string }).client_id;
+  return cimdClient(redirects, "flow-client");
 }
 
 function authorizeUrl(id: string, redirect: string): string {
@@ -78,21 +67,6 @@ async function approve(id: string, redirect: string): Promise<Response> {
   );
 }
 
-describe("registration", () => {
-  it("a caller over the registration limit is refused with 429", async () => {
-    const ip = "198.51.100.77";
-    let verdict = await checkRate(env.APP_KV as never, ip, new Date(), REGISTRATION_LIMIT);
-    for (let i = 0; i < REGISTRATION_LIMIT.perHour + 1 && verdict.allowed; i++) {
-      verdict = await checkRate(env.APP_KV as never, ip, new Date(), REGISTRATION_LIMIT);
-    }
-    expect(verdict.allowed, "the limiter never refused, so this test proves nothing").toBe(false);
-    const refused = await register([HTTPS_REDIRECT], ip);
-    expect(refused.status).toBe(429);
-    const other = await register([HTTPS_REDIRECT], "198.51.100.78");
-    expect(other.status, "a different caller was refused too").toBe(201);
-  });
-});
-
 describe("approval", () => {
   it("the approval cookie lives 30 days", async () => {
     const id = await clientId([HTTPS_REDIRECT]);
@@ -124,8 +98,7 @@ describe("approval", () => {
   it("an approval for a client that no longer resolves does not skip anything", async () => {
     const id = await clientId([HTTPS_REDIRECT]);
     const cookie = cookieValues(await approve(id, HTTPS_REDIRECT)).join("; ");
-    const keys = await env.OAUTH_KV.list({ prefix: "client:" });
-    for (const key of keys.keys) if (key.name.includes(id)) await env.OAUTH_KV.delete(key.name);
+    withdrawCimdClient(id);
     const after = await call(new Request(authorizeUrl(id, HTTPS_REDIRECT), { headers: { Cookie: cookie } }));
     expect(after.status).not.toBe(302);
   });
@@ -159,6 +132,6 @@ describe("callback", () => {
     expect(response.status).toBe(403);
     expect(await response.text()).toBe("stored authorization state is unreadable. Restart from your MCP client.");
     expect(await env.OAUTH_KV.get(`capsid:oauth-state:${state}`)).toBeNull();
-    expect(fetchSpy, "an unreadable state still reached GitHub").not.toHaveBeenCalled();
+    expect(fetchSpy, "an unreadable state still reached Access").not.toHaveBeenCalled();
   });
 });

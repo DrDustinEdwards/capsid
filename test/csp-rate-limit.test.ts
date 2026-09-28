@@ -6,16 +6,19 @@ import {
   MAX_REPORTS_PER_DAY,
   MAX_REPORTS_PER_HOUR,
   rateLimitedResponse,
-  REGISTRATION_LIMIT,
+  type RateLimitPolicy,
 } from "../src/rate-limit.ts";
 
 const checkCspReportRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, CSP_REPORT_LIMIT);
-const checkRegistrationRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, REGISTRATION_LIMIT);
+// No served endpoint fails open since /register went (design PR 4). The policy keeps the
+// choice per endpoint, so the allow side is driven with a policy made here.
+const FAIL_OPEN: RateLimitPolicy = { prefix: "open:rate:", perHour: 30, perDay: 100, label: "FAIL_OPEN_TEST", onUnavailable: "allow" };
+const checkOpenRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, FAIL_OPEN);
 import { fakeKv } from "./fakes.ts";
 
 // An app-level rate limit on /csp-report. Cloudflare rate limiting rules are a zone
 // feature and do not apply to *.workers.dev, so the limit lives in the Worker,
-// reusing the limiter /register has. Every accepted report becomes an R2 object.
+// with a limiter of its own. Every accepted report becomes an R2 object.
 //
 // Every test is about one of two properties: the limit fires, and it says why it
 // fired. This endpoint refuses on a KV failure, and a refusal that cannot be told
@@ -72,9 +75,8 @@ test("the daily limit fires even when the hour is quiet", async () => {
 
 // What an unreadable counter means, per endpoint. /csp-report is unauthenticated and
 // every accepted report becomes an R2 object, so failing open during a KV outage would
-// hand an anonymous caller an unbounded write path to R2. /register fails open, as
-// stated on REGISTRATION_LIMIT: refusing there locks the owner out of reconnecting.
-// The two directions are planted separately.
+// hand an anonymous caller an unbounded write path to R2. A policy may fail open
+// instead; the two directions are planted separately.
 
 test("PLANT: a KV read that throws REFUSES a csp report, and says it could not measure", async () => {
   const kv = fakeKv({ failGet: true });
@@ -127,36 +129,35 @@ test("an unavailable refusal answers 503 and not 429", async () => {
   assert.match(await response.text(), /rate limiting is unavailable/);
 });
 
-// /register fails open.
+// A fail-open policy.
 
-test("THE OTHER DIRECTION: every KV failure still ALLOWS a registration", async () => {
-  // An outage must not lock the owner out of reconnecting. Each path is driven,
-  // because they fail in different places.
+test("THE OTHER DIRECTION: under a fail-open policy every KV failure ALLOWS the call", async () => {
+  // Each path is driven, because they fail in different places.
   for (const [name, kv] of [
     ["read throws", fakeKv({ failGet: true }).kv],
     ["write throws", fakeKv({ failPut: true }).kv],
     ["corrupt counter", fakeKv({ corrupt: "banana" }).kv],
     ["no binding", undefined],
   ] as const) {
-    assert.equal((await checkRegistrationRate(kv, IP, NOW)).allowed, true, `a registration was refused when ${name}`);
+    assert.equal((await checkOpenRate(kv, IP, NOW)).allowed, true, `a fail-open call was refused when ${name}`);
   }
 });
 
-test("the two endpoints give OPPOSITE answers to the same KV failure", async () => {
+test("the two policies give OPPOSITE answers to the same KV failure", async () => {
   // Asserted together so a refactor that collapsed the policies into one rule fails.
   assert.equal((await checkCspReportRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, false);
-  assert.equal((await checkRegistrationRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, true);
+  assert.equal((await checkOpenRate(fakeKv({ failGet: true }).kv, IP, NOW)).allowed, true);
 });
 
-test("csp reports and registrations count in separate buckets", async () => {
-  // One prefix per endpoint. Sharing would let CSP traffic exhaust the registration
-  // budget.
+test("two policies count in separate buckets", async () => {
+  // One prefix per endpoint. Sharing would let one endpoint's traffic exhaust
+  // another's budget.
   const kv = fakeKv();
   await checkCspReportRate(kv.kv, IP, NOW);
-  await checkRegistrationRate(kv.kv, IP, NOW);
+  await checkOpenRate(kv.kv, IP, NOW);
   const keys = [...kv.store.keys()];
   assert.equal(keys.filter((k) => k.startsWith("csp:rate:")).length, 2, `csp keys missing: ${keys.join(", ")}`);
-  assert.equal(keys.filter((k) => k.startsWith("dcr:rate:")).length, 2, `dcr keys missing: ${keys.join(", ")}`);
+  assert.equal(keys.filter((k) => k.startsWith("open:rate:")).length, 2, `fail-open keys missing: ${keys.join(", ")}`);
 });
 
 test("a report from another IP does not spend this one's budget", async () => {

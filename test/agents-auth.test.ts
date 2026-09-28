@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sha256Hex } from "../src/auth.ts";
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgent, legacyAgent, resolveAgent } from "../src/agents.ts";
+import { adminAgentForEmail, legacyAgent, resolveAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 
 // A bearer resolves to a caller, not to a tier, so the audit log can say whose
@@ -97,9 +97,9 @@ test("no bearer, or a bearer nothing knows, resolves to nothing at all", async (
 });
 
 test("an OAuth admin session is the synthetic agent named admin, holding every scope", () => {
-  const agent = adminAgent("DrDustinEdwards");
+  const agent = adminAgentForEmail("admin@example.com");
   assert.equal(agent.name, "admin");
-  assert.equal(agent.actor, "github:DrDustinEdwards", "the login is more specific than the synthetic name, so the audit row keeps it");
+  assert.equal(agent.actor, "access:admin@example.com", "the email is more specific than the synthetic name, so the audit row keeps it");
   assert.equal(agent.scopes.namespaces, "*");
   assert.equal(agent.scopes.tools, "*");
   assert.deepEqual(agent.scopes.grants, ["read", "write"]);

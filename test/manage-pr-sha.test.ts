@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server.ts";
-import { adminAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // manage_pr merge with `sha`: the caller names the head it reviewed, GitHub merges only
@@ -23,7 +23,7 @@ function db() {
 }
 
 async function callManagePr(args: Record<string, unknown>) {
-  const server = buildServer(fakeEnv({ DB: db(), APP_KV: fakeKv({ seedToken: true }).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ DB: db(), APP_KV: fakeKv({ seedToken: true }).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "manage-pr-sha", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

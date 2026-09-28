@@ -74,8 +74,8 @@ test("a MISSING canary fails, and is named as the 2026-08-17 anomaly recurring",
   assert.equal(report.passed, false);
   assert.match(report.detail, /is GONE from capsid-app-kv/);
   assert.match(report.detail, /vanished-client-record anomaly of 2026-08-17/);
-  // It must tell the reader what to check before re-minting destroys the evidence.
-  assert.match(report.detail, /check whether live grants survived before re-minting/);
+  // It must tell the reader what to check before restoring it destroys the evidence.
+  assert.match(report.detail, /check whether live grants survived before restoring it/);
 });
 
 test("an UNREACHABLE store is NOT reported as data loss", async () => {
@@ -97,9 +97,8 @@ test("missing and unreachable are genuinely different outcomes", async () => {
 });
 
 test("a canary that has acquired a TTL fails BEFORE it can expire", async () => {
-  // Re-minting through /register would hand the canary the 90 day
-  // clientRegistrationTTL back, and a canary that can expire on its own has a second
-  // reason to be absent.
+  // A record put back with the 90 day TTL DCR gave every client is a canary that can
+  // expire on its own, a second reason to be absent.
   const stub = fakeKvApi({ value: RECORD, expiration: 1794583009 });
   const result = await check(stub);
   assert.equal(result.outcome, "has-ttl");
@@ -135,12 +134,6 @@ test("a foreign or truncated value at the right key is not accepted", async () =
 test("gate 2b is wired into the run and counted", () => {
   const gate = read("../scripts/verify-live.mjs");
   assert.match(gate, /await gateCanary\(\);/, "gate 2b is defined but never called");
-  // It runs before the register gate's client is created, so a keyspace-wide loss is
-  // reported against a record that predates this run.
-  assert.ok(
-    gate.indexOf("await gateCanary()") < gate.indexOf("return gateRegister()"),
-    "the canary is checked after this run registers its own client"
-  );
   // The gate total is pinned in counts.ts and checked by test/counts.test.ts; this
   // asserts only that the canary is one of the counted gates.
   const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
@@ -150,7 +143,7 @@ test("gate 2b is wired into the run and counted", () => {
 test("the credentials the gate needs are supplied to it in CI", () => {
   // Without these the gate skips silently in CI.
   const workflow = read("../.github/workflows/ci.yml");
-  const step = workflow.slice(workflow.indexOf("- name: verify:live"), workflow.indexOf("- name: Reap this run"));
+  const step = workflow.slice(workflow.indexOf("- name: verify:live"), workflow.indexOf("- name: Roll back the deploy this run shipped"));
   assert.match(step, /CLOUDFLARE_API_TOKEN:/, "verify:live cannot read KV, so gate 2b will skip on every CI run");
   assert.match(step, /CLOUDFLARE_ACCOUNT_ID:/);
 });

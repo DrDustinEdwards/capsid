@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { sha256Hex } from "../src/auth.ts";
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgent, resolveAgent } from "../src/agents.ts";
+import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
@@ -78,14 +78,14 @@ test("/ops/backup refuses the legacy read-only operator key", async () => {
 });
 
 test("/ops/backup admits the OAuth admin", () => {
-  assert.equal(routeRefusal("/ops/backup", adminAgent("DrDustinEdwards")), null);
+  assert.equal(routeRefusal("/ops/backup", adminAgentForEmail("admin@example.com")), null);
 });
 
 test("a path in neither table is refused to everyone but the admin", async () => {
   // routeRefusal fails closed: a route wired to it before its table entry exists is
   // admin only, never open.
   assert.ok(routeRefusal("/ops/not-a-route", await resolveWith(DRIVER_KEY)));
-  assert.equal(routeRefusal("/ops/not-a-route", adminAgent("DrDustinEdwards")), null);
+  assert.equal(routeRefusal("/ops/not-a-route", adminAgentForEmail("admin@example.com")), null);
 });
 
 // every route
@@ -148,7 +148,7 @@ test("every route in defaultHandler is either gated through checkScope or listed
 test("improve_run: run and claim are a driver's work and every other action is admin", async () => {
   // The actions come from the schema the server serves, so an action added to the tool
   // without a decision here fails.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgent("DrDustinEdwards"));
+  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "route-gates", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);

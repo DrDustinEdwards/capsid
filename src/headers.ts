@@ -26,14 +26,13 @@ export const COOP_REPORT_ONLY = "same-origin";
 // The dialog has an inline <style> and posts a form back to /authorize. No scripts or
 // images, so everything else is locked down.
 //
-// form-action is deliberately absent. Approving submits this form into a four hop
-// redirect chain: POST /authorize, 302 to github.com, 302 back to /callback, 302 out
-// to the client's registered redirect_uri. Chrome enforces form-action against every
-// hop and a blocked hop aborts the navigation silently while that response's
-// Set-Cookie still lands. The terminal hop is a dynamically registered client
-// redirect_uri and any client may register one via /register, so no static allowlist
-// can be correct. Adding github.com and claude.ai alongside 'self' was rejected: it
-// holds until the next client registers.
+// form-action is deliberately absent. Approving submits this form into a redirect
+// chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
+// client's redirect_uri. Chrome enforces form-action against every hop and a blocked
+// hop aborts the navigation silently while that response's Set-Cookie still lands. The
+// terminal hop is whatever redirect_uri a client's metadata document names, and any
+// client may publish one, so no static allowlist can be correct. Adding the upstream
+// and claude.ai alongside 'self' was rejected: it holds until the next client appears.
 //
 // `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days, undetected
 // because the approvedClients fast path 302s out of the GET and never submits a form.
