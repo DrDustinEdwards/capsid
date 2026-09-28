@@ -71,7 +71,7 @@ test("no source file hardcodes the bucket NAME either, except the scorer", () =>
 
 // Checked by type, by npm run check:test: if AttemptEnv regains a banned key, or an
 // entry point takes the whole Env back, one of these assignments stops compiling.
-type Banned = "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID";
+type Banned = "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN";
 type HasNone<K> = [Extract<K, Banned>] extends [never] ? true : false;
 const ATTEMPT_ENV_OMITS_THEM: HasNone<keyof AttemptEnv> = true;
 const PROPOSE_TAKES_ATTEMPT_ENV: HasNone<keyof Parameters<typeof Attempt.proposeChange>[0]> = true;

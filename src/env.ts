@@ -45,8 +45,9 @@ export interface Env {
   R2_BACKUP_PARENT_ACCESS_KEY_ID?: string;
 }
 
-// Everything except the holdout bucket and the credentials that could mint read access to it.
-export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID">;
+// Everything except the holdout bucket, the credentials that could mint read access to it,
+// and the Cloudflare read token (it can read Worker code).
+export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email
