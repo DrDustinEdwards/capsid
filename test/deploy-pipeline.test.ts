@@ -69,3 +69,21 @@ test("the rollback pins the same wrangler version the deploy uses", () => {
   // latest.
   assert.match(ci, new RegExp(`wrangler@${pinned.replace(/\./g, "\.")} rollback`), `the rollback does not pin wrangler ${pinned}`);
 });
+
+// The Watch Floor app (dashboard/) is its own package, outside every root gate, so CI
+// has to name it: its typecheck against src/ops-types.ts, its build and size budget,
+// and its install in both the checks job and the deploy job (scripts/deploy.mjs builds
+// it into the Worker's assets).
+test("CI typechecks, builds and budgets the dashboard, and installs it wherever it is built", () => {
+  const ci = read(".github/workflows/ci.yml");
+  const checks = ci.slice(ci.indexOf("  checks:"), ci.indexOf("  deploy:"));
+  const deploy = ci.slice(ci.indexOf("  deploy:"), ci.indexOf("  live:"));
+  assert.match(checks, /npm ci --prefix dashboard/, "the checks job does not install the dashboard");
+  assert.match(checks, /npm run check:dashboard \|\| status=1/, "the checks job does not typecheck the dashboard");
+  assert.match(checks, /run: npm run build:dashboard/, "the checks job does not build the dashboard and hold its size budget");
+  assert.match(deploy, /npm ci --prefix dashboard/, "the deploy job does not install the dashboard that scripts/deploy.mjs builds");
+  const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+  assert.match(pkg.scripts["build:dashboard"] ?? "", /run build && .*run size/, "build:dashboard no longer runs the size budget after the build");
+  const deployScript = read("scripts/deploy.mjs");
+  assert.ok(deployScript.indexOf('"run", "size"') > deployScript.indexOf('"run", "build"') && deployScript.indexOf('"run", "size"') < deployScript.indexOf('"deploy",'), "scripts/deploy.mjs must build and budget the dashboard before wrangler deploy");
+});
