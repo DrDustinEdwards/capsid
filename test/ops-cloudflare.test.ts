@@ -456,7 +456,8 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
 // scanner-rule: Cloudflare is read in the watcher pass only, never per dashboard request
 test("only the watcher imports the Cloudflare read, so no dashboard request can call Cloudflare", () => {
   const importers = sourceFiles()
-    .filter((f) => /from\s+["'](\.\.?\/)+ops-cloudflare["']/.test(f.text))
+    // A static import, a bare side-effect import, or a dynamic import().
+    .filter((f) => /(\bfrom\s*|\bimport\s*\(?\s*)["'](\.\.?\/)+ops-cloudflare(\.ts)?["']/.test(f.text))
     .map((f) => f.name);
   assert.deepEqual(importers, ["watcher.ts"]);
 });
