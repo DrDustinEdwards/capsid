@@ -16,19 +16,25 @@ export interface OpsSite {
   // root, which proves liveness and nothing more.
   healthPath: string | null;
   platform: "cloudflare" | "vercel";
+  // The Worker script that serves the site, named here only where the host proves it:
+  // a *.dustin-edwards.workers.dev host is served by the script its first label names.
+  // Every other Cloudflare site is resolved on each pass from the account's Workers
+  // custom domains (src/ops-cloudflare.ts), and one that resolves to nothing is shown
+  // as unresolved rather than guessed.
+  script?: string;
   // Probed in-process through healthReport() instead of over HTTP: a Worker fetching
   // its own workers.dev hostname is not a reliable probe of itself.
   self?: true;
 }
 
 export const OPS_SITES: readonly OpsSite[] = [
-  { namespace: "capsid", name: "Capsid", origin: "https://capsid.dustin-edwards.workers.dev", healthPath: "/health", platform: "cloudflare", self: true },
+  { namespace: "capsid", name: "Capsid", origin: "https://capsid.dustin-edwards.workers.dev", healthPath: "/health", platform: "cloudflare", script: "capsid", self: true },
   { namespace: "dustinedwards", name: "dustinedwards.info", origin: "https://dustinedwards.info", healthPath: "/api/health", platform: "cloudflare" },
   { namespace: "germomics", name: "Germomics", origin: "https://germomics.com", healthPath: "/health", platform: "cloudflare" },
   { namespace: "foxing", name: "Foxing", origin: "https://foxing.app", healthPath: null, platform: "cloudflare" },
   { namespace: "foxhound", name: "Foxhound", origin: "https://foxhoundapp.com", healthPath: null, platform: "cloudflare" },
   { namespace: "txasm", name: "TXASM", origin: "https://txasm.org", healthPath: null, platform: "cloudflare" },
-  { namespace: "bsw", name: "BSW", origin: "https://bsw.dustin-edwards.workers.dev", healthPath: null, platform: "cloudflare" },
+  { namespace: "bsw", name: "BSW", origin: "https://bsw.dustin-edwards.workers.dev", healthPath: null, platform: "cloudflare", script: "bsw" },
   { namespace: "julieedwards", name: "julieedwards.info", origin: "https://julieedwards.info", healthPath: null, platform: "vercel" },
 ];
 

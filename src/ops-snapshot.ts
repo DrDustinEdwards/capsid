@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
 import type { OpsSite } from "./ops-sites";
-import type { CiObservation, MirrorObservation, OpsSnapshot, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
+import type { CiObservation, MirrorObservation, OpsSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -135,6 +135,9 @@ export interface SnapshotInput {
   site_map: SiteMapDrift | null;
   // Null when the probes could not run at all this pass.
   probes: SiteProbe[] | null;
+  // This pass's Cloudflare state per site, keyed by namespace (src/ops-cloudflare.ts).
+  // A probed site with no entry is written without the field, never with last pass's.
+  cloudflare?: Record<string, SiteCloudflare>;
 }
 
 /** The snapshot for this pass, carrying each site's ring forward from `prev`. A site
@@ -146,13 +149,20 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
   const sites: SiteSnapshot[] = [];
   for (const probe of input.probes ?? []) {
     const before = prevSites.get(probe.namespace);
-    sites.push({ ...probe, ...advanceRing(before, slot, probeIsUp(probe)) });
+    const cloudflare = input.cloudflare?.[probe.namespace];
+    sites.push({ ...probe, ...advanceRing(before, slot, probeIsUp(probe)), ...(cloudflare ? { cloudflare } : {}) });
     prevSites.delete(probe.namespace);
   }
   if (input.probes === null) {
     for (const before of prevSites.values()) {
       const gap = Math.min(Math.max(slot - before.ring_slot, 0), RING_SLOTS);
-      sites.push({ ...before, ring: (before.ring + "-".repeat(gap)).slice(-RING_SLOTS), ring_slot: Math.max(slot, before.ring_slot) });
+      const cloudflare = input.cloudflare?.[before.namespace];
+      sites.push({
+        ...before,
+        ring: (before.ring + "-".repeat(gap)).slice(-RING_SLOTS),
+        ring_slot: Math.max(slot, before.ring_slot),
+        ...(cloudflare ? { cloudflare } : {}),
+      });
     }
   }
   return {

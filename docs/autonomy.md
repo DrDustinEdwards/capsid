@@ -94,7 +94,8 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
   - the mirror's newest dump and last run;
   - each roster repo's latest CI run;
   - the site map compared with the registered namespaces;
-  - a probe of every site in `src/ops-sites.ts`.
+  - a probe of every site in `src/ops-sites.ts`;
+  - Cloudflare's view of each site: its last ten deploys and 24 hourly buckets of requests and errors.
 
   **Probes.** Each site's health route is read, or its root where it has none, and the root as well when the health route fails. So a broken health route on a site that is up reads as degraded, not down. Capsid itself is read in-process.
 
@@ -103,3 +104,9 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
   **Write order.** The snapshot is written before `watcher:last`, so a snapshot that cannot be written fails the pass and the next tick runs it again.
 
   **Site map.** A registered namespace the map neither covers nor lists as having no site, or a map entry whose namespace is not registered, is a finding.
+
+  **Cloudflare.** `src/ops-cloudflare.ts` reads Cloudflare once per pass, never per dashboard request, with `CF_OPS_TOKEN`, a read-only token holding Workers Scripts Read and Account Analytics Read. The account is `CF_ACCOUNT_ID`, or `R2_ACCOUNT_ID` where that is unset. A site's script is named in the map only where the host proves it (a `workers.dev` host's first label); any other site is resolved from the account's Workers custom domains, and one that resolves to nothing is shown as unresolved, never guessed. Deploys come from the script's deployments list. Errors come from one GraphQL Analytics query for every script (`workersInvocationsAdaptive`). A query that fails is shown as no data with its reason, never as zeros. With no token nothing is fetched, each site says what is unset, and the `cloudflare` check shows as could not run. Cloudflare records only deployments that happened, so a failed deploy is not visible here; a failed deploy workflow is already the `ci-red` finding.
+
+  **Site down.** A site whose previous ring slot is `0` and whose probe this pass is down too, two failed probes in a row, is a finding (`site-down-<namespace>`, owned by the probes).
+
+  **Error rate.** A Worker that errored on more than 1 percent of at least 100 requests in the most recent complete hour is a finding (`site-errors-<namespace>`, owned by the `cloudflare` check, so it clears only on a pass where Cloudflare was read in full).
