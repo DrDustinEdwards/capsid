@@ -81,6 +81,28 @@ describe("the route tables are a statement about the Worker that serves them", (
     }
   });
 
+  // scanner-rule: CLAUDE.md, one enforcement point rule. Derived over UNGATED_ROUTES:
+  // every /console route but the sign-in callback and the old JSON address answers to
+  // consoleGate, so a route added under /console without it fails here.
+  it("PLANT: every console route is behind consoleGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {
+    const NOT_GATED = new Set(["/console/callback", "/console.json"]);
+    const consoleRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console") && !NOT_GATED.has(p));
+    // /console, /console/json, the feed, the refresh, the app and the app's files.
+    expect(consoleRoutes.length, `console routes found: ${consoleRoutes.join(", ")}`).toBe(6);
+    for (const path of consoleRoutes) {
+      for (const method of ["GET", "POST"]) {
+        const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });
+        if (await isFallback(bearer)) continue; // not served for this method
+        expect(bearer.status, `${method} ${path} served a bearer`).toBe(403);
+        const anonymous = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual" });
+        expect(anonymous.status, `${method} ${path} served an anonymous caller`).toBe(302);
+        expect(anonymous.headers.get("Location") ?? "", `${method} ${path} did not send an anonymous caller to the Access sign-in`).toContain(
+          "sample.cloudflareaccess.com"
+        );
+      }
+    }
+  });
+
   it("every gated route refuses a non-admin driver with 403, so each one asks routeRefusal", async () => {
     const gated = Object.keys(ROUTE_GRANTS);
     expect(gated.length, "ROUTE_GRANTS is empty, so this proves nothing").toBeGreaterThan(0);

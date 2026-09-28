@@ -19,7 +19,11 @@ import { activityFilterFrom, loadActivity, ACTIVITY_LIMIT, type ActivityFilter, 
 // pull request or mints a credential: those stay behind manage_pr and agents.
 
 export const CONSOLE_PATH = "/console";
-export const CONSOLE_JSON_PATH = "/console.json";
+// Under /console, where the session cookie is scoped (Path=/console). At /console.json
+// the browser never sent it, so the route sent every reader back to sign in.
+export const CONSOLE_JSON_PATH = "/console/json";
+// The old address, kept as a permanent redirect so a bookmark or a script still lands.
+export const CONSOLE_JSON_LEGACY_PATH = "/console.json";
 export const CONSOLE_CALLBACK_PATH = "/console/callback";
 
 // As strict as /authorize, plus `form-action 'self'`, which is safe here because a
@@ -108,6 +112,12 @@ export async function handleConsoleJson(request: Request, env: Env, now: Date = 
   const gate = await consoleGate(request, env, now, CONSOLE_JSON_PATH);
   if (!gate.ok) return gate.response;
   return Response.json(await consoleData(env, gate.user.email, now, activityFilterFrom(new URL(request.url))));
+}
+
+/** /console.json moved to /console/json. The query string is carried over. */
+export function consoleJsonMoved(request: Request): Response {
+  const search = new URL(request.url).search;
+  return new Response(null, { status: 301, headers: { Location: `${CONSOLE_JSON_PATH}${search}` } });
 }
 
 const STYLE = `

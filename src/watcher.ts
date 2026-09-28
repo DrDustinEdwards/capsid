@@ -540,11 +540,12 @@ export async function runPass(readers: PassReaders): Promise<{ posted: string[];
   return { posted, cleared };
 }
 
-/** The step the five-minute tick calls. Gates on its own cadence first. */
-export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>): Promise<WatcherReport> {
+/** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
+ *  (the console's Refresh, src/ops-feed.ts), which skips that check and nothing else. */
+export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>, opts: { force?: boolean } = {}): Promise<WatcherReport> {
   const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);
-  const due = passDue(last, minutes, now);
+  const due: DueVerdict = opts.force ? { due: true, reason: "an on-demand pass." } : passDue(last, minutes, now);
   if (!due.due) return { ran: false, note: due.reason, posted: [], cleared: [] };
 
   const agent = watcherAgent();
