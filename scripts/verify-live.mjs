@@ -353,6 +353,9 @@ async function gateSecurityHeaders(clientId) {
     ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/backup 401", "other", { url: `${ORIGIN}/ops/backup`, init: { method: "POST" } }],
+    // The Watch Floor app with no session: the console gate answers with the sign-in
+    // redirect, never the app. A 200 here would be the dashboard served to anyone.
+    ["/console/app no session", "other", { url: `${ORIGIN}/console/app/`, init: { redirect: "manual" }, status: 302 }],
     ["/nope 404", "other", { url: `${ORIGIN}/nope` }],
     ["/csp-report", "other", { url: `${ORIGIN}/csp-report`, init: { method: "POST", headers: { "Content-Type": "application/csp-report" }, body: report }, status: 204 }],
   ];

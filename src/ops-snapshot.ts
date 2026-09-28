@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
-import type { OpsSite, SiteMapDrift } from "./ops-sites";
+import type { OpsSite } from "./ops-sites";
+import type { CiObservation, MirrorObservation, OpsSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -18,60 +19,11 @@ export const RING_SLOTS = (7 * 24 * 60) / RING_SLOT_MINUTES;
 
 const PROBE_TIMEOUT_MS = 5000;
 
+// The shapes live in src/ops-types.ts, the contract the dashboard app reads.
 // ok: the health route answered 2xx. degraded: it did not, but the root did.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type ProbeState = "ok" | "degraded" | "liveness" | "down";
-
-export interface SiteProbe {
-  namespace: string;
-  name: string;
-  origin: string;
-  health_path: string | null;
-  platform: OpsSite["platform"];
-  state: ProbeState;
-  // The status of the URL the state rests on: the health route, or the root.
-  http_status: number | null;
-  latency_ms: number | null;
-  // Reported by the site's own health route, where it reports one.
-  sha: string | null;
-  error: string | null;
-  checked_at: string;
-}
-
-export interface SiteSnapshot extends SiteProbe {
-  ring: string;
-  // The clock slot (minutes since the epoch / RING_SLOT_MINUTES) of the ring's last
-  // character.
-  ring_slot: number;
-}
-
-export type CheckState = "clear" | "finding" | "could-not-run";
-
-export interface CiObservation {
-  namespace: string;
-  // Null when the repo's runs could not be read this pass.
-  latest: { head_sha: string; status: string; conclusion: string | null; created_at: string; url: string | null } | null;
-}
-
-export interface MirrorObservation {
-  newest_dump: string | null;
-  // Null when the runs could not be read, or none has completed.
-  last_run: { at: string | null; conclusion: string | null; url: string | null } | null;
-}
-
-export interface OpsSnapshot {
-  version: 1;
-  pass_at: string;
-  pass_ms: number;
-  cadence_min: number;
-  checks: Array<{ id: string; state: CheckState; findings: string[] }>;
-  health: HealthReport | null;
-  mirror: MirrorObservation | null;
-  ci: CiObservation[];
-  site_map: SiteMapDrift | null;
-  sites: SiteSnapshot[];
-}
+export type { CheckState, CiObservation, MirrorObservation, OpsSnapshot, ProbeState, SiteProbe, SiteSnapshot } from "./ops-types";
 
 export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * 60_000));
 
@@ -183,6 +135,9 @@ export interface SnapshotInput {
   site_map: SiteMapDrift | null;
   // Null when the probes could not run at all this pass.
   probes: SiteProbe[] | null;
+  // This pass's Cloudflare state per site, keyed by namespace (src/ops-cloudflare.ts).
+  // A probed site with no entry is written without the field, never with last pass's.
+  cloudflare?: Record<string, SiteCloudflare>;
 }
 
 /** The snapshot for this pass, carrying each site's ring forward from `prev`. A site
@@ -194,13 +149,20 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
   const sites: SiteSnapshot[] = [];
   for (const probe of input.probes ?? []) {
     const before = prevSites.get(probe.namespace);
-    sites.push({ ...probe, ...advanceRing(before, slot, probeIsUp(probe)) });
+    const cloudflare = input.cloudflare?.[probe.namespace];
+    sites.push({ ...probe, ...advanceRing(before, slot, probeIsUp(probe)), ...(cloudflare ? { cloudflare } : {}) });
     prevSites.delete(probe.namespace);
   }
   if (input.probes === null) {
     for (const before of prevSites.values()) {
       const gap = Math.min(Math.max(slot - before.ring_slot, 0), RING_SLOTS);
-      sites.push({ ...before, ring: (before.ring + "-".repeat(gap)).slice(-RING_SLOTS), ring_slot: Math.max(slot, before.ring_slot) });
+      const cloudflare = input.cloudflare?.[before.namespace];
+      sites.push({
+        ...before,
+        ring: (before.ring + "-".repeat(gap)).slice(-RING_SLOTS),
+        ring_slot: Math.max(slot, before.ring_slot),
+        ...(cloudflare ? { cloudflare } : {}),
+      });
     }
   }
   return {

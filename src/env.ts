@@ -14,6 +14,14 @@ export interface Env {
   ACCESS_SAAS_CLIENT_ID?: string;
   ACCESS_SAAS_CLIENT_SECRET?: string;
   ADMIN_EMAIL?: string;
+  // The Watch Floor's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
+  // with Account Analytics Read and Workers Scripts Read, and the account it reads.
+  // Unset, the deploy and error columns show no data and say why.
+  CF_OPS_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  // The dashboard app's built files (dashboard/dist), served under /console/app/ only
+  // after the console gate. Absent where no assets are configured.
+  ASSETS?: Fetcher;
   // GitHub App. No pinned installation id: resolved per owner and repo.
   GITHUB_APP_CLIENT_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
@@ -37,8 +45,9 @@ export interface Env {
   R2_BACKUP_PARENT_ACCESS_KEY_ID?: string;
 }
 
-// Everything except the holdout bucket and the credentials that could mint read access to it.
-export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID">;
+// Everything except the holdout bucket, the credentials that could mint read access to it,
+// and the Cloudflare read token (it can read Worker code).
+export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

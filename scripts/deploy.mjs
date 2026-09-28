@@ -13,9 +13,31 @@
 // named commit, and /health says so.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
+}
+
+// The Watch Floor app (dashboard/) is served from dashboard/dist as the Worker's static
+// assets (wrangler.jsonc.example, "assets"). It is built and held to its size budget
+// here, before every deploy, so a deploy never ships a stale or missing app. A failed
+// build or budget stops the deploy. dist/ is gitignored, so building does not dirty the
+// tree.
+function npmRun(args) {
+  const run = spawnSync("npm", args, { stdio: "inherit", shell: process.platform === "win32" });
+  if (run.status !== 0) {
+    console.error(`deploy: npm ${args.join(" ")} failed (exit ${run.status ?? "none"}); nothing was deployed.`);
+    process.exit(run.status ?? 1);
+  }
+}
+if (existsSync("dashboard/package.json")) {
+  if (!existsSync("dashboard/node_modules")) {
+    console.error("deploy: dashboard/node_modules is missing. Run `npm ci --prefix dashboard` first; nothing was deployed.");
+    process.exit(1);
+  }
+  npmRun(["--prefix", "dashboard", "run", "build"]);
+  npmRun(["--prefix", "dashboard", "run", "size"]);
 }
 
 let sha = "unknown";

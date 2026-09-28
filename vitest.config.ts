@@ -70,6 +70,25 @@ export default defineConfig({
         d1Databases: ["DB"],
         kvNamespaces: ["APP_KV", "OAUTH_KV"],
         r2Buckets: ["MEDIA", "HOLDOUT"],
+        // The Watch Floor app's files (src/console-app.ts), a small fake build in
+        // test-integration/fixtures/dashboard. Miniflare's own assets option
+        // (AssetsOptionsSchema in miniflare's types; the pool forwards
+        // `miniflare.assets` and sets has_user_worker, @cloudflare/vitest-pool-workers
+        // dist/pool/index.mjs; Cloudflare's recipe is
+        // https://github.com/cloudflare/workers-sdk/tree/main/fixtures/vitest-plugin-examples/workers-assets).
+        // invoke_user_worker_ahead_of_assets is what wrangler's run_worker_first
+        // becomes, and it is what production must set: with it off, the router serves
+        // /index.html and /assets/* at the origin's root before the Worker, and so
+        // before the console gate. Set here to match, but NOT PROVEN HERE: in this pool
+        // SELF is ctx.exports.default (dist/worker/lib/cloudflare/test-internal.mjs),
+        // the Worker itself, so no test request passes through the router. Flipping
+        // this to false was tried and every test stayed green.
+        assets: {
+          directory: path.join(import.meta.dirname, "test-integration", "fixtures", "dashboard"),
+          binding: "ASSETS",
+          routerConfig: { invoke_user_worker_ahead_of_assets: true },
+          assetConfig: { html_handling: "auto-trailing-slash", not_found_handling: "none" },
+        },
         bindings: {
           // The migrations, handed to the setup file through the env. This is the
           // pool's route for it: a setup file runs inside workerd and cannot read

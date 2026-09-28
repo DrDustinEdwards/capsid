@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Written by scripts/fixture-check.mjs on every `npm run check`.
+dev/generated/

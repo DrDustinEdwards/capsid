@@ -96,10 +96,14 @@ jobs:
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
       # @cloudflare/workers-types rather than from generated bindings. That is why this
       # job needs no config and no secrets.
+      # The Watch Floor app (dashboard/) is its own package with its own lockfile, so
+      # it installs separately; none of the root gates can see it.
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix dashboard
 
-      # FOUR TYPECHECKS IN ONE STEP (audit 2026-09-25, B1). Each config stays separate,
+      # FIVE TYPECHECKS IN ONE STEP (audit 2026-09-25, B1). Each config stays separate,
       # and every one runs even when an earlier one fails, so one red run reports all of
       # them. The step name is on the auto-merge policy's required CI list.
       #
@@ -122,6 +126,10 @@ jobs:
       # other repos, which do not all gate it the same way. On 2026-09-07 this repo
       # shipped ten type errors in it that only dustinedwards-info's stricter gate could
       # see. This is the guard, in the repo the file is authored in.
+      #
+      # check:dashboard: the Watch Floor app, typechecked against src/ops-types.ts, the
+      # contract its data endpoint returns. The step keeps its name because the name is
+      # on the auto-merge policy's required CI list.
       - name: Typecheck src, tests, integration tests and the copied scorer script
         run: |
           status=0
@@ -129,6 +137,7 @@ jobs:
           npm run check:test || status=1
           npm run check:integration || status=1
           npm run check:scripts || status=1
+          npm run check:dashboard || status=1
           exit $status
 
       # THE LINTS (audit 2026-09-25, C1-6): the dead-export report and the derived
@@ -149,6 +158,12 @@ jobs:
       # SQLite, the OAuth provider or the runtime refusing it.
       - name: Integration tests
         run: npm run test:integration
+
+      # The Watch Floor app builds, and stays inside its size budget
+      # (dashboard/scripts/size-budget.mjs, which fails closed on a missing build).
+      # scripts/deploy.mjs runs the same two before every deploy.
+      - name: Build the dashboard and hold its size budget
+        run: npm run build:dashboard
 
   # Ordered after checks: a failing typecheck or test never reaches production. No
   # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
@@ -174,8 +189,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # dashboard/ is built by scripts/deploy.mjs into the Worker's static assets, so the
+      # deploy job installs it too.
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix dashboard
 
       # wrangler.jsonc is gitignored, so a runner has no deployable config.
       # scripts/ci-config.mjs rebuilds it: every binding is resolved by NAME against the
