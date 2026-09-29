@@ -218,3 +218,43 @@ test("without the new arguments the output is unchanged: no jobs, job or step fi
     assert.equal(calls.some((c) => c.path.endsWith("/jobs")), false, "a successful run was drilled into");
   });
 });
+
+// Through the tool, not ciStatus: the log gate is the registration's own scope check
+// (src/tools/repo.ts), and a test that passes logTail itself cannot see it move.
+async function callCiStatus(grants: Array<"read" | "write">, args: Record<string, unknown>) {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { buildServer } = await import("../src/server.ts");
+  const { defaultScopes } = await import("../src/agents-schema.ts");
+  const scopes = defaultScopes(["ns"]);
+  scopes.grants = grants;
+  const agent = { id: "agent_sample00000", name: "sample-driver", kind: "driver", actor: "agent:sample-driver", scopes, admin: false, row: null } as const;
+  const server = buildServer(makeEnv(), agent as unknown as Parameters<typeof buildServer>[1]);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  const client = new Client({ name: "test", version: "0" });
+  await client.connect(clientTransport);
+  try {
+    const result = await client.callTool({ name: "ci_status", arguments: { namespace: "ns", ...args } });
+    return JSON.parse((result.content as Array<{ text: string }>)[0].text) as Out;
+  } finally {
+    await client.close();
+  }
+}
+
+test("PLANT: through the tool, a read-only key gets no step log and the log is never fetched", async () => {
+  await withFetch(routes(), async (calls) => {
+    const out = await callCiStatus(["read"], { run_id: 42, job: "deploy", step: "Deploy" });
+    assert.equal(out.step?.name, "Deploy");
+    assert.equal(out.log, undefined, "a read-only key was handed a CI log");
+    assert.equal(calls.some((c) => c.path.includes("/logs")), false, "the log was fetched for a read-only key");
+  });
+});
+
+test("through the tool, the namespace's write-grant driver gets the step log, redacted", async () => {
+  await withFetch(routes(), async (calls) => {
+    const out = await callCiStatus(["read", "write"], { run_id: 42, job: "deploy", step: "Deploy" });
+    assert.equal(typeof out.log, "string", "the namespace's driver was refused its own step log");
+    assert.ok(calls.some((c) => c.path.includes("/logs")));
+  });
+});
