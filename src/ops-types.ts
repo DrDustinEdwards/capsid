@@ -304,11 +304,17 @@ export interface PortalNamespaces {
 }
 
 export interface PortalActivityRow {
+  // The audit_log row id: unique, so the view keys on it.
+  id: number;
   at: string;
   actor: string | null;
   action: string | null;
   namespace: string | null;
   path: string | null;
+  // What the row records. A job transition writes two rows with one action, actor and
+  // path: "job" for the job and "document" for its mirror document. null when the
+  // row's params name neither.
+  target: "job" | "document" | null;
 }
 
 export interface PortalActivity {
