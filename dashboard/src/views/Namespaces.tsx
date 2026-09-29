@@ -39,14 +39,14 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         <div className="mt4">{n.paused != null ? <St kind="warn">Paused</St> : <St kind="ok">Not paused</St>}</div>
         {n.paused != null && <div className="src wrap">{n.paused || "no reason recorded"}</div>}
       </td>
-      <td>
+      <td data-label="Driver">
         <Driver ns={n.namespace} />
       </td>
-      <td>
+      <td data-label="Anchor">
         {n.anchor_problem ? <St kind="crit">Problem</St> : n.anchor_pinned ? <St kind="ok">Pinned</St> : <St kind="nodata">Not pinned</St>}
         {n.anchor_problem && <div className="src wrap">{n.anchor_problem}</div>}
       </td>
-      <td>
+      <td data-label="Last run">
         {r ? (
           <>
             <span className="mono">{r.status}</span>
@@ -58,7 +58,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
           <St kind="nodata">No runs yet</St>
         )}
       </td>
-      <td>
+      <td data-label="Best score">
         {n.best ? (
           <>
             <span className="mono">{n.best.score}</span>
@@ -70,7 +70,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
           <St kind="nodata">No best yet</St>
         )}
       </td>
-      <td>
+      <td data-label="Integrity">
         {!rep ? (
           <St kind="nodata">No truth report</St>
         ) : rep.integrity == null ? (
@@ -85,19 +85,19 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
           </>
         )}
       </td>
-      <td className="mono nowrap">
+      <td data-label="Jobs" className="mono nowrap">
         {n.jobs.queued} queued · {n.jobs.claimed} running
         <div className="src">
           {n.jobs.blocked} blocked · {n.jobs.done_today} done today
         </div>
       </td>
-      <td>
+      <td data-label="Skills">
         <span className="mono nowrap">
           {sk.live} live · {sk.candidate} candidate · {sk.retired} retired
         </span>
         <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>
       </td>
-      <td>
+      <td className="ctl">
         {n.paused != null ? (
           <button type="button" className="btn" onClick={() => confirm({ action: "unpause", params: { namespace: n.namespace }, title: `Unpause ${n.namespace}`, onDone: onChanged })}>
             Unpause
@@ -159,8 +159,8 @@ export function Namespaces() {
             Reading the namespaces...
           </div>
         ) : data && data.namespaces.length ? (
-          <div className="scroll-x">
-            <table className="list minw1240">
+          <div className="scroll-x reflow">
+            <table className="list cards-below-1320">
               <thead>
                 <tr>
                   <th>Namespace</th>

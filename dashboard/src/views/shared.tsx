@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import { JOB, PROBE, cfNoData, cfOk, incidents, siteKey } from "../lib/derive";
@@ -112,8 +112,8 @@ export function BackupCell({ s }: { s: SiteSnapshot }) {
 export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
   const { now } = useApp();
   return (
-    <div className="scroll-x">
-      <table className="fleet">
+    <div className="scroll-x reflow">
+      <table className="fleet cards-below-1100">
         <thead>
           <tr>
             <th>Site</th>
@@ -134,24 +134,24 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <b>{s.name}</b>
                   <span>{hostOf(s.origin)}</span>
                 </td>
-                <td>
+                <td data-label="Status">
                   <Pill kind={p.kind}>{p.label}</Pill>
                   <div className="src mt4">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</div>
                 </td>
-                <td className="w30">
+                <td data-label="Uptime, 2-hour ticks" className="w30">
                   <UptimeTicks site={s} />
                   <UptimeFoot site={s} />
                 </td>
-                <td>
+                <td data-label="Live deploy">
                   <LiveDeployCell s={s} />
                 </td>
-                <td>
+                <td data-label="Errors 24h">
                   <ErrorTotalsCell s={s} />
                 </td>
-                <td>
+                <td data-label="Backup age">
                   <BackupCell s={s} />
                 </td>
-                <td>
+                <td data-label="Probe">
                   <span className="mono">{s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}</span>
                   <div className="src">
                     {s.health_path ?? "/"} · {ago(ms(s.checked_at), now)}
@@ -272,15 +272,35 @@ export function IncidentFeed({ limit, ns }: { limit?: number; ns?: string }) {
 
 // ---- timeline panel ------------------------------------------------------------------------
 
+// The content-box width of an element, kept current as the layout changes (the window,
+// the rail collapsing).
+function useWidth(): [number | null, (el: HTMLElement | null) => void] {
+  const [w, setW] = useState<number | null>(null);
+  const obs = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    obs.current?.disconnect();
+    obs.current = null;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[entries.length - 1];
+      if (e) setW(e.contentRect.width);
+    });
+    ro.observe(el);
+    obs.current = ro;
+  }, []);
+  return [w, ref];
+}
+
 export function TimelinePanel({ title, days, src }: { title: string; days: number; src: string }) {
   const { feed, now } = useApp();
+  const [width, ref] = useWidth();
   const sites = feed.snapshot?.sites ?? [];
   return (
     <Panel title={title} src={src} className="tl">
       {sites.length ? (
         <>
-          <div className="scroll-x tl-pad">
-            <Timeline sites={sites} days={days} now={now} />
+          <div className="scroll-x tl-pad" ref={ref}>
+            <Timeline sites={sites} days={days} now={now} width={width} />
           </div>
           <TimelineLegend />
         </>

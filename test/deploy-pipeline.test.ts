@@ -87,3 +87,20 @@ test("CI typechecks, builds and budgets the dashboard, and installs it wherever 
   const deployScript = read("scripts/deploy.mjs");
   assert.ok(deployScript.indexOf('"run", "size"') > deployScript.indexOf('"run", "build"') && deployScript.indexOf('"run", "size"') < deployScript.indexOf('"deploy",'), "scripts/deploy.mjs must build and budget the dashboard before wrangler deploy");
 });
+
+// The app's browser tests (dashboard/e2e) drive the BUILT app, so CI runs them after
+// the build step, with a browser installed first. A Preview click that did nothing on
+// the live Portal passed every other step in this job.
+test("CI runs the app's browser tests after the dashboard build, with Chromium installed", () => {
+  const ci = read(".github/workflows/ci.yml");
+  const checks = ci.slice(ci.indexOf("  checks:"), ci.indexOf("  deploy:"));
+  const build = checks.indexOf("run: npm run build:dashboard");
+  const install = checks.indexOf("playwright install --with-deps chromium");
+  const run = checks.indexOf("run: npm run test:browser");
+  assert.ok(build > -1 && install > -1 && run > -1, "the checks job does not build the dashboard, install Chromium and run the browser tests");
+  assert.ok(build < run && install < run, "the browser tests must run after the build and the browser install");
+  const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+  assert.equal(pkg.scripts["test:browser"], "npm --prefix dashboard run e2e");
+  const dash = JSON.parse(read("dashboard/package.json")) as { scripts: Record<string, string> };
+  assert.equal(dash.scripts.e2e, "playwright test");
+});

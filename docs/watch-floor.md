@@ -64,7 +64,9 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
   - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `b` backups, `c` CI.
   - `j` and `k` move through a list, Enter opens the row, and Esc closes.
   - `r` refreshes and `t` switches light and dark.
+  - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
   - `?` lists the keys. The sheet can turn single-key shortcuts off.
+- **Width:** no view scrolls sideways from 1024 px up. The wide tables (Namespaces, the fleet, Agents) turn each row into a card when their panel is too narrow for the columns.
 - **Freshness:** the top bar shows when the live part was read and when the watcher's pass ran. The stamp turns to the warning colour when the pass is older than two cadences, which means the watcher has gone quiet. The app polls every 60 seconds while its tab is visible.
 
 ## Building and changing it
@@ -72,5 +74,10 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 `dashboard/` is its own package (React 19, Vite, wouter), with its own lockfile and README.
 - **Develop:** `npm --prefix dashboard run dev` serves it with fake sample data (`dashboard/dev/sample-feed.json`, checked against `OpsFeed`).
 - **Deploy:** `scripts/deploy.mjs` builds it into `dashboard/dist` before every deploy, and the Worker serves those files as its static assets. A failed build stops the deploy.
+- **Browser tests:** `npm run test:browser`, after `npm run build:dashboard`, drives the built app in Chromium through Playwright (`dashboard/e2e`). It runs under `vite preview` with the dev mock and the Worker's own page CSP (`src/dashboard-csp.ts`). CI runs it after the build. What it covers:
+  - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
+  - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
+  - the phone layout;
+  - the collapsible sidebar.
 - **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. The initial JavaScript must be at most 100 KB gzip, each lazily loaded view at most 40 KB, and all CSS at most 12 KB.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/console/callback` with the app's `index.html`, or serve the app's files without the gate.

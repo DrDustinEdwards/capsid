@@ -21,6 +21,7 @@ export function ConfirmDialog({
 }) {
   const dlg = useRef<HTMLDialogElement>(null);
   const doIt = useRef<HTMLButtonElement>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const opener = useRef<Element | null>(null);
   const started = useRef(false);
   const finished = useRef(false);
@@ -58,29 +59,52 @@ export function ConfirmDialog({
     setError({ text: `Could not reach the server: ${r.message}`, expired: false });
   };
 
+  // Every click on Preview ends in something the person can see: the preview, a
+  // refusal, a timeout, or the reason it could not be sent. A click that does nothing
+  // is the defect this dialog was sent back for.
   const runPreview = async (why: string) => {
-    const params = needsReason ? { ...req.params, reason: why.trim() } : req.params;
+    const typed = needsReason ? why.trim() : "";
+    if (needsReason && !typed) {
+      setError({ text: "A reason is required. Type what you are doing and why, then preview.", expired: false });
+      reasonRef.current?.focus();
+      return;
+    }
+    const params = needsReason ? { ...req.params, reason: typed } : req.params;
     setPending("preview");
     setError(null);
     setPreview(null);
-    const r = await previewAction(csrf, { action: req.action, params });
-    if (!alive.current) return;
-    setPending(null);
-    if (r.kind === "ok") setPreview(r.value);
-    else failed(r);
+    try {
+      const r = await previewAction(csrf, { action: req.action, params });
+      if (!alive.current) return;
+      if (r.kind === "ok") setPreview(r.value);
+      else failed(r);
+    } catch (e) {
+      if (alive.current) setError({ text: `The preview could not be shown: ${e instanceof Error ? e.message : String(e)}`, expired: false });
+    } finally {
+      if (alive.current) setPending(null);
+    }
   };
 
   const runPerform = async () => {
     if (!preview) return;
     setPending("perform");
     setError(null);
-    const r = await performAction(csrf, preview.token);
-    if (!alive.current) return;
-    setPending(null);
-    if (r.kind === "ok") return finish(r.value);
-    if (r.kind === "expired") setPreview(null);
-    failed(r);
+    try {
+      const r = await performAction(csrf, preview.token);
+      if (!alive.current) return;
+      if (r.kind === "ok") return finish(r.value);
+      if (r.kind === "expired") setPreview(null);
+      failed(r);
+    } catch (e) {
+      if (alive.current) setError({ text: `The result could not be shown: ${e instanceof Error ? e.message : String(e)}. Check Activity before trying again.`, expired: false });
+    } finally {
+      if (alive.current) setPending(null);
+    }
   };
+
+  // The reason is read from the field itself as well as from state, so a value the
+  // browser filled in without an input event still counts.
+  const reasonNow = () => reasonRef.current?.value ?? reason;
 
   useEffect(() => {
     alive.current = true;
@@ -105,7 +129,6 @@ export function ConfirmDialog({
   }, [preview]);
 
   const busy = pending != null;
-  const canPreview = !needsReason || reason.trim().length > 0;
 
   let primary = null;
   if (preview) {
@@ -116,7 +139,10 @@ export function ConfirmDialog({
     );
   } else if (needsReason || error) {
     primary = (
-      <button type={needsReason ? "submit" : "button"} form={needsReason ? "confirmForm" : undefined} className="btn primary" disabled={busy || !canPreview} onClick={needsReason ? undefined : () => void runPreview(reason)}>
+      // A plain button with its own handler: Preview never depends on the form's submit
+      // event, and it is disabled only while a request is in flight, never silently
+      // because the reason is empty (that click says so instead).
+      <button type="button" className="btn primary" disabled={busy} onClick={() => void runPreview(reasonNow())}>
         {pending === "preview" ? "Checking..." : error?.expired ? "Preview again" : error ? "Try again" : "Preview"}
       </button>
     );
@@ -143,13 +169,28 @@ export function ConfirmDialog({
             className="stack-gap"
             onSubmit={(e) => {
               e.preventDefault();
-              if (canPreview && !busy) void runPreview(reason);
+              if (!busy) void runPreview(reasonNow());
             }}
           >
             <label htmlFor="confirmReason" className="section-title">
               Reason (required)
             </label>
-            <textarea id="confirmReason" rows={3} required autoFocus value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
+            <textarea
+              ref={reasonRef}
+              id="confirmReason"
+              rows={3}
+              autoFocus
+              value={reason}
+              disabled={busy}
+              onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => {
+                // Ctrl or Cmd with Enter previews; a plain Enter is a new line.
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy) {
+                  e.preventDefault();
+                  void runPreview(reasonNow());
+                }
+              }}
+            />
             <p className="faint note">Recorded with the change. Preview shows what will change before anything is written.</p>
           </form>
         )}

@@ -1,4 +1,5 @@
 import { consoleGate } from "./console";
+import { DASHBOARD_CSP } from "./dashboard-csp";
 import type { Env } from "./env";
 
 // The Watch Floor app's built files, served under /console/app/ (capsid/research/
@@ -17,11 +18,9 @@ import type { Env } from "./env";
 export const CONSOLE_APP_PATH = "/console/app";
 export const CONSOLE_APP_PREFIX = "/console/app/";
 
-// The app's page only. Scripts and styles from this origin and nothing inline, so an
-// injected tag in anything the feed carries cannot run. CONSOLE_CSP (the server-rendered
-// page) and the consent dialog's CSP are separate and unchanged.
-export const DASHBOARD_CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+// The app's page CSP. The string lives in src/dashboard-csp.ts so the app's browser
+// tests serve the same one.
+export { DASHBOARD_CSP };
 
 // Hashed build output, named by content, so a changed file has a new name. Private:
 // the files sit behind a login, so no shared cache keeps a copy.
