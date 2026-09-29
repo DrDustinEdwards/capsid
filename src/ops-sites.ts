@@ -77,7 +77,7 @@ function configFrom(row: SiteRow): OpsSiteConfig {
 
 /** Every configured row, sites and no-site declarations, by namespace. */
 export async function readSiteConfig(db: D1Database): Promise<OpsSiteConfig[]> {
-  const { results } = await db.prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites ORDER BY namespace LIMIT ${SITE_ROWS_LIMIT}`).all<SiteRow>();
+  const { results } = await db.prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites ORDER BY namespace LIMIT ?1`).bind(SITE_ROWS_LIMIT).all<SiteRow>();
   return (results ?? []).map(configFrom);
 }
 
