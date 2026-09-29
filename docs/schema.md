@@ -414,77 +414,32 @@ document. A document is data, and a document another client wrote is untrusted
 input. The stamp is on the response envelope rather than in the body, because the
 body is exactly what an attacker controls.
 
-## Capsid Portal's JSON twin
+## Capsid Portal's reads
 
-`GET /console/json` serves the object the `/console` page renders, so a dashboard
-or a chat reads the same state without scraping HTML. Admin session only, on the
-same gate as the page. The two cannot drift: the page is rendered from this
-object, and a test asserts a deep equality between the response and the function
-that builds it.
+Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
+functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
+feed, `OpsFeed` in `src/ops-types.ts`. `GET /portal/api/namespaces` returns each
+roster namespace from `improveStatus()`, the function behind `improve_status`.
+`GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
+filtered, with ISO times. All three are admin session only.
 
-```json
-{
-  "generated": "2026-09-11T14:00:00.000Z",
-  "viewer": "<the admin's github login>",
-  "health": {
-    "status": "ok | degraded",
-    "sha": "<deployed git sha>",
-    "dirty": false,
-    "builtAt": "<build time, or null>",
-    "schema_version": "<newest applied migration, or null>",
-    "store": { "d1": "ok", "fts": "ok" },
-    "backup": { "last_ok": "<timestamp>", "age_hours": 5, "warning": "<only when stale>" }
-  },
-  "improve": "<the improve_status report: mode, budget, protected_paths, agents, namespaces>",
-  "agents": [
-    {
-      "name": "capsid-driver",
-      "kind": "driver",
-      "namespaces": ["capsid"],
-      "grants": ["read", "write"],
-      "flags": ["<only the flags this agent holds>"],
-      "last_seen": "<timestamp, or null>",
-      "revoked_at": "<timestamp, or null>",
-      "jobs_completed": 4,
-      "jobs_failed": 0,
-      "jobs_blocked": 1,
-      "prs_opened": 2,
-      "prs_merged": 0,
-      "attempts_kept": 6,
-      "attempts_reverted": 14,
-      "record": {
-        "actor": "agent:capsid-driver",
-        "jobs_done": 4,
-        "jobs_failed": 0,
-        "jobs_blocked": 1,
-        "gates_hit": 2,
-        "resumed": 2,
-        "prs_opened": 4,
-        "prs_merged": 3,
-        "pr_merge_rate": 0.75,
-        "ci_checked": 3,
-        "ci_green_rate": 1,
-        "median_duration_minutes": 41,
-        "attempts_kept": 6,
-        "attempts_reverted": 14
-      }
-    }
-  ],
-  "activity": [
-    { "at": "<timestamp>", "actor": "github:...", "action": "console-pause", "namespace": "capsid", "path": null }
-  ],
-  "activity_filter": { "namespace": null, "actor": null }
-}
+**A click in the Portal writes two audit rows:** the shared mutator's own row (for
+example `improve-paused` by `improve-loop`, or `job-resumed`), then the click's row,
+`portal-<action>` under `access:<email>`. The Portal's on-demand watcher pass is
+`portal-ops-refresh`. Rows written before the Portal moved from `/console` to
+`/portal` name the click `console-<action>` and the refresh `console-ops-refresh`,
+and rows from before the Access login name the admin `github:<login>`, so a query
+for the admin's clicks across both dates matches both prefixes:
+
+```sql
+SELECT at, actor, action, namespace FROM audit_log
+WHERE action LIKE 'portal-%' OR action LIKE 'console-%'
+ORDER BY id DESC LIMIT 50;
 ```
 
-`improve` is the whole
-`improve_status` report rather than a copy of parts of it, so Capsid Portal and the
-tool serve one description of the loop. `agents` is that report's inventory with
-counts attached, and `attempts_kept` and `attempts_reverted` are `null` for every
-kind except `driver`, because an attempt belongs to a namespace's runs and
-crediting a seat with them would attribute one credential's work to another.
-`activity_filter` echoes what the query string asked for, so a reader can tell a
-filtered view from the whole log.
+`attempts_kept` and `attempts_reverted` on an agent are `null` for every kind
+except `driver`, because an attempt belongs to a namespace's runs and crediting a
+seat with them would attribute one credential's work to another.
 
 `record` is the agent record. It is a different measurement from the counts
 beside it. The flat `prs_opened` and `prs_merged` count what this credential did
@@ -494,7 +449,3 @@ GitHub itself, which is why a driver can show pull requests in one and a `null`
 rate in the other: it opened them without naming them as evidence on a job. A rate
 with no denominator is `null` rather than `0`, because `0%` would sort a credential
 that has done nothing below one that has done something imperfectly.
-
-No key, no stored verifier and no CSRF token appears here. The token is minted per
-page render and belongs in a cookie and a form, not in a document any reader of
-the twin could copy.
