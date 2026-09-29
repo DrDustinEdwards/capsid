@@ -43,12 +43,14 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - [docs/rollback.md](docs/rollback.md) serving the previous Worker version when a deploy shipped a bad one
 - [docs/schema.md](docs/schema.md) the knowledge model, the document types and the tables
 - [docs/bootstrap.md](docs/bootstrap.md) minting agents and removing the operator key
+- [docs/hooks.md](docs/hooks.md) Claude Code session hooks: what `/ops/hooks` keeps, who may post, the settings for driver repos and Dustin's machine, and what enabling them for seat-started sessions would take
 
 ## Endpoints
 
 - `POST /mcp` MCP over Streamable HTTP, requires an OAuth access token (admin only)
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/otlp/v1/metrics`, `POST /ops/otlp/v1/logs` Claude Code's OpenTelemetry as OTLP/HTTP JSON, gzip or plain, at most 1MB. A driver key, a runner key or the admin key as `Authorization: Bearer <key>` (401 without one, 403 for a read-only key). Keeps usage totals per session and a count of api_error events; never a prompt, a response or tool content (docs/telemetry.md)
+- `POST /ops/hooks` Claude Code HTTP hook events, requires a driver or runner key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, response or tool content (docs/hooks.md)
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
 - `GET /portal/`, `GET /portal/callback`, `GET /portal/api/ops`, `POST /portal/api/ops/refresh`, `POST /portal/api/actions/preview`, `POST /portal/api/actions/perform`, `GET /portal/api/namespaces`, `GET /portal/api/activity`, `POST /portal/api/sign-out` Capsid Portal: the app's files, its sign-in return, its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the eight controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces and activity reads, and sign out. Admin session only; a bearer token is refused with 403 (docs/portal.md). Nothing answers under `/console`
