@@ -79,7 +79,8 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
     revokeBoundKeys(env.DB, id),
-    // The seat ending a job is a touch, and ends whatever wait a gate began.
+    // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
+    // a gate a resume already answered is not this touch's wait.
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -87,7 +88,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: true }),
       detail: { reason, from: current.status, held_by: current.claimed_by },
-      sinceGate: true,
+      sinceGate: current.status === "blocked",
       at: now.toISOString(),
     }),
   ];
@@ -183,7 +184,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: true }),
       detail: { reason, held_by: current.claimed_by },
-      sinceGate: true,
+      sinceGate: current.status === "blocked",
       at: now.toISOString(),
     }),
   ]);
@@ -305,7 +306,7 @@ export async function supersedeJob(
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
       detail: { reason, replaced_by: replacedBy, from: current.status, held_by: current.claimed_by },
-      sinceGate: true,
+      sinceGate: current.status === "blocked",
       at: now.toISOString(),
     }),
   ]);
