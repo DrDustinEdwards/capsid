@@ -4,7 +4,7 @@ import { sha256Hex } from "../src/auth";
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
 import { opsFeed } from "../src/ops-feed";
-import { HOOK_MAX_BYTES, OPS_HOOKS_PATH } from "../src/ops-hooks";
+import { OPS_HOOKS_PATH } from "../src/ops-hooks";
 
 // The hook receiver through the whole Worker, on real D1 (src/ops-hooks.ts,
 // migrations/0025): who may post, the job a session binds to, the needs_input cycle, a
@@ -205,7 +205,9 @@ describe("what a session records", () => {
   });
 
   it("a body over 64KB is refused with 413 and nothing is written", async () => {
-    const response = await hook(DRIVER_KEY, { ...start(), prompt: "x".repeat(HOOK_MAX_BYTES) });
+    // A literal 64KB, not HOOK_MAX_BYTES: a body sized from the constant grows with it,
+    // and could never show the cap moving.
+    const response = await hook(DRIVER_KEY, { ...start(), prompt: "x".repeat(65_536) });
     expect(response.status).toBe(413);
     expect(await sessionCount()).toBe(0);
   });
