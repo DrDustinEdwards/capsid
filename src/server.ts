@@ -4,6 +4,7 @@ import { legacyAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
+import { decorateCacheHints } from "./cache-hints";
 import { registerDocTools, type ToolCtx, type ToolGrant } from "./tools/docs";
 import { registerLintTools } from "./tools/lint";
 import { registerRepoTools } from "./tools/repo";
@@ -82,6 +83,9 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   // check scope themselves (src/resources.ts).
   registerDocumentResources(server, agent, db);
   registerPrompts(server, agent, db);
+
+  // Last, so every handler it decorates exists (src/cache-hints.ts).
+  decorateCacheHints(server);
 
   return server;
 }
