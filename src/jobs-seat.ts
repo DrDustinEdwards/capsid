@@ -130,6 +130,16 @@ export async function failAsCaller(
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
+    // A claim is the holder's account of its own work. The seat failing a job it does
+    // not hold has none to give, and one sent anyway is refused rather than dropped, so
+    // nobody reads a silence as a recorded claim.
+    const sent = typeof said.claim === "string" ? said.claim.trim() !== "" : said.claim !== undefined;
+    if (sent) {
+      return refuse(
+        "fail",
+        `${id} is held by ${current.claimed_by ?? "nobody"}, so this is the seat's fail and takes no claim: a claim is the holder's account of its own work. Send it without claim.`
+      );
+    }
     return adminFailJob(env, agent, now, id, reason);
   }
   return failJob(env, agent, now, id, reason, skills, said);

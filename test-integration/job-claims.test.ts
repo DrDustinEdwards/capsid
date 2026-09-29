@@ -200,11 +200,22 @@ describe("job_claims: what the agent said", () => {
   it("the seat failing somebody else's job writes no claim: the agent made none", async () => {
     const id = await claimed("the seat fails it");
     const seat = legacyAgent("write", SEAT);
-    const failed = await failAsCaller(jobsEnv(), seat, LATER, id, "the driver is gone", undefined, { claim: { deploy_state: "none" } });
+    const failed = await failAsCaller(jobsEnv(), seat, LATER, id, "the driver is gone");
     expect(failed.ok, failed.refusal).toBe(true);
     expect(failed.action).toBe("admin-fail");
     expect(await claimsFor(id)).toEqual([]);
     expect(await evaluationsFor(id)).toEqual([]);
+  });
+
+  it("PLANT: the seat sending a claim on somebody else's job is refused, not dropped, and the job stays claimed", async () => {
+    const id = await claimed("the seat fails it with a claim");
+    const seat = legacyAgent("write", SEAT);
+    const failed = await failAsCaller(jobsEnv(), seat, LATER, id, "the driver is gone", undefined, { claim: { deploy_state: "none" } });
+    expect(failed.ok).toBe(false);
+    expect(failed.refusal).toContain("takes no claim");
+    expect(await claimsFor(id)).toEqual([]);
+    const row = await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(id).first<{ status: string }>();
+    expect(row?.status).toBe("claimed");
   });
 });
 
