@@ -19,7 +19,7 @@ export function Ci() {
       <Panel title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
           <div className="scroll-x">
-            <table className="list minw700">
+            <table className="list">
               <thead>
                 <tr>
                   <th>Namespace</th>
@@ -65,7 +65,7 @@ export function Ci() {
       </Panel>
       <Panel title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x">
-          <table className="list minw760">
+          <table className="list">
             <thead>
               <tr>
                 <th>PR</th>
@@ -105,7 +105,7 @@ export function Ci() {
       </Panel>
       <Panel title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
         <div className="scroll-x">
-          <table className="list minw700">
+          <table className="list">
             <thead>
               <tr>
                 <th>PR</th>

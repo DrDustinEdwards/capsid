@@ -122,7 +122,7 @@ export function Activity() {
           </div>
         ) : data && data.rows.length ? (
           <div className="scroll-x">
-            <table className="list minw760">
+            <table className="list">
               <thead>
                 <tr>
                   <th>When</th>

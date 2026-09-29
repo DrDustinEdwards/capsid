@@ -219,7 +219,7 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 .tile.crit .v { color: var(--crit); } .tile.warn .v { color: var(--warn); } .tile.ok .v { color: var(--ok); }
 
 /* fleet table */
-table.fleet { width: 100%; border-collapse: collapse; min-width: 920px; }
+table.fleet { width: 100%; border-collapse: collapse; }
 .fleet th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .fleet td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .fleet tr:last-child td { border-bottom: 0; }
@@ -239,7 +239,8 @@ table.fleet { width: 100%; border-collapse: collapse; min-width: 920px; }
 .backupbar i.warn { background: var(--warn); } .backupbar i.crit { background: var(--crit); }
 
 /* timeline */
-.tl .scroll-x > svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.tl .scroll-x > svg { display: block; width: 100%; height: auto; }
+@media (max-width: 820px) { .tl .scroll-x > svg { min-width: 760px; } }
 .tl-legend svg { flex: none; }
 .tl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 0 16px 12px; }
 .tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -272,6 +273,34 @@ table.list { width: 100%; border-collapse: collapse; }
 .list tr:last-child td { border-bottom: 0; }
 .list tbody tr.click { cursor: pointer; }
 .list tbody tr.click:hover, .list tbody tr.sel { background: var(--raised); }
+
+/* Wide tables reflow instead of scrolling sideways. The wrapper is a size container; when
+   it is narrower than the table needs, each row becomes a card: the first cell across the
+   top, every other cell in a grid under it with its column name above its value (from
+   data-label), and a controls cell (.ctl) at the top right. Every value stays on screen.
+   The thresholds sit just above each table's natural width with the sample data. */
+.reflow { container-type: inline-size; }
+@container (max-width: 1319px) {
+  table.cards-below-1320, table.cards-below-1320 > tbody { display: block; width: 100%; }
+  table.cards-below-1320 > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  table.cards-below-1320 > tbody > tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 20px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table.cards-below-1320 > tbody > tr:last-child { border-bottom: 0; }
+  table.cards-below-1320 > tbody > tr > td { display: block; width: auto; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+  table.cards-below-1320 > tbody > tr > td:first-child { grid-column: 1 / -1; }
+  table.cards-below-1320 > tbody > tr:has(> td.ctl) > td:first-child { grid-column: 1 / -2; }
+  table.cards-below-1320 > tbody > tr > td.ctl { grid-row: 1; grid-column: -2 / -1; justify-self: end; }
+  table.cards-below-1320 > tbody > tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 600 10px/1.4 var(--ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+}
+@container (max-width: 1099px) {
+  table.cards-below-1100, table.cards-below-1100 > tbody { display: block; width: 100%; }
+  table.cards-below-1100 > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  table.cards-below-1100 > tbody > tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 20px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table.cards-below-1100 > tbody > tr:last-child { border-bottom: 0; }
+  table.cards-below-1100 > tbody > tr > td { display: block; width: auto; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+  table.cards-below-1100 > tbody > tr > td:first-child { grid-column: 1 / -1; }
+  table.cards-below-1100 > tbody > tr > td.w30 { grid-column: span 2; }
+  table.cards-below-1100 > tbody > tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 600 10px/1.4 var(--ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+}
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .search { height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 0 10px; min-width: 220px; }
@@ -347,9 +376,6 @@ dialog { color: var(--text); }
 .mt8 { margin-top: 8px; }
 .w30 { width: 30%; }
 .w50 { width: 50%; }
-.minw700 { min-width: 700px; }
-.minw760 { min-width: 760px; }
-.minw860 { min-width: 860px; }
 .small { font-size: 12px; margin: 6px 0 0; }
 .note { margin: 0; font-size: 12px; }
 .stack-gap { display: grid; gap: 12px; }
@@ -373,8 +399,6 @@ dialog { color: var(--text); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .src.wrap, td.wrap { white-space: normal; overflow-wrap: anywhere; max-width: 36ch; }
 .prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
-.minw960 { min-width: 960px; }
-.minw1240 { min-width: 1240px; }
 .nowrap { white-space: nowrap; }
 select.search { padding-right: 6px; }
 .confirm textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); padding: 8px 10px; resize: vertical; }

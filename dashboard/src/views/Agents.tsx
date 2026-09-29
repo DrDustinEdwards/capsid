@@ -17,8 +17,8 @@ export function Agents() {
     <div className="page">
       <PageHead title="Agents">Every credential, what it did, and when it was last seen. Counts and rates only; the verified columns are what the Worker checked against GitHub.</PageHead>
       <Panel title="Roster" src="agents · job outcomes">
-        <div className="scroll-x">
-          <table className="list minw960">
+        <div className="scroll-x reflow">
+          <table className="list cards-below-1100">
             <thead>
               <tr>
                 <th>Agent</th>
@@ -43,21 +43,21 @@ export function Agents() {
                         {a.kind} · {nsList(a)}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Last seen">
                       <St kind={st.kind}>{st.label}</St>
                       <div className="src">{a.revoked_at ? `revoked ${ago(ms(a.revoked_at), now)}` : a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
                     </td>
-                    <td className="mono">
+                    <td data-label="Done / failed / blocked" className="mono">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
                     </td>
-                    <td className="mono">
+                    <td data-label="PRs merged" className="mono">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
-                    <td className="mono">{pct(a.pr_merge_rate, 0)}</td>
-                    <td className="mono">{pct(a.ci_green_rate, 0)}</td>
-                    <td className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
-                    <td className="mono">{attemptsText(a)}</td>
-                    <td>
+                    <td data-label="Merge rate" className="mono">{pct(a.pr_merge_rate, 0)}</td>
+                    <td data-label="CI green" className="mono">{pct(a.ci_green_rate, 0)}</td>
+                    <td data-label="Median job" className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
+                    <td data-label="Improve attempts" className="mono">{attemptsText(a)}</td>
+                    <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (
                           <span key={f} className="chip flag">
