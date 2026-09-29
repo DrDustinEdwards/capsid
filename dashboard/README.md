@@ -25,6 +25,7 @@ Other states, for looking at the empty and failure paths:
 WF_MOCK=signed-out npm run dev   # 401: the "Signed out" state
 WF_MOCK=no-snapshot npm run dev  # the watcher has not written its first pass
 WF_MOCK=no-token npm run dev     # Cloudflare read not configured
+WF_MOCK=no-sites npm run dev     # no site configured: no Sites view, no site items
 ```
 
 ## Check, build, budget
@@ -62,7 +63,8 @@ A missing `dist/` or manifest is a failure, not a pass.
 
 ## Keyboard
 
-`Ctrl K` or `/` opens the command menu. `g` then `o s i q d a b c` goes to a view,
+`Ctrl K` or `/` opens the command menu. `g` then `o s i q d a b c n l e` goes to a view
+(`s`, Sites, only while a site is configured; `e` is Settings),
 `j` and `k` move through rows, `Enter` opens one, `Esc` closes, `r` refreshes,
 `t` switches theme, `f` focuses the queue filter, `?` shows the sheet, where
 single-key shortcuts can be turned off.

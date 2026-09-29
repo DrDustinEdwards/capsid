@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpsFeed } from "../types";
-import { VIEWS, type ViewId } from "./ctx";
-import { JOB, PROBE, siteKey } from "../lib/derive";
+import type { ViewDef, ViewId } from "./ctx";
+import { JOB, PROBE, hasSites, siteKey } from "../lib/derive";
 import { ago, hostOf, ms } from "../lib/format";
 
 export interface Command {
@@ -20,9 +20,10 @@ export interface Actions {
   copy: (text: string) => void;
 }
 
-export function commands(feed: OpsFeed | null, a: Actions, now: number): Command[] {
-  const out: Command[] = VIEWS.map((v) => ({ group: "Go to", text: v.label, hint: `g ${v.key}`, run: () => a.go(v.id) }));
-  for (const s of feed?.snapshot?.sites ?? []) out.push({ group: "Site", text: `${s.name}  ${hostOf(s.origin)}`, hint: PROBE[s.state].label, run: () => a.open(`site:${siteKey(s)}`) });
+export function commands(feed: OpsFeed | null, views: ReadonlyArray<ViewDef>, a: Actions, now: number): Command[] {
+  const out: Command[] = views.map((v) => ({ group: "Go to", text: v.label, hint: `g ${v.key}`, run: () => a.go(v.id) }));
+  const sites = feed && hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
+  for (const s of sites) out.push({ group: "Site", text: `${s.name}  ${hostOf(s.origin)}`, hint: PROBE[s.state].label, run: () => a.open(`site:${siteKey(s)}`) });
   for (const j of feed?.live.jobs ?? []) out.push({ group: "Job", text: j.title, hint: `${JOB[j.status].label} · ${j.namespace}`, run: () => a.open(`job:${j.id}`) });
   for (const g of feed?.live.agents ?? []) out.push({ group: "Agent", text: g.name, hint: g.last_seen ? ago(ms(g.last_seen), now) : "never seen", run: () => a.open(`agent:${g.name}`) });
   out.push({ group: "Action", text: "Refresh now", hint: "r", run: a.refresh });

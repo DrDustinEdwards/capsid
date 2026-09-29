@@ -93,8 +93,8 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
   - `/health`;
   - the mirror's newest dump and last run;
   - each roster repo's latest CI run;
-  - the site map compared with the registered namespaces;
-  - a probe of every site in `src/ops-sites.ts`;
+  - the Portal's site configuration compared with the registered namespaces;
+  - a probe of every configured site (`ops_sites`, docs/portal.md), and none when nothing is configured;
   - Cloudflare's view of each site: its last ten deploys and 24 hourly buckets of requests and errors.
 
   **Probes.** Each site's health route is read, or its root where it has none, and the root as well when the health route fails. So a broken health route on a site that is up reads as degraded, not down. Capsid itself is read in-process.

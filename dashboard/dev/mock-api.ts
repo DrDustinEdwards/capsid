@@ -14,14 +14,16 @@
 //
 // WF_MOCK=signed-out answers 401, WF_MOCK=no-snapshot drops the watcher pass,
 // WF_MOCK=no-token marks Cloudflare as not configured, WF_MOCK=expired answers every
-// perform with 410, WF_MOCK=warn performs with a warning.
+// perform with 410, WF_MOCK=warn performs with a warning, WF_MOCK=no-sites starts with
+// no site configured (live.sites and the snapshot's sites empty), so the Portal hides
+// its Sites view and the Overview's site items.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
-import type { OpsFeed, OpsJob, PortalAction, PortalActivity, PortalActivityRow, PortalNamespace, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/types.ts";
+import type { OpsFeed, OpsJob, OpsSiteConfig, PortalAction, PortalActivity, PortalActivityRow, PortalNamespace, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/types.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -30,7 +32,10 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove"];
+// Registered in the mock but with no site row, so an add has somewhere to go. The site
+// map in the fixture reports it as unmapped.
+const EXTRA_REGISTERED = ["sample-i"];
 
 function shift(value: unknown, delta: number): unknown {
   if (typeof value === "string" && ISO.test(value)) return new Date(Date.parse(value) + delta).toISOString();
@@ -52,6 +57,8 @@ interface MockState {
   seat: boolean | null;
   jobs: Map<string, Partial<OpsJob>>;
   revoked: Map<string, string>;
+  // The site configuration as it stands, every row, by namespace.
+  sites: OpsSiteConfig[];
   activity: PortalActivityRow[];
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
@@ -62,10 +69,76 @@ function fixture(): OpsFeed {
   return shift(raw, delta) as OpsFeed;
 }
 
+// D1's datetime('now') shape, which is what the Worker sends for updated_at.
+function sqlNow(t = Date.now()): string {
+  return new Date(t).toISOString().slice(0, 19).replace("T", " ");
+}
+
+// The fixture's rows, with updated_at shifted as fixture() shifts the ISO timestamps
+// (it is D1's shape, not ISO, so shift() leaves it alone). WF_MOCK=no-sites starts empty.
+function seedSites(): OpsSiteConfig[] {
+  if (process.env.WF_MOCK === "no-sites") return [];
+  const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
+  const delta = Date.now() - Date.parse(raw.live.generated);
+  return raw.live.sites.map((s) => ({ ...s, updated_at: sqlNow(Date.parse(`${s.updated_at.replace(" ", "T")}Z`) + delta) }));
+}
+
+// Registered namespaces: the roster, every row the fixture seeds, and EXTRA_REGISTERED.
+// Removing a row does not unregister its namespace.
+function registered(): Set<string> {
+  const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
+  return new Set([...raw.live.namespaces.map((n) => n.name), ...raw.live.sites.map((s) => s.namespace), ...EXTRA_REGISTERED]);
+}
+
+// The Worker's validation (src/ops-sites.ts, validateSite), with its refusal text, in
+// the parts a person is likely to hit. The mock does not import it: dev code stays off
+// the Worker's runtime modules, as the app does.
+type SiteFields = Pick<OpsSiteConfig, "namespace" | "name" | "origin" | "health_path" | "platform" | "script">;
+function validateSite(p: Record<string, string>): SiteFields {
+  const namespace = p.namespace ?? "";
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(namespace)) throw new Refusal(400, `'${namespace}' is not a namespace name: lowercase letters, digits and hyphens.`);
+  const name = p.name ?? namespace;
+  if (name.length > 80) throw new Refusal(400, "the name must be at most 80 characters with no control characters.");
+  if (!p.origin) {
+    if (p.health_path || p.platform || p.script) throw new Refusal(400, "a namespace that serves no site takes no health path, platform or script. Give an origin to make it a site.");
+    return { namespace, name, origin: null, health_path: null, platform: null, script: null };
+  }
+  const m = /^https:\/\/([^/?#@:]+)\/?$/.exec(p.origin);
+  if (!m) {
+    if (!/^https:\/\//i.test(p.origin)) throw new Refusal(400, `the origin must start with https://; got '${p.origin}'.`);
+    throw new Refusal(400, `the origin is https:// and a hostname only, with no user, port, path, query or fragment; put a health route in the health path. Got '${p.origin}'.`);
+  }
+  const host = m[1] ?? "";
+  if (host !== host.toLowerCase()) throw new Refusal(400, `the hostname '${host}' must be lowercase.`);
+  if (!host.includes(".")) throw new Refusal(400, `'${host}' is a single-label name; a site needs a public hostname such as example.com.`);
+  if (p.platform !== "cloudflare" && p.platform !== "vercel") throw new Refusal(400, `the platform must be one of cloudflare, vercel; got '${p.platform ?? ""}'.`);
+  if (p.health_path && !/^\/[A-Za-z0-9._~\/-]{0,199}$/.test(p.health_path)) {
+    throw new Refusal(400, `the health path '${p.health_path}' must start with / and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`);
+  }
+  if (p.script) {
+    if (p.platform !== "cloudflare") throw new Refusal(400, "only a Cloudflare site names a Worker script.");
+    if (!/^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$/.test(p.script)) throw new Refusal(400, `'${p.script}' is not a Worker script name: lowercase letters, digits, - and _.`);
+  }
+  return { namespace, name, origin: `https://${host}`, health_path: p.health_path ?? null, platform: p.platform, script: p.script ?? null };
+}
+
+function describeSite(s: SiteFields): string {
+  if (s.origin === null) return `"${s.name}", serves no site (not probed)`;
+  const probe = s.health_path ? `${s.origin}${s.health_path}` : `${s.origin}/ (no health route, so the root)`;
+  return `"${s.name}", probed at ${probe}, on ${s.platform}${s.script ? `, Worker script ${s.script}` : ""}`;
+}
+
+function revisionOf(raw: string | undefined): number | null {
+  return raw && /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : null;
+}
+
+const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
+
 function feed(nextRefresh: number, st: MockState): OpsFeed {
   const out = fixture();
   const mode = process.env.WF_MOCK;
   if (mode === "no-snapshot") out.snapshot = null;
+  if (mode === "no-sites" && out.snapshot) out.snapshot.sites = [];
   if (mode === "no-token") {
     out.cloudflare_configured = false;
     for (const s of out.snapshot?.sites ?? []) {
@@ -77,6 +150,7 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   if (st.seat != null) out.live.seat_start.enabled = st.seat;
   out.live.jobs = out.live.jobs.map((j) => ({ ...j, ...st.jobs.get(j.id) }));
   for (const a of out.live.agents) if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
+  out.live.sites = st.sites.map((s) => ({ ...s }));
   out.refresh_allowed_at = nextRefresh > Date.now() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
@@ -204,6 +278,61 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.revoked.set(name, now),
       };
     }
+    case "site_add": {
+      const site = validateSite(params);
+      if (!registered().has(site.namespace)) throw new Refusal(400, `'${site.namespace}' is not a registered namespace. Register it first; a site row for an unregistered namespace is drift the watcher reports.`);
+      const existing = f.live.sites.find((s) => s.namespace === site.namespace);
+      if (existing) throw new Refusal(400, `${site.namespace} already has a row (${describeSite(existing)}). Edit it instead.`);
+      return {
+        summary: `Add ${site.namespace} to the site configuration.`,
+        done: `Added ${site.namespace}: ${describeSite(site)}.`,
+        changes: [`ops_sites: add ${site.namespace}, ${describeSite(site)}.`, site.origin ? "The watcher probes it from its next pass, and the Sites view lists it." : `Nothing is probed for ${site.namespace}; the site-map check counts it as decided.`],
+        apply: (st) => {
+          st.sites.push({ ...site, self_probe: false, revision: 1, updated_at: sqlNow() });
+          st.sites.sort((a, b) => (a.namespace < b.namespace ? -1 : a.namespace > b.namespace ? 1 : 0));
+        },
+      };
+    }
+    case "site_edit": {
+      const revision = revisionOf(params.revision);
+      if (revision === null) throw new Refusal(400, "site_edit needs the revision of the row it edits.");
+      const site = validateSite(params);
+      const before = f.live.sites.find((s) => s.namespace === site.namespace);
+      if (!before) throw new Refusal(400, `${site.namespace} has no row to edit. Add it instead.`);
+      if (before.revision !== revision) throw new Refusal(400, `${site.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`);
+      const shown = (v: string | null) => (v === null ? "(none)" : `"${v}"`);
+      const diffs = SITE_FIELDS.filter((k) => before[k] !== site[k]).map((k) => `  ${k}: ${shown(before[k])} -> ${shown(site[k])}`);
+      if (!diffs.length) throw new Refusal(400, `the edit changes nothing in ${site.namespace}.`);
+      return {
+        summary: `Change ${site.namespace} in the site configuration.`,
+        done: `Changed ${site.namespace}: ${describeSite(site)}.`,
+        changes: [`ops_sites ${site.namespace}, revision ${revision} -> ${revision + 1}:`, ...diffs],
+        apply: (st) => {
+          const i = st.sites.findIndex((s) => s.namespace === site.namespace);
+          const cur = st.sites[i];
+          if (!cur) throw new Refusal(400, `${site.namespace} has no row to edit. Add it instead.`);
+          st.sites[i] = { ...cur, ...site, self_probe: cur.self_probe && cur.origin === site.origin, revision: cur.revision + 1, updated_at: sqlNow() };
+        },
+      };
+    }
+    case "site_remove": {
+      const ns = need(params, "namespace", "The namespace");
+      const revision = revisionOf(params.revision);
+      if (revision === null) throw new Refusal(400, "site_remove needs a namespace and the revision of the row it removes.");
+      const before = f.live.sites.find((s) => s.namespace === ns);
+      if (!before) throw new Refusal(400, `${ns} has no row to remove.`);
+      if (before.revision !== revision) throw new Refusal(400, `${ns} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`);
+      return {
+        summary: `Remove ${ns} from the site configuration.`,
+        done: `Removed ${ns} from the site configuration.`,
+        changes: [
+          `ops_sites: remove ${ns} (${describeSite(before)}). The row is kept in the audit row.`,
+          before.origin ? `The watcher stops probing ${before.origin}, and its uptime ring leaves the next pass.` : "Nothing was probed for it.",
+          ...(registered().has(ns) ? [`${ns} is still registered, so the site-map check reports it as unmapped until it has a row again.`] : []),
+        ],
+        apply: (st) => void (st.sites = st.sites.filter((s) => s.namespace !== ns)),
+      };
+    }
   }
 }
 
@@ -280,7 +409,7 @@ const ACTIVITY_LIMIT = 200;
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), activity: seedActivity(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), activity: seedActivity(), tokens: new Map() };
   const csrf = () => fixture().csrf;
 
   async function action(req: IncomingMessage, res: ServerResponse, kind: "preview" | "perform"): Promise<void> {

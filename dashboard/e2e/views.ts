@@ -4,7 +4,7 @@ import { VIEWS, routePath, type ViewId } from "../src/app/ctx.ts";
 // Every view the app registers, so a new view is covered without editing a test. The
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
-export const VIEW_COUNT = 10;
+export const VIEW_COUNT = 11;
 
 // Relative to the /portal/ base URL.
 export function urlOf(id: ViewId): string {

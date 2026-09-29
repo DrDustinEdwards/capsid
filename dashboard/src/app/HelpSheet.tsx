@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { VIEWS } from "./ctx";
+import type { ViewDef } from "./ctx";
 
-export function HelpSheet({ open, onClose, singleKeys, setSingleKeys }: { open: boolean; onClose: () => void; singleKeys: boolean; setSingleKeys: (v: boolean) => void }) {
+export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: { open: boolean; onClose: () => void; views: ReadonlyArray<ViewDef>; singleKeys: boolean; setSingleKeys: (v: boolean) => void }) {
   const dlg = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = dlg.current;
@@ -21,7 +21,7 @@ export function HelpSheet({ open, onClose, singleKeys, setSingleKeys }: { open: 
           <dd>
             Command menu (also <kbd>/</kbd>)
           </dd>
-          {VIEWS.map((v) => (
+          {views.map((v) => (
             <FragmentRow key={v.id} k={v.key} label={v.label} />
           ))}
           <dt>
