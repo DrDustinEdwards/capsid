@@ -168,7 +168,8 @@ describe("job_touches", () => {
     const r = await releaseJob(jobsEnv(), seat(), at("2026-09-29T04:00:00.000Z"), released, "the session ended");
     expect(r.ok, r.refusal).toBe(true);
     const releaseRow = (await touches(released)).at(-1);
-    expect(releaseRow).toMatchObject({ kind: "release", actor: "agent:seat", actor_kind: "seat", waited_ms: 150 * 60 * 1000 });
+    // The gate was answered by the resume above, so the release ends no wait of its own.
+    expect(releaseRow).toMatchObject({ kind: "release", actor: "agent:seat", actor_kind: "seat", waited_ms: null });
     expect(JSON.parse(releaseRow?.detail ?? "{}")).toMatchObject({ reason: "the session ended", held_by: "agent:capsid-driver" });
 
     // Supersede a queued job that never hit a gate: no wait to measure.
