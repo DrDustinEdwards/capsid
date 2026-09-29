@@ -161,11 +161,11 @@ test("PLANT: every read-only tool is served as idempotent", async () => {
 // openWorldHint: true iff the handler reaches GitHub or Cloudflare.
 //
 // DIRECT, not transitive: a block is open world when it calls a name its own file
-// imports from src/github* or src/ops-cloudflare.ts. A transitive scan disagreed with
+// imports from src/github* or src/ops-cloudflare*.ts. A transitive scan disagreed with
 // the table twice, so a call made through another module is named below with its
 // reason instead of inferred.
 
-const OUTSIDE_MODULE = /^(?:\.\.?\/)+(?:github(?:\/[\w-]+)?|ops-cloudflare)$/;
+const OUTSIDE_MODULE = /^(?:\.\.?\/)+(?:github(?:\/[\w-]+)?|ops-cloudflare(?:-config)?)$/;
 
 // Exports of those modules that never leave the Worker. Each is checked below to
 // be defined there and to contain no fetch, so an entry cannot outlive its reason.
@@ -197,7 +197,7 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
   },
 };
 
-// The names a file imports, as values, from src/github* or src/ops-cloudflare.ts.
+// The names a file imports, as values, from src/github* or src/ops-cloudflare*.ts.
 function outsideImports(text: string): Set<string> {
   const names = new Set<string>();
   for (const m of text.matchAll(/import\s+(type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g)) {
