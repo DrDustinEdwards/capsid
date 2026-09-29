@@ -2,11 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { mockOpsApi } from "./dev/mock-api.ts";
 
-// Served by the capsid Worker under /console/app/. The Worker's CSP is
+// Served by the capsid Worker at /portal/. The Worker's CSP is
 // script-src 'self'; style-src 'self'; font-src 'self', so the build emits no inline
 // script or style and the fonts ship as files under assets/.
 export default defineConfig({
-  base: "/console/app/",
+  base: "/portal/",
   plugins: [react(), mockOpsApi()],
   build: {
     outDir: "dist",

@@ -65,7 +65,7 @@ export function useApp(): Ctx {
   return c;
 }
 
-// Routes, relative to the /console/app base:
+// Routes, relative to the /portal base:
 //   /                      overview
 //   /<view>                a view
 //   /<view>/<type>/<id>    a view with a drawer open over it (site, job, agent)

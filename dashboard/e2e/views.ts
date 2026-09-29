@@ -6,7 +6,7 @@ import { VIEWS, routePath, type ViewId } from "../src/app/ctx.ts";
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
 export const VIEW_COUNT = 10;
 
-// Relative to the /console/app/ base URL.
+// Relative to the /portal/ base URL.
 export function urlOf(id: ViewId): string {
   return `.${routePath(id)}`;
 }
