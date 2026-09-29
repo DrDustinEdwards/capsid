@@ -6,7 +6,7 @@ import { ago, ms, utc } from "../lib/format";
 import { readPref, toggleTheme, writePref } from "../lib/prefs";
 import { BrandMark, NavIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
-import { AppCtx, VIEWS, isView, parseRoute, routePath, type Ctx, type Filters, type ViewId } from "./ctx";
+import { AppCtx, VIEWS, isView, parseRoute, routePath, type ConfirmRequest, type Ctx, type Filters, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
 import { HelpSheet } from "./HelpSheet";
@@ -23,7 +23,12 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
   backups: lazy(() => import("../views/Backups").then((m) => ({ default: m.Backups }))),
   ci: lazy(() => import("../views/Ci").then((m) => ({ default: m.Ci }))),
+  namespaces: lazy(() => import("../views/Namespaces").then((m) => ({ default: m.Namespaces }))),
+  activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
 };
+
+// Loaded on the first control a person opens.
+const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 
 const TABS: ViewId[] = ["overview", "sites", "queue", "incidents", "ci"];
 
@@ -72,11 +77,16 @@ export function App() {
   const mainRef = useRef<HTMLElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
 
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
+
+  // A longer message stays up longer, so an action's warning can be read.
   const say = useCallback((msg: string) => {
     setToast({ msg, on: true });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, on: false })), 2400);
+    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, on: false })), Math.max(2400, msg.length * 70));
   }, []);
+
+  const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), []);
 
   const go = useCallback(
     (v: ViewId) => {
@@ -144,8 +154,9 @@ export function App() {
   useEffect(() => setSel(-1), [route.view]);
 
   // Keyboard grammar. Latest values through a ref so one listener serves.
-  const keys = useRef({ singleKeys, palette, help, route, sel });
-  keys.current = { singleKeys, palette, help, route, sel };
+  const confirming = confirmReq != null;
+  const keys = useRef({ singleKeys, palette, help, confirming, route, sel });
+  keys.current = { singleKeys, palette, help, confirming, route, sel };
   const act = useRef({ go, open, refresh, theme, closeDrawer });
   act.current = { go, open, refresh, theme, closeDrawer };
   useEffect(() => {
@@ -153,6 +164,7 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const k = keys.current;
       const a = act.current;
+      if (k.confirming) return; // the confirm dialog owns every key, Ctrl K included
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setHelp(false);
@@ -252,10 +264,17 @@ export function App() {
   const c = feed ? counts(feed) : null;
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c
-    ? { overview: { n: critCount, cls: "hot" }, sites: { n: c.down + c.degraded, cls: "hot" }, incidents: { n: c.findings, cls: "warm" }, queue: { n: c.blocked, cls: "warm" }, ci: { n: c.ciRed, cls: "warm" } }
+    ? {
+        overview: { n: critCount, cls: "hot" },
+        sites: { n: c.down + c.degraded, cls: "hot" },
+        incidents: { n: c.findings, cls: "warm" },
+        queue: { n: c.blocked, cls: "warm" },
+        ci: { n: c.ciRed, cls: "warm" },
+        namespaces: { n: c.paused, cls: "warm" },
+      }
     : {};
 
-  const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy } : null;
+  const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, signOut } : null;
   const View = VIEW_COMPONENTS[route.view];
 
   let content: ReactNode;
@@ -388,6 +407,22 @@ export function App() {
       )}
       <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
       <HelpSheet open={help} onClose={() => setHelp(false)} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+      {confirmReq && feed && (
+        <Suspense fallback={null}>
+          <ConfirmDialog
+            req={confirmReq}
+            csrf={feed.csrf}
+            onSignedOut={() => (setConfirmReq(null), signOut())}
+            onClose={(p) => {
+              setConfirmReq(null);
+              if (!p) return;
+              accept(p.feed);
+              say(p.warning ? `${p.summary}${/[.!?]$/.test(p.summary) ? "" : "."} Warning: ${p.warning}` : p.summary);
+              confirmReq.onDone?.(p);
+            }}
+          />
+        </Suspense>
+      )}
       <div className={`toast${toast.on ? " on" : ""}`} role="status" aria-live="polite">
         {toast.msg}
       </div>

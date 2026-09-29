@@ -8,6 +8,7 @@ import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_LEGACY_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
 import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX } from "../src/console-app.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
+import { PORTAL_ACTIVITY_PATH, PORTAL_NAMESPACES_PATH, PORTAL_PERFORM_PATH, PORTAL_PREVIEW_PATH } from "../src/portal-actions.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
@@ -104,6 +105,10 @@ const PATH_CONSTANTS: Record<string, string> = {
   RUNNER_KEY_PATH,
   OPS_FEED_PATH,
   OPS_REFRESH_PATH,
+  PORTAL_PREVIEW_PATH,
+  PORTAL_PERFORM_PATH,
+  PORTAL_NAMESPACES_PATH,
+  PORTAL_ACTIVITY_PATH,
   CONSOLE_APP_PATH,
   CONSOLE_APP_PREFIX,
 };

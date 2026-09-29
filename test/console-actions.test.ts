@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleConsoleAction } from "../src/console-actions.ts";
+import { CONSOLE_ACTIONS, handleConsoleAction } from "../src/console-actions.ts";
 import { consoleSessionCookie } from "../src/console-auth.ts";
 import { fakeD1, fakeKv } from "./fakes.ts";
 
@@ -92,14 +92,24 @@ test("no session, no action", async () => {
   assert.equal(res.status, 302);
 });
 
-for (const [action, fields] of [
+const EVERY_ACTION = [
   ["pause", { namespace: "capsid", reason: "looking at a regression" }],
   ["unpause", { namespace: "capsid" }],
   ["mode", { value: "off" }],
+  ["seat_start", { value: "on" }],
   ["resume_job", { id: "job_1", reason: "ran the push" }],
+  ["release_job", { id: "job_1", reason: "the holder is gone" }],
   ["fail_job", { id: "job_1", reason: "superseded" }],
   ["revoke_agent", { name: "capsid-driver" }],
-] as const) {
+] as const;
+
+test("the CSRF and confirm loop below covers every console action, eight of them", () => {
+  // Derived from the allow-list, so an action added there without a row here fails.
+  assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...CONSOLE_ACTIONS].sort());
+  assert.equal(EVERY_ACTION.length, 8);
+});
+
+for (const [action, fields] of EVERY_ACTION) {
   test(`${action} REFUSES without a CSRF token, and writes nothing`, async () => {
     const d1 = fakeD1();
     const e = env({ DB: d1.db });

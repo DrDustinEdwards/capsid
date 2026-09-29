@@ -260,6 +260,7 @@ export function counts(feed: OpsFeed) {
     queued: jobs.filter((j) => j.status === "queued").length,
     findings: jobs.filter((j) => j.finding && isOpen(j)).length,
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
+    paused: feed.live.namespaces.filter((n) => n.paused != null).length,
   };
 }
 
@@ -276,4 +277,26 @@ export function agentState(a: OpsAgent, now: number): { kind: Kind; label: strin
 
 export function nsList(a: OpsAgent): string {
   return a.namespaces === "*" ? "*" : a.namespaces.join(", ");
+}
+
+// A namespace's driver is the agent named <ns>-driver.
+export function driverOf(feed: OpsFeed, ns: string): OpsAgent | null {
+  return feed.live.agents.find((a) => a.name === `${ns}-driver`) ?? null;
+}
+
+// The improve loop's attempts for a driver. Null is not a driver, shown as a dash, never zero.
+export function attemptsText(a: OpsAgent): string {
+  return a.attempts_kept == null || a.attempts_reverted == null ? "-" : `${a.attempts_kept} kept / ${a.attempts_reverted} reverted`;
+}
+
+// ---- improve loop mode -------------------------------------------------------------
+
+export const LOOP_MODES = ["api", "subscription", "off"] as const;
+export type LoopMode = (typeof LOOP_MODES)[number];
+
+export function loopMode(mode: string): { kind: Kind; label: string } {
+  if (mode === "api") return { kind: "ok", label: "API" };
+  if (mode === "subscription") return { kind: "ok", label: "Subscription" };
+  if (mode === "off") return { kind: "nodata", label: "Off" };
+  return { kind: "warn", label: `Unknown mode: ${mode}` };
 }
