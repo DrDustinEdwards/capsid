@@ -259,18 +259,21 @@ function namespaces(f: OpsFeed): PortalNamespaces {
 function seedActivity(): PortalActivityRow[] {
   const now = Date.now();
   const M = 60_000;
-  const rows: Array<[number, string | null, string | null, string | null, string | null]> = [
-    [4, "agent:sample-driver", "write", "sample", "sample/notes/run-log.md"],
-    [11, "agent:watcher", "jobs.post", "sample-b", "sample-b/jobs/job_9ab0bcf483ae.md"],
-    [26, "agent:sample-driver", "jobs.block", "sample", "sample/jobs/job_7c1e44b0a912.md"],
-    [48, "seat", "jobs.resume", "sample", "sample/jobs/job_91b3c0de5a24.md"],
-    [95, "agent:sample-b-driver", "write", "sample-b", "sample-b/core.md"],
-    [180, ACTOR, "portal.mode", null, null],
-    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md"],
-    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md"],
-    [720, "agent:sample-c-driver", "improve.run", "sample-c", null],
+  // A job transition writes two rows with one action, actor, path and second, one for
+  // the job and one for its mirror document, as the Worker does (src/portal-activity.ts).
+  const rows: Array<[number, string | null, string | null, string | null, string | null, PortalActivityRow["target"]]> = [
+    [4, "agent:sample-driver", "write", "sample", "sample/notes/run-log.md", "document"],
+    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "job"],
+    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "document"],
+    [26, "agent:sample-driver", "jobs.block", "sample", "sample/jobs/job_7c1e44b0a912.md", "job"],
+    [48, "seat", "jobs.resume", "sample", "sample/jobs/job_91b3c0de5a24.md", "job"],
+    [95, "agent:sample-b-driver", "write", "sample-b", "sample-b/core.md", "document"],
+    [180, ACTOR, "portal.mode", null, null, null],
+    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", null],
+    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", null],
+    [720, "agent:sample-c-driver", "improve.run", "sample-c", null, null],
   ];
-  return rows.map(([m, actor, action, namespace, path]) => ({ at: new Date(now - m * M).toISOString(), actor, action, namespace, path }));
+  return rows.map(([m, actor, action, namespace, path, target], i) => ({ id: 1000 - i, at: new Date(now - m * M).toISOString(), actor, action, namespace, path, target }));
 }
 
 const ACTIVITY_LIMIT = 200;
@@ -317,7 +320,7 @@ export function mockOpsApi(): Plugin {
       const p = plan(f, t.action, t.params);
       p.apply(st);
       const ns = t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
-      st.activity.unshift({ at: new Date().toISOString(), actor: ACTOR, action: `portal.${t.action}`, namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
+      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date().toISOString(), actor: ACTOR, action: `portal.${t.action}`, namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
       const out: PortalPerformed = { action: t.action, summary: p.done, warning: process.env.WF_MOCK === "warn" ? "The action happened, but its audit row was not written." : null, feed: feed(nextRefresh, st) };
       return send(res, 200, out);
     } catch (e) {
