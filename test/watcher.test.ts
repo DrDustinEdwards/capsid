@@ -6,6 +6,8 @@ import { checkScope } from "../src/scope.ts";
 import { anchorDriftVerdict, driftVerdict } from "../src/improve-gates.ts";
 import { loopPauseReason } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
+import { fakeFindingMemory } from "./fakes.ts";
+import { MAX_EVIDENCE, REOPEN_QUIET_MS, appendEvidence, onSighting, type EvidenceEntry, type FindingRow } from "../src/watcher-findings.ts";
 import {
   BUDGET_WARN_FRACTION,
   CI_RED_HOURS,
@@ -25,6 +27,7 @@ import {
   mirrorFindings,
   watcherAgent,
   type Finding,
+  type WatcherCheck,
 } from "../src/watcher.ts";
 
 // A watcher that cannot fix anything.
@@ -209,7 +212,7 @@ test("a budget over the warning fraction is a finding, per cap", () => {
 
 test("CI red for longer than a flake is a finding, and a fresh red is not", () => {
   const red = (hours: number) => [{ head_sha: "deadbee1234", status: "completed", conclusion: "failure", created_at: hoursAgo(hours) }];
-  assert.deepEqual(ciFindings("capsid", red(CI_RED_HOURS + 1), NOW).map((f) => f.fingerprint), ["ci-red-deadbee"]);
+  assert.deepEqual(ciFindings("capsid", red(CI_RED_HOURS + 1), NOW).map((f) => f.fingerprint), ["ci-red-capsid"]);
   assert.deepEqual(ciFindings("capsid", red(CI_RED_HOURS - 1), NOW), [], "a red run somebody is already fixing is not a finding");
 });
 
@@ -239,29 +242,30 @@ function harness(found: Finding[], open: Map<string, string>) {
       },
       post: async (f: Finding) => {
         posted.push(f);
-        return { ok: true };
+        return { ok: true as const, jobId: `job_${f.fingerprint}` };
       },
+      memory: fakeFindingMemory().memory,
     },
   };
 }
 
 test("EACH FINDING POSTS EXACTLY ONCE, and a second pass posts nothing", async () => {
   const first = harness([fakeFinding("ci-red-abc")], new Map());
-  const one = await runPass(first.readers);
+  const one = await runPass(first.readers, NOW);
   assert.deepEqual(one.posted, ["ci-red-abc"]);
   assert.equal(first.posted.length, 1);
 
   // The same finding, now with its job open. The queue's own duplicate rule would
   // refuse it; the pass does not even ask, so the log does not fill with refusals.
   const second = harness([fakeFinding("ci-red-abc")], new Map([["ci-red-abc", "job_1"]]));
-  const two = await runPass(second.readers);
+  const two = await runPass(second.readers, NOW);
   assert.deepEqual(two.posted, []);
   assert.equal(second.posted.length, 0, "a finding already open must not be posted again");
 });
 
 test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not", async () => {
   const h = harness([fakeFinding("still-broken")], new Map([["still-broken", "job_1"], ["went-away", "job_2"]]));
-  const result = await runPass(h.readers);
+  const result = await runPass(h.readers, NOW);
   assert.deepEqual(result.cleared, ["went-away"]);
   assert.deepEqual(h.cleared, ["job_2"], "a finding that is still being found must keep its job");
 });
@@ -271,15 +275,19 @@ test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
   // absent. That says nothing about whether the problems went away.
   const open = new Map([["ci-red-abc1234", "job_1"], ["paused-foxing", "job_2"], ["backup-stale", "job_3"]]);
   const cleared: string[] = [];
-  const result = await runPass({
-    findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "improve_status")) }),
-    open: async () => open,
-    clear: async (id) => {
-      cleared.push(id);
-      return true;
+  const result = await runPass(
+    {
+      findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "improve_status")) }),
+      open: async () => open,
+      clear: async (id) => {
+        cleared.push(id);
+        return true;
+      },
+      post: async () => ({ ok: true as const, jobId: "job_new" }),
+      memory: fakeFindingMemory().memory,
     },
-    post: async () => ({ ok: true }),
-  });
+    NOW
+  );
   assert.deepEqual(result.cleared, ["backup-stale"], "only a job whose check ran may be cleared");
   assert.deepEqual(cleared, ["job_3"]);
 });
@@ -308,49 +316,217 @@ test("every fingerprint the checks produce has an owning check", () => {
 
 test("A HEALTHY PASS POSTS NOTHING AND CLOSES NOTHING", async () => {
   const h = harness([], new Map());
-  const result = await runPass(h.readers);
-  assert.deepEqual(result, { posted: [], cleared: [] });
+  const result = await runPass(h.readers, NOW);
+  assert.deepEqual(result, { posted: [], cleared: [], held: [] });
 });
 
 test("clearing runs BEFORE posting, so a finding that flickers is not refused as its own duplicate", async () => {
   // If the post ran first, a finding whose job was about to be closed would be
   // refused as a duplicate of it.
   const order: string[] = [];
-  await runPass({
-    findings: async () => ({ findings: [fakeFinding("b")], ran: new Set(WATCHER_CHECKS) }),
-    open: async () => new Map([["a", "job_a"]]),
-    clear: async (id) => {
-      order.push(`clear:${id}`);
-      return true;
+  await runPass(
+    {
+      findings: async () => ({ findings: [fakeFinding("b")], ran: new Set(WATCHER_CHECKS) }),
+      open: async () => new Map([["a", "job_a"]]),
+      clear: async (id) => {
+        order.push(`clear:${id}`);
+        return true;
+      },
+      post: async (f) => {
+        order.push(`post:${f.fingerprint}`);
+        return { ok: true as const, jobId: "job_b" };
+      },
+      memory: fakeFindingMemory().memory,
     },
-    post: async (f) => {
-      order.push(`post:${f.fingerprint}`);
-      return { ok: true };
-    },
-  });
+    NOW
+  );
   assert.deepEqual(order, ["clear:job_a", "post:b"]);
 });
 
 test("a pass posts at most its bound, and the rest are found again next time", async () => {
   const many = Array.from({ length: MAX_FINDINGS_PER_PASS + 5 }, (_, i) => fakeFinding(`f-${i}`));
   const h = harness(many, new Map());
-  const result = await runPass(h.readers);
+  const result = await runPass(h.readers, NOW);
   assert.equal(result.posted.length, MAX_FINDINGS_PER_PASS);
 });
 
 test("a refused post is logged and does not stop the rest of the pass", async () => {
   const posted: string[] = [];
-  const result = await runPass({
-    findings: async () => ({ findings: [fakeFinding("first"), fakeFinding("second")], ran: new Set(WATCHER_CHECKS) }),
-    open: async () => new Map(),
-    clear: async () => true,
-    post: async (f) => {
-      posted.push(f.fingerprint);
-      return f.fingerprint === "first" ? { ok: false, refusal: "a duplicate is already open" } : { ok: true };
+  const result = await runPass(
+    {
+      findings: async () => ({ findings: [fakeFinding("first"), fakeFinding("second")], ran: new Set(WATCHER_CHECKS) }),
+      open: async () => new Map(),
+      clear: async () => true,
+      post: async (f) => {
+        posted.push(f.fingerprint);
+        return f.fingerprint === "first" ? { ok: false as const, refusal: "a duplicate is already open" } : { ok: true as const, jobId: "job_second" };
+      },
+      memory: fakeFindingMemory().memory,
     },
-  });
+    NOW
+  );
   assert.deepEqual(posted, ["first", "second"], "a refusal on one finding must not abandon the others");
   assert.deepEqual(result.posted, ["second"], "only what actually posted is reported as posted");
+});
+
+// The watcher's memory of a finding across jobs (src/watcher-findings.ts). The
+// decision is pure and driven here; the D1 statements run in
+// test-integration/watcher-findings.test.ts.
+
+const HOUR = 3_600_000;
+const later = (hours: number) => new Date(NOW.getTime() + hours * HOUR);
+
+function findingRow(fingerprint: string, over: Partial<FindingRow> = {}): FindingRow {
+  return {
+    fingerprint,
+    namespace: "sample",
+    title: `Watcher: something [${fingerprint}]`,
+    state: "open",
+    job_id: "job_1",
+    first_seen_at: hoursAgo(10),
+    last_seen_at: hoursAgo(1),
+    seen_count: 3,
+    cleared_at: null,
+    reopen_after: null,
+    evidence: "[]",
+    updated_at: hoursAgo(1),
+    ...over,
+  };
+}
+
+test("the quiet period is six hours", () => {
+  assert.equal(REOPEN_QUIET_MS, 6 * HOUR);
+});
+
+test("a sighting's verdict, for every state a row can be in", () => {
+  const superseded = { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) };
+  const clearedBy = (hours: number) => ({ status: "failed", result_summary: "cleared", updated_at: hoursAgo(hours) });
+  const cases: Array<[string, ReturnType<typeof onSighting>["do"], ReturnType<typeof onSighting>]> = [
+    ["no row, no job", "post", onSighting(null, null, null, NOW)],
+    ["its job open", "bump", onSighting(findingRow("a"), "job_1", null, NOW)],
+    ["an open job with no row (posted before the table)", "adopt", onSighting(null, "job_9", null, NOW)],
+    ["an open job on a cleared row", "adopt", onSighting(findingRow("a", { state: "cleared", job_id: null }), "job_9", null, NOW)],
+    ["an open row whose job a person superseded", "dismiss", onSighting(findingRow("a"), null, superseded, NOW)],
+    ["an open row whose job was done", "dismiss", onSighting(findingRow("a"), null, { status: "done", result_summary: "fixed", updated_at: hoursAgo(1) }, NOW)],
+    ["an open row whose job is gone", "dismiss", onSighting(findingRow("a"), null, null, NOW)],
+    ["an open row the watcher cleared an hour ago", "quiet", onSighting(findingRow("a"), null, clearedBy(1), NOW)],
+    ["an open row the watcher cleared seven hours ago", "post", onSighting(findingRow("a"), null, clearedBy(7), NOW)],
+    ["an open row with no job (a refused post)", "post", onSighting(findingRow("a", { job_id: null }), null, null, NOW)],
+    ["dismissed", "quiet", onSighting(findingRow("a", { state: "dismissed" }), null, null, NOW)],
+    ["cleared, inside the quiet period", "quiet", onSighting(findingRow("a", { state: "cleared", reopen_after: later(1).toISOString() }), null, null, NOW)],
+    ["cleared, past the quiet period", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: hoursAgo(1) }), null, null, NOW)],
+    ["cleared, reopen_after exactly now", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: NOW.toISOString() }), null, null, NOW)],
+    ["cleared, reopen_after unreadable", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: "garbage" }), null, null, NOW)],
+  ];
+  for (const [name, want, got] of cases) assert.equal(got.do, want, name);
+  assert.equal(cases.length, 15);
+});
+
+test("evidence keeps the newest MAX_EVIDENCE sightings, newest last, and restarts on a value that does not parse", () => {
+  let evidence: string | null = null;
+  for (let i = 0; i < MAX_EVIDENCE + 5; i++) evidence = appendEvidence("fp", evidence, { ...fakeFinding("fp"), evidence: [`sighting ${i}`] }, later(i));
+  const list = JSON.parse(evidence as string) as EvidenceEntry[];
+  assert.equal(list.length, MAX_EVIDENCE);
+  assert.deepEqual(list[list.length - 1].lines, [`sighting ${MAX_EVIDENCE + 4}`]);
+  assert.deepEqual(list[0].lines, ["sighting 5"]);
+  const fresh = JSON.parse(appendEvidence("fp", "{not json", { ...fakeFinding("fp"), evidence: ["x".repeat(1000)] }, NOW)) as EvidenceEntry[];
+  assert.equal(fresh.length, 1);
+  assert.equal(fresh[0].lines[0].length, 300, "one evidence line is bounded");
+});
+
+test("ci-red is one incident per namespace: a new head sha is the same finding, and the sha is its evidence", () => {
+  const red = (sha: string) => [{ head_sha: sha, status: "completed", conclusion: "failure", created_at: hoursAgo(CI_RED_HOURS + 1) }];
+  const [a] = ciFindings("sample", red("aaaaaaa1111111"), NOW);
+  const [b] = ciFindings("sample", red("bbbbbbb2222222"), NOW);
+  assert.equal(a.fingerprint, "ci-red-sample");
+  assert.equal(a.fingerprint, b.fingerprint);
+  assert.equal(a.title, b.title, "the title is the queue's duplicate key, so it must not move with the sha either");
+  assert.ok(b.evidence?.includes("head sha: bbbbbbb2222222"), `the sha is not in the evidence: ${b.evidence?.join("; ")}`);
+  assert.notEqual(ciFindings("capsid", red("aaaaaaa1111111"), NOW)[0].fingerprint, a.fingerprint, "two namespaces' red branches are two incidents");
+});
+
+function memoryPass(found: Finding[], open: Map<string, string>, memory: ReturnType<typeof fakeFindingMemory>, now: Date, ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS)) {
+  const posted: string[] = [];
+  const closed: string[] = [];
+  const result = runPass(
+    {
+      findings: async () => ({ findings: found, ran }),
+      open: async () => open,
+      clear: async (id) => {
+        closed.push(id);
+        return true;
+      },
+      post: async (f) => {
+        posted.push(f.fingerprint);
+        return { ok: true as const, jobId: `job_new_${f.fingerprint}` };
+      },
+      memory: memory.memory,
+    },
+    now
+  );
+  return { result, posted, closed };
+}
+
+test("A FINDING A PERSON ENDED IS NOT FILED AGAIN until it has cleared and stayed quiet", async () => {
+  const fp = "site-map-drift-add-sample";
+  const mem = fakeFindingMemory([findingRow(fp, { job_id: "job_1" })], { job_1: { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) } });
+
+  // Still seen after the seat superseded its job: dismissed, not posted.
+  const one = memoryPass([fakeFinding(fp)], new Map(), mem, NOW);
+  assert.deepEqual((await one.result).posted, []);
+  assert.deepEqual((await one.result).held, [fp]);
+  assert.equal(mem.rows.get(fp)?.state, "dismissed");
+  assert.equal(mem.rows.get(fp)?.seen_count, 4, "the sighting is counted");
+
+  // Seen again: still dismissed, still not posted.
+  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(1)).result).posted, []);
+
+  // The drift is fixed: cleared, quiet for six hours from now.
+  await memoryPass([], new Map(), mem, later(2)).result;
+  assert.equal(mem.rows.get(fp)?.state, "cleared");
+  assert.equal(mem.rows.get(fp)?.reopen_after, new Date(later(2).getTime() + REOPEN_QUIET_MS).toISOString());
+
+  // It flaps back inside the quiet period: counted, not posted.
+  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(3)).result).posted, []);
+  assert.equal(mem.rows.get(fp)?.state, "cleared");
+
+  // Seen after the quiet period: a recurrence, filed once, and the row is open on the new job.
+  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(9)).result).posted, [fp]);
+  assert.equal(mem.rows.get(fp)?.state, "open");
+  assert.equal(mem.rows.get(fp)?.job_id, `job_new_${fp}`);
+  assert.equal(mem.rows.get(fp)?.reopen_after, null);
+});
+
+test("a cleared row is not cleared again each pass, so its quiet period does not slide forever", async () => {
+  const fp = "backup-stale";
+  const mem = fakeFindingMemory([findingRow(fp, { state: "cleared", cleared_at: hoursAgo(7), reopen_after: hoursAgo(1) })]);
+  await memoryPass([], new Map(), mem, NOW).result;
+  assert.deepEqual(mem.writes, [], "a cleared row that is still clear was written");
+  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, NOW).result).posted, [fp]);
+});
+
+test("a finding whose check did not run is neither cleared nor dismissed", async () => {
+  const mem = fakeFindingMemory([findingRow("ci-red-sample", { state: "dismissed" }), findingRow("backup-stale", { job_id: "job_2" })]);
+  const pass = memoryPass([], new Map([["backup-stale", "job_2"]]), mem, NOW, new Set(WATCHER_CHECKS.filter((c) => c !== "ci")));
+  await pass.result;
+  assert.equal(mem.rows.get("ci-red-sample")?.state, "dismissed", "a failed CI read cleared a dismissed incident");
+  assert.equal(mem.rows.get("backup-stale")?.state, "cleared");
+  assert.deepEqual(pass.closed, ["job_2"]);
+});
+
+test("an open job with no row, posted before the table existed, is adopted rather than filed again", async () => {
+  const mem = fakeFindingMemory();
+  const pass = memoryPass([fakeFinding("backup-stale")], new Map([["backup-stale", "job_legacy"]]), mem, NOW);
+  assert.deepEqual((await pass.result).posted, []);
+  assert.equal(mem.rows.get("backup-stale")?.state, "open");
+  assert.equal(mem.rows.get("backup-stale")?.job_id, "job_legacy");
+});
+
+test("the bound counts posts, so findings already open do not use it up", async () => {
+  const already = Array.from({ length: MAX_FINDINGS_PER_PASS }, (_, i) => fakeFinding(`old-${i}`));
+  const open = new Map(already.map((f, i) => [f.fingerprint, `job_${i}`]));
+  const pass = memoryPass([...already, fakeFinding("new-a"), fakeFinding("new-b")], open, fakeFindingMemory(), NOW);
+  assert.deepEqual((await pass.result).posted, ["new-a", "new-b"]);
 });
 
 test("the fingerprint round-trips through the title, which is what deduplicates", () => {

@@ -109,6 +109,10 @@ export interface JobFeedRow {
   gate_required: number;
   result_ref: string | null;
   result_summary: string | null;
+  // From the finding's watcher_findings row when this job is its current one
+  // (src/watcher-findings.ts). Null, or absent, otherwise.
+  finding_seen_count?: number | null;
+  finding_last_seen?: string | null;
 }
 
 // The watcher's title carries its fingerprint in brackets at the end. The same
@@ -141,7 +145,7 @@ export function opsJobFrom(row: JobFeedRow): OpsJob {
     waits_on: waitsOn,
     command: blocked ? commandFromSummary(summary) : null,
     result_ref: row.result_ref,
-    finding: print ? { fingerprint: print[1] } : null,
+    finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
   };
 }
 
@@ -248,13 +252,17 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
 async function liveJobs(db: D1Database, now: Date): Promise<OpsJob[]> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   // datetime() on both sides: updated_at is written both as ISO and as D1's default
-  // text form, and the two do not compare as text.
+  // text form, and the two do not compare as text. The watcher's finding row joins
+  // on the job it is currently filed as, so a watcher job shows how often its finding
+  // has been seen; one row per fingerprint, so the join cannot multiply a job.
   const { results } = await db
     .prepare(
-      `SELECT id, namespace, title, status, priority, posted_by, claimed_by, created_at, updated_at, lease_expires,
-              blocked_count, resumed_count, gate_required, result_ref, result_summary
-       FROM jobs WHERE status IN (${open}) OR datetime(updated_at) >= datetime(?1)
-       ORDER BY updated_at DESC`
+      `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
+              j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary,
+              wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
+       FROM jobs j LEFT JOIN watcher_findings wf ON wf.job_id = j.id
+       WHERE j.status IN (${open}) OR datetime(j.updated_at) >= datetime(?1)
+       ORDER BY j.updated_at DESC`
     )
     .bind(new Date(now.getTime() - DAY_MS).toISOString(), ...OPEN_JOB_STATUSES)
     .all<JobFeedRow>();
