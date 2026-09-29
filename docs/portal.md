@@ -1,6 +1,6 @@
 # Capsid Portal
 
-Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: every site, the job queue across every namespace, the watcher's findings, deploys, agents, namespaces, activity, backups and CI. The designs and their rulings are in Capsid at `capsid/research/design-ops-console.md` and `capsid/research/design-portal-unify.md`.
+Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: every site, the job queue across every namespace, the watcher's findings, deploys, agents, namespaces, activity, claims, backups and CI. The designs and their rulings are in Capsid at `capsid/research/design-ops-console.md` and `capsid/research/design-portal-unify.md`.
 
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
@@ -35,11 +35,22 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - the improve loop's mode and budget;
 - each roster namespace's pause reason.
 
-Two views read more when they open, and not on every poll:
+Three views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
+- **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
+
+## Claims
+
+The Claims view shows what each agent said about its work beside what the Worker checked, and every time a human touched a job. The data is the three append-only tables of `migrations/0023_job_claims.sql`, read through `src/job-claims-read.ts`, the same readers the admin-only `claims` tool uses, so the view and the tool agree.
+
+- **By agent.** One row per agent and namespace: jobs and claims, each check's counts (agree, disagree, unclaimed, unchecked), the touches by kind and by who made them, and the median and total wait. A touch on a job no agent has claimed yet has its own row. Filter by namespace, agent, and a since and before date; the filters live in the address.
+- **By check.** The same agreement counts summed over the rows above, one row per check (`pr_merged`, `prs_opened`, `commits`, `files_changed`, `ci_green`).
+- **A job.** Open one by id (the list offers the feed's jobs). Each claim shows what the agent stated, the self-reported versions and the Worker's build, and under it each check with the claimed and verified values side by side. Then the touch log, oldest first, with each wait.
+- **Nothing stated is not zero.** A field the agent did not state shows as "not stated", a value the Worker could not check as "not checked", and a group with no measured wait as "no wait".
+- **Bounded.** Each read carries a limit and the view says which one it hit. The whole dataset is read through the `claims` tool's `export` action.
 
 ## Sites are configuration
 
@@ -77,7 +88,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
-  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing.
+  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing.
   - `j` and `k` move through a list, Enter opens the row, and Esc closes.
   - `r` refreshes and `t` switches light and dark.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
@@ -94,7 +105,8 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
   - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
   - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
   - the phone layout;
-  - the collapsible sidebar.
+  - the collapsible sidebar;
+  - the Claims view: the aggregate, its filter, and a job's claims beside their checks.
 - **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. The initial JavaScript must be at most 100 KB gzip, each lazily loaded view at most 40 KB, and all CSS at most 12 KB.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/portal/callback` with the app's `index.html`, or serve the app's files without the gate.
 
@@ -122,6 +134,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
   - Refusals: 400 refused, 403 CSRF or cross-site, 410 expired (preview again), 413 too large.
   - A perform writes the shared mutator's audit row, then `portal-<action>` under `access:<email>`. Rows from before the move say `console-<action>` ([schema.md](schema.md)).
 - **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered.
+- **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `claims` tool's readers and writes nothing.
 - **`POST /portal/api/sign-out`**, above.
 - **Any other `/portal/api/` path** is a JSON 404 behind the gate, never the app's page.
 - **`/portal/`** and everything under it serves the built app from the `ASSETS` binding, only after the gate. The page gets `no-store` and its own CSP (scripts, styles and fetches from this origin only); hashed files under `/portal/assets/` are cached privately for a year. A browser loading an unknown path as a page gets the app's page, so the app's own routes load; a missing file stays a 404. With no `ASSETS` binding the admin gets a 503 saying the Portal is not deployed.

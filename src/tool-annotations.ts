@@ -58,6 +58,13 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // The credential control plane. revoke and update_scopes both overwrite existing
   // state: one ends a credential, the other changes what it may do.
   agents: destructive(),
+
+  // Claims apart from verified outcomes. The handler only reads, but readOnlyHint is
+  // the negation of the write gate (test/tool-annotations.test.ts), and "admin" is the
+  // write grant plus the admin identity, so it is served as not read-only. It
+  // overwrites and removes nothing, so it is not destructive either. A client that
+  // asks before a non-read-only call asks here too, which costs the admin one click.
+  claims: additive(),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.

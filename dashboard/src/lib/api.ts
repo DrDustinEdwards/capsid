@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPerformed, PortalPreview } from "../types";
 
 export const FEED_URL = "/portal/api/ops";
 export const REFRESH_URL = "/portal/api/ops/refresh";
@@ -7,6 +7,7 @@ export const PREVIEW_URL = "/portal/api/actions/preview";
 export const PERFORM_URL = "/portal/api/actions/perform";
 export const NAMESPACES_URL = "/portal/api/namespaces";
 export const ACTIVITY_URL = "/portal/api/activity";
+export const CLAIMS_URL = "/portal/api/claims";
 export const SIGN_OUT_URL = "/portal/api/sign-out";
 export const APP_URL = "/portal/";
 export const POLL_MS = 60_000;
@@ -179,6 +180,27 @@ export function fetchActivity(filter: { namespace: string; actor: string }): Pro
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();
   return get<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
+}
+
+export interface ClaimsQuery {
+  namespace: string;
+  agent: string;
+  since: string;
+  until: string;
+}
+
+// GET /portal/api/claims: the per-agent aggregate, filtered.
+export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<PortalClaimsAggregate>> {
+  const qs = new URLSearchParams();
+  for (const key of ["namespace", "agent", "since", "until"] as const) if (filter[key]) qs.set(key, filter[key]);
+  const s = qs.toString();
+  return get<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
+}
+
+// GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. A job
+// that does not exist is a refusal with status 404.
+export function fetchClaimsJob(id: string): Promise<Answer<PortalClaimsJob>> {
+  return get<PortalClaimsJob>(`${CLAIMS_URL}?${new URLSearchParams({ job: id }).toString()}`);
 }
 
 // POST /portal/api/sign-out: the Worker expires the Portal's cookies and answers 204.

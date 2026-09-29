@@ -6,7 +6,8 @@
 // ring_slot so live.generated is "now", which keeps the relative times readable.
 //
 // It also mocks the Portal's controls (preview and perform), GET
-// /portal/api/namespaces, GET /portal/api/activity and POST /portal/api/sign-out, with
+// /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims and POST
+// /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
 // an expired token, 413 for a body over 8 KB. Changes live in memory until the dev
@@ -23,7 +24,21 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
-import type { OpsFeed, OpsJob, OpsSiteConfig, PortalAction, PortalActivity, PortalActivityRow, PortalNamespace, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/types.ts";
+import type {
+  ClaimsGroup,
+  OpsFeed,
+  OpsJob,
+  OpsSiteConfig,
+  PortalAction,
+  PortalActivity,
+  PortalActivityRow,
+  PortalClaimsAggregate,
+  PortalClaimsJob,
+  PortalNamespace,
+  PortalNamespaces,
+  PortalPerformed,
+  PortalPreview,
+} from "../src/types.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -407,10 +422,198 @@ function seedActivity(): PortalActivityRow[] {
 
 const ACTIVITY_LIMIT = 200;
 
+// Claims, with fake data only: per-agent groups for the aggregate, and two jobs from the
+// fixture with their claims, checks and touches for the drill-in. Any other job id is
+// the Worker's JSON 404.
+type ClaimRow = PortalClaimsJob["claims"][number];
+type EvaluationRow = PortalClaimsJob["evaluations"][number];
+
+function seedClaimGroups(): ClaimsGroup[] {
+  const touches = (count: number, byKind: Record<string, number>, byActor: Record<string, number>, waits: number[]): ClaimsGroup["touches"] => {
+    const sorted = [...waits].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+    return { count, by_kind: byKind, by_actor_kind: byActor, waits: waits.length, waited_ms_total: waits.length ? waits.reduce((a, b) => a + b, 0) : null, waited_ms_median: median };
+  };
+  const agr = (agree: number, disagree: number, unclaimed: number, unchecked: number) => ({ agree, disagree, unclaimed, unchecked });
+  return [
+    {
+      agent: "agent:sample-b-driver",
+      namespace: "sample-b",
+      jobs: 3,
+      claims: 4,
+      evaluations: { pr_merged: agr(2, 0, 0, 0), prs_opened: agr(2, 0, 0, 0), commits: agr(1, 1, 0, 0), files_changed: agr(2, 0, 0, 0), ci_green: agr(0, 0, 2, 0) },
+      touches: touches(3, { gate: 1, approval: 1, note: 1 }, { human: 2, seat: 1 }, [2_700_000]),
+    },
+    {
+      agent: "agent:sample-c-driver",
+      namespace: "sample-c",
+      jobs: 2,
+      claims: 2,
+      evaluations: { pr_merged: agr(0, 1, 0, 0), prs_opened: agr(1, 0, 0, 0), commits: agr(0, 0, 1, 0), files_changed: agr(0, 0, 0, 1), ci_green: agr(0, 0, 1, 0) },
+      touches: touches(1, { admin_fail: 1 }, { seat: 1 }, []),
+    },
+    {
+      agent: "agent:sample-driver",
+      namespace: "sample",
+      jobs: 5,
+      claims: 8,
+      evaluations: { pr_merged: agr(3, 1, 0, 0), prs_opened: agr(4, 0, 0, 0), commits: agr(2, 1, 1, 0), files_changed: agr(3, 0, 0, 1), ci_green: agr(0, 0, 4, 0) },
+      touches: touches(6, { gate: 3, approval: 2, correction: 1 }, { human: 4, policy: 1, seat: 1 }, [540_000, 11_520_000, 1_800_000]),
+    },
+    {
+      agent: null,
+      namespace: "sample-f",
+      jobs: 0,
+      claims: 0,
+      evaluations: {},
+      touches: touches(1, { release: 1 }, { seat: 1 }, []),
+    },
+  ];
+}
+
+function seedClaimJobs(): Map<string, Omit<PortalClaimsJob, "generated">> {
+  const now = Date.now();
+  const at = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  const claim = (id: number, jobId: string, action: ClaimRow["action"], minutesAgo: number, over: Partial<ClaimRow> = {}): ClaimRow => ({
+    id,
+    job_id: jobId,
+    action,
+    agent: "agent:sample-driver",
+    namespace: "sample",
+    raw: "{}",
+    prs_opened_urls: null,
+    prs_merged_urls: null,
+    prs_opened: null,
+    prs_merged: null,
+    commits: null,
+    files_changed: null,
+    tests_added: null,
+    tests_run: null,
+    tests_passed: null,
+    tests_failed: null,
+    tests_result: null,
+    deploy_state: null,
+    files_touched: null,
+    model_id: null,
+    client_name: null,
+    client_version: null,
+    permission_mode: null,
+    capsid_sha: SHA,
+    recorded_at: at(minutesAgo),
+    ...over,
+  });
+  const PR = "https://github.com/example/sample/pull/41";
+  const done = "job_6b5a4c3d2e1f";
+  const blocked = "job_7c1e44b0a912";
+  const evaluation = (
+    id: number,
+    name: string,
+    claimed: string | null,
+    verified: string | null,
+    agreement: EvaluationRow["agreement"],
+    label: EvaluationRow["score_label"],
+    value: number | null
+  ): EvaluationRow => ({
+    id,
+    job_id: done,
+    claim_id: 3,
+    name,
+    score_value: value,
+    score_label: label,
+    claimed,
+    verified,
+    agreement,
+    evaluator: "worker",
+    evaluator_id: `capsid@${SHA}`,
+    explanation: null,
+    recorded_at: at(95),
+  });
+  return new Map<string, Omit<PortalClaimsJob, "generated">>([
+    [
+      done,
+      {
+        job: { id: done, namespace: "sample", title: "Record the login switch dates in the auth doc", status: "done", claimed_by: "agent:sample-driver" },
+        outcome: {
+          job_id: done,
+          agent: "agent:sample-driver",
+          namespace: "sample",
+          prs_opened: 1,
+          prs_merged: 1,
+          commits: 2,
+          files_changed: 1,
+          tests_added: null,
+          ci_green: null,
+          blocked_count: 1,
+          resumed_count: 1,
+          duration_minutes: 34,
+          result_kind: "pr",
+          verified: '{"prs_opened":true,"prs_merged":true,"commits":true,"files_changed":true,"ci_green":false}',
+          recorded_at: at(95),
+        },
+        claims: [
+          claim(2, done, "block", 190, { raw: '{"reason":"needs a push","command":"git push -u origin docs/auth-dates"}' }),
+          claim(3, done, "complete", 95, {
+            raw: `{"evidence":{"prs":["${PR}"],"commits":3,"files_changed":1},"claim":{"prs_merged":["${PR}"],"tests":{"result":"not_run"},"deploy_state":"none"}}`,
+            prs_opened_urls: `["${PR}"]`,
+            prs_merged_urls: `["${PR}"]`,
+            prs_opened: 1,
+            prs_merged: 1,
+            commits: 3,
+            files_changed: 1,
+            tests_result: "not_run",
+            deploy_state: "none",
+            files_touched: '["docs/auth.md"]',
+            model_id: "sample-model",
+            client_name: "sample-client",
+            client_version: "1.0.0",
+            permission_mode: "default",
+          }),
+        ],
+        evaluations: [
+          evaluation(1, "pr_merged", "1", "1", "agree", "pass", 1),
+          evaluation(2, "prs_opened", "1", "1", "agree", "pass", 1),
+          evaluation(3, "commits", "3", "2", "disagree", "pass", 2),
+          evaluation(4, "files_changed", "1", "1", "agree", "pass", 1),
+          evaluation(5, "ci_green", null, null, "unclaimed", "unknown", null),
+        ],
+        touches: [
+          { id: 1, job_id: done, namespace: "sample", kind: "gate", actor: "agent:sample-driver", actor_kind: "driver", waited_ms: null, detail: '{"reason":"needs a push","command":"git push -u origin docs/auth-dates"}', at: at(190) },
+          { id: 2, job_id: done, namespace: "sample", kind: "approval", actor: "access:admin@example.com", actor_kind: "human", waited_ms: 3_300_000, detail: '{"reason":"pushed"}', at: at(135) },
+        ],
+        limit: 200,
+        truncated: [],
+      },
+    ],
+    [
+      blocked,
+      {
+        job: { id: blocked, namespace: "sample", title: "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]", status: "blocked", claimed_by: "agent:sample-driver" },
+        outcome: null,
+        claims: [claim(1, blocked, "block", 26, { raw: '{"reason":"the workflow needs a secret","command":"gh secret set SAMPLE_KEY"}' })],
+        evaluations: [],
+        touches: [{ id: 3, job_id: blocked, namespace: "sample", kind: "gate", actor: "agent:sample-driver", actor_kind: "driver", waited_ms: null, detail: '{"reason":"the workflow needs a secret"}', at: at(26) }],
+        limit: 200,
+        truncated: [],
+      },
+    ],
+  ]);
+}
+
+// The Worker's since and until check: an ISO date or time, or it is a 400.
+function isoOrNull(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) && !Number.isNaN(parsed) ? new Date(parsed).toISOString() : "bad";
+}
+
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
   const st: MockState = { paused: new Map(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), activity: seedActivity(), tokens: new Map() };
   const csrf = () => fixture().csrf;
+  const claimGroups = seedClaimGroups();
+  const claimJobs = seedClaimJobs();
 
   async function action(req: IncomingMessage, res: ServerResponse, kind: "preview" | "perform"): Promise<void> {
     if (req.method !== "POST") return refuse(res, 400, "This endpoint takes POST.");
@@ -461,7 +664,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -485,6 +688,24 @@ export function mockOpsApi(): Plugin {
           const actor = url.searchParams.get("actor") || null;
           const rows = st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor)).slice(0, ACTIVITY_LIMIT);
           const out: PortalActivity = { generated: new Date().toISOString(), filter: { namespace, actor }, rows, limit: ACTIVITY_LIMIT };
+          return send(res, 200, out);
+        }
+        if (path === "/portal/api/claims") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const job = url.searchParams.get("job")?.trim();
+          if (job) {
+            const found = claimJobs.get(job);
+            if (!found) return send(res, 404, { error: `no job ${job}` });
+            const out: PortalClaimsJob = { generated: new Date().toISOString(), ...found };
+            return send(res, 200, out);
+          }
+          const namespace = url.searchParams.get("namespace")?.trim() || null;
+          const agent = url.searchParams.get("agent")?.trim() || null;
+          const since = isoOrNull(url.searchParams.get("since"));
+          const until = isoOrNull(url.searchParams.get("until"));
+          if (since === "bad" || until === "bad") return refuse(res, 400, "since and until must be ISO 8601 times such as 2026-09-01.");
+          const groups = claimGroups.filter((g) => (!namespace || g.namespace === namespace) && (!agent || g.agent === agent));
+          const out: PortalClaimsAggregate = { generated: new Date().toISOString(), filter: { namespace, agent, since, until }, groups, truncated: [] };
           return send(res, 200, out);
         }
         if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh") return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });
