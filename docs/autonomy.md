@@ -101,6 +101,8 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
 
   **Uptime ring.** Each site keeps a 7-day ring of half-hour slots aligned to the clock. A slot no pass reached is marked as no data, never as up.
 
+  **Reading it over MCP.** `ops_snapshot` (admin only) returns the snapshot whole, or one site's entry with `site`, or one half-hour slot of that site's ring with `site` and `slot` (0 the newest, up to 335) or `at` (an ISO time). A slot reads `up`, `down`, `no-pass` or `outside-ring` (older than the history the ring holds yet), with the half hour it covers. No snapshot yet, or one that does not parse, is a named error.
+
   **Write order.** The snapshot is written before `watcher:last`, so a snapshot that cannot be written fails the pass and the next tick runs it again.
 
   **Site map.** A registered namespace the map neither covers nor lists as having no site, or a map entry whose namespace is not registered, is a finding.

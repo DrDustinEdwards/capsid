@@ -1,4 +1,4 @@
-import { hmacHex, timingSafeEqual } from "./auth";
+import { hmacHex, sha256Hex, timingSafeEqual } from "./auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import {
@@ -14,7 +14,9 @@ import {
   SKILLS_PREFIX,
 } from "./improve-schema";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { D1_BATCH_STATEMENTS } from "./limits";
 import { isMissingRowAbort } from "./store-guards";
+import { pathMutation } from "./tools/docs";
 
 // delete_namespace: the plan, the refusals, the signed confirmation and the one batch.
 // The tool is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
@@ -28,8 +30,10 @@ import { isMissingRowAbort } from "./store-guards";
 // unless the store still is what the plan read.
 //
 // WHAT IS DELETED: every live document (any path not under archive/), each snapshotted
-// to document_versions inside the batch before it goes; every edge with an end at a
-// live path of the namespace, recorded whole in the audit row; the ops_sites row,
+// to document_versions inside the batch before it goes and removed by
+// pathMutation(db, ns, path, null), the one path mutation site (CLAUDE.md, path
+// mutation rule); every edge touching one of those documents, removed by the same
+// helper and recorded whole in the audit row; the ops_sites row,
 // recorded whole in the audit row; the namespaces row; and, after the batch commits,
 // the namespace's four improve KV keys.
 //
@@ -45,7 +49,22 @@ import { isMissingRowAbort } from "./store-guards";
 //
 // WHAT ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked),
 // a live agent whose scopes name the namespace, and a namespace on the improve roster.
-// cascade reaches documents only.
+// cascade reaches documents only. A namespace with more live documents than one batch
+// can delete (NAMESPACE_DELETE_MAX_DOCUMENTS) is refused too, never half deleted.
+//
+// An edge whose end in this namespace names a path no document holds (already
+// dangling) touches no deleted document, so pathMutation leaves it, as a document
+// delete would; docs/schema.md, "Links", says dangling edges are reported, never
+// repaired.
+
+// The statements every perform batch carries besides the per-document ones: the plan
+// guard, the snapshot, the audit row, the ops_sites delete and the namespaces delete.
+const FIXED_STATEMENTS = 5;
+// pathMutation(db, ns, path, null) is two statements: the edges, then the row.
+const STATEMENTS_PER_DOCUMENT = 2;
+/** The most live documents one delete_namespace batch can remove, from D1's batch
+ *  ceiling (D1_BATCH_STATEMENTS in src/limits.ts). */
+export const NAMESPACE_DELETE_MAX_DOCUMENTS = Math.floor((D1_BATCH_STATEMENTS - FIXED_STATEMENTS) / STATEMENTS_PER_DOCUMENT);
 
 // Its own context string, so this key differs from the Portal's confirmation key and
 // every other key derived from COOKIE_ENCRYPTION_KEY: a Portal token never verifies
@@ -93,6 +112,12 @@ export interface DeletePlan {
   improve_control_paths: string[];
   // The improve KV keys that hold a value now.
   kv_keys: string[];
+  // Every live path in path order, at most NAMESPACE_DELETE_MAX_DOCUMENTS + 1 of them:
+  // one more than fits says the namespace is over the cap. The perform deletes exactly
+  // these, and the token binds them, so a document swapped for another refuses.
+  live_paths: string[];
+  // sha256 of JSON.stringify(live_paths), which is what the fingerprint binds.
+  live_paths_sha256: string;
 }
 
 export interface DeleteOptions {
@@ -125,10 +150,12 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     db.prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE namespace = ?1").bind(namespace),
+    // The edges pathMutation will remove: those touching a live document.
     db
       .prepare(
         `SELECT COUNT(*) AS n FROM document_links
-         WHERE (from_ns = ?1 AND from_path NOT LIKE 'archive/%') OR (to_ns = ?1 AND to_path NOT LIKE 'archive/%')`
+         WHERE (from_ns = ?1 AND from_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))
+            OR (to_ns = ?1 AND to_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))`
       )
       .bind(namespace),
     db.prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE namespace = ?1 GROUP BY status").bind(namespace),
@@ -186,6 +213,9 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
          FROM ops_sites WHERE namespace = ?1`
       )
       .bind(namespace),
+    db
+      .prepare("SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%' ORDER BY path LIMIT ?2")
+      .bind(namespace, NAMESPACE_DELETE_MAX_DOCUMENTS + 1),
   ]);
 
   const jobsByStatus: Record<string, number> = {};
@@ -211,6 +241,7 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     if (value !== null) kvKeys.push(key);
   }
 
+  const livePaths = rows<{ path: string }>(results[22]).map((r) => r.path);
   return {
     namespace,
     registered: rows(results[0]).length > 0,
@@ -242,6 +273,8 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     ops_site_revision: site ? Number(site.revision) : null,
     open_jobs: rows<{ id: string; status: string; title: string }>(results[7]),
     live_agents: live,
+    live_paths: livePaths,
+    live_paths_sha256: await sha256Hex(JSON.stringify(livePaths)),
     improve_control_paths: rows<{ path: string }>(results[20]).map((r) => r.path),
     kv_keys: kvKeys,
   };
@@ -278,6 +311,13 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
         `cascade never reaches agents. Use the agents tool: action 'revoke', or action 'update_scopes' to drop ${ns} from its namespaces.`
     );
   }
+  if (plan.counts.documents_live > NAMESPACE_DELETE_MAX_DOCUMENTS) {
+    refusals.push(
+      `${ns} holds ${plan.counts.documents_live} live documents, and one delete_namespace batch deletes at most ${NAMESPACE_DELETE_MAX_DOCUMENTS} ` +
+        `(D1's ${D1_BATCH_STATEMENTS}-statement batch ceiling: ${FIXED_STATEMENTS} fixed statements plus ${STATEMENTS_PER_DOCUMENT} per document). ` +
+        `Delete or move documents with the delete tool first, or ask the seat to rule a set-based helper.`
+    );
+  }
   if (plan.counts.documents_live > 0 && !opts.cascade) {
     refusals.push(
       `${ns} holds ${plan.counts.documents_live} live document${plan.counts.documents_live === 1 ? "" : "s"}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`
@@ -293,14 +333,21 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
 }
 
 /** The part of the plan a token binds, in one canonical spelling: every count, the
- *  jobs by status, the ops_sites revision and the KV keys present. Any change between
- *  the preview and the perform changes this string. */
+ *  jobs by status, the ops_sites revision, the KV keys present and the sha256 of the
+ *  live path list (a digest, so fifty 512-character paths do not ride in the token).
+ *  Any change between the preview and the perform changes this string. */
 export function planFingerprint(plan: DeletePlan): string {
   const counts: Record<string, number> = {};
   for (const key of Object.keys(plan.counts).sort()) counts[key] = plan.counts[key as keyof PlanCounts];
   const jobs: Record<string, number> = {};
   for (const key of Object.keys(plan.jobs_by_status).sort()) jobs[key] = plan.jobs_by_status[key];
-  return JSON.stringify({ counts, jobs_by_status: jobs, ops_site_revision: plan.ops_site_revision, kv_keys: [...plan.kv_keys].sort() });
+  return JSON.stringify({
+    counts,
+    jobs_by_status: jobs,
+    ops_site_revision: plan.ops_site_revision,
+    kv_keys: [...plan.kv_keys].sort(),
+    live_paths_sha256: plan.live_paths_sha256,
+  });
 }
 
 /** The keys of two fingerprints that differ, for the refusal. Pure. */
@@ -421,7 +468,7 @@ function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string
   return {
     will_delete: [
       `${c.documents_live} live document(s), each snapshotted to document_versions first`,
-      `${c.document_links_removed} edge(s) with an end at a live path of ${plan.namespace}, recorded whole in the audit row`,
+      `${c.document_links_removed} edge(s) touching those documents, recorded whole in the audit row (an already dangling edge touches none and stays)`,
       plan.ops_site ? `the ops_sites row (revision ${plan.ops_site_revision}), recorded whole in the audit row` : "no ops_sites row (there is none)",
       `the namespaces row and its repo mapping, recorded in the audit row`,
       `the improve KV keys, after the batch commits (holding a value now: ${plan.kv_keys.length ? plan.kv_keys.join(", ") : "none"})`,
@@ -466,6 +513,8 @@ export async function previewNamespaceDelete(
     jobs_by_status: plan.jobs_by_status,
     open_jobs: plan.open_jobs,
     live_agents: plan.live_agents,
+    live_paths: plan.live_paths,
+    max_documents: NAMESPACE_DELETE_MAX_DOCUMENTS,
     improve_control_paths: plan.improve_control_paths,
     ops_site: plan.ops_site,
     kv_keys: plan.kv_keys,
@@ -501,8 +550,11 @@ export async function previewNamespaceDelete(
 // The batch's first statement: an INSERT that violates NOT NULL (the same abort as
 // requireExists in src/store-guards.ts), fired unless the store is still what the plan
 // read. The preview's reads are another transaction, so this is what makes the
-// refusals and the counts hold at commit.
-function planGuard(db: D1Database, plan: DeletePlan): D1PreparedStatement {
+// refusals and the counts hold at commit. The live set is pinned exactly: the count
+// equals the plan's, and no live path lies outside the plan's list (?6, JSON), so a
+// document swapped for another in between aborts too, and every live document the
+// batch finds is one pathMutation below deletes.
+function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
@@ -510,8 +562,11 @@ function planGuard(db: D1Database, plan: DeletePlan): D1PreparedStatement {
        WHERE NOT (
          EXISTS (SELECT 1 FROM namespaces WHERE namespace = ?1)
          AND (SELECT COUNT(*) FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%') = ?2
+         AND NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'
+                         AND path NOT IN (SELECT value FROM json_each(?6)))
          AND (SELECT COUNT(*) FROM document_links
-              WHERE (from_ns = ?1 AND from_path NOT LIKE 'archive/%') OR (to_ns = ?1 AND to_path NOT LIKE 'archive/%')) = ?3
+              WHERE (from_ns = ?1 AND from_path IN (SELECT value FROM json_each(?6)))
+                 OR (to_ns = ?1 AND to_path IN (SELECT value FROM json_each(?6)))) = ?3
          AND NOT EXISTS (SELECT 1 FROM jobs WHERE namespace = ?1 AND status IN (SELECT value FROM json_each(?4)))
          AND NOT EXISTS (SELECT 1 FROM agents WHERE revoked_at IS NULL AND
            CASE WHEN json_valid(scopes) THEN
@@ -521,14 +576,21 @@ function planGuard(db: D1Database, plan: DeletePlan): D1PreparedStatement {
          AND (SELECT revision FROM ops_sites WHERE namespace = ?1) IS ?5
        )`
     )
-    .bind(plan.namespace, plan.counts.documents_live, plan.counts.document_links_removed, JSON.stringify(OPEN_JOB_STATUSES), plan.ops_site_revision);
+    .bind(
+      plan.namespace,
+      plan.counts.documents_live,
+      plan.counts.document_links_removed,
+      JSON.stringify(OPEN_JOB_STATUSES),
+      plan.ops_site_revision,
+      pathsJson
+    );
 }
 
 /**
- * The perform. `deletion` is namespaceLiveDeletion(db, namespace) from src/tools/docs.ts,
- * the path mutation helper (CLAUDE.md, path mutation rule), built by the tool so the
- * helper stays the only site that deletes a documents row. Its order is positional:
- * [0] document_links, [1] documents RETURNING id.
+ * The perform: the token, the plan read again, then one batch. Each live document is
+ * deleted by pathMutation(db, namespace, path, null), the one site that deletes a
+ * documents row (CLAUDE.md, path mutation rule), so the batch is FIXED_STATEMENTS plus
+ * two per document and the cap refuses anything larger before it is built.
  */
 export async function performNamespaceDelete(
   env: Env,
@@ -536,7 +598,6 @@ export async function performNamespaceDelete(
   namespace: string,
   opts: DeleteOptions,
   token: string | undefined,
-  deletion: D1PreparedStatement[],
   now: Date
 ): Promise<ToolAnswer> {
   const db = env.DB;
@@ -567,46 +628,65 @@ export async function performNamespaceDelete(
       refusal: `delete_namespace refused, nothing changed: the namespace changed since the preview (${changed.join("; ")}). Preview again.`,
     };
   }
-  if (deletion.length !== 2) {
-    return { ok: false, refusal: `delete_namespace failed, nothing changed: expected the two statements of namespaceLiveDeletion, got ${deletion.length}.` };
+  // The cap is in deleteRefusals, so this holds already; checked again because the
+  // batch below is sized from this list, and a list the read truncated would delete
+  // part of the namespace.
+  const paths = plan.live_paths;
+  if (paths.length !== plan.counts.documents_live || paths.length > NAMESPACE_DELETE_MAX_DOCUMENTS) {
+    return {
+      ok: false,
+      refusal: `delete_namespace failed, nothing changed: the plan read ${paths.length} live paths for ${plan.counts.documents_live} live documents, with a cap of ${NAMESPACE_DELETE_MAX_DOCUMENTS}.`,
+    };
   }
+  const pathsJson = JSON.stringify(paths);
+  const deletion = paths.flatMap((path) => pathMutation(db, namespace, path, null));
 
   // What the audit row carries besides what it reads inside the batch.
-  const recorded = JSON.stringify({ cascade: opts.cascade, allow_improve_paths: opts.allowImprovePaths, counts: plan.counts, jobs_by_status: plan.jobs_by_status, kv_keys: plan.kv_keys });
+  const recorded = JSON.stringify({
+    cascade: opts.cascade,
+    allow_improve_paths: opts.allowImprovePaths,
+    counts: plan.counts,
+    jobs_by_status: plan.jobs_by_status,
+    kv_keys: plan.kv_keys,
+    documents_deleted: paths,
+  });
   let results: D1Result[];
   try {
     results = await db.batch([
-      planGuard(db, plan),
-      // Every live document, from the rows the table holds when the batch runs.
+      planGuard(db, plan, pathsJson),
+      // Exactly the paths pathMutation deletes below, bound, from the rows the table
+      // holds when the batch runs. The guard has pinned the live set to this list.
       db
         .prepare(
           `INSERT INTO document_versions (document_id, namespace, path, title, body)
-           SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'
+           SELECT id, namespace, path, title, body FROM documents
+           WHERE namespace = ?1 AND path IN (SELECT value FROM json_each(?2))
            RETURNING id`
         )
-        .bind(namespace),
+        .bind(namespace, pathsJson),
       // The one audit row, read inside the batch before anything is removed: the
-      // edges, the deleted paths, the whole ops_sites row and the namespaces row are
-      // recorded here and nowhere else afterwards. The aggregate always yields a row.
+      // edges, the whole ops_sites row and the namespaces row are recorded here and
+      // nowhere else afterwards; the deleted paths ride in the plan. The aggregate
+      // always yields a row.
       db
         .prepare(
           `INSERT INTO audit_log (actor, action, namespace, path, params)
            SELECT ?1, 'namespace-delete', ?2, NULL, json_object(
              'plan', json(?3),
-             'documents_deleted', json((SELECT json_group_array(path) FROM documents WHERE namespace = ?2 AND path NOT LIKE 'archive/%')),
              'edges_removed', json_group_array(json_object('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path)),
              'ops_site', json((SELECT json_object('namespace', namespace, 'name', name, 'origin', origin, 'health_path', health_path,
                  'platform', platform, 'script', script, 'self_probe', self_probe, 'revision', revision,
                  'created_at', created_at, 'updated_at', updated_at) FROM ops_sites WHERE namespace = ?2)),
              'namespace_row', json((SELECT json_object('namespace', namespace, 'repos', repos, 'created_at', created_at) FROM namespaces WHERE namespace = ?2)))
            FROM document_links
-           WHERE (from_ns = ?2 AND from_path NOT LIKE 'archive/%') OR (to_ns = ?2 AND to_path NOT LIKE 'archive/%')
+           WHERE (from_ns = ?2 AND from_path IN (SELECT value FROM json_each(?4)))
+              OR (to_ns = ?2 AND to_path IN (SELECT value FROM json_each(?4)))
            RETURNING params`
         )
-        .bind(actor, namespace, recorded),
-      ...deletion,
+        .bind(actor, namespace, recorded, pathsJson),
       db.prepare("DELETE FROM ops_sites WHERE namespace = ?1 RETURNING namespace").bind(namespace),
       db.prepare("DELETE FROM namespaces WHERE namespace = ?1 RETURNING namespace").bind(namespace),
+      ...deletion,
     ]);
   } catch (err) {
     if (isMissingRowAbort(err)) {
@@ -618,13 +698,15 @@ export async function performNamespaceDelete(
     return { ok: false, refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
   }
 
-  // Counted from RETURNING, never meta.changes (CLAUDE.md, path mutation rule).
+  // Counted from RETURNING, never meta.changes (CLAUDE.md, path mutation rule). The
+  // batch committed, so the guard held: the live set was exactly `paths`, and
+  // pathMutation deleted each of them.
   const snapshots = rows(results[1]).length;
   const auditParams = rows<{ params: string }>(results[2])[0]?.params;
   let edgesRemoved = 0;
   if (auditParams) edgesRemoved = (JSON.parse(auditParams) as { edges_removed: unknown[] }).edges_removed.length;
-  const documentsDeleted = rows(results[4]).length;
-  const siteRemoved = rows(results[5]).length > 0;
+  const siteRemoved = rows(results[3]).length > 0;
+  const documentsDeleted = paths.length;
 
   // KV after the commit: KV is not in the transaction. Every key is deleted, present
   // or not, and a failure is reported with the key, never dropped.

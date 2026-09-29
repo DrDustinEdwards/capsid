@@ -3,6 +3,7 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import {
   CI_DISPATCH_POLL_MS,
+  CI_JOBS_MAX,
   CI_LOG_BUDGET,
   ciDispatch,
   ciStatus,
@@ -24,7 +25,7 @@ import {
   searchCode,
   writeRepoFile,
 } from "../github";
-import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_BODY, MAX_COMMIT_MESSAGE, MAX_PATH, MAX_PR_BODY, MAX_PR_COMMENT, MAX_PR_TITLE, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
+import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_BODY, MAX_CI_NAME, MAX_COMMIT_MESSAGE, MAX_PATH, MAX_PR_BODY, MAX_PR_COMMENT, MAX_PR_TITLE, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
 import { fail, type ToolCtx } from "./docs";
 import { repoGuards } from "./repo-guards";
 
@@ -310,7 +311,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     "ci_status",
     {
       annotations: hintsFor("ci_status"),
-      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo. Read-only.`,
+      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Those three return the run and its jobs in place of the run list and the failed-run drill-in. Every log is returned with secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share. Read-only.`,
       inputSchema: {
         namespace: nsName,
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
@@ -319,17 +320,26 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           .optional()
           .describe("Narrow to one branch or head sha. A hex object name is filtered as a sha, anything else as a branch."),
         run_id: z.number().int().positive().optional().describe("Return only this run, by its GitHub run id."),
+        jobs: z.boolean().optional().describe("With run_id: every job of the run, with its steps."),
+        job: bounded(MAX_CI_NAME).optional().describe("With run_id: one job, by name or numeric id."),
+        step: bounded(MAX_CI_NAME)
+          .optional()
+          .describe("With job: one step, by name or number, and its log for a write-grant caller."),
       },
     },
-    ({ namespace, repo, limit, ref, run_id }) =>
-      // The log tail is withheld from a read-only caller: a build log carries whatever
-      // the workflow echoed. Asked of checkScope rather than decided here.
+    ({ namespace, repo, limit, ref, run_id, jobs, job, step }) =>
+      // The log is withheld from a read-only caller: a build log carries whatever the
+      // workflow echoed. Asked of checkScope rather than decided here, and the same
+      // answer gates the failed-run tail and a step's log.
       guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
           logTail: ctx.scope({ tool: "ci_status", namespace, grant: "write" }) === null,
           ref,
           runId: run_id,
+          jobs,
+          job,
+          step,
         })
       )
   );

@@ -48,22 +48,6 @@ export function pathMutation(
   ];
 }
 
-// The same deletion for every live document of a namespace at once, for
-// delete_namespace (src/namespace-delete.ts). Set-based because D1 caps a batch at 100
-// statements, and two per document would cap a namespace at fifty. Live means any path
-// not under archive/: archived documents and the edges whose ends are both archived
-// stay. Statement order is positional: [0] document_links [1] documents RETURNING id.
-export function namespaceLiveDeletion(db: D1Database, namespace: string): D1PreparedStatement[] {
-  return [
-    db
-      .prepare(
-        "DELETE FROM document_links WHERE (from_ns = ?1 AND from_path NOT LIKE 'archive/%') OR (to_ns = ?1 AND to_path NOT LIKE 'archive/%')"
-      )
-      .bind(namespace),
-    db.prepare("DELETE FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%' RETURNING id").bind(namespace),
-  ];
-}
-
 // Edges touching a document, read before a mutation so the caller can record
 // them. document_versions snapshots only title and body, so for a delete this
 // is the only place the edges survive.
