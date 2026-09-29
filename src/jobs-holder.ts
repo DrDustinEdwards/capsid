@@ -18,6 +18,7 @@ import { skillsForOutcome } from "./job-skill-offers";
 import {
   outcomeFrom,
   outcomeStatement,
+  readJobUsage,
   signalFor,
   verifyEvidence,
   type JobSkills,
@@ -185,7 +186,10 @@ async function holderTransition(
     if (claimed) {
       statements.push(...evaluationStatements(env.DB, evaluationRows(claimed, verdict, { evaluator_id: workerEvaluatorId(env.BUILD_SHA), now })));
     }
-    const row = outcomeFrom(job, verdict, now, patch.skills);
+    // Cost, tokens and active time from the job's sessions' telemetry, NULL when none
+    // reached Capsid (src/ops-otlp.ts). Points exported after this read stay in
+    // session_usage and are not added to the row, which is written once.
+    const row = outcomeFrom(job, verdict, now, patch.skills, await readJobUsage(env.DB, job.id));
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, in the same batch as the outcome.
