@@ -203,7 +203,7 @@ test("DERIVED: every tool that declares an action-shaped argument is in ACTION_A
 test("every tool named in ACTION_ARG serves an argument by that name", async () => {
   // The other direction. A table entry naming an argument the tool does not have means
   // allowsToolAction sees undefined and refuses the narrowed tool outright.
-  const wired = ["agents", "claims", "improve_run", "jobs", "lint", "manage_pr"];
+  const wired = ["agents", "claims", "cloudflare_config", "improve_run", "jobs", "lint", "manage_pr"];
   const tools = await listedTools();
   for (const tool of wired) {
     const key = actionArgFor(tool);

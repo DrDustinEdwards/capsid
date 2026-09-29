@@ -77,9 +77,26 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
 
 ## The Cloudflare token
 
-`CF_OPS_TOKEN` is a Cloudflare API token that can only read. It has exactly two permissions:
+`CF_OPS_TOKEN` is a Cloudflare API token that can only read. The watcher needs two permissions:
 - **Account Analytics Read**, for requests and errors per Worker per hour;
 - **Workers Scripts Read**, for deployments and the custom-domain list.
+
+The admin-only `cloudflare_config` MCP tool (`src/tools/cloudflare.ts`, reading through `src/ops-cloudflare-config.ts`) needs four more:
+- **Account / Access: Apps and Policies / Read**, for `access_apps` and `access_policies`;
+- **Account / Email Routing Addresses / Read**, for `email_addresses`;
+- **Zone / Zone / Read**, to list the zones `email_rules` reads;
+- **Zone / Email Routing Rules / Read**, for `email_rules`.
+
+A 403 from any of these names the permission that is missing. The tool copies named fields only, so an Access for SaaS client secret, a SCIM credential or an application's aud tag never reaches the caller. It runs once per tool call, never from a Portal page.
+
+To add the four to the existing token:
+1. Open dash.cloudflare.com/profile/api-tokens.
+2. On the token **capsid-portal-read**, choose **Edit**.
+3. Add **Account / Access: Apps and Policies / Read**, **Account / Email Routing Addresses / Read**, **Zone / Email Routing Rules / Read** and **Zone / Zone / Read**.
+4. Under **Zone Resources**, choose **All zones from the account**.
+5. Choose **Continue to summary**, then **Update token**.
+
+The secret value does not change, so no Worker secret is updated.
 
 The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is unset (the same account). Both are Worker secrets, never in the repo, and the improve loop's attempt code cannot see the token (`AttemptEnv`). The watcher calls Cloudflare once per pass and never once per page load.
 
