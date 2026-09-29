@@ -76,3 +76,24 @@ test("a preview with no answer ends in a message, not a dialog stuck busy", asyn
   await expect(dialog.getByRole("alert")).toContainText("no answer within 20 seconds");
   await expect(dialog.getByRole("button", { name: "Try again" })).toBeEnabled();
 });
+
+test.describe("on a phone", () => {
+  // A mobile browser widens its layout viewport to fit a page that overflows, and a
+  // centred dialog then sits off the visible screen. Measured before the fix: at 390 px
+  // the document was 1189 px wide (the tab bar), and tapping Preview hit the dialog
+  // element instead of the button.
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("the dialog and its buttons are on screen", async ({ page }) => {
+    const dialog = await openPause(page, "sample-d");
+    for (const name of ["Preview", "Cancel"]) {
+      await expect(dialog.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    }
+    await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+    await dialog.getByRole("button", { name: "Preview" }).tap();
+    await expect(dialog.getByText("What changes")).toBeVisible();
+    for (const name of ["Do it", "Cancel"]) {
+      await expect(dialog.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    }
+  });
+});

@@ -152,7 +152,11 @@ a:hover { text-decoration: underline; }
 .rail .hint .linkish { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-align: left; }
 .rail .hint .linkish:hover { color: var(--text); }
 
-main { overflow-y: auto; min-width: 0; }
+/* main is the containing block for anything absolutely positioned inside it (.sr-only
+   text in a table header, say). Without it such an element is placed against the whole
+   document, past the scrolling table, and a mobile browser widens its layout viewport to
+   reach it: at 390 px the document was 1189 px wide and a centred dialog sat off screen. */
+main { overflow-y: auto; min-width: 0; position: relative; }
 .page { padding: 20px 24px 64px; display: grid; gap: 20px; max-width: 1480px; }
 .pagehead { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
 .pagehead h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; text-wrap: balance; }
@@ -185,7 +189,7 @@ main { overflow-y: auto; min-width: 0; }
 .panel > header .src { margin-left: auto; }
 .panel .body { padding: 14px 16px; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
-.scroll-x { overflow-x: auto; }
+.scroll-x { overflow-x: auto; position: relative; }
 
 /* attention strip */
 .attention { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
@@ -401,7 +405,7 @@ ul.plain.mono { font-size: 12px; }
   .page { padding: 16px 16px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 16px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tabbar {
-    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
   }
   .tabbar a { display: grid; justify-items: center; gap: 2px; font-size: 10px; font-weight: 600; color: var(--muted); padding: 4px 0; text-decoration: none; position: relative; }
