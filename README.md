@@ -29,7 +29,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 ## Documentation
 
-- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, and the two gated endpoints
+- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the two gated endpoints, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
 - [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, and its guards
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records
