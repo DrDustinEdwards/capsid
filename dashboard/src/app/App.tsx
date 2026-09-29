@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type
 import { Link, useLocation } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, passStale } from "../lib/derive";
-import { ago, ms, utc } from "../lib/format";
+import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
 import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
@@ -51,12 +51,15 @@ function useTick(ms: number): number {
   return now;
 }
 
-function Freshness({ feed, nextPollAt }: { feed: OpsFeed | null; nextPollAt: number }) {
-  const now = useTick(1000);
+function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollAt: number; skew: number }) {
+  const clientNow = useTick(1000);
   if (!feed) return <div className="fresh" role="status" aria-live="polite">Reading the feed...</div>;
+  // Server times against the server's clock; the next poll against the browser's,
+  // since the browser schedules it.
+  const now = portalNow(clientNow, skew, ms(feed.live.generated));
   const snap = feed.snapshot;
   const stale = passStale(snap, now);
-  const frac = Math.max(0, Math.min(1, (nextPollAt - now) / POLL_MS));
+  const frac = Math.max(0, Math.min(1, (nextPollAt - clientNow) / POLL_MS));
   const title = snap
     ? `Live data read ${utc(ms(feed.live.generated))}. Site data from the watcher pass at ${utc(ms(snap.pass_at))} (every ${snap.cadence_min} min). Stale after ${2 * snap.cadence_min} min.`
     : `Live data read ${utc(ms(feed.live.generated))}. The watcher has not written its first pass yet.`;
@@ -75,7 +78,14 @@ export function App() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const [location, navigate] = useLocation();
   const route = parseRoute(location);
-  const now = useTick(15_000);
+  // Relative times are measured on the server's clock (portalNow): the skew is taken
+  // when each feed arrives, and now never falls behind the feed's own read time.
+  const tick = useTick(15_000);
+  const [skew, setSkew] = useState(0);
+  useEffect(() => {
+    if (feed) setSkew(ms(feed.live.generated) - Date.now());
+  }, [feed]);
+  const now = portalNow(tick, skew, feed ? ms(feed.live.generated) : 0);
   const [filters, setFiltersState] = useState<Filters>({ ns: "all", q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
@@ -399,7 +409,7 @@ export function App() {
           </span>
         )}
         <div className="spacer" />
-        {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} />}
+        {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
         <button type="button" className={`btn iconbtn${spinning ? " spin" : ""}`} title="Refresh (r)" aria-label="Refresh" onClick={() => void refresh()} disabled={signedOut}>
           <RefreshIcon />
         </button>

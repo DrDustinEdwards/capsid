@@ -37,7 +37,9 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 
 Two views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
-- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor.
+- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
+
+**Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
 
 ## No data is a state, never a zero
 

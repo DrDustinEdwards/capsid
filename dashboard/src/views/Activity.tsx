@@ -18,8 +18,12 @@ function None() {
 
 // The filters live in the address (?namespace=&actor=), so a filtered view can be
 // reloaded or shared. The inputs apply on submit, not on each keystroke.
+// A job transition writes two rows with the same action, actor and path; this says which
+// is the job's and which its mirror document's.
+const TARGET_LABEL: Record<"job" | "document", string> = { job: "(job)", document: "(mirror document)" };
+
 export function Activity() {
-  const { feed, now, signOut } = useApp();
+  const { feed, now: appNow, signOut } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
@@ -59,6 +63,8 @@ export function Activity() {
   };
 
   const data = load.data;
+  // The rows were just read from the server, so none is later than the read itself.
+  const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
 
@@ -133,13 +139,16 @@ export function Activity() {
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((r, i) => (
-                  <tr key={`${r.at}-${i}`} data-row="">
+                {data.rows.map((r) => (
+                  <tr key={r.id} data-row="">
                     <td className="mono" title={utc(ms(r.at))}>
                       {ago(ms(r.at), now)}
                     </td>
                     <td className="mono">{r.actor ?? <None />}</td>
-                    <td className="mono">{r.action ?? <None />}</td>
+                    <td className="mono">
+                      {r.action ?? <None />}
+                      {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
+                    </td>
                     <td className="mono">{r.namespace ?? <None />}</td>
                     <td className="mono wrap">{r.path ?? <None />}</td>
                   </tr>

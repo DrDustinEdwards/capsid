@@ -29,7 +29,7 @@ const WHOLE_TABLE_BY_DESIGN = [
   { file: "backup.ts", sql: /^SELECT \* FROM /i, why: "the nightly dump reads every row of a table on purpose" },
   {
     file: "portal-activity.ts",
-    sql: /^SELECT at, actor, action, namespace, path FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/i,
+    sql: /^SELECT id, at, actor, action, namespace, path, CASE .* END AS target FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/is,
     why:
       "the Portal's UNFILTERED activity read. With no WHERE and ORDER BY id DESC LIMIT 50, SQLite walks the rowid " +
       "b-tree backwards and stops at 50 rows: the plan carries NO TEMP B-TREE, so nothing is sorted, and it reads " +
