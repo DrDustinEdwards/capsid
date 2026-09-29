@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
-import { JOB, PROBE, cfNoData, cfOk, incidents, siteKey } from "../lib/derive";
+import { JOB, PROBE, cfNoData, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
@@ -294,10 +294,12 @@ function useWidth(): [number | null, (el: HTMLElement | null) => void] {
 export function TimelinePanel({ title, days, src }: { title: string; days: number; src: string }) {
   const { feed, now } = useApp();
   const [width, ref] = useWidth();
-  const sites = feed.snapshot?.sites ?? [];
+  const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
   return (
     <Panel title={title} src={src} className="tl">
-      {sites.length ? (
+      {!hasSites(feed) ? (
+        <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
+      ) : sites.length ? (
         <>
           <div className="scroll-x tl-pad" ref={ref}>
             <Timeline sites={sites} days={days} now={now} width={width} />

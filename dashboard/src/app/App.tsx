@@ -1,12 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
-import { attentionItems, counts, passStale } from "../lib/derive";
+import { attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
 import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
-import { AppCtx, VIEWS, isView, parseRoute, routePath, type ConfirmRequest, type Ctx, type Filters, type ViewId } from "./ctx";
+import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
 import { HelpSheet } from "./HelpSheet";
@@ -25,11 +25,13 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   ci: lazy(() => import("../views/Ci").then((m) => ({ default: m.Ci }))),
   namespaces: lazy(() => import("../views/Namespaces").then((m) => ({ default: m.Namespaces }))),
   activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
+  settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
 
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 
+// With no site configured, Settings takes the Sites tab, so a phone can reach it.
 const TABS: ViewId[] = ["overview", "sites", "queue", "incidents", "ci"];
 
 // What each rail count means, for its accessible name and its tooltip.
@@ -69,7 +71,7 @@ function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollA
       <span>
         Updated <b>{ago(ms(feed.live.generated), now)}</b>
       </span>
-      <span className="long">· {snap ? `sites from pass ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet"}</span>
+      <span className="long">· {snap ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet"}</span>
     </div>
   );
 }
@@ -77,7 +79,17 @@ function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollA
 export function App() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const [location, navigate] = useLocation();
-  const route = parseRoute(location);
+  // Until the feed answers, the Sites view is assumed on offer, so a configured install
+  // does not see it flicker in.
+  const sitesOn = feed ? hasSites(feed) : true;
+  const views = viewsFor(sitesOn);
+  const parsed = parseRoute(location);
+  // With no site configured, /sites is not a view: it shows the overview, and the
+  // address is replaced below.
+  const route = parsed.view === "sites" && !sitesOn ? { view: "overview" as const, drawer: null } : parsed;
+  useEffect(() => {
+    if (parsed.view === "sites" && !sitesOn) navigate(routePath("overview"), { replace: true });
+  }, [parsed.view, sitesOn, navigate]);
   // Relative times are measured on the server's clock (portalNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
   const tick = useTick(15_000);
@@ -199,8 +211,8 @@ export function App() {
 
   // Keyboard grammar. Latest values through a ref so one listener serves.
   const confirming = confirmReq != null;
-  const keys = useRef({ singleKeys, palette, help, confirming, route, sel });
-  keys.current = { singleKeys, palette, help, confirming, route, sel };
+  const keys = useRef({ singleKeys, palette, help, confirming, route, sel, views });
+  keys.current = { singleKeys, palette, help, confirming, route, sel, views };
   const act = useRef({ go, open, refresh, theme, closeDrawer, toggleRail });
   act.current = { go, open, refresh, theme, closeDrawer, toggleRail };
   useEffect(() => {
@@ -225,7 +237,7 @@ export function App() {
       if (!k.singleKeys) return;
       if (gAt && Date.now() - gAt < 1200) {
         gAt = 0;
-        const v = VIEWS.find((x) => x.key === e.key);
+        const v = k.views.find((x) => x.key === e.key);
         if (v) (e.preventDefault(), a.go(v.id));
         return;
       }
@@ -312,7 +324,7 @@ export function App() {
     };
   }, []);
 
-  const list = useMemo(() => commands(feed, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy }, now), [feed, go, open, refresh, theme, copy, now]);
+  const list = useMemo(() => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy }, now), [feed, views, go, open, refresh, theme, copy, now]);
 
   const onRowActivate = (e: ReactMouseEvent | ReactKeyboardEvent) => {
     const target = e.target as Element;
@@ -427,7 +439,7 @@ export function App() {
         )}
       </header>
       <nav className="rail" id="rail" aria-label="Sections">
-        {VIEWS.map((v) => {
+        {views.map((v) => {
           const b = badge[v.id];
           // With a count, the name says what it counts: "Sites, 2 down or degraded".
           const named = b?.n ? `${v.label}, ${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : undefined;
@@ -492,7 +504,7 @@ export function App() {
         {content}
       </main>
       <nav className="tabbar" aria-label="Sections">
-        {TABS.map((id) => {
+        {(sitesOn ? TABS : TABS.map((id) => (id === "sites" ? "settings" : id))).map((id) => {
           const v = VIEWS.find((x) => x.id === id)!;
           const b = badge[id];
           return (
@@ -518,7 +530,7 @@ export function App() {
         shell
       )}
       <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
-      <HelpSheet open={help} onClose={() => setHelp(false)} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+      <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
       {confirmReq && feed && (
         <Suspense fallback={null}>
           <ConfirmDialog

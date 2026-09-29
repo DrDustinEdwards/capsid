@@ -11,6 +11,13 @@ export const PROBE: Record<ProbeState, { kind: Kind; label: string }> = {
   down: { kind: "crit", label: "Down" },
 };
 
+// Site monitoring is optional (capsid/decisions.md, 2026-09-29): with no configured row
+// that has an origin, the Portal shows no Sites view and no site items anywhere else.
+// Read from the configuration, not the snapshot, so a stale pass cannot bring them back.
+export function hasSites(feed: OpsFeed): boolean {
+  return feed.live.sites.some((s) => s.origin !== null);
+}
+
 export function siteKey(s: SiteSnapshot): string {
   return s.name;
 }
@@ -109,13 +116,14 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   const out: Attention[] = [];
   const snap = feed.snapshot;
   const live = feed.live;
+  const sitesOn = hasSites(feed);
   if (!snap) {
     out.push({ sev: "nodata", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:incidents" });
   } else {
     if (passStale(snap, now)) {
       out.push({ sev: "warn", kind: "Watcher", title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`, sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`, at: ms(snap.pass_at), open: "view:incidents" });
     }
-    for (const s of snap.sites) {
+    for (const s of sitesOn ? snap.sites : []) {
       if (s.state === "down" || s.state === "degraded") {
         out.push({
           sev: s.state === "down" ? "crit" : "warn",
@@ -166,7 +174,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       if (c.state === "could-not-run") out.push({ sev: "nodata", kind: "Watcher", title: `Check '${c.id}' could not run on the last pass`, sub: c.findings.join("; "), at: ms(snap.pass_at), open: "view:incidents" });
     }
     const drift = snap.site_map;
-    if (drift && (drift.unmapped.length || drift.unknown.length)) {
+    if (sitesOn && drift && (drift.unmapped.length || drift.unknown.length)) {
       out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:incidents" });
     }
   }
@@ -250,7 +258,7 @@ export function incidents(feed: OpsFeed): Incident[] {
 // ---- counts ---------------------------------------------------------------------
 
 export function counts(feed: OpsFeed) {
-  const sites = feed.snapshot?.sites ?? [];
+  const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
   const jobs = feed.live.jobs;
   return {
     down: sites.filter((s) => s.state === "down").length,

@@ -125,10 +125,10 @@
       }
     ],
     "site_map": {
-      "unmapped": [],
-      "unknown": [
-        "sample-legacy"
-      ]
+      "unmapped": [
+        "sample-i"
+      ],
+      "unknown": []
     },
     "sites": [
       {
@@ -884,7 +884,7 @@
         }
       },
       {
-        "namespace": "sample-d",
+        "namespace": "sample-e",
         "name": "Sample E",
         "origin": "https://sample-e.example.com",
         "health_path": null,
@@ -1617,6 +1617,107 @@
       {
         "name": "sample-f",
         "paused": null
+      }
+    ],
+    "sites": [
+      {
+        "namespace": "sample",
+        "name": "Sample A",
+        "origin": "https://sample-a.example.com",
+        "health_path": "/health",
+        "platform": "cloudflare",
+        "script": "sample-a",
+        "self_probe": true,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-b",
+        "name": "Sample B",
+        "origin": "https://sample-b.example.com",
+        "health_path": "/api/health",
+        "platform": "cloudflare",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-c",
+        "name": "Sample C",
+        "origin": "https://sample-c.example.com",
+        "health_path": "/health",
+        "platform": "cloudflare",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-d",
+        "name": "Sample D",
+        "origin": "https://sample-d.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-docs",
+        "name": "sample-docs",
+        "origin": null,
+        "health_path": null,
+        "platform": null,
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-e",
+        "name": "Sample E",
+        "origin": "https://sample-e.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-f",
+        "name": "Sample F",
+        "origin": "https://sample-f.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "script": "sample-f",
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-g",
+        "name": "Sample G",
+        "origin": "https://sample-g.example.com",
+        "health_path": null,
+        "platform": "cloudflare",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
+      },
+      {
+        "namespace": "sample-h",
+        "name": "Sample H",
+        "origin": "https://sample-h.example.com",
+        "health_path": "/api/health",
+        "platform": "vercel",
+        "script": null,
+        "self_probe": false,
+        "revision": 1,
+        "updated_at": "2026-09-21 12:00:00"
       }
     ]
   },
