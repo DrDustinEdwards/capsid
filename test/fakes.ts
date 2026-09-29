@@ -246,6 +246,7 @@ export interface FakeD1Rows {
   jobs: Array<Record<string, unknown>>;
   job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
   job_outcomes: Array<Record<string, unknown>>;
+  job_touches: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1 {
@@ -359,6 +360,21 @@ function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
   return { changes: 1, returning: [{ params: auditParams }] };
 }
 
+// touchStatement (src/job-touches.ts): waited_ms is a subquery over the latest gate row
+// for the job, resolved here against rows.job_touches in the same order SQLite reads
+// it (by id), so a gate earlier in the same batch counts.
+const TOUCH_INSERT = /^INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\) VALUES/i;
+
+function landTouch(params: unknown[], rows: FakeD1Rows): WriteResult {
+  const [job_id, namespace, kind, actor, actor_kind, detail, at, sinceGate] = params;
+  const gates = rows.job_touches.filter((t) => t.job_id === job_id && t.kind === "gate");
+  const latest = gates.reduce<Record<string, unknown> | null>((best, t) => (!best || Number(t.id) > Number(best.id) ? t : best), null);
+  const waited_ms = sinceGate === 1 && latest ? Math.round(Date.parse(String(at)) - Date.parse(String(latest.at))) : null;
+  const id = rows.job_touches.reduce((max, t) => Math.max(max, Number(t.id ?? 0)), 0) + 1;
+  rows.job_touches.push({ id, job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at });
+  return { changes: 1, returning: [] };
+}
+
 // The column defaults migrations 0006 to 0020 give a jobs row.
 const jobDefaults = (): Row => ({
   priority: 0,
@@ -423,6 +439,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     jobs: (opts.jobs ?? []).map((j) => ({ ...jobDefaults(), ...j })),
     job_outcome_prs: (opts.jobOutcomePrs ?? []).map((p) => ({ ...p })),
     job_outcomes: (opts.jobOutcomes ?? []).map((o) => ({ ...o })),
+    job_touches: [],
   };
   // The tables a write lands in, so a write whose WHERE matched nothing is
   // distinguishable from one that landed.
@@ -460,6 +477,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       return { changes: 0, returning: [] };
     }
     if (SNAPSHOT_LIVE.test(flat)) return landSnapshot(params, rows);
+    if (TOUCH_INSERT.test(flat)) return landTouch(params, rows);
     if (DELETE_AUDIT_EDGES.test(flat)) return landDeleteAudit(params, rows);
     // jobs_open_title (migrations/0019): one open job per (namespace, title). The
     // queue's duplicate refusal is this index firing, so a fake without it would
