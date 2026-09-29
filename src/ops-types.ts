@@ -146,8 +146,10 @@ export interface OpsJob {
   waits_on: string | null;
   command: string | null;
   result_ref: string | null;
-  // Posted by agent:watcher, with its fingerprint from the title.
-  finding: { fingerprint: string } | null;
+  // Posted by agent:watcher, with its fingerprint from the title, and how often the
+  // watcher has seen it (seen_count, last_seen) while this is the finding's current
+  // job; both null otherwise (src/watcher-findings.ts).
+  finding: { fingerprint: string; seen_count: number | null; last_seen: string | null } | null;
 }
 
 export interface OpsAgent {
