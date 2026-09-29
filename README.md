@@ -2,7 +2,7 @@
 
 Capsid is a control plane for AI agents working across a portfolio of repositories. It stores structured memory, issues scoped credentials with an audit trail over every write, runs a signed work queue that hands a task from a chat to a machine, and optionally runs a self-improvement loop scored against hidden tests.
 
-It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 34 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
+It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 35 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
 
 Every write snapshots the prior version into `document_versions` and appends to `audit_log`.
 
