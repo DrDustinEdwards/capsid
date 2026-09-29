@@ -65,6 +65,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // overwrites and removes nothing, so it is not destructive either. A client that
   // asks before a non-read-only call asks here too, which costs the admin one click.
   claims: additive(),
+
+  // Cloudflare Access and Email Routing, read. Admin, so not read-only under the same
+  // rule as claims, and it overwrites and removes nothing.
+  cloudflare_config: additive(),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.
