@@ -429,7 +429,9 @@ function seedActivity(): PortalActivityRow[] {
   return rows.map(([m, actor, action, namespace, path, target], i) => ({ id: 1000 - i, at: new Date(now - m * M).toISOString(), actor, action, namespace, path, target }));
 }
 
-const ACTIVITY_LIMIT = 200;
+// The Worker's own cap (ACTIVITY_LIMIT in src/portal-activity.ts), so the screenshots
+// state what the Portal reads.
+const ACTIVITY_LIMIT = 50;
 
 // Claims, with fake data only: per-agent groups for the aggregate, and two jobs from the
 // fixture with their claims, checks and touches for the drill-in. Any other job id is
