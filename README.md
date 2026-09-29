@@ -2,7 +2,7 @@
 
 Capsid is a control plane for AI agents working across a portfolio of repositories. It stores structured memory, issues scoped credentials with an audit trail over every write, runs a signed work queue that hands a task from a chat to a machine, and optionally runs a self-improvement loop scored against hidden tests.
 
-It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 32 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
+It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 33 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
 
 Every write snapshots the prior version into `document_versions` and appends to `audit_log`.
 
@@ -23,7 +23,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - **Repo access.** A dedicated GitHub App mints short-lived installation tokens. The Worker reads and writes mapped repositories with no long-lived credential stored. The namespace mapping is the authorization boundary.
 - **The work queue.** A job hands a task from a chat that has no shell to a session that has no conversation. Bodies are signed, claims take a four-hour lease, and a job reaching a push, a deploy or a merge blocks with the exact command a human runs.
 - **The self-improvement loop.** An optional nightly loop proposes one scoped change at a time, has each repo's own CI score it against hidden tests, and opens a pull request only for changes that improved the repo without regressing an anchor. Off by default, and it never merges.
-- **Capsid Portal.** The admin app at `/portal/`: every site, the job queue, agents, namespaces, recent activity, backups and CI, with eight controls that each preview what they will change before anything does. It renders what the tools already compute.
+- **Capsid Portal.** The admin app at `/portal/`: every site, the job queue, agents, namespaces, recent activity, agent claims beside verified outcomes, backups and CI, with eight controls that each preview what they will change before anything does. It renders what the tools already compute.
 - **Backups.** A daily cron exports every table to R2 as JSON plus a markdown mirror of every document body. `DrDustinEdwards/capsid-backups` mirrors the dumps off-account; this repo mints that job's credential and sets no schedule for it. Restore is documented and rehearsed weekly against a scratch database.
 - **Audit trail.** Every write snapshots the prior version into `document_versions` and appends to `audit_log`. Every destructive document write asks for confirmation first.
 

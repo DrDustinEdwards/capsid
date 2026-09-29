@@ -15,6 +15,7 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
+import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
@@ -112,6 +113,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PERFORM_PATH,
   PORTAL_NAMESPACES_PATH,
   PORTAL_ACTIVITY_PATH,
+  PORTAL_CLAIMS_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,
   PORTAL_PATH,
