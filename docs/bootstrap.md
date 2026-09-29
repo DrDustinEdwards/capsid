@@ -46,6 +46,7 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareacce
 npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Capsid"
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the one email both logins admit, exactly
+npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys
 npx wrangler secret put ANTHROPIC_API_KEY        # only for the fully automated mode

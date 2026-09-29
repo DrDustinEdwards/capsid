@@ -4,12 +4,13 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
-**It carries eight controls**, each on the row it changes:
+**It carries eleven controls**, each on the row it changes:
 - the job drawer: resume a blocked job, release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
 - the Queue view: the seat-start switch;
 - the Agents view: the improve mode;
-- the Namespaces view: pause and unpause.
+- the Namespaces view: pause and unpause;
+- the Settings view: add, edit and remove a site.
 
 Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (the routes are below). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons.
 
@@ -143,7 +144,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
 
 - **`GET /portal/api/ops`** returns `OpsFeed` (`src/ops-types.ts`), uncached: the watcher's last pass from KV, plus open jobs and jobs that ended in the last day, the agents with their records, pull requests recorded in the last week, the awaiting-seat set, seat-started sessions from the last week with the run each became, and the loop's mode and budget. It also carries each roster namespace's pause reason and the `csrf` value the controls send back. One request costs 10 D1 statements (plus one per unclaimed seat start in the pending window) and 7 KV reads plus one per roster namespace, run concurrently. `src/ops-feed.ts` states them and an integration test counts them.
 - **`POST /portal/api/ops/refresh`** runs one watcher pass now and returns the new feed. It needs the header `X-Capsid-Ops: refresh`, which a cross-site form cannot send, and it runs at most once per two minutes (KV `ops:refresh:last`; a 429 with `Retry-After` inside that window, and a 503 when the stamp cannot be read or written). The click is audited as `portal-ops-refresh` under `access:<email>`.
-- **`POST /portal/api/actions/preview`** and **`POST /portal/api/actions/perform`** are the eight controls (`src/portal-actions.ts`). The confirm is a second request, as ruled 2026-09-11:
+- **`POST /portal/api/actions/preview`** and **`POST /portal/api/actions/perform`** are the eleven controls (`src/portal-actions.ts`). The confirm is a second request, as ruled 2026-09-11:
   - The preview takes `{action, params}`, reads the current state, writes nothing, and returns what will change, the audit rows the perform will write, and a signed token. The token is good for five minutes and carries the action, its params and the admin's email.
   - The perform takes only `{token}`, so what runs is exactly what the dialog showed.
   - Both refuse a `Sec-Fetch-Site` that is present and not `same-origin`.
