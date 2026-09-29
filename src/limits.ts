@@ -20,6 +20,9 @@ export const MAX_SHA = 128;
 export const MAX_COMMIT_MESSAGE = 4096;
 export const MAX_PR_TITLE = 512;
 export const MAX_PR_BODY = 65_536;
+// A CI job or step name, or its numeric id, as ci_status takes them. GitHub does not
+// document a ceiling; a name longer than this is not one a workflow file holds.
+export const MAX_CI_NAME = 512;
 // A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
 // a paragraph, and GitHub's own comment ceiling is 65_536 either way.
 export const MAX_PR_COMMENT = 16_384;

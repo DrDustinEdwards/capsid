@@ -48,6 +48,54 @@ export function advanceRing(
   return { ring, ring_slot: slot };
 }
 
+const RING_SLOT_MS = RING_SLOT_MINUTES * 60_000;
+
+export interface RingReading {
+  namespace: string;
+  // 0 is the ring's newest slot, the one the last pass that reached this site wrote.
+  slot: number;
+  // The half hour the slot covers, [from, to).
+  from: string;
+  to: string;
+  // up: the site answered; down: it did not; no-pass: no pass reached it in that half
+  // hour; outside-ring: older than the history this ring holds yet.
+  value: "up" | "down" | "no-pass" | "outside-ring";
+  mark: string | null;
+}
+
+/** One site's ring value, by slot counted back from the newest (0) or by the time the
+ *  slot covers. A refusal is returned as a string, never thrown, for the tool to relay. */
+export function ringReading(
+  site: Pick<SiteSnapshot, "namespace" | "ring" | "ring_slot">,
+  pick: { slot: number } | { at: Date }
+): RingReading | string {
+  let back: number;
+  if ("slot" in pick) {
+    back = pick.slot;
+  } else {
+    if (!Number.isFinite(pick.at.getTime())) return "at is not a time; pass an ISO time such as 2026-09-28T12:10:00Z.";
+    back = site.ring_slot - ringSlot(pick.at);
+    if (back < 0) {
+      return `at ${pick.at.toISOString()} is after the newest slot of ${site.namespace}'s ring, which starts ${new Date(site.ring_slot * RING_SLOT_MS).toISOString()}.`;
+    }
+  }
+  if (!Number.isInteger(back) || back < 0 || back >= RING_SLOTS) {
+    return `the ring holds ${RING_SLOTS} half-hour slots (0 to ${RING_SLOTS - 1}, 0 the newest), so ${"slot" in pick ? `slot ${pick.slot}` : `at ${pick.at.toISOString()}`} is outside it.`;
+  }
+  const absolute = site.ring_slot - back;
+  const index = site.ring.length - 1 - back;
+  const mark = index >= 0 ? site.ring[index] : null;
+  const value = mark === "1" ? "up" : mark === "0" ? "down" : mark === "-" ? "no-pass" : "outside-ring";
+  return {
+    namespace: site.namespace,
+    slot: back,
+    from: new Date(absolute * RING_SLOT_MS).toISOString(),
+    to: new Date((absolute + 1) * RING_SLOT_MS).toISOString(),
+    value,
+    mark,
+  };
+}
+
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 interface Reached {

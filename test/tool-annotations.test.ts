@@ -280,6 +280,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   jobs: { idempotent: false, reason: "post creates a job on every call" },
   agents: { idempotent: false, reason: "mint issues a new credential on every call" },
   claims: { idempotent: true, reason: "the handler only reads" },
+  ops_snapshot: { idempotent: true, reason: "the handler only reads one KV value" },
 };
 
 // What creates something new on every call, matched in the block by what it does. An
