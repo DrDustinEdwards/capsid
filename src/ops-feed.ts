@@ -10,7 +10,8 @@ import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSeatStart } from "./ops-types";
+import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
+import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSeatStart, OpsSession } from "./ops-types";
 import { runUrl } from "./runner-key";
 import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
@@ -28,7 +29,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 11 statements plus N:
+//   D1, 12 statements plus N:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -37,6 +38,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //        plus N = one readJob per such start not already held (at most the cap in use)
 //     1  checkBudget's month spend
 //     1  ops_sites: the site configuration, every row
+//     1  agent_sessions: live sessions from the hook receiver, at most 50
 //   KV, 7 gets plus one per ROSTER namespace (5 today, so 12): ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, and each namespace's pause key.
@@ -47,7 +49,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 11, kv: 7 + ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 12, kv: 7 + ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -79,6 +81,8 @@ const WEEK_MS = 7 * DAY_MS;
 // The seat-start read's bound. Starts are rare (a cap of one or two in flight), so a
 // week of them is far under this; the LIMIT is a guard, not a page.
 const SEAT_ROWS_LIMIT = 500;
+// The live-sessions read's bound.
+const SESSION_ROWS_LIMIT = 50;
 
 // D1's datetime('now') text form, for comparing against columns written by default.
 const sqliteTime = (at: Date): string => at.toISOString().slice(0, 19).replace("T", " ");
@@ -291,6 +295,66 @@ async function seatRows(db: D1Database, now: Date): Promise<SeatAuditRow[]> {
   return results ?? [];
 }
 
+export interface SessionFeedRow {
+  session_id: string;
+  agent: string;
+  job_id: string | null;
+  namespace: string | null;
+  source: string | null;
+  model: string | null;
+  permission_mode: string | null;
+  started_at: string;
+  last_event_at: string;
+  last_event: string;
+  last_notification_type: string | null;
+  needs_input: number;
+  last_failure: string | null;
+}
+
+/** A session as the feed shows it, with its incident decided now: a failure a person
+ *  must act on, or input awaited for more than ten minutes (src/ops-hooks.ts). */
+export function opsSessionFrom(row: SessionFeedRow, now: Date): OpsSession {
+  const needsInput = row.needs_input === 1;
+  const waitedMs = now.getTime() - Date.parse(isoTime(row.last_event_at));
+  const incident =
+    row.last_failure !== null && INCIDENT_FAILURES.includes(row.last_failure)
+      ? "failure"
+      : needsInput && waitedMs > NEEDS_INPUT_INCIDENT_MS
+        ? "waiting"
+        : null;
+  return {
+    session_id: row.session_id,
+    agent: row.agent,
+    job_id: row.job_id,
+    namespace: row.namespace,
+    source: row.source,
+    model: row.model,
+    permission_mode: row.permission_mode,
+    started_at: isoTime(row.started_at),
+    last_event_at: isoTime(row.last_event_at),
+    last_event: row.last_event,
+    last_notification_type: row.last_notification_type,
+    needs_input: needsInput,
+    last_failure: row.last_failure,
+    incident,
+  };
+}
+
+// Through agent_sessions_live (ended_at, last_event_at): the NULL ended_at and the
+// range on last_event_at are both on the index, which also gives the order.
+async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT session_id, agent, job_id, namespace, source, model, permission_mode, started_at, last_event_at, last_event,
+              last_notification_type, needs_input, last_failure
+       FROM agent_sessions WHERE ended_at IS NULL AND last_event_at >= ?1
+       ORDER BY last_event_at DESC LIMIT ?2`
+    )
+    .bind(new Date(now.getTime() - DAY_MS).toISOString(), SESSION_ROWS_LIMIT)
+    .all<SessionFeedRow>();
+  return (results ?? []).map((row) => opsSessionFrom(row, now));
+}
+
 async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
   const [{ mode }, budget] = await Promise.all([readMode(env.APP_KV), checkBudget(env, now)]);
   // checkBudget's reason is prose for a refusal; the app states the numbers itself.
@@ -298,7 +362,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites] = await Promise.all([
+  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions] = await Promise.all([
     liveJobs(env.DB, now),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -311,6 +375,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     // with its reason, the way the loop treats it.
     Promise.all(ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
     readSiteConfig(env.DB),
+    liveSessions(env.DB, now),
   ]);
   return {
     generated: now.toISOString(),
@@ -319,6 +384,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
     seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
+    sessions,
     loop,
     namespaces,
     sites,

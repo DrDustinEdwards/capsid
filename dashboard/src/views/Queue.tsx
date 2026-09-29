@@ -47,6 +47,43 @@ export function SeatStart() {
   );
 }
 
+// Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
+// the job each is bound to, the key, its last event, whether it waits on a person, and
+// its last failure.
+export function LiveSessions() {
+  const { feed, now } = useApp();
+  const list = feed.live.sessions;
+  if (!list.length) return <div className="allclear">No live sessions in the last 24 hours.</div>;
+  return (
+    <>
+      {list.map((s) => (
+        <div className="qrow" key={s.session_id} data-row="" data-session={s.session_id} data-open={s.job_id ? `job:${s.job_id}` : undefined} tabIndex={s.job_id ? 0 : undefined}>
+          {s.last_failure ? (
+            <St kind={s.incident === "failure" ? "crit" : "warn"}>Failed</St>
+          ) : s.needs_input ? (
+            <St kind={s.incident === "waiting" ? "warn" : "blocked"}>Needs input</St>
+          ) : (
+            <St kind="run">Running</St>
+          )}
+          <div className="t">
+            <b className="mono">{s.job_id ?? "no job bound"}</b>
+            <div>
+              {s.agent}
+              {s.namespace ? ` · ${s.namespace}` : ""}
+              {s.last_failure ? ` · failure: ${s.last_failure}` : ""}
+            </div>
+          </div>
+          <div className="m">
+            {s.last_event === "Notification" && s.last_notification_type ? s.last_notification_type : s.last_event}
+            <br />
+            {ago(ms(s.last_event_at), now)}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function Queue() {
   const { feed, filters, setFilters } = useApp();
   const all = feed.live.jobs;
@@ -97,6 +134,9 @@ export function Queue() {
             <p className="section-title">Seat-started sessions</p>
             <SeatStart />
           </div>
+        </Panel>
+        <Panel title="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
+          <LiveSessions />
         </Panel>
       </div>
     </div>

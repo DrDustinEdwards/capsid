@@ -7,6 +7,7 @@ import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
+import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_API_PREFIX,
@@ -109,6 +110,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   RUNNER_KEY_PATH,
   OPS_FEED_PATH,
   OPS_REFRESH_PATH,
+  OPS_HOOKS_PATH,
   PORTAL_PREVIEW_PATH,
   PORTAL_PERFORM_PATH,
   PORTAL_NAMESPACES_PATH,
