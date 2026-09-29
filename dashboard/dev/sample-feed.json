@@ -1269,7 +1269,9 @@
         "command": null,
         "result_ref": null,
         "finding": {
-          "fingerprint": "errors-sample-c"
+          "fingerprint": "errors-sample-c",
+          "seen_count": null,
+          "last_seen": null
         }
       },
       {
@@ -1290,7 +1292,9 @@
         "command": null,
         "result_ref": null,
         "finding": {
-          "fingerprint": "probe-sample-f"
+          "fingerprint": "probe-sample-f",
+          "seen_count": null,
+          "last_seen": null
         }
       },
       {
@@ -1368,7 +1372,9 @@
         "command": null,
         "result_ref": null,
         "finding": {
-          "fingerprint": "deploy-drift-d88c043"
+          "fingerprint": "deploy-drift-d88c043",
+          "seen_count": null,
+          "last_seen": null
         }
       }
     ],
