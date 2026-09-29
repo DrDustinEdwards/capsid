@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorCode, GetPromptRequestSchema, ListPromptsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { Agent } from "./agents";
 import { namespaceFilter, resourceRefusal } from "./resources";
+import { PRIVATE_LIST } from "./cache-hints";
 
 export function registerPrompts(server: McpServer, agent: Agent, db: D1Database): void {
   // Prompts: reusable templates stored as type 'prompt' documents whose bodies use
@@ -37,6 +38,8 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
         description: promptSafeTitle(row.title),
         arguments: promptVariables(row.body ?? "").map((name) => ({ name, required: true })),
       })),
+      // Filtered to the caller's namespaces, so private (src/cache-hints.ts).
+      ...PRIVATE_LIST,
     };
   });
   server.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
