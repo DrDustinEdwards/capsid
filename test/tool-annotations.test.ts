@@ -50,6 +50,9 @@ const DESTRUCTIVE = [
   // update_scopes); the statements live in src/agents-admin.ts.
   /\brevokeAgent\(/,
   /\bupdateAgentScopes\(/,
+  // delete_namespace's perform; its batch deletes each document through pathMutation
+  // in src/namespace-delete.ts.
+  /\bperformNamespaceDelete\(/,
 ];
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
@@ -269,6 +272,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   lint: { idempotent: false, reason: "a second report the same day snapshots the first" },
   register_namespace: { idempotent: false, reason: "a repeat is refused, but the create is an INSERT the scan below cannot tell from a repeating one" },
   update_namespace: { idempotent: true, reason: "sets the mapping to the value given; a repeat sets the same mapping" },
+  delete_namespace: { idempotent: true, reason: "a repeat finds no namespace and is refused" },
   write_repo_file: { idempotent: false, reason: "every call is a new commit, or a new pull request in pr mode" },
   create_branch: { idempotent: true, reason: "GitHub refuses a branch that exists" },
   open_pr: { idempotent: false, reason: "after the first is closed or merged, a repeat opens another" },

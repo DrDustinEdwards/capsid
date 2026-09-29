@@ -58,6 +58,9 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // and, with a repos axis of "*", immediately read and write it.
   register_namespace: "admin",
   update_namespace: "admin",
+  // Removes the mapping and, with cascade, every live document of the namespace. It
+  // reaches across every table that names the namespace, which no scope narrows.
+  delete_namespace: "admin",
   // gather reads, finalize archives.
   lint: "action",
 
@@ -300,6 +303,8 @@ const ADMIN_REASON: Record<string, string> = {
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
   update_namespace:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
+  delete_namespace:
+    "It removes a namespace's repo mapping, which is the authorization boundary every repo call resolves through, and with cascade every live document in it, so a scoped caller that could use it could delete the boundary it sits behind.",
   agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
   claims:
     "It reads every agent's claims, the Worker's checks of them and every human touch, across every namespace, which is wider than any one caller's scope.",
@@ -358,6 +363,7 @@ const ACTION_ARG: Record<string, string> = {
   agents: "action",
   claims: "action",
   cloudflare_config: "action",
+  delete_namespace: "action",
   improve_run: "action",
   jobs: "action",
   lint: "mode",
