@@ -70,10 +70,12 @@ function cutoffDay(now: Date, days: number): string {
 // keeps the one-instant dump: rows at or below it cannot have changed, and only this
 // run's own prune (after the export, under the lease) deletes them. documents and jobs
 // are updated in place, so they stay in the batch. A version row can be a few hundred
-// KB; an audit row carries no document body.
+// KB; an audit row carries no document body. A claim row can list 500 touched paths,
+// so job_claims pages too; its two sibling tables carry no lists and stay in the batch.
 const PAGED = {
   document_versions: { idColumn: "id", pageRows: 100 },
   audit_log: { idColumn: "id", pageRows: 1000 },
+  job_claims: { idColumn: "id", pageRows: 200 },
 };
 // wrangler's migration ledger. A restore builds the schema from migrations/, which
 // writes its own, and the rehearsal refuses a file that is not a migrations table.
