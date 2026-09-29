@@ -1387,7 +1387,9 @@
         "prs_merged": 31,
         "pr_merge_rate": 0.86,
         "ci_green_rate": 0.94,
-        "median_duration_minutes": 212
+        "median_duration_minutes": 212,
+        "attempts_kept": 14,
+        "attempts_reverted": 9
       },
       {
         "name": "sample-b-driver",
@@ -1405,7 +1407,9 @@
         "prs_merged": 66,
         "pr_merge_rate": 0.93,
         "ci_green_rate": 0.9,
-        "median_duration_minutes": 96
+        "median_duration_minutes": 96,
+        "attempts_kept": 6,
+        "attempts_reverted": 11
       },
       {
         "name": "sample-c-driver",
@@ -1423,7 +1427,9 @@
         "prs_merged": 11,
         "pr_merge_rate": 0.85,
         "ci_green_rate": null,
-        "median_duration_minutes": 118
+        "median_duration_minutes": 118,
+        "attempts_kept": 2,
+        "attempts_reverted": 3
       },
       {
         "name": "sample-d-driver",
@@ -1441,7 +1447,9 @@
         "prs_merged": 5,
         "pr_merge_rate": 1,
         "ci_green_rate": null,
-        "median_duration_minutes": 77
+        "median_duration_minutes": 77,
+        "attempts_kept": 0,
+        "attempts_reverted": 0
       },
       {
         "name": "seat",
@@ -1459,7 +1467,9 @@
         "prs_merged": 58,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null
+        "median_duration_minutes": null,
+        "attempts_kept": null,
+        "attempts_reverted": null
       },
       {
         "name": "watcher",
@@ -1475,7 +1485,9 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null
+        "median_duration_minutes": null,
+        "attempts_kept": null,
+        "attempts_reverted": null
       },
       {
         "name": "reviewer",
@@ -1493,7 +1505,9 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null
+        "median_duration_minutes": null,
+        "attempts_kept": null,
+        "attempts_reverted": null
       },
       {
         "name": "old-auditor",
@@ -1509,7 +1523,9 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null
+        "median_duration_minutes": null,
+        "attempts_kept": null,
+        "attempts_reverted": null
       }
     ],
     "prs": [
@@ -1580,8 +1596,31 @@
         },
         "exceeded": false
       }
-    }
+    },
+    "namespaces": [
+      {
+        "name": "sample",
+        "paused": null
+      },
+      {
+        "name": "sample-b",
+        "paused": null
+      },
+      {
+        "name": "sample-c",
+        "paused": "Paused while the fixture repo is rebuilt"
+      },
+      {
+        "name": "sample-d",
+        "paused": null
+      },
+      {
+        "name": "sample-f",
+        "paused": null
+      }
+    ]
   },
   "refresh_allowed_at": null,
-  "cloudflare_configured": true
+  "cloudflare_configured": true,
+  "csrf": "sample-csrf-0000000000000000"
 }

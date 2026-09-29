@@ -127,6 +127,13 @@ const NAV_ICONS: Record<string, ReactNode> = {
       <path d="M4 6v4M6 4h2a4 4 0 0 1 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
+  namespaces: <path d="M2 3h5v4H2zM9 3h5v4H9zM2 9h5v4H2zM9 9h5v4H9z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  activity: (
+    <>
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
 };
 
 export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {

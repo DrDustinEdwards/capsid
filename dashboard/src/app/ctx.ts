@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { OpsFeed } from "../types";
+import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
 export const VIEWS = [
   { id: "overview", label: "Overview", key: "o" },
@@ -10,6 +10,8 @@ export const VIEWS = [
   { id: "agents", label: "Agents", key: "a" },
   { id: "backups", label: "Backups", key: "b" },
   { id: "ci", label: "CI and merges", key: "c" },
+  { id: "namespaces", label: "Namespaces", key: "n" },
+  { id: "activity", label: "Activity", key: "l" },
 ] as const;
 
 export type ViewId = (typeof VIEWS)[number]["id"];
@@ -34,7 +36,26 @@ export interface Ctx {
   filters: Filters;
   setFilters: (f: Partial<Filters>) => void;
   copy: (text: string) => void;
+  // A short message in the toast.
+  say: (msg: string) => void;
+  // Opens the confirm dialog for one control: it previews, then performs on "Do it".
+  confirm: (req: ConfirmRequest) => void;
+  // The session ended: show the signed-out page.
+  signOut: () => void;
 }
+
+// One control's request to the confirm dialog. The dialog collects params.reason
+// itself for the actions that need one (NEEDS_REASON).
+export interface ConfirmRequest {
+  action: PortalAction;
+  params: Record<string, string>;
+  // The dialog's heading before the preview answers, e.g. "Pause sample".
+  title: string;
+  // Called after a successful perform, once the app has taken the new feed.
+  onDone?: (p: PortalPerformed) => void;
+}
+
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job"]);
 
 export const AppCtx = createContext<Ctx | null>(null);
 

@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OpsFeed } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../types";
 
 export const FEED_URL = "/console/api/ops";
 export const REFRESH_URL = "/console/api/ops/refresh";
+export const PREVIEW_URL = "/console/api/actions/preview";
+export const PERFORM_URL = "/console/api/actions/perform";
+export const NAMESPACES_URL = "/console/api/namespaces";
+export const ACTIVITY_URL = "/console/api/activity";
 export const APP_URL = "/console/app/";
 export const POLL_MS = 60_000;
 
 // The console session ended: Access answers with a redirect to its login, or the
 // Worker answers 401 or 403. redirect: "manual" keeps a cross-origin login redirect
-// from surfacing as an opaque network error.
-function sessionEnded(res: Response): boolean {
-  return res.type === "opaqueredirect" || res.redirected || res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400);
+// from surfacing as an opaque network error. The action endpoints answer 403 for a
+// CSRF or cross-site refusal, with its text, so they pass forbidden = false and show
+// that text instead of the signed-out page.
+function sessionEnded(res: Response, forbidden = true): boolean {
+  return res.type === "opaqueredirect" || res.redirected || res.status === 401 || (forbidden && res.status === 403) || (res.status >= 300 && res.status < 400);
 }
 
 async function asFeed(res: Response): Promise<OpsFeed> {
@@ -89,4 +95,75 @@ export async function requestRefresh(): Promise<RefreshResult> {
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }
+}
+
+// ---- Portal controls, namespaces and activity ----------------------------------------------
+
+// What a control's request came to. A refusal carries the server's text verbatim.
+export type Answer<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "refused"; status: number; message: string }
+  | { kind: "expired"; message: string }
+  | { kind: "signed-out" }
+  | { kind: "error"; message: string };
+
+async function refusalText(res: Response): Promise<string> {
+  const text = (await res.text()).trim();
+  return text || `The server answered ${res.status} with no text`;
+}
+
+async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> {
+  if (sessionEnded(res, forbidden)) return { kind: "signed-out" };
+  if (res.status === 410) return { kind: "expired", message: await refusalText(res) };
+  if (!res.ok) return { kind: "refused", status: res.status, message: await refusalText(res) };
+  const type = res.headers.get("content-type") ?? "";
+  if (!type.includes("json")) return { kind: "error", message: `The server answered ${res.status} with ${type || "no content type"}, not JSON` };
+  return { kind: "ok", value: (await res.json()) as T };
+}
+
+async function post<T>(url: string, csrf: string, body: unknown): Promise<Answer<T>> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      redirect: "manual",
+      cache: "no-store",
+      headers: { "X-Capsid-CSRF": csrf, "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    return await answer<T>(res, false);
+  } catch (e) {
+    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function get<T>(url: string): Promise<Answer<T>> {
+  try {
+    const res = await fetch(url, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json" } });
+    return await answer<T>(res, true);
+  } catch (e) {
+    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// POST /console/api/actions/preview: writes nothing; answers what will change and a token.
+export function previewAction(csrf: string, req: PortalActionRequest): Promise<Answer<PortalPreview>> {
+  return post<PortalPreview>(PREVIEW_URL, csrf, req);
+}
+
+// POST /console/api/actions/perform: carries only the token; answers the feed after.
+export function performAction(csrf: string, token: string): Promise<Answer<PortalPerformed>> {
+  return post<PortalPerformed>(PERFORM_URL, csrf, { token });
+}
+
+export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
+  return get<PortalNamespaces>(NAMESPACES_URL);
+}
+
+export function fetchActivity(filter: { namespace: string; actor: string }): Promise<Answer<PortalActivity>> {
+  const qs = new URLSearchParams();
+  if (filter.namespace) qs.set("namespace", filter.namespace);
+  if (filter.actor) qs.set("actor", filter.actor);
+  const s = qs.toString();
+  return get<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
 }

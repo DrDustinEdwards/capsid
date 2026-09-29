@@ -1,16 +1,15 @@
 import { useApp } from "../app/ctx";
-import { agentState, nsList, type Kind } from "../lib/derive";
+import { LOOP_MODES, agentState, attemptsText, loopMode, nsList, type LoopMode } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { PageHead, Panel } from "./shared";
 
-function modeKind(mode: string): Kind {
-  return mode === "on" ? "ok" : mode === "paused" ? "warn" : "nodata";
-}
+const MODE_BUTTON: Record<LoopMode, string> = { api: "Switch to API", subscription: "Switch to subscription", off: "Turn off" };
 
 export function Agents() {
-  const { feed, now } = useApp();
+  const { feed, now, confirm } = useApp();
   const live = feed.live;
+  const mode = loopMode(live.loop.mode);
   const b = live.loop.budget;
   const minFrac = b.caps.actions_minutes_month ? b.spend.ci_minutes / b.caps.actions_minutes_month : 0;
   const usdFrac = b.caps.model_usd_month ? b.spend.cost_usd / b.caps.model_usd_month : 0;
@@ -19,7 +18,7 @@ export function Agents() {
       <PageHead title="Agents">Every credential, what it did, and when it was last seen. Counts and rates only; the verified columns are what the Worker checked against GitHub.</PageHead>
       <Panel title="Roster" src="agents · job outcomes">
         <div className="scroll-x">
-          <table className="list minw860">
+          <table className="list minw960">
             <thead>
               <tr>
                 <th>Agent</th>
@@ -29,6 +28,7 @@ export function Agents() {
                 <th>Merge rate</th>
                 <th>CI green</th>
                 <th>Median job</th>
+                <th>Improve attempts</th>
                 <th>Flags</th>
               </tr>
             </thead>
@@ -56,6 +56,7 @@ export function Agents() {
                     <td className="mono">{pct(a.pr_merge_rate, 0)}</td>
                     <td className="mono">{pct(a.ci_green_rate, 0)}</td>
                     <td className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
+                    <td className="mono">{attemptsText(a)}</td>
                     <td>
                       {a.flags.length ? (
                         a.flags.map((f) => (
@@ -78,8 +79,13 @@ export function Agents() {
         <div className="body">
           <dl className="kv">
             <dt>Mode</dt>
-            <dd>
-              <St kind={modeKind(live.loop.mode)}>{live.loop.mode}</St>
+            <dd className="toolbar">
+              <St kind={mode.kind}>{mode.label}</St>
+              {LOOP_MODES.filter((m) => m !== live.loop.mode).map((m) => (
+                <button key={m} type="button" className="btn" onClick={() => confirm({ action: "mode", params: { value: m }, title: `Set the improve loop to ${loopMode(m).label}` })}>
+                  {MODE_BUTTON[m]}
+                </button>
+              ))}
             </dd>
             <dt>Actions minutes</dt>
             <dd>
