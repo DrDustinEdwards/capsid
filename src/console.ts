@@ -452,12 +452,12 @@ export function renderConsole(data: ConsoleData, csrf = ""): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Capsid console</title>
+<title>Capsid Portal</title>
 <style>${STYLE}</style>
 </head>
 <body>
 <main>
-<h1>Capsid console</h1>
+<h1>Capsid Portal</h1>
 <p class="sub">Signed in as ${escapeHtml(data.viewer)}. Generated ${escapeHtml(data.generated)}.</p>
 <ul class="facts">${headerFacts(data)}</ul>
 ${modeForms(data, csrf)}

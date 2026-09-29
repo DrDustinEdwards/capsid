@@ -42,7 +42,7 @@ nothing starts fine and answers healthy while every read errors.
 
 ```
 npx wrangler secret put GITHUB_APP_PRIVATE_KEY   # the .pem contents
-npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareaccess.com, the MCP and console logins (docs/auth.md)
+npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareaccess.com, the MCP and Capsid Portal logins (docs/auth.md)
 npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Capsid"
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the one email both logins admit, exactly
@@ -233,7 +233,7 @@ The seat granted them on 2026-09-11, each for a stated reason: in both repos the
 protected paths are the subject of the driver's jobs rather than something near
 them, since tests, CI and `scripts/` are what that work edits, and in claude-skills
 a skill's workflow is part of the artifact being shipped. Every other driver holds
-none. `improve_status` and the console list what each agent actually holds, so the
+none. `improve_status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
 A driver opens pull requests and never merges them. A driver's pull request is
@@ -296,7 +296,7 @@ read-only tier and nothing else.
 
 **What it would take to mint over OAuth instead**, stated rather than built: the
 `agents` tool would need a mode that writes the key somewhere other than its
-response, and there is nowhere good. The console is admin-gated and would be the
+response, and there is nowhere good. Capsid Portal is admin-gated and would be the
 natural home, but it never mints by ruling, and a browser download is not mode 0600
 on the machine that needs it. A device-code flow in `scripts/mint-agents.mjs` that
 obtained an admin token the way any OAuth client does would keep the key on the
