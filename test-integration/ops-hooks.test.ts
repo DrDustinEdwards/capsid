@@ -41,7 +41,7 @@ async function agentRow(id: string, name: string, kind: string, key: string, gra
 function job(id: string, status: string, claimedBy: string | null) {
   return env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by, lease_expires)
-     VALUES (?1, 'sample', 'a sample job', 'lorem body', ?2, 'github:sample', ?3, ?4)`
+     VALUES (?1, 'sample', 'a sample job ' || ?1, 'lorem body', ?2, 'github:sample', ?3, ?4)`
   ).bind(id, status, claimedBy, claimedBy ? iso(-2 * HOUR) : null);
 }
 

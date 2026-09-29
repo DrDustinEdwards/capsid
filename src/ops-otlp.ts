@@ -266,24 +266,56 @@ export function jobForSession(caller: SessionCaller, bound: string | null | unde
 // A session belongs to the key that first reported it, by hook or by telemetry. The
 // claim: an agent_sessions row for a session nobody has reported yet, and nothing for
 // one that exists (the hook receiver owns every other column).
-const CLAIM_SESSION = `INSERT INTO agent_sessions (session_id, agent, job_id, namespace, started_at, last_event_at, last_event, updated_at)
-   VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'otlp', ?5)
-   ON CONFLICT(session_id) DO NOTHING`;
+// Each statement is one literal at its prepare, so test-integration/query-plans.test.ts
+// can reconstruct and EXPLAIN it.
+function claimSession(db: D1Database, id: string, actor: string, jobId: string | null, namespace: string | null, at: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO agent_sessions (session_id, agent, job_id, namespace, started_at, last_event_at, last_event, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'otlp', ?5)
+       ON CONFLICT(session_id) DO NOTHING`
+    )
+    .bind(id, actor, jobId, namespace, at);
+}
 
 // The upsert, conditional on the session being this caller's (?8), in the same batch as
 // the claim, so a session another key owns is never written whatever order two
 // requests commit in. RETURNING says which series landed; never meta.changes (CLAUDE.md,
 // path mutation rule). The job a row was first written with is kept (COALESCE).
 // The SELECT carries a WHERE, which SQLite needs to read the ON CONFLICT that follows.
-const UPSERT = (mode: "add" | "replace") =>
-  `INSERT INTO session_usage (session_id, job_id, metric, kind, model, value, updated_at)
-   SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-   WHERE EXISTS (SELECT 1 FROM agent_sessions WHERE session_id = ?1 AND agent = ?8)
-   ON CONFLICT(session_id, metric, kind, model) DO UPDATE SET
-     value = ${mode === "add" ? "session_usage.value + excluded.value" : "excluded.value"},
-     job_id = COALESCE(session_usage.job_id, excluded.job_id),
-     updated_at = excluded.updated_at
-   RETURNING session_id`;
+// Delta points add to the stored total; cumulative points replace it.
+function upsertUsage(
+  db: D1Database,
+  mode: "add" | "replace",
+  w: { session_id: string; metric: string; kind: string; model: string; value: number },
+  jobId: string | null,
+  at: string,
+  actor: string
+): D1PreparedStatement {
+  const statement =
+    mode === "add"
+      ? db.prepare(
+          `INSERT INTO session_usage (session_id, job_id, metric, kind, model, value, updated_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM agent_sessions WHERE session_id = ?1 AND agent = ?8)
+           ON CONFLICT(session_id, metric, kind, model) DO UPDATE SET
+             value = session_usage.value + excluded.value,
+             job_id = COALESCE(session_usage.job_id, excluded.job_id),
+             updated_at = excluded.updated_at
+           RETURNING session_id`
+        )
+      : db.prepare(
+          `INSERT INTO session_usage (session_id, job_id, metric, kind, model, value, updated_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+           WHERE EXISTS (SELECT 1 FROM agent_sessions WHERE session_id = ?1 AND agent = ?8)
+           ON CONFLICT(session_id, metric, kind, model) DO UPDATE SET
+             value = excluded.value,
+             job_id = COALESCE(session_usage.job_id, excluded.job_id),
+             updated_at = excluded.updated_at
+           RETURNING session_id`
+        );
+  return statement.bind(w.session_id, jobId, w.metric, w.kind, w.model, w.value, at, actor);
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -400,8 +432,8 @@ export async function recordExport(
     const claims = [...new Set(writes.map((w) => w.session_id))].filter((id) => !bound.has(id));
     try {
       const results = await db.batch([
-        ...claims.map((id) => db.prepare(CLAIM_SESSION).bind(id, actor, caller.job_id, caller.namespace, at)),
-        ...writes.map((w) => db.prepare(UPSERT(w.mode)).bind(w.session_id, jobOf.get(w.session_id) ?? null, w.metric, w.kind, w.model, w.value, at, actor)),
+        ...claims.map((id) => claimSession(db, id, actor, caller.job_id, caller.namespace, at)),
+        ...writes.map((w) => upsertUsage(db, w.mode, w, jobOf.get(w.session_id) ?? null, at, actor)),
       ]);
       // A series whose upsert returned no row was refused by the ownership condition:
       // another key claimed the session between the read above and this batch.
