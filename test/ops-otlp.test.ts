@@ -36,7 +36,9 @@ function exportOf(metrics: unknown[], resource: Attr[] = [s("session.id", SESSIO
 
 // A D1 stand-in that records every bound value, for the one question these tests ask
 // of the database: what did the receiver send it.
-function recordingDb(bound: Array<{ session_id: string; job_id: string | null }> = []) {
+// `bound` is what agent_sessions already holds. The batch answers each RETURNING
+// statement with its row, as a landed write does.
+function recordingDb(bound: Array<{ session_id: string; agent: string; job_id: string | null }> = []) {
   const statements: Array<{ sql: string; params: unknown[] }> = [];
   const db = {
     prepare(sql: string) {
@@ -56,7 +58,7 @@ function recordingDb(bound: Array<{ session_id: string; job_id: string | null }>
     },
     batch: async (stmts: Array<{ sql: string; params: unknown[] }>) => {
       for (const st of stmts) statements.push({ sql: st.sql, params: st.params });
-      return [];
+      return stmts.map((st) => ({ results: /RETURNING/.test(st.sql) ? [{ session_id: st.params[0] }] : [] }));
     },
   } as unknown as D1Database;
   const writes = () => statements.filter((st) => /^\s*INSERT INTO session_usage/.test(st.sql));
@@ -87,7 +89,12 @@ function driverAgent(): Agent {
   };
 }
 
-const caller = (job_id: string | null = JOB): SessionCaller => ({ agent: driverAgent(), job_id });
+const caller = (job_id: string | null = JOB): SessionCaller => ({
+  agent: driverAgent(),
+  job_id,
+  namespace: job_id ? "sample" : null,
+  touch: async () => {},
+});
 
 test("the metrics path is the one Claude Code's exporter appends to the endpoint", () => {
   assert.equal(OTLP_METRICS_PATH, "/ops/otlp/v1/metrics");
@@ -308,5 +315,30 @@ test("only a driver, a runner key or the admin, holding write, may report on a s
   readOnlyDriver.scopes.grants = ["read"];
   assert.match(sessionCallerRefusal(readOnlyDriver) ?? "", /write grant/);
   const seat = { ...driverAgent(), kind: "seat" as const };
-  assert.match(sessionCallerRefusal(seat) ?? "", /not a driver, a runner key or the admin/);
+  assert.match(sessionCallerRefusal(seat) ?? "", /not a driver or a runner/);
+});
+
+// whose session it is
+
+test("the ownership condition is bound: a claim for a new session, then upserts only where agent_sessions names this caller", async () => {
+  const parsed = parseMetrics(exportOf([sumMetric("claude_code.commit.count", 1, [{ asInt: "1" }])]));
+  const { db, statements, writes } = recordingDb();
+  const response = await recordExport(db, caller(), parsed, new Date("2026-09-29T00:00:00.000Z"));
+  assert.deepEqual(await response.json(), {});
+  const batched = statements.filter((st) => /^\s*INSERT/.test(st.sql));
+  assert.equal(batched.length, 2, "the claim and the upsert were not both sent in one batch");
+  // The claim first, so the upsert's condition finds it in the same batch.
+  assert.match(batched[0].sql, /INSERT INTO agent_sessions[\s\S]*ON CONFLICT\(session_id\) DO NOTHING/);
+  assert.deepEqual(batched[0].params.slice(0, 4), [SESSION, "agent:sample-driver", JOB, "sample"]);
+  assert.match(writes()[0].sql, /WHERE EXISTS \(SELECT 1 FROM agent_sessions WHERE session_id = \?1 AND agent = \?8\)/);
+  assert.equal(writes()[0].params[7], "agent:sample-driver", "the caller is not what the ownership condition compares against");
+});
+
+test("points for a session another key reported first are rejected and counted, and nothing is written for them", async () => {
+  const parsed = parseMetrics(exportOf([sumMetric("claude_code.commit.count", 1, [{ asInt: "1" }, { asInt: "2" }])]));
+  const { db, writes } = recordingDb([{ session_id: SESSION, agent: "agent:other-driver", job_id: "job_aaaaaaaaaaaa" }]);
+  const body = (await (await recordExport(db, caller(), parsed, new Date())).json()) as { partialSuccess?: { rejectedDataPoints: number; errorMessage: string } };
+  assert.equal(writes().length, 0);
+  assert.equal(body.partialSuccess?.rejectedDataPoints, 2);
+  assert.match(body.partialSuccess?.errorMessage ?? "", /first reported by another key/);
 });
