@@ -10,6 +10,7 @@
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
+import { REOPEN_QUIET_MS, appendEvidence, type FindingMemory, type FindingRow, type JobEnd } from "../src/watcher-findings.ts";
 import { applyWrite, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
 import {
   IMPROVE_ATTEMPT_DEFAULTS,
@@ -982,4 +983,98 @@ export function fakeEnv(parts: Record<string, unknown>): never {
 // AgentRecord cannot be silently missing from every AgentSummary fixture.
 export function agentRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return { ...recordFor("agent:fixture", { outcomes: [], jobs: [], runs: [] }, null), ...overrides };
+}
+
+// The watcher's finding memory
+
+// An in-memory FindingMemory (src/watcher-findings.ts) for driving runPass without a
+// database. Each write is guarded on the state it was read in, as the D1 statements
+// are; test-integration/watcher-findings.test.ts runs the real statements.
+export interface FakeFindingMemory {
+  memory: FindingMemory;
+  rows: Map<string, FindingRow>;
+  writes: string[];
+}
+
+export function fakeFindingMemory(seed: FindingRow[] = [], jobs: Record<string, JobEnd> = {}): FakeFindingMemory {
+  const rows = new Map(seed.map((r) => [r.fingerprint, { ...r }]));
+  const writes: string[] = [];
+  const guarded = (row: FindingRow, extra: (cur: FindingRow) => boolean = () => true) => {
+    const cur = rows.get(row.fingerprint);
+    return cur && cur.state === row.state && extra(cur) ? cur : null;
+  };
+  const memory: FindingMemory = {
+    async load(fingerprints) {
+      const out = new Map<string, FindingRow>();
+      for (const fp of fingerprints) {
+        const row = rows.get(fp);
+        if (row) out.set(fp, { ...row });
+      }
+      for (const row of rows.values()) if (row.state !== "cleared") out.set(row.fingerprint, { ...row });
+      return out;
+    },
+    async job(id) {
+      return jobs[id] ?? null;
+    },
+    async insert(f, state, jobId, now) {
+      if (rows.has(f.fingerprint)) return false;
+      const iso = now.toISOString();
+      rows.set(f.fingerprint, {
+        fingerprint: f.fingerprint,
+        namespace: f.namespace,
+        title: f.title,
+        state,
+        job_id: jobId,
+        first_seen_at: iso,
+        last_seen_at: iso,
+        seen_count: 1,
+        cleared_at: null,
+        reopen_after: null,
+        evidence: appendEvidence(f.fingerprint, null, f, now),
+        updated_at: iso,
+      });
+      writes.push(`insert:${f.fingerprint}:${state}`);
+      return true;
+    },
+    async sight(row, f, now) {
+      const cur = guarded(row);
+      if (!cur) return false;
+      Object.assign(cur, { title: f.title, seen_count: cur.seen_count + 1, last_seen_at: now.toISOString(), evidence: appendEvidence(row.fingerprint, row.evidence, f, now), updated_at: now.toISOString() });
+      writes.push(`sight:${row.fingerprint}`);
+      return true;
+    },
+    async open(row, f, jobId, now) {
+      const cur = guarded(row);
+      if (!cur) return false;
+      Object.assign(cur, {
+        state: "open",
+        job_id: jobId,
+        title: f.title,
+        namespace: f.namespace,
+        cleared_at: null,
+        reopen_after: null,
+        seen_count: cur.seen_count + 1,
+        last_seen_at: now.toISOString(),
+        evidence: appendEvidence(row.fingerprint, row.evidence, f, now),
+        updated_at: now.toISOString(),
+      });
+      writes.push(`open:${row.fingerprint}:${jobId}`);
+      return true;
+    },
+    async dismiss(row, f, now) {
+      const cur = guarded(row, (c) => c.state === "open" && c.job_id === row.job_id);
+      if (!cur) return false;
+      Object.assign(cur, { state: "dismissed", reopen_after: null, cleared_at: null, seen_count: cur.seen_count + 1, last_seen_at: now.toISOString(), evidence: appendEvidence(row.fingerprint, row.evidence, f, now), updated_at: now.toISOString() });
+      writes.push(`dismiss:${row.fingerprint}`);
+      return true;
+    },
+    async clear(row, now) {
+      const cur = guarded(row);
+      if (!cur) return false;
+      Object.assign(cur, { state: "cleared", cleared_at: now.toISOString(), reopen_after: new Date(now.getTime() + REOPEN_QUIET_MS).toISOString(), updated_at: now.toISOString() });
+      writes.push(`clear:${row.fingerprint}`);
+      return true;
+    },
+  };
+  return { memory, rows, writes };
 }

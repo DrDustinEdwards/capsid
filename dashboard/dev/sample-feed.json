@@ -1151,7 +1151,9 @@
         "command": "gh workflow run mirror --repo example-org/sample-backups",
         "result_ref": null,
         "finding": {
-          "fingerprint": "mirror-run-failed"
+          "fingerprint": "mirror-run-failed",
+          "seen_count": 14,
+          "last_seen": "2026-09-28T11:30:00.000Z"
         }
       },
       {
