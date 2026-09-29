@@ -20,6 +20,9 @@ export const MAX_SHA = 128;
 export const MAX_COMMIT_MESSAGE = 4096;
 export const MAX_PR_TITLE = 512;
 export const MAX_PR_BODY = 65_536;
+// A CI job or step name, or its numeric id, as ci_status takes them. GitHub does not
+// document a ceiling; a name longer than this is not one a workflow file holds.
+export const MAX_CI_NAME = 512;
 // A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
 // a paragraph, and GitHub's own comment ceiling is 65_536 either way.
 export const MAX_PR_COMMENT = 16_384;
@@ -36,6 +39,9 @@ export const SEARCH_ROWS = 25;
 export const BRIEF_BUDGET = 40_000;
 // Enforced by trimming, not warned about.
 export const GATHER_BUDGET = 150_000;
+// D1's ceiling on the statements in one batch, the number the bounds below are sized
+// against. delete_namespace derives its document cap from it.
+export const D1_BATCH_STATEMENTS = 100;
 // Four statements per path plus an audit row: 20 paths is 81, under D1's
 // 100-statement batch ceiling.
 export const LINT_CONSUMED_MAX = 20;

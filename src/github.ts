@@ -37,6 +37,7 @@ export {
 export {
   CI_DISPATCH_POLL_INTERVAL_MS,
   CI_DISPATCH_POLL_MS,
+  CI_JOBS_MAX,
   CI_LOG_BUDGET,
   ciDispatch,
   ciStatus,

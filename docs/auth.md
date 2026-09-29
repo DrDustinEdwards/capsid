@@ -78,3 +78,21 @@ Two gated endpoints:
 Login and repo access use different credentials: the Access for SaaS app for both logins, and a GitHub App for repo access. The GitHub OAuth App that was the login before the switch was deleted on 2026-09-28, after PR 4 was live and the claude.ai connector had reconnected by CIMD, and its three secrets (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ADMIN_GITHUB_LOGIN`) were deleted from the Worker the same day. No code reads them.
 
 `register_namespace` returns the command that mints the new namespace's driver agent, `node scripts/mint-agents.mjs --namespace <ns> --apply`. It does not mint it, and since 2026-09-13 it is admin only itself, so the separation is now belt and braces: registering a namespace and minting a credential for it are two acts by the same caller rather than one act that quietly does both.
+
+## Tool hints and list caching
+
+Every tool in `tools/list` carries all four annotations, from `src/tool-annotations.ts`. They are hints to a client and enforce nothing; `checkScope` is still the only gate.
+
+- `readOnlyHint` is the negation of the write gate in `TOOL_GRANTS`, so an admin tool that only reads (`claims`) is served as not read-only.
+- `destructiveHint` is true when a write can overwrite or remove existing state.
+- `idempotentHint` is true for every read-only tool, and for a write only when a repeat of the same call changes nothing further (a second `delete` finds nothing and is refused). Tools that create something on every call, such as `ci_dispatch`, `open_pr` and `jobs` post, are false.
+- `openWorldHint` is true when the handler reaches GitHub or Cloudflare: the repo tools, `ci_status`, `lint` (gather reads the repo tree), `jobs` (evidence checks and seat starts) and `improve_run`.
+
+Both of the last two are stated for every tool, because the protocol reads an omitted `idempotentHint` as false and an omitted `openWorldHint` as true. `test/tool-annotations.test.ts` derives each hint from the handler source and fails in both directions.
+
+List results carry the cache fields of MCP 2026-07-28 (`CacheableResult`), `ttlMs` and `cacheScope` (`src/cache-hints.ts`). `tools/list` is `public` for 60 seconds: every caller is served the same list, and scope refuses at call time. `prompts/list`, `resources/list`, `resources/templates/list` and `resources/read` are `private` for 60 seconds, because each is filtered to the caller's namespaces.
+
+What the clients do with them, as of 2026-09-29:
+
+- **Claude Code**, verified: it refreshes its tool list on `notifications/tools/list_changed`. On protocol 2026-07-28 it rejects a `tools/list` result that lacks `ttlMs` or `cacheScope` (anthropics/claude-code#88128). capsid's SDK (1.29.0) negotiates 2025-11-25, where the two fields are extra and ignored, so today they are forward-looking. Nothing shows Claude Code caching by `ttlMs`.
+- **claude.ai**, unknown: nothing observed shows whether it reads the annotations, the cache fields, or either. It is known to cache the tool list from connect time, so a deploy still needs a reconnect (docs/bootstrap.md, "Verifying a deploy").

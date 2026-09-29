@@ -2,7 +2,7 @@
 
 Capsid is a control plane for AI agents working across a portfolio of repositories. It stores structured memory, issues scoped credentials with an audit trail over every write, runs a signed work queue that hands a task from a chat to a machine, and optionally runs a self-improvement loop scored against hidden tests.
 
-It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 34 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
+It is a single-user Cloudflare Worker. It speaks MCP over Streamable HTTP and exposes 35 tools in five groups: documents, repo access, maintenance, the work queue, and self-improvement. It also serves Resources (every document at `capsid://<namespace>/<path>`) and Prompts (templates stored as documents).
 
 Every write snapshots the prior version into `document_versions` and appends to `audit_log`.
 
@@ -29,7 +29,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 ## Documentation
 
-- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, and the two gated endpoints
+- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the two gated endpoints, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
 - [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, and its guards
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records

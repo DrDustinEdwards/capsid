@@ -5,6 +5,7 @@ import {
   deleteRefusals,
   fingerprintDifference,
   improveKvKeys,
+  NAMESPACE_DELETE_MAX_DOCUMENTS,
   planFingerprint,
   signDeleteToken,
   verifyDeleteToken,
@@ -12,6 +13,7 @@ import {
   type DeletePlan,
   type PlanCounts,
 } from "../src/namespace-delete.ts";
+import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { hintsFor } from "../src/tool-annotations.ts";
 
@@ -58,6 +60,8 @@ function plan(over: Partial<DeletePlan> = {}, counts: Partial<PlanCounts> = {}):
     live_agents: [],
     improve_control_paths: [],
     kv_keys: [],
+    live_paths: [],
+    live_paths_sha256: "0".repeat(64),
     ...over,
   };
 }
@@ -67,7 +71,7 @@ const ALL = { cascade: true, allowImprovePaths: true };
 
 test("the tool is admin, destructive, and its action argument is required with no default", () => {
   assert.equal(requiredGrant("delete_namespace"), "admin");
-  assert.deepEqual(hintsFor("delete_namespace"), { readOnlyHint: false, destructiveHint: true });
+  assert.deepEqual(hintsFor("delete_namespace"), { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
   assert.equal(actionArgFor("delete_namespace"), "action");
   assert.equal(defaultActionFor("delete_namespace"), undefined, "an omitted action must never mean perform");
 });
@@ -144,6 +148,26 @@ test("the fingerprint ignores key order and KV key order, and moves with every c
   }
   assert.notEqual(planFingerprint(plan({ ops_site_revision: 2 })), planFingerprint(plan({ ops_site_revision: 3 })));
   assert.notEqual(planFingerprint(plan({ kv_keys: ["a"] })), planFingerprint(plan()));
+  assert.notEqual(planFingerprint(plan({ live_paths_sha256: "1".repeat(64) })), planFingerprint(plan()), "a swapped document would not move the fingerprint");
+});
+
+// the batch cap
+
+test("the cap is derived from D1's batch ceiling: five fixed statements plus two per document", () => {
+  assert.equal(D1_BATCH_STATEMENTS, 100);
+  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, Math.floor((D1_BATCH_STATEMENTS - 5) / 2));
+  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, 47);
+  assert.ok(5 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS, "a batch at the cap does not fit");
+  assert.ok(5 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS, "the cap is lower than it needs to be");
+});
+
+test("PLANT: one document over the cap is refused whatever cascade says, with the count, the cap and the advice", () => {
+  const over = deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS + 1 }), ALL);
+  assert.equal(over.length, 1);
+  assert.match(over[0], new RegExp(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`));
+  assert.match(over[0], new RegExp(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`));
+  assert.match(over[0], /delete or move documents with the delete tool first, or ask the seat to rule a set-based helper/i);
+  assert.deepEqual(deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS }), ALL), [], "exactly the cap is refused");
 });
 
 test("the difference names what moved", () => {

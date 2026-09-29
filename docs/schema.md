@@ -116,13 +116,20 @@ true. `allow_improve_paths` needs the `can_touch_protected` flag, as it does on 
 document delete.
 
 What the batch deletes: every live document (every path outside `archive/`), each
-snapshotted to `document_versions` first; every edge with an end at one of those
-paths; the `ops_sites` row; the `namespaces` row. One audit row, action
+snapshotted to `document_versions` first and then removed by the same path helper a
+document delete uses, which takes every edge touching it too; the `ops_sites` row;
+the `namespaces` row. An edge that was already dangling (its end in the namespace
+names no document) touches nothing deleted and stays. One audit row, action
 `namespace-delete`, holds the counts, the deleted paths, the removed edges, and
 the `ops_sites` and `namespaces` rows whole. After the batch commits, the
 namespace's four improve KV keys (`improve:best:`, `improve:paused:`,
 `improve:anchor:`, `improve:driver:`) are deleted. A key that cannot be deleted is
 named in the response, not dropped.
+
+The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
+ones plus two per document. So a namespace with more than 47 live documents is
+refused at preview and at perform, never half deleted. Delete or move documents
+with the `delete` tool first, or ask the seat to rule a set-based helper.
 
 What it keeps, because it is history: archived documents and the edges between
 them, `document_versions`, `audit_log`, finished jobs, `job_outcomes`,

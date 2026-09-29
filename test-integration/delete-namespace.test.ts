@@ -6,7 +6,7 @@ import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
 import { bestKey, pausedKey } from "../src/improve-schema";
-import { planFingerprint, readDeletePlan, signDeleteToken } from "../src/namespace-delete";
+import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan, signDeleteToken } from "../src/namespace-delete";
 import { buildServer } from "../src/server";
 
 // delete_namespace against a real D1 and KV: every refusal the preview gives, every way
@@ -247,6 +247,20 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 
+  it("PLANT: a document swapped for another after the preview refuses the token, though the count is the same", async () => {
+    const ns = fresh();
+    await register(ns);
+    await doc(ns, "a.md");
+    const p = await preview(ns, { cascade: true });
+    await env.DB.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = 'a.md'").bind(ns).run();
+    await doc(ns, "c.md");
+    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/live_paths_sha256/);
+    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path = 'c.md'", ns)).toBe(1);
+    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
+  });
+
   it("PLANT: a token for another namespace is refused", async () => {
     const a = fresh();
     const b = fresh();
@@ -347,6 +361,8 @@ describe("delete_namespace perform", () => {
     await edge(other, "x.md", ns, "core.md");
     await edge(ns, "notes/a.md", other, "x.md");
     await edge(ns, "archive/old.md", ns, "archive/older.md");
+    // Already dangling: its end in ns names no document, so no pathMutation touches it.
+    await edge(other, "x.md", ns, "never-existed.md");
     await job(ns, `job_${ns.slice(-12)}`, "done");
     await agent(`${ns}-gone`, [ns], true);
     await env.DB.prepare("INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')")
@@ -384,7 +400,10 @@ describe("delete_namespace perform", () => {
     expect(await env.APP_KV.get(pausedKey(ns))).toBeNull();
     expect(await env.APP_KV.get(bestKey(ns))).toBeNull();
     expect(
-      await n("SELECT COUNT(*) AS n FROM document_links WHERE (from_ns = ?1 AND from_path NOT LIKE 'archive/%') OR (to_ns = ?1 AND to_path NOT LIKE 'archive/%')", ns)
+      await n(
+        "SELECT COUNT(*) AS n FROM document_links WHERE (from_ns = ?1 AND from_path IN ('core.md', 'notes/a.md')) OR (to_ns = ?1 AND to_path IN ('core.md', 'notes/a.md'))",
+        ns
+      )
     ).toBe(0);
 
     // Snapshotted: each live document's body, by path.
@@ -402,6 +421,7 @@ describe("delete_namespace perform", () => {
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'", ns)).toBe(2);
     expect(await n("SELECT COUNT(*) AS n FROM document_links WHERE from_ns = ?1 AND from_path = 'archive/old.md'", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", other)).toBe(1);
+    expect(await n("SELECT COUNT(*) AS n FROM document_links WHERE to_ns = ?1 AND to_path = 'never-existed.md'", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM agents WHERE name = ?1", `${ns}-gone`)).toBe(1);
 
@@ -412,15 +432,14 @@ describe("delete_namespace perform", () => {
     expect(audit.results).toHaveLength(1);
     expect(audit.results[0].actor).toBe(ACTOR);
     const params = JSON.parse(audit.results[0].params) as {
-      plan: { counts: Record<string, number>; cascade: boolean };
-      documents_deleted: string[];
+      plan: { counts: Record<string, number>; cascade: boolean; documents_deleted: string[] };
       edges_removed: Array<Record<string, string>>;
       ops_site: Record<string, unknown> | null;
       namespace_row: Record<string, unknown> | null;
     };
     expect(params.plan.cascade).toBe(true);
     expect(params.plan.counts.documents_live).toBe(3);
-    expect(params.documents_deleted.sort()).toEqual(["core.md", `jobs/job_${ns.slice(-12)}.md`, "notes/a.md"].sort());
+    expect(params.plan.documents_deleted.sort()).toEqual(["core.md", `jobs/job_${ns.slice(-12)}.md`, "notes/a.md"].sort());
     expect(params.edges_removed).toHaveLength(3);
     expect(params.edges_removed).toContainEqual({ from_ns: other, from_path: "x.md", type: "references", to_ns: ns, to_path: "core.md" });
     expect(params.ops_site?.origin).toBe("https://sample.example.com");
@@ -498,6 +517,63 @@ describe("delete_namespace perform", () => {
     const done = JSON.parse(result.content[0].text) as { kv_failed: Array<{ key: string }>; warning?: string };
     expect(done.kv_failed).toHaveLength(4);
     expect(done.warning).toMatch(/could not be deleted/);
+    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
+  });
+});
+
+async function docs(ns: string, count: number): Promise<void> {
+  await env.DB.batch(
+    Array.from({ length: count }, (_, i) =>
+      env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, ?2, ?3)").bind(ns, `notes/${String(i).padStart(3, "0")}.md`, `body ${i}`)
+    )
+  );
+}
+
+describe("delete_namespace batch cap", () => {
+  it("PLANT: a namespace over the batch cap is refused at preview, not half deleted", async () => {
+    const ns = fresh();
+    await register(ns);
+    await docs(ns, NAMESPACE_DELETE_MAX_DOCUMENTS + 1);
+    const p = await preview(ns, { cascade: true });
+    expect(p.verdict).toBe("refused");
+    expect(p.token).toBeUndefined();
+    const refusal = p.refusals.join(" ");
+    expect(refusal).toContain(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`);
+    expect(refusal).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
+    expect(refusal).toMatch(/Delete or move documents with the delete tool first, or ask the seat to rule a set-based helper/);
+
+    // A token signed over this very plan is refused at perform too, by the same rule.
+    const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
+    const token = await signDeleteToken(workerEnv(), {
+      v: 1,
+      namespace: ns,
+      cascade: true,
+      allow_improve_paths: false,
+      actor: ACTOR,
+      plan: planFingerprint(plan),
+      exp: Math.floor(Date.now() / 1000) + 60,
+    });
+    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
+    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS + 1);
+    expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1", ns)).toBe(0);
+    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
+  });
+
+  it("a namespace at exactly the cap is deleted in one batch, each document snapshotted", async () => {
+    const ns = fresh();
+    await register(ns);
+    await docs(ns, NAMESPACE_DELETE_MAX_DOCUMENTS);
+    const p = await preview(ns, { cascade: true });
+    expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
+    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    expect(result.isError, result.content[0].text).not.toBe(true);
+    const done = JSON.parse(result.content[0].text) as { documents_deleted: number; snapshots: number };
+    expect(done.documents_deleted).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
+    expect(done.snapshots).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
+    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(0);
+    expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL", ns)).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
   });
 });
