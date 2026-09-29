@@ -52,6 +52,15 @@ const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resu
 // map in the fixture reports it as unmapped.
 const EXTRA_REGISTERED = ["sample-i"];
 
+// WF_MOCK_NOW (an ISO time) pins the mock's clock, so the screenshots
+// (playwright.shots.config.ts) show the same times on every run. Unset, it is the real
+// clock. A value that is not a time stops the server rather than being ignored.
+const PINNED_NOW = process.env.WF_MOCK_NOW ? Date.parse(process.env.WF_MOCK_NOW) : null;
+if (PINNED_NOW !== null && Number.isNaN(PINNED_NOW)) throw new Error(`WF_MOCK_NOW is not an ISO time: '${process.env.WF_MOCK_NOW}'`);
+function mockNow(): number {
+  return PINNED_NOW ?? Date.now();
+}
+
 function shift(value: unknown, delta: number): unknown {
   if (typeof value === "string" && ISO.test(value)) return new Date(Date.parse(value) + delta).toISOString();
   if (Array.isArray(value)) return value.map((v) => shift(v, delta));
@@ -80,12 +89,12 @@ interface MockState {
 
 function fixture(): OpsFeed {
   const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
-  const delta = Date.now() - Date.parse(raw.live.generated);
+  const delta = mockNow() - Date.parse(raw.live.generated);
   return shift(raw, delta) as OpsFeed;
 }
 
 // D1's datetime('now') shape, which is what the Worker sends for updated_at.
-function sqlNow(t = Date.now()): string {
+function sqlNow(t = mockNow()): string {
   return new Date(t).toISOString().slice(0, 19).replace("T", " ");
 }
 
@@ -94,7 +103,7 @@ function sqlNow(t = Date.now()): string {
 function seedSites(): OpsSiteConfig[] {
   if (process.env.WF_MOCK === "no-sites") return [];
   const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
-  const delta = Date.now() - Date.parse(raw.live.generated);
+  const delta = mockNow() - Date.parse(raw.live.generated);
   return raw.live.sites.map((s) => ({ ...s, updated_at: sqlNow(Date.parse(`${s.updated_at.replace(" ", "T")}Z`) + delta) }));
 }
 
@@ -166,7 +175,7 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   out.live.jobs = out.live.jobs.map((j) => ({ ...j, ...st.jobs.get(j.id) }));
   for (const a of out.live.agents) if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
   out.live.sites = st.sites.map((s) => ({ ...s }));
-  out.refresh_allowed_at = nextRefresh > Date.now() ? new Date(nextRefresh).toISOString() : null;
+  out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
 
@@ -216,7 +225,7 @@ function need(params: Record<string, string>, key: string, what: string): string
 // What an action would do against the feed as it stands. Throws a Refusal for a
 // request the Worker would refuse.
 function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>): { summary: string; done: string; changes: string[]; apply: (st: MockState) => void } {
-  const now = new Date().toISOString();
+  const now = new Date(mockNow()).toISOString();
   const job = () => {
     const id = need(params, "id", "The job id");
     const j = f.live.jobs.find((x) => x.id === id);
@@ -352,7 +361,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
 }
 
 function namespaces(f: OpsFeed): PortalNamespaces {
-  const now = Date.now();
+  const now = mockNow();
   const iso = (agoMs: number) => new Date(now - agoMs).toISOString();
   const H = 3_600_000;
   const detail: Record<string, Partial<PortalNamespace>> = {
@@ -401,7 +410,7 @@ function namespaces(f: OpsFeed): PortalNamespaces {
 }
 
 function seedActivity(): PortalActivityRow[] {
-  const now = Date.now();
+  const now = mockNow();
   const M = 60_000;
   // A job transition writes two rows with one action, actor, path and second, one for
   // the job and one for its mirror document, as the Worker does (src/portal-activity.ts).
@@ -473,7 +482,7 @@ function seedClaimGroups(): ClaimsGroup[] {
 }
 
 function seedClaimJobs(): Map<string, Omit<PortalClaimsJob, "generated">> {
-  const now = Date.now();
+  const now = mockNow();
   const at = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
   const SHA = "0123456789abcdef0123456789abcdef01234567";
   const claim = (id: number, jobId: string, action: ClaimRow["action"], minutesAgo: number, over: Partial<ClaimRow> = {}): ClaimRow => ({
@@ -635,7 +644,7 @@ export function mockOpsApi(): Plugin {
         const params = b.params && typeof b.params === "object" ? (b.params as Record<string, string>) : {};
         const p = plan(f, a, params);
         const token = randomUUID();
-        const expires = Date.now() + TOKEN_MS;
+        const expires = mockNow() + TOKEN_MS;
         st.tokens.set(token, { action: a, params, expires });
         const out: PortalPreview = { action: a, summary: p.summary, changes: p.changes, audit: [`portal.${a} by ${ACTOR}`], token, expires_at: new Date(expires).toISOString() };
         return send(res, 200, out);
@@ -644,7 +653,7 @@ export function mockOpsApi(): Plugin {
       if (typeof token !== "string" || !token) throw new Refusal(400, "The token is missing.");
       const t = st.tokens.get(token);
       if (!t) throw new Refusal(400, "The token is not one this server issued, or it was already used.");
-      if (process.env.WF_MOCK === "expired" || t.expires < Date.now()) {
+      if (process.env.WF_MOCK === "expired" || t.expires < mockNow()) {
         st.tokens.delete(token);
         throw new Refusal(410, "This confirmation expired. Preview the action again.");
       }
@@ -652,7 +661,7 @@ export function mockOpsApi(): Plugin {
       const p = plan(f, t.action, t.params);
       p.apply(st);
       const ns = t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
-      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date().toISOString(), actor: ACTOR, action: `portal.${t.action}`, namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
+      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date(mockNow()).toISOString(), actor: ACTOR, action: `portal.${t.action}`, namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
       const out: PortalPerformed = { action: t.action, summary: p.done, warning: process.env.WF_MOCK === "warn" ? "The action happened, but its audit row was not written." : null, feed: feed(nextRefresh, st) };
       return send(res, 200, out);
     } catch (e) {
@@ -687,7 +696,7 @@ export function mockOpsApi(): Plugin {
           const namespace = url.searchParams.get("namespace") || null;
           const actor = url.searchParams.get("actor") || null;
           const rows = st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor)).slice(0, ACTIVITY_LIMIT);
-          const out: PortalActivity = { generated: new Date().toISOString(), filter: { namespace, actor }, rows, limit: ACTIVITY_LIMIT };
+          const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
         }
         if (path === "/portal/api/claims") {
@@ -696,7 +705,7 @@ export function mockOpsApi(): Plugin {
           if (job) {
             const found = claimJobs.get(job);
             if (!found) return send(res, 404, { error: `no job ${job}` });
-            const out: PortalClaimsJob = { generated: new Date().toISOString(), ...found };
+            const out: PortalClaimsJob = { generated: new Date(mockNow()).toISOString(), ...found };
             return send(res, 200, out);
           }
           const namespace = url.searchParams.get("namespace")?.trim() || null;
@@ -705,14 +714,14 @@ export function mockOpsApi(): Plugin {
           const until = isoOrNull(url.searchParams.get("until"));
           if (since === "bad" || until === "bad") return refuse(res, 400, "since and until must be ISO 8601 times such as 2026-09-01.");
           const groups = claimGroups.filter((g) => (!namespace || g.namespace === namespace) && (!agent || g.agent === agent));
-          const out: PortalClaimsAggregate = { generated: new Date().toISOString(), filter: { namespace, agent, since, until }, groups, truncated: [] };
+          const out: PortalClaimsAggregate = { generated: new Date(mockNow()).toISOString(), filter: { namespace, agent, since, until }, groups, truncated: [] };
           return send(res, 200, out);
         }
         if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh") return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });
-        if (Date.now() < nextRefresh) {
+        if (mockNow() < nextRefresh) {
           return send(res, 429, { error: "too soon", refresh_allowed_at: new Date(nextRefresh).toISOString() });
         }
-        nextRefresh = Date.now() + REFRESH_GAP_MS;
+        nextRefresh = mockNow() + REFRESH_GAP_MS;
         return send(res, 200, feed(nextRefresh, st));
   };
 
