@@ -1,6 +1,7 @@
 import { base64Decode } from "../encoding";
 import { SCORER_WORKFLOW } from "../improve-schema";
 import type { AttemptEnv as Env } from "../env";
+import { redact, redactText, type Redacted } from "../redact";
 import {
   assertRepoArg,
   cachedGet,
@@ -18,7 +19,9 @@ import {
 // The log tail is withheld from read-only keys. Run metadata (name, sha, conclusion)
 // is inert; a build log carries whatever the workflow echoed: resolved binding ids,
 // account ids, wrangler output, and any variable a step printed by accident. The runs
-// list stays open to read-only keys.
+// list stays open to read-only keys. Every log text returned, to anyone, is redacted
+// first (src/redact.ts). With run_id, jobs/job/step drill into any run the same way
+// (ciRunJobs below), behind the same log gate.
 
 // A ref matching this shape is filtered as a head sha, anything else as a branch.
 // GitHub has two query parameters for these and none that accepts either, so the
@@ -29,8 +32,23 @@ export async function ciStatus(
   env: Env,
   namespace: string,
   repoSelector?: string,
-  opts: { limit?: number; logTail?: boolean; ref?: string; runId?: number } = {}
+  opts: { limit?: number; logTail?: boolean; ref?: string; runId?: number; jobs?: boolean; job?: string; step?: string } = {}
 ) {
+  // The drill-in arguments narrow one run, so each needs the one above it. Refused
+  // before any GitHub call rather than ignored, so a caller never reads a run list
+  // believing it is the step it asked for.
+  if (opts.step !== undefined && opts.job === undefined) {
+    throw new Error("ci_status: step needs job, the job (name or id) the step ran in, and run_id");
+  }
+  if (opts.job !== undefined && opts.runId === undefined) {
+    throw new Error("ci_status: job needs run_id, the run the job belongs to. ci_status without it lists runs and their ids");
+  }
+  if (opts.jobs === true && opts.runId === undefined) {
+    throw new Error("ci_status: jobs needs run_id, the run whose jobs to list. ci_status without it lists runs and their ids");
+  }
+  if (opts.jobs === true && opts.job !== undefined) {
+    throw new Error("ci_status: pass jobs: true to list every job in the run, or job to read one, not both");
+  }
   if (opts.ref) assertRepoArg("ref", opts.ref);
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const limit = opts.limit && opts.limit > 0 ? Math.min(opts.limit, 20) : 10;
@@ -40,8 +58,11 @@ export async function ciStatus(
     // has one code path.
     const one = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${opts.runId}`);
     if (one.status === 404) throw new Error(`ci_status: run ${opts.runId} does not exist on ${full}`);
-    if (!one.ok) throw new Error(`ci_status run lookup failed (${one.status}): ${(await one.text()).slice(0, 200)}`);
+    if (!one.ok) throw new Error(`ci_status run lookup failed (${one.status}): ${await errorBody(one)}`);
     const run = await one.json();
+    if (opts.jobs === true || opts.job !== undefined) {
+      return ciRunJobs(env, { owner, repo, full }, run as CiRun, { job: opts.job, step: opts.step, logTail: opts.logTail === true });
+    }
     return ciStatusFromRuns(env, owner, repo, full, [run as CiRun], opts.logTail === true, { run_id: opts.runId });
   }
   if (opts.ref) {
@@ -70,7 +91,7 @@ export async function ciStatus(
       "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry."
     );
   }
-  if (!resp.ok) throw new Error(`ci_status failed (${resp.status}): ${await resp.text()}`);
+  if (!resp.ok) throw new Error(`ci_status failed (${resp.status}): ${redactText(await resp.text())}`);
   const data = (await resp.json()) as { workflow_runs: CiRun[] };
   return ciStatusFromRuns(env, owner, repo, full, data.workflow_runs, opts.logTail === true, opts.ref ? { ref: opts.ref } : {});
 }
@@ -102,10 +123,18 @@ export const CI_LOG_BUDGET = 64 * 1024;
 // second of output (where the error is) is dropped. Truncating down only widens the
 // lower bound, so `from` needs no adjustment.
 const STEP_STAMP_PRECISION_MS = 1000;
-function failingStepLog(
+
+// Every log text ci_status returns is redacted (src/redact.ts), and redacted BEFORE the
+// budget cut: a cut first could split a secret so its remaining half no longer matches
+// any pattern, or keep a private key's body without its BEGIN line.
+//
+// `label` is how the region is named: "failing step" for the failed-run drill-in, whose
+// wording callers already read, and "step" for a step the caller asked for by name.
+function stepLog(
   log: string,
-  step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined
-): { text: string; how: string } {
+  step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined,
+  label: "failing step" | "step" = "failing step"
+): { text: string; how: string; redactions: Redacted["redactions"] } {
   const name = step?.name;
   const from = step?.started_at ? Date.parse(step.started_at) : NaN;
   const to = step?.completed_at ? Date.parse(step.completed_at) : NaN;
@@ -121,25 +150,33 @@ function failingStepLog(
       })
       .join("\n");
     if (windowed.length > 0) {
+      const clean = redact(windowed);
       return {
-        text: windowed.length > CI_LOG_BUDGET ? windowed.slice(-CI_LOG_BUDGET) : windowed,
+        text: clean.text.length > CI_LOG_BUDGET ? clean.text.slice(-CI_LOG_BUDGET) : clean.text,
         how:
-          windowed.length > CI_LOG_BUDGET
-            ? `failing step "${name}" by timestamp window, last ${CI_LOG_BUDGET} bytes of it`
-            : `failing step "${name}" by timestamp window, whole (${windowed.length} bytes)`,
+          clean.text.length > CI_LOG_BUDGET
+            ? `${label} "${name}" by timestamp window, last ${CI_LOG_BUDGET} bytes of it`
+            : `${label} "${name}" by timestamp window, whole (${clean.text.length} bytes)`,
+        redactions: clean.redactions,
       };
     }
   }
 
   // NAMED FALLBACK, not a silent one. "The end of the job log" and "the failing
   // step" are different claims and the caller is told which one this is.
+  const clean = redact(log);
   return {
-    text: log.slice(-CI_LOG_BUDGET),
+    text: clean.text.slice(-CI_LOG_BUDGET),
     how: name
       ? `step "${name}" had no usable timestamp window, so this is the last ${CI_LOG_BUDGET} bytes of the whole job, cleanup included`
       : `no failing step was named, so this is the last ${CI_LOG_BUDGET} bytes of the whole job, cleanup included`,
+    redactions: clean.redactions,
   };
 }
+
+// A GitHub error body is echoed into a result too, so it is redacted as well, before
+// its 200-character cut for the same reason as above.
+const errorBody = async (resp: Response): Promise<string> => redactText(await resp.text()).slice(0, 200) || "no response body";
 
 async function ciStatusFromRuns(
   env: Env,
@@ -181,7 +218,7 @@ async function ciStatusFromRuns(
     };
     const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${failed.id}/jobs`);
     if (!jobsResp.ok) {
-      failedRun.jobs_unavailable = `${jobsResp.status}: ${(await jobsResp.text()).slice(0, 200) || "no response body"}`;
+      failedRun.jobs_unavailable = `${jobsResp.status}: ${await errorBody(jobsResp)}`;
     } else {
       const jobsData = (await jobsResp.json()) as {
         jobs: Array<{
@@ -208,18 +245,167 @@ async function ciStatusFromRuns(
         const logResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/jobs/${firstFailedJob.id}/logs`);
         if (logResp.ok) {
           const failedStep = (firstFailedJob.steps ?? []).find((s) => s.conclusion === "failure");
-          const picked = failingStepLog(await logResp.text(), failedStep);
+          const picked = stepLog(await logResp.text(), failedStep);
           failedRun.failing_job = firstFailedJob.name;
           failedRun.failing_step = failedStep?.name ?? null;
           failedRun.log_region = picked.how;
           failedRun.log = picked.text;
+          if (Object.keys(picked.redactions).length > 0) failedRun.log_redactions = picked.redactions;
         } else {
-          failedRun.log_tail_unavailable = `${logResp.status}: ${(await logResp.text()).slice(0, 200) || "no response body"}`;
+          failedRun.log_tail_unavailable = `${logResp.status}: ${await errorBody(logResp)}`;
         }
       }
     }
     result.failed_run = failedRun;
   }
+  return result;
+}
+
+// One page of a run's jobs, the latest attempt only. GitHub's page limit, and the cap:
+// a run with more jobs than this says so rather than being paged through.
+export const CI_JOBS_MAX = 100;
+
+interface CiJob {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  html_url?: string;
+  steps?: CiStep[];
+}
+
+interface CiStep {
+  number: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+const stepView = (s: CiStep) => ({
+  number: s.number,
+  name: s.name,
+  status: s.status,
+  conclusion: s.conclusion,
+  started_at: s.started_at ?? null,
+  completed_at: s.completed_at ?? null,
+});
+
+const jobView = (j: CiJob) => ({
+  id: j.id,
+  name: j.name,
+  status: j.status,
+  conclusion: j.conclusion,
+  started_at: j.started_at ?? null,
+  completed_at: j.completed_at ?? null,
+  url: j.html_url ?? null,
+  steps: (j.steps ?? []).map(stepView),
+});
+
+// A job or step named by the caller: a number is tried as the id (a job) or the number
+// (a step) first, then as a name. A name two entries share is refused with what tells
+// them apart, never resolved to the first.
+function pickOne<T extends { name: string }>(
+  items: T[],
+  wanted: string,
+  byNumber: (item: T) => number,
+  what: string,
+  where: string
+): T {
+  if (/^\d+$/.test(wanted)) {
+    const numbered = items.find((item) => byNumber(item) === Number(wanted));
+    if (numbered) return numbered;
+  }
+  const named = items.filter((item) => item.name === wanted);
+  if (named.length === 1) return named[0];
+  if (named.length > 1) {
+    throw new Error(
+      `ci_status: ${named.length} ${what}s in ${where} are named "${wanted}". Pass one by its ${what === "job" ? "id" : "number"}: ${named.map(byNumber).join(", ")}`
+    );
+  }
+  const known = items.slice(0, 30).map((item) => `"${item.name}" (${byNumber(item)})`);
+  throw new Error(`ci_status: no ${what} "${wanted}" in ${where}. It has: ${known.join(", ") || "none"}${items.length > 30 ? ", and more" : ""}`);
+}
+
+/** Every job of one run with its steps (jobs: true), or one job, or one step of it with
+ *  that step's log. For any run, not only a failed one. The log is withheld from a
+ *  read-only caller exactly as the failed-run tail is, and redacted for everyone else. */
+async function ciRunJobs(
+  env: Env,
+  target: { owner: string; repo: string; full: string },
+  run: CiRun,
+  opts: { job?: string; step?: string; logTail: boolean }
+) {
+  const { owner, repo, full } = target;
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?filter=latest&per_page=${CI_JOBS_MAX}`
+  );
+  if (resp.status === 403) {
+    throw new Error(
+      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry."
+    );
+  }
+  if (!resp.ok) throw new Error(`ci_status jobs lookup for run ${run.id} failed (${resp.status}): ${await errorBody(resp)}`);
+  const data = (await resp.json()) as { total_count?: number; jobs: CiJob[] };
+  const jobs = data.jobs.slice(0, CI_JOBS_MAX);
+  const total = typeof data.total_count === "number" ? data.total_count : jobs.length;
+
+  const result: Record<string, unknown> = {
+    repo: full,
+    filter: {
+      run_id: run.id,
+      ...(opts.job === undefined ? { jobs: true } : { job: opts.job }),
+      ...(opts.step === undefined ? {} : { step: opts.step }),
+    },
+    run: {
+      name: run.name,
+      head_sha: run.head_sha?.slice(0, 7),
+      status: run.status,
+      conclusion: run.conclusion,
+      event: run.event,
+      created_at: run.created_at,
+      url: run.html_url,
+    },
+  };
+  const truncated =
+    total > jobs.length
+      ? `the run has ${total} jobs in its latest attempt and only the first ${jobs.length} were read (at most ${CI_JOBS_MAX})`
+      : null;
+
+  if (opts.job === undefined) {
+    result.jobs = jobs.map(jobView);
+    result.jobs_total = total;
+    if (truncated) result.jobs_truncated = truncated;
+    return result;
+  }
+
+  const where = `run ${run.id}${truncated ? ` (${truncated})` : ""}`;
+  const job = pickOne(jobs, opts.job, (j) => j.id, "job", where);
+  result.job = jobView(job);
+  if (opts.step === undefined) return result;
+
+  const step = pickOne(job.steps ?? [], opts.step, (s) => s.number, "step", `job "${job.name}"`);
+  result.step = stepView(step);
+  if (!opts.logTail) {
+    // The read-only tier's boundary, worded as the failed-run tail's is.
+    result.log_withheld = "read-only key: step metadata only. A write-grant key returns the step's log.";
+    return result;
+  }
+  const logResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/jobs/${job.id}/logs`);
+  if (!logResp.ok) {
+    result.log_unavailable = `${logResp.status}: ${await errorBody(logResp)}`;
+    return result;
+  }
+  const picked = stepLog(await logResp.text(), step, "step");
+  result.log_region = picked.how;
+  result.log = picked.text;
+  if (Object.keys(picked.redactions).length > 0) result.log_redactions = picked.redactions;
   return result;
 }
 

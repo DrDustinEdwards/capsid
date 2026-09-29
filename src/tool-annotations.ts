@@ -65,6 +65,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // overwrites and removes nothing, so it is not destructive either. A client that
   // asks before a non-read-only call asks here too, which costs the admin one click.
   claims: additive(),
+
+  // The watcher's last pass, read from one KV value. Admin, so not read-only under the
+  // same rule as claims, and it overwrites and removes nothing.
+  ops_snapshot: additive(),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.
