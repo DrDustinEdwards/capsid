@@ -237,6 +237,7 @@ export const JOB_PARAM_NAMES = [
   "replaced_by",
   "command",
   "evidence",
+  "claim",
 ] as const;
 
 // Only the full `</name>` spelling, so a body that discusses this rule is not refused.
