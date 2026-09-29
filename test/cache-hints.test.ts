@@ -50,7 +50,7 @@ test("PLANT: tools/list carries ttlMs 60000 and cacheScope public", async () => 
   const client = await connect(buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com")));
   try {
     const result = (await client.listTools()) as unknown as Record<string, unknown>;
-    assert.deepEqual(hintsOf(result), PUBLIC_LIST, "tools/list was served without its cache hints");
+    assert.deepEqual(hintsOf(result), { ttlMs: 60000, cacheScope: "public" }, "tools/list was served without its cache hints");
   } finally {
     await client.close();
   }
@@ -61,15 +61,15 @@ test("PLANT: prompts/list, resources/list, resources/templates/list and resource
   try {
     const prompts = (await client.listPrompts()) as unknown as Record<string, unknown>;
     assert.ok((prompts.prompts as unknown[]).length > 0, "the fixture prompt was not listed, so the hint is checked on an empty result");
-    assert.deepEqual(hintsOf(prompts), PRIVATE_LIST, "prompts/list");
+    assert.deepEqual(hintsOf(prompts), { ttlMs: 60000, cacheScope: "private" }, "prompts/list");
     const resources = (await client.listResources()) as unknown as Record<string, unknown>;
     assert.ok((resources.resources as unknown[]).length > 0, "the fixture documents were not listed");
-    assert.deepEqual(hintsOf(resources), PRIVATE_LIST, "resources/list");
+    assert.deepEqual(hintsOf(resources), { ttlMs: 60000, cacheScope: "private" }, "resources/list");
     const templates = (await client.listResourceTemplates()) as unknown as Record<string, unknown>;
-    assert.deepEqual(hintsOf(templates), PRIVATE_LIST, "resources/templates/list");
+    assert.deepEqual(hintsOf(templates), { ttlMs: 60000, cacheScope: "private" }, "resources/templates/list");
     const read = (await client.readResource({ uri: "capsid://sample/notes/one.md" })) as unknown as Record<string, unknown>;
     assert.equal((read.contents as Array<{ text: string }>)[0].text, "one", "resources/read lost its content");
-    assert.deepEqual(hintsOf(read), PRIVATE_LIST, "resources/read");
+    assert.deepEqual(hintsOf(read), { ttlMs: 60000, cacheScope: "private" }, "resources/read");
   } finally {
     await client.close();
   }
