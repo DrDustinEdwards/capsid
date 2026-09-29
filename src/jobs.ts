@@ -74,7 +74,7 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
 // The improve_status block. Counted per namespace, plus what a human has to look at:
 // the blocked jobs, with the command each is waiting on. Blocked is the only status
 // whose rows come back rather than a count, because a count of blocked jobs tells
-// nobody what to run, and the console shows exactly these.
+// nobody what to run, and the Portal shows exactly these.
 //
 // done_today rather than done: a lifetime total only goes up and stops being
 // information. What the seat wants to know is whether the queue moved today.

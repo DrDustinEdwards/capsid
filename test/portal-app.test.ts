@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CONSOLE_CSP, CONSOLE_JSON_LEGACY_PATH, CONSOLE_JSON_PATH, consoleJsonMoved } from "../src/console.ts";
-import { consoleSessionCookie } from "../src/console-auth.ts";
-import { assetPath, DASHBOARD_CSP, handleConsoleApp, HASHED_ASSET_CACHE, isNavigation } from "../src/console-app.ts";
+import { portalSessionCookie } from "../src/portal-auth.ts";
+import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
 import { CONSENT_DIALOG_HEADERS } from "../src/headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The Watch Floor app's files behind the console gate (src/console-app.ts), with a fake
+// Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake
 // ASSETS binding that records what it was asked for. The same routes run through the
 // whole Worker, with miniflare's real assets router, in
-// test-integration/console-app.test.ts.
+// test-integration/portal-app.test.ts.
 
-const SECRET = "console-app-test-cookie-secret";
+const SECRET = "portal-app-test-cookie-secret";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 const FILES: Record<string, { body: string; type: string }> = {
   "/": { body: "<!doctype html><title>Watch Floor</title>", type: "text/html" },
@@ -48,24 +47,24 @@ function env(assets: unknown = fakeAssets().assets) {
 }
 
 async function signed(path: string, headers: Record<string, string> = {}): Promise<Request> {
-  const cookie = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
+  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   return new Request(`https://capsid.example${path}`, { headers: { ...headers, Cookie: cookie } });
 }
 
-test("PLANT: no file is fetched for a caller the console gate refuses", async () => {
+test("PLANT: no file is fetched for a caller the Portal gate refuses", async () => {
   const { assets, asked } = fakeAssets();
-  for (const path of ["/console/app", "/console/app/", "/console/app/assets/app-abc123.js", "/console/app/jobs"]) {
-    const anonymous = await handleConsoleApp(new Request(`https://capsid.example${path}`, { headers: { Accept: "text/html" } }), env(assets), NOW);
+  for (const path of ["/portal", "/portal/", "/portal/assets/app-abc123.js", "/portal/jobs"]) {
+    const anonymous = await handlePortalApp(new Request(`https://capsid.example${path}`, { headers: { Accept: "text/html" } }), env(assets), NOW);
     assert.equal(anonymous.status, 302, `${path} served an anonymous reader`);
-    const bearer = await handleConsoleApp(new Request(`https://capsid.example${path}`, { headers: { Authorization: "Bearer capsid_x" } }), env(assets), NOW);
+    const bearer = await handlePortalApp(new Request(`https://capsid.example${path}`, { headers: { Authorization: "Bearer capsid_x" } }), env(assets), NOW);
     assert.equal(bearer.status, 403, `${path} served a bearer`);
   }
   assert.deepEqual(asked, [], "the assets binding was asked for a file before the gate admitted anyone");
 });
 
 test("a signed-in administrator gets the app's page, uncached, under its own CSP", async () => {
-  for (const path of ["/console/app", "/console/app/", "/console/app/index.html"]) {
-    const res = await handleConsoleApp(await signed(path), env(), NOW);
+  for (const path of ["/portal", "/portal/", "/portal/index.html"]) {
+    const res = await handlePortalApp(await signed(path), env(), NOW);
     assert.equal(res.status, 200, path);
     assert.match(await res.text(), /Watch Floor/);
     assert.equal(res.headers.get("Cache-Control"), "no-store");
@@ -75,61 +74,53 @@ test("a signed-in administrator gets the app's page, uncached, under its own CSP
 });
 
 test("hashed files are cached privately and for a year; anything else is not cached", async () => {
-  const js = await handleConsoleApp(await signed("/console/app/assets/app-abc123.js"), env(), NOW);
+  const js = await handlePortalApp(await signed("/portal/assets/app-abc123.js"), env(), NOW);
   assert.equal(js.status, 200);
   assert.equal(js.headers.get("Cache-Control"), HASHED_ASSET_CACHE);
   assert.equal(js.headers.get("Content-Security-Policy"), null, "the page's CSP is the page's, not every file's");
-  const icon = await handleConsoleApp(await signed("/console/app/favicon.svg"), env(), NOW);
+  const icon = await handlePortalApp(await signed("/portal/favicon.svg"), env(), NOW);
   assert.equal(icon.headers.get("Cache-Control"), "no-store");
 });
 
 test("an unknown path falls back to the page for a navigation only; a missing file stays a 404", async () => {
   const { assets, asked } = fakeAssets();
-  const nav = await handleConsoleApp(await signed("/console/app/jobs/job_000000000001", { "Sec-Fetch-Mode": "navigate" }), env(assets), NOW);
+  const nav = await handlePortalApp(await signed("/portal/jobs/job_000000000001", { "Sec-Fetch-Mode": "navigate" }), env(assets), NOW);
   assert.equal(nav.status, 200);
   assert.match(await nav.text(), /Watch Floor/);
   assert.equal(nav.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
   assert.deepEqual(asked, ["/jobs/job_000000000001", "/"]);
 
-  const script = await handleConsoleApp(await signed("/console/app/assets/app-missing.js", { Accept: "*/*" }), env(), NOW);
+  const script = await handlePortalApp(await signed("/portal/assets/app-missing.js", { Accept: "*/*" }), env(), NOW);
   assert.equal(script.status, 404);
   assert.equal(script.headers.get("Cache-Control"), "no-store");
 });
 
 test("with no ASSETS binding the admin is told the dashboard is not deployed; nobody else learns it", async () => {
-  const res = await handleConsoleApp(await signed("/console/app"), env(null), NOW);
+  const res = await handlePortalApp(await signed("/portal"), env(null), NOW);
   assert.equal(res.status, 503);
   assert.match(await res.text(), /not deployed/);
-  const anonymous = await handleConsoleApp(new Request("https://capsid.example/console/app"), env(null), NOW);
+  const anonymous = await handlePortalApp(new Request("https://capsid.example/portal"), env(null), NOW);
   assert.equal(anonymous.status, 302);
 });
 
-test("a redirect from the assets router is put back under /console/app", async () => {
+test("a redirect from the assets router is put back under /portal", async () => {
   const assets = { fetch: async () => new Response(null, { status: 307, headers: { Location: "/about/" } }) };
-  const res = await handleConsoleApp(await signed("/console/app/about"), env(assets), NOW);
+  const res = await handlePortalApp(await signed("/portal/about"), env(assets), NOW);
   assert.equal(res.status, 307);
-  assert.equal(res.headers.get("Location"), "/console/app/about/");
+  assert.equal(res.headers.get("Location"), "/portal/about/");
 });
 
 test("the app's paths map onto the assets directory, and navigations are told from fetches", () => {
-  assert.equal(assetPath("/console/app"), "/");
-  assert.equal(assetPath("/console/app/"), "/");
-  assert.equal(assetPath("/console/app/index.html"), "/");
-  assert.equal(assetPath("/console/app/assets/app-abc123.js"), "/assets/app-abc123.js");
+  assert.equal(assetPath("/portal"), "/");
+  assert.equal(assetPath("/portal/"), "/");
+  assert.equal(assetPath("/portal/index.html"), "/");
+  assert.equal(assetPath("/portal/assets/app-abc123.js"), "/assets/app-abc123.js");
   assert.equal(isNavigation(new Request("https://x.example", { headers: { "Sec-Fetch-Mode": "navigate" } })), true);
   assert.equal(isNavigation(new Request("https://x.example", { headers: { Accept: "text/html,application/xhtml+xml" } })), true);
   assert.equal(isNavigation(new Request("https://x.example", { headers: { Accept: "application/json", "Sec-Fetch-Mode": "cors" } })), false);
 });
 
-test("the dashboard's CSP did not loosen the console's or the consent dialog's", () => {
-  assert.equal(CONSOLE_CSP, "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+test("the Portal's CSP did not loosen the consent dialog's, and allows nothing inline", () => {
   assert.doesNotMatch(CONSENT_DIALOG_HEADERS["Content-Security-Policy"], /script-src|connect-src/);
   assert.doesNotMatch(DASHBOARD_CSP, /unsafe-inline|unsafe-eval|\*/);
-});
-
-test("/console.json answers 301 to /console/json, keeping the query", () => {
-  const res = consoleJsonMoved(new Request(`https://capsid.example${CONSOLE_JSON_LEGACY_PATH}?namespace=sample`));
-  assert.equal(res.status, 301);
-  assert.equal(res.headers.get("Location"), `${CONSOLE_JSON_PATH}?namespace=sample`);
-  assert.ok(CONSOLE_JSON_PATH.startsWith("/console/"), "the JSON twin must sit under the session cookie's Path=/console");
 });

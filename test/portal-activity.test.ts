@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { activityFilterFrom, loadActivity } from "../src/console-activity.ts";
+import { activityFilterFrom, loadActivity } from "../src/portal-activity.ts";
 import { fakeD1 } from "./fakes.ts";
 
 // Recent activity: the last 50 audit rows, filterable by namespace and actor. The
@@ -41,4 +41,4 @@ test("the filter values are BOUND, never interpolated into the statement", async
 });
 
 // The LIMIT, the newest-first order and the two filter clauses are proven by the rows
-// they return from a real audit_log: test-integration/console-activity.test.ts.
+// they return from a real audit_log: test-integration/portal-activity.test.ts.

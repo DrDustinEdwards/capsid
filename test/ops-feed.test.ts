@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { consoleSessionCookie } from "../src/console-auth.ts";
+import { portalSessionCookie } from "../src/portal-auth.ts";
 import { RESUME_MARKER } from "../src/jobs.ts";
 import {
   awaitingFrom,
@@ -241,7 +241,7 @@ const FEED: OpsFeedData = {
 const feed = async () => FEED;
 
 async function signed(path: string, init: RequestInit = {}): Promise<Request> {
-  const cookie = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
+  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   const headers = new Headers(init.headers);
   headers.set("Cookie", cookie);
   return new Request(`https://capsid.example${path}`, { ...init, headers });
@@ -278,7 +278,7 @@ test("the feed and the refresh mint the Portal CSRF cookie when the request has 
     const { csrf } = (await res.json()) as { csrf: string };
     assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     assert.ok(set.startsWith(`${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/console", "Max-Age=43200"]) {
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=43200"]) {
       assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
     }
   }
@@ -360,7 +360,7 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
   const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
   assert.ok(audit, "the refresh wrote no audit row");
   assert.equal(audit.params[0], "access:admin@example.com");
-  assert.equal(audit.params[1], "console-ops-refresh");
+  assert.equal(audit.params[1], "portal-ops-refresh");
   assert.equal(JSON.parse(String(audit.params[4])).ran, true);
 });
 

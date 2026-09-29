@@ -82,15 +82,15 @@ describe("the route tables are a statement about the Worker that serves them", (
   });
 
   // scanner-rule: CLAUDE.md, one enforcement point rule. Derived over UNGATED_ROUTES:
-  // every /console route but the sign-in callback and the old JSON address answers to
-  // consoleGate, so a route added under /console without it fails here.
-  it("PLANT: every console route is behind consoleGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {
-    const NOT_GATED = new Set(["/console/callback", "/console.json"]);
-    const consoleRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console") && !NOT_GATED.has(p));
-    // /console, /console/json, the feed, the refresh, the Portal's preview, perform,
-    // namespaces and activity, the app and the app's files.
-    expect(consoleRoutes.length, `console routes found: ${consoleRoutes.join(", ")}`).toBe(10);
-    for (const path of consoleRoutes) {
+  // every /portal route but the sign-in callback answers to portalGate, so a route
+  // added under /portal without it fails here.
+  it("PLANT: every Portal route is behind portalGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {
+    const NOT_GATED = new Set(["/portal/callback"]);
+    const portalRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/portal") && !NOT_GATED.has(p));
+    // The feed, the refresh, preview, perform, namespaces, activity, sign-out, the
+    // /portal/api/ fallback, the app and the app's files.
+    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(10);
+    for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });
         if (await isFallback(bearer)) continue; // not served for this method
@@ -102,6 +102,23 @@ describe("the route tables are a statement about the Worker that serves them", (
         );
       }
     }
+  });
+
+  // The Portal moved from /console with no redirects (capsid/research/
+  // design-portal-unify.md): every old address, by every method, is the Worker's plain
+  // fallback. Six addresses, the old page, its JSON twin and old JSON address, its
+  // callback, the old feed and the old app.
+  it("every old /console address is the plain 404, with no redirect", async () => {
+    const OLD = ["/console", "/console/json", "/console.json", "/console/callback", "/console/api/ops", "/console/app/"];
+    expect(OLD.length).toBe(6);
+    for (const path of OLD) {
+      for (const method of ["GET", "POST"]) {
+        const response = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual" });
+        expect(await isFallback(response), `${method} ${path} answered ${response.status}`).toBe(true);
+        expect(response.headers.get("Location"), `${method} ${path} redirects`).toBeNull();
+      }
+    }
+    expect(Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console")), "src/scope.ts still names a /console route").toEqual([]);
   });
 
   it("every gated route refuses a non-admin driver with 403, so each one asks routeRefusal", async () => {

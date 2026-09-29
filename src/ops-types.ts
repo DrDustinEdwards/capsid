@@ -1,4 +1,4 @@
-// The Watch Floor contract: what GET /console/api/ops returns
+// The Watch Floor contract: what GET /portal/api/ops returns
 // (capsid/research/design-ops-console.md). Types only, no runtime code, so the
 // dashboard app under dashboard/ imports it with `import type` and src/ never imports
 // from the app. Changing a field here changes both sides, and both typecheck against it.
@@ -203,7 +203,7 @@ export interface OpsLive {
   loop: OpsLoop;
   // Every roster namespace with its improve-loop pause reason, null when not paused.
   // One KV get per namespace; the heavy per-namespace detail is GET
-  // /console/api/namespaces, read when the Namespaces view opens.
+  // /portal/api/namespaces, read when the Namespaces view opens.
   namespaces: Array<{ name: string; paused: string | null }>;
 }
 
@@ -211,7 +211,7 @@ export interface OpsFeed {
   // Null until the watcher has written its first pass.
   snapshot: OpsSnapshot | null;
   live: OpsLive;
-  // When the next on-demand pass is allowed (POST /console/api/ops/refresh), or null
+  // When the next on-demand pass is allowed (POST /portal/api/ops/refresh), or null
   // when one is allowed now.
   refresh_allowed_at: string | null;
   // Whether CF_OPS_TOKEN is set, so the app can say why deploy and error columns are
@@ -230,10 +230,11 @@ export interface OpsFeed {
 // will change plus a signed token, then a perform that carries only the token. Both
 // are JSON POSTs with the headers X-Capsid-CSRF (the feed's csrf value) and
 // Content-Type: application/json.
-//   POST /console/api/actions/preview   body PortalActionRequest -> PortalPreview
-//   POST /console/api/actions/perform   body { token }           -> PortalPerformed
-//   GET  /console/api/namespaces                                  -> PortalNamespaces
-//   GET  /console/api/activity?namespace=&actor=                  -> PortalActivity
+//   POST /portal/api/actions/preview    body PortalActionRequest -> PortalPreview
+//   POST /portal/api/actions/perform    body { token }           -> PortalPerformed
+//   GET  /portal/api/namespaces                                   -> PortalNamespaces
+//   GET  /portal/api/activity?namespace=&actor=                   -> PortalActivity
+//   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
 

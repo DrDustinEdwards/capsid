@@ -1,5 +1,5 @@
 // Recent activity: a bounded, filtered read of audit_log across every namespace, for
-// the console. The filter comes off a query string, so both values are bound
+// Capsid Portal's Activity view. The filter comes off a query string, so both values are bound
 // parameters; the test asserts the statement's shape as well as its results.
 
 export const ACTIVITY_LIMIT = 50;

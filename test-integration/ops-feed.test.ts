@@ -1,7 +1,7 @@
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { consoleSessionCookie } from "../src/console-auth";
+import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { pausedKey, ROSTER } from "../src/improve-schema";
 import { RESUME_MARKER } from "../src/jobs";
@@ -13,7 +13,7 @@ import { WATCHER_ACTOR } from "../src/watcher";
 // many reads one request costs (src/ops-feed.ts states the count; this counts).
 
 const ORIGIN = "https://capsid.test";
-const SECRET = "integration-console-cookie-key";
+const SECRET = "integration-portal-cookie-key";
 const NOW = new Date();
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
 const iso = (ms: number) => ago(ms).toISOString();
@@ -144,7 +144,7 @@ describe("the feed against real D1", () => {
 });
 
 async function signedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const cookie = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const headers = new Headers(init.headers);
   headers.set("Cookie", cookie);
   const ctx = createExecutionContext();
@@ -177,16 +177,5 @@ describe("the feed's routes through the Worker", () => {
     const response = await signedFetch(OPS_REFRESH_PATH, { method: "POST" });
     expect(response.status).toBe(403);
     expect(await env.APP_KV.get("ops:refresh:last")).toBeNull();
-  });
-
-  it("/console.json answers 301 to /console/json, and /console/json is behind the gate", async () => {
-    const moved = await SELF.fetch(`${ORIGIN}/console.json?namespace=sample`, { redirect: "manual" });
-    expect(moved.status).toBe(301);
-    expect(moved.headers.get("Location")).toBe("/console/json?namespace=sample");
-    const anonymous = await SELF.fetch(`${ORIGIN}/console/json`, { redirect: "manual" });
-    expect(anonymous.status).toBe(302);
-    const signed = await signedFetch("/console/json");
-    expect(signed.status).toBe(200);
-    expect(((await signed.json()) as { viewer: string }).viewer).toBe("admin@example.com");
   });
 });

@@ -187,7 +187,7 @@ export function mintJobId(): string {
 
 // What a job needs of the driver's history (migrations/0011): a scope says what a
 // credential may do, this says what it has done. Each bar must be a number the agent
-// record computes and the console shows. No rate bar: a rate over a small
+// record computes and the Portal shows. No rate bar: a rate over a small
 // denominator is noise.
 export interface MinRecord {
   prs_merged?: number;

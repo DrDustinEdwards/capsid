@@ -51,11 +51,11 @@
   //                  src/skills-refresh.ts decides whether today is the
   //                  configured day, so the day is a KV edit not a redeploy.
   "triggers": { "crons": ["0 9 * * *", "0 8,9 * * *", "*/5 * * * *", "30 9 * * *"] },
-  // THE WATCH FLOOR APP (dashboard/, built to dashboard/dist by scripts/deploy.mjs).
+  // CAPSID PORTAL (dashboard/, built to dashboard/dist by scripts/deploy.mjs).
   // run_worker_first is REQUIRED, not a preference: with it off, the platform's
-  // navigation handling could answer a browser's /authorize or /console/callback with
+  // navigation handling could answer a browser's /authorize or /portal/callback with
   // index.html and break both logins. Every request reaches the Worker, which serves an
-  // asset only under /console/app/ and only after the console gate. not_found_handling
+  // asset only under /portal/ and only after the Portal gate. not_found_handling
   // is "none" because the Worker does the single-page fallback itself, after the gate.
   // scripts/dry-run-config.mjs removes this block (between the two markers) for the
   // scorer's bundle-size dry run, which builds no dashboard.

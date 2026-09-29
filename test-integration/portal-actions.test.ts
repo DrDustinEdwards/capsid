@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { legacyAgent } from "../src/agents";
-import { consoleSessionCookie } from "../src/console-auth";
+import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { improveStatus } from "../src/improve-run";
 import { MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema";
@@ -20,11 +20,11 @@ import { SEAT_START_KEY } from "../src/seat-start";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
-// rows it wrote read back. The job transitions mirror
-// test-integration/console-job-actions.test.ts, which drives the old page.
+// rows it wrote read back. The refusals below were carried over from the old page's
+// job-action tests when /console was deleted, so none of its cases lost coverage.
 
 const ORIGIN = "https://capsid.test";
-const SECRET = "integration-console-cookie-key";
+const SECRET = "integration-portal-cookie-key";
 const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const NOW = new Date();
 const ACTOR = "access:admin@example.com";
@@ -35,7 +35,7 @@ function workerEnv(): Env {
 }
 
 async function call(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
-  const session = (await consoleSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+  const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const headers = new Headers({ Cookie: `${session}; capsid_portal_csrf=${CSRF}`, "Sec-Fetch-Site": "same-origin" });
   if (init.body !== undefined) {
     headers.set(PORTAL_CSRF_HEADER, CSRF);
@@ -193,7 +193,7 @@ describe("every action, previewed then performed through the Worker", () => {
       // the comparison is of distinct "<action> by <actor>" lines.
       const written = (await auditRows()).filter((r) => !auditBefore.some((b) => b.id === r.id));
       expect([...new Set(written.map((r) => `${r.action} by ${r.actor}`))].sort()).toEqual([...preview.audit].sort());
-      const click = written.find((r) => r.action === `console-${action}`);
+      const click = written.find((r) => r.action === `portal-${action}`);
       expect(click?.actor).toBe(ACTOR);
     });
   }
@@ -215,11 +215,43 @@ describe("the job actions against real D1", () => {
     const id = await blockedJob("resumed twice");
     const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
     expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status).toBe(200);
-    const clicks = (await auditRows()).filter((r) => r.action === "console-resume_job").length;
+    const clicks = (await auditRows()).filter((r) => r.action === "portal-resume_job").length;
     const again = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(again.status).toBe(400);
     expect(await again.text()).toMatch(/not blocked/);
-    expect((await auditRows()).filter((r) => r.action === "console-resume_job").length).toBe(clicks);
+    expect((await auditRows()).filter((r) => r.action === "portal-resume_job").length).toBe(clicks);
+  });
+
+  it("fail: a job id that does not exist is refused, rather than reported as a no-op that worked", async () => {
+    await blockedJob("some other job");
+    const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "fail_job", params: { id: "job_missing", reason: "x" } } });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/no job job_missing/);
+  });
+
+  it("fail and resume need a reason, say so, and write nothing", async () => {
+    const id = await blockedJob("needs a reason");
+    await env.DB.prepare("DELETE FROM audit_log").run();
+    for (const action of ["fail_job", "resume_job"]) {
+      const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params: { id } } });
+      expect(res.status, `${action} without a reason`).toBe(400);
+      expect(await res.text()).toMatch(/reason|what you approved/i);
+    }
+    expect(await auditRows()).toEqual([]);
+    expect((await job(id))?.status).toBe("blocked");
+  });
+
+  it("resume REFUSES a job whose body was edited after it was signed, at perform, and the job stays blocked", async () => {
+    // A blocked job can be edited while it waits for a human, so resume re-verifies the
+    // signature, and the Portal must show that refusal rather than report success.
+    const id = await blockedJob("edited while blocked");
+    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
+    await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1").bind(id, "---\ncapsid-task-signature: deadbeef\n---\ntampered").run();
+    const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/signature|does not match its body/i);
+    expect((await job(id))?.status).not.toBe("claimed");
+    expect((await auditRows()).some((r) => r.action === "portal-resume_job"), "a refused resume wrote a click row").toBe(false);
   });
 
   it("release: the preview refuses a blocked job, and fail refuses a finished one", async () => {
