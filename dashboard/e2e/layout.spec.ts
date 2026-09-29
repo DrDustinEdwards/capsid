@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { RAIL_PREF } from "../src/lib/prefs.ts";
 import { ALL_VIEWS, VIEW_COUNT, expectNoSideways, measure, sideways, visit } from "./views.ts";
 
 // No sideways scrolling from 1024 px up: not the document, not main, and not any
@@ -10,20 +11,32 @@ test("the view registry lists every view", () => {
 
 const WIDTHS = [1920, 1440, 1280, 1024];
 
-for (const width of WIDTHS) {
-  test(`at ${width} px no view scrolls sideways`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    let seen = 0;
-    const problems: string[] = [];
-    for (const v of ALL_VIEWS) {
-      await visit(page, v.id);
-      expect(await page.evaluate(() => document.documentElement.clientWidth)).toBe(width);
-      problems.push(...sideways(await measure(page), `${v.label} at ${width}`));
-      seen++;
-    }
-    expect(seen).toBe(VIEW_COUNT);
-    expect(problems).toEqual([]);
-  });
+// The side menu at its full width (208 px) and collapsed to icons (56 px), set through
+// its stored preference before the app starts.
+const RAIL = [
+  { state: "expanded", width: 208 },
+  { state: "collapsed", width: 56 },
+] as const;
+
+for (const rail of RAIL) {
+  for (const width of WIDTHS) {
+    test(`at ${width} px, menu ${rail.state}, no view scrolls sideways`, async ({ page }) => {
+      await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [RAIL_PREF, rail.state] as const);
+      await page.setViewportSize({ width, height: 900 });
+      let seen = 0;
+      const problems: string[] = [];
+      for (const v of ALL_VIEWS) {
+        await visit(page, v.id);
+        expect(await page.evaluate(() => document.documentElement.clientWidth)).toBe(width);
+        // The menu really is in the state under test.
+        expect(await page.locator("nav.rail").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(rail.width);
+        problems.push(...sideways(await measure(page), `${v.label} at ${width}, menu ${rail.state}`));
+        seen++;
+      }
+      expect(seen).toBe(VIEW_COUNT);
+      expect(problems).toEqual([]);
+    });
+  }
 }
 
 // One drawer of each type, opened from the first row that opens one.

@@ -151,6 +151,25 @@ a:hover { text-decoration: underline; }
 .rail .hint { margin-top: auto; padding: 10px; font-size: 12px; color: var(--faint); display: grid; gap: 6px; }
 .rail .hint .linkish { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-align: left; }
 .rail .hint .linkish:hover { color: var(--text); }
+/* Buttons laid out like the rail links, so their icons sit in the same column. */
+.rail .railbtn {
+  display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 12px; width: 100%;
+  padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 12px; text-align: left;
+}
+.rail .railbtn:hover { background: var(--raised); color: var(--text); }
+.rail .railbtn svg { justify-self: center; }
+
+/* The collapsed side menu: icons only, in the column they hold when expanded (20 px from
+   the left, under the header logo). Labels stay in the accessibility tree; each link has
+   a tooltip, and a count becomes a dot with the number in the tooltip and the name. */
+.app.rail-collapsed { --rail: 56px; }
+.rail-collapsed .rail a, .rail-collapsed .rail .railbtn { position: relative; grid-template-columns: 16px; padding-right: 0; }
+.rail-collapsed .rail .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.rail-collapsed .rail .count { position: absolute; top: 4px; left: 25px; width: 7px; height: 7px; border-radius: 50%; overflow: hidden; font-size: 0; color: transparent; }
+.rail-collapsed .rail .count.hot { background: var(--crit); box-shadow: 0 0 0 2px var(--surface); }
+.rail-collapsed .rail .count.warm { background: var(--warn); box-shadow: 0 0 0 2px var(--surface); }
+.rail-collapsed .rail .hint { padding: 10px 0 0; gap: 2px; }
+.rail-collapsed .rail .railtoggle .railicon { transform: scaleX(-1); }
 
 /* main is the containing block for anything absolutely positioned inside it (.sr-only
    text in a table header, say). Without it such an element is placed against the whole
