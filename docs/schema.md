@@ -208,6 +208,56 @@ as a total.
 and found empty is `0`. An average over a column that spelled both the same way
 would treat missing as empty.
 
+### Claims apart from outcomes
+
+`job_outcomes` keeps one value per field, and where the Worker could ask GitHub it
+stores GitHub's number in place of the driver's. That loses the claim itself: how
+often an agent's own account of its work is wrong cannot be read from a row that
+overwrote the account. `migrations/0023_job_claims.sql` adds three tables that keep
+the claim and the check side by side. All three are append-only, enforced by
+triggers that abort any UPDATE or DELETE, because a record that can be rewritten
+after the fact is not evidence.
+
+`job_claims` is what the agent said: one row per `complete`, `fail` or `block` call
+that reached the transition, so a job blocked three times and then completed has
+four. It is captured before any verification runs, in the same batch as the
+transition. A call refused before the transition writes none, and neither does a
+seat's `fail` of another credential's job, since that agent made no claim.
+
+| column | what it is |
+| --- | --- |
+| `action`, `agent`, `namespace` | the call, the caller, and the job's namespace at the time |
+| `raw` | the claim-bearing arguments exactly as sent: `evidence`, `claim`, `result_summary` or `reason`, `result_ref`, `command` |
+| `prs_opened_urls`, `prs_merged_urls`, `prs_opened`, `prs_merged` | the pull requests the agent says it opened and says are merged, as JSON arrays and their lengths |
+| `commits`, `files_changed`, `tests_added` | the driver's own counts from `evidence`, never GitHub's |
+| `tests_run`, `tests_passed`, `tests_failed`, `tests_result` | the tests the agent says it ran, and their result |
+| `deploy_state` | what the agent says about deployment |
+| `files_touched` | a JSON array of the paths the agent says it touched |
+| `model_id`, `client_name`, `client_version`, `permission_mode` | self-reported, recorded and never used to authorize anything |
+| `capsid_sha` | the Worker's own deployed commit, not the agent's word |
+
+`job_evaluations` holds one row per check, named for OpenTelemetry's
+`gen_ai.evaluation.result` event: `name`, `score_value`, `score_label` (`pass`,
+`fail` or `unknown`) and `explanation`. `claimed` and `verified` sit side by side as
+JSON, and `agreement` is computed once when the row is written: `agree`,
+`disagree`, `unclaimed` (the agent said nothing) or `unchecked` (no verified
+value). `evaluator` is `worker`, `model` or `human`, and `evaluator_id` names which
+one, `capsid@<sha>` for this Worker. The Worker writes `pr_merged`, `prs_opened`,
+`commits`, `files_changed` and `ci_green` at `complete` and `fail`; `hidden_tests`
+and `scope_respected` are reserved for later evaluators.
+
+`job_touches` is the human-touch log: every gate, resume, approval, correction,
+note, release, supersede, seat fail and acted-on review, with the actor, an
+`actor_kind` (`human`, `seat`, `driver`, `policy`, `reviewer` or `system`) and, for
+a touch that ends a wait, `waited_ms` since the job's latest gate. Without it, human
+effort confounds any comparison of agents: a job that needed four rescues and one
+that needed none both end merged.
+
+The same rule as `job_outcomes` holds, more strictly: a field the agent did not
+state is `NULL`, never `0` and never false. "Nobody said" and "said none" are
+different facts. Times are ISO 8601 with milliseconds, because a wait is a
+difference of two times.
+
 ### A swallowed parameter tag is refused
 
 `complete`, `fail` and `post` refuse a `result_summary`, `reason` or `body` that
