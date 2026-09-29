@@ -139,7 +139,7 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
   const csrfField = form.get("csrf");
   const csrfCookie = getCookie(request, CONSOLE_CSRF_COOKIE);
   if (!csrfField || !csrfCookie || !timingSafeEqual(csrfCookie, csrfField)) {
-    return textResponse("csrf validation failed: reload the console and try again.", 403);
+    return textResponse("csrf validation failed: reload Capsid Portal and try again.", 403);
   }
 
   if (form.get("confirm") !== "yes") return confirmPage(action, form, csrfField);

@@ -1,4 +1,4 @@
-# Watch Floor
+# Capsid Portal
 
 The operations dashboard the capsid Worker serves at `/console/app/`. A React app
 built with Vite, reading one endpoint: `GET /console/api/ops`, whose shape is

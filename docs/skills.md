@@ -119,7 +119,7 @@ FAILURE NOTES. A failed job, or a complete the Worker verified as a loss, writes
 `skill_failures` note per skill the run reported using, from its reason or summary.
 `offerSkills` attaches the two newest to the next offer. They move no status.
 
-The console carries a skills panel per namespace: counts by status, the last
+Capsid Portal carries a skills panel per namespace: counts by status, the last
 evaluation, and the offered-to-used rate, which is the number a reader cannot compute
 from the others.
 

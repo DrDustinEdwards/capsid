@@ -313,9 +313,7 @@ export function App() {
       <header className="top">
         <div className="brand">
           <BrandMark />
-          <div>
-            Watch Floor <small>capsid</small>
-          </div>
+          <div>Capsid Portal</div>
         </div>
         {import.meta.env.DEV && (
           <span className="sample" title="npm run dev serves dev/sample-feed.json: every number here is fake">
