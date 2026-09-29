@@ -118,6 +118,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // The watcher's last pass, read from one KV value. Admin, so not read-only under the
   // same rule as claims, and it overwrites and removes nothing.
   ops_snapshot: additive({ idempotent: true, openWorld: false }),
+
+  // Cloudflare Access and Email Routing, read. Admin, so not read-only under the same
+  // rule as claims, and it overwrites and removes nothing. Open world: Cloudflare's API.
+  cloudflare_config: additive({ idempotent: true, openWorld: true }),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.
