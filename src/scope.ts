@@ -167,6 +167,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
   "/improve/holdout-credential": "signed with the per-namespace HMAC score key, and mints read access to that namespace's holdout only",
   "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
+  "/ops/hooks":
+    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver, a runner key or the admin, and through checkScope only a caller holding the write grant on jobs (403 otherwise); each event binds to the runner key's job or the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts)",
   "/ops/runner-key":
     "a GitHub Actions OIDC token verified against GitHub's key set, its run claims pinned against the repo as GitHub reports it, and a pending seat start; it mints a key bound to that one job (src/runner-key.ts)",
   "/ops/otlp/v1/metrics":

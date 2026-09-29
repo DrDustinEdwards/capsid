@@ -33,7 +33,8 @@ test("the restore runbook names every backed-up table", () => {
     assert.match(restore, new RegExp(`\\b${table}\\b`), `the restore runbook never names ${table}`);
   }
   // A restore that applies only 0001/0002 loses the improve tables.
-  assert.doesNotMatch(restore, /\bfive real tables\b/i, "the runbook still says five real tables");
+  // Not after a hyphen: "twenty-five real tables" is not "five real tables".
+  assert.doesNotMatch(restore, /(?<![\w-])five real tables\b/i, "the runbook still says five real tables");
   assert.doesNotMatch(restore, /The five tables are\b/i, "the runbook still enumerates only five tables");
 });
 
@@ -41,19 +42,19 @@ test("the restore runbook states the table count TABLES actually has", () => {
   const restore = restoreRunbook();
   // The count is spelled out in prose in three places. Derived from TABLES, so the
   // next addition fails here rather than being found during a restore.
-  const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two", "twenty-three"];
+  const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two", "twenty-three", "twenty-four", "twenty-five"];
   const correct = words[TABLES.length - 5];
   assert.ok(correct, `TABLES has ${TABLES.length} entries, outside the words this check can spell`);
   for (const [i, word] of words.entries()) {
     if (i === TABLES.length - 5) continue;
     assert.doesNotMatch(
       restore,
-      new RegExp(`\\b${word} (real )?tables?\\b`, "i"),
+      new RegExp(`(?<![\\w-])${word} (real )?tables?\\b`, "i"),
       `the runbook says "${word} tables" and there are ${TABLES.length}`
     );
-    assert.doesNotMatch(restore, new RegExp(`\\b${word} exports\\b`, "i"), `the runbook says "${word} exports"`);
+    assert.doesNotMatch(restore, new RegExp(`(?<![\\w-])${word} exports\\b`, "i"), `the runbook says "${word} exports"`);
   }
-  assert.match(restore, new RegExp(`\\b${correct} `, "i"), `the runbook never states the count as ${correct}`);
+  assert.match(restore, new RegExp(`(?<![\\w-])${correct} `, "i"), `the runbook never states the count as ${correct}`);
 });
 
 test("the restore runbook applies EVERY migration, derived from the directory", () => {
