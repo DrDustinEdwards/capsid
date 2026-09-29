@@ -84,6 +84,22 @@ export interface SiteMapDrift {
   unknown: string[];
 }
 
+// One row of the Portal's site configuration (ops_sites, src/ops-sites.ts). A row with
+// no origin says its namespace serves no site; platform is null exactly then.
+export interface OpsSiteConfig {
+  namespace: string;
+  name: string;
+  origin: string | null;
+  health_path: string | null;
+  platform: "cloudflare" | "vercel" | null;
+  script: string | null;
+  // Probed in-process rather than over HTTP: Capsid's own row. Not settable from the Portal.
+  self_probe: boolean;
+  // Counts edits. site_edit and site_remove name the revision they previewed.
+  revision: number;
+  updated_at: string;
+}
+
 export interface HealthSnapshot {
   status: "ok" | "degraded";
   sha: string;
@@ -205,6 +221,9 @@ export interface OpsLive {
   // One KV get per namespace; the heavy per-namespace detail is GET
   // /portal/api/namespaces, read when the Namespaces view opens.
   namespaces: Array<{ name: string; paused: string | null }>;
+  // The site configuration, every row. With no row that has an origin, the Portal
+  // shows no Sites view and no site items on the Overview.
+  sites: OpsSiteConfig[];
 }
 
 export interface OpsFeed {
@@ -246,7 +265,10 @@ export type PortalAction =
   | "resume_job"
   | "release_job"
   | "fail_job"
-  | "revoke_agent";
+  | "revoke_agent"
+  | "site_add"
+  | "site_edit"
+  | "site_remove";
 
 // params by action:
 //   pause         { namespace, reason }   reason required
@@ -257,6 +279,11 @@ export type PortalAction =
 //   release_job   { id, reason }          reason required
 //   fail_job      { id, reason }          reason required
 //   revoke_agent  { name }
+//   site_add      { namespace, name?, origin?, health_path?, platform?, script? }
+//                 no origin: the namespace serves no site, and takes no other field
+//   site_edit     { namespace, revision, name?, origin?, health_path?, platform?, script? }
+//                 every field is the row as it will be; revision is the one shown
+//   site_remove   { namespace, revision }
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;

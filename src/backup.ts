@@ -106,6 +106,9 @@ export const TABLES = [
   "skill_edits",
   "skill_failures",
   "job_outcome_prs",
+  // The Portal's site configuration: edited by hand in the Portal, so the dump is
+  // its only copy outside D1 besides the audit rows of each edit.
+  "ops_sites",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

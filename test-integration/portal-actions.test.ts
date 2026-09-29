@@ -96,8 +96,17 @@ beforeEach(async () => {
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();
+  // A registered namespace with no site row, for site_add.
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
+    .run();
+  await env.DB.prepare("DELETE FROM ops_sites WHERE namespace = 'sample'").run();
   for (const key of KEYS) await env.APP_KV.delete(key);
 });
+
+async function siteRow(namespace: string) {
+  return env.DB.prepare("SELECT * FROM ops_sites WHERE namespace = ?1").bind(namespace).first<Record<string, unknown>>();
+}
 
 // Each action: its params, the state it starts from, and what the perform must leave.
 type Case = { params: () => Promise<Record<string, string>>; after: (params: Record<string, string>) => Promise<void> };
@@ -157,12 +166,30 @@ const CASES: Record<string, Case> = {
       expect(row?.revoked_at).not.toBeNull();
     },
   },
+  site_add: {
+    params: async () => ({ namespace: "sample", name: "Sample", origin: "https://sample.example.com", health_path: "/health", platform: "cloudflare" }),
+    after: async () => expect(await siteRow("sample")).toMatchObject({ origin: "https://sample.example.com", health_path: "/health", platform: "cloudflare", revision: 1 }),
+  },
+  site_edit: {
+    params: async () => {
+      const row = await siteRow("germomics");
+      return { namespace: "germomics", revision: String(row?.revision), name: "Germomics", origin: "https://germomics.com", health_path: "/api/health", platform: "cloudflare" };
+    },
+    after: async ({ revision }) => expect(await siteRow("germomics")).toMatchObject({ health_path: "/api/health", revision: Number(revision) + 1 }),
+  },
+  site_remove: {
+    params: async () => {
+      const row = await siteRow("txasm");
+      return { namespace: "txasm", revision: String(row?.revision) };
+    },
+    after: async () => expect(await siteRow("txasm")).toBeNull(),
+  },
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, eight actions", () => {
+  it("covers the allow-list, eleven actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(8);
+    expect(Object.keys(CASES).length).toBe(11);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -263,6 +290,41 @@ describe("the job actions against real D1", () => {
     const fail = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "fail_job", params: { id: blocked, reason: "x" } } });
     expect(fail.status).toBe(400);
     expect(await fail.text()).toMatch(/already done/);
+  });
+});
+
+describe("the site actions against real D1", () => {
+  it("a site edit previewed, then edited elsewhere, is refused at perform and the row keeps the other edit", async () => {
+    const row = await siteRow("foxing");
+    const params = { namespace: "foxing", revision: String(row?.revision), name: "Foxing", origin: "https://foxing.app", health_path: "/health", platform: "cloudflare" };
+    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_edit", params } })).json()) as PortalPreview;
+    await env.DB.prepare("UPDATE ops_sites SET name = 'Foxing (renamed)', revision = revision + 1 WHERE namespace = 'foxing'").run();
+    const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/changed since the preview/);
+    expect(await siteRow("foxing")).toMatchObject({ name: "Foxing (renamed)", health_path: null });
+    expect((await auditRows()).some((r) => r.action === "portal-site_edit"), "a refused edit wrote a click row").toBe(false);
+  });
+
+  it("add refuses an unregistered namespace and a bad origin at preview, with the reason, writing nothing", async () => {
+    const auditBefore = await auditRows();
+    const unregistered = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_add", params: { namespace: "nobody", origin: "https://nobody.example.com", platform: "cloudflare" } } });
+    expect(unregistered.status).toBe(400);
+    expect(await unregistered.text()).toMatch(/not a registered namespace/);
+    const http = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_add", params: { namespace: "sample", origin: "http://sample.example.com", platform: "cloudflare" } } });
+    expect(http.status).toBe(400);
+    expect(await http.text()).toMatch(/must start with https/);
+    expect(await siteRow("sample")).toBeNull();
+    expect(await auditRows()).toEqual(auditBefore);
+  });
+
+  it("the feed carries the configuration, and a perform's feed shows the change", async () => {
+    const row = await siteRow("julieedwards");
+    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_remove", params: { namespace: "julieedwards", revision: String(row?.revision) } } })).json()) as PortalPreview;
+    expect(preview.changes.join(" ")).toMatch(/still registered|remove julieedwards/);
+    const performed = (await (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).json()) as PortalPerformed;
+    expect(performed.feed.live.sites.some((s) => s.namespace === "julieedwards")).toBe(false);
+    expect(performed.feed.live.sites.some((s) => s.namespace === "capsid")).toBe(true);
   });
 });
 

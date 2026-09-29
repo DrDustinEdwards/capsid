@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CF_GRAPHQL, DEPLOYS_KEPT, cloudflareCredentials, errorWindow, readCloudflare } from "../src/ops-cloudflare.ts";
-import { OPS_SITES, type OpsSite } from "../src/ops-sites.ts";
+import type { OpsSite } from "../src/ops-sites.ts";
 import { buildSnapshot, OPS_SNAPSHOT_KEY, readSnapshot, ringSlot, type OpsSnapshot, type SiteProbe } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types.ts";
 import {
@@ -140,17 +140,8 @@ test("a Vercel site is not Cloudflare's, with a reason, even with a token", asyn
 
 // Script resolution
 
-// scanner-rule: a script is named in the site map only where the host proves it
-test("a script is named in the site map only where the host proves it: a workers.dev host's first label", () => {
-  const named = OPS_SITES.filter((s) => s.script !== undefined);
-  assert.ok(named.length >= 2, "the map names fewer than two scripts, so this checks almost nothing");
-  for (const s of OPS_SITES) {
-    const host = new URL(s.origin).hostname;
-    if (host.endsWith(".workers.dev")) assert.equal(s.script, host.split(".")[0], `${s.namespace} is on workers.dev and does not name its script`);
-    else assert.equal(s.script, undefined, `${s.namespace} names a script its host does not prove; resolve it from the custom domains list`);
-  }
-  assert.deepEqual(named.map((s) => s.script).sort(), ["bsw", "capsid"]);
-});
+// The seed's scripts (a script named only where the host proves it) are checked
+// against the migrated table in test-integration/ops-sites.test.ts.
 
 test("a custom-domain site resolves to the Worker its custom domain names; one with none is unresolved, never guessed", async () => {
   const cf = cloudflare({
@@ -411,13 +402,34 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
 // path a real outage takes, so only the probes, the snapshot and Cloudflare run.
 const deadDb = { prepare: () => { throw new Error("fake D1 is down"); } };
 
-async function gather(env: Record<string, unknown>, answers: Record<string, Answer>, prev: OpsSnapshot | null) {
+// The site configuration a pass reads (src/ops-sites.ts), shaped like the migration's
+// seed: a self-probed workers.dev site, a second workers.dev site, two custom domains
+// resolved from Cloudflare's list, and a Vercel site. Every other read fails, as deadDb.
+const CONFIG_ROWS = [
+  { namespace: "capsid", name: "Capsid", origin: "https://capsid.sample.workers.dev", health_path: "/health", platform: "cloudflare", script: "capsid", self_probe: 1 },
+  { namespace: "bsw", name: "BSW", origin: "https://bsw.sample.workers.dev", health_path: null, platform: "cloudflare", script: "bsw", self_probe: 0 },
+  { namespace: "foxing", name: "Foxing", origin: "https://foxing.example.com", health_path: null, platform: "cloudflare", script: null, self_probe: 0 },
+  { namespace: "germomics", name: "Germomics", origin: "https://germomics.example.com", health_path: "/health", platform: "cloudflare", script: null, self_probe: 0 },
+  { namespace: "julieedwards", name: "julieedwards", origin: "https://julieedwards.example.com", health_path: null, platform: "vercel", script: null, self_probe: 0 },
+  { namespace: "claude-skills", name: "claude-skills", origin: null, health_path: null, platform: null, script: null, self_probe: 0 },
+].map((r) => ({ ...r, revision: 1, updated_at: "2026-09-29 00:00:00" }));
+
+function configDb(rows: unknown[]) {
+  return {
+    prepare: (sql: string) => {
+      if (!/FROM ops_sites/i.test(sql)) throw new Error("fake D1 is down");
+      return { bind: () => ({ all: async () => ({ results: rows }) }), all: async () => ({ results: rows }) };
+    },
+  };
+}
+
+async function gather(env: Record<string, unknown>, answers: Record<string, Answer>, prev: OpsSnapshot | null, db: unknown = configDb(CONFIG_ROWS)) {
   const kv = fakeKv(prev ? { seed: { [OPS_SNAPSHOT_KEY]: JSON.stringify(prev) } } : {});
   const cf = cloudflare(answers);
   let result: Awaited<ReturnType<typeof gatherFindings>> | null = null;
   // GitHub is read through the global fetch; every route answers 500 here.
   await withFetch({}, async () => {
-    ({ value: result } = await quietly(() => gatherFindings(fakeEnv({ DB: deadDb, APP_KV: kv.kv, ...env }), NOW, cf.impl as typeof fetch)));
+    ({ value: result } = await quietly(() => gatherFindings(fakeEnv({ DB: db, APP_KV: kv.kv, ...env }), NOW, cf.impl as typeof fetch)));
   });
   return { gathered: result as unknown as Awaited<ReturnType<typeof gatherFindings>>, calls: cf.calls };
 }
@@ -427,9 +439,32 @@ test("with no token the cloudflare check does not run, nothing reaches Cloudflar
   assert.equal(gathered.ran.has("cloudflare"), false);
   assert.ok(!calls.some((c) => c.url.startsWith("https://api.cloudflare.com")), "a pass with no token called Cloudflare");
   const cf = gathered.observed.cloudflare ?? {};
-  for (const s of OPS_SITES) {
+  const sites = CONFIG_ROWS.filter((r) => r.origin !== null);
+  assert.equal(Object.keys(cf).length, sites.length, "the no-site row got a Cloudflare state");
+  for (const s of sites) {
     assert.equal(cf[s.namespace]?.state, s.platform === "vercel" ? "not-cloudflare" : "no-token", s.namespace);
   }
+});
+
+// scanner-rule: with nothing configured, the watcher reaches no site
+test("PLANT: with no site configured, the pass probes nothing and reaches no Cloudflare API", async () => {
+  const noSites = CONFIG_ROWS.filter((r) => r.origin === null);
+  const { gathered, calls } = await gather(CREDS, {}, prevWith({}), configDb(noSites));
+  // Only GitHub is fetched, and through the global fetch the stub does not see.
+  assert.deepEqual(calls.map((c) => c.url), [], "a pass with no site configured fetched a site or Cloudflare");
+  assert.deepEqual(gathered.observed.probes, []);
+  assert.equal(gathered.observed.cloudflare, undefined);
+  assert.equal(gathered.ran.has("cloudflare"), false);
+  assert.ok(!gathered.findings.some((f) => f.fingerprint.startsWith("site-")), "a pass with no site configured raised a site finding");
+});
+
+test("an unreadable site configuration runs no site check, probes nothing, and clears nothing", async () => {
+  const { gathered, calls } = await gather(CREDS, {}, prevWith({}), deadDb);
+  assert.deepEqual(calls.map((c) => c.url), []);
+  for (const check of ["site map", "site probes", "cloudflare"] as const) {
+    assert.equal(gathered.ran.has(check), false, `${check} counted as run on an unreadable configuration`);
+  }
+  assert.equal(gathered.observed.probes, null);
 });
 
 test("a site down on two probes in a row, and a Worker over the error rate, reach the findings through gatherFindings", async () => {

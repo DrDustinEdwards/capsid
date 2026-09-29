@@ -4,7 +4,7 @@ import { hmacHex } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { b64urlDecode, b64urlEncode } from "../src/encoding.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
-import type { PortalPerformed, PortalPreview } from "../src/ops-types.ts";
+import type { OpsSiteConfig, PortalPerformed, PortalPreview } from "../src/ops-types.ts";
 import {
   handlePortalActivity,
   handlePortalApiNotFound,
@@ -36,8 +36,47 @@ const LATER = (ms: number) => new Date(NOW.getTime() + ms);
 
 const DRIVER_SCOPES = JSON.stringify({ namespaces: ["capsid"], repos: "*", tools: "*", grants: ["read", "write"], flags: {} });
 
+// The site configuration the previews read. The fake D1 does not model ops_sites, so
+// its reads are answered here; the writes are performed against real D1 in
+// test-integration/portal-actions.test.ts and test-integration/ops-sites.test.ts.
+const SITE_ROWS: OpsSiteConfig[] = [
+  { namespace: "capsid", name: "Capsid", origin: "https://capsid.example.com", health_path: "/health", platform: "cloudflare", script: "capsid", self_probe: true, revision: 3, updated_at: "2026-09-28 00:00:00" },
+];
+
+function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
+  const toRow = (s: OpsSiteConfig) => ({ ...s, self_probe: s.self_probe ? 1 : 0 });
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop !== "prepare") return Reflect.get(target, prop, receiver);
+      return (sql: string) => {
+        if (!/FROM ops_sites/i.test(sql)) return target.prepare(sql);
+        const statement = {
+          params: [] as unknown[],
+          bind(...params: unknown[]) {
+            statement.params = params;
+            return statement;
+          },
+          async first() {
+            const [ns] = statement.params;
+            const hit = sites.find((s) => s.namespace === ns);
+            return hit ? toRow(hit) : null;
+          },
+          async all() {
+            return { results: sites.map(toRow), meta: {} };
+          },
+        };
+        return statement;
+      };
+    },
+  });
+}
+
 function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; env: never } {
   const d1 = fakeD1({
+    namespaces: [
+      { namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) },
+      { namespace: "capsid-new", repos: JSON.stringify([{ repo: "owner/new", label: "primary" }]) },
+    ],
     agents: [
       {
         id: "agent_driver000001",
@@ -68,7 +107,7 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
   });
   const kv = fakeKv({ seed: { "improve:paused:capsid": "an old reason" } });
   const env = {
-    DB: d1.db,
+    DB: withSites(d1.db, SITE_ROWS),
     APP_KV: kv.kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
@@ -120,6 +159,7 @@ const FEED: OpsFeedData = {
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
     namespaces: [],
+    sites: [],
   },
   refresh_allowed_at: null,
   cloudflare_configured: false,
@@ -179,14 +219,29 @@ const EVERY_ACTION = [
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
   ["fail_job", { id: "job_queued000001", reason: "superseded" }],
   ["revoke_agent", { name: "capsid-driver" }],
+  ["site_add", { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" }],
+  ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
+  ["site_remove", { namespace: "capsid", revision: "3" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, and every loop below covers each", () => {
-  // The old page's allow-list, written out when the page was deleted, so an action
-  // added to PORTAL_ACTIONS without a decision here, or without a row below, fails.
-  assert.deepEqual([...PORTAL_ACTIONS].sort(), ["fail_job", "mode", "pause", "release_job", "resume_job", "revoke_agent", "seat_start", "unpause"]);
+test("the Portal's actions are the eight the old /console page had and the three site edits, and every loop below covers each", () => {
+  // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
+  // without a row below, fails.
+  assert.deepEqual([...PORTAL_ACTIONS].sort(), [
+    "fail_job",
+    "mode",
+    "pause",
+    "release_job",
+    "resume_job",
+    "revoke_agent",
+    "seat_start",
+    "site_add",
+    "site_edit",
+    "site_remove",
+    "unpause",
+  ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 8);
+  assert.equal(PORTAL_ACTIONS.length, 11);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -287,8 +342,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions are performed against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job"))) {
+// transitions and the site edits are performed against real D1 in
+// test-integration/portal-actions.test.ts.
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && !a.startsWith("site_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);
