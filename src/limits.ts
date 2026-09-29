@@ -27,6 +27,9 @@ export const MAX_PR_COMMENT = 16_384;
 // Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror
 // document beside the signed prompt, which can already be MAX_BODY on its own.
 export const MAX_RESUME_NOTE = 16_384;
+// A delete_namespace confirmation token: base64url claims carrying the plan's counts,
+// a dot and a 64-hex signature. Well under 2KB in practice.
+export const MAX_CONFIRM_TOKEN = 8192;
 
 export const MAX_ROWS = 500;
 export const SEARCH_ROWS = 25;
