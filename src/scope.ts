@@ -86,6 +86,10 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // The credential control plane. Admin in whole: an agent that could mint, revoke or
   // re-scope another could widen itself.
   agents: "admin",
+
+  // Claims apart from verified outcomes. It only reads, and is admin only in whole:
+  // it spans every namespace and every agent, and its export is the whole dataset.
+  claims: "admin",
 };
 
 // Fail closed: a tool with no entry requires the write grant, so a tool added without
@@ -166,6 +170,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
   "/portal/api/namespaces": "the Portal's per-namespace status, read through improve_status's function, gated by portalGate",
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
+  "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the claims tool's readers, gated by portalGate",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
   "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
   "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",
@@ -288,6 +293,8 @@ const ADMIN_REASON: Record<string, string> = {
   update_namespace:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
   agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
+  claims:
+    "It reads every agent's claims, the Worker's checks of them and every human touch, across every namespace, which is wider than any one caller's scope.",
   improve_run:
     "That action controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver takes its lease with action 'claim' and runs with action 'run'.",
   "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
@@ -337,6 +344,7 @@ type ToolHandler = (...args: unknown[]) => unknown;
 // flag (can_direct_write), and one setting should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
   agents: "action",
+  claims: "action",
   improve_run: "action",
   jobs: "action",
   lint: "mode",
@@ -350,7 +358,7 @@ const ACTION_ARG: Record<string, string> = {
 // registrar saw no action where the handler reads "gather".
 // test/audit-2026-09-16.test.ts derives the required entries from the served schemas:
 // an action argument a tool marks optional is a handler default.
-const DEFAULT_ACTION: Record<string, string> = { improve_run: "run", lint: "gather" };
+const DEFAULT_ACTION: Record<string, string> = { claims: "aggregate", improve_run: "run", lint: "gather" };
 
 /** The action a call means when the caller omits the argument, or undefined. */
 export function defaultActionFor(tool: string): string | undefined {

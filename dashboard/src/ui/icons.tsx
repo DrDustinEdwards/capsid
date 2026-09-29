@@ -142,6 +142,12 @@ const NAV_ICONS: Record<string, ReactNode> = {
       <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
+  claims: (
+    <>
+      <path d="M2 3h5v10H2zM9 3h5v10H9z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M3.5 8.2l1 1 1.8-2.2M10.5 6.5l2 2M12.5 6.5l-2 2" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
 };
 
 export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {
