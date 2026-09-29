@@ -15,16 +15,16 @@ import { bounded } from "./limits";
 // NULL IS NOT FALSE, on 0011's reasoning: a field the agent did not state is NULL,
 // never 0 and never false. "Nobody said" and "said none" are different facts.
 
-export const CLAIM_TESTS_RESULTS = ["pass", "fail", "partial", "not_run"] as const;
-export const CLAIM_DEPLOY_STATES = ["none", "pending", "deployed", "verified", "failed"] as const;
+const CLAIM_TESTS_RESULTS = ["pass", "fail", "partial", "not_run"] as const;
+const CLAIM_DEPLOY_STATES = ["none", "pending", "deployed", "verified", "failed"] as const;
 
 // Bounds on what one claim may carry. A claim is stored whole, so each list and each
 // string is bounded where it arrives rather than truncated where it is written.
 export const MAX_CLAIM_PRS = 10;
-export const MAX_CLAIM_URL = 512;
-export const MAX_CLAIM_FILES = 500;
-export const MAX_CLAIM_PATH = 512;
-export const MAX_CLAIM_VERSION = 128;
+const MAX_CLAIM_URL = 512;
+const MAX_CLAIM_FILES = 500;
+const MAX_CLAIM_PATH = 512;
+const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);

@@ -7,7 +7,7 @@
 // release, supersede, the seat's fail, a review verdict acted on), so a transition the
 // guard refuses writes no touch, and a touch never describes a move that did not happen.
 
-export const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "review"] as const;
+const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "review"] as const;
 export type TouchKind = (typeof TOUCH_KINDS)[number];
 
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;
