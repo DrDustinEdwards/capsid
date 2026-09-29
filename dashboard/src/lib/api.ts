@@ -121,7 +121,13 @@ async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> 
   return { kind: "ok", value: (await res.json()) as T };
 }
 
-async function post<T>(url: string, csrf: string, body: unknown): Promise<Answer<T>> {
+// How long a control waits for the Worker before it says so. A request with no answer
+// would otherwise leave the dialog busy, with every button disabled and nothing said.
+export const ACTION_TIMEOUT_MS = 20_000;
+
+async function post<T>(url: string, csrf: string, body: unknown, timeoutMs = ACTION_TIMEOUT_MS): Promise<Answer<T>> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -130,10 +136,16 @@ async function post<T>(url: string, csrf: string, body: unknown): Promise<Answer
       cache: "no-store",
       headers: { "X-Capsid-CSRF": csrf, "Content-Type": "application/json", accept: "application/json" },
       body: JSON.stringify(body),
+      signal: abort.signal,
     });
     return await answer<T>(res, false);
   } catch (e) {
+    if (abort.signal.aborted) {
+      return { kind: "error", message: `no answer within ${Math.round(timeoutMs / 1000)} seconds. Check Activity to see whether anything changed before trying again.` };
+    }
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
