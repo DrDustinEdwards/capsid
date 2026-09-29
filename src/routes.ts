@@ -31,6 +31,7 @@ import { handleHealth } from "./health";
 import { escapeHtml } from "./html";
 import { handlePortalApp } from "./portal-app";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
+import { OTLP_LOGS_PATH, OTLP_METRICS_PATH, handleOtlpLogs, handleOtlpMetrics } from "./ops-otlp";
 import { OPS_HOOKS_PATH, handleOpsHooks } from "./ops-hooks";
 import {
   handlePortalActivity,
@@ -578,6 +579,8 @@ export const defaultHandler = {
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
   if (url.pathname === RUNNER_KEY_PATH && request.method === "POST") return handleRunnerKey(request, env);
+    if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
+    if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
     if (url.pathname === SCORE_PATH && request.method === "POST") return handleImproveScore(request, env);
     if (url.pathname === CREDENTIAL_PATH && request.method === "POST") return handleHoldoutCredential(request, env);
     if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);

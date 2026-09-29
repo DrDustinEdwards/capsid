@@ -1,7 +1,6 @@
-import { resolveAgent, type Agent } from "./agents";
 import type { Env } from "./env";
 import { readBoundedText } from "./improve-scorer";
-import { checkScope } from "./scope";
+import { resolveSessionCaller } from "./ops-session-auth";
 
 // The hook receiver: POST /ops/hooks. Claude Code's HTTP hooks post each event's input
 // JSON here (docs/hooks.md), and this keeps a SUMMARY of each session in agent_sessions
@@ -18,9 +17,10 @@ import { checkScope } from "./scope";
 // never parses a decision out of it. Every refusal is non-2xx, which Claude Code shows
 // as a non-blocking error.
 //
-// Authorization: the bearer resolves through resolveAgent, and only three callers are
-// admitted (hookCallerRefusal): a driver, a runner (a session key, bound to its job),
-// or the admin for testing. It is a route, not a tool, and src/scope.ts lists it among
+// Authorization: resolveSessionCaller (src/ops-session-auth.ts), the one caller check
+// this route shares with the OTLP receiver. The bearer resolves through resolveAgent,
+// and only three callers are admitted: a driver, a runner (a session key, bound to its
+// job), or the admin for testing. It is a route, not a tool, and src/scope.ts lists it among
 // the routes gated some other way.
 
 export const OPS_HOOKS_PATH = "/ops/hooks";
@@ -29,7 +29,7 @@ export const OPS_HOOKS_PATH = "/ops/hooks";
 // be something else.
 export const HOOK_MAX_BYTES = 65_536;
 // session_events older than this are pruned, a bounded batch per call.
-export const EVENT_RETENTION_DAYS = 30;
+const EVENT_RETENTION_DAYS = 30;
 const PRUNE_BATCH = 50;
 
 // The six events docs/hooks.md configures. Any other event is refused with 400, so a
@@ -177,36 +177,10 @@ export function parseHook(raw: string): HookParse {
   return { ok: true, hook };
 }
 
-/** Why this caller may not post hooks, or null. A driver, a runner or session key, or
- *  the admin; and through checkScope, only one that could write to the job queue, so a
- *  read-only credential is refused whatever its kind. */
-export function hookCallerRefusal(agent: Agent): string | null {
-  if (agent.admin) return null;
-  if (!agent.row || (agent.kind !== "driver" && agent.kind !== "session")) {
-    return `forbidden: ${agent.actor} is not a driver or a runner. Hooks are posted with the session's own driver or runner key (docs/hooks.md).`;
-  }
-  return checkScope(agent, { tool: "jobs", grant: "write" });
-}
-
+// The job an event belongs to, as resolveSessionCaller bound it.
 export interface HookBinding {
   job_id: string;
   namespace: string;
-}
-
-/** The job a caller's events belong to: a runner key's bound job, or the one job a
- *  driver holds claimed. None, or more than one, is no binding. */
-export async function callerJob(db: D1Database, agent: Agent): Promise<HookBinding | null> {
-  if (agent.job) {
-    const row = await db.prepare("SELECT id, namespace FROM jobs WHERE id = ?1").bind(agent.job).first<{ id: string; namespace: string }>();
-    return row ? { job_id: row.id, namespace: row.namespace } : null;
-  }
-  if (!agent.row || agent.kind !== "driver") return null;
-  const { results } = await db
-    .prepare("SELECT id, namespace FROM jobs WHERE claimed_by = ?1 AND status = 'claimed' LIMIT 2")
-    .bind(agent.actor)
-    .all<{ id: string; namespace: string }>();
-  const held = results ?? [];
-  return held.length === 1 ? { job_id: held[0].id, namespace: held[0].namespace } : null;
 }
 
 /** The three writes for one event, in one batch: the session upsert (RETURNING, so a
@@ -282,27 +256,23 @@ function textResponse(message: string, status: number, extra: Record<string, str
 }
 
 export async function handleOpsHooks(request: Request, env: Env, ctx: ExecutionContext | null, now: Date = new Date()): Promise<Response> {
-  const resolved = await resolveAgent(request, env, now);
-  if (!resolved) {
-    return textResponse("unauthorized: a driver or runner key is required as Authorization: Bearer <key>", 401, {
-      "WWW-Authenticate": 'Bearer realm="capsid-hooks"',
-    });
-  }
-  const refusal = hookCallerRefusal(resolved.agent);
-  if (refusal) return textResponse(refusal, 403);
+  // 401 with realm capsid-hooks, or 403 for a caller that is not a driver, a runner or
+  // the admin, or that holds no write grant.
+  const caller = await resolveSessionCaller(request, env, now);
+  if (caller instanceof Response) return caller;
   // Bounded at the stream, in bytes, before the parse (see handleCspReport in routes.ts).
   const bounded = await readBoundedText(request, HOOK_MAX_BYTES);
   if (!bounded.ok) return textResponse(`the hook body exceeds ${HOOK_MAX_BYTES} bytes`, 413);
   const parsed = parseHook(bounded.text);
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
 
-  const binding = await callerJob(env.DB, resolved.agent);
-  const [session] = await env.DB.batch(hookStatements(env.DB, resolved.agent.actor, binding, parsed.hook, now));
+  const binding: HookBinding | null = caller.job_id && caller.namespace ? { job_id: caller.job_id, namespace: caller.namespace } : null;
+  const [session] = await env.DB.batch(hookStatements(env.DB, caller.agent.actor, binding, parsed.hook, now));
   if ((session.results ?? []).length === 0) {
     return textResponse(`session ${parsed.hook.session_id} was first reported by another key, so this event was not recorded`, 409);
   }
   // last_seen is not part of authorizing; see handleOperatorMcp.
-  if (ctx) ctx.waitUntil(resolved.touch());
-  else await resolved.touch();
+  if (ctx) ctx.waitUntil(caller.touch());
+  else await caller.touch();
   return new Response(null, { status: 200 });
 }

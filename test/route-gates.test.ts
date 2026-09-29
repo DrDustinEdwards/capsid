@@ -19,6 +19,7 @@ import {
 import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
+import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
 import {
   ROUTE_GRANTS,
@@ -108,6 +109,8 @@ const PATH_CONSTANTS: Record<string, string> = {
   BACKUP_CREDENTIAL_PATH,
   PORTAL_CALLBACK_PATH,
   RUNNER_KEY_PATH,
+  OTLP_METRICS_PATH,
+  OTLP_LOGS_PATH,
   OPS_FEED_PATH,
   OPS_REFRESH_PATH,
   OPS_HOOKS_PATH,
