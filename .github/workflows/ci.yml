@@ -165,6 +165,17 @@ jobs:
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard
 
+      # The app in a real browser (dashboard/e2e, Playwright): the build above under
+      # vite preview, the dev mock, and the Worker's page CSP. A Preview click that did
+      # nothing live, and pages that scrolled sideways, passed every other step here.
+      # Only Chromium is installed; its version is pinned by @playwright/test in
+      # dashboard/package-lock.json.
+      - name: Install the browser for the app's browser tests
+        run: npx --prefix dashboard playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: npm run test:browser
+
   # Ordered after checks: a failing typecheck or test never reaches production. No
   # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
   # when its credentials are missing makes "deployed" and "could not deploy"

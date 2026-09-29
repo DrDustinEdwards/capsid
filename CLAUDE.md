@@ -6,7 +6,7 @@ Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting. They 
 
 ## Commands
 
-- Before any push: `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard`. CI runs the same eight, plus the integration suite. capsid pull requests are merged by the seat, never auto-merged (docs/policy/auto-merge.md).
+- Before any push: `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard`, then `npm run test:browser` (after the build; it drives the built app in Chromium). CI runs the same nine, plus the integration suite. capsid pull requests are merged by the seat, never auto-merged (docs/policy/auto-merge.md).
 - `npm run test:integration` runs the Worker in workerd. `npm run deploy` (it builds the dashboard first and stops if the build or its size budget fails), then `EXPECT_SHA=<sha> npm run verify:live`.
 - The Capsid Portal app lives in `dashboard/`, its own package: `npm --prefix dashboard run dev` serves it with fake sample data.
 - Secrets: `npx wrangler secret put KEY`.
