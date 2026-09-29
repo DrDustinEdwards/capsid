@@ -147,7 +147,7 @@ test("REFUSES slot or at without site, slot with at, and a site the snapshot doe
 });
 
 test("an absent or unreadable snapshot is a named error, not an empty result", async () => {
-  for (const seed of [{}, { [OPS_SNAPSHOT_KEY]: JSON.stringify({ ...SNAPSHOT, version: 2 }) }, { [OPS_SNAPSHOT_KEY]: "{not json" }]) {
+  for (const seed of <Record<string, string>[]>[{}, { [OPS_SNAPSHOT_KEY]: JSON.stringify({ ...SNAPSHOT, version: 2 }) }, { [OPS_SNAPSHOT_KEY]: "{not json" }]) {
     const { call, close } = await connect(admin(), seed);
     try {
       const result = await call({});
