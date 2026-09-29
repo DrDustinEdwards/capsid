@@ -28,11 +28,30 @@ import {
 // tool takes one `ref` and decides here.
 const SHA_SHAPE = /^[0-9a-f]{7,40}$/i;
 
+interface CiRunsOpts {
+  limit?: number;
+  logTail?: boolean;
+  ref?: string;
+  runId?: number;
+}
+interface CiDrillOpts extends CiRunsOpts {
+  jobs?: boolean;
+  job?: string;
+  step?: string;
+}
+type CiRunsResult = Awaited<ReturnType<typeof ciStatusFromRuns>>;
+type CiJobsResult = Awaited<ReturnType<typeof ciRunJobs>>;
+
+// Without the drill-in arguments the answer is always the run list, and the callers
+// that read `runs` (job-outcomes.ts, watcher.ts) keep that type. Only a call that
+// passes jobs, job or step can get the jobs view back.
+export async function ciStatus(env: Env, namespace: string, repoSelector?: string, opts?: CiRunsOpts): Promise<CiRunsResult>;
+export async function ciStatus(env: Env, namespace: string, repoSelector: string | undefined, opts: CiDrillOpts): Promise<CiRunsResult | CiJobsResult>;
 export async function ciStatus(
   env: Env,
   namespace: string,
   repoSelector?: string,
-  opts: { limit?: number; logTail?: boolean; ref?: string; runId?: number; jobs?: boolean; job?: string; step?: string } = {}
+  opts: CiDrillOpts = {}
 ) {
   // The drill-in arguments narrow one run, so each needs the one above it. Refused
   // before any GitHub call rather than ignored, so a caller never reads a run list
