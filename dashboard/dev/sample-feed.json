@@ -1317,7 +1317,7 @@
         "finding": null
       },
       {
-        "id": "job_195c11e2667b",
+        "id": "job_d524d7459d9e",
         "namespace": "sample-b",
         "title": "Publish queue shows scheduled posts",
         "status": "done",
@@ -1545,7 +1545,7 @@
         "recorded_at": "2026-09-28T11:10:00.000Z"
       },
       {
-        "job_id": "job_195c11e2667b",
+        "job_id": "job_d524d7459d9e",
         "pr_url": "https://github.com/example-org/sample-b/pull/214",
         "merged": true,
         "merge_verified_at": "2026-09-28T06:12:00.000Z",
