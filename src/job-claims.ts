@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { EvidenceVerdict, JobEvidence } from "./job-outcomes";
+import { bounded } from "./limits";
 
 // WHAT THE AGENT SAID, kept apart from what the Worker verified (migrations/0023).
 //
@@ -26,15 +27,15 @@ export const MAX_CLAIM_PATH = 512;
 export const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
-const version = z.string().max(MAX_CLAIM_VERSION);
+const version = bounded(MAX_CLAIM_VERSION);
 
 // Strict at every level: an unknown key is refused, never dropped. A dropped key is a
 // claim the agent made and the record does not have, which is the loss this table
 // exists to prevent.
 export const claimSchema = z
   .object({
-    prs_opened: z.array(z.string().max(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job opened."),
-    prs_merged: z.array(z.string().max(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job says are merged."),
+    prs_opened: z.array(bounded(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job opened."),
+    prs_merged: z.array(bounded(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job says are merged."),
     tests: z
       .object({
         run: count.optional(),
@@ -46,7 +47,7 @@ export const claimSchema = z
       .optional()
       .describe("Tests the agent ran, and their result."),
     deploy_state: z.enum(CLAIM_DEPLOY_STATES).optional(),
-    files_touched: z.array(z.string().max(MAX_CLAIM_PATH)).max(MAX_CLAIM_FILES).optional().describe("Repo-relative paths the agent touched."),
+    files_touched: z.array(bounded(MAX_CLAIM_PATH)).max(MAX_CLAIM_FILES).optional().describe("Repo-relative paths the agent touched."),
     versions: z
       .object({
         model_id: version.optional(),
