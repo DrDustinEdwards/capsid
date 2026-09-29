@@ -6,6 +6,7 @@ import { callerIsSeat, readJob, refuse, type JobResult } from "./jobs-transition
 import { verifySignedBody } from "./improve-task";
 import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
+import { sha256Hex } from "./auth";
 
 // The seat starts a Claude Code session on GitHub's runners to work one queued job
 // (capsid/research/design-seat-start.md, approved 2026-09-26). The start sends a
@@ -110,6 +111,23 @@ export async function sessionsInFlight(env: Env, now: Date): Promise<InFlight[]>
   return out;
 }
 
+/**
+ * The W3C trace context a seat-started session is dispatched with
+ * (https://www.w3.org/TR/trace-context/#traceparent-header): version 00, a trace id of
+ * the first 32 hex of sha256(job id), so every start of one job shares a trace and
+ * anyone holding the job id can find it, a span id of the first 16 hex of
+ * sha256(job id + ":" + the start's instant), one per start, and flags 01 (sampled).
+ * The span is keyed on the instant rather than the start's audit id because the audit
+ * row is written after GitHub accepts the dispatch; the job-seat-started row records
+ * the traceparent, which ties the two together. Claude Code reads TRACEPARENT in -p
+ * and Agent SDK sessions only (docs/telemetry.md).
+ */
+export async function seatTraceparent(jobId: string, startedAt: Date): Promise<string> {
+  const trace = (await sha256Hex(jobId)).slice(0, 32);
+  const span = (await sha256Hex(`${jobId}:${startedAt.toISOString()}`)).slice(0, 16);
+  return `00-${trace}-${span}-01`;
+}
+
 /** jobs action "start": dispatch a session for one queued job, after every check. */
 export async function startSeatSession(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
@@ -150,15 +168,16 @@ export async function startSeatSession(env: Env, agent: Agent, now: Date, id: st
     return refuse("start", `${inFlight.length} seat-started session(s) in flight (${inFlight.map((f) => f.job_id).join(", ")}), and the cap is ${state.max_sessions}.`);
   }
 
+  const traceparent = await seatTraceparent(job.id, now);
   const sent = await ghFetch(env, repo.owner, repo.repo, `/repos/${repo.owner}/${repo.repo}/dispatches`, {
     method: "POST",
-    body: JSON.stringify({ event_type: SEAT_START_EVENT, client_payload: { job_id: job.id } }),
+    body: JSON.stringify({ event_type: SEAT_START_EVENT, client_payload: { job_id: job.id, traceparent } }),
   });
   if (sent.status !== 204) {
     return refuse("start", `GitHub refused the dispatch to ${repo.full} (${sent.status}), so no session was started.`);
   }
   await env.DB.batch([
-    jobAudit(env.DB, agent.actor, "job-seat-started", job, { repo: repo.full, cap: state.max_sessions, in_flight_before: inFlight.length }),
+    jobAudit(env.DB, agent.actor, "job-seat-started", job, { repo: repo.full, cap: state.max_sessions, in_flight_before: inFlight.length, traceparent }),
   ]);
   return {
     ok: true,

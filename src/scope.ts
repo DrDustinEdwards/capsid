@@ -169,6 +169,10 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
   "/ops/runner-key":
     "a GitHub Actions OIDC token verified against GitHub's key set, its run claims pinned against the repo as GitHub reports it, and a pending seat start; it mints a key bound to that one job (src/runner-key.ts)",
+  "/ops/otlp/v1/metrics":
+    "Claude Code's OTLP metrics: resolveAgent on the bearer (401 otherwise), then a driver, runner key or the admin holding write through checkScope (403 otherwise); the usage is bound to the runner key's job or the one job the driver holds claimed, never to a job the body names (src/ops-session-auth.ts)",
+  "/ops/otlp/v1/logs":
+    "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
   "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
