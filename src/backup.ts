@@ -109,6 +109,12 @@ export const TABLES = [
   // The Portal's site configuration: edited by hand in the Portal, so the dump is
   // its only copy outside D1 besides the audit rows of each edit.
   "ops_sites",
+  // The claims dataset (migrations/0023_job_claims.sql): what each agent said it did,
+  // each check of that against GitHub, and every human touch. Append-only by trigger,
+  // and nothing prunes them, so the dump is the only copy outside D1.
+  "job_claims",
+  "job_evaluations",
+  "job_touches",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;
