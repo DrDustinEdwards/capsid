@@ -437,6 +437,13 @@ WHERE action LIKE 'portal-%' OR action LIKE 'console-%'
 ORDER BY id DESC LIMIT 50;
 ```
 
+**The site configuration** is the table `ops_sites`, one row per namespace
+(docs/portal.md, "Sites are configuration"). Its edits are audited as
+`ops-site-added`, `ops-site-edited` and `ops-site-removed` under `access:<email>`,
+each carrying the row before and after as `params`, then the click row
+`portal-site_add`, `portal-site_edit` or `portal-site_remove`. A removed row survives
+only in that audit row and the nightly dump.
+
 `attempts_kept` and `attempts_reverted` on an agent are `null` for every kind
 except `driver`, because an attempt belongs to a namespace's runs and crediting a
 seat with them would attribute one credential's work to another.

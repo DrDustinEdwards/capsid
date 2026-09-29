@@ -12,6 +12,7 @@ import { IMPROVE_ACTOR, pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
 import { resumeDestination } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
+import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
 import { readBoundedText } from "./improve-scorer";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalAction, PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "./ops-types";
@@ -67,6 +68,9 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "fail_job",
   "release_job",
   "revoke_agent",
+  "site_add",
+  "site_edit",
+  "site_remove",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -98,6 +102,14 @@ function describeAction(action: PortalAction, params: ActionParams): string {
       return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
+    case "site_add":
+      return params.origin
+        ? `Add ${ns} to the sites Capsid Portal watches. The watcher probes it from its next pass.`
+        : `Record that ${ns} serves no site, so the site-map check stops reporting it as unmapped.`;
+    case "site_edit":
+      return `Change how Capsid Portal watches ${ns}. The watcher reads the new row on its next pass.`;
+    case "site_remove":
+      return `Remove ${ns} from the Portal's site configuration. The watcher stops probing it on its next pass.`;
   }
 }
 
@@ -203,6 +215,38 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         await auditClick(env, actor, action, null, { name });
         break;
       }
+      case "site_add":
+      case "site_edit":
+      case "site_remove": {
+        // Checked again here, not only at preview: the token binds the params, and the
+        // rules could have changed under a token signed before a deploy.
+        let result;
+        if (action === "site_remove") {
+          const revision = revisionOf(params.revision);
+          if (!params.namespace || revision === null) return { ok: false, refusal: "site_remove needs a namespace and the revision it previewed." };
+          result = await removeSite(env.DB, actor, params.namespace, revision);
+        } else {
+          const checked = validateSite(params);
+          if (!checked.ok) return { ok: false, refusal: checked.refusal };
+          if (action === "site_add") {
+            result = await addSite(env.DB, actor, checked.site);
+          } else {
+            const revision = revisionOf(params.revision);
+            if (revision === null) return { ok: false, refusal: "site_edit needs the revision it previewed." };
+            result = await editSite(env.DB, actor, checked.site, revision);
+          }
+        }
+        if (!result.ok) return { ok: false, refusal: result.refusal };
+        committed = true;
+        summary =
+          action === "site_add"
+            ? `Added ${result.site.namespace}: ${describeSite(result.site)}.`
+            : action === "site_edit"
+              ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
+              : `Removed ${result.site.namespace} from the site configuration.`;
+        await auditClick(env, actor, action, result.site.namespace, params);
+        break;
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -250,6 +294,9 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
   revoke_agent: ["name"],
+  site_add: ["namespace", "name", "origin", "health_path", "platform", "script"],
+  site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script"],
+  site_remove: ["namespace", "revision"],
 };
 
 type Gated = { ok: true; email: string; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
@@ -309,6 +356,18 @@ function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Rec
 }
 
 type Plan = { ok: true; changes: string[]; audit: string[] } | { ok: false; refusal: string };
+
+/** A revision param as a positive integer, or null. */
+function revisionOf(raw: string | undefined): number | null {
+  if (!raw || !/^[1-9][0-9]{0,9}$/.test(raw)) return null;
+  return Number(raw);
+}
+
+const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
+
+function shown(value: string | null): string {
+  return value === null ? "(none)" : `"${value}"`;
+}
 
 const refused = (refusal: string): Plan => ({ ok: false, refusal });
 
@@ -436,6 +495,57 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             : `Nobody held it, so no outcome row is written; any key bound to ${job.id} is revoked.`,
         ],
         audit: [`job-admin-fail by ${actor}`, click],
+      };
+    }
+    case "site_add": {
+      const checked = validateSite(p);
+      if (!checked.ok) return refused(checked.refusal);
+      const site = checked.site;
+      const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(site.namespace).first<{ namespace: string }>();
+      if (!registered) return refused(`'${site.namespace}' is not a registered namespace. Register it first; a site row for an unregistered namespace is drift the watcher reports.`);
+      const existing = await readSiteRow(env.DB, site.namespace);
+      if (existing) return refused(`${site.namespace} already has a row (${describeSite(existing)}). Edit it instead.`);
+      return {
+        ok: true,
+        changes: [
+          `ops_sites: add ${site.namespace}, ${describeSite(site)}.`,
+          site.origin
+            ? `The watcher probes it from its next pass, and the Sites view lists it.`
+            : `Nothing is probed for ${site.namespace}; the site-map check counts it as decided.`,
+        ],
+        audit: [`ops-site-added by ${actor}`, click],
+      };
+    }
+    case "site_edit": {
+      const revision = revisionOf(p.revision);
+      if (revision === null) return refused("site_edit needs the revision of the row it edits.");
+      const checked = validateSite(p);
+      if (!checked.ok) return refused(checked.refusal);
+      const site: SiteInput = checked.site;
+      const before = await readSiteRow(env.DB, site.namespace);
+      if (!before) return refused(`${site.namespace} has no row to edit. Add it instead.`);
+      if (before.revision !== revision) return refused(`${site.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`);
+      const diffs = SITE_FIELDS.filter((f) => before[f] !== site[f]).map((f) => `${f}: ${shown(before[f])} -> ${shown(site[f])}`);
+      if (diffs.length === 0) return refused(`the edit changes nothing in ${site.namespace}.`);
+      const changes = [`ops_sites ${site.namespace}, revision ${revision} -> ${revision + 1}:`, ...diffs.map((d) => `  ${d}`)];
+      if (before.self_probe && before.origin !== site.origin) changes.push("The origin changes, so the in-process self-probe is cleared and the site is probed over HTTP.");
+      return { ok: true, changes, audit: [`ops-site-edited by ${actor}`, click] };
+    }
+    case "site_remove": {
+      const revision = revisionOf(p.revision);
+      if (!p.namespace || revision === null) return refused("site_remove needs a namespace and the revision of the row it removes.");
+      const before = await readSiteRow(env.DB, p.namespace);
+      if (!before) return refused(`${p.namespace} has no row to remove.`);
+      if (before.revision !== revision) return refused(`${p.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`);
+      const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(p.namespace).first<{ namespace: string }>();
+      return {
+        ok: true,
+        changes: [
+          `ops_sites: remove ${p.namespace} (${describeSite(before)}). The row is kept in the audit row.`,
+          before.origin ? `The watcher stops probing ${before.origin}, and its uptime ring leaves the next pass.` : `Nothing was probed for it.`,
+          ...(registered ? [`${p.namespace} is still registered, so the site-map check reports it as unmapped until it has a row again.`] : []),
+        ],
+        audit: [`ops-site-removed by ${actor}`, click],
       };
     }
     case "revoke_agent": {

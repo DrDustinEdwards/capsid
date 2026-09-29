@@ -173,6 +173,12 @@ export function rehearse(dumpDir, migrationsDir, opts = {}) {
     const parsed = JSON.parse(readFileSync(join(dumpDir, `${table}.json`), "utf8"));
     if (parsed.table !== table) fail(`${table}.json says it dumps '${parsed.table}'; refusing to restore shuffled files`);
     if (!Array.isArray(parsed.rows)) fail(`${table}.json carries no rows array`);
+    // The dump is the table's whole content. A migration can seed rows (0022 seeds
+    // ops_sites), and a restore that kept them would bring back a site removed since,
+    // or collide on its key, so each table is emptied before its dump goes in. Every
+    // table is empty but the seeded ones at this point, so for the rest this is a no-op;
+    // documents has no rows yet, so its delete trigger never reaches documents_fts.
+    db.exec(`DELETE FROM ${table}`);
     const columns = db.prepare(`SELECT name FROM pragma_table_info(?)`).all(table).map((c) => c.name);
     const insert = db.prepare(
       `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`

@@ -320,3 +320,16 @@ test("an OLD write to a since-archived path is not torn, and passes", () => {
     assert.equal(summary.orphanAudits, 1);
   });
 });
+
+// Migration 0022 seeds ops_sites. The dump is the table's whole content: a restore that
+// kept the seed would bring back a site removed since, or collide on its key.
+test("PLANT: a table a migration seeds restores to exactly its dump, seed rows gone and no key collision", () => {
+  withDump((dir) => {
+    // One row, on a namespace the seed also has, and nothing for the other eight.
+    setRows(dir, "ops_sites", [
+      { namespace: "capsid", name: "Capsid", origin: "https://capsid.example.com", health_path: "/health", platform: "cloudflare", script: null, self_probe: 0, revision: 4, created_at: "2026-09-29 00:00:00", updated_at: "2026-09-30 00:00:00" },
+    ]);
+    const summary = rehearse(dir, MIGRATIONS);
+    assert.equal(summary.tables, TABLES.length);
+  });
+});

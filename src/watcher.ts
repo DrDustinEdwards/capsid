@@ -8,7 +8,7 @@ import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
-import { OPS_SITES, siteMapDrift, type SiteMapDrift } from "./ops-sites";
+import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readCloudflare } from "./ops-cloudflare";
 import type { SiteCloudflare } from "./ops-types";
 import {
@@ -501,9 +501,9 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
   const names = [...drift.unmapped.map((n) => "add-" + n), ...drift.unknown.map((n) => "drop-" + n)].join("-");
   return [
     finding("capsid", "site-map-drift-" + names, "the operations site map does not match the registered namespaces", [
-      ...drift.unmapped.map((n) => n + ": registered, but neither in OPS_SITES nor in NO_SITE_NAMESPACES (src/ops-sites.ts)"),
-      ...drift.unknown.map((n) => n + ": in src/ops-sites.ts, but not a registered namespace"),
-      "The dashboard shows only mapped sites, so an unmapped site is one nobody is watching.",
+      ...drift.unmapped.map((n) => n + ": registered, but has no row in the Portal's site configuration (Settings: add it as a site, or as serving no site)"),
+      ...drift.unknown.map((n) => n + ": in the Portal's site configuration, but not a registered namespace"),
+      "The Portal shows only configured sites, so an unmapped site is one nobody is watching.",
     ]),
   ];
 }
@@ -860,24 +860,35 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   }
   if (ciRead === ROSTER.length) ran.add("ci");
 
-  // The site map against the registered namespaces, both ways (src/ops-sites.ts).
-  const registered = await attempt("site map", async () => {
-    const { results } = await env.DB.prepare("SELECT namespace FROM namespaces ORDER BY namespace").all<{ namespace: string }>();
-    return (results ?? []).map((r) => r.namespace);
-  });
-  if (registered) {
+  // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
+  // check below cannot run this pass: nothing is probed on a guess, and an open site
+  // finding is not cleared on no evidence.
+  const config = await attempt("site config", () => readSiteConfig(env.DB));
+  const sites: OpsSite[] | null = config ? sitesFrom(config) : null;
+
+  // The configuration against the registered namespaces, both ways.
+  const registered = config
+    ? await attempt("site map", async () => {
+        const { results } = await env.DB.prepare("SELECT namespace FROM namespaces ORDER BY namespace").all<{ namespace: string }>();
+        return (results ?? []).map((r) => r.namespace);
+      })
+    : null;
+  if (config && registered) {
     ran.add("site map");
-    observed.siteMap = siteMapDrift(registered);
+    observed.siteMap = siteMapDrift(registered, config);
     out.push(...siteMapFindings(observed.siteMap));
   }
 
-  // Every mapped site, probed in turn. A probe that gets no answer is a result, not a
+  // Every configured site, probed in turn. With none configured nothing is probed and
+  // the check has nothing to judge. A probe that gets no answer is a result, not a
   // failure of the check; the check fails only if probing itself throws.
-  const probes = await attempt("site probes", async () => {
-    const results: SiteProbe[] = [];
-    for (const site of OPS_SITES) results.push(await probeSite(site, fetchImpl, now, health));
-    return results;
-  });
+  const probes = sites
+    ? await attempt("site probes", async () => {
+        const results: SiteProbe[] = [];
+        for (const site of sites) results.push(await probeSite(site, fetchImpl, now, health));
+        return results;
+      })
+    : null;
   // The previous pass's rings, for "down on two probes in a row". A snapshot that is
   // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
   // KV read that throws means the check cannot judge, so it does not count as run and
@@ -893,15 +904,18 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
 
   // Cloudflare's view of each site: deploys and hourly errors (src/ops-cloudflare.ts).
   // With no token nothing is fetched, each site says why, and the check is not run.
-  const cf = await attempt("cloudflare", () => readCloudflare(env, OPS_SITES, fetchImpl, now));
-  if (cf) {
-    observed.cloudflare = cf.bySite;
-    if (cf.ran) ran.add("cloudflare");
-    out.push(...siteErrorFindings(OPS_SITES, cf.bySite));
-  } else {
-    observed.cloudflare = Object.fromEntries(
-      OPS_SITES.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
-    );
+  // With no site configured there is nothing to read, and nothing is fetched.
+  if (sites && sites.length > 0) {
+    const cf = await attempt("cloudflare", () => readCloudflare(env, sites, fetchImpl, now));
+    if (cf) {
+      observed.cloudflare = cf.bySite;
+      if (cf.ran) ran.add("cloudflare");
+      out.push(...siteErrorFindings(sites, cf.bySite));
+    } else {
+      observed.cloudflare = Object.fromEntries(
+        sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
+      );
+    }
   }
 
   return { findings: out, ran, observed };

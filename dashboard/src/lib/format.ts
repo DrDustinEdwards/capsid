@@ -22,6 +22,12 @@ export function portalNow(clientNow: number, skew: number, newestServerRead: num
   return Math.max(clientNow + skew, newestServerRead);
 }
 
+// Milliseconds from a D1 datetime('now') value ("2026-09-28 11:00:00", UTC with no zone
+// mark), which Date.parse would read as local time. An ISO string passes through.
+export function msSql(t: string): number {
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t) ? Date.parse(`${t.replace(" ", "T")}Z`) : Date.parse(t);
+}
+
 function span(a: number): string {
   if (a < MIN) return `${Math.round(a / 1000)}s`;
   if (a < HOUR) return `${Math.round(a / MIN)}m`;

@@ -21,6 +21,8 @@ const RAIL = [
 for (const rail of RAIL) {
   for (const width of WIDTHS) {
     test(`at ${width} px, menu ${rail.state}, no view scrolls sideways`, async ({ page }) => {
+      // One test visits every view, so its time grows with the view count.
+      test.setTimeout(10_000 * VIEW_COUNT);
       await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [RAIL_PREF, rail.state] as const);
       await page.setViewportSize({ width, height: 900 });
       let seen = 0;

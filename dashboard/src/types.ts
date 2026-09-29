@@ -12,6 +12,7 @@ export type {
   OpsJobStatus,
   OpsLive,
   OpsPr,
+  OpsSiteConfig,
   OpsSnapshot,
   PortalAction,
   PortalActionRequest,

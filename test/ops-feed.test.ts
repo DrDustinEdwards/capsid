@@ -233,6 +233,7 @@ const FEED: OpsFeedData = {
     awaiting_seat: [],
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
+    sites: [],
     namespaces: [{ name: "sample", paused: null }],
   },
   refresh_allowed_at: null,

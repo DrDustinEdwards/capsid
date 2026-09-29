@@ -12,9 +12,19 @@ export const VIEWS = [
   { id: "ci", label: "CI and merges", key: "c" },
   { id: "namespaces", label: "Namespaces", key: "n" },
   { id: "activity", label: "Activity", key: "l" },
+  { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
 export type ViewId = (typeof VIEWS)[number]["id"];
+
+// The views on offer: Sites only while at least one site is configured (hasSites in
+// lib/derive.ts). Every other view is always there, Settings included, since that is
+// where the first site is added.
+export type ViewDef = (typeof VIEWS)[number];
+const WITHOUT_SITES: ReadonlyArray<ViewDef> = VIEWS.filter((v) => v.id !== "sites");
+export function viewsFor(sites: boolean): ReadonlyArray<ViewDef> {
+  return sites ? VIEWS : WITHOUT_SITES;
+}
 export type DrawerType = "site" | "job" | "agent";
 
 export function isView(v: string | undefined): v is ViewId {

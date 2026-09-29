@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useApp, type ViewId } from "../app/ctx";
-import { attentionItems, counts, isOpen } from "../lib/derive";
+import { attentionItems, counts, hasSites, isOpen } from "../lib/derive";
 import { DAY, age, ago, ms } from "../lib/format";
 import { Icon, St } from "../ui/icons";
 import { FleetTable, IncidentFeed, NoSnapshot, PageHead, Panel, QueueRows, TimelinePanel } from "./shared";
@@ -25,10 +25,15 @@ export function Overview() {
   const backup = snap?.health?.backup ?? null;
   const mirrorAge = snap?.mirror?.newest_dump ? now - ms(snap.mirror.newest_dump) : null;
   const findingsOpen = c.findings;
-  const tiles: Tile[] = [
-    snap
+  // Site monitoring is optional: with no site configured, no site tile, fleet or timeline.
+  const sitesOn = hasSites(feed);
+  const siteTile: Tile | null = !sitesOn
+    ? null
+    : snap
       ? { label: "Sites up", v: <>{snap.sites.length - c.down - c.degraded}<small>/{snap.sites.length}</small></>, d: `${c.down} down · ${c.degraded} degraded`, cls: c.down ? "crit" : c.degraded ? "warn" : "ok", go: "sites" }
-      : { label: "Sites up", v: <small>No data</small>, d: "no watcher pass yet", cls: "", go: "sites" },
+      : { label: "Sites up", v: <small>No data</small>, d: "no watcher pass yet", cls: "", go: "sites" };
+  const tiles: Tile[] = [
+    ...(siteTile ? [siteTile] : []),
     { label: "Blocked on you", v: String(c.blocked), d: blocked.length ? `oldest ${age(Math.min(...blocked.map((j) => ms(j.updated_at))), now)}` : "nothing waiting", cls: c.blocked ? "warn" : "ok", go: "queue" },
     { label: "Running", v: <>{c.running}<small> · {c.queued} queued</small></>, d: `across ${new Set(live.jobs.filter(isOpen).map((j) => j.namespace)).size} namespaces`, cls: "", go: "queue" },
     backup && backup.age_hours != null
@@ -44,7 +49,7 @@ export function Overview() {
         <header>
           <h2 id="attH">Needs attention</h2>
           <span className="mono faint">{att.length} items</span>
-          <span className="src ml-auto">worst first · sites, backups, CI, queue, watcher, agents</span>
+          <span className="src ml-auto">worst first · {sitesOn ? "sites, " : ""}backups, CI, queue, watcher, agents</span>
         </header>
         {att.length ? (
           att.map((a, i) => (
@@ -66,7 +71,7 @@ export function Overview() {
           </div>
         )}
       </section>
-      <div className="tiles">
+      <div className={sitesOn ? "tiles" : "tiles five"}>
         {tiles.map((t) => (
           <button type="button" key={t.label} className={`tile ${t.cls}`} onClick={() => go(t.go)}>
             <span className="label">{t.label}</span>
@@ -75,10 +80,14 @@ export function Overview() {
           </button>
         ))}
       </div>
-      <Panel title="Fleet" src={snap ? `watcher pass ${ago(ms(snap.pass_at), now)} · KV ops:snapshot` : "KV ops:snapshot"}>
-        {snap ? <FleetTable sites={snap.sites} /> : <div className="body"><NoSnapshot /></div>}
-      </Panel>
-      <TimelinePanel title="Deploys and downtime, 7 days" days={7} src="Cloudflare deployments · probe ring" />
+      {sitesOn && (
+        <>
+          <Panel title="Fleet" src={snap ? `watcher pass ${ago(ms(snap.pass_at), now)} · KV ops:snapshot` : "KV ops:snapshot"}>
+            {snap ? <FleetTable sites={snap.sites} /> : <div className="body"><NoSnapshot /></div>}
+          </Panel>
+          <TimelinePanel title="Deploys and downtime, 7 days" days={7} src="Cloudflare deployments · probe ring" />
+        </>
+      )}
       <div className="grid2">
         <Panel title="Queue" src="live · D1 jobs">
           <QueueRows jobs={live.jobs} compact />

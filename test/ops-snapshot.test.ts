@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { HealthReport } from "../src/health.ts";
-import { NO_SITE_NAMESPACES, OPS_SITES, siteMapDrift, type OpsSite } from "../src/ops-sites.ts";
+import type { OpsSite } from "../src/ops-sites.ts";
 import {
   advanceRing,
   buildSnapshot,
@@ -125,26 +125,7 @@ test("Capsid itself is read in-process, never fetched", async () => {
   assert.deepEqual(f.asked, []);
 });
 
-// The site map
-
-test("every site in the map is on a distinct namespace, and none is also listed as having no site", () => {
-  const names = OPS_SITES.map((s) => s.namespace);
-  assert.equal(new Set(names).size, names.length);
-  for (const ns of NO_SITE_NAMESPACES) assert.ok(!names.includes(ns), `${ns} is both mapped and listed as having no site`);
-  assert.equal(OPS_SITES.filter((s) => s.self).length, 1, "exactly one site is Capsid itself");
-});
-
-test("the site map is compared with the registered namespaces both ways", () => {
-  const registered = [...OPS_SITES.map((s) => s.namespace), ...NO_SITE_NAMESPACES];
-  assert.deepEqual(siteMapDrift(registered), { unmapped: [], unknown: [] });
-  assert.deepEqual(siteMapFindings(siteMapDrift(registered)), []);
-
-  const drift = siteMapDrift([...registered.filter((n) => n !== "txasm"), "carrel"]);
-  assert.deepEqual(drift, { unmapped: ["carrel"], unknown: ["txasm"] });
-  const [f] = siteMapFindings(drift);
-  assert.equal(f.fingerprint, "site-map-drift-add-carrel-drop-txasm");
-  assert.match(f.body, /carrel: registered, but neither in OPS_SITES nor in NO_SITE_NAMESPACES/);
-});
+// The site map is compared with the registered namespaces in test/ops-sites.test.ts.
 
 // Check states
 

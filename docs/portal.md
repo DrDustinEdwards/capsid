@@ -22,8 +22,8 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - Capsid's `/health`;
 - the backup mirror;
 - each roster repo's latest CI run;
-- the site map compared with the registered namespaces;
-- a probe of every site in `src/ops-sites.ts`, with a 7-day uptime ring;
+- the site configuration compared with the registered namespaces;
+- a probe of every configured site, with a 7-day uptime ring;
 - Cloudflare's view of each site, from `src/ops-cloudflare.ts`.
 
 **The live part** is read from D1 and KV on every request. It holds:
@@ -40,6 +40,18 @@ Two views read more when they open, and not on every poll:
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
+
+## Sites are configuration
+
+Which sites the Portal watches is configuration each install edits, not code (ruled 2026-09-29: monitoring panels are optional and configured per install). The rows live in the D1 table `ops_sites` (`migrations/0022_ops_sites.sql`, `src/ops-sites.ts`) and are edited in the **Settings** view.
+
+- **A row per namespace.** A row with an origin is a site: its name, its origin (`https://` and a hostname, nothing else), an optional health route, its platform (`cloudflare` or `vercel`), and optionally the Worker script that serves it. A row with no origin records that the namespace serves no site, so its absence from the probes is a decision.
+- **Edits are controls.** Add, edit and remove go through the same preview and perform as every other control, as `site_add`, `site_edit` and `site_remove`. The preview names every field that changes. An edit or a removal carries the row's `revision` from the preview and is refused if the row changed since. Each writes `ops-site-added`, `ops-site-edited` or `ops-site-removed` (with the row before and after) and then the click row.
+- **What is checked.** The origin must be `https://` and a lowercase public hostname: no user, port, path, query or fragment, no IP address, no single-label or local name. A health path starts with `/` and uses only letters, digits and `- . _ ~ /`, with no empty, `.` or `..` segment. A script is named only for a Cloudflare site. A new row's namespace must be registered. The table's own CHECK constraints hold the origin and platform to both or neither.
+- **Nothing configured.** With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides the Sites view and every site item on the Overview. Settings stays, since that is where the first site is added.
+- **Every pass reads it.** The watcher reads the table at the start of each pass. If the read fails, no site check runs that pass: nothing is probed on a guess and no open site finding is cleared.
+- **The site map check** compares the rows with the registered namespaces both ways. A registered namespace with no row, or a row for a namespace that is not registered, is a watcher finding.
+- **The seed** is the list the code held before the move, so nothing changed on the deploy that moved it. Capsid's own row is probed in-process rather than over HTTP; the Portal cannot set that, and an edit that changes Capsid's origin clears it.
 
 ## No data is a state, never a zero
 
@@ -65,7 +77,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
-  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `b` backups, `c` CI.
+  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing.
   - `j` and `k` move through a list, Enter opens the row, and Esc closes.
   - `r` refreshes and `t` switches light and dark.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.

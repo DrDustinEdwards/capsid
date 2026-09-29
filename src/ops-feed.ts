@@ -8,6 +8,7 @@ import { ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
 import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
 import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSeatStart } from "./ops-types";
 import { runUrl } from "./runner-key";
@@ -27,7 +28,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 10 statements plus N:
+//   D1, 11 statements plus N:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -35,6 +36,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //     2  sessionsInFlight: runner-held jobs, and starts inside the pending window,
 //        plus N = one readJob per such start not already held (at most the cap in use)
 //     1  checkBudget's month spend
+//     1  ops_sites: the site configuration, every row
 //   KV, 7 gets plus one per ROSTER namespace (5 today, so 12): ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, and each namespace's pause key.
@@ -45,7 +47,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 10, kv: 7 + ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 11, kv: 7 + ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -296,7 +298,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces] = await Promise.all([
+  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites] = await Promise.all([
     liveJobs(env.DB, now),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -308,6 +310,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     // Read as the loop reads it (pausedReason), so an unreadable key shows as a pause
     // with its reason, the way the loop treats it.
     Promise.all(ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
+    readSiteConfig(env.DB),
   ]);
   return {
     generated: now.toISOString(),
@@ -318,6 +321,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
     loop,
     namespaces,
+    sites,
   };
 }
 
