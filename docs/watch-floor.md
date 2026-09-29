@@ -2,7 +2,14 @@
 
 Capsid Portal's operations dashboard: every site, the job queue across every namespace, the watcher's findings, deploys, agents, backups and CI in one app at `/console/app/`. The design and its rulings are in Capsid at `capsid/research/design-ops-console.md`. The routes and their gate are in [console.md](console.md).
 
-**It is read only.** It can refresh and it links out, and nothing else. It shows the resume call for a blocked job with a Copy button; the seat, or the Portal's summary page at `/console`, makes the call. The one action is Refresh, which reads the feed again and runs one watcher pass on demand, at most once per two minutes.
+**It carries the Portal's eight controls**, the same ones as the summary page at `/console`, each on the row it changes:
+- the job drawer: resume a blocked job, release a claimed one, mark a job failed;
+- the agent drawer: revoke an agent;
+- the Queue view: the seat-start switch;
+- the Agents view: the improve mode;
+- the Namespaces view: pause and unpause.
+
+Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (routes in [console.md](console.md)). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons.
 
 ## Where each view gets its data
 
@@ -23,7 +30,12 @@ The app reads one endpoint, `GET /console/api/ops`, whose shape is `OpsFeed` in 
 - pull requests from the last week;
 - what auto-merge left for the seat;
 - seat-started sessions with their GitHub run links;
-- the improve loop's mode and budget.
+- the improve loop's mode and budget;
+- each roster namespace's pause reason.
+
+Two views read more when they open, and not on every poll:
+- **Namespaces** reads `GET /console/api/namespaces`: each namespace as `improve_status` reports it.
+- **Activity** reads `GET /console/api/activity`: the last 50 audit rows, filtered by namespace and actor.
 
 ## No data is a state, never a zero
 
@@ -49,7 +61,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Where:** https://capsid.dustin-edwards.workers.dev/console/app/, signed in through Cloudflare Access as `ADMIN_EMAIL`. It works at phone width, with a bottom tab bar.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
-  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `b` backups, `c` CI.
+  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `b` backups, `c` CI.
   - `j` and `k` move through a list, Enter opens the row, and Esc closes.
   - `r` refreshes and `t` switches light and dark.
   - `?` lists the keys. The sheet can turn single-key shortcuts off.
