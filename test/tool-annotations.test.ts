@@ -50,6 +50,9 @@ const DESTRUCTIVE = [
   // update_scopes); the statements live in src/agents-admin.ts.
   /\brevokeAgent\(/,
   /\bupdateAgentScopes\(/,
+  // delete_namespace's document deletion, the path mutation helper's namespace-wide
+  // sibling in src/tools/docs.ts; the batch runs in src/namespace-delete.ts.
+  /\bnamespaceLiveDeletion\(/,
 ];
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));

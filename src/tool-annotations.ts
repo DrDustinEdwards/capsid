@@ -32,6 +32,9 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   lint: destructive(),
   register_namespace: additive(),
   update_namespace: destructive(),
+  // Deletes the namespaces row, its ops_sites row and, with cascade, every live
+  // document; preview writes nothing, but one tool carries one hint.
+  delete_namespace: destructive(),
 
   list_repo_tree: read(),
   read_repo_file: read(),

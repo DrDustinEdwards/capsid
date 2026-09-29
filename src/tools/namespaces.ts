@@ -1,16 +1,20 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { hintsFor } from "../tool-annotations";
+import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
+import { performNamespaceDelete, previewNamespaceDelete } from "../namespace-delete";
 import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
 import { auditStatement } from "../store-guards";
 import { driverMintInstruction } from "../agents-schema";
-import { bounded, MAX_REPO_SELECTOR, MAX_REPOS_JSON, nsName } from "../limits";
-import { ok, fail, type ToolCtx } from "./docs";
+import { bounded, MAX_CONFIRM_TOKEN, MAX_REPO_SELECTOR, MAX_REPOS_JSON, nsName } from "../limits";
+import { ok, fail, namespaceLiveDeletion, type ToolCtx } from "./docs";
 
-// The namespace tools: namespaces, register_namespace and update_namespace.
+// The namespace tools: namespaces, register_namespace, update_namespace and
+// delete_namespace.
 // registerDocTools in ./docs registers them after the document tools.
 
 export function registerNamespaceTools(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor } = ctx;
+  const { env, db, actor } = ctx;
 
   server.registerTool(
     "namespaces",
@@ -129,6 +133,42 @@ export function registerNamespaceTools(server: McpServer, ctx: ToolCtx): void {
         auditStatement(db, actor, "update_namespace", ns, null, { old: existing.repos, new: reposJson }),
       ]);
       return ok({ namespace: ns, repos: list, action: "updated", previous: existing.repos });
+    }
+  );
+  // Delete a namespace: a preview that counts everything naming it and signs a token,
+  // then a perform that re-plans, requires the token to match and commits one guarded
+  // batch. The rules and what is kept are in src/namespace-delete.ts. Admin only
+  // (TOOL_GRANTS in src/scope.ts), like the other two tools that edit the mapping.
+  server.registerTool(
+    "delete_namespace",
+    {
+      annotations: hintsFor("delete_namespace"),
+      description:
+        "Delete a registered namespace. Two calls. action 'preview' writes nothing: it counts every live and archived document, snapshot, edge, job by status, agent naming the namespace, the ops_sites row, improve rows and KV keys, and returns a verdict. It is refused while any job in the namespace is open (queued, claimed or blocked) or any live agent names it in its scopes (cascade never reaches jobs or agents; end them with the jobs or agents tool), while it is on the improve roster, while live documents exist and cascade is not true, and while it holds improve loop control documents and allow_improve_paths is not true. An allowed preview returns a token bound to the namespace, cascade, allow_improve_paths, the counts and this caller, valid five minutes. action 'perform' takes the same arguments and that token, re-reads the plan and refuses if anything counted changed, then in one batch snapshots every live document to document_versions and deletes it with its edges, deletes the ops_sites row and the namespaces row, and writes one audit row 'namespace-delete' holding the edges and both rows whole; it then deletes the namespace's improve KV keys and reports any it could not. Archived documents, versions, the audit log, finished jobs and their records are kept. Admin only: an OAuth session qualifies, a minted agent holding the write grant does not.",
+      inputSchema: {
+        namespace: nsName,
+        action: z.enum(["preview", "perform"]),
+        cascade: z.boolean().optional(),
+        allow_improve_paths: z.boolean().optional(),
+        token: bounded(MAX_CONFIRM_TOKEN).optional(),
+      },
+    },
+    async ({ namespace, action, cascade, allow_improve_paths, token }) => {
+      const ns = namespace.trim();
+      if (!ns) return fail("namespace is required");
+      const opts = { cascade: cascade === true, allowImprovePaths: allow_improve_paths === true };
+      // The improve override is scoped as it is on a document delete: the flag is the
+      // permission, the argument only the caller's intent.
+      if (opts.allowImprovePaths) {
+        const overrideRefusal = ctx.scope({ tool: "delete_namespace", namespace: ns, flags: IMPROVE_OVERRIDE_FLAGS });
+        if (overrideRefusal) return fail(overrideRefusal);
+      }
+      const now = new Date();
+      const answer =
+        action === "preview"
+          ? await previewNamespaceDelete(env, actor, ns, opts, now)
+          : await performNamespaceDelete(env, actor, ns, opts, token, namespaceLiveDeletion(db, ns), now);
+      return answer.ok ? ok(answer.data) : fail(answer.refusal);
     }
   );
 }
