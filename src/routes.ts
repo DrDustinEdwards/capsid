@@ -41,6 +41,16 @@ import {
 import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX, handleConsoleApp } from "./console-app";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { handleConsoleAction } from "./console-actions";
+import {
+  handlePortalActivity,
+  handlePortalNamespaces,
+  handlePortalPerform,
+  handlePortalPreview,
+  PORTAL_ACTIVITY_PATH,
+  PORTAL_NAMESPACES_PATH,
+  PORTAL_PERFORM_PATH,
+  PORTAL_PREVIEW_PATH,
+} from "./portal-actions";
 import { handleConsoleCallback } from "./console-auth";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 
@@ -584,6 +594,10 @@ export const defaultHandler = {
     if (url.pathname === CONSOLE_CALLBACK_PATH) return handleConsoleCallback(request, env, new Date());
     if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
     if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
+    if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST") return handlePortalPreview(request, env);
+    if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST") return handlePortalPerform(request, env);
+    if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
+    if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
     // The app and everything under it, every method: the handler gates first.
     if (url.pathname === CONSOLE_APP_PATH || url.pathname.startsWith(CONSOLE_APP_PREFIX)) return handleConsoleApp(request, env);
 

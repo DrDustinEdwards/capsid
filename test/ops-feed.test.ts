@@ -12,6 +12,8 @@ import {
   OPS_REFRESH_KEY,
   OPS_REFRESH_PATH,
   opsAgentFrom,
+  PORTAL_CSRF_COOKIE,
+  type OpsFeedData,
   opsJobFrom,
   refreshAllowedAt,
   seatRecentFrom,
@@ -19,7 +21,6 @@ import {
   type SeatAuditRow,
 } from "../src/ops-feed.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
-import type { OpsFeed } from "../src/ops-types.ts";
 import { runUrl } from "../src/runner-key.ts";
 import { openWatcherFingerprints, watcherTick, WATCHER_ACTOR, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
 import { agentRecord, fakeEnv, fakeKv } from "./fakes.ts";
@@ -98,7 +99,18 @@ test("a watcher job's fingerprint is read exactly as openWatcherFingerprints rea
 });
 
 test("an agent is shown with the record improve_status computes for it, and without its grants", () => {
-  const record = agentRecord({ jobs_done: 4, jobs_failed: 1, jobs_blocked: 2, prs_opened: 3, prs_merged: 2, pr_merge_rate: 0.667, ci_green_rate: null, median_duration_minutes: 12 });
+  const record = agentRecord({
+    jobs_done: 4,
+    jobs_failed: 1,
+    jobs_blocked: 2,
+    prs_opened: 3,
+    prs_merged: 2,
+    pr_merge_rate: 0.667,
+    ci_green_rate: null,
+    median_duration_minutes: 12,
+    attempts_kept: 5,
+    attempts_reverted: 7,
+  });
   const shaped = opsAgentFrom({
     name: "sample-driver",
     kind: "driver",
@@ -124,6 +136,8 @@ test("an agent is shown with the record improve_status computes for it, and with
     pr_merge_rate: 0.667,
     ci_green_rate: null,
     median_duration_minutes: 12,
+    attempts_kept: 5,
+    attempts_reverted: 7,
   });
 });
 
@@ -209,7 +223,7 @@ function recordingDb() {
   return { db, batches };
 }
 
-const FEED: OpsFeed = {
+const FEED: OpsFeedData = {
   snapshot: null,
   live: {
     generated: NOW.toISOString(),
@@ -219,6 +233,7 @@ const FEED: OpsFeed = {
     awaiting_seat: [],
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
+    namespaces: [{ name: "sample", paused: null }],
   },
   refresh_allowed_at: null,
   cloudflare_configured: false,
@@ -237,7 +252,50 @@ test("the feed answers a signed-in administrator with the feed, uncached", async
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Cache-Control"), "no-store");
   assert.match(res.headers.get("Content-Type") ?? "", /application\/json/);
-  assert.deepEqual(await res.json(), FEED);
+  const body = (await res.json()) as { csrf: string };
+  assert.deepEqual(body, { ...FEED, csrf: body.csrf });
+});
+
+// The Portal's CSRF value
+
+const CSRF_VALUE = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+// A signed request that also carries a Portal CSRF cookie.
+async function signedWithCsrf(path: string, csrf: string, init: RequestInit = {}): Promise<Request> {
+  const req = await signed(path, init);
+  req.headers.set("Cookie", `${req.headers.get("Cookie")}; ${PORTAL_CSRF_COOKIE}=${csrf}`);
+  return req;
+}
+
+test("the feed and the refresh mint the Portal CSRF cookie when the request has none, and the body carries its value", async () => {
+  for (const [path, handler, init] of [
+    [OPS_FEED_PATH, handleOpsFeed, {}],
+    [OPS_REFRESH_PATH, handleOpsRefresh, { method: "POST", headers: { [OPS_REFRESH_HEADER]: "refresh" } }],
+  ] as const) {
+    const res = await handler(await signed(path, init), env(), NOW, { feed, gather: gathered });
+    assert.equal(res.status, 200, await res.clone().text());
+    const set = res.headers.get("Set-Cookie") ?? "";
+    const { csrf } = (await res.json()) as { csrf: string };
+    assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    assert.ok(set.startsWith(`${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/console", "Max-Age=43200"]) {
+      assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
+    }
+  }
+});
+
+test("a present Portal CSRF cookie is echoed and never re-set, so a poll does not rotate it", async () => {
+  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, CSRF_VALUE), env(), NOW, { feed });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Set-Cookie"), null, "a present cookie was rotated");
+  assert.equal(((await res.json()) as { csrf: string }).csrf, CSRF_VALUE);
+});
+
+test("a malformed Portal CSRF cookie is replaced, not echoed", async () => {
+  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, "not-a-token"), env(), NOW, { feed });
+  const { csrf } = (await res.json()) as { csrf: string };
+  assert.notEqual(csrf, "not-a-token");
+  assert.ok((res.headers.get("Set-Cookie") ?? "").startsWith(`${PORTAL_CSRF_COOKIE}=${csrf};`));
 });
 
 test("the feed and the refresh refuse a bearer with 403 and send an anonymous reader to sign in", async () => {
@@ -292,7 +350,8 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
 
   const res = await handleOpsRefresh(await refreshRequest(), env(kv, db), NOW, { feed, gather: gathered });
   assert.equal(res.status, 200, await res.clone().text());
-  assert.deepEqual(await res.json(), FEED);
+  const body = (await res.json()) as { csrf: string };
+  assert.deepEqual(body, { ...FEED, csrf: body.csrf });
   assert.equal(kv.store.get(WATCHER_LAST_KEY), NOW.toISOString(), "no pass ran");
   assert.ok(kv.store.has(OPS_SNAPSHOT_KEY), "the pass wrote no snapshot");
   assert.equal(kv.store.get(OPS_REFRESH_KEY), NOW.toISOString(), "the rate-limit stamp was not written");

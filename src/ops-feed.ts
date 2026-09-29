@@ -1,9 +1,12 @@
 import { adminAgentForEmail } from "./agents";
+import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { consoleGate } from "./console";
+import { CONSOLE_SESSION_TTL_SECONDS } from "./console-auth";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
-import { readMode } from "./improve-state";
+import { ROSTER } from "./improve-schema";
+import { pausedReason, readMode } from "./improve-state";
 import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSnapshot } from "./ops-snapshot";
@@ -33,16 +36,35 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //     2  sessionsInFlight: runner-held jobs, and starts inside the pending window,
 //        plus N = one readJob per such start not already held (at most the cap in use)
 //     1  checkBudget's month spend
-//   KV, 7 gets: ops:snapshot, the awaiting-seat set, the refresh stamp, the improve
-//     mode, the budget caps, and seatStartState's two keys.
+//   KV, 7 gets plus one per ROSTER namespace (5 today, so 12): ops:snapshot, the
+//     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
+//     seatStartState's two keys, and each namespace's pause key.
 // They run concurrently; the longest chain is agentSummaries' two steps.
 
 export const OPS_FEED_PATH = "/console/api/ops";
 export const OPS_REFRESH_PATH = "/console/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
-const OPS_RETURN_TO = "/console/app";
+export const OPS_RETURN_TO = "/console/app";
 
-export const OPS_FEED_READS = { d1: 10, kv: 7 } as const;
+export const OPS_FEED_READS = { d1: 10, kv: 7 + ROSTER.length } as const;
+
+// The Portal's double-submit CSRF cookie (OpsFeed.csrf). Its own cookie, not the old
+// page's capsid_console_csrf: that one is rotated on every render of /console, which
+// would break a dialog left open in the app. Minted when absent or malformed and then
+// left alone, never rotated per poll, so a preview and its perform carry one value.
+export const PORTAL_CSRF_COOKIE = "capsid_portal_csrf";
+const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
+function portalCsrf(request: Request): { value: string; setCookie: string | null } {
+  const presented = getCookie(request, PORTAL_CSRF_COOKIE);
+  if (presented !== null && CSRF_SHAPE.test(presented)) return { value: presented, setCookie: null };
+  const value = crypto.randomUUID();
+  return {
+    value,
+    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=${CONSOLE_SESSION_TTL_SECONDS}`,
+  };
+}
 
 // The refresh's rate limit: one on-demand pass per two minutes, stamped in KV.
 export const OPS_REFRESH_KEY = "ops:refresh:last";
@@ -142,6 +164,8 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
     pr_merge_rate: r.pr_merge_rate,
     ci_green_rate: r.ci_green_rate,
     median_duration_minutes: r.median_duration_minutes,
+    attempts_kept: r.attempts_kept,
+    attempts_reverted: r.attempts_reverted,
   };
 }
 
@@ -274,7 +298,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop] = await Promise.all([
+  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces] = await Promise.all([
     liveJobs(env.DB, now),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -283,6 +307,9 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     sessionsInFlight(env, now),
     seatRows(env.DB, now),
     liveLoop(env, now),
+    // Read as the loop reads it (pausedReason), so an unreadable key shows as a pause
+    // with its reason, the way the loop treats it.
+    Promise.all(ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
   ]);
   return {
     generated: now.toISOString(),
@@ -292,10 +319,15 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     awaiting_seat: awaitingFrom(awaitingRaw),
     seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
     loop,
+    namespaces,
   };
 }
 
-export async function opsFeed(env: Env, now: Date): Promise<OpsFeed> {
+// The feed without its csrf, which comes off the request (portalCsrf) and is added by
+// the handler, so opsFeed reads storage only.
+export type OpsFeedData = Omit<OpsFeed, "csrf">;
+
+export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
   const [snapshot, live, last] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY)]);
   return {
     snapshot,
@@ -305,11 +337,12 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeed> {
   };
 }
 
-function feedResponse(feed: OpsFeed, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(feed), {
-    status: 200,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...extra },
-  });
+function feedResponse(request: Request, data: OpsFeedData, extra: Record<string, string> = {}): Response {
+  const csrf = portalCsrf(request);
+  const feed: OpsFeed = { ...data, csrf: csrf.value };
+  const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store", ...extra });
+  if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
+  return new Response(JSON.stringify(feed), { status: 200, headers });
 }
 
 function textResponse(message: string, status: number, extra: Record<string, string> = {}): Response {
@@ -320,14 +353,14 @@ function textResponse(message: string, status: number, extra: Record<string, str
 // watcher pass itself is not injectable: the refresh always calls watcherTick with
 // force, and only the gather under it is swapped.
 export interface OpsDeps {
-  feed?: (env: Env, now: Date) => Promise<OpsFeed>;
+  feed?: (env: Env, now: Date) => Promise<OpsFeedData>;
   gather?: (env: Env, now: Date) => Promise<Gathered>;
 }
 
 export async function handleOpsFeed(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
   const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return feedResponse(await (deps.feed ?? opsFeed)(env, now));
+  return feedResponse(request, await (deps.feed ?? opsFeed)(env, now));
 }
 
 export async function handleOpsRefresh(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
@@ -388,5 +421,5 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     console.error(warning);
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return feedResponse(feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
+  return feedResponse(request, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }
