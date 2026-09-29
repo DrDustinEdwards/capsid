@@ -1,5 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { legacyAgent } from "../src/agents";
+import { postJob } from "../src/jobs";
 import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
 
 // THE PORTAL'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
@@ -47,5 +49,35 @@ describe("loadActivity against a real audit_log", () => {
     const expectedBoth = all.filter((r) => r.namespace === "act-a" && r.actor === "agent:lorem").slice(0, ACTIVITY_LIMIT);
     expect(expectedBoth.length).toBeGreaterThan(0);
     expect(both.map((r) => r.path)).toEqual(expectedBoth.map((r) => r.path));
+  });
+});
+
+// Reported 2026-09-29: "job-posted" twice, same actor, same second, same path. Both rows
+// are real and intended: a job transition writes one audit row for the job (params carry
+// job_id) and one for its mirror document (params carry bytes and sha256), as every
+// document write does. The Activity read says which is which.
+describe("a job transition's two audit rows", () => {
+  it("PLANT: are told apart, the job's row and its mirror document's", async () => {
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+      .run();
+    const posted = await postJob(env as never, legacyAgent("write", "github:sample"), new Date(), {
+      namespace: "capsid",
+      title: "a job whose post is read back from Activity",
+      body: "do the thing",
+    });
+    expect(posted.ok, posted.refusal).toBe(true);
+    const path = `jobs/${posted.job!.id}.md`;
+    const rows = (await loadActivity(env.DB, { namespace: "capsid", actor: "github:sample" })).filter((r) => r.path === path);
+    expect(rows.map((r) => r.action)).toEqual(["job-posted", "job-posted"]);
+    expect(rows.map((r) => r.target).sort()).toEqual(["document", "job"]);
+    expect(new Set(rows.map((r) => r.id)).size, "two rows share an id, so a view keyed on it would drop one").toBe(2);
+  });
+
+  it("a row whose params are not JSON, or name neither, has no target rather than failing the read", async () => {
+    await env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'act-z', 'z.md', 'not json')").run();
+    await env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'act-z', 'y.md', '{}')").run();
+    const rows = await loadActivity(env.DB, { namespace: "act-z", actor: null });
+    expect(rows.map((r) => r.target)).toEqual([null, null]);
   });
 });
