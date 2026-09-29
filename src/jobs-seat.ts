@@ -199,7 +199,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: true }),
       detail: { reason, held_by: current.claimed_by },
-      sinceGate: current.status === "blocked",
+      sinceGate: false, // only a claimed job is released, so no gate is open
       at: now.toISOString(),
     }),
   ]);
@@ -321,7 +321,7 @@ export async function supersedeJob(
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
       detail: { reason, replaced_by: replacedBy, from: current.status, held_by: current.claimed_by },
-      sinceGate: current.status === "blocked",
+      sinceGate: false, // only a queued or claimed job is superseded, so no gate is open
       at: now.toISOString(),
     }),
   ]);
