@@ -20,6 +20,7 @@ import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { commandFromSummary, failJob } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
 import type { JobSkills } from "./job-outcomes";
+import type { ClaimInput, ClaimRaw } from "./job-claims";
 import {
   actorShapeRefusal,
   callerIsSeat,
@@ -102,19 +103,23 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
 // fail through the jobs tool. The holder failing its own job is an ordinary fail. The
 // seat failing a job somebody else holds, or nobody holds, is adminFailJob. Anyone else
 // gets failJob's own refusal for a job it does not hold.
+//
+// The claim goes to the holder path only. The seat failing somebody else's job made no
+// claim about that work, so adminFailJob records none.
 export async function failAsCaller(
   env: Env,
   agent: Agent,
   now: Date,
   id: string,
   reason: string,
-  skills?: JobSkills
+  skills?: JobSkills,
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
     return adminFailJob(env, agent, now, id, reason);
   }
-  return failJob(env, agent, now, id, reason, skills);
+  return failJob(env, agent, now, id, reason, skills, said);
 }
 
 // Release: the seat returning a claimed job to the queue when its holder is gone (the
