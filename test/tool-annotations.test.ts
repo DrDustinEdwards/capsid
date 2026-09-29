@@ -281,6 +281,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   agents: { idempotent: false, reason: "mint issues a new credential on every call" },
   claims: { idempotent: true, reason: "the handler only reads" },
   ops_snapshot: { idempotent: true, reason: "the handler only reads one KV value" },
+  cloudflare_config: { idempotent: true, reason: "the handler only reads Cloudflare configuration" },
 };
 
 // What creates something new on every call, matched in the block by what it does. An

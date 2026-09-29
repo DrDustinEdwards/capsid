@@ -94,6 +94,10 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // The watcher's last pass. It only reads, and is admin only in whole: the snapshot
   // spans every namespace's sites, CI runs and Cloudflare state.
   ops_snapshot: "admin",
+
+  // Cloudflare Access and Email Routing, read. Admin only in whole: the account's login
+  // gates and mail routes span every namespace.
+  cloudflare_config: "admin",
 };
 
 // Fail closed: a tool with no entry requires the write grant, so a tool added without
@@ -303,6 +307,8 @@ const ADMIN_REASON: Record<string, string> = {
     "It reads the watcher's last pass: every site's probes and uptime, every roster repo's CI and each site's Cloudflare deploys and errors, across every namespace, which is wider than any one caller's scope.",
   improve_run:
     "That action controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver takes its lease with action 'claim' and runs with action 'run'.",
+  cloudflare_config:
+    "It reads the Cloudflare account's Access applications and policies and its Email Routing rules and addresses, which gate and route every namespace's site, so it is wider than any one caller's scope.",
   "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };
 
@@ -351,6 +357,7 @@ type ToolHandler = (...args: unknown[]) => unknown;
 const ACTION_ARG: Record<string, string> = {
   agents: "action",
   claims: "action",
+  cloudflare_config: "action",
   improve_run: "action",
   jobs: "action",
   lint: "mode",
