@@ -247,6 +247,9 @@ export interface FakeD1Rows {
   job_outcome_prs: Array<{ job_id: string; pr_url: string }>;
   job_outcomes: Array<Record<string, unknown>>;
   job_touches: Array<Record<string, unknown>>;
+  // migrations/0023. Append-only on the real table (triggers); here they only land.
+  job_claims: Array<Record<string, unknown>>;
+  job_evaluations: Array<Record<string, unknown>>;
 }
 
 export interface FakeD1 {
@@ -440,6 +443,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     job_outcome_prs: (opts.jobOutcomePrs ?? []).map((p) => ({ ...p })),
     job_outcomes: (opts.jobOutcomes ?? []).map((o) => ({ ...o })),
     job_touches: [],
+    job_claims: [],
+    job_evaluations: [],
   };
   // The tables a write lands in, so a write whose WHERE matched nothing is
   // distinguishable from one that landed.
@@ -458,6 +463,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     jobs: { rows: rows.jobs, unique: [["id"]], defaults: jobDefaults },
     job_outcomes: { rows: rows.job_outcomes, unique: [["job_id"]], defaults: () => ({ recorded_at: sqliteNow() }) },
     job_outcome_prs: { rows: rows.job_outcome_prs as Row[], unique: [["job_id", "pr_url"]], defaults: () => ({ merged: null, merge_verified_at: null, recorded_at: sqliteNow() }) },
+    job_claims: { rows: rows.job_claims, unique: [], autoId: true, defaults: () => ({}) },
+    job_evaluations: { rows: rows.job_evaluations, unique: [], autoId: true, defaults: () => ({}) },
   };
 
   // One write, applied to the rows. A statement this fake does not model throws rather
@@ -486,6 +493,17 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const [, namespace, title] = params as [string, string, string];
       const taken = rows.jobs.some((j) => j.namespace === namespace && j.title === title && OPEN_JOB_STATUSES.includes(j.status as JobStatus));
       if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
+    }
+    // evaluationStatements (src/job-claims.ts) names its claim with a scalar subquery,
+    // resolved here against the claim rows this batch has already landed.
+    const claimRef = /\(SELECT MAX\(id\) FROM job_claims WHERE job_id = \?(\d+)\)/i.exec(flat);
+    if (claimRef) {
+      const jobId = params[Number(claimRef[1]) - 1];
+      const ids = rows.job_claims.filter((c) => c.job_id === jobId).map((c) => Number(c.id));
+      const resolved = flat.replace(claimRef[0], ids.length > 0 ? String(Math.max(...ids)) : "NULL");
+      const landed = applyWrite(tables, resolved, params);
+      if (!landed) throw new Error(`fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`);
+      return landed;
     }
     const result = applyWrite(tables, flat, params);
     if (!result) throw new Error(`fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`);
