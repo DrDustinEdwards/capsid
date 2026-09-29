@@ -1,8 +1,8 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { ACTIVITY_LIMIT, loadActivity } from "../src/console-activity";
+import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
 
-// THE CONSOLE'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
+// THE PORTAL'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
 // statement's text for the LIMIT and the two filter clauses; these seed more rows than
 // the limit, across two namespaces and two actors, and assert which rows come back.
 

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpsFeed, PortalActionRequest, PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../types";
 
-export const FEED_URL = "/console/api/ops";
-export const REFRESH_URL = "/console/api/ops/refresh";
-export const PREVIEW_URL = "/console/api/actions/preview";
-export const PERFORM_URL = "/console/api/actions/perform";
-export const NAMESPACES_URL = "/console/api/namespaces";
-export const ACTIVITY_URL = "/console/api/activity";
-export const APP_URL = "/console/app/";
+export const FEED_URL = "/portal/api/ops";
+export const REFRESH_URL = "/portal/api/ops/refresh";
+export const PREVIEW_URL = "/portal/api/actions/preview";
+export const PERFORM_URL = "/portal/api/actions/perform";
+export const NAMESPACES_URL = "/portal/api/namespaces";
+export const ACTIVITY_URL = "/portal/api/activity";
+export const SIGN_OUT_URL = "/portal/api/sign-out";
+export const APP_URL = "/portal/";
 export const POLL_MS = 60_000;
 
-// The console session ended: Access answers with a redirect to its login, or the
+// The Portal session ended: Access answers with a redirect to its login, or the
 // Worker answers 401 or 403. redirect: "manual" keeps a cross-origin login redirect
 // from surfacing as an opaque network error. The action endpoints answer 403 for a
 // CSRF or cross-site refusal, with its text, so they pass forbidden = false and show
@@ -32,7 +33,7 @@ export interface FeedState {
   nextPollAt: number;
 }
 
-// Polls GET /console/api/ops every 60 s while the tab is visible, pauses while it is
+// Polls GET /portal/api/ops every 60 s while the tab is visible, pauses while it is
 // hidden, and reads again when the tab comes back or the window takes focus.
 export function useOpsFeed() {
   const [state, setState] = useState<FeedState>({ feed: null, error: null, signedOut: false, nextPollAt: Date.now() + POLL_MS });
@@ -72,7 +73,7 @@ export type RefreshResult =
   | { kind: "signed-out" }
   | { kind: "error"; message: string };
 
-// POST /console/api/ops/refresh runs a watcher pass now and answers the new feed. A
+// POST /portal/api/ops/refresh runs a watcher pass now and answers the new feed. A
 // 429 says when the next is allowed: refresh_allowed_at in the body when it is JSON,
 // else Retry-After.
 export async function requestRefresh(): Promise<RefreshResult> {
@@ -158,12 +159,12 @@ async function get<T>(url: string): Promise<Answer<T>> {
   }
 }
 
-// POST /console/api/actions/preview: writes nothing; answers what will change and a token.
+// POST /portal/api/actions/preview: writes nothing; answers what will change and a token.
 export function previewAction(csrf: string, req: PortalActionRequest): Promise<Answer<PortalPreview>> {
   return post<PortalPreview>(PREVIEW_URL, csrf, req);
 }
 
-// POST /console/api/actions/perform: carries only the token; answers the feed after.
+// POST /portal/api/actions/perform: carries only the token; answers the feed after.
 export function performAction(csrf: string, token: string): Promise<Answer<PortalPerformed>> {
   return post<PortalPerformed>(PERFORM_URL, csrf, { token });
 }
@@ -178,4 +179,24 @@ export function fetchActivity(filter: { namespace: string; actor: string }): Pro
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();
   return get<PortalActivity>(s ? `${ACTIVITY_URL}?${s}` : ACTIVITY_URL);
+}
+
+// POST /portal/api/sign-out: the Worker expires the Portal's cookies and answers 204.
+// A session that already ended counts as signed out. Anything else is said, because a
+// sign-out that silently failed leaves the session open on a shared screen.
+export async function signOutRequest(csrf: string): Promise<{ kind: "ok" } | { kind: "error"; message: string }> {
+  try {
+    const res = await fetch(SIGN_OUT_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      redirect: "manual",
+      cache: "no-store",
+      headers: { "X-Capsid-CSRF": csrf, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (res.status === 204 || sessionEnded(res, false)) return { kind: "ok" };
+    return { kind: "error", message: await refusalText(res) };
+  } catch (e) {
+    return { kind: "error", message: e instanceof Error ? e.message : String(e) };
+  }
 }

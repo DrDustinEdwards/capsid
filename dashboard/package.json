@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Watch Floor: the operations dashboard the capsid Worker serves at /console/app/",
+  "description": "Watch Floor: the operations dashboard the capsid Worker serves at /portal/",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

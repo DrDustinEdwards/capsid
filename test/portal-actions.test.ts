@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hmacHex } from "../src/auth.ts";
-import { CONSOLE_ACTIONS } from "../src/console-actions.ts";
-import { consoleSessionCookie } from "../src/console-auth.ts";
+import { portalSessionCookie } from "../src/portal-auth.ts";
 import { b64urlDecode, b64urlEncode } from "../src/encoding.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
 import type { PortalPerformed, PortalPreview } from "../src/ops-types.ts";
 import {
   handlePortalActivity,
+  handlePortalApiNotFound,
   handlePortalNamespaces,
   handlePortalPerform,
   handlePortalPreview,
+  handlePortalSignOut,
   PORTAL_ACTIONS,
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,
   PORTAL_NAMESPACES_PATH,
   PORTAL_PERFORM_PATH,
   PORTAL_PREVIEW_PATH,
+  PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
@@ -90,7 +92,7 @@ interface Opts {
 
 async function post(path: string, body: unknown, opts: Opts = {}): Promise<Request> {
   const cookies: string[] = [];
-  if (opts.session !== false) cookies.push((await consoleSessionCookie({ email: opts.session ?? EMAIL }, SECRET, NOW)).split(";")[0]);
+  if (opts.session !== false) cookies.push((await portalSessionCookie({ email: opts.session ?? EMAIL }, SECRET, NOW)).split(";")[0]);
   const cookie = opts.csrfCookie === undefined ? CSRF : opts.csrfCookie;
   if (cookie) cookies.push(`${PORTAL_CSRF_COOKIE}=${cookie}`);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -179,10 +181,10 @@ const EVERY_ACTION = [
   ["revoke_agent", { name: "capsid-driver" }],
 ] as const;
 
-test("the Portal's actions are the old page's eight, and every loop below covers each", () => {
-  // Derived from both allow-lists, so an action added to either without the other, or
-  // without a row here, fails.
-  assert.deepEqual([...PORTAL_ACTIONS].sort(), [...CONSOLE_ACTIONS].sort());
+test("the Portal's actions are the eight the old /console page had, and every loop below covers each", () => {
+  // The old page's allow-list, written out when the page was deleted, so an action
+  // added to PORTAL_ACTIONS without a decision here, or without a row below, fails.
+  assert.deepEqual([...PORTAL_ACTIONS].sort(), ["fail_job", "mode", "pause", "release_job", "resume_job", "revoke_agent", "seat_start", "unpause"]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
   assert.equal(PORTAL_ACTIONS.length, 8);
 });
@@ -210,7 +212,7 @@ for (const [action, params] of EVERY_ACTION) {
     assert.equal(body.action, action);
     assert.ok(body.summary.length > 20, "no summary");
     assert.ok(body.changes.length >= 1 && body.changes.every((c) => c.length > 10), `no concrete changes: ${JSON.stringify(body.changes)}`);
-    assert.ok(body.audit.includes(`console-${action} by ${ACTOR}`), `the click row is not in the preview's audit list: ${JSON.stringify(body.audit)}`);
+    assert.ok(body.audit.includes(`portal-${action} by ${ACTOR}`), `the click row is not in the preview's audit list: ${JSON.stringify(body.audit)}`);
     assert.equal(body.audit.length, 2, "the mutator's row and the click row");
     assert.match(body.token, /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/);
     assert.equal(body.expires_at, LATER(5 * 60_000).toISOString());
@@ -305,7 +307,7 @@ test("the click row names the administrator, and the mutator's row says what hap
   const { token } = await previewOk(w, "pause", { namespace: "foxing", reason: "holdout rebuild" });
   await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
   assert.equal(w.kv.store.get("improve:paused:foxing"), "holdout rebuild");
-  const click = w.d1.recorded.find((r) => r.params[1] === "console-pause");
+  const click = w.d1.recorded.find((r) => r.params[1] === "portal-pause");
   assert.equal(click?.params[0], ACTOR);
   assert.equal(click?.params[2], "foxing");
 });
@@ -317,7 +319,7 @@ test("a replay inside five minutes is allowed: the transitions are guarded, not 
     const res = await handlePortalPerform(await perform({ token }), w.env, at, deps);
     assert.equal(res.status, 200, await res.clone().text());
   }
-  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("console-mode")).length, 2);
+  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-mode")).length, 2);
 });
 
 test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {
@@ -398,7 +400,7 @@ test("an action that happened but whose click row failed returns 200 with the wa
   const db = w.d1.db as unknown as { batch: (s: Array<{ params?: unknown[] }>) => Promise<unknown> };
   const batch = db.batch.bind(db);
   db.batch = async (statements) => {
-    if (statements.some((s) => s.params?.[1] === "console-mode")) throw new Error("D1_ERROR: database is locked");
+    if (statements.some((s) => s.params?.[1] === "portal-mode")) throw new Error("D1_ERROR: database is locked");
     return batch(statements);
   };
   const errors: string[] = [];
@@ -412,7 +414,7 @@ test("an action that happened but whose click row failed returns 200 with the wa
   }
   assert.equal(res.status, 200);
   const body = (await res.json()) as PortalPerformed;
-  assert.match(body.warning ?? "", /mode completed, but the console audit row naming access:admin@example.com was not written/);
+  assert.match(body.warning ?? "", /mode completed, but the Portal audit row naming access:admin@example.com was not written/);
   assert.match(res.headers.get("X-Capsid-Warning") ?? "", /mode completed/);
   assert.equal(w.kv.store.get("improve_mode"), "off", "the action itself did not happen");
   assert.equal(errors.length, 1);
@@ -457,12 +459,14 @@ const ROUTES = [
   [PORTAL_PERFORM_PATH, "POST", (r: Request, e: never) => handlePortalPerform(r, e, NOW, deps)],
   [PORTAL_NAMESPACES_PATH, "GET", (r: Request, e: never) => handlePortalNamespaces(r, e, NOW)],
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
+  [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
+  ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all four routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 4);
+test("all six routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 6);
   for (const [path, method, handler] of ROUTES) {
-    const session = (await consoleSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
+    const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };
     const body = method === "POST" ? JSON.stringify({ action: "mode", params: { value: "off" } }) : undefined;
     // A bearer beside a valid session and CSRF pair is still refused: the gate reads it first.
@@ -472,4 +476,54 @@ test("all four routes refuse a bearer with 403 and send an anonymous caller to s
     assert.equal(anonymous.status, 302, `${path} did not send an anonymous caller to sign in`);
     assert.match(anonymous.headers.get("Location") ?? "", /sample\.cloudflareaccess\.com/);
   }
+});
+
+// Sign out
+
+// Node's Headers has getSetCookie; the Workers types this suite checks against do not.
+function setCookies(res: Response): string[] {
+  return (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie();
+}
+
+async function signOut(opts: Opts = {}): Promise<Request> {
+  return post(PORTAL_SIGN_OUT_PATH, {}, opts);
+}
+
+test("sign out expires the session and CSRF cookies at Path=/portal, and writes nothing", async () => {
+  const w = world();
+  const res = await handlePortalSignOut(await signOut(), w.env, NOW);
+  assert.equal(res.status, 204);
+  const cookies = setCookies(res);
+  assert.equal(cookies.length, 2, `expected the session and CSRF cookies, got: ${cookies.join(" | ")}`);
+  const names = cookies.map((c) => c.split("=")[0]).sort();
+  assert.deepEqual(names, ["capsid_portal", PORTAL_CSRF_COOKIE]);
+  for (const c of cookies) {
+    assert.match(c, /; Max-Age=0(;|$)/, `${c} does not expire the cookie`);
+    assert.match(c, /; Path=\/portal(;|$)/, `${c} is not scoped to the Portal, so it would not clear the cookie the login set`);
+    assert.match(c, /HttpOnly; Secure; SameSite=Lax/);
+  }
+  wroteNothing(w, "sign out");
+});
+
+for (const [label, opts] of [
+  ["with no CSRF header", { csrfHeader: null }],
+  ["when the CSRF header does not match the cookie", { csrfHeader: "ffffffff-2222-4333-8444-555555555555" }],
+  ["from another site", { site: "cross-site" }],
+] as const) {
+  test(`PLANT: sign out REFUSES ${label}, and clears nothing`, async () => {
+    const w = world();
+    const res = await handlePortalSignOut(await signOut(opts), w.env, NOW);
+    assert.equal(res.status, 403, `sign out was served ${label}`);
+    assert.deepEqual(setCookies(res), [], `sign out cleared a cookie ${label}`);
+    wroteNothing(w, `sign out ${label}`);
+  });
+}
+
+test("an unknown path under /portal/api/ is a JSON 404 for the administrator, never the app's page", async () => {
+  const w = world();
+  const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
+  const res = await handlePortalApiNotFound(new Request("https://capsid.example/portal/api/typo", { headers: { Cookie: session } }), w.env, NOW);
+  assert.equal(res.status, 404);
+  assert.match(res.headers.get("Content-Type") ?? "", /json/);
+  assert.match(await res.text(), /no Portal route at GET \/portal\/api\/typo/);
 });

@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { clearIdTokenKeysCache, type Jwk } from "../src/access-jwt.ts";
-import { handleConsoleCallback, readConsoleSession, startConsoleLogin } from "../src/console-auth.ts";
+import { handlePortalCallback, readPortalSession, startPortalLogin } from "../src/portal-auth.ts";
 import { fakeKv } from "./fakes.ts";
 
-// The console's callback through the shared Access for SaaS login (src/access-login.ts),
+// Capsid Portal's callback through the shared Access for SaaS login (src/access-login.ts),
 // design PR 3 of capsid/research/design-capsid-access-login.md. The MCP callback is
-// covered in test-integration/oauth-round-trip.test.ts. The console runs the same
+// covered in test-integration/oauth-round-trip.test.ts. The Portal runs the same
 // module with its own callback path, cookie name and Path, KV prefix and restart hint,
 // so these drive a real round trip: start, then call back with Access's token and
 // JWKS endpoints stubbed and a real RS256 ID token signed here.
 
 const ORIGIN = "https://capsid.example";
-const SECRET = "console-login-test-cookie-secret";
+const SECRET = "portal-login-test-cookie-secret";
 const ISSUER = "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client";
 const realFetch = globalThis.fetch;
 
@@ -24,10 +24,10 @@ const pair = (await crypto.subtle.generateKey(
   true,
   ["sign", "verify"]
 )) as CryptoKeyPair;
-const publicJwk = { ...((await crypto.subtle.exportKey("jwk", pair.publicKey)) as Jwk), kid: "console-kid" };
+const publicJwk = { ...((await crypto.subtle.exportKey("jwk", pair.publicKey)) as Jwk), kid: "portal-kid" };
 
 async function idToken(claims: Record<string, unknown>): Promise<string> {
-  const head = b64json({ alg: "RS256", kid: "console-kid", typ: "JWT" });
+  const head = b64json({ alg: "RS256", kid: "portal-kid", typ: "JWT" });
   const now = Math.floor(Date.now() / 1000);
   const body = b64json({ iss: ISSUER, aud: "sample-client", iat: now, exp: now + 300, ...claims });
   const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", pair.privateKey, new TextEncoder().encode(`${head}.${body}`)));
@@ -72,8 +72,8 @@ function stubAccess(authorizationUrl: string, claims: Record<string, unknown> = 
   return bodies;
 }
 
-async function started(e: never): Promise<{ state: string; cookie: string; location: string }> {
-  const res = await startConsoleLogin(new Request(`${ORIGIN}/console`), e, "/console/json");
+async function started(e: never, returnTo = "/portal/jobs"): Promise<{ state: string; cookie: string; location: string }> {
+  const res = await startPortalLogin(new Request(`${ORIGIN}/portal/`), e, returnTo);
   assert.equal(res.status, 302);
   const location = String(res.headers.get("Location"));
   const state = String(new URL(location).searchParams.get("state"));
@@ -86,66 +86,67 @@ function setCookies(res: Response): string[] {
 }
 
 function callback(state: string, cookie: string): Request {
-  return new Request(`${ORIGIN}/console/callback?code=c&state=${state}`, { headers: { Cookie: cookie } });
+  return new Request(`${ORIGIN}/portal/callback?code=c&state=${state}`, { headers: { Cookie: cookie } });
 }
 
-test("the start sets the console state cookie on Path=/console and sends Access the console callback, with PKCE and a nonce", async () => {
+test("the start sets the Portal state cookie on Path=/portal and sends Access the Portal callback, with PKCE and a nonce", async () => {
   const e = env();
-  const res = await startConsoleLogin(new Request(`${ORIGIN}/console`), e, "/console");
+  const res = await startPortalLogin(new Request(`${ORIGIN}/portal/`), e, "/portal/");
   const location = new URL(String(res.headers.get("Location")));
   assert.equal(`${location.origin}${location.pathname}`, `${ISSUER}/authorization`);
-  assert.equal(location.searchParams.get("redirect_uri"), `${ORIGIN}/console/callback`);
+  assert.equal(location.searchParams.get("redirect_uri"), `${ORIGIN}/portal/callback`);
   assert.equal(location.searchParams.get("scope"), "openid email profile");
   assert.equal(location.searchParams.get("code_challenge_method"), "S256");
   assert.ok(location.searchParams.get("nonce"));
   const cookies = setCookies(res);
   assert.equal(cookies.length, 1);
-  assert.match(cookies[0], /^capsid_console_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/console; Max-Age=600$/);
+  assert.match(cookies[0], /^capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=600$/);
 });
 
 test("the admin completes the login: session cookie carries the email, state cookie cleared, state consumed", async () => {
   const e = env();
   const { state, cookie, location } = await started(e);
   const bodies = stubAccess(location);
-  const res = await handleConsoleCallback(callback(state, cookie), e, new Date());
+  const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
-  assert.equal(res.headers.get("Location"), "/console/json");
-  assert.equal(bodies[0]?.get("redirect_uri"), `${ORIGIN}/console/callback`);
+  assert.equal(res.headers.get("Location"), "/portal/jobs");
+  assert.equal(bodies[0]?.get("redirect_uri"), `${ORIGIN}/portal/callback`);
   assert.ok(bodies[0]?.get("code_verifier"), "the exchange sent no PKCE verifier");
   const cookies = setCookies(res);
   assert.equal(cookies.length, 2);
-  assert.equal(cookies[1], "capsid_console_state=; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=0");
-  const session = await readConsoleSession(
-    new Request(`${ORIGIN}/console`, { headers: { Cookie: cookies[0].split(";")[0] } }),
+  assert.match(cookies[0], /^capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=43200$/);
+  assert.equal(cookies[1], "capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/portal; Max-Age=0");
+  const session = await readPortalSession(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: cookies[0].split(";")[0] } }),
     e,
     new Date()
   );
   assert.deepEqual(session, { email: "admin@example.com" });
-  assert.equal(await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:console-state:${state}`), null);
+  assert.equal(await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`), null);
 });
 
-test("a state cookie that is not the digest of the state is refused with the console's restart hint", async () => {
+test("a state cookie that is not the digest of the state is refused with the Portal's restart hint", async () => {
   const e = env();
   const { state } = await started(e);
-  const res = await handleConsoleCallback(callback(state, `capsid_console_state=${"0".repeat(64)}`), e, new Date());
+  const res = await handlePortalCallback(callback(state, `capsid_portal_state=${"0".repeat(64)}`), e, new Date());
   assert.equal(res.status, 403);
-  assert.equal(await res.text(), "state validation failed: this browser did not start the flow. Open /console again.");
+  assert.equal(await res.text(), "state validation failed: this browser did not start the flow. Open /portal again.");
 });
 
-test("the MCP flow's state cookie does not satisfy the console callback", async () => {
+test("the MCP flow's state cookie does not satisfy the Portal callback", async () => {
   const e = env();
   const { state, cookie } = await started(e);
-  const res = await handleConsoleCallback(callback(state, cookie.replace("capsid_console_state=", "capsid_state=")), e, new Date());
+  const res = await handlePortalCallback(callback(state, cookie.replace("capsid_portal_state=", "capsid_state=")), e, new Date());
   assert.equal(res.status, 403);
 });
 
 test("a state with no KV entry is refused as expired", async () => {
   const e = env();
   const { state, cookie } = await started(e);
-  await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.delete(`capsid:console-state:${state}`);
-  const res = await handleConsoleCallback(callback(state, cookie), e, new Date());
+  await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.delete(`capsid:portal-state:${state}`);
+  const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 403);
-  assert.equal(await res.text(), "state expired or already used. Open /console again.");
+  assert.equal(await res.text(), "state expired or already used. Open /portal again.");
 });
 
 // Each of these reaches the ID token check and must end with no session cookie.
@@ -162,7 +163,7 @@ for (const [name, claims, overrides, pattern] of [
     const e = env(overrides);
     const { state, cookie, location } = await started(e);
     stubAccess(location, claims);
-    const res = await handleConsoleCallback(callback(state, cookie), e, new Date());
+    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     assert.equal(res.status, 403);
     assert.match(await res.text(), pattern);
     assert.equal(res.headers.get("Set-Cookie"), null);
@@ -175,11 +176,25 @@ test("Access reporting a refused sign-in on the callback gets no session and nev
   globalThis.fetch = (async () => {
     throw new Error("the callback called Access after an error");
   }) as typeof fetch;
-  const res = await handleConsoleCallback(
-    new Request(`${ORIGIN}/console/callback?error=access_denied&state=${state}`, { headers: { Cookie: cookie } }),
+  const res = await handlePortalCallback(
+    new Request(`${ORIGIN}/portal/callback?error=access_denied&state=${state}`, { headers: { Cookie: cookie } }),
     e,
     new Date()
   );
   assert.equal(res.status, 403);
   assert.equal(res.headers.get("Set-Cookie"), null);
 });
+
+// PLANT: the return clamp. A stored return path outside the Portal lands on /portal/,
+// so a bad KV write cannot become an open redirect. /portalx shares the prefix and
+// must not pass; /console is the old address, which no longer answers.
+for (const stored of ["/portalx", "/console", "https://example.com/portal/", "//example.com/portal/"]) {
+  test(`a stored return path of ${stored} lands on /portal/`, async () => {
+    const e = env();
+    const { state, cookie, location } = await started(e, stored);
+    stubAccess(location);
+    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.get("Location"), "/portal/");
+  });
+}

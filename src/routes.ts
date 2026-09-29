@@ -29,29 +29,23 @@ import {
 } from "./improve-scorer";
 import { handleHealth } from "./health";
 import { escapeHtml } from "./html";
-import {
-  CONSOLE_CALLBACK_PATH,
-  CONSOLE_JSON_LEGACY_PATH,
-  CONSOLE_JSON_PATH,
-  CONSOLE_PATH,
-  consoleJsonMoved,
-  handleConsole,
-  handleConsoleJson,
-} from "./console";
-import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX, handleConsoleApp } from "./console-app";
+import { handlePortalApp } from "./portal-app";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
-import { handleConsoleAction } from "./console-actions";
 import {
   handlePortalActivity,
+  handlePortalApiNotFound,
   handlePortalNamespaces,
   handlePortalPerform,
   handlePortalPreview,
+  handlePortalSignOut,
   PORTAL_ACTIVITY_PATH,
+  PORTAL_API_PREFIX,
   PORTAL_NAMESPACES_PATH,
   PORTAL_PERFORM_PATH,
   PORTAL_PREVIEW_PATH,
+  PORTAL_SIGN_OUT_PATH,
 } from "./portal-actions";
-import { handleConsoleCallback } from "./console-auth";
+import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "./portal-auth";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 
 const APPROVAL_COOKIE = "capsid_approved";
@@ -587,19 +581,21 @@ export const defaultHandler = {
     if (url.pathname === "/authorize" && request.method === "GET") return handleAuthorizeGet(request, env);
     if (url.pathname === "/authorize" && request.method === "POST") return handleAuthorizePost(request, env);
     if (url.pathname === "/callback") return handleCallback(request, env);
-    if (url.pathname === CONSOLE_PATH && request.method === "GET") return handleConsole(request, env);
-    if (url.pathname === CONSOLE_PATH && request.method === "POST") return handleConsoleAction(request, env);
-    if (url.pathname === CONSOLE_JSON_PATH && request.method === "GET") return handleConsoleJson(request, env);
-    if (url.pathname === CONSOLE_JSON_LEGACY_PATH) return consoleJsonMoved(request);
-    if (url.pathname === CONSOLE_CALLBACK_PATH) return handleConsoleCallback(request, env, new Date());
+    // Capsid Portal. The callback and every /portal/api/ route are matched before the
+    // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
+    // Nothing answers under /console: the Portal moved without redirects
+    // (capsid/research/design-portal-unify.md), so an old address reaches the 404 below.
+    if (url.pathname === PORTAL_CALLBACK_PATH) return handlePortalCallback(request, env, new Date());
     if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
     if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
     if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST") return handlePortalPreview(request, env);
     if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST") return handlePortalPerform(request, env);
     if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
     if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
+    if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
+    if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
     // The app and everything under it, every method: the handler gates first.
-    if (url.pathname === CONSOLE_APP_PATH || url.pathname.startsWith(CONSOLE_APP_PREFIX)) return handleConsoleApp(request, env);
+    if (url.pathname === PORTAL_PATH || url.pathname.startsWith(PORTAL_PREFIX)) return handlePortalApp(request, env);
 
     return new Response("not found", { status: 404 });
   },

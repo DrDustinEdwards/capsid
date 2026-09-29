@@ -5,10 +5,16 @@ import { test } from "node:test";
 import { sha256Hex } from "../src/auth.ts";
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
-import { CONSOLE_CALLBACK_PATH, CONSOLE_JSON_LEGACY_PATH, CONSOLE_JSON_PATH, CONSOLE_PATH } from "../src/console.ts";
-import { CONSOLE_APP_PATH, CONSOLE_APP_PREFIX } from "../src/console-app.ts";
+import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
-import { PORTAL_ACTIVITY_PATH, PORTAL_NAMESPACES_PATH, PORTAL_PERFORM_PATH, PORTAL_PREVIEW_PATH } from "../src/portal-actions.ts";
+import {
+  PORTAL_ACTIVITY_PATH,
+  PORTAL_API_PREFIX,
+  PORTAL_NAMESPACES_PATH,
+  PORTAL_PERFORM_PATH,
+  PORTAL_PREVIEW_PATH,
+  PORTAL_SIGN_OUT_PATH,
+} from "../src/portal-actions.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
@@ -98,10 +104,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   SCORE_PATH,
   CREDENTIAL_PATH,
   BACKUP_CREDENTIAL_PATH,
-  CONSOLE_PATH,
-  CONSOLE_JSON_PATH,
-  CONSOLE_JSON_LEGACY_PATH,
-  CONSOLE_CALLBACK_PATH,
+  PORTAL_CALLBACK_PATH,
   RUNNER_KEY_PATH,
   OPS_FEED_PATH,
   OPS_REFRESH_PATH,
@@ -109,8 +112,10 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PERFORM_PATH,
   PORTAL_NAMESPACES_PATH,
   PORTAL_ACTIVITY_PATH,
-  CONSOLE_APP_PATH,
-  CONSOLE_APP_PREFIX,
+  PORTAL_SIGN_OUT_PATH,
+  PORTAL_API_PREFIX,
+  PORTAL_PATH,
+  PORTAL_PREFIX,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the
@@ -127,7 +132,7 @@ function dispatches(): { path: string; handler: string }[] {
   };
   for (const m of body.matchAll(line)) found.push({ path: resolve(m[1]), handler: m[2] });
   // A prefix match covers every path under it, so it is a route of its own, named in
-  // the tables as the prefix with a trailing `*` ("/console/app/*").
+  // the tables as the prefix with a trailing `*` ("/portal/*").
   const prefix = /url\.pathname\.startsWith\(("[^"]+"|[A-Z_]+)\)[^\n]*?\breturn (\w+)\(/g;
   for (const m of body.matchAll(prefix)) found.push({ path: `${resolve(m[1])}*`, handler: m[2] });
   // A match written any other way (startsWith, a regex, a switch) would be missed by

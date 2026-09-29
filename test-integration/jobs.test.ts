@@ -336,7 +336,7 @@ describe("blocked", () => {
     expect(blocked.ok, blocked.refusal).toBe(true);
     const stored = await row(id);
     expect(stored?.status).toBe("blocked");
-    // The command is in the summary verbatim; the console shows this string.
+    // The command is in the summary verbatim; the Portal shows this string.
     expect(String(stored?.result_summary)).toContain("git push origin feat/thing");
     expect(String(stored?.result_summary)).toContain("deploys the Worker");
   });

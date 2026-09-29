@@ -414,7 +414,7 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
 
 // A blocked job carries the exact command. A job that hit a gate is not a failure; it
 // is work waiting on a human, and the human needs the command to run, not a
-// description of the situation. The console shows these. blockJob writes this marker
+// description of the situation. Capsid Portal shows these. blockJob writes this marker
 // and commandFromSummary reads it back, so the format cannot drift between the two.
 export const RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
 
@@ -443,7 +443,7 @@ export async function blockJob(
   }
   const summary = args.command ? `${args.reason}\n\n${RESUME_MARKER}\n\n    ${args.command}` : args.reason;
   // The cap is applied where the block is written, so a capped job says so in the one
-  // field every reader already looks at: the console prints result_summary, the driver
+  // field every reader already looks at: the Portal prints result_summary, the driver
   // reads it to continue, and a human deciding reads it there too. The budget is read
   // before the transition, because the transition is what makes this block count.
   const current = await readJob(env.DB, id);

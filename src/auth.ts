@@ -17,7 +17,7 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
   return bytesToHex(sig);
 }
 
-// Cookie lookup, once, for the consent flow and the console session.
+// Cookie lookup, once, for the consent flow and the Portal session.
 export function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get("Cookie");
   if (!header) return null;

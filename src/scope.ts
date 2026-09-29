@@ -154,23 +154,22 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
   "/ops/runner-key":
     "a GitHub Actions OIDC token verified against GitHub's key set, its run claims pinned against the repo as GitHub reports it, and a pending seat start; it mints a key bound to that one job (src/runner-key.ts)",
-  "/authorize": "the OAuth authorization step, gated by the OAuth provider and GitHub login",
+  "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
-  "/console": "the admin console, gated by its own GitHub OAuth session",
-  "/console.json": "a permanent redirect to /console/json that serves nothing itself; the session cookie is scoped to /console",
-  "/console/json": "the admin console's data, gated by the same console session",
-  "/console/callback": "the console's OAuth callback, which validates state before issuing a session",
-  "/console/api/ops": "the Watch Floor feed, gated by consoleGate: the administrator's Access session, and a 403 for any bearer",
-  "/console/api/ops/refresh":
-    "one watcher pass on demand, gated by consoleGate, then a same-origin header, then a KV rate limit that fails closed",
-  "/console/api/actions/preview":
-    "a Portal action's preview, which writes nothing: consoleGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
-  "/console/api/actions/perform":
+  "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
+  "/portal/api/ops": "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
+  "/portal/api/ops/refresh":
+    "one watcher pass on demand, gated by portalGate, then a same-origin header, then a KV rate limit that fails closed",
+  "/portal/api/actions/preview":
+    "a Portal action's preview, which writes nothing: portalGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
+  "/portal/api/actions/perform":
     "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
-  "/console/api/namespaces": "the Portal's per-namespace status, read through improve_status's function, gated by consoleGate",
-  "/console/api/activity": "the Portal's bounded audit_log read, gated by consoleGate",
-  "/console/app": "the Watch Floor app's page, served from ASSETS only after consoleGate admits the administrator's session",
-  "/console/app/*": "the Watch Floor app's files, served from ASSETS only after consoleGate admits the administrator's session",
+  "/portal/api/namespaces": "the Portal's per-namespace status, read through improve_status's function, gated by portalGate",
+  "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
+  "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
+  "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
+  "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",
+  "/portal/*": "Capsid Portal's files and client routes, served from ASSETS only after portalGate admits the administrator's session",
 };
 
 // The refusal for a gated route, or null. The same checkScope the tools use.

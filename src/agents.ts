@@ -39,7 +39,7 @@ export interface Agent {
   // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
   // agent; `opkey:<fingerprint>` for a legacy operator key; the admin as
   // `access:<email>` on the MCP login (Cloudflare Access, since 2026-09-27) or
-  // `github:<login>` on the console until it moves too. Those are more specific than a
+  // `github:<login>` on rows the old console wrote before it moved to Access. Those are more specific than a
   // synthetic name, and every audit query already reads them.
   actor: string;
   scopes: AgentScopes;
@@ -69,7 +69,7 @@ function readEverythingScopes(): AgentScopes {
   return { namespaces: "*", repos: "*", tools: "*", grants: ["read"], flags: flagsAll(false) };
 }
 
-// The admin, as the MCP and console logins know it: the email Access verified, already
+// The admin, as the MCP and Portal logins know it: the email Access verified, already
 // checked against ADMIN_EMAIL at sign-in and on every request.
 export function adminAgentForEmail(email: string): Agent {
   const actor = `access:${email}`;

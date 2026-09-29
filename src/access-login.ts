@@ -3,8 +3,8 @@ import { getCookie, isAdminEmail, sha256Hex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
-// by the MCP authorization flow (src/routes.ts) and the console login
-// (src/console-auth.ts). What differs between them is passed in as a LoginFlow; what
+// by the MCP authorization flow (src/routes.ts) and Capsid Portal's login
+// (src/portal-auth.ts). What differs between them is passed in as a LoginFlow; what
 // each stores and does with the admitted email stays in the caller. A state token is
 // stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding its
 // digest, and used once. PKCE and an OIDC nonce are kept in the stored state, and the

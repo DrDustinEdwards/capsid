@@ -353,9 +353,15 @@ async function gateSecurityHeaders(clientId) {
     ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/backup 401", "other", { url: `${ORIGIN}/ops/backup`, init: { method: "POST" } }],
-    // The Watch Floor app with no session: the console gate answers with the sign-in
-    // redirect, never the app. A 200 here would be the dashboard served to anyone.
-    ["/console/app no session", "other", { url: `${ORIGIN}/console/app/`, init: { redirect: "manual" }, status: 302 }],
+    // Capsid Portal with no session: the Portal gate answers with the sign-in redirect,
+    // never the app. A 200 here would be the dashboard served to anyone.
+    ["/portal/ no session", "other", { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 302 }],
+    // The Portal moved from /console with no redirects (capsid/research/
+    // design-portal-unify.md): each old address is the Worker's plain 404. A 302 here is
+    // a redirect somebody added, and a 200 is the old page back.
+    ["/console gone", "other", { url: `${ORIGIN}/console`, init: { redirect: "manual" }, status: 404 }],
+    ["/console/app/ gone", "other", { url: `${ORIGIN}/console/app/`, init: { redirect: "manual" }, status: 404 }],
+    ["/console/callback gone", "other", { url: `${ORIGIN}/console/callback`, init: { redirect: "manual" }, status: 404 }],
     ["/nope 404", "other", { url: `${ORIGIN}/nope` }],
     ["/csp-report", "other", { url: `${ORIGIN}/csp-report`, init: { method: "POST", headers: { "Content-Type": "application/csp-report" }, body: report }, status: 204 }],
   ];

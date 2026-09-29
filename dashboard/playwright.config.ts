@@ -14,13 +14,13 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [["list"]] : [["list"]],
   use: {
-    baseURL: `http://localhost:${PORT}/console/app/`,
+    baseURL: `http://localhost:${PORT}/portal/`,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `npx vite preview --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/console/app/`,
+    url: `http://localhost:${PORT}/portal/`,
     reuseExistingServer: false,
     timeout: 60_000,
   },

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 // defect these guard: on the live Portal a Pause with a typed reason, then Preview,
 // did nothing and said nothing. Every path below must end in something visible.
 
-const PREVIEW_URL = "**/console/api/actions/preview";
+const PREVIEW_URL = "**/portal/api/actions/preview";
 
 async function openPause(page: Page, ns: string) {
   await page.goto("namespaces");
