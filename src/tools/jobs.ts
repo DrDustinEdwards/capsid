@@ -7,6 +7,7 @@ import { SCOPE_FLAGS } from "../agents-schema";
 import { blockJob, claimJob, completeJob, failAsCaller, heartbeatJob, listJobs, postJob, releaseJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
 import { startSeatSession } from "../seat-start";
 import { parseEvidence } from "../job-outcomes";
+import { claimSchema } from "../job-claims";
 import { fail, ok, type ToolCtx } from "./docs";
 
 const MAX_JOB_ID = 64;
@@ -32,7 +33,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("jobs"),
       description:
-        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. It returns offered_skills: up to three skills matched to the job's title and prompt, each with its instructions inline. The Worker records that offer at the job's first claim, and a later claim of the same job returns the same skills. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence against GitHub; the response carries the row and a note for each check that could not run. action "fail" needs a reason. action "block" needs a reason and the command the human must run. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. Without take, when that driver holds another claim or the job was blocked by a shared identity (access:, github: or opkey:), the job goes back to queued instead. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. action "start" starts a Claude Code session on GitHub's runners for one queued job in capsid or dustinedwards, by a repository_dispatch to that namespace's repo; it is for the admin or a can_merge caller, and is refused while the seat_start switch is off, for a repo that is not public, while a session for that repo is in flight, or at the cap. action "release" returns a claimed job held by another credential to the queue; it needs reason, is for the admin or a can_merge caller, and writes no job_outcomes row. heartbeat, complete and block act only on the claimed job this caller holds. fail does too, except for the admin or a can_merge caller, which may fail a job somebody else holds; that writes the holder's job_outcomes row. An expired lease returns the job to queued on the five-minute tick.`,
+        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. It returns offered_skills: up to three skills matched to the job's title and prompt, each with its instructions inline. The Worker records that offer at the job's first claim, and a later claim of the same job returns the same skills. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence against GitHub; the response carries the row and a note for each check that could not run. action "fail" needs a reason. action "block" needs a reason and the command the human must run. complete, fail and block take an optional claim (what the agent says it did), recorded as sent in job_claims before anything is verified. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. Without take, when that driver holds another claim or the job was blocked by a shared identity (access:, github: or opkey:), the job goes back to queued instead. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. action "start" starts a Claude Code session on GitHub's runners for one queued job in capsid or dustinedwards, by a repository_dispatch to that namespace's repo; it is for the admin or a can_merge caller, and is refused while the seat_start switch is off, for a repo that is not public, while a session for that repo is in flight, or at the cap. action "release" returns a claimed job held by another credential to the queue; it needs reason, is for the admin or a can_merge caller, and writes no job_outcomes row. heartbeat, complete and block act only on the claimed job this caller holds. fail does too, except for the admin or a can_merge caller, which may fail a job somebody else holds; that writes the holder's job_outcomes row. An expired lease returns the job to queued on the five-minute tick.`,
       inputSchema: {
         action: z.enum(JOB_ACTIONS).describe("post | list | claim | heartbeat | complete | fail | block | resume | supersede | release | start."),
         namespace: nsName.optional().describe('For post, the namespace the work belongs to. For list and claim, the namespace to filter or pick from.'),
@@ -113,6 +114,15 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .describe(
             "For complete: what the work produced, as an object or a JSON string. An omitted field is stored as NULL, not 0. For each named pull request the stored merge state, commit count and file count are read from GitHub; tests_added is stored as given."
           ),
+        // The same object-or-string union as evidence, for the same reason. The object
+        // is strict (src/job-claims.ts), and the string form is parsed against the same
+        // schema, so an unknown key is refused either way rather than dropped.
+        claim: z
+          .union([claimSchema, bounded(MAX_BODY)])
+          .optional()
+          .describe(
+            "For complete, fail and block: what the agent says it did, as an object or a JSON string. prs_opened and prs_merged (pull request URLs), tests {run, passed, failed, result: pass|fail|partial|not_run}, deploy_state (none|pending|deployed|verified|failed), files_touched (paths), versions {model_id, client_name, client_version, permission_mode} (self-reported). Recorded as sent, apart from what the Worker verifies. An omitted field is NULL, never 0; an unknown key or a string that is not JSON is refused."
+          ),
       },
     },
     async (args) => {
@@ -179,12 +189,21 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
                 result_ref: args.result_ref,
                 evidence: parsedEvidence,
                 skills: args.skills,
+                claim: args.claim,
+                // As received, so job_claims.raw keeps the evidence the driver sent and
+                // not parseEvidence's reading of it.
+                raw: { evidence: args.evidence, claim: args.claim, result_summary: args.result_summary, result_ref: args.result_ref },
               })
             );
           }
           case "fail": {
             if (!args.id) return fail("fail needs the job id.");
-            return reply(await failAsCaller(env, agent, now, args.id, args.reason ?? "", args.skills));
+            return reply(
+              await failAsCaller(env, agent, now, args.id, args.reason ?? "", args.skills, {
+                claim: args.claim,
+                raw: { claim: args.claim, reason: args.reason },
+              })
+            );
           }
           case "start": {
             if (!args.id) return fail("start needs the job id.");
@@ -196,7 +215,14 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           }
           case "block": {
             if (!args.id) return fail("block needs the job id.");
-            return reply(await blockJob(env, agent, now, args.id, { reason: args.reason ?? "", command: args.command }));
+            return reply(
+              await blockJob(env, agent, now, args.id, {
+                reason: args.reason ?? "",
+                command: args.command,
+                claim: args.claim,
+                raw: { claim: args.claim, reason: args.reason, command: args.command },
+              })
+            );
           }
           case "resume": {
             if (!args.id) return fail("resume needs the job id.");

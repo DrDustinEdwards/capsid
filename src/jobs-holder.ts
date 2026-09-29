@@ -24,6 +24,17 @@ import {
   type JobEvidence,
   type JobOutcomeRow,
 } from "./job-outcomes";
+import {
+  claimRow,
+  claimStatement,
+  evaluationRows,
+  evaluationStatements,
+  parseClaim,
+  workerEvaluatorId,
+  type ClaimInput,
+  type ClaimRaw,
+  type JobClaim,
+} from "./job-claims";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
 import { correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 
@@ -68,6 +79,10 @@ async function holderTransition(
     // The skills the driver was offered and used. Names only: the credit direction
     // comes from signalFor(), which reads what the Worker verified on GitHub.
     skills?: JobSkills;
+    // What the agent said on this complete, fail or block, as sent. Present, the
+    // transition writes one job_claims row; absent (heartbeat, a block the review gate
+    // made), it writes none, because the agent made no claim.
+    said?: { claim?: JobClaim; raw: ClaimRaw };
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -133,8 +148,31 @@ async function holderTransition(
   // complete, fail and block all end the run that held the job, so a runner key bound
   // to it stops here, in the same batch.
   if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
+  // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as
+  // sent, so nothing GitHub says can reach it (src/job-claims.ts). It rides in this
+  // batch, so a transition the guard aborts leaves no claim behind either.
+  const claimed =
+    patch.said && (action === "complete" || action === "fail" || action === "block")
+      ? claimRow({
+          job_id: id,
+          action,
+          agent: actor,
+          namespace: job.namespace,
+          raw: patch.said.raw,
+          claim: patch.said.claim,
+          evidence: patch.evidence,
+          capsid_sha: env.BUILD_SHA ?? null,
+          now,
+        })
+      : undefined;
+  if (claimed) statements.push(claimStatement(env.DB, claimed));
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
+    // One evaluation per worker check, the claim and GitHub's value side by side,
+    // after the claim row so its claim_id subquery finds it.
+    if (claimed) {
+      statements.push(...evaluationStatements(env.DB, evaluationRows(claimed, verdict, { evaluator_id: workerEvaluatorId(env.BUILD_SHA), now })));
+    }
     const row = outcomeFrom(job, verdict, now, patch.skills);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
@@ -366,11 +404,15 @@ export async function completeJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills }
+  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills; claim?: ClaimInput; raw?: ClaimRaw }
 ): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
+  // Refused before anything else runs, so a claim that cannot be recorded whole
+  // leaves no row of any kind.
+  const claim = parseClaim(args.claim);
+  if ("error" in claim) return refuse("complete", claim.error);
   // Checked before the write, because the outcome row this call produces cannot be
   // corrected afterwards: a result_ref and evidence swallowed into the summary would
   // leave a row that records nothing.
@@ -395,13 +437,27 @@ export async function completeJob(
     lease_expires: null,
     evidence: args.evidence,
     skills: credited.skills,
+    said: {
+      claim: claim.claim,
+      raw: args.raw ?? { evidence: args.evidence, claim: args.claim, result_summary: args.result_summary, result_ref: args.result_ref },
+    },
   });
 }
 
-export async function failJob(env: Env, agent: Agent, now: Date, id: string, reason: string, skills?: JobSkills): Promise<JobResult> {
+export async function failJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  reason: string,
+  skills?: JobSkills,
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
+): Promise<JobResult> {
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
+  const failClaim = parseClaim(said.claim);
+  if ("error" in failClaim) return refuse("fail", failClaim.error);
   // The review gate (see reviewRefusal), without demanding a pull request.
   const review = await reviewRefusal(env, agent, now, "fail", id, null);
   if (review) return review;
@@ -409,7 +465,13 @@ export async function failJob(env: Env, agent: Agent, now: Date, id: string, rea
   if (unknownOnFail) return refuse("fail", unknownOnFail);
   const creditedOnFail = await creditedSkills(env, id, skills);
   if ("refusal" in creditedOnFail) return refuse("fail", creditedOnFail.refusal);
-  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills: creditedOnFail.skills });
+  return holderTransition(env, agent, now, "fail", id, {
+    status: "failed",
+    result_summary: reason,
+    lease_expires: null,
+    skills: creditedOnFail.skills,
+    said: { claim: failClaim.claim, raw: said.raw ?? { claim: said.claim, reason } },
+  });
 }
 
 // A blocked job carries the exact command. A job that hit a gate is not a failure; it
@@ -432,9 +494,11 @@ export async function blockJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { reason: string; command?: string; fromReview?: boolean }
+  args: { reason: string; command?: string; fromReview?: boolean; claim?: ClaimInput; raw?: ClaimRaw }
 ): Promise<JobResult> {
   if (!args.reason?.trim()) return refuse("block", "block needs a reason: what gate was hit.");
+  const blockClaim = parseClaim(args.claim);
+  if ("error" in blockClaim) return refuse("block", blockClaim.error);
   // The review gate (see reviewRefusal). `fromReview` is set when the gate itself
   // blocks, so it does not consult itself again.
   if (!args.fromReview) {
@@ -453,5 +517,9 @@ export async function blockJob(
     result_summary: capped ? cappedSummary(summary) : summary,
     lease_expires: null,
     bumpBlocked: true,
+    // A block the review gate made is the reviewer's act, not a claim by the agent.
+    said: args.fromReview
+      ? undefined
+      : { claim: blockClaim.claim, raw: args.raw ?? { claim: args.claim, reason: args.reason, command: args.command } },
   });
 }

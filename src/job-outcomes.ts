@@ -164,6 +164,24 @@ export interface EvidenceVerdict {
   // the Worker could not read is absent, never false. Written to job_outcome_prs at
   // complete time, so the row says which pull requests were verified.
   pr_states?: Record<string, boolean>;
+  // What GitHub itself said, kept apart from the fields above, which mix it with the
+  // driver's numbers. job_evaluations (src/job-claims.ts) sets these beside the claim,
+  // so a check that disagreed with the driver is recorded as a disagreement rather
+  // than as the one number job_outcomes keeps. Null wherever the Worker did not read
+  // it; merged has an entry only for a pull request that was read.
+  github?: GitHubFacts;
+  // The driver's numbers as sent, before any of them was replaced by GitHub's.
+  reported?: { prs: string[] | null; commits: number | null; files_changed: number | null; tests_added: number | null };
+}
+
+export interface GitHubFacts {
+  merged: Record<string, boolean>;
+  // Sums over every named pull request, null unless every one was read: a sum over
+  // some of them is not the job's total.
+  commits: number | null;
+  files_changed: number | null;
+  // CI on the last named pull request's head, 1 or 0, null when not answered.
+  ci_green: number | null;
 }
 
 export async function prFacts(env: Env, namespace: string, url: string): Promise<PrFacts | string> {
@@ -270,6 +288,7 @@ export async function verifyEvidence(
     tests_added: evidence?.tests_added ?? null,
   };
   const urls = evidence?.prs ?? [];
+  const github: GitHubFacts = { merged: {}, commits: null, files_changed: null, ci_green: null };
   const verdict: EvidenceVerdict = {
     prs_opened: urls.length > 0 ? urls.length : null,
     prs_merged: null,
@@ -277,6 +296,8 @@ export async function verifyEvidence(
     ci_green: null,
     verified: { ...NOTHING_VERIFIED },
     notes: [],
+    github,
+    reported: { prs: urls.length > 0 ? [...urls] : null, ...reported },
   };
   if (urls.length === 0) return verdict;
 
@@ -291,6 +312,7 @@ export async function verifyEvidence(
     }
   }
   verdict.pr_states = Object.fromEntries([...read].map(([url, f]) => [url, f.merged]));
+  github.merged = { ...verdict.pr_states };
 
   // A partly read list keeps what was read. prs_merged counts the pull requests that
   // were read and is marked verified, as the re-verification sweep already does.
@@ -318,6 +340,7 @@ export async function verifyEvidence(
     if (partialCi.green !== null) {
       verdict.ci_green = partialCi.green ? 1 : 0;
       verdict.verified.ci_green = true;
+      github.ci_green = verdict.ci_green;
     }
     return verdict;
   }
@@ -330,6 +353,8 @@ export async function verifyEvidence(
   verdict.verified.prs_merged = true;
   verdict.verified.commits = true;
   verdict.verified.files_changed = true;
+  github.commits = verdict.commits;
+  github.files_changed = verdict.files_changed;
 
   // CI on the last pull request's head, the one a driver opens at the end of its work.
   const last = facts[facts.length - 1];
@@ -338,6 +363,7 @@ export async function verifyEvidence(
   if (ci.green !== null) {
     verdict.ci_green = ci.green ? 1 : 0;
     verdict.verified.ci_green = true;
+    github.ci_green = verdict.ci_green;
   }
   return verdict;
 }
