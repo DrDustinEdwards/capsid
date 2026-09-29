@@ -11,7 +11,8 @@
     "check": "node scripts/fixture-check.mjs && tsc --noEmit -p .",
     "size": "node scripts/size-budget.mjs",
     "preview": "vite preview",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "shots": "playwright test -c playwright.shots.config.ts"
   },
   "engines": {
     "node": ">=22.12.0"
