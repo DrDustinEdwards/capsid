@@ -16,6 +16,7 @@ const NOW = new Date("2026-09-29T12:00:00.000Z");
 const DRIVER_KEY = "capsid_agent_" + "e".repeat(64);
 const READ_ONLY_DRIVER_KEY = "capsid_agent_" + "f".repeat(64);
 const RUNNER_KEY = "capsid_agent_" + "a".repeat(64);
+const OTHER_DRIVER_KEY = "capsid_agent_" + "b".repeat(64);
 const DRIVER_ACTOR = "agent:sample-driver";
 const SESSION = "5f1c2d3e-sample-session";
 
@@ -123,6 +124,26 @@ describe("who may send", () => {
     const response = await send(RUNNER_KEY, COST);
     expect(response.status, await response.clone().text()).toBe(200);
     expect((await usageRows())[0]).toMatchObject({ job_id: id });
+  });
+
+  it("PLANT: a key cannot add usage to another key's session", async () => {
+    // The first report claims the session for the driver.
+    expect((await send(DRIVER_KEY, COST)).status).toBe(200);
+    const owner = await env.DB.prepare("SELECT agent, last_event FROM agent_sessions WHERE session_id = ?1").bind(SESSION).first();
+    expect(owner).toEqual({ agent: DRIVER_ACTOR, last_event: "otlp" });
+
+    // A second key with write sends points for the same session id.
+    await seedAgent("agent_sampleoth01", "other-driver", OTHER_DRIVER_KEY, ["read", "write"]);
+    const response = await send(OTHER_DRIVER_KEY, COST);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = (await response.json()) as { partialSuccess?: { rejectedDataPoints: number; errorMessage: string } };
+    expect(body.partialSuccess?.rejectedDataPoints).toBe(1);
+    expect(body.partialSuccess?.errorMessage).toMatch(/first reported by another key/);
+    // The driver's total is untouched, and the session still names the driver.
+    expect(await usageRows()).toEqual([
+      { session_id: SESSION, job_id: null, metric: "claude_code.cost.usage", kind: "", model: "claude-sample-1", value: 0.5 },
+    ]);
+    expect((await env.DB.prepare("SELECT agent FROM agent_sessions WHERE session_id = ?1").bind(SESSION).first())?.agent).toBe(DRIVER_ACTOR);
   });
 });
 

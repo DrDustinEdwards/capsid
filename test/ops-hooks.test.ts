@@ -8,13 +8,13 @@ import {
   HOOK_EVENTS,
   HOOK_MAX_BYTES,
   handleOpsHooks,
-  hookCallerRefusal,
   hookStatements,
   NEEDS_INPUT_TYPES,
   OPS_HOOKS_PATH,
   parseHook,
   type ParsedHook,
 } from "../src/ops-hooks.ts";
+import { sessionCallerRefusal } from "../src/ops-session-auth.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 
 // The hook receiver's parse, its allowlist and its caller check (src/ops-hooks.ts).
@@ -139,7 +139,7 @@ function plantedBody(event: string): Record<string, unknown> {
 
 const DRIVER_KEY = "capsid_agent_" + "e".repeat(64);
 
-// resolveAgent and callerJob read through the D1 fake; the batch is recorded, never run,
+// resolveAgent and the job binding (resolveSessionCaller) read through the D1 fake; the batch is recorded, never run,
 // so every value that would reach D1 is in `writes`.
 async function recordingEnv() {
   const scopes = defaultScopes(["sample"]);
@@ -234,14 +234,14 @@ function rowAgent(kind: AgentKind, grants: Array<"read" | "write">, job: string 
 }
 
 test("a driver, a runner and the admin may post hooks; a read-only key, a cron or seat agent and a legacy read key may not", () => {
-  assert.equal(hookCallerRefusal(rowAgent("driver", ["read", "write"])), null);
-  assert.equal(hookCallerRefusal(rowAgent("session", ["read", "write"], "job_00000000abcd")), null);
-  assert.equal(hookCallerRefusal(adminAgentForEmail("admin@example.com")), null);
-  assert.equal(hookCallerRefusal(legacyAgent("write", "opkey:abc")), null);
-  assert.match(hookCallerRefusal(rowAgent("driver", ["read"])) ?? "", /requires the write grant/);
-  assert.match(hookCallerRefusal(rowAgent("cron", ["read", "write"])) ?? "", /not a driver or a runner/);
-  assert.match(hookCallerRefusal(rowAgent("seat", ["read", "write"])) ?? "", /not a driver or a runner/);
-  assert.match(hookCallerRefusal(legacyAgent("read", "opkey:def")) ?? "", /not a driver or a runner/);
+  assert.equal(sessionCallerRefusal(rowAgent("driver", ["read", "write"])), null);
+  assert.equal(sessionCallerRefusal(rowAgent("session", ["read", "write"], "job_00000000abcd")), null);
+  assert.equal(sessionCallerRefusal(adminAgentForEmail("admin@example.com")), null);
+  assert.equal(sessionCallerRefusal(legacyAgent("write", "opkey:abc")), null);
+  assert.match(sessionCallerRefusal(rowAgent("driver", ["read"])) ?? "", /requires the write grant/);
+  assert.match(sessionCallerRefusal(rowAgent("cron", ["read", "write"])) ?? "", /not a driver or a runner/);
+  assert.match(sessionCallerRefusal(rowAgent("seat", ["read", "write"])) ?? "", /not a driver or a runner/);
+  assert.match(sessionCallerRefusal(legacyAgent("read", "opkey:def")) ?? "", /not a driver or a runner/);
 });
 
 // ---- the feed's incidents ------------------------------------------------------------

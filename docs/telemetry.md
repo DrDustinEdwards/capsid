@@ -35,9 +35,18 @@ resolves to nobody, is 401 with `WWW-Authenticate: Bearer realm="capsid-hooks"`.
 Accepted: a minted driver, a runner key, or the admin key, holding the write grant
 (checked through `checkScope`). A read-only key or any other kind is 403.
 
+The hook receiver (`/ops/hooks`, docs/hooks.md) uses the same caller check.
+
+A session belongs to the key that first reported it, by hook or by telemetry. The
+first export for a new session id writes its `agent_sessions` row (last event `otlp`)
+in the same batch as the usage, and every usage write is conditional on that row
+naming the caller. Points for a session another key reported first are not recorded:
+they are counted in `partialSuccess.rejectedDataPoints`, and the `errorMessage` says
+why.
+
 The job a session's usage counts toward (`src/ops-session-auth.ts`):
 
-1. A session the hook receiver already bound (its `agent_sessions` row) keeps that job.
+1. A session already bound (its `agent_sessions` row) keeps that job.
 2. Otherwise a runner key's one job, or the single job a driver holds claimed. A driver
    holding none, or several, records the usage against no job.
 3. The `capsid.job_id` resource attribute never picks a job. Where it disagrees with the

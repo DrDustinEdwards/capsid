@@ -263,15 +263,27 @@ export function jobForSession(caller: SessionCaller, bound: string | null | unde
   return { job, mismatch: attr !== null && attr !== job };
 }
 
-// The upsert. The job a row was first written with is kept (COALESCE), so a session
-// stays with the job it was bound to.
+// A session belongs to the key that first reported it, by hook or by telemetry. The
+// claim: an agent_sessions row for a session nobody has reported yet, and nothing for
+// one that exists (the hook receiver owns every other column).
+const CLAIM_SESSION = `INSERT INTO agent_sessions (session_id, agent, job_id, namespace, started_at, last_event_at, last_event, updated_at)
+   VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'otlp', ?5)
+   ON CONFLICT(session_id) DO NOTHING`;
+
+// The upsert, conditional on the session being this caller's (?8), in the same batch as
+// the claim, so a session another key owns is never written whatever order two
+// requests commit in. RETURNING says which series landed; never meta.changes (CLAUDE.md,
+// path mutation rule). The job a row was first written with is kept (COALESCE).
+// The SELECT carries a WHERE, which SQLite needs to read the ON CONFLICT that follows.
 const UPSERT = (mode: "add" | "replace") =>
   `INSERT INTO session_usage (session_id, job_id, metric, kind, model, value, updated_at)
-   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+   SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+   WHERE EXISTS (SELECT 1 FROM agent_sessions WHERE session_id = ?1 AND agent = ?8)
    ON CONFLICT(session_id, metric, kind, model) DO UPDATE SET
      value = ${mode === "add" ? "session_usage.value + excluded.value" : "excluded.value"},
      job_id = COALESCE(session_usage.job_id, excluded.job_id),
-     updated_at = excluded.updated_at`;
+     updated_at = excluded.updated_at
+   RETURNING session_id`;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -343,24 +355,39 @@ export async function recordExport(
     return false;
   });
 
+  // Who owns each session already. A session another key reported first is refused
+  // here, and the conditional upsert below refuses it again at commit.
+  const actor = caller.agent.actor;
   const bound = new Map<string, string | null>();
+  const foreign = new Set<string>();
   if (kept.size > 0) {
     const { results } = await db
-      .prepare("SELECT session_id, job_id FROM agent_sessions WHERE session_id IN (SELECT value FROM json_each(?1))")
+      .prepare("SELECT session_id, agent, job_id FROM agent_sessions WHERE session_id IN (SELECT value FROM json_each(?1))")
       .bind(JSON.stringify([...kept]))
-      .all<{ session_id: string; job_id: string | null }>();
-    for (const row of results ?? []) bound.set(row.session_id, row.job_id);
+      .all<{ session_id: string; agent: string; job_id: string | null }>();
+    for (const row of results ?? []) {
+      if (row.agent === actor) bound.set(row.session_id, row.job_id);
+      else foreign.add(row.session_id);
+    }
   }
+  if (foreign.size > 0) {
+    problems.push(`${foreign.size} session(s) were first reported by another key, so their points were not recorded`);
+  }
+  const owned = points.filter((p) => {
+    if (!foreign.has(p.session_id)) return true;
+    rejected += 1;
+    return false;
+  });
   const jobOf = new Map<string, string | null>();
   let mismatched = 0;
-  for (const p of points) {
+  for (const p of owned) {
     const { job, mismatch } = jobForSession(caller, bound.get(p.session_id), p.job_attr);
     jobOf.set(p.session_id, job);
     if (mismatch) mismatched += 1;
   }
   if (mismatched > 0) problems.push(`${mismatched} point(s) named a capsid.job_id other than the job this caller is bound to; they were recorded against the bound job`);
 
-  let writes = aggregate(points);
+  let writes = aggregate(owned);
   if (writes.length > OTLP_MAX_SERIES) {
     problems.push(`more than ${OTLP_MAX_SERIES} series in one request`);
     // The points behind the dropped series are not counted one by one; each dropped
@@ -370,10 +397,19 @@ export async function recordExport(
   }
   const at = now.toISOString();
   if (writes.length > 0) {
+    const claims = [...new Set(writes.map((w) => w.session_id))].filter((id) => !bound.has(id));
     try {
-      await db.batch(
-        writes.map((w) => db.prepare(UPSERT(w.mode)).bind(w.session_id, jobOf.get(w.session_id) ?? null, w.metric, w.kind, w.model, w.value, at))
-      );
+      const results = await db.batch([
+        ...claims.map((id) => db.prepare(CLAIM_SESSION).bind(id, actor, caller.job_id, caller.namespace, at)),
+        ...writes.map((w) => db.prepare(UPSERT(w.mode)).bind(w.session_id, jobOf.get(w.session_id) ?? null, w.metric, w.kind, w.model, w.value, at, actor)),
+      ]);
+      // A series whose upsert returned no row was refused by the ownership condition:
+      // another key claimed the session between the read above and this batch.
+      const refused = results.slice(claims.length).filter((r) => (r.results ?? []).length === 0).length;
+      if (refused > 0) {
+        rejected += refused;
+        problems.push(`${refused} series belonged to a session another key reported first, so they were not recorded`);
+      }
     } catch (err) {
       // Not swallowed (CLAUDE.md, no swallowed error rule): logged, and answered 503 so
       // the exporter retries rather than losing the points.
