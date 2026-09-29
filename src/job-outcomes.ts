@@ -59,6 +59,82 @@ export interface JobOutcomeRow {
   skill_ids_offered: string | null;
   skill_ids_used: string | null;
   recorded_at: string;
+  // What the job's Claude Code sessions reported by OpenTelemetry (migrations/0025),
+  // summed from session_usage when the row is written. NULL when no telemetry for the
+  // job reached Capsid, never 0.
+  cost_usd: number | null;
+  tokens_input: number | null;
+  tokens_output: number | null;
+  tokens_cache_read: number | null;
+  tokens_cache_creation: number | null;
+  active_seconds: number | null;
+}
+
+// A job's telemetry totals, as the outcome row stores them.
+export type JobUsage = Pick<
+  JobOutcomeRow,
+  "cost_usd" | "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation" | "active_seconds"
+>;
+
+const NO_USAGE: JobUsage = {
+  cost_usd: null,
+  tokens_input: null,
+  tokens_output: null,
+  tokens_cache_read: null,
+  tokens_cache_creation: null,
+  active_seconds: null,
+};
+
+const TOKEN_COLUMN: Record<string, "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation"> = {
+  input: "tokens_input",
+  output: "tokens_output",
+  cacheRead: "tokens_cache_read",
+  cacheCreation: "tokens_cache_creation",
+};
+
+/**
+ * The per-job totals from session_usage rows (metric, kind, total), which is what
+ * readJobUsage selects. Per metric family: a family with no row at all stays NULL
+ * (nothing was reported); once a family has a row, a type it lacks is 0, because
+ * Claude Code exports no point for a counter that did not move.
+ */
+export function usageFromTotals(rows: ReadonlyArray<{ metric: string; kind: string; total: number | null }>): JobUsage {
+  const usage: JobUsage = { ...NO_USAGE };
+  const families = new Set(rows.map((r) => r.metric));
+  if (families.has("claude_code.cost.usage")) usage.cost_usd = 0;
+  if (families.has("claude_code.token.usage")) {
+    for (const column of Object.values(TOKEN_COLUMN)) usage[column] = 0;
+  }
+  if (families.has("claude_code.active_time.total")) usage.active_seconds = 0;
+  for (const row of rows) {
+    const total = Number(row.total ?? 0);
+    if (!Number.isFinite(total)) continue;
+    if (row.metric === "claude_code.cost.usage") usage.cost_usd = (usage.cost_usd ?? 0) + total;
+    else if (row.metric === "claude_code.active_time.total") usage.active_seconds = (usage.active_seconds ?? 0) + total;
+    else if (row.metric === "claude_code.token.usage" && Object.hasOwn(TOKEN_COLUMN, row.kind)) {
+      const column = TOKEN_COLUMN[row.kind];
+      usage[column] = (usage[column] ?? 0) + total;
+    }
+  }
+  // The token columns are INTEGER.
+  for (const column of Object.values(TOKEN_COLUMN)) {
+    const value = usage[column];
+    if (value !== null) usage[column] = Math.round(value);
+  }
+  return usage;
+}
+
+/** The job's telemetry totals from session_usage (src/ops-otlp.ts writes it). */
+export async function readJobUsage(db: D1Database, jobId: string): Promise<JobUsage> {
+  const { results } = await db
+    .prepare(
+      `SELECT metric, kind, SUM(value) AS total FROM session_usage
+       WHERE job_id = ?1 AND metric IN ('claude_code.cost.usage', 'claude_code.token.usage', 'claude_code.active_time.total')
+       GROUP BY metric, kind`
+    )
+    .bind(jobId)
+    .all<{ metric: string; kind: string; total: number | null }>();
+  return usageFromTotals(results ?? []);
 }
 
 /** The skills a driver reports for one finished job. Names only; the credit comes
@@ -368,7 +444,8 @@ export async function verifyEvidence(
   return verdict;
 }
 
-export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills): JobOutcomeRow {
+// usage: the job's telemetry totals (readJobUsage). Omitted is no telemetry: NULL.
+export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills, usage: JobUsage = NO_USAGE): JobOutcomeRow {
   return {
     job_id: job.id,
     // Copied, not joined, because a later lease expiry clears claimed_by.
@@ -389,6 +466,12 @@ export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, sk
     skill_ids_offered: skillColumn(skills?.offered),
     skill_ids_used: skillColumn(skills?.used),
     recorded_at: now.toISOString(),
+    cost_usd: usage.cost_usd,
+    tokens_input: usage.tokens_input,
+    tokens_output: usage.tokens_output,
+    tokens_cache_read: usage.tokens_cache_read,
+    tokens_cache_creation: usage.tokens_cache_creation,
+    active_seconds: usage.active_seconds,
   };
 }
 
@@ -399,8 +482,9 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
     .prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed,
          tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified,
-         skill_ids_offered, skill_ids_used, recorded_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+         skill_ids_offered, skill_ids_used, recorded_at, cost_usd, tokens_input, tokens_output,
+         tokens_cache_read, tokens_cache_creation, active_seconds)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
        ON CONFLICT(job_id) DO NOTHING`
     )
     .bind(
@@ -420,6 +504,12 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.verified,
       row.skill_ids_offered,
       row.skill_ids_used,
-      row.recorded_at
+      row.recorded_at,
+      row.cost_usd,
+      row.tokens_input,
+      row.tokens_output,
+      row.tokens_cache_read,
+      row.tokens_cache_creation,
+      row.active_seconds
     );
 }

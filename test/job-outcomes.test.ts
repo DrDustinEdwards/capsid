@@ -7,6 +7,7 @@ import {
   resultKindOf,
   signalFor,
   signalForRow,
+  usageFromTotals,
   verifyEvidence,
   type EvidenceVerdict,
 } from "../src/job-outcomes.ts";
@@ -110,6 +111,34 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
   assert.equal(row.blocked_count, 0);
   assert.equal(row.agent, "agent:capsid-driver");
   assert.equal(row.namespace, "capsid");
+});
+
+test("PLANT: a job with no telemetry records NULL cost, tokens and active time, never 0", () => {
+  // Both ways in: no usage argument, and a session_usage read that found no row.
+  for (const row of [outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z")), outcomeFrom(job(), empty(), new Date(), undefined, usageFromTotals([]))]) {
+    for (const field of ["cost_usd", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation", "active_seconds"] as const) {
+      assert.equal(row[field], null, `${field} is ${row[field]} for a job no telemetry reached`);
+    }
+  }
+});
+
+test("a job's telemetry totals land on its outcome row: summed per column, a family seen is 0 where a type is missing", () => {
+  const usage = usageFromTotals([
+    { metric: "claude_code.cost.usage", kind: "", total: 0.5 },
+    { metric: "claude_code.cost.usage", kind: "", total: 0.25 },
+    { metric: "claude_code.token.usage", kind: "input", total: 1200 },
+    { metric: "claude_code.token.usage", kind: "output", total: 300.4 },
+    { metric: "claude_code.token.usage", kind: "cacheRead", total: 5000 },
+  ]);
+  const row = outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z"), undefined, usage);
+  assert.equal(row.cost_usd, 0.75);
+  assert.equal(row.tokens_input, 1200);
+  assert.equal(row.tokens_output, 300, "token columns are INTEGER");
+  assert.equal(row.tokens_cache_read, 5000);
+  // Tokens were reported, and no cacheCreation point: nothing was created.
+  assert.equal(row.tokens_cache_creation, 0);
+  // active_time was never reported: unknown, not zero.
+  assert.equal(row.active_seconds, null);
 });
 
 test("a reported zero is stored as zero, which is a different fact", async () => {
