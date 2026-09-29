@@ -1,4 +1,4 @@
-// Dev and preview only: serves dev/sample-feed.json at /console/api/ops so `npm run
+// Dev and preview only: serves dev/sample-feed.json at /portal/api/ops so `npm run
 // dev`, and the browser tests under `vite preview`, run with fake data and no Worker.
 // Never part of the build (apply: "serve").
 //
@@ -6,7 +6,8 @@
 // ring_slot so live.generated is "now", which keeps the relative times readable.
 //
 // It also mocks the Portal's controls (preview and perform), GET
-// /console/api/namespaces and GET /console/api/activity, with the Worker's refusals:
+// /portal/api/namespaces, GET /portal/api/activity and POST /portal/api/sign-out, with
+// the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
 // an expired token, 413 for a body over 8 KB. Changes live in memory until the dev
 // server restarts.
@@ -328,20 +329,26 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/console/api/ops", "/console/api/ops/refresh", "/console/api/actions/preview", "/console/api/actions/perform", "/console/api/namespaces", "/console/api/activity"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
-        if (path === "/console/api/ops") {
+        if (path === "/portal/api/ops") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, feed(nextRefresh, st));
         }
-        if (path === "/console/api/actions/preview" || path === "/console/api/actions/perform") {
+        if (path === "/portal/api/actions/preview" || path === "/portal/api/actions/perform") {
           // An unexpected error goes to Vite's error handler, which answers 500 with it.
           action(req, res, path.endsWith("preview") ? "preview" : "perform").catch(next);
           return;
         }
-        if (path === "/console/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st)));
-        if (path === "/console/api/activity") {
+        if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st)));
+        if (path === "/portal/api/sign-out") {
+          if (req.method !== "POST") return send(res, 405, { error: "method" });
+          if (req.headers["x-capsid-csrf"] !== csrf()) return refuse(res, 403, "csrf validation failed: reload Capsid Portal and try again.");
+          res.statusCode = 204;
+          return res.end();
+        }
+        if (path === "/portal/api/activity") {
           const namespace = url.searchParams.get("namespace") || null;
           const actor = url.searchParams.get("actor") || null;
           const rows = st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor)).slice(0, ACTIVITY_LIMIT);

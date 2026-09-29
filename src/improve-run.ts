@@ -268,7 +268,7 @@ export async function improveStatus(
   only?: string,
   taskPath?: string,
   // The caller's namespaces and whether it is the admin, supplied by the tool from the
-  // resolved agent. Omitted means unrestricted (the cron, the console). A scoped caller
+  // resolved agent. Omitted means unrestricted (the cron, the Portal). A scoped caller
   // sees only its own namespaces and no credential inventory, because both map the
   // boundary it sits behind.
   scope?: { namespaces: "*" | string[]; admin: boolean }

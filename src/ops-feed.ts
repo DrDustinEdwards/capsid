@@ -1,8 +1,7 @@
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { consoleGate } from "./console";
-import { CONSOLE_SESSION_TTL_SECONDS } from "./console-auth";
+import { PORTAL_CSRF_COOKIE, PORTAL_PATH, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate } from "./portal-auth";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { ROSTER } from "./improve-schema";
@@ -17,11 +16,11 @@ import { auditStatement } from "./store-guards";
 import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
-// /console/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
-// plus what changes between passes, read live. POST /console/api/ops/refresh runs one
+// /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
+// plus what changes between passes, read live. POST /portal/api/ops/refresh runs one
 // watcher pass now and returns the new feed.
 //
-// Both answer to consoleGate, exactly as /console does: the administrator's Access
+// Both answer to portalGate, as every Portal route does: the administrator's Access
 // session and ADMIN_EMAIL on every request, and a 403 for any Authorization header.
 // They are routes, not tools, so no grant is checked here (CLAUDE.md, one enforcement
 // point rule); src/scope.ts lists them among the routes gated some other way.
@@ -41,18 +40,17 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //     seatStartState's two keys, and each namespace's pause key.
 // They run concurrently; the longest chain is agentSummaries' two steps.
 
-export const OPS_FEED_PATH = "/console/api/ops";
-export const OPS_REFRESH_PATH = "/console/api/ops/refresh";
+export const OPS_FEED_PATH = "/portal/api/ops";
+export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
-export const OPS_RETURN_TO = "/console/app";
+export const OPS_RETURN_TO = PORTAL_PREFIX;
 
 export const OPS_FEED_READS = { d1: 10, kv: 7 + ROSTER.length } as const;
 
-// The Portal's double-submit CSRF cookie (OpsFeed.csrf). Its own cookie, not the old
-// page's capsid_console_csrf: that one is rotated on every render of /console, which
-// would break a dialog left open in the app. Minted when absent or malformed and then
-// left alone, never rotated per poll, so a preview and its perform carry one value.
-export const PORTAL_CSRF_COOKIE = "capsid_portal_csrf";
+// The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
+// Minted when absent or malformed and then left alone, never rotated per poll, so a
+// preview and its perform carry one value.
+export { PORTAL_CSRF_COOKIE };
 const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
@@ -62,7 +60,7 @@ function portalCsrf(request: Request): { value: string; setCookie: string | null
   const value = crypto.randomUUID();
   return {
     value,
-    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/console; Max-Age=${CONSOLE_SESSION_TTL_SECONDS}`,
+    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${PORTAL_PATH}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
   };
 }
 
@@ -358,13 +356,13 @@ export interface OpsDeps {
 }
 
 export async function handleOpsFeed(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
-  const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   return feedResponse(request, await (deps.feed ?? opsFeed)(env, now));
 }
 
 export async function handleOpsRefresh(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
-  const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   if (request.headers.get(OPS_REFRESH_HEADER) !== OPS_REFRESH_HEADER_VALUE) {
     return textResponse(`forbidden: a refresh must carry the header ${OPS_REFRESH_HEADER}: ${OPS_REFRESH_HEADER_VALUE}. The dashboard sends it; a cross-site form cannot.`, 403);
@@ -404,20 +402,20 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`OPS_REFRESH_PASS_FAILED ${message}`);
-    await env.DB.batch([auditStatement(env.DB, actor, "console-ops-refresh", null, null, { ran: false, error: message })]);
+    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message })]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
 
-  // The click's own audit row, as every console action writes one (src/console-actions.ts).
+  // The click's own audit row, as every Portal action writes one (src/portal-actions.ts).
   let warning: string | null = null;
   try {
     await env.DB.batch([
-      auditStatement(env.DB, actor, "console-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared }),
+      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared }),
     ]);
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not
     // turned into a failure of a pass that ran.
-    warning = `the pass ran, but the console audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
+    warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
     console.error(warning);
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);

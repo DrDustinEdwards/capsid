@@ -186,7 +186,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
 // Allowed from `queued` by any caller that may write the job's namespace, since nobody
 // holds it. From `claimed`, only while the row records no work (no gate hit, no
 // resume, no correction, no result_ref), and only by the holder or the seat
-// (callerIsSeat). Anything later is ended by `fail` or the console's admin fail.
+// (callerIsSeat). Anything later is ended by `fail` or the Portal's Mark failed.
 //
 // The whole rule is in the one keyed UPDATE. The checks before it only choose the
 // refusal message; a driver that hits a gate between the read and the write leaves no
@@ -348,7 +348,7 @@ export interface ResumeOptions {
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`access:<email>`, or `github:<login>` from the console) and a legacy
+// identity (`access:<email>`, or `github:<login>` from the old console) and a legacy
 // operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 

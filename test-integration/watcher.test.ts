@@ -69,7 +69,7 @@ describe("clearFinding", () => {
 describe("a job blocked on a human is not a watcher finding", () => {
   it("a job blocked for two days produces no blocked- finding and no job", async () => {
     // Every blocked job waits on a person by construction, so a reminder per blocked
-    // job was noise (Dustin, 2026-09-26). The console lists blocked jobs with their
+    // job was noise (Dustin, 2026-09-26). The Portal lists blocked jobs with their
     // commands; alerting is a separate item.
     await seed("job_longblocked0", { status: "blocked", posted_by: "github:DrDustinEdwards", updated_at: hoursAgo(48) });
     const { findings, ran } = await gatherFindings(env_, NOW);

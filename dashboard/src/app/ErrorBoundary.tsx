@@ -18,7 +18,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     return (
       <div className="page">
         <div className="callout crit" role="alert">
-          <b>The dashboard failed to render.</b> {e.message}. <a href="/console/app/">Reload</a>
+          <b>The dashboard failed to render.</b> {e.message}. <a href="/portal/">Reload</a>
         </div>
       </div>
     );

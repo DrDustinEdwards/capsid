@@ -1,7 +1,7 @@
 # Capsid Portal
 
-The operations dashboard the capsid Worker serves at `/console/app/`. A React app
-built with Vite, reading one endpoint: `GET /console/api/ops`, whose shape is
+The operations dashboard the capsid Worker serves at `/portal/`. A React app
+built with Vite, reading one endpoint: `GET /portal/api/ops`, whose shape is
 `OpsFeed` in [`../src/ops-types.ts`](../src/ops-types.ts). The app imports those
 types with `import type` and never imports runtime code from the Worker.
 
@@ -13,8 +13,8 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:5173/console/app/. The dev server answers
-`/console/api/ops` and `POST /console/api/ops/refresh` from
+Open http://localhost:5173/portal/. The dev server answers
+`/portal/api/ops` and `POST /portal/api/ops/refresh` from
 [`dev/sample-feed.json`](dev/sample-feed.json), a fake feed (sites under
 `example.com`, namespaces `sample*`), with every timestamp shifted so the feed
 reads as current. A second refresh within 30 s answers 429, as the Worker does.
@@ -55,7 +55,7 @@ A missing `dist/` or manifest is a failure, not a pass.
 - Served with `script-src 'self'; style-src 'self'; font-src 'self'`: no inline
   script or style in `index.html`, fonts self-hosted from `@fontsource`, and
   `assetsInlineLimit: 0` so nothing becomes a `data:` URL.
-- Base path `/console/app/`; hashed file names under `assets/`.
+- Base path `/portal/`; hashed file names under `assets/`.
 - Read only. A blocked job's drawer copies its command and the resume call; the
   dashboard never makes the call.
 - A number the feed does not have is shown as "No data" with the reason, never as 0.

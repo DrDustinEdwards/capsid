@@ -17,7 +17,7 @@ import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 // `agent:<name>` (agentActor in src/agents-schema.ts), and the name is unique in the
 // agents table and never reused, so the string identifies exactly one credential. The
 // admin is `access:<email>` on the MCP login since it moved to Cloudflare Access
-// (docs/auth.md, 2026-09-27) and `github:<login>` on the console until it moves too.
+// (docs/auth.md, 2026-09-27) and `github:<login>` on rows the old console wrote before it moved to Access.
 const ACTOR_SHAPE = /^(access:|github:|opkey:|agent:)/;
 
 export function actorShapeRefusal(action: string, actor: string): JobResult | null {
@@ -144,7 +144,7 @@ export function movedBeforeFailing(action: string, id: string, current: JobRow |
 // outcome row, so making every claim pay for that read would put a table scan in
 // front of the queue's hottest path.
 //
-// It goes through recordFor, the same function improve_status and the console call,
+// It goes through recordFor, the same function improve_status and the Portal call,
 // so the bar a claim is measured against is the number a human can read on the page.
 // `null` for namespaces because the improve-loop columns play no part in this
 // comparison, and computing them here would attribute a namespace's attempts to

@@ -267,7 +267,7 @@ export function improveExec(sql: string, params: unknown[], rows: ImproveRows): 
   }
 
   // The per-namespace kept and reverted totals (src/agent-record.ts,
-  // src/console-reputation.ts), matched before the reader below, which would return
+  // src/ops-feed.ts), matched before the reader below, which would return
   // one raw row per run instead of one summed row per namespace.
   if (/^SELECT namespace, .+ FROM improve_runs GROUP BY namespace$/i.test(text)) {
     return { handled: true, results: selectRows(rows.improve_runs, text, params) };

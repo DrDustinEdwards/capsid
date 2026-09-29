@@ -73,8 +73,8 @@ export interface HealthReport {
   backup: { last_ok: string | null; age_hours: number | null; warning?: string };
 }
 
-// /health serializes this and the console header renders it, so the console shows
-// the same values the live gate asserts.
+// /health serializes this and the watcher's pass records it for Capsid Portal, so the
+// Portal shows the same values the live gate asserts.
 export async function healthReport(env: Env): Promise<HealthReport> {
   const provenance = {
     sha: env.BUILD_SHA ?? "unknown",

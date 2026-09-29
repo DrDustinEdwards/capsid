@@ -45,7 +45,7 @@ for (const [name, status, location, reason] of [
   ["another app's endpoint", 302, signIn({}, `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/other-app/authorization`), /not the Capsid app's authorization endpoint/],
   ["another client_id", 302, signIn({ client_id: "other-app" }), /client_id is not/],
   ["a redirect_uri on another host", 302, signIn({ redirect_uri: "https://capsid.dustinedwards.info/callback" }), /redirect_uri is/],
-  ["the console callback", 302, signIn({ redirect_uri: `${ORIGIN}/console/callback` }), /redirect_uri is/],
+  ["the Portal callback", 302, signIn({ redirect_uri: `${ORIGIN}/portal/callback` }), /redirect_uri is/],
   ["no PKCE method", 302, signIn({ code_challenge_method: null }), /not S256/],
   ["plain PKCE", 302, signIn({ code_challenge_method: "plain" }), /not S256/],
   ["no challenge", 302, signIn({ code_challenge: null }), /not a S256 challenge/],

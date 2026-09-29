@@ -2,8 +2,8 @@ import { adminAgentForEmail } from "./agents";
 import { revokeAgent } from "./agents-admin";
 import { agentActor } from "./agents-schema";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
-import { consoleGate } from "./console";
-import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./console-activity";
+import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
+import { portalGate, portalSignOutCookies } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
@@ -20,12 +20,12 @@ import { auditStatement } from "./store-guards";
 
 // The Portal's controls: the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
-// src/ops-types.ts). The old page (POST /console, src/console-actions.ts) calls the
-// same dispatch, so no transition is implemented twice.
+// src/ops-types.ts). They replaced the old /console page's forms, which called this
+// same dispatch (capsid/research/design-portal-unify.md), so no transition is
+// implemented twice.
 //
 // No merge (it can start a CI deploy, so it stays behind can_merge) and no mint (a
-// mint hands out a key). test/console-actions.test.ts and test/portal-actions.test.ts
-// assert both absences.
+// mint hands out a key). test/portal-actions.test.ts asserts both absences.
 //
 // Two requests per action, as ruled 2026-09-11. The preview reads the current state,
 // writes nothing, and returns what will change with a signed token that carries the
@@ -34,20 +34,24 @@ import { auditStatement } from "./store-guards";
 // transition is guarded on the state it moves from, so a second perform is refused by
 // the mutator or changes nothing.
 //
-// Every route answers to consoleGate, as the feed does. They are routes, not tools, so
+// Every route answers to portalGate, as the feed does. They are routes, not tools, so
 // no grant is checked here (CLAUDE.md, one enforcement point rule); src/scope.ts lists
 // them among the routes gated some other way.
 
-export const PORTAL_PREVIEW_PATH = "/console/api/actions/preview";
-export const PORTAL_PERFORM_PATH = "/console/api/actions/perform";
-export const PORTAL_NAMESPACES_PATH = "/console/api/namespaces";
-export const PORTAL_ACTIVITY_PATH = "/console/api/activity";
+export const PORTAL_PREVIEW_PATH = "/portal/api/actions/preview";
+export const PORTAL_PERFORM_PATH = "/portal/api/actions/perform";
+export const PORTAL_NAMESPACES_PATH = "/portal/api/namespaces";
+export const PORTAL_ACTIVITY_PATH = "/portal/api/activity";
+export const PORTAL_SIGN_OUT_PATH = "/portal/api/sign-out";
+// Every Portal data and action route sits under here. A path under it that no route
+// names is a JSON 404 (handlePortalApiNotFound), never the app's page.
+export const PORTAL_API_PREFIX = "/portal/api/";
 // The double-submit CSRF header: the feed's csrf value, compared with the
 // capsid_portal_csrf cookie. A cross-site page can neither read the value nor set the
 // header without a preflight this Worker does not answer.
 export const PORTAL_CSRF_HEADER = "X-Capsid-CSRF";
 
-// Same cap as the old page's form, applied at the stream before parsing.
+// Same cap as the consent form, applied at the stream before parsing.
 const BODY_MAX_BYTES = 65_536;
 const TOKEN_TTL_SECONDS = 5 * 60;
 // Its own context string, so this key differs from every other key derived from
@@ -67,12 +71,12 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
 
 export type ActionParams = Record<string, string | undefined>;
 
-// The click's own audit row is `<prefix><action>`. It stays console- until the Portal
-// moves to /portal, when this one line changes.
-const CLICK_AUDIT_PREFIX = "console-";
+// The click's own audit row is `<prefix><action>`. Rows written before the move to
+// /portal say console-<action>; a query across that date names both (docs/schema.md).
+const CLICK_AUDIT_PREFIX = "portal-";
 
 /** What each action is about to do, naming the target, for the confirm step. */
-export function describeAction(action: PortalAction, params: ActionParams): string {
+function describeAction(action: PortalAction, params: ActionParams): string {
   const ns = params.namespace ?? "";
   const id = params.id ?? "";
   switch (action) {
@@ -116,7 +120,7 @@ export type ActionResult =
 
 /** One action, performed by the administrator `email`: the shared mutator the MCP tool
  *  calls, then the click's audit row. Nothing here reimplements a transition. */
-export async function performAction(env: Env, email: string, now: Date, action: PortalAction, params: ActionParams): Promise<ActionResult> {
+async function performAction(env: Env, email: string, now: Date, action: PortalAction, params: ActionParams): Promise<ActionResult> {
   const agent = adminAgentForEmail(email);
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
@@ -203,8 +207,8 @@ export async function performAction(env: Env, email: string, now: Date, action: 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (committed) {
-      // The action happened; only the console's own audit row failed, so no refusal.
-      const warning = `${action} completed, but the console audit row naming ${actor} was not written: ${message}`;
+      // The action happened; only the Portal's own audit row failed, so no refusal.
+      const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
       console.error(warning);
       return { ok: true, summary, warning };
     }
@@ -221,9 +225,9 @@ function textResponse(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
 }
 
-function jsonResponse(body: unknown, extra: Record<string, string> = {}): Response {
+function jsonResponse(body: unknown, extra: Record<string, string> = {}, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...extra },
   });
 }
@@ -253,7 +257,7 @@ type Gated = { ok: true; email: string; csrf: string; body: Record<string, unkno
 /** The checks both POSTs run, in order: the session, the fetch metadata, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
 async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
-  const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate;
 
   // A browser names where a request came from. Absent (an older browser, or curl with
@@ -521,7 +525,7 @@ async function verifyConfirm(env: Env, token: string, email: string, now: Date):
   return { ok: true, claims };
 }
 
-/** POST /console/api/actions/preview: what the action will change, and a token to
+/** POST /portal/api/actions/preview: what the action will change, and a token to
  *  perform it. Writes nothing. */
 export async function handlePortalPreview(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
@@ -552,7 +556,7 @@ export interface PortalDeps {
   feed?: (env: Env, now: Date) => Promise<OpsFeedData>;
 }
 
-/** POST /console/api/actions/perform: the action a preview signed, run through the
+/** POST /portal/api/actions/perform: the action a preview signed, run through the
  *  shared mutator, then the fresh feed. */
 export async function handlePortalPerform(request: Request, env: Env, now: Date = new Date(), deps: PortalDeps = {}): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
@@ -589,10 +593,10 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
   return jsonResponse(performed, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }
 
-/** GET /console/api/namespaces: every roster namespace as improve_status reports it,
+/** GET /portal/api/namespaces: every roster namespace as improve_status reports it,
  *  from the same function, so the Portal and the tool agree (ruled 2026-09-11). */
 export async function handlePortalNamespaces(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
-  const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const status = await improveStatus(env);
   const body: PortalNamespaces = {
@@ -615,9 +619,9 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
   return jsonResponse(body);
 }
 
-/** GET /console/api/activity?namespace=&actor=: the old page's activity read. */
+/** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. */
 export async function handlePortalActivity(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
-  const gate = await consoleGate(request, env, now, OPS_RETURN_TO);
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const filter = activityFilterFrom(new URL(request.url));
   const rows = await loadActivity(env.DB, filter);
@@ -628,4 +632,26 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
     limit: ACTIVITY_LIMIT,
   };
   return jsonResponse(body);
+}
+
+/** POST /portal/api/sign-out, body {}: expire the session and CSRF cookies in this
+ *  browser. The same checks as an action (the session, Sec-Fetch-Site, the body cap,
+ *  the CSRF pair), so a cross-site page cannot sign the administrator out. It ends the
+ *  Portal session only: the Access session at the team domain is Cloudflare's, so the
+ *  next visit to /portal may sign in again without a prompt. */
+export async function handlePortalSignOut(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gated = await gateActionRequest(request, env, now);
+  if (!gated.ok) return gated.response;
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  for (const cookie of portalSignOutCookies()) headers.append("Set-Cookie", cookie);
+  return new Response(null, { status: 204, headers });
+}
+
+/** Any other path under /portal/api/, any method: behind the gate like every Portal
+ *  route, then a JSON 404, so a typo in the app never reads the app's own page as data. */
+export async function handlePortalApiNotFound(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
+  if (!gate.ok) return gate.response;
+  const path = new URL(request.url).pathname;
+  return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, {}, 404);
 }

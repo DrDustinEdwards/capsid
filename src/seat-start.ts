@@ -117,7 +117,7 @@ export async function startSeatSession(env: Env, agent: Agent, now: Date, id: st
   }
   const state = await seatStartState(env);
   if (!state.enabled) {
-    return refuse("start", `seat-started sessions are switched off (APP_KV ${SEAT_START_KEY} is not "on"). The admin turns them on with improve_run action "seat_start" or from the console.`);
+    return refuse("start", `seat-started sessions are switched off (APP_KV ${SEAT_START_KEY} is not "on"). The admin turns them on with improve_run action "seat_start" or from Capsid Portal.`);
   }
   const job: JobRow | null = await readJob(env.DB, id);
   if (!job) return refuse("start", `no job ${id}.`);

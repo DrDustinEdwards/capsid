@@ -33,7 +33,7 @@ import {
 // finding posts once and is refused every pass after that until it clears. A
 // separate fingerprint table would be a second answer that could disagree.
 
-export const WATCHER_NAME = "watcher";
+const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
 
 const WATCHER_CADENCE_KEY = "watcher:cadence-minutes";
@@ -596,7 +596,7 @@ export async function runPass(readers: PassReaders): Promise<{ posted: string[];
 }
 
 /** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
- *  (the console's Refresh, src/ops-feed.ts), which skips that check and nothing else. */
+ *  (the Portal's Refresh, src/ops-feed.ts), which skips that check and nothing else. */
 export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>, opts: { force?: boolean } = {}): Promise<WatcherReport> {
   const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);

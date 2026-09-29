@@ -8,7 +8,7 @@ export interface Env {
   OAUTH_PROVIDER: OAuthHelpers;
   OPERATOR_KEY_HASH: string;
   COOKIE_ENCRYPTION_KEY: string;
-  // The MCP and console logins' upstream: Cloudflare Access for SaaS (OIDC),
+  // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
   // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody.
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_SAAS_CLIENT_ID?: string;
@@ -19,8 +19,8 @@ export interface Env {
   // Unset, the deploy and error columns show no data and say why.
   CF_OPS_TOKEN?: string;
   CF_ACCOUNT_ID?: string;
-  // The dashboard app's built files (dashboard/dist), served under /console/app/ only
-  // after the console gate. Absent where no assets are configured.
+  // The dashboard app's built files (dashboard/dist), served under /portal/ only
+  // after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;
   // GitHub App. No pinned installation id: resolved per owner and repo.
   GITHUB_APP_CLIENT_ID: string;

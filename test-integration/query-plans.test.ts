@@ -28,10 +28,10 @@ const HOT_TABLES = [
 const WHOLE_TABLE_BY_DESIGN = [
   { file: "backup.ts", sql: /^SELECT \* FROM /i, why: "the nightly dump reads every row of a table on purpose" },
   {
-    file: "console-activity.ts",
+    file: "portal-activity.ts",
     sql: /^SELECT at, actor, action, namespace, path FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/i,
     why:
-      "the console's UNFILTERED activity read. With no WHERE and ORDER BY id DESC LIMIT 50, SQLite walks the rowid " +
+      "the Portal's UNFILTERED activity read. With no WHERE and ORDER BY id DESC LIMIT 50, SQLite walks the rowid " +
       "b-tree backwards and stops at 50 rows: the plan carries NO TEMP B-TREE, so nothing is sorted, and it reads " +
       "LIMIT rows rather than the table. No index improves on reading the last 50 rowids. The FILTERED variants of " +
       "this same statement are not exempt and are checked by name below, because those are the ones that could scan.",

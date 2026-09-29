@@ -23,7 +23,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - **Repo access.** A dedicated GitHub App mints short-lived installation tokens. The Worker reads and writes mapped repositories with no long-lived credential stored. The namespace mapping is the authorization boundary.
 - **The work queue.** A job hands a task from a chat that has no shell to a session that has no conversation. Bodies are signed, claims take a four-hour lease, and a job reaching a push, a deploy or a merge blocks with the exact command a human runs.
 - **The self-improvement loop.** An optional nightly loop proposes one scoped change at a time, has each repo's own CI score it against hidden tests, and opens a pull request only for changes that improved the repo without regressing an anchor. Off by default, and it never merges.
-- **Capsid Portal.** The admin view at `/console`: a summary page showing every namespace, and an operations app at `/console/app/`. The summary shows pauses, job counts, the command each blocked job waits on, the agent inventory and recent activity. It renders what the tools already compute.
+- **Capsid Portal.** The admin app at `/portal/`: every site, the job queue, agents, namespaces, recent activity, backups and CI, with eight controls that each preview what they will change before anything does. It renders what the tools already compute.
 - **Backups.** A daily cron exports every table to R2 as JSON plus a markdown mirror of every document body. `DrDustinEdwards/capsid-backups` mirrors the dumps off-account; this repo mints that job's credential and sets no schedule for it. Restore is documented and rehearsed weekly against a scratch database.
 - **Audit trail.** Every write snapshots the prior version into `document_versions` and appends to `audit_log`. Every destructive document write asks for confirmation first.
 
@@ -36,8 +36,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes, the nightly driver and the watcher
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts
 - [docs/skills.md](docs/skills.md) how an idea abstracted from work that landed is offered to other projects
-- [docs/console.md](docs/console.md) Capsid Portal: what the summary page shows, who gets in, and what it cannot do
-- [docs/watch-floor.md](docs/watch-floor.md) Capsid Portal's operations app: its data, what "no data" means, the Cloudflare token, and building it
+- [docs/portal.md](docs/portal.md) Capsid Portal: its views and data, what "no data" means, who gets in, its routes and controls, the Cloudflare token, and building it
 - [docs/consolidation.md](docs/consolidation.md) the wiki maintenance loop, and the confirmation step on destructive writes
 - [docs/backups.md](docs/backups.md) what the daily dump contains, and three restore paths in the order to try them
 - [docs/rollback.md](docs/rollback.md) serving the previous Worker version when a deploy shipped a bad one
@@ -50,8 +49,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
-- `GET /console`, `POST /console`, `GET /console/json`, `GET /console/callback` Capsid Portal's summary page, its actions and its JSON twin. Admin session only; a bearer token is refused with 403. `/console.json` answers 301 to `/console/json`
-- `GET /console/api/ops`, `POST /console/api/ops/refresh`, `POST /console/api/actions/preview`, `POST /console/api/actions/perform`, `GET /console/api/namespaces`, `GET /console/api/activity`, `GET /console/app/` Capsid Portal's operations app: its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the eight controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces and activity reads, and the app's files. Same gate as the summary page (docs/console.md)
+- `GET /portal/`, `GET /portal/callback`, `GET /portal/api/ops`, `POST /portal/api/ops/refresh`, `POST /portal/api/actions/preview`, `POST /portal/api/actions/perform`, `GET /portal/api/namespaces`, `GET /portal/api/activity`, `POST /portal/api/sign-out` Capsid Portal: the app's files, its sign-in return, its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the eight controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces and activity reads, and sign out. Admin session only; a bearer token is refused with 403 (docs/portal.md). Nothing answers under `/console`
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
@@ -102,7 +100,7 @@ Every write snapshots the prior version into `document_versions` and appends to 
 
 6. Create a Cloudflare Access for SaaS application (for login) in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
 
-   - Redirect URLs, both of them, spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow and `https://capsid.<your-subdomain>.workers.dev/console/callback` for Capsid Portal.
+   - Redirect URLs, both of them, spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow and `https://capsid.<your-subdomain>.workers.dev/portal/callback` for Capsid Portal.
    - Scopes openid, email and profile, PKCE on, and a policy that allows your email only.
 
    Then set the secrets:

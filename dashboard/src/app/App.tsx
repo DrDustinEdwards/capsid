@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { APP_URL, POLL_MS, requestRefresh, useOpsFeed } from "../lib/api";
+import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, passStale } from "../lib/derive";
 import { ago, ms, utc } from "../lib/format";
 import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
@@ -144,6 +144,20 @@ export function App() {
     }
     say(`Refresh failed: ${r.message}`);
   }, [accept, feed, say, signOut, spinning]);
+
+  // Sign out: the Worker expires the Portal's cookies, then the signed-out page says
+  // it was a choice, not an expiry.
+  const [leaving, setLeaving] = useState(false);
+  const [leftByChoice, setLeftByChoice] = useState(false);
+  const leave = useCallback(async () => {
+    if (!feed || leaving) return;
+    setLeaving(true);
+    const r = await signOutRequest(feed.csrf);
+    setLeaving(false);
+    if (r.kind === "error") return say(`Sign out failed: ${r.message}`);
+    setLeftByChoice(true);
+    signOut();
+  }, [feed, leaving, say, signOut]);
 
   const theme = useCallback(() => say(toggleTheme() === "dark" ? "Dark" : "Light"), [say]);
 
@@ -324,9 +338,13 @@ export function App() {
       <div className="page">
         <div className="signedout" role="alert">
           <h1>Signed out</h1>
-          <p>Your console session ended, so the feed stopped answering.</p>
+          <p>
+            {leftByChoice
+              ? "You signed out of Capsid Portal in this browser. Signing in again may not ask for your email if your Access session is still open."
+              : "Your Portal session ended, so the feed stopped answering."}
+          </p>
           <a className="btn" href={APP_URL}>
-            Reload to sign in
+            {leftByChoice ? "Sign in again" : "Reload to sign in"}
           </a>
         </div>
       </div>
@@ -392,6 +410,11 @@ export function App() {
         <button type="button" className="btn iconbtn" title="Theme (t)" aria-label="Switch theme" onClick={theme}>
           <ThemeIcon />
         </button>
+        {!signedOut && (
+          <button type="button" className="btn" onClick={() => void leave()} disabled={!feed || leaving}>
+            Sign out
+          </button>
+        )}
       </header>
       <nav className="rail" id="rail" aria-label="Sections">
         {VIEWS.map((v) => {
