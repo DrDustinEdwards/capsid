@@ -14,7 +14,7 @@ import {
   siteErrorFindings,
   type Finding,
 } from "../src/watcher.ts";
-import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
 // The watcher's read of Cloudflare for the Watch Floor (src/ops-cloudflare.ts), and the
@@ -353,15 +353,19 @@ test("site-down is owned by the probes and site-errors by the cloudflare check, 
   const open = new Map([["site-errors-sample", "j1"], ["site-down-sample", "j2"]]);
   const cleared: string[] = [];
   const pass = (ran: Set<"site probes" | "cloudflare">) =>
-    runPass({
-      findings: async () => ({ findings: [] as Finding[], ran }),
-      open: async () => open,
-      clear: async (id) => {
-        cleared.push(id);
-        return true;
+    runPass(
+      {
+        findings: async () => ({ findings: [] as Finding[], ran }),
+        open: async () => open,
+        clear: async (id) => {
+          cleared.push(id);
+          return true;
+        },
+        post: async () => ({ ok: true as const, jobId: "job_new" }),
+        memory: fakeFindingMemory().memory,
       },
-      post: async () => ({ ok: true }),
-    });
+      NOW
+    );
   await pass(new Set(["site probes"]));
   assert.deepEqual(cleared, ["j2"], "a site-errors job was cleared on a pass where the cloudflare check did not run");
   cleared.length = 0;
