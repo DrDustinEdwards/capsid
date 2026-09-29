@@ -21,7 +21,7 @@ import { auditStatement } from "./store-guards";
 // The confirm is a second request: the first POST renders what will happen and
 // changes nothing; the second, with the same CSRF, performs it.
 
-const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "seat_start", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
+export const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "seat_start", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 
 function isConsoleAction(value: string): value is ConsoleAction {
