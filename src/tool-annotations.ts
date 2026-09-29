@@ -65,6 +65,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   register_namespace: additive({ idempotent: false, openWorld: false }),
   // Sets the mapping to the value given; a repeat sets the same mapping.
   update_namespace: destructive({ idempotent: true, openWorld: false }),
+  // Deletes the namespaces row, its ops_sites row and, with cascade, every live
+  // document; preview writes nothing, but one tool carries one hint. A repeat finds no
+  // namespace and is refused.
+  delete_namespace: destructive({ idempotent: true, openWorld: false }),
 
   list_repo_tree: read({ idempotent: true, openWorld: true }),
   read_repo_file: read({ idempotent: true, openWorld: true }),
