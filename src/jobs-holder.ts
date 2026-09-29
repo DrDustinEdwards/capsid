@@ -10,7 +10,7 @@ import {
   atCorrectionCap,
   cappedSummary,
 } from "./jobs-schema";
-import { reviewGate, type GateOutcome } from "./review";
+import { reviewGate, type GateOutcome, type Review } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { attributionStatements, failureNoteStatements } from "./skills-records";
@@ -25,7 +25,8 @@ import {
   type JobOutcomeRow,
 } from "./job-outcomes";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
-import { correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { actorKind, touchStatement } from "./job-touches";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -68,6 +69,9 @@ async function holderTransition(
     // The skills the driver was offered and used. Names only: the credit direction
     // comes from signalFor(), which reads what the Worker verified on GitHub.
     skills?: JobSkills;
+    // Human-touch rows (src/job-touches.ts) for this transition, built from the row as
+    // the UPDATE leaves it, so they commit or abort with it. Only block writes any.
+    touches?: (job: JobRow) => D1PreparedStatement[];
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -133,6 +137,7 @@ async function holderTransition(
   // complete, fail and block all end the run that held the job, so a runner key bound
   // to it stops here, in the same batch.
   if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
+  if (patch.touches) statements.push(...patch.touches(job));
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
     const row = outcomeFrom(job, verdict, now, patch.skills);
@@ -281,6 +286,7 @@ async function reviewRefusal(
           `review by ${review.by}: CHANGES.${said} This is correction ${spentOnWork + 1} against this work, past the cap of ${CORRECTION_CAP}: ` +
           `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
         fromReview: true,
+        review,
       }));
     }
     // Back to the driver, spending a correction from the same budget the retry cap
@@ -301,6 +307,7 @@ async function reviewRefusal(
         at: review.at,
         corrections_count: job.corrections_count,
       }),
+      reviewTouch(env.DB, job, review, now),
     ]);
     if (!won) return refuse(action, `${id} moved between reading it and recording the review. Ask again.`);
     return { ok: false, action, job, refusal: `${summary} The job stays claimed: fix it and hand it on again. This spent a correction (${job.corrections_count} of ${CORRECTION_CAP}).` };
@@ -309,7 +316,22 @@ async function reviewRefusal(
   // BLOCK: blocked for the seat, with the objection as the reason, through the
   // ordinary block path so the gate counter and the mirror document behave as they do
   // for any other block.
-  return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true }));
+  return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true, review }));
+}
+
+// A CHANGES or BLOCK acted on is a touch by the reviewer named on the verdict, not by
+// the driver whose call met it. It ends no wait, so it carries no waited_ms.
+function reviewTouch(db: D1Database, job: JobRow, review: Review, now: Date): D1PreparedStatement {
+  return touchStatement(db, {
+    job_id: job.id,
+    namespace: job.namespace,
+    kind: "review",
+    actor: review.by,
+    actor_kind: actorKind(review.by, { reviewer: true }),
+    detail: { verdict: review.verdict, at: review.at, ...(review.said ? { said: review.said } : {}) },
+    sinceGate: false,
+    at: now.toISOString(),
+  });
 }
 
 // A transition that ended somewhere other than asked is not a success. A complete or
@@ -432,7 +454,9 @@ export async function blockJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { reason: string; command?: string; fromReview?: boolean }
+  // review: the verdict that produced this block, when the gate blocked it, recorded
+  // as the reviewer's touch beside the gate.
+  args: { reason: string; command?: string; fromReview?: boolean; review?: Review }
 ): Promise<JobResult> {
   if (!args.reason?.trim()) return refuse("block", "block needs a reason: what gate was hit.");
   // The review gate (see reviewRefusal). `fromReview` is set when the gate itself
@@ -453,5 +477,21 @@ export async function blockJob(
     result_summary: capped ? cappedSummary(summary) : summary,
     lease_expires: null,
     bumpBlocked: true,
+    // The gate is the start of a wait for someone else, which the resume that ends it
+    // measures from. The reason and command as the driver gave them, before the cap
+    // wording is added to the summary.
+    touches: (job) => [
+      ...(args.review ? [reviewTouch(env.DB, job, args.review, now)] : []),
+      touchStatement(env.DB, {
+        job_id: job.id,
+        namespace: job.namespace,
+        kind: "gate",
+        actor: agent.actor,
+        actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
+        detail: { reason: args.reason, command: args.command ?? null },
+        sinceGate: false,
+        at: now.toISOString(),
+      }),
+    ],
   });
 }
