@@ -1,19 +1,16 @@
-import { adminAgentForEmail } from "./agents";
-import { revokeAgent } from "./agents-admin";
 import { getCookie, timingSafeEqual } from "./auth";
 import { CONSOLE_PATH, consoleGate } from "./console";
 import { CONSOLE_CSRF_COOKIE } from "./console-auth";
 import { escapeHtml } from "./html";
 import type { Env } from "./env";
-import { improveControl } from "./improve-run";
-import { adminFailJob, releaseJob, resumeJob } from "./jobs";
-import { setSeatStart } from "./seat-start";
+import { describeAction, performAction, type ActionParams } from "./portal-actions";
 import { readBoundedText } from "./improve-scorer";
-import { auditStatement } from "./store-guards";
 
 // The console's controls. Each is the admin session, a CSRF token, a confirm step,
 // then the shared mutator the MCP tool calls, then an audit row naming the person who
-// clicked. Nothing here reimplements a transition.
+// clicked. The mutator dispatch and the audit row are performAction in
+// src/portal-actions.ts, which the Portal's endpoints call too; nothing here
+// reimplements a transition.
 //
 // No merge (it can start a CI deploy, so it stays behind can_merge) and no mint (a
 // mint hands out a key). test/console-actions.test.ts asserts both absences.
@@ -21,7 +18,7 @@ import { auditStatement } from "./store-guards";
 // The confirm is a second request: the first POST renders what will happen and
 // changes nothing; the second, with the same CSRF, performs it.
 
-const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "seat_start", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
+export const CONSOLE_ACTIONS = ["pause", "unpause", "mode", "seat_start", "resume_job", "fail_job", "release_job", "revoke_agent"] as const;
 export type ConsoleAction = (typeof CONSOLE_ACTIONS)[number];
 
 function isConsoleAction(value: string): value is ConsoleAction {
@@ -35,35 +32,12 @@ function textResponse(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 }
 
-function required(form: URLSearchParams, field: string): string | null {
-  const value = form.get(field);
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-// What each action is about to do, naming the target, for the confirm step.
-function describe(action: ConsoleAction, form: URLSearchParams): string {
-  const ns = form.get("namespace") ?? "";
-  const id = form.get("id") ?? "";
-  switch (action) {
-    case "pause":
-      return `Pause the improve loop for ${ns}. It stays paused until somebody unpauses it: the pause key has no expiry, deliberately.`;
-    case "unpause":
-      return `Unpause ${ns}. The loop will open a run for it on the next opener.`;
-    case "mode":
-      return `Set the improve mode to ${form.get("value") ?? ""} for every namespace.`;
-    case "seat_start":
-      return form.get("value") === "on"
-        ? "Turn seat-started sessions ON. The seat may then start Claude Code sessions on GitHub's runners for queued capsid and dustinedwards jobs, billed to your subscription, up to the cap. Confirm on the Anthropic billing page after the first run that nothing was billed as API usage."
-        : "Turn seat-started sessions OFF. No new session starts; one already running finishes.";
-    case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
-    case "release_job":
-      return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
-    case "fail_job":
-      return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
-    case "revoke_agent":
-      return `Revoke the agent ${form.get("name") ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
-  }
+// The form as the dispatch reads it. The first value of a repeated field wins, as
+// URLSearchParams.get does.
+function paramsOf(form: URLSearchParams): ActionParams {
+  const params: ActionParams = {};
+  for (const [key, value] of form) if (!Object.hasOwn(params, key)) params[key] = value;
+  return params;
 }
 
 function confirmPage(action: ConsoleAction, form: URLSearchParams, csrf: string): Response {
@@ -88,7 +62,7 @@ a { display: inline-block; margin-left: 1rem; }
 <body>
 <div class="card">
 <h1>Confirm: ${escapeHtml(action)}</h1>
-<p>${escapeHtml(describe(action, form))}</p>
+<p>${escapeHtml(describeAction(action, paramsOf(form)))}</p>
 <form method="post" action="${CONSOLE_PATH}">
 ${carried}
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
@@ -109,12 +83,6 @@ ${carried}
       "X-Frame-Options": "DENY",
     },
   });
-}
-
-// The click's own audit row, naming the admin. The shared mutators' rows do not say
-// who asked (improveControl records a pause as `improve-loop`).
-async function auditClick(env: Env, actor: string, action: ConsoleAction, namespace: string | null, params: unknown) {
-  await env.DB.batch([auditStatement(env.DB, actor, `console-${action}`, namespace, null, params)]);
 }
 
 export async function handleConsoleAction(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
@@ -144,93 +112,19 @@ export async function handleConsoleAction(request: Request, env: Env, now: Date 
 
   if (form.get("confirm") !== "yes") return confirmPage(action, form, csrfField);
 
-  const agent = adminAgentForEmail(gate.user.email);
-  const actor = agent.actor;
-  // Set once the mutator succeeds, so the catch knows whether the action happened.
-  let committed = false;
-  try {
-    switch (action) {
-      case "pause":
-      case "unpause": {
-        const namespace = required(form, "namespace");
-        if (!namespace) return textResponse(`${action} needs a namespace.`, 400);
-        const reason = form.get("reason")?.trim() || undefined;
-        const result = await improveControl(env, action, { namespace, reason });
-        committed = true;
-        await auditClick(env, actor, action, namespace, result);
-        break;
-      }
-      case "mode": {
-        const value = required(form, "value");
-        if (!value) return textResponse("mode needs a value.", 400);
-        const result = await improveControl(env, "mode", { value });
-        committed = true;
-        await auditClick(env, actor, action, null, result);
-        break;
-      }
-      case "seat_start": {
-        const value = required(form, "value");
-        if (!value) return textResponse("seat_start needs a value.", 400);
-        const result = await setSeatStart(env, actor, { value });
-        committed = true;
-        await auditClick(env, actor, action, null, result);
-        break;
-      }
-      case "resume_job":
-      case "release_job":
-      case "fail_job": {
-        const id = required(form, "id");
-        const reason = required(form, "reason");
-        if (!id) return textResponse(`${action} needs a job id.`, 400);
-        if (!reason) {
-          return textResponse(
-            action === "resume_job"
-              ? "resume needs a reason: what you approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen."
-              : action === "release_job"
-                ? "release needs a reason: why the holder is not coming back."
-                : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
-            400
-          );
-        }
-        const result =
-          action === "resume_job"
-            ? await resumeJob(env, agent, now, id, reason)
-            : action === "release_job"
-              ? await releaseJob(env, agent, now, id, reason)
-              : await adminFailJob(env, agent, now, id, reason);
-        if (!result.ok) return textResponse(result.refusal ?? `${action} was refused.`, 400);
-        committed = true;
-        await auditClick(env, actor, action, result.job?.namespace ?? null, { id, reason });
-        break;
-      }
-      case "revoke_agent": {
-        const name = required(form, "name");
-        if (!name) return textResponse("revoke_agent needs an agent name.", 400);
-        const result = await revokeAgent(env.DB, actor, name);
-        if (!result.ok) return textResponse(result.refusal ?? `revoking ${name} was refused.`, 400);
-        committed = true;
-        await auditClick(env, actor, action, null, { name });
-        break;
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (committed) {
-      // The action happened; only the console's own audit row failed, so no 400.
-      const warning = `${action} completed, but the console audit row naming ${actor} was not written: ${message}`;
-      console.error(warning);
-      return new Response(warning, {
-        status: 303,
-        headers: {
-          Location: CONSOLE_PATH,
-          "Content-Type": "text/plain;charset=utf-8",
-          // A header value must be printable Latin-1; the error text is not guaranteed to be.
-          "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " "),
-        },
-      });
-    }
-    // improveControl throws on a bad value, with a message that says so.
-    return textResponse(message, 400);
+  const result = await performAction(env, gate.user.email, now, action, paramsOf(form));
+  if (!result.ok) return textResponse(result.refusal, 400);
+  if (result.warning) {
+    // The action happened; only the console's own audit row failed, so no 400.
+    return new Response(result.warning, {
+      status: 303,
+      headers: {
+        Location: CONSOLE_PATH,
+        "Content-Type": "text/plain;charset=utf-8",
+        // A header value must be printable Latin-1; the error text is not guaranteed to be.
+        "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " "),
+      },
+    });
   }
 
   // POST then redirect, so a reload does not repeat the action.

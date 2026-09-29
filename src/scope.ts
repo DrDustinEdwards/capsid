@@ -163,6 +163,12 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/console/api/ops": "the Watch Floor feed, gated by consoleGate: the administrator's Access session, and a 403 for any bearer",
   "/console/api/ops/refresh":
     "one watcher pass on demand, gated by consoleGate, then a same-origin header, then a KV rate limit that fails closed",
+  "/console/api/actions/preview":
+    "a Portal action's preview, which writes nothing: consoleGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
+  "/console/api/actions/perform":
+    "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
+  "/console/api/namespaces": "the Portal's per-namespace status, read through improve_status's function, gated by consoleGate",
+  "/console/api/activity": "the Portal's bounded audit_log read, gated by consoleGate",
   "/console/app": "the Watch Floor app's page, served from ASSETS only after consoleGate admits the administrator's session",
   "/console/app/*": "the Watch Floor app's files, served from ASSETS only after consoleGate admits the administrator's session",
 };

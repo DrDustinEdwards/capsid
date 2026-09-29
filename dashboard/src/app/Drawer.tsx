@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useApp, type DrawerType } from "./ctx";
-import type { OpsJob, SiteSnapshot } from "../types";
+import type { OpsAgent, OpsJob, SiteSnapshot } from "../types";
 import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
 import { ErrorChart, UptimeFoot, UptimeTicks } from "../ui/charts";
 import { jobMeta } from "../views/shared";
-import { agentState, nsList } from "../lib/derive";
+import { agentState, attemptsText, nsList } from "../lib/derive";
 
 type Ref = { type: DrawerType; id: string };
 
@@ -140,6 +140,56 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
   );
 }
 
+// The controls a job's status allows. Each opens the confirm dialog, which asks for a
+// reason and shows what changes before anything is written.
+function JobControls({ j }: { j: OpsJob }) {
+  const { confirm } = useApp();
+  const params = { id: j.id };
+  const blocked = j.status === "blocked";
+  const claimed = j.status === "claimed";
+  const failable = blocked || claimed || j.status === "queued";
+  if (!failable) return null;
+  return (
+    <div>
+      <p className="section-title">Change it</p>
+      <div className="toolbar">
+        {blocked && (
+          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `Resume ${j.id}` })}>
+            Resume
+          </button>
+        )}
+        {claimed && (
+          <button type="button" className="btn" onClick={() => confirm({ action: "release_job", params, title: `Release ${j.id}` })}>
+            Release
+          </button>
+        )}
+        <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark ${j.id} failed` })}>
+          Mark failed
+        </button>
+      </div>
+      <p className="faint small">
+        {blocked ? "Resume puts it back in the queue. " : claimed ? "Release takes it from its holder and puts it back in the queue. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
+      </p>
+    </div>
+  );
+}
+
+function AgentControls({ a }: { a: OpsAgent }) {
+  const { confirm } = useApp();
+  if (a.revoked_at) return null;
+  return (
+    <div>
+      <p className="section-title">Change it</p>
+      <div className="toolbar">
+        <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke ${a.name}` })}>
+          Revoke
+        </button>
+      </div>
+      <p className="faint small">Revoke ends this credential. The preview lists what else it changes.</p>
+    </div>
+  );
+}
+
 function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
   const { now, feed } = useApp();
   const k = JOB[j.status];
@@ -161,10 +211,11 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <div>
               <p className="section-title">Then resume it</p>
               <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy resume call" />
-              <p className="faint small">Read only: this page copies the call. The seat, or the summary page at /console, makes it.</p>
+              <p className="faint small">Resume it with the button below, or copy the call and make it from a session.</p>
             </div>
           </>
         )}
+        <JobControls j={j} />
         <div>
           <p className="section-title">Record</p>
           <dl className="kv">
@@ -282,9 +333,14 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <dd className="mono">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
           <dt>Median job</dt>
           <dd className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
+          <dt>Improve attempts</dt>
+          <dd className="mono" title={a.attempts_kept == null ? "Not a namespace driver" : undefined}>
+            {attemptsText(a)}
+          </dd>
           <dt>Flags</dt>
           <dd>{a.flags.join(", ") || "none"}</dd>
         </dl>
+        <AgentControls a={a} />
         <div>
           <p className="section-title">Holding now</p>
           {mine.length ? (

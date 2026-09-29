@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { consoleSessionCookie } from "../src/console-auth";
 import type { Env } from "../src/env";
+import { pausedKey, ROSTER } from "../src/improve-schema";
 import { RESUME_MARKER } from "../src/jobs";
 import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src/ops-feed";
 import type { OpsFeed } from "../src/ops-types";
@@ -92,6 +93,10 @@ describe("the feed against real D1", () => {
     await opsFeed(e, NOW);
     expect(reads.d1.length, `D1 statements:\n${reads.d1.join("\n")}`).toBe(OPS_FEED_READS.d1);
     expect(reads.kv.length, `KV gets: ${reads.kv.join(", ")}`).toBe(OPS_FEED_READS.kv);
+    // One pause key per roster namespace, and those are the only per-namespace reads.
+    const pauseKeys = reads.kv.filter((key) => key.startsWith("improve:paused:"));
+    expect(pauseKeys.sort()).toEqual(ROSTER.map(pausedKey).sort());
+    expect(OPS_FEED_READS.kv).toBe(7 + ROSTER.length);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
     const again = counted();
@@ -123,6 +128,19 @@ describe("the feed against real D1", () => {
     expect(feed.cloudflare_configured).toBe(false);
     expect(feed.refresh_allowed_at).toBeNull();
   });
+
+  it("lists every roster namespace with its pause reason, null when not paused", async () => {
+    const [paused] = ROSTER;
+    await env.APP_KV.put(pausedKey(paused), "looking at a regression");
+    try {
+      const feed = await opsFeed(env as unknown as Env, NOW);
+      expect(feed.live.namespaces.map((n) => n.name)).toEqual([...ROSTER]);
+      expect(feed.live.namespaces.find((n) => n.name === paused)?.paused).toBe("looking at a regression");
+      expect(feed.live.namespaces.filter((n) => n.paused === null).length).toBe(ROSTER.length - 1);
+    } finally {
+      await env.APP_KV.delete(pausedKey(paused));
+    }
+  });
 });
 
 async function signedFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -142,6 +160,8 @@ describe("the feed's routes through the Worker", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const feed = (await response.json()) as OpsFeed;
     expect(feed.live.jobs.length).toBe(4);
+    // No Portal CSRF cookie on the request, so one is minted and the body carries it.
+    expect(response.headers.get("Set-Cookie") ?? "").toContain(`capsid_portal_csrf=${feed.csrf};`);
   });
 
   it("refuses a bearer with 403 and sends an anonymous caller to sign in", async () => {

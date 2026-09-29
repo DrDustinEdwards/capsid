@@ -4,12 +4,21 @@ import { St } from "../ui/icons";
 import { NsChips, PageHead, Panel, QueueRows } from "./shared";
 
 export function SeatStart() {
-  const { feed, now } = useApp();
+  const { feed, now, confirm } = useApp();
   const s = feed.live.seat_start;
   return (
     <dl className="kv">
       <dt>Switch</dt>
-      <dd>{s.enabled ? <St kind="ok">On</St> : <St kind="nodata">Off</St>}</dd>
+      <dd className="toolbar">
+        {s.enabled ? <St kind="ok">On</St> : <St kind="nodata">Off</St>}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => confirm({ action: "seat_start", params: { value: s.enabled ? "off" : "on" }, title: s.enabled ? "Turn seat start off" : "Turn seat start on" })}
+        >
+          {s.enabled ? "Turn off" : "Turn on"}
+        </button>
+      </dd>
       <dt>In flight</dt>
       <dd className="mono">
         {s.in_flight} of {s.max_sessions}

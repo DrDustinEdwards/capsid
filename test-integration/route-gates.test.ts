@@ -87,8 +87,9 @@ describe("the route tables are a statement about the Worker that serves them", (
   it("PLANT: every console route is behind consoleGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {
     const NOT_GATED = new Set(["/console/callback", "/console.json"]);
     const consoleRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console") && !NOT_GATED.has(p));
-    // /console, /console/json, the feed, the refresh, the app and the app's files.
-    expect(consoleRoutes.length, `console routes found: ${consoleRoutes.join(", ")}`).toBe(6);
+    // /console, /console/json, the feed, the refresh, the Portal's preview, perform,
+    // namespaces and activity, the app and the app's files.
+    expect(consoleRoutes.length, `console routes found: ${consoleRoutes.join(", ")}`).toBe(10);
     for (const path of consoleRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });

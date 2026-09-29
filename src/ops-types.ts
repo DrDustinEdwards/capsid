@@ -149,6 +149,10 @@ export interface OpsAgent {
   pr_merge_rate: number | null;
   ci_green_rate: number | null;
   median_duration_minutes: number | null;
+  // The improve loop's kept and reverted attempts in the agent's namespaces, from its
+  // record (src/agent-record.ts). Null for an agent that is not a namespace driver.
+  attempts_kept: number | null;
+  attempts_reverted: number | null;
 }
 
 export interface OpsPr {
@@ -197,6 +201,10 @@ export interface OpsLive {
   awaiting_seat: OpsAwaitingSeat[];
   seat_start: OpsSeatStart;
   loop: OpsLoop;
+  // Every roster namespace with its improve-loop pause reason, null when not paused.
+  // One KV get per namespace; the heavy per-namespace detail is GET
+  // /console/api/namespaces, read when the Namespaces view opens.
+  namespaces: Array<{ name: string; paused: string | null }>;
 }
 
 export interface OpsFeed {
@@ -209,4 +217,103 @@ export interface OpsFeed {
   // Whether CF_OPS_TOKEN is set, so the app can say why deploy and error columns are
   // empty.
   cloudflare_configured: boolean;
+  // The double-submit CSRF value: the same value is in the HttpOnly cookie
+  // capsid_portal_csrf, and the app sends it back as X-Capsid-CSRF on every action. A
+  // cross-site page cannot read this body, so it cannot learn the value.
+  csrf: string;
+}
+
+// ---------------------------------------------------------------------------
+// The Portal's controls (capsid/research/design-portal-unify.md, section 2).
+//
+// Two requests, as ruled 2026-09-11: a preview that writes nothing and returns what
+// will change plus a signed token, then a perform that carries only the token. Both
+// are JSON POSTs with the headers X-Capsid-CSRF (the feed's csrf value) and
+// Content-Type: application/json.
+//   POST /console/api/actions/preview   body PortalActionRequest -> PortalPreview
+//   POST /console/api/actions/perform   body { token }           -> PortalPerformed
+//   GET  /console/api/namespaces                                  -> PortalNamespaces
+//   GET  /console/api/activity?namespace=&actor=                  -> PortalActivity
+// A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
+// token expired (preview again), 413 body too large. Signed out is the gate's 302.
+
+export type PortalAction =
+  | "pause"
+  | "unpause"
+  | "mode"
+  | "seat_start"
+  | "resume_job"
+  | "release_job"
+  | "fail_job"
+  | "revoke_agent";
+
+// params by action:
+//   pause         { namespace, reason }   reason required
+//   unpause       { namespace }
+//   mode          { value: "api" | "subscription" | "off" }
+//   seat_start    { value: "on" | "off" }
+//   resume_job    { id, reason }          reason required
+//   release_job   { id, reason }          reason required
+//   fail_job      { id, reason }          reason required
+//   revoke_agent  { name }
+export interface PortalActionRequest {
+  action: PortalAction;
+  params: Record<string, string>;
+}
+
+export interface PortalPreview {
+  action: PortalAction;
+  // One sentence: what this does, naming the target.
+  summary: string;
+  // Exactly what changes, one line each, from the state read now.
+  changes: string[];
+  // The audit rows the perform will write, as "<action> by <actor>".
+  audit: string[];
+  // Signed; carries action and params. Valid until expires_at.
+  token: string;
+  expires_at: string;
+}
+
+export interface PortalPerformed {
+  action: PortalAction;
+  summary: string;
+  // Set when the action happened but the click's own audit row was not written.
+  warning: string | null;
+  // The feed as it stands after the action.
+  feed: OpsFeed;
+}
+
+export interface PortalNamespace {
+  namespace: string;
+  paused: string | null;
+  anchor_pinned: boolean;
+  anchor_problem: string | null;
+  best: { sha: string; score: number; recorded_at: string } | null;
+  last_run: { status: string; started: string; attempts: number; kept: number; reverts: number } | null;
+  totals: { runs: number; attempts: number; kept: number; reverts: number; cost_usd: number; ci_minutes: number };
+  // Null means no truth report was ever run, which is not an integrity of zero.
+  latest_report: { integrity: number | null; generated: string } | null;
+  jobs: { queued: number; claimed: number; blocked: number; done_today: number };
+  skills: { candidate: number; live: number; retired: number; offered: number; used: number; use_rate: number | null; last_evaluation: string | null };
+}
+
+export interface PortalNamespaces {
+  generated: string;
+  namespaces: PortalNamespace[];
+}
+
+export interface PortalActivityRow {
+  at: string;
+  actor: string | null;
+  action: string | null;
+  namespace: string | null;
+  path: string | null;
+}
+
+export interface PortalActivity {
+  generated: string;
+  filter: { namespace: string | null; actor: string | null };
+  // Newest first, at most `limit`.
+  rows: PortalActivityRow[];
+  limit: number;
 }

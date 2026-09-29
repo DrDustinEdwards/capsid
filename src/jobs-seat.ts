@@ -352,6 +352,30 @@ const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 // operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
+/** Where a resume sends a blocked job: back to `holder`, or to the queue with the
+ *  reason. The same one-claim-per-caller rule the claim path runs on, asked of whoever
+ *  ends up holding the lease: a driver holding two has abandoned one. Without take, a
+ *  holder that cannot take the job back sends it to the queue instead. resumeJob acts
+ *  on it and the Portal's preview (src/portal-actions.ts) states it, so the two agree. */
+export async function resumeDestination(
+  db: D1Database,
+  holder: string,
+  id: string,
+  take: boolean
+): Promise<{ held: JobRow | null; toQueue: string | null }> {
+  const held = await heldClaim(db, holder);
+  const toQueue: string | null = take
+    ? null
+    : held
+      ? `${holder} holds ${held.id} ('${held.title}' in ${held.namespace}), so ${id} went back to the queue for the next free session.`
+      : !isMintedActor(holder)
+        ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
+        : (await isRunnerActor(db, holder))
+          ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
+          : null;
+  return { held, toQueue };
+}
+
 /** The head commit of the job's own pull request, and the mapped repo it is on.
  *  The pull request is the one the job records: its result_ref, or its job_outcome_prs
  *  rows. Throws with the reason when there is none, more than one, one outside the
@@ -424,19 +448,7 @@ export async function resumeJob(
   // exist, since block keys on claimed_by) goes to the caller.
   const holder = take || !current.claimed_by ? actor : current.claimed_by;
 
-  // The same one-claim-per-caller rule the claim path runs on, asked of whoever ends
-  // up holding the lease: a driver holding two has abandoned one. Without take, a
-  // holder that cannot take the job back sends it to the queue instead.
-  const held = await heldClaim(env.DB, holder);
-  const toQueue: string | null = take
-    ? null
-    : held
-      ? `${holder} holds ${held.id} ('${held.title}' in ${held.namespace}), so ${id} went back to the queue for the next free session.`
-      : !isMintedActor(holder)
-        ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
-        : await isRunnerActor(env.DB, holder)
-          ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
-          : null;
+  const { held, toQueue } = await resumeDestination(env.DB, holder, id, take);
   if (held && !toQueue) {
     return refuse("resume", `${holder} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. Finish it before resuming another.`);
   }
