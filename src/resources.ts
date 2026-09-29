@@ -4,6 +4,7 @@ import type { Agent } from "./agents";
 import { checkScope } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { MAX_ROWS } from "./limits";
+import { PRIVATE_LIST } from "./cache-hints";
 
 // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
 // a raw request handler is not a registration, so these handlers check scope here.
@@ -64,7 +65,8 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
   // served by the one template above. test/bounded-reads.test.ts pins that.
   server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
     // The grant, before the query.
-    if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
+    // Every result is filtered to the caller's namespaces, so private (src/cache-hints.ts).
+    if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [], ...PRIVATE_LIST };
     if (!agent.scopes.grants.includes("read")) {
       throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
     }
@@ -114,6 +116,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         mimeType: "text/markdown",
       })),
       ...(more && last ? { nextCursor: b64urlEncode(JSON.stringify({ n: last.namespace, p: last.path })) } : {}),
+      ...PRIVATE_LIST,
     };
   });
 }
