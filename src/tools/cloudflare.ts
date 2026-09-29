@@ -3,6 +3,7 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { CF_CONFIG_ACTIONS, CF_PERMISSION, readCloudflareConfig } from "../ops-cloudflare-config";
 import { fail, ok, type ToolCtx } from "./docs";
+import { bounded } from "../limits";
 
 // A zone name as Cloudflare lists it: labels of letters, digits and hyphens.
 const ZONE_NAME = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
@@ -25,7 +26,7 @@ export function registerCloudflareTools(server: McpServer, ctx: ToolCtx): void {
         `Cloudflare Access and Email Routing configuration for the account, read with CF_OPS_TOKEN. Admin only. It reads and never writes. action "access_apps": each Access application's id, name, domain, type, self_hosted_domains, destinations (type, uri, hostname) and its policies (name, decision). action "access_policies": each reusable policy's id, name, decision and its include, exclude and require rules as types, with the value only for email (the address), email_domain (the domain), group (the group id) and service_token (the token id). action "email_rules": each zone's Email Routing rules (name, enabled, priority, matchers, actions); zone narrows it to one zone name, else every zone in the account. action "email_addresses": each destination address and whether it is verified. Client secrets, SCIM credentials and aud tags are never returned. A 403 names the permission the token lacks: ${CF_PERMISSION.access} for Access, ${CF_PERMISSION.zones} and ${CF_PERMISSION.rules} for rules, ${CF_PERMISSION.addresses} for addresses.`,
       inputSchema: {
         action: z.enum(CF_CONFIG_ACTIONS).describe("access_apps | access_policies | email_rules | email_addresses."),
-        zone: z.string().regex(ZONE_NAME).optional().describe("For email_rules: one zone name, such as example.com. Omitted reads every zone in the account."),
+        zone: bounded(253).regex(ZONE_NAME).optional().describe("For email_rules: one zone name, such as example.com. Omitted reads every zone in the account."),
       },
     },
     async (args) => {
