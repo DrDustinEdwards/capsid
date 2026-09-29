@@ -1582,6 +1582,56 @@
         }
       ]
     },
+    "sessions": [
+      {
+        "session_id": "5e55a0a1-0000-4000-8000-000000000001",
+        "agent": "agent:runner-job_91b3c0de5a24-s4101",
+        "job_id": "job_91b3c0de5a24",
+        "namespace": "sample",
+        "source": "startup",
+        "model": "claude-sample-model",
+        "permission_mode": "default",
+        "started_at": "2026-09-28T11:20:00.000Z",
+        "last_event_at": "2026-09-28T11:58:00.000Z",
+        "last_event": "Stop",
+        "last_notification_type": null,
+        "needs_input": false,
+        "last_failure": null,
+        "incident": null
+      },
+      {
+        "session_id": "5e55a0a1-0000-4000-8000-000000000002",
+        "agent": "agent:sample-driver",
+        "job_id": "job_e946e3196ab8",
+        "namespace": "sample",
+        "source": "resume",
+        "model": "claude-sample-model",
+        "permission_mode": "default",
+        "started_at": "2026-09-28T10:05:00.000Z",
+        "last_event_at": "2026-09-28T11:35:00.000Z",
+        "last_event": "Notification",
+        "last_notification_type": "permission_prompt",
+        "needs_input": true,
+        "last_failure": null,
+        "incident": "waiting"
+      },
+      {
+        "session_id": "5e55a0a1-0000-4000-8000-000000000003",
+        "agent": "agent:sample-b-driver",
+        "job_id": null,
+        "namespace": null,
+        "source": "startup",
+        "model": null,
+        "permission_mode": null,
+        "started_at": "2026-09-28T11:00:00.000Z",
+        "last_event_at": "2026-09-28T11:20:00.000Z",
+        "last_event": "StopFailure",
+        "last_notification_type": null,
+        "needs_input": false,
+        "last_failure": "rate_limit",
+        "incident": "failure"
+      }
+    ],
     "loop": {
       "mode": "off",
       "budget": {
