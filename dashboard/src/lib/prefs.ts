@@ -19,6 +19,10 @@ export function writePref(key: string, value: string): void {
   }
 }
 
+// The side menu's state: "collapsed" or "expanded". Anything else, including no value or
+// storage that cannot be read, is expanded.
+export const RAIL_PREF = "wf-rail";
+
 export type Theme = "light" | "dark";
 
 export function currentTheme(): Theme {

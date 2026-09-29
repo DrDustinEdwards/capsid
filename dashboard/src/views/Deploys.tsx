@@ -33,7 +33,7 @@ export function Deploys() {
           <NsChips list={snap.sites.map((s) => s.namespace)} />
           <Panel title="Every deploy" count={list.length} src="at most 10 per site, newest first">
             <div className="scroll-x">
-              <table className="list minw760">
+              <table className="list">
                 <thead>
                   <tr>
                     <th>When</th>

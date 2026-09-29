@@ -17,6 +17,7 @@
     "check:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "check:dashboard": "npm --prefix dashboard run check",
     "build:dashboard": "npm --prefix dashboard run build && npm --prefix dashboard run size",
+    "test:browser": "npm --prefix dashboard run e2e",
     "lint": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",

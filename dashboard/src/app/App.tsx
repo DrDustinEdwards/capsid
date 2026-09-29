@@ -3,8 +3,8 @@ import { Link, useLocation } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, passStale } from "../lib/derive";
 import { ago, ms, utc } from "../lib/format";
-import { readPref, toggleTheme, writePref } from "../lib/prefs";
-import { BrandMark, NavIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
+import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
+import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
 import { AppCtx, VIEWS, isView, parseRoute, routePath, type ConfirmRequest, type Ctx, type Filters, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
@@ -31,6 +31,16 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 
 const TABS: ViewId[] = ["overview", "sites", "queue", "incidents", "ci"];
+
+// What each rail count means, for its accessible name and its tooltip.
+const BADGE_NOTE: Partial<Record<ViewId, string>> = {
+  overview: "critical",
+  sites: "down or degraded",
+  incidents: "open findings",
+  queue: "blocked",
+  ci: "red",
+  namespaces: "paused",
+};
 
 function useTick(ms: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -70,6 +80,7 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [singleKeys, setSingleKeysState] = useState(() => readPref("wf-single-keys") !== "off");
+  const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const [sel, setSel] = useState(-1);
@@ -141,6 +152,15 @@ export function App() {
     writePref("wf-single-keys", v ? "on" : "off");
   }, []);
 
+  const railRef = useRef(railCollapsed);
+  railRef.current = railCollapsed;
+  const toggleRail = useCallback(() => {
+    const next = !railRef.current;
+    setRailCollapsed(next);
+    writePref(RAIL_PREF, next ? "collapsed" : "expanded");
+    tipRef.current?.classList.remove("on");
+  }, []);
+
   const setFilters = useCallback((f: Partial<Filters>) => {
     setFiltersState((p) => ({ ...p, ...f }));
     setSel(-1);
@@ -157,8 +177,8 @@ export function App() {
   const confirming = confirmReq != null;
   const keys = useRef({ singleKeys, palette, help, confirming, route, sel });
   keys.current = { singleKeys, palette, help, confirming, route, sel };
-  const act = useRef({ go, open, refresh, theme, closeDrawer });
-  act.current = { go, open, refresh, theme, closeDrawer };
+  const act = useRef({ go, open, refresh, theme, closeDrawer, toggleRail });
+  act.current = { go, open, refresh, theme, closeDrawer, toggleRail };
   useEffect(() => {
     let gAt = 0;
     const onKey = (e: KeyboardEvent) => {
@@ -202,6 +222,9 @@ export function App() {
         case "t":
           a.theme();
           return;
+        case "[":
+          a.toggleRail();
+          return;
         case "f": {
           const s = document.getElementById("qsearch");
           if (s) (e.preventDefault(), s.focus());
@@ -229,22 +252,40 @@ export function App() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tooltips for the uptime ticks (data-tip).
+  // Tooltips (data-tip): the uptime ticks, and the collapsed side menu. Shown on pointer
+  // hover and on keyboard focus. data-tip-side="right" puts the tip beside the element
+  // instead of above it.
   useEffect(() => {
     const tip = tipRef.current;
     if (!tip) return;
-    const over = (e: MouseEvent) => {
-      const el = (e.target as Element).closest?.<HTMLElement>("[data-tip]");
+    const show = (el: HTMLElement | null | undefined) => {
       if (!el) return tip.classList.remove("on");
       tip.textContent = el.dataset.tip ?? "";
       tip.classList.add("on");
       const r = el.getBoundingClientRect();
       const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      if (el.dataset.tipSide === "right") {
+        // Clear of the menu's edge, not over it.
+        const edge = el.closest("nav")?.getBoundingClientRect().right ?? r.right;
+        tip.style.left = `${Math.min(window.innerWidth - tw - 8, Math.max(r.right, edge) + 6)}px`;
+        tip.style.top = `${Math.max(8, r.top + r.height / 2 - th / 2)}px`;
+        return;
+      }
       tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
-      tip.style.top = `${Math.max(8, r.top - tip.offsetHeight - 8)}px`;
+      tip.style.top = `${Math.max(8, r.top - th - 8)}px`;
     };
+    const over = (e: MouseEvent) => show((e.target as Element).closest?.<HTMLElement>("[data-tip]"));
+    const focus = (e: FocusEvent) => show(e.target instanceof Element ? e.target.closest<HTMLElement>("[data-tip]") : null);
+    const blur = () => tip.classList.remove("on");
     document.addEventListener("mouseover", over);
-    return () => document.removeEventListener("mouseover", over);
+    document.addEventListener("focusin", focus);
+    document.addEventListener("focusout", blur);
+    return () => {
+      document.removeEventListener("mouseover", over);
+      document.removeEventListener("focusin", focus);
+      document.removeEventListener("focusout", blur);
+    };
   }, []);
 
   const list = useMemo(() => commands(feed, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy }, now), [feed, go, open, refresh, theme, copy, now]);
@@ -328,7 +369,7 @@ export function App() {
   }
 
   const shell = (
-    <div className="app">
+    <div className={`app${railCollapsed ? " rail-collapsed" : ""}`}>
       <header className="top">
         <div className="brand">
           <BrandMark />
@@ -352,29 +393,67 @@ export function App() {
           <ThemeIcon />
         </button>
       </header>
-      <nav className="rail" aria-label="Sections">
+      <nav className="rail" id="rail" aria-label="Sections">
         {VIEWS.map((v) => {
           const b = badge[v.id];
+          // With a count, the name says what it counts: "Sites, 2 down or degraded".
+          const named = b?.n ? `${v.label}, ${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : undefined;
           return (
-            <Link key={v.id} href={routePath(v.id)} aria-current={route.view === v.id ? "page" : undefined} onClick={() => setSel(-1)}>
+            <Link
+              key={v.id}
+              href={routePath(v.id)}
+              aria-current={route.view === v.id ? "page" : undefined}
+              aria-label={named}
+              data-tip={railCollapsed ? (named ?? v.label) : undefined}
+              data-tip-side={railCollapsed ? "right" : undefined}
+              onClick={() => setSel(-1)}
+            >
               <NavIcon id={v.id} />
-              <span>{v.label}</span>
+              <span className="lbl">{v.label}</span>
               <span className={`count ${b?.n ? b.cls : ""}`}>{b?.n ? b.n : ""}</span>
             </Link>
           );
         })}
-        <div className="hint">
-          <button type="button" className="linkish" onClick={() => setPalette(true)}>
-            <span>Command menu</span>
-            <span>
-              <kbd>Ctrl</kbd> <kbd>K</kbd>
-            </span>
-          </button>
-          <button type="button" className="linkish" onClick={() => setHelp(true)}>
-            <span>Shortcuts</span>
-            <kbd>?</kbd>
-          </button>
-        </div>
+        {railCollapsed ? (
+          <div className="hint">
+            <button type="button" className="railbtn" data-tip="Command menu (Ctrl K)" data-tip-side="right" onClick={() => setPalette(true)}>
+              <SearchIcon />
+              <span className="lbl">Command menu</span>
+            </button>
+            <button type="button" className="railbtn" data-tip="Shortcuts (?)" data-tip-side="right" onClick={() => setHelp(true)}>
+              <KeysIcon />
+              <span className="lbl">Shortcuts</span>
+            </button>
+          </div>
+        ) : (
+          <div className="hint">
+            <button type="button" className="linkish" onClick={() => setPalette(true)}>
+              <span>Command menu</span>
+              <span>
+                <kbd>Ctrl</kbd> <kbd>K</kbd>
+              </span>
+            </button>
+            <button type="button" className="linkish" onClick={() => setHelp(true)}>
+              <span>Shortcuts</span>
+              <kbd>?</kbd>
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          className="railbtn railtoggle"
+          aria-expanded={!railCollapsed}
+          aria-controls="rail"
+          data-tip={railCollapsed ? "Expand menu ([)" : undefined}
+          data-tip-side={railCollapsed ? "right" : undefined}
+          onClick={toggleRail}
+        >
+          <RailIcon />
+          <span className="lbl">{railCollapsed ? "Expand menu" : "Collapse menu"}</span>
+          <kbd className="lbl" aria-hidden="true">
+            [
+          </kbd>
+        </button>
       </nav>
       <main ref={mainRef} tabIndex={-1} onClick={onRowActivate} onKeyDown={onRowActivate}>
         {content}

@@ -172,6 +172,28 @@ export function SearchIcon() {
   );
 }
 
+// A panel with its left column and an arrow pointing into it: "collapse the side menu".
+// Mirrored by CSS when the menu is collapsed.
+export function RailIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className="railicon">
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M6 2.75v10.5" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M11 6 9 8l2 2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// A keyboard, for the Shortcuts button when the side menu is collapsed.
+export function KeysIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="1.75" y="3.25" width="12.5" height="9.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4.5 6.5h1M7.5 6.5h1M10.5 6.5h1M5 9.5h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ThemeIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">

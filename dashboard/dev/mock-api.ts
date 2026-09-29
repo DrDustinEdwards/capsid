@@ -1,5 +1,6 @@
-// Dev only: serves dev/sample-feed.json at /console/api/ops so `npm run dev` runs
-// with fake data and no Worker. Never part of the build (apply: "serve").
+// Dev and preview only: serves dev/sample-feed.json at /console/api/ops so `npm run
+// dev`, and the browser tests under `vite preview`, run with fake data and no Worker.
+// Never part of the build (apply: "serve").
 //
 // The fixture's timestamps are fixed; each response shifts every ISO timestamp and
 // ring_slot so live.generated is "now", which keeps the relative times readable.
@@ -18,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
 import type { OpsFeed, OpsJob, PortalAction, PortalActivity, PortalActivityRow, PortalNamespace, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/types.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
@@ -323,11 +325,7 @@ export function mockOpsApi(): Plugin {
     }
   }
 
-  return {
-    name: "watch-floor-mock-ops",
-    apply: "serve",
-    configureServer(server) {
-      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
+  const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
         const known = ["/console/api/ops", "/console/api/ops/refresh", "/console/api/actions/preview", "/console/api/actions/perform", "/console/api/namespaces", "/console/api/activity"];
@@ -356,7 +354,23 @@ export function mockOpsApi(): Plugin {
         }
         nextRefresh = Date.now() + REFRESH_GAP_MS;
         return send(res, 200, feed(nextRefresh, st));
+  };
+
+  return {
+    name: "watch-floor-mock-ops",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(handle);
+    },
+    // `vite preview` serves the production build: the browser tests (dashboard/e2e)
+    // run against it with the same mock, and with the Worker's own page CSP on every
+    // response, so a script or style the Worker's page would refuse fails the tests too.
+    configurePreviewServer(server) {
+      server.middlewares.use((_req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        res.setHeader("Content-Security-Policy", DASHBOARD_CSP);
+        next();
       });
+      server.middlewares.use(handle);
     },
   };
 }

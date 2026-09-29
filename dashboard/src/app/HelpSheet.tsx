@@ -45,6 +45,10 @@ export function HelpSheet({ open, onClose, singleKeys, setSingleKeys }: { open: 
           </dt>
           <dd>Switch light and dark</dd>
           <dt>
+            <kbd>[</kbd>
+          </dt>
+          <dd>Collapse or expand the side menu</dd>
+          <dt>
             <kbd>f</kbd>
           </dt>
           <dd>Filter the queue</dd>
