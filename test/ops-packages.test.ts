@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { historyRanges, isoWeek, readPackage, validatePackage, type FetchLike } from "../src/ops-packages.ts";
 import type { OpsPackageConfig } from "../src/ops-types.ts";
-import { fakeEnv } from "./fakes.ts";
+import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The Packages panel's pure parts and its per-pass read, against a fake of each source.
 // The response shapes are the ones the live endpoints returned on 2026-09-30.
@@ -120,4 +120,21 @@ test("a scoped name travels with its slash escaped where the registry and the ve
   assert.ok(seen.includes("https://registry.npmjs.org/@sample%2Fpkg"), seen.join("\n"));
   assert.ok(seen.includes("https://api.npmjs.org/downloads/point/last-week/@sample/pkg"), seen.join("\n"));
   assert.ok(seen.includes("https://api.deps.dev/v3/systems/npm/packages/%40sample%2Fpkg"), seen.join("\n"));
+});
+
+test("the repository's numbers come from GitHub through the App, with pull requests taken out of the issue count", async () => {
+  // GitHub's open_issues_count counts open pull requests as issues.
+  const { fetchImpl } = fetchFrom({});
+  const env = fakeEnv({ APP_KV: fakeKv({ seedToken: true }).kv });
+  await withFetch(
+    {
+      "GET /repos/example-org/sample-pkg": { body: { stargazers_count: 4, open_issues_count: 3 } },
+      "GET /repos/example-org/sample-pkg/pulls": { body: [{ number: 7 }, { number: 8 }] },
+      "GET /repos/example-org/sample-pkg/releases/latest": { status: 404, body: { message: "Not Found" } },
+    },
+    async () => {
+      const snap = await readPackage(env, { ...CFG, repo: "example-org/sample-pkg" }, fetchImpl, NOW);
+      assert.deepEqual(snap.github, { state: "ok", repo: "example-org/sample-pkg", stars: 4, open_issues: 1, open_prs: 2, open_prs_capped: false, latest_release: null });
+    }
+  );
 });
