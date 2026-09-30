@@ -4,6 +4,7 @@ import { legacyAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
+import { decorateCacheHints } from "./cache-hints";
 import { registerDocTools, type ToolCtx, type ToolGrant } from "./tools/docs";
 import { registerLintTools } from "./tools/lint";
 import { registerRepoTools } from "./tools/repo";
@@ -11,6 +12,8 @@ import { registerImproveTools } from "./tools/improve";
 import { registerJobTools } from "./tools/jobs";
 import { registerAgentTools } from "./tools/agents";
 import { registerClaimsTools } from "./tools/claims";
+import { registerOpsTools } from "./tools/ops";
+import { registerCloudflareTools } from "./tools/cloudflare";
 
 export type { ToolGrant };
 
@@ -77,11 +80,16 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   registerJobTools(server, ctx);
   registerAgentTools(server, ctx);
   registerClaimsTools(server, ctx);
+  registerOpsTools(server, ctx);
+  registerCloudflareTools(server, ctx);
 
   // Resources and prompts are raw request handlers, not tool registrations, so they
   // check scope themselves (src/resources.ts).
   registerDocumentResources(server, agent, db);
   registerPrompts(server, agent, db);
+
+  // Last, so every handler it decorates exists (src/cache-hints.ts).
+  decorateCacheHints(server);
 
   return server;
 }

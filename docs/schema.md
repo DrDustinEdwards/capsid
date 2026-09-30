@@ -92,6 +92,54 @@ Four invariants, each enforced in code rather than by discipline:
    whole transaction and returns the current hash to rebase against. Racing
    creates resolve to one winner and one refusal.
 
+## Deleting a namespace
+
+`delete_namespace` is admin only and takes two calls. `action: "preview"` writes
+nothing. It counts everything that names the namespace and returns a verdict, and
+when nothing refuses, a token bound to the namespace, `cascade`,
+`allow_improve_paths`, those counts and the caller, valid for five minutes.
+`action: "perform"` takes the same arguments and the token, reads the counts again,
+and refuses if any of them moved. Then it commits one batch whose first statement
+aborts it unless the store still matches the plan.
+
+It refuses, whatever `cascade` says:
+
+- while any job in the namespace is queued, claimed or blocked. End each with the
+  `jobs` tool (`supersede` for a queued job, `fail` for a claimed or blocked one).
+- while any live agent names the namespace in its scopes. Use the `agents` tool
+  (`revoke`, or `update_scopes` to drop the namespace).
+- while the namespace is on the improve roster, which is a list in code.
+
+It also refuses while live documents exist and `cascade` is not true, and while the
+namespace holds improve loop control documents and `allow_improve_paths` is not
+true. `allow_improve_paths` needs the `can_touch_protected` flag, as it does on a
+document delete.
+
+What the batch deletes: every live document (every path outside `archive/`), each
+snapshotted to `document_versions` first and then removed by the same path helper a
+document delete uses, which takes every edge touching it too; the `ops_sites` row;
+the `namespaces` row. An edge that was already dangling (its end in the namespace
+names no document) touches nothing deleted and stays. One audit row, action
+`namespace-delete`, holds the counts, the deleted paths, the removed edges, and
+the `ops_sites` and `namespaces` rows whole. After the batch commits, the
+namespace's four improve KV keys (`improve:best:`, `improve:paused:`,
+`improve:anchor:`, `improve:driver:`) are deleted. A key that cannot be deleted is
+named in the response, not dropped.
+
+The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
+ones plus two per document. So a namespace with more than 47 live documents is
+refused at preview and at perform, never half deleted. Delete or move documents
+with the `delete` tool first, or ask the seat to rule a set-based helper.
+
+What it keeps, because it is history: archived documents and the edges between
+them, `document_versions`, `audit_log`, finished jobs, `job_outcomes`,
+`job_claims`, `job_touches`, the skill records, every `improve_*` row, revoked
+agents, the nightly backups and the holdout bucket. The kept archived documents
+still carry the deleted name. `read`, `list`, `search`, `brief` and `history`
+return them under it. `write`, `delete`, `move` and `restore` refuse there until
+the name is registered again, and registering it again brings them back into
+scope.
+
 ## Write modes
 
 A write is one of four modes. Amending a large document used to mean re-emitting

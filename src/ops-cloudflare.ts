@@ -4,20 +4,30 @@ import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
-// per dashboard request: src/watcher.ts is the one module that imports it
-// (test/ops-cloudflare.test.ts).
+// per dashboard request. Two modules import it (test/ops-cloudflare.test.ts):
+// src/watcher.ts, and src/ops-cloudflare-config.ts, the admin-only cloudflare_config
+// tool's Access and Email Routing reads, which reuse this envelope and paging.
 //
-// The token, CF_OPS_TOKEN, is read-only and holds two permissions:
-//   Workers Scripts Read     GET /accounts/{id}/workers/domains and
-//                            GET /accounts/{id}/workers/scripts/{script}/deployments
-//   Account Analytics Read   POST /graphql (workersInvocationsAdaptive)
+// The token, CF_OPS_TOKEN, is read-only and holds these permissions:
+//   Workers Scripts Read              GET /accounts/{id}/workers/domains and
+//                                     GET /accounts/{id}/workers/scripts/{script}/deployments
+//   Account Analytics Read            POST /graphql (workersInvocationsAdaptive)
+//   Access: Apps and Policies Read    GET /accounts/{id}/access/apps and /access/policies
+//   Email Routing Addresses Read      GET /accounts/{id}/email/routing/addresses
+//   Zone Read                         GET /zones
+//   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
+// The last four are the cloudflare_config tool's. To add them to the existing token:
+// dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add
+// Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read,
+// Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones
+// from the account; Continue to summary, Update token. The secret value does not change.
 //
 // What this read cannot see: a failed deploy. Cloudflare's deployments list records
 // only the deployments that happened, so a deploy that failed before it reached
 // Cloudflare leaves nothing here to find. No finding is invented for it; a failed
 // deploy workflow is already the watcher's ci-red finding on the default branch.
 
-const CF_API = "https://api.cloudflare.com/client/v4";
+export const CF_API = "https://api.cloudflare.com/client/v4";
 export const CF_GRAPHQL = `${CF_API}/graphql`;
 const CF_TIMEOUT_MS = 10_000;
 export const DEPLOYS_KEPT = 10;
@@ -28,7 +38,7 @@ const HOUR_MS = 3_600_000;
 // that cannot break out of a string literal is sent.
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
-type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type CfCredentials = { ok: true; token: string; account: string } | { ok: false; reason: string };
 
@@ -47,23 +57,59 @@ export function cloudflareCredentials(env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUN
 
 const hostOf = (origin: string): string => new URL(origin).hostname.toLowerCase();
 
+/** A failed Cloudflare read, carrying the HTTP status so a caller can say what a 403
+ *  means for its endpoint (the permission the token lacks). */
+export class CfReadError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "CfReadError";
+    this.status = status;
+  }
+}
+
+type CfEnvelope = { success?: unknown; errors?: unknown; result?: unknown; result_info?: unknown };
+
 // The Cloudflare REST envelope. `success` false or a non-2xx is a failed read, with
 // Cloudflare's own messages as the reason. The token is never part of a reason.
 async function cfGet(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<unknown> {
+  return (await cfEnvelope(fetchImpl, token, url, what)).result;
+}
+
+async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<CfEnvelope> {
   const res = await fetchImpl(url, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)" },
     signal: AbortSignal.timeout(CF_TIMEOUT_MS),
   });
-  const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as {
-    success?: unknown;
-    errors?: unknown;
-    result?: unknown;
-  } | null;
+  const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as CfEnvelope | null;
   if (!res.ok || body?.success !== true) {
-    throw new Error(`${what} answered ${res.status}: ${messagesOf(body?.errors) || "no error message"}`);
+    throw new CfReadError(`${what} answered ${res.status}: ${messagesOf(body?.errors) || "no error message"}`, res.status);
   }
-  return body.result;
+  return body;
+}
+
+// A list read stops here rather than returning part of a list as if it were the whole.
+export const CF_MAX_PAGES = 20;
+
+/** Every item of a paged Cloudflare list, following result_info.total_pages. `url`
+ *  carries no page or per_page; both are set here. A list with more than CF_MAX_PAGES
+ *  pages fails with the count, never a truncated answer. */
+export async function cfGetAll(fetchImpl: FetchLike, token: string, url: string, what: string, perPage: number): Promise<unknown[]> {
+  const out: unknown[] = [];
+  for (let page = 1; ; page++) {
+    const u = new URL(url);
+    u.searchParams.set("page", String(page));
+    u.searchParams.set("per_page", String(perPage));
+    const body = await cfEnvelope(fetchImpl, token, u.toString(), what);
+    if (!Array.isArray(body.result)) throw new Error(`${what} returned no result array`);
+    out.push(...body.result);
+    const pages = (body.result_info as { total_pages?: unknown } | null | undefined)?.total_pages;
+    // No result_info, or no total_pages, is a list Cloudflare does not page: one page.
+    const total = typeof pages === "number" && Number.isFinite(pages) ? pages : 1;
+    if (page >= total) return out;
+    if (page >= CF_MAX_PAGES) throw new Error(`${what} has ${total} pages of ${perPage}, more than the ${CF_MAX_PAGES} this read follows`);
+  }
 }
 
 function parseJson(text: string, failure: string): unknown {

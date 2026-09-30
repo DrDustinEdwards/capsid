@@ -489,10 +489,14 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
 });
 
 // scanner-rule: Cloudflare is read in the watcher pass only, never per dashboard request
-test("only the watcher imports the Cloudflare read, so no dashboard request can call Cloudflare", () => {
-  const importers = sourceFiles()
-    // A static import, a bare side-effect import, or a dynamic import().
-    .filter((f) => /(\bfrom\s*|\bimport\s*\(?\s*)["'](\.\.?\/)+ops-cloudflare(\.ts)?["']/.test(f.text))
-    .map((f) => f.name);
-  assert.deepEqual(importers, ["watcher.ts"]);
+test("only the watcher and the admin cloudflare_config reads import the Cloudflare read, so no dashboard request can call Cloudflare", () => {
+  const importersOf = (module: string) =>
+    sourceFiles()
+      // A static import, a bare side-effect import, or a dynamic import().
+      .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
+      .map((f) => f.name);
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "watcher.ts"]);
+  // The config reads run per call of an admin-only MCP tool and nowhere else: not from
+  // a Portal route, whose every page load would then call Cloudflare.
+  assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
 });
