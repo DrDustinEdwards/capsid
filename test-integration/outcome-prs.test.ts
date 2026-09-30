@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { dueForReverify, outcomePrStatements, reverifyPr, reverifyStatements, reverifySweep } from "../src/outcome-prs";
+import { dueForReverify, outcomePrStatements, reverifyPr, reverifyStatements, reverifySweep, unverifiableStatements } from "../src/outcome-prs";
 
 // OUTCOME MERGE STATE, AGAINST A REAL D1 (job_3e1596235513).
 //
@@ -138,5 +138,74 @@ describe("outcomePrStatements", () => {
     // The sweep still picks the unread one up, and the closed one, as before.
     const due = (await dueForReverify(ENV, NOW)).map((r) => r.pr_url).sort();
     expect(due).toEqual([PR(2), PR(3)]);
+  });
+});
+
+// A PULL REQUEST'S IDENTITY (job_6092edef11e1, migrations/0026). A recreated or
+// transferred repo reuses numbers, so a row pins the pull request it named and a row
+// whose number moved on is marked unverifiable. The decision is made in reverifyPr
+// against GitHub (test/job-outcomes.test.ts); these check what the SQL then does.
+describe("unverifiable rows", () => {
+  it("a marked row leaves the sweep and every count, and prs_opened stays the driver's, unverified", async () => {
+    await outcome("job_moved", { prs_merged: null });
+    await prRow("job_moved", PR(8), null, null);
+    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(8), "repo-recreated", "created after the outcome", NOW));
+    const pr = await env.DB.prepare("SELECT merged, unverifiable, unverifiable_note, unverifiable_at FROM job_outcome_prs WHERE job_id = 'job_moved'").first();
+    expect(pr).toEqual({ merged: null, unverifiable: "repo-recreated", unverifiable_note: "created after the outcome", unverifiable_at: NOW.toISOString() });
+    expect(await dueForReverify(ENV, NOW)).toEqual([]);
+    const row = await outcomeRow("job_moved");
+    expect(row?.prs_merged, "a pull request nobody can verify was counted").toBe(0);
+    expect(row?.prs_opened, "prs_opened was replaced").toBe(1);
+    expect(JSON.parse(String(row?.verified)).prs_opened, "prs_opened was marked verified with a row nobody can verify").not.toBe(true);
+  });
+
+  it("a marked row is never written again, by a later re-verification or a second mark", async () => {
+    await outcome("job_moved");
+    await prRow("job_moved", PR(17), null, null);
+    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(17), "identity-changed", "first", NOW));
+    await env.DB.batch(reverifyStatements(env.DB, "job_moved", PR(17), true, NOW, { node_id: "PR_new", created_at: "2026-09-29T00:00:00Z" }));
+    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(17), "repo-recreated", "second", NOW));
+    const pr = await env.DB.prepare("SELECT merged, pr_node_id, unverifiable, unverifiable_note FROM job_outcome_prs WHERE job_id = 'job_moved'").first();
+    expect(pr).toEqual({ merged: null, pr_node_id: null, unverifiable: "identity-changed", unverifiable_note: "first" });
+    expect((await outcomeRow("job_moved"))?.prs_merged).toBe(0);
+  });
+
+  it("a re-verification pins an unpinned row once and never replaces a pin", async () => {
+    await outcome("job_pin");
+    await prRow("job_pin", PR(5), null, null);
+    await env.DB.batch(reverifyStatements(env.DB, "job_pin", PR(5), false, NOW, { node_id: "PR_first", created_at: "2026-09-01T00:00:00Z" }));
+    await env.DB.batch(reverifyStatements(env.DB, "job_pin", PR(5), true, NOW, { node_id: "PR_other", created_at: "2026-09-02T00:00:00Z" }));
+    const pr = await env.DB.prepare("SELECT merged, pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_pin'").first();
+    expect(pr).toEqual({ merged: 1, pr_node_id: "PR_first", pr_created_at: "2026-09-01T00:00:00Z" });
+  });
+
+  it("the other pull requests of the same outcome still count", async () => {
+    await outcome("job_two", { prs_merged: null });
+    await prRow("job_two", PR(40), null, null);
+    await prRow("job_two", PR(41), null, null);
+    await env.DB.batch(reverifyStatements(env.DB, "job_two", PR(40), true, NOW, { node_id: "PR_forty", created_at: "2026-09-01T00:00:00Z" }));
+    await env.DB.batch(unverifiableStatements(env.DB, "job_two", PR(41), "identity-changed", "moved", NOW));
+    const row = await outcomeRow("job_two");
+    expect(row?.prs_merged).toBe(1);
+    expect(JSON.parse(String(row?.verified)).prs_merged).toBe(true);
+    expect(JSON.parse(String(row?.verified)).prs_opened).not.toBe(true);
+  });
+
+  it("a row counted merged and then marked leaves the merged count", async () => {
+    // manage_pr's merge path re-reads a pull request whatever its row holds, so a row
+    // already counted can be found to name a different pull request later.
+    await outcome("job_counted", { prs_merged: null });
+    await prRow("job_counted", PR(50), null, null);
+    await env.DB.batch(reverifyStatements(env.DB, "job_counted", PR(50), true, NOW, { node_id: "PR_fifty", created_at: "2026-09-01T00:00:00Z" }));
+    expect((await outcomeRow("job_counted"))?.prs_merged).toBe(1);
+    await env.DB.batch(unverifiableStatements(env.DB, "job_counted", PR(50), "identity-changed", "moved", NOW));
+    expect((await outcomeRow("job_counted"))?.prs_merged, "a pull request nobody can verify stayed in the merged count").toBe(0);
+  });
+
+  it("complete pins the pull requests it read", async () => {
+    await outcome("job_read");
+    await env.DB.batch(outcomePrStatements(env.DB, "job_read", [PR(1)], { [PR(1)]: false }, NOW, { [PR(1)]: { node_id: "PR_one", created_at: "2026-09-08T00:00:00Z" } }));
+    const pr = await env.DB.prepare("SELECT pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_read'").first();
+    expect(pr).toEqual({ pr_node_id: "PR_one", pr_created_at: "2026-09-08T00:00:00Z" });
   });
 });
