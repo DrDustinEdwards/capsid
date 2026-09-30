@@ -49,7 +49,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
       <td data-label="Last run">
         {r ? (
           <>
-            <span className="mono">{r.status}</span>
+            <span>{r.status}</span>
             <div className="src" title={utc(ms(r.started))}>
               {ago(ms(r.started), now)} · {r.attempts} tried, {r.kept} kept, {r.reverts} reverted
             </div>
@@ -61,7 +61,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
       <td data-label="Best score">
         {n.best ? (
           <>
-            <span className="mono">{n.best.score}</span>
+            <span className="num">{n.best.score}</span>
             <div className="src" title={utc(ms(n.best.recorded_at))}>
               {shortId(n.best.sha, 7)} · {ago(ms(n.best.recorded_at), now)}
             </div>
@@ -80,19 +80,19 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
           </>
         ) : (
           <>
-            <span className="mono">{pct(rep.integrity, 0)}</span>
+            <span className="num">{pct(rep.integrity, 0)}</span>
             <div className="src">report {ago(ms(rep.generated), now)}</div>
           </>
         )}
       </td>
-      <td data-label="Jobs" className="mono nowrap">
+      <td data-label="Jobs" className="num nowrap">
         {n.jobs.queued} queued · {n.jobs.claimed} running
         <div className="src">
           {n.jobs.blocked} blocked · {n.jobs.done_today} done today
         </div>
       </td>
       <td data-label="Skills">
-        <span className="mono nowrap">
+        <span className="num nowrap">
           {sk.live} live · {sk.candidate} candidate · {sk.retired} retired
         </span>
         <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>

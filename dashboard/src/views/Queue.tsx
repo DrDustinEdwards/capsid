@@ -1,5 +1,5 @@
 import { useApp } from "../app/ctx";
-import { ago, ms } from "../lib/format";
+import { agentLabel, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import { NsChips, PageHead, Panel, QueueRows } from "./shared";
 
@@ -20,7 +20,7 @@ export function SeatStart() {
         </button>
       </dd>
       <dt>In flight</dt>
-      <dd className="mono">
+      <dd className="num">
         {s.in_flight} of {s.max_sessions}
       </dd>
       <dt>Last 7 days</dt>
@@ -54,6 +54,8 @@ export function LiveSessions() {
   const { feed, now } = useApp();
   const list = feed.live.sessions;
   if (!list.length) return <div className="allclear">No live sessions in the last 24 hours.</div>;
+  // A row names the session's job by its title; the id is in the job's drawer (D11).
+  const title = (id: string | null) => (id ? (feed.live.jobs.find((j) => j.id === id)?.title ?? "A job outside the live window") : "No job bound");
   return (
     <>
       {list.map((s) => (
@@ -66,9 +68,9 @@ export function LiveSessions() {
             <St kind="run">Running</St>
           )}
           <div className="t">
-            <b className="mono">{s.job_id ?? "no job bound"}</b>
+            <b>{title(s.job_id)}</b>
             <div>
-              {s.agent}
+              {agentLabel(s.agent)}
               {s.namespace ? ` · ${s.namespace}` : ""}
               {s.last_failure ? ` · failure: ${s.last_failure}` : ""}
             </div>
@@ -121,9 +123,9 @@ export function Queue() {
                           <i className="q" style={{ width: `${(qd / tot) * 100}%` }} />
                         </div>
                       </td>
-                      <td className="mono">{b} blocked</td>
-                      <td className="mono">{r} running</td>
-                      <td className="mono">{qd} queued</td>
+                      <td className="num">{b} blocked</td>
+                      <td className="num">{r} running</td>
+                      <td className="num">{qd} queued</td>
                     </tr>
                   );
                 })}

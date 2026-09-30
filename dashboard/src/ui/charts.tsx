@@ -108,7 +108,7 @@ export function ErrorChart({ site }: { site: SiteSnapshot }) {
       {grid.map((g) => (
         <g key={g}>
           <line x1={L} x2={W - R} y1={y(g)} y2={y(g)} stroke="var(--line)" strokeWidth="1" />
-          <text x={L - 6} y={y(g) + 3} textAnchor="end" fontSize="9" fontFamily="var(--mono)" fill="var(--muted)">
+          <text x={L - 6} y={y(g) + 3} textAnchor="end" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
             {g}%
           </text>
         </g>
@@ -128,7 +128,7 @@ export function ErrorChart({ site }: { site: SiteSnapshot }) {
         </circle>
       ))}
       <line x1={L} x2={W - R} y1={y(1)} y2={y(1)} stroke="var(--warn)" strokeDasharray="4 3" />
-      <text x={W - R} y={y(1) - 4} textAnchor="end" fontSize="9" fontFamily="var(--mono)" fill="var(--warn)">
+      <text x={W - R} y={y(1) - 4} textAnchor="end" fontSize="11" fontFamily="var(--ui)" fill="var(--warn)">
         alert at 1%
       </text>
       {inWindow.map((d) => {
@@ -142,7 +142,7 @@ export function ErrorChart({ site }: { site: SiteSnapshot }) {
         );
       })}
       {[0, 6, 12, 18, 24].map((hh) => (
-        <text key={hh} x={L + (hh / 24) * pw} y={H - 8} textAnchor="middle" fontSize="9" fontFamily="var(--mono)" fill="var(--muted)">
+        <text key={hh} x={L + (hh / 24) * pw} y={H - 8} textAnchor="middle" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
           {hh === 24 ? "now" : `-${24 - hh}h`}
         </text>
       ))}
@@ -209,7 +209,7 @@ export function Timeline({ sites, days, now, width }: { sites: SiteSnapshot[]; d
         </text>
         <line x1={L} x2={W - R} y1={cy} y2={cy} stroke="var(--line-strong)" strokeWidth="1" />
         {why && (
-          <text x={L + 8} y={cy - 5} fontSize="10" fontFamily="var(--mono)" fill="var(--dim)">
+          <text x={L + 8} y={cy - 5} fontSize="11" fontFamily="var(--ui)" fill="var(--dim)">
             {`Deploys: no data, ${why}`}
           </text>
         )}
@@ -225,7 +225,7 @@ export function Timeline({ sites, days, now, width }: { sites: SiteSnapshot[]; d
         return (
           <g key={d}>
             <line x1={tx} x2={tx} y1={T - 6} y2={H - 6} stroke="var(--line)" strokeWidth="1" />
-            <text x={tx} y={T - 12} textAnchor={d === days ? "end" : d === 0 ? "start" : "middle"} fontSize="10" fontFamily="var(--mono)" fill="var(--muted)">
+            <text x={tx} y={T - 12} textAnchor={d === days ? "end" : d === 0 ? "start" : "middle"} fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
               {d === days ? "now" : new Date(t0 + d * DAY).toISOString().slice(5, 10)}
             </text>
           </g>

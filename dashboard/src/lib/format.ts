@@ -62,6 +62,13 @@ export function shortId(id: string | null, n = 8): string {
   return id ? id.slice(0, n) : "";
 }
 
+// An agent as a row names it. A seat-started runner's name carries its job's id
+// (`runner-<job>-s<n>`, src/runner-key.ts), so a row calls it a runner; the full name is
+// in the drawer (design D11).
+export function agentLabel(agent: string): string {
+  return /^(agent:)?runner-job_/.test(agent) ? "a seat-started runner" : agent;
+}
+
 export function unique<T>(list: T[]): T[] {
   return [...new Set(list)];
 }

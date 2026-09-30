@@ -48,13 +48,12 @@ export function Overview() {
       <section className="attention" aria-labelledby="attH">
         <header>
           <h2 id="attH">Needs attention</h2>
-          <span className="mono faint">{att.length} items</span>
+          <span className="num faint">{att.length} items</span>
           <span className="src ml-auto">worst first · {sitesOn ? "sites, " : ""}backups, CI, queue, watcher, agents</span>
         </header>
         {att.length ? (
           att.map((a, i) => (
-            <div className="att-row" key={`${a.kind}-${a.title}-${i}`} data-row="" data-open={a.open} tabIndex={0}>
-              <span className={`stripe ${a.sev}`} />
+            <div className={a.sev === "crit" ? "att-row sev-crit" : "att-row"} key={`${a.kind}-${a.title}-${i}`} data-row="" data-open={a.open} tabIndex={0}>
               <span className="kind">
                 <St kind={a.sev}>{a.kind}</St>
               </span>

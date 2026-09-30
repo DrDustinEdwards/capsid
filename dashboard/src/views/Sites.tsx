@@ -46,10 +46,10 @@ export function Sites() {
                     <td>
                       <b>{s.name}</b>
                     </td>
-                    <td className="mono">
+                    <td>
                       {s.health_path ? (
                         <>
-                          {s.health_path} {s.state === "degraded" && s.http_status != null && <St kind="warn">{String(s.http_status)}</St>}
+                          <span className="mono">{s.health_path}</span> {s.state === "degraded" && s.http_status != null && <St kind="warn">{String(s.http_status)}</St>}
                         </>
                       ) : (
                         <St kind="nodata">none</St>

@@ -34,9 +34,9 @@ export function Backups() {
                 {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
                 <dl className="kv">
                   <dt>Last good dump</dt>
-                  <dd className="mono">{h.backup.last_ok ? `${utc(ms(h.backup.last_ok))} (${ago(ms(h.backup.last_ok), now)})` : <St kind="crit">None recorded</St>}</dd>
+                  <dd className="num">{h.backup.last_ok ? `${utc(ms(h.backup.last_ok))} (${ago(ms(h.backup.last_ok), now)})` : <St kind="crit">None recorded</St>}</dd>
                   <dt>Age</dt>
-                  <dd className="mono">{h.backup.age_hours == null ? <St kind="nodata">No data</St> : `${h.backup.age_hours.toFixed(1)}h`}</dd>
+                  <dd className="num">{h.backup.age_hours == null ? <St kind="nodata">No data</St> : `${h.backup.age_hours.toFixed(1)}h`}</dd>
                   <dt>State</dt>
                   <dd>{h.backup.warning || !h.backup.last_ok ? <St kind="crit">Stale</St> : <St kind="ok">Fresh</St>}</dd>
                   <dt>Health</dt>
@@ -70,7 +70,7 @@ export function Backups() {
                 )}
                 <dl className="kv">
                   <dt>Newest dump</dt>
-                  <dd className="mono">{m.newest_dump ? `${utc(ms(m.newest_dump))} (${ago(ms(m.newest_dump), now)})` : "none"}</dd>
+                  <dd className="num">{m.newest_dump ? `${utc(ms(m.newest_dump))} (${ago(ms(m.newest_dump), now)})` : "none"}</dd>
                   <dt>Last run</dt>
                   <dd>
                     {m.last_run ? (

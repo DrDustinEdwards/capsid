@@ -47,16 +47,16 @@ export function Agents() {
                       <St kind={st.kind}>{st.label}</St>
                       <div className="src">{a.revoked_at ? `revoked ${ago(ms(a.revoked_at), now)}` : a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
                     </td>
-                    <td data-label="Done / failed / blocked" className="mono">
+                    <td data-label="Done / failed / blocked" className="num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
                     </td>
-                    <td data-label="PRs merged" className="mono">
+                    <td data-label="PRs merged" className="num">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
-                    <td data-label="Merge rate" className="mono">{pct(a.pr_merge_rate, 0)}</td>
-                    <td data-label="CI green" className="mono">{pct(a.ci_green_rate, 0)}</td>
-                    <td data-label="Median job" className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
-                    <td data-label="Improve attempts" className="mono">{attemptsText(a)}</td>
+                    <td data-label="Merge rate" className="num">{pct(a.pr_merge_rate, 0)}</td>
+                    <td data-label="CI green" className="num">{pct(a.ci_green_rate, 0)}</td>
+                    <td data-label="Median job" className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
+                    <td data-label="Improve attempts" className="num">{attemptsText(a)}</td>
                     <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (
@@ -92,7 +92,7 @@ export function Agents() {
               <div className="meter" role="img" aria-label={`${b.spend.ci_minutes} of ${b.caps.actions_minutes_month} Actions minutes`}>
                 <i className={minFrac > 1 ? "crit" : minFrac > 0.8 ? "warn" : ""} style={{ width: `${Math.min(100, minFrac * 100)}%` }} />
               </div>
-              <span className="mono">
+              <span className="num">
                 {b.spend.ci_minutes} of {b.caps.actions_minutes_month} this month
               </span>
             </dd>
@@ -101,7 +101,7 @@ export function Agents() {
               <div className="meter" role="img" aria-label={`$${b.spend.cost_usd.toFixed(2)} of $${b.caps.model_usd_month}`}>
                 <i className={usdFrac > 1 ? "crit" : usdFrac > 0.8 ? "warn" : ""} style={{ width: `${Math.min(100, usdFrac * 100)}%` }} />
               </div>
-              <span className="mono">
+              <span className="num">
                 ${b.spend.cost_usd.toFixed(2)} of ${b.caps.model_usd_month} (estimate)
               </span>
             </dd>
