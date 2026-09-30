@@ -257,6 +257,15 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               <>
                 <dt>Finding</dt>
                 <dd className="mono">{j.finding.fingerprint}</dd>
+                {j.finding.seen_count !== null && (
+                  <>
+                    <dt>Seen</dt>
+                    <dd className="mono">
+                      {j.finding.seen_count} {j.finding.seen_count === 1 ? "time" : "times"}
+                      {j.finding.last_seen ? `, last ${j.finding.last_seen}` : ""}
+                    </dd>
+                  </>
+                )}
               </>
             )}
             {j.result_ref && (
