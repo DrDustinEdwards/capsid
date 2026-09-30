@@ -224,9 +224,10 @@ const EVERY_ACTION = [
   ["site_add", { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" }],
   ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
   ["site_remove", { namespace: "capsid", revision: "3" }],
+  ["reset_breaker", { namespace: "capsid" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had and the three site edits, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the three site edits and the breaker reset, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
@@ -234,6 +235,7 @@ test("the Portal's actions are the eight the old /console page had and the three
     "mode",
     "pause",
     "release_job",
+    "reset_breaker",
     "resume_job",
     "revoke_agent",
     "seat_start",
@@ -243,7 +245,7 @@ test("the Portal's actions are the eight the old /console page had and the three
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 11);
+  assert.equal(PORTAL_ACTIONS.length, 12);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing

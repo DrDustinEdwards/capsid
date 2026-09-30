@@ -7,6 +7,7 @@ import { portalGate, portalSignOutCookies } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
+import { breakerState, resetBreaker } from "./job-breaker";
 import { IMPROVE_MODES, onRoster, pausedKey, ROSTER } from "./improve-schema";
 import { IMPROVE_ACTOR, pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
@@ -71,6 +72,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "site_add",
   "site_edit",
   "site_remove",
+  "reset_breaker",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -110,6 +112,8 @@ function describeAction(action: PortalAction, params: ActionParams): string {
       return `Change how Capsid Portal watches ${ns}. The watcher reads the new row on its next pass.`;
     case "site_remove":
       return `Remove ${ns} from the Portal's site configuration. The watcher stops probing it on its next pass.`;
+    case "reset_breaker":
+      return `Reset the queue's circuit breaker for ${ns}. Jobs its drivers failed before now stop counting, so ${ns} hands out work again until the threshold is reached anew.`;
   }
 }
 
@@ -158,6 +162,16 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         committed = true;
         summary = `Set the improve mode to ${value}.`;
         await auditClick(env, actor, action, null, result);
+        break;
+      }
+      case "reset_breaker": {
+        const namespace = required(params, "namespace");
+        if (!namespace) return { ok: false, refusal: "reset_breaker needs a namespace." };
+        const result = await resetBreaker(env, actor, now, { namespace });
+        if (!result.ok) return { ok: false, refusal: result.error };
+        committed = true;
+        summary = `Reset the circuit breaker for ${namespace}.`;
+        await auditClick(env, actor, action, namespace, result.state);
         break;
       }
       case "seat_start": {
@@ -297,6 +311,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script"],
   site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script"],
   site_remove: ["namespace", "revision"],
+  reset_breaker: ["namespace"],
 };
 
 type Gated = { ok: true; email: string; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
@@ -371,10 +386,10 @@ function shown(value: string | null): string {
 
 const refused = (refusal: string): Plan => ({ ok: false, refusal });
 
-function rosterRefusal(action: "pause" | "unpause", namespace: string | undefined): string | null {
+function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
   if (namespace === "all") {
-    return `the Portal ${action}s one namespace at a time, so "all" is refused here. ${action === "pause" ? "Pause" : "Unpause"} each of ${ROSTER.join(", ")} in turn.`;
+    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${ROSTER.join(", ")} in turn.`;
   }
   if (!onRoster(namespace)) return `'${namespace}' is not on the improve roster (${ROSTER.join(", ")}).`;
   return null;
@@ -399,6 +414,20 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             : `${pausedKey(p.namespace)} already holds "${current}"; it is replaced with "${p.reason}", with no expiry.`,
         ],
         audit: [`improve-paused by ${IMPROVE_ACTOR}`, click],
+      };
+    }
+    case "reset_breaker": {
+      const bad = rosterRefusal(action, p.namespace);
+      if (bad) return refused(bad);
+      const state = await breakerState(env, p.namespace, new Date());
+      return {
+        ok: true,
+        changes: [
+          state.open
+            ? `The breaker for ${p.namespace} is OPEN: ${state.failed} holder fails since ${state.since} UTC, at or over the threshold of ${state.threshold}. After the reset only failures from now count, and ${p.namespace} hands out work again.`
+            : `The breaker for ${p.namespace} is closed (${state.failed} of ${state.threshold} holder fails since ${state.since} UTC). The reset moves its window to now.`,
+        ],
+        audit: [`job-breaker-reset by ${actor}`, click],
       };
     }
     case "unpause": {
@@ -714,6 +743,7 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
     namespaces: status.namespaces.map((ns) => ({
       namespace: ns.namespace,
       paused: ns.paused,
+      breaker: { open: ns.breaker.open, failed: ns.breaker.failed, threshold: ns.breaker.threshold, since: ns.breaker.since, reset_at: ns.breaker.reset_at },
       anchor_pinned: ns.anchor_pinned,
       anchor_problem: ns.anchor_problem,
       best: ns.best,
