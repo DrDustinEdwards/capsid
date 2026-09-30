@@ -37,6 +37,7 @@ import {
   type JobClaim,
 } from "./job-claims";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
+import { signJobText } from "./job-signing";
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 
@@ -134,10 +135,14 @@ async function holderTransition(
   // reports its own errors as notes, so an unreachable GitHub costs the verified flags
   // and not the driver's ability to close a finished job.
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
+  // The summary is signed as it is written, so the command a blocked job shows a person
+  // can be told apart from one changed afterwards (src/job-signing.ts).
+  const summarySig = patch.result_summary ? await signJobText(env.IMPROVE_SCORE_SECRET, "summary", id, { summary: patch.result_summary }) : null;
   const statements = [
     requireJobUnchanged(env.DB, id, "claimed", actor, read.updated_at),
     env.DB.prepare(
       `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
+         summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?9 END,
          lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8
        WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?7 RETURNING id`
     ).bind(
@@ -148,9 +153,10 @@ async function holderTransition(
       patch.lease_expires,
       now.toISOString(),
       actor,
-      patch.bumpBlocked ? 1 : 0
+      patch.bumpBlocked ? 1 : 0,
+      summarySig
     ),
-    ...(await mirrorStatements(env.DB, job, `job-${action}`, actor)),
+    ...(await mirrorStatements(env, job, `job-${action}`, actor)),
     jobAudit(env.DB, actor, `job-${action}`, job, {
       status: job.status,
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
@@ -226,7 +232,7 @@ async function holderTransition(
   }
   // The driver a resume returned the job to is already holding it and learns of the
   // resume by its next call, which is usually a heartbeat.
-  const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env.DB, job) : null;
+  const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env, job) : null;
   return { ok: true, action, job, ...(outcome ? { outcome } : {}), ...(heartbeatNote ? { resume_note: heartbeatNote } : {}) };
 }
 
@@ -300,7 +306,7 @@ async function reviewRefusal(
         `UPDATE jobs SET result_ref = ?2, updated_at = ?3
          WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
       ).bind(id, outcome.pr, now.toISOString(), agent.actor),
-      ...(await mirrorStatements(env.DB, job, "job-review-bound", agent.actor)),
+      ...(await mirrorStatements(env, job, "job-review-bound", agent.actor)),
       jobAudit(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
     ]);
     if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
@@ -347,10 +353,10 @@ async function reviewRefusal(
     const job: JobRow = { ...read, result_summary: summary, corrections_count: read.corrections_count + 1, updated_at: now.toISOString() };
     const won = await guardedTransition(env, read, [
       env.DB.prepare(
-        `UPDATE jobs SET result_summary = ?2, corrections_count = corrections_count + 1, updated_at = ?3
+        `UPDATE jobs SET result_summary = ?2, summary_sig = NULL, corrections_count = corrections_count + 1, updated_at = ?3
          WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 RETURNING id`
       ).bind(id, summary, now.toISOString(), agent.actor),
-      ...(await mirrorStatements(env.DB, job, "job-review-changes", agent.actor)),
+      ...(await mirrorStatements(env, job, "job-review-changes", agent.actor)),
       jobAudit(env.DB, agent.actor, "job-review-changes", job, {
         verdict: review.verdict,
         by: review.by,

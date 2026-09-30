@@ -61,6 +61,9 @@ export interface JobRow {
   lease_expires: string | null;
   result_ref: string | null;
   result_summary: string | null;
+  // The holder's signature over result_summary (migrations/0027, src/job-signing.ts),
+  // or null: written before signing, or by a writer that does not sign.
+  summary_sig?: string | null;
   gate_required: number;
   // The scopes this job's work needs of the driver that claims it, as JSON, or null
   // for the jobs that need nothing unusual (migrations/0009).
