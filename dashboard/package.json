@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check && vite build",
-    "check": "node scripts/fixture-check.mjs && tsc --noEmit -p .",
+    "check": "node scripts/palette.mjs --check && node scripts/fixture-check.mjs && tsc --noEmit -p .",
+    "tokens": "node scripts/palette.mjs",
     "size": "node scripts/size-budget.mjs",
     "preview": "vite preview",
     "e2e": "playwright test",

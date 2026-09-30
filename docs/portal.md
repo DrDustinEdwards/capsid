@@ -118,13 +118,16 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 `dashboard/` is its own package (React 19, Vite, wouter), with its own lockfile and README.
 - **Develop:** `npm --prefix dashboard run dev` serves it with fake sample data (`dashboard/dev/sample-feed.json`, checked against `OpsFeed`).
+- **Design tokens:** every colour, font and shadow is a custom property in `dashboard/src/tokens.css`, which `dashboard/scripts/palette.mjs` generates from the seed `#4F2D7F` as a 12-step OKLCH scale (the method and the reasons are in Capsid, `capsid/research/design-portal-linear.md`, "Palette"). Change the script, then `npm --prefix dashboard run tokens`; never edit the file. `npm run check:dashboard` regenerates it and refuses a file that differs, and refuses any text or control pair below WCAG 2.2's bar (4.5:1 for text, 3:1 for a boundary) in either theme. The file holds tokens and nothing else, so it can move unchanged into the shared design package (capsid/decisions.md 2026-09-30).
 - **Deploy:** `scripts/deploy.mjs` builds it into `dashboard/dist` before every deploy, and the Worker serves those files as its static assets. A failed build stops the deploy.
 - **Browser tests:** `npm run test:browser`, after `npm run build:dashboard`, drives the built app in Chromium through Playwright (`dashboard/e2e`). It runs under `vite preview` with the dev mock and the Worker's own page CSP (`src/dashboard-csp.ts`). CI runs it after the build. What it covers:
   - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
   - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
   - the phone layout;
   - the collapsible sidebar;
-  - the Claims view: the aggregate, its filter, and a job's claims beside their checks.
+  - the Claims view: the aggregate, its filter, and a job's claims beside their checks;
+  - contrast as painted, in both themes: each text tone, the status words and pills, and a button's border, against what is behind them;
+  - the keyboard: `j` and `k` move the selection, Enter opens the row and Esc closes it, and the selected row can be seen (a changed background and a ring at 3:1).
 - **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. The initial JavaScript must be at most 100 KB gzip, each lazily loaded view at most 40 KB, and all CSS at most 12 KB.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/portal/callback` with the app's `index.html`, or serve the app's files without the gate.
 
