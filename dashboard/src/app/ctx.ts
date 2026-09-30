@@ -12,6 +12,7 @@ export const VIEWS = [
   { id: "ci", label: "CI and merges", key: "c" },
   { id: "namespaces", label: "Namespaces", key: "n" },
   { id: "activity", label: "Activity", key: "l" },
+  { id: "claims", label: "Claims", key: "v" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 

@@ -399,3 +399,56 @@ describe("the gate is bound to the job's own pull request and head", () => {
     expect((await jobRow())?.status).toBe("claimed");
   });
 });
+
+// A complete the reviewer stopped is the claim the dataset exists to keep: the agent
+// said it was done, a second reader said it was not. The claim rides in the batch the
+// gate writes and is recorded under the action the agent called. Each test uses its own
+// job id, because job_claims is append-only and cannot be emptied between tests.
+describe("a claim the review gate diverts is still recorded", () => {
+  const claimsOf = async (id: string) =>
+    (await env.DB.prepare("SELECT action, agent, prs_merged_urls, commits, deploy_state FROM job_claims WHERE job_id = ?1 ORDER BY id").bind(id).all()).results;
+  const saying = (id: string) =>
+    completeJob(reviewEnv(), driver(), NOW, id, {
+      result_summary: "opened PR 27",
+      result_ref: PR,
+      evidence: { prs: [PR], commits: 4 },
+      claim: { prs_merged: [PR], deploy_state: "none" },
+    });
+
+  it("PLANT: CHANGES keeps the driver's complete claim, with its own numbers", async () => {
+    const id = "job_reviewclaim1";
+    await claimedJob({ id });
+    withComments(["REVIEW: the error path swallows the refusal. CHANGES"]);
+    const result = await saying(id);
+    expect(result.ok).toBe(false);
+    expect(await claimsOf(id)).toEqual([
+      { action: "complete", agent: "agent:capsid-driver", prs_merged_urls: JSON.stringify([PR]), commits: 4, deploy_state: "none" },
+    ]);
+  });
+
+  it("PLANT: a reviewer BLOCK keeps the claim under complete, not block", async () => {
+    const id = "job_reviewclaim2";
+    await claimedJob({ id });
+    withComments(["REVIEW: needs a ruling. BLOCK"]);
+    const result = await saying(id);
+    expect(result.job?.status).toBe("blocked");
+    expect((await claimsOf(id)).map((c) => c.action)).toEqual(["complete"]);
+  });
+
+  it("CHANGES at the cap blocks and keeps the claim once", async () => {
+    const id = "job_reviewclaim3";
+    await claimedJob({ id, corrections_count: 2 });
+    withComments(["REVIEW: still not right. CHANGES"]);
+    await saying(id);
+    expect((await claimsOf(id)).map((c) => c.action)).toEqual(["complete"]);
+  });
+
+  it("an APPROVE records one claim, as any complete does", async () => {
+    const id = "job_reviewclaim4";
+    await claimedJob({ id });
+    withComments([`REVIEW: right at ${SHORT}. APPROVE`]);
+    const result = await saying(id);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect((await claimsOf(id)).map((c) => c.action)).toEqual(["complete"]);
+  });
+});

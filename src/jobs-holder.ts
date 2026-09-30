@@ -10,7 +10,7 @@ import {
   atCorrectionCap,
   cappedSummary,
 } from "./jobs-schema";
-import { reviewGate, type GateOutcome } from "./review";
+import { reviewGate, type GateOutcome, type Review } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { attributionStatements, failureNoteStatements } from "./skills-records";
@@ -24,8 +24,20 @@ import {
   type JobEvidence,
   type JobOutcomeRow,
 } from "./job-outcomes";
+import {
+  claimRow,
+  claimStatement,
+  evaluationRows,
+  evaluationStatements,
+  parseClaim,
+  workerEvaluatorId,
+  type ClaimInput,
+  type ClaimRaw,
+  type JobClaim,
+} from "./job-claims";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
-import { correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { actorKind, touchStatement } from "./job-touches";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -45,6 +57,12 @@ function holderRefusal(action: string, id: string, actor: string, current: JobRo
   if (current.claimed_by !== actor) return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
   return null;
 }
+
+// What the agent said on one complete, fail or block call, for its job_claims row.
+// `as` and `evidence` are set when the review gate turned the call into another
+// transition: the claim is still the agent's, made on the action it called, and a
+// complete the reviewer stopped is exactly the claim the dataset exists to keep.
+type Said = { claim?: JobClaim; raw: ClaimRaw; as?: "complete" | "fail" | "block"; evidence?: JobEvidence };
 
 async function holderTransition(
   env: Env,
@@ -68,6 +86,14 @@ async function holderTransition(
     // The skills the driver was offered and used. Names only: the credit direction
     // comes from signalFor(), which reads what the Worker verified on GitHub.
     skills?: JobSkills;
+    // Human-touch rows (src/job-touches.ts) for this transition, built from the row as
+    // the UPDATE leaves it, so they commit or abort with it. Only block writes any.
+    touches?: (job: JobRow) => D1PreparedStatement[];
+    // What the agent said on this complete, fail or block, as sent. Present, the
+    // transition writes one job_claims row; absent (heartbeat), it writes none, because
+    // the agent made no claim. `as` is the action the agent called, when the review
+    // gate turned it into another transition.
+    said?: Said;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -133,8 +159,32 @@ async function holderTransition(
   // complete, fail and block all end the run that held the job, so a runner key bound
   // to it stops here, in the same batch.
   if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
+  if (patch.touches) statements.push(...patch.touches(job));
+  // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as
+  // sent, so nothing GitHub says can reach it (src/job-claims.ts). It rides in this
+  // batch, so a transition the guard aborts leaves no claim behind either.
+  const claimed =
+    patch.said && (action === "complete" || action === "fail" || action === "block")
+      ? claimRow({
+          job_id: id,
+          action: patch.said.as ?? action,
+          agent: actor,
+          namespace: job.namespace,
+          raw: patch.said.raw,
+          claim: patch.said.claim,
+          evidence: patch.said.evidence ?? patch.evidence,
+          capsid_sha: env.BUILD_SHA ?? null,
+          now,
+        })
+      : undefined;
+  if (claimed) statements.push(claimStatement(env.DB, claimed));
   if (job.status === "done" || job.status === "failed") {
     const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
+    // One evaluation per worker check, the claim and GitHub's value side by side,
+    // after the claim row so its claim_id subquery finds it.
+    if (claimed) {
+      statements.push(...evaluationStatements(env.DB, evaluationRows(claimed, verdict, { evaluator_id: workerEvaluatorId(env.BUILD_SHA), now })));
+    }
     const row = outcomeFrom(job, verdict, now, patch.skills);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
@@ -202,7 +252,7 @@ async function reviewRefusal(
   action: string,
   id: string,
   resultRef: string | null,
-  opts: { requirePullRequest?: boolean; candidateRefs?: readonly (string | null | undefined)[] } = {}
+  opts: { requirePullRequest?: boolean; candidateRefs?: readonly (string | null | undefined)[]; said?: Said } = {}
 ): Promise<JobResult | null> {
   const current = await readJob(env.DB, id);
   if (!current) return null;
@@ -214,7 +264,7 @@ async function reviewRefusal(
     outcome = await reviewGate(
       env,
       { namespace: current.namespace, review_required: current.review_required, result_ref: current.result_ref },
-      { ...opts, candidateRefs: [resultRef, ...(opts.candidateRefs ?? [])] }
+      { requirePullRequest: opts.requirePullRequest, candidateRefs: [resultRef, ...(opts.candidateRefs ?? [])] }
     );
   } catch (err) {
     // A GitHub failure holds the job rather than waving it through. The gate puts a
@@ -281,6 +331,8 @@ async function reviewRefusal(
           `review by ${review.by}: CHANGES.${said} This is correction ${spentOnWork + 1} against this work, past the cap of ${CORRECTION_CAP}: ` +
           `${RETRY_CAP_REASON}. The reviewer and the driver have not converged, so what happens next is a person's call rather than another round.`,
         fromReview: true,
+        review,
+        said: opts.said,
       }));
     }
     // Back to the driver, spending a correction from the same budget the retry cap
@@ -301,6 +353,25 @@ async function reviewRefusal(
         at: review.at,
         corrections_count: job.corrections_count,
       }),
+      reviewTouch(env.DB, job, review, now),
+      ...(opts.said
+        ? [
+            claimStatement(
+              env.DB,
+              claimRow({
+                job_id: id,
+                action: opts.said.as ?? (action as "complete" | "fail" | "block"),
+                agent: agent.actor,
+                namespace: job.namespace,
+                raw: opts.said.raw,
+                claim: opts.said.claim,
+                evidence: opts.said.evidence,
+                capsid_sha: env.BUILD_SHA ?? null,
+                now,
+              })
+            ),
+          ]
+        : []),
     ]);
     if (!won) return refuse(action, `${id} moved between reading it and recording the review. Ask again.`);
     return { ok: false, action, job, refusal: `${summary} The job stays claimed: fix it and hand it on again. This spent a correction (${job.corrections_count} of ${CORRECTION_CAP}).` };
@@ -309,7 +380,22 @@ async function reviewRefusal(
   // BLOCK: blocked for the seat, with the objection as the reason, through the
   // ordinary block path so the gate counter and the mirror document behave as they do
   // for any other block.
-  return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true }));
+  return endedElsewhere(action, await blockJob(env, agent, now, id, { reason: `review by ${review.by}: BLOCK.${said}`, fromReview: true, review, said: opts.said }));
+}
+
+// A CHANGES or BLOCK acted on is a touch by the reviewer named on the verdict, not by
+// the driver whose call met it. It ends no wait, so it carries no waited_ms.
+function reviewTouch(db: D1Database, job: JobRow, review: Review, now: Date): D1PreparedStatement {
+  return touchStatement(db, {
+    job_id: job.id,
+    namespace: job.namespace,
+    kind: "review",
+    actor: review.by,
+    actor_kind: actorKind(review.by, { reviewer: true }),
+    detail: { verdict: review.verdict, at: review.at, ...(review.said ? { said: review.said } : {}) },
+    sinceGate: false,
+    at: now.toISOString(),
+  });
 }
 
 // A transition that ended somewhere other than asked is not a success. A complete or
@@ -366,11 +452,15 @@ export async function completeJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills }
+  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills; claim?: ClaimInput; raw?: ClaimRaw }
 ): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
+  // Refused before anything else runs, so a claim that cannot be recorded whole
+  // leaves no row of any kind.
+  const claim = parseClaim(args.claim);
+  if ("error" in claim) return refuse("complete", claim.error);
   // Checked before the write, because the outcome row this call produces cannot be
   // corrected afterwards: a result_ref and evidence swallowed into the summary would
   // leave a row that records nothing.
@@ -379,9 +469,11 @@ export async function completeJob(
   // The review gate (see reviewRefusal). complete must name a pull request and carry
   // an APPROVE; evidence.prs counts as naming it, so a driver cannot report its work
   // there with a document key in result_ref and escape the gate.
+  const completeRaw: ClaimRaw = args.raw ?? { evidence: args.evidence, claim: args.claim, result_summary: args.result_summary, result_ref: args.result_ref };
   const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
     requirePullRequest: true,
     candidateRefs: args.evidence?.prs,
+    said: { claim: claim.claim, raw: completeRaw, as: "complete", evidence: args.evidence },
   });
   if (review) return review;
   const unknown = await unknownSkills(env.DB, args.skills);
@@ -395,21 +487,39 @@ export async function completeJob(
     lease_expires: null,
     evidence: args.evidence,
     skills: credited.skills,
+    said: { claim: claim.claim, raw: completeRaw },
   });
 }
 
-export async function failJob(env: Env, agent: Agent, now: Date, id: string, reason: string, skills?: JobSkills): Promise<JobResult> {
+export async function failJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  reason: string,
+  skills?: JobSkills,
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
+): Promise<JobResult> {
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
+  const failClaim = parseClaim(said.claim);
+  if ("error" in failClaim) return refuse("fail", failClaim.error);
   // The review gate (see reviewRefusal), without demanding a pull request.
-  const review = await reviewRefusal(env, agent, now, "fail", id, null);
+  const failRaw: ClaimRaw = said.raw ?? { claim: said.claim, reason };
+  const review = await reviewRefusal(env, agent, now, "fail", id, null, { said: { claim: failClaim.claim, raw: failRaw, as: "fail" } });
   if (review) return review;
   const unknownOnFail = await unknownSkills(env.DB, skills);
   if (unknownOnFail) return refuse("fail", unknownOnFail);
   const creditedOnFail = await creditedSkills(env, id, skills);
   if ("refusal" in creditedOnFail) return refuse("fail", creditedOnFail.refusal);
-  return holderTransition(env, agent, now, "fail", id, { status: "failed", result_summary: reason, lease_expires: null, skills: creditedOnFail.skills });
+  return holderTransition(env, agent, now, "fail", id, {
+    status: "failed",
+    result_summary: reason,
+    lease_expires: null,
+    skills: creditedOnFail.skills,
+    said: { claim: failClaim.claim, raw: failRaw },
+  });
 }
 
 // A blocked job carries the exact command. A job that hit a gate is not a failure; it
@@ -432,13 +542,19 @@ export async function blockJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { reason: string; command?: string; fromReview?: boolean }
+  // review: the verdict that produced this block, when the gate blocked it, recorded
+  // as the reviewer's touch beside the gate. said: the agent's claim on the call the
+  // gate turned into this block, recorded under the action the agent called.
+  args: { reason: string; command?: string; fromReview?: boolean; review?: Review; claim?: ClaimInput; raw?: ClaimRaw; said?: Said }
 ): Promise<JobResult> {
   if (!args.reason?.trim()) return refuse("block", "block needs a reason: what gate was hit.");
+  const blockClaim = parseClaim(args.claim);
+  if ("error" in blockClaim) return refuse("block", blockClaim.error);
   // The review gate (see reviewRefusal). `fromReview` is set when the gate itself
   // blocks, so it does not consult itself again.
+  const blockRaw: ClaimRaw = args.raw ?? { claim: args.claim, reason: args.reason, command: args.command };
   if (!args.fromReview) {
-    const review = await reviewRefusal(env, agent, now, "block", id, null);
+    const review = await reviewRefusal(env, agent, now, "block", id, null, { said: { claim: blockClaim.claim, raw: blockRaw, as: "block" } });
     if (review) return review;
   }
   const summary = args.command ? `${args.reason}\n\n${RESUME_MARKER}\n\n    ${args.command}` : args.reason;
@@ -453,5 +569,23 @@ export async function blockJob(
     result_summary: capped ? cappedSummary(summary) : summary,
     lease_expires: null,
     bumpBlocked: true,
+    // The gate is the start of a wait for someone else, which the resume that ends it
+    // measures from. The reason and command as the driver gave them, before the cap
+    // wording is added to the summary.
+    touches: (job) => [
+      ...(args.review ? [reviewTouch(env.DB, job, args.review, now)] : []),
+      touchStatement(env.DB, {
+        job_id: job.id,
+        namespace: job.namespace,
+        kind: "gate",
+        actor: agent.actor,
+        actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
+        detail: { reason: args.reason, command: args.command ?? null },
+        sinceGate: false,
+        at: now.toISOString(),
+      }),
+    ],
+    // A block the review gate made carries the claim of the call it diverted, if any.
+    said: args.fromReview ? args.said : { claim: blockClaim.claim, raw: blockRaw },
   });
 }

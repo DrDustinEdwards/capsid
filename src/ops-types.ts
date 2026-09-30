@@ -253,6 +253,7 @@ export interface OpsFeed {
 //   POST /portal/api/actions/perform    body { token }           -> PortalPerformed
 //   GET  /portal/api/namespaces                                   -> PortalNamespaces
 //   GET  /portal/api/activity?namespace=&actor=                   -> PortalActivity
+//   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -350,4 +351,138 @@ export interface PortalActivity {
   // Newest first, at most `limit`.
   rows: PortalActivityRow[];
   limit: number;
+}
+
+// ---------------------------------------------------------------------------
+// Claims apart from verified outcomes (migrations/0023_job_claims.sql). The `claims`
+// tool and GET /portal/api/claims return these, from the same readers
+// (src/job-claims-read.ts). Every column is as stored: JSON columns stay JSON text,
+// and NULL stays null, because NULL is not zero.
+
+export type ClaimsAgreement = "agree" | "disagree" | "unclaimed" | "unchecked";
+
+export interface ClaimsFilter {
+  namespace: string | null;
+  // The claiming agent's actor string, e.g. agent:sample-driver.
+  agent: string | null;
+  // ISO 8601, inclusive lower bound and exclusive upper bound on each row's own time
+  // (recorded_at for claims and evaluations, at for touches).
+  since: string | null;
+  until: string | null;
+}
+
+export interface ClaimsAgreementCounts {
+  agree: number;
+  disagree: number;
+  unclaimed: number;
+  unchecked: number;
+}
+
+export interface ClaimsTouchSummary {
+  count: number;
+  by_kind: Record<string, number>;
+  by_actor_kind: Record<string, number>;
+  // Over the touches that carry a wait. Null when none does: no wait was measured,
+  // which is not a wait of zero.
+  waits: number;
+  waited_ms_total: number | null;
+  waited_ms_median: number | null;
+}
+
+export interface ClaimsGroup {
+  // Null for touches on a job no agent has made a claim on yet.
+  agent: string | null;
+  namespace: string;
+  // Distinct jobs with a claim, and claim rows.
+  jobs: number;
+  claims: number;
+  // Per evaluation name (pr_merged, prs_opened, ...), the claim-to-verified agreement.
+  evaluations: Record<string, ClaimsAgreementCounts>;
+  touches: ClaimsTouchSummary;
+}
+
+export interface ClaimsAggregate {
+  filter: ClaimsFilter;
+  groups: ClaimsGroup[];
+  // Each bounded read that hit its bound, by name. Empty means the answer is whole.
+  truncated: string[];
+}
+
+export interface JobClaimRow {
+  id: number;
+  job_id: string;
+  action: "complete" | "fail" | "block";
+  agent: string;
+  namespace: string;
+  raw: string;
+  prs_opened_urls: string | null;
+  prs_merged_urls: string | null;
+  prs_opened: number | null;
+  prs_merged: number | null;
+  commits: number | null;
+  files_changed: number | null;
+  tests_added: number | null;
+  tests_run: number | null;
+  tests_passed: number | null;
+  tests_failed: number | null;
+  tests_result: string | null;
+  deploy_state: string | null;
+  files_touched: string | null;
+  model_id: string | null;
+  client_name: string | null;
+  client_version: string | null;
+  permission_mode: string | null;
+  capsid_sha: string | null;
+  recorded_at: string;
+}
+
+export interface JobEvaluationRow {
+  id: number;
+  job_id: string;
+  claim_id: number | null;
+  name: string;
+  score_value: number | null;
+  score_label: "pass" | "fail" | "unknown";
+  claimed: string | null;
+  verified: string | null;
+  agreement: ClaimsAgreement;
+  evaluator: "worker" | "model" | "human";
+  evaluator_id: string;
+  explanation: string | null;
+  recorded_at: string;
+}
+
+export interface JobTouchRow {
+  id: number;
+  job_id: string;
+  namespace: string;
+  kind: string;
+  actor: string;
+  actor_kind: string;
+  waited_ms: number | null;
+  detail: string | null;
+  at: string;
+}
+
+export interface ClaimsJob {
+  job: { id: string; namespace: string; title: string; status: string; claimed_by: string | null };
+  // The job_outcomes row as stored, or null when the job has not ended.
+  outcome: Record<string, unknown> | null;
+  // Oldest first, each at most `limit`.
+  claims: JobClaimRow[];
+  evaluations: JobEvaluationRow[];
+  touches: JobTouchRow[];
+  limit: number;
+  truncated: string[];
+}
+
+// GET /portal/api/claims?namespace=&agent=&since=&until=  -> PortalClaimsAggregate
+// GET /portal/api/claims?job=<id>                         -> PortalClaimsJob (404 JSON for no such job)
+// A since or until that is not an ISO time is a text/plain 400.
+export interface PortalClaimsAggregate extends ClaimsAggregate {
+  generated: string;
+}
+
+export interface PortalClaimsJob extends ClaimsJob {
+  generated: string;
 }

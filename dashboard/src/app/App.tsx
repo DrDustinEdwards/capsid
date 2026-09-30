@@ -25,6 +25,7 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   ci: lazy(() => import("../views/Ci").then((m) => ({ default: m.Ci }))),
   namespaces: lazy(() => import("../views/Namespaces").then((m) => ({ default: m.Namespaces }))),
   activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
+  claims: lazy(() => import("../views/Claims").then((m) => ({ default: m.Claims }))),
   settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
 
