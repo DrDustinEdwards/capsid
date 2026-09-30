@@ -111,6 +111,10 @@ export const TABLES = [
   // The Portal's site configuration: edited by hand in the Portal, so the dump is
   // its only copy outside D1 besides the audit rows of each edit.
   "ops_sites",
+  // The Portal's package configuration and its weekly GitHub numbers (migrations/0028):
+  // the configuration is edited by hand, and the weekly rows are kept nowhere else.
+  "ops_packages",
+  "ops_package_weeks",
   // The claims dataset (migrations/0023_job_claims.sql): what each agent said it did,
   // each check of that against GitHub, and every human touch. Append-only by trigger,
   // and nothing prunes them, so the dump is the only copy outside D1.

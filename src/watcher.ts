@@ -10,8 +10,9 @@ import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
+import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
 import { readCloudflare } from "./ops-cloudflare";
-import type { SiteCloudflare } from "./ops-types";
+import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import {
   buildSnapshot,
   probeSite,
@@ -505,6 +506,9 @@ export interface Observed {
   // Each site's Cloudflare state, keyed by namespace. Optional so a pass assembled
   // without it (a test's Gathered) still builds a snapshot.
   cloudflare?: Record<string, SiteCloudflare>;
+  // Each configured package as this pass read it; [] with none configured, absent when
+  // the configuration could not be read (the snapshot then keeps the last pass's).
+  packages?: PackageSnapshot[];
 }
 
 export interface Gathered {
@@ -726,8 +730,20 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       site_map: o.siteMap,
       probes: o.probes,
       cloudflare: o.cloudflare,
+      packages: o.packages,
     })
   );
+  // The week's GitHub numbers, once per package per ISO week (ops_package_weeks). A
+  // failed write loses one week's row, not the pass: it is logged, and the next pass
+  // that week writes it.
+  const weekly = (o.packages ?? []).map((p) => weekStatement(env.DB, p, now)).filter((st): st is D1PreparedStatement => st !== null);
+  if (weekly.length > 0) {
+    try {
+      await env.DB.batch(weekly);
+    } catch (err) {
+      console.error(`WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   // Written last and only on a pass that ran. A stamp written first would make a
   // throwing pass look completed and skip the next several ticks.
@@ -1004,6 +1020,19 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
         sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
       );
     }
+  }
+
+  // The configured packages, for the Portal's Packages view (src/ops-packages.ts).
+  // Read, never judged: no finding comes from a package. With none configured nothing
+  // is fetched; each package's sources fail on their own inside readPackage.
+  const packageConfig = await attempt("package config", () => readPackageConfig(env.DB));
+  if (packageConfig) {
+    const read = await attempt("packages", async () => {
+      const results: PackageSnapshot[] = [];
+      for (const cfg of packageConfig) results.push(await readPackage(env, cfg, fetchImpl, now));
+      return results;
+    });
+    if (read) observed.packages = read;
   }
 
   return { findings: out, ran, observed };
