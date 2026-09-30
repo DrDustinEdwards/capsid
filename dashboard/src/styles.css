@@ -405,3 +405,5 @@ ul.plain.mono { font-size: 12px; }
 .field:disabled { opacity: 0.5; }
 .field[readonly] { background: var(--sunken); }
 td.ctl .toolbar { flex-wrap: nowrap; justify-content: flex-end; }
+/* A control cell with more than one button stacks them, so the column is as wide as one. */
+td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
