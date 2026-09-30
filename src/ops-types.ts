@@ -305,7 +305,8 @@ export type PortalAction =
   | "revoke_agent"
   | "site_add"
   | "site_edit"
-  | "site_remove";
+  | "site_remove"
+  | "reset_breaker";
 
 // params by action:
 //   pause         { namespace, reason }   reason required
@@ -321,6 +322,7 @@ export type PortalAction =
 //   site_edit     { namespace, revision, name?, origin?, health_path?, platform?, script? }
 //                 every field is the row as it will be; revision is the one shown
 //   site_remove   { namespace, revision }
+//   reset_breaker { namespace }           the queue's circuit breaker (src/job-breaker.ts)
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;
@@ -351,6 +353,9 @@ export interface PortalPerformed {
 export interface PortalNamespace {
   namespace: string;
   paused: string | null;
+  // The queue's circuit breaker: open after the threshold of holder fails in 24 hours,
+  // until reset. since is the window's start in audit_log's UTC format.
+  breaker: { open: boolean; failed: number; threshold: number; since: string; reset_at: string | null };
   anchor_pinned: boolean;
   anchor_problem: string | null;
   best: { sha: string; score: number; recorded_at: string } | null;

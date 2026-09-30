@@ -161,6 +161,21 @@ test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
   assert.deepEqual(report("budget").map((f) => f.fingerprint), ["paused-foxing"]);
 });
 
+test("an OPEN queue breaker is a finding the improve_status check owns, and a closed one is not", () => {
+  const report = (open: boolean) =>
+    statusFindings(
+      {
+        budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false, reason: null },
+        namespaces: [{ namespace: "foxing", paused: null, breaker: { namespace: "foxing", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
+      } as never
+    );
+  const found = report(true);
+  assert.deepEqual(found.map((f) => f.fingerprint), ["breaker-open-foxing"]);
+  assert.equal(owningCheck("breaker-open-foxing"), "improve_status");
+  assert.match(found[0].body, /3, threshold 3/);
+  assert.deepEqual(report(false), []);
+});
+
 // Derived from the gates' own reasons, not a hand-written one: neither gate's reason
 // contains the word "drift".
 test("a pause set by either drift gate is a finding", () => {
