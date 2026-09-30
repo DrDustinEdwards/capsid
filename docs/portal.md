@@ -4,13 +4,13 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
-**It carries twelve controls**, each on the row it changes:
+**It carries fifteen controls**, each on the row it changes:
 - the job drawer: resume a blocked job, release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
 - the Queue view: the seat-start switch;
 - the Agents view: the improve mode;
 - the Namespaces view: pause and unpause, and reset the queue's circuit breaker when it is open;
-- the Settings view: add, edit and remove a site.
+- the Settings view: add, edit and remove a site, and add, edit and remove a package.
 
 Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (the routes are below). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
@@ -25,7 +25,8 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - each roster repo's latest CI run;
 - the site configuration compared with the registered namespaces;
 - a probe of every configured site, with a 7-day uptime ring;
-- Cloudflare's view of each site, from `src/ops-cloudflare.ts`.
+- Cloudflare's view of each site, from `src/ops-cloudflare.ts`;
+- each configured package as the pass read it, from `src/ops-packages.ts`.
 
 **The live part** is read from D1 and KV on every request. It holds:
 - every open job, and every job that ended in the last day;
@@ -34,12 +35,26 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - what auto-merge left for the seat;
 - seat-started sessions with their GitHub run links;
 - the improve loop's mode and budget;
-- each roster namespace's pause reason.
+- each roster namespace's pause reason;
+- the site and package configuration.
 
-Three views read more when they open, and not on every poll:
+Four views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
+- **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
+
+## Packages
+
+Optional, like the sites (capsid/decisions.md, 2026-09-29): with no package configured in Settings, the Portal shows no Packages view and the watcher reads nothing for packages. Each watcher pass reads every configured npm package, each source failing on its own (`src/ops-packages.ts`, which cites each API's documentation):
+- **Versions**: the registry's abbreviated document, `latest` and the other dist-tags.
+- **Downloads**: the last 7 and 30 days from `api.npmjs.org`, and the last 7 days per version, the only per-version counts npm keeps. A package npm has not counted yet shows zero.
+- **Dependents**: deps.dev's counts of packages that depend on the default version, directly or through another package. deps.dev calls them indicative, and no public API lists them, so the view links to npm's and deps.dev's lists. GitHub has no API for the repositories that use a package.
+- **Repository**: stars, open issues (GitHub counts pull requests as issues; they are taken out), open pull requests (one page of 100; more shows as 100+) and the latest release, through the GitHub App. The first pass of each ISO week keeps these in `ops_package_weeks`.
+
+A pass costs up to nine requests per package. No rate limit is published for npm or deps.dev.
+
+**The daily history** is read when asked for, not pass by pass: from each name's first publish (the full registry document's `time.created`) to yesterday, in ranges of at most 540 days, under npm's 18-month cap, since npm silently shortens a longer range. A package's former name (`formerly`, as enarratio was abscissa) is read the same way and shown joined to it, each day labelled. It is cached six hours in KV (`packages:history:v1:<name>`), about 30 bytes a day. A range npm would not answer is named as missing, never counted as zero.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
 
@@ -106,7 +121,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
-  - `g` then a letter goes to a view: `o` overview, `s` sites, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing.
+  - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
   - `j` and `k` move through a list, Enter opens the row, and Esc closes.
   - `r` refreshes and `t` switches light and dark.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
@@ -145,9 +160,9 @@ The administrator's Access session, and nothing else (`src/portal-auth.ts`).
 
 Every route but the callback answers to one gate, `portalGate`: the Access session and `ADMIN_EMAIL` on every request, a 403 for any `Authorization` header, and the sign-in for no session. The router matches the callback and every `/portal/api/` route before the app's catch-all.
 
-- **`GET /portal/api/ops`** returns `OpsFeed` (`src/ops-types.ts`), uncached: the watcher's last pass from KV, plus open jobs and jobs that ended in the last day, the agents with their records, pull requests recorded in the last week, the awaiting-seat set, seat-started sessions from the last week with the run each became, and the loop's mode and budget. It also carries each roster namespace's pause reason and the `csrf` value the controls send back. One request costs 10 D1 statements (plus one per unclaimed seat start in the pending window) and 7 KV reads plus one per roster namespace, run concurrently. `src/ops-feed.ts` states them and an integration test counts them.
+- **`GET /portal/api/ops`** returns `OpsFeed` (`src/ops-types.ts`), uncached: the watcher's last pass from KV, plus open jobs and jobs that ended in the last day, the agents with their records, pull requests recorded in the last week, the awaiting-seat set, seat-started sessions from the last week with the run each became, and the loop's mode and budget. It also carries each roster namespace's pause reason and the `csrf` value the controls send back. One request costs 13 D1 statements (plus one per unclaimed seat start in the pending window) and 7 KV reads plus one per roster namespace, run concurrently. `src/ops-feed.ts` states them and an integration test counts them.
 - **`POST /portal/api/ops/refresh`** runs one watcher pass now and returns the new feed. It needs the header `X-Capsid-Ops: refresh`, which a cross-site form cannot send, and it runs at most once per two minutes (KV `ops:refresh:last`; a 429 with `Retry-After` inside that window, and a 503 when the stamp cannot be read or written). The click is audited as `portal-ops-refresh` under `access:<email>`.
-- **`POST /portal/api/actions/preview`** and **`POST /portal/api/actions/perform`** are the twelve controls (`src/portal-actions.ts`). The confirm is a second request, as ruled 2026-09-11:
+- **`POST /portal/api/actions/preview`** and **`POST /portal/api/actions/perform`** are the fifteen controls (`src/portal-actions.ts`). The confirm is a second request, as ruled 2026-09-11:
   - The preview takes `{action, params}`, reads the current state, writes nothing, and returns what will change, the audit rows the perform will write, and a signed token. The token is good for five minutes and carries the action, its params and the admin's email.
   - The perform takes only `{token}`, so what runs is exactly what the dialog showed.
   - Both refuse a `Sec-Fetch-Site` that is present and not `same-origin`.
@@ -156,6 +171,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
   - A perform writes the shared mutator's audit row, then `portal-<action>` under `access:<email>`. Rows from before the move say `console-<action>` ([schema.md](schema.md)).
 - **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `claims` tool's readers and writes nothing.
+- **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
 - **`POST /portal/api/sign-out`**, above.
 - **Any other `/portal/api/` path** is a JSON 404 behind the gate, never the app's page.
 - **`/portal/`** and everything under it serves the built app from the `ASSETS` binding, only after the gate. The page gets `no-store` and its own CSP (scripts, styles and fetches from this origin only); hashed files under `/portal/assets/` are cached privately for a year. A browser loading an unknown path as a page gets the app's page, so the app's own routes load; a missing file stays a 404. With no `ASSETS` binding the admin gets a 503 saying the Portal is not deployed.
