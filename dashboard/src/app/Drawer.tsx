@@ -61,7 +61,7 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
           <dl className="kv">
             <dt>Checked</dt>
             <dd>
-              {ago(ms(s.checked_at), now)} <span className="faint mono">{utc(ms(s.checked_at))}</span>
+              {ago(ms(s.checked_at), now)} <span className="faint num">{utc(ms(s.checked_at))}</span>
             </dd>
             <dt>URL</dt>
             <dd className="mono">
@@ -69,9 +69,9 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
               {s.health_path ?? "/"}
             </dd>
             <dt>HTTP status</dt>
-            <dd className="mono">{s.http_status ?? "no answer"}</dd>
+            <dd className="num">{s.http_status ?? "no answer"}</dd>
             <dt>Latency</dt>
-            <dd className="mono">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
+            <dd className="num">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
             <dt>Reports sha</dt>
             <dd className="mono">{s.sha ?? <span className="faint">not reported</span>}</dd>
             <dt>Platform</dt>
@@ -93,7 +93,7 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
                       <td className="mono">{shortId(d.version_id ?? d.id)}</td>
                       <td className="muted">{d.message ?? d.triggered_by ?? ""}</td>
                       <td className="muted">{d.author_email ?? ""}</td>
-                      <td className="mono" title={utc(ms(d.created_on))}>
+                      <td className="num" title={utc(ms(d.created_on))}>
                         {ago(ms(d.created_on), now)}
                       </td>
                     </tr>
@@ -224,16 +224,16 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               <St kind={k.kind}>{k.label}</St> <span className="faint">{jobMeta(j, now)}</span>
             </dd>
             <dt>Priority</dt>
-            <dd className="mono">{j.priority}</dd>
+            <dd className="num">{j.priority}</dd>
             <dt>Posted by</dt>
             <dd className="mono">{j.posted_by}</dd>
             <dt>Created</dt>
             <dd>
-              {ago(ms(j.created_at), now)} <span className="faint mono">{utc(ms(j.created_at))}</span>
+              {ago(ms(j.created_at), now)} <span className="faint num">{utc(ms(j.created_at))}</span>
             </dd>
             <dt>Last change</dt>
             <dd>
-              {ago(ms(j.updated_at), now)} <span className="faint mono">{utc(ms(j.updated_at))}</span>
+              {ago(ms(j.updated_at), now)} <span className="faint num">{utc(ms(j.updated_at))}</span>
             </dd>
             {j.claimed_by && (
               <>
@@ -248,7 +248,7 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               </>
             )}
             <dt>Blocked / resumed</dt>
-            <dd className="mono">
+            <dd className="num">
               {j.blocked_count} / {j.resumed_count}
             </dd>
             <dt>Gate required</dt>
@@ -260,7 +260,7 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                 {j.finding.seen_count !== null && (
                   <>
                     <dt>Seen</dt>
-                    <dd className="mono">
+                    <dd className="num">
                       {j.finding.seen_count} {j.finding.seen_count === 1 ? "time" : "times"}
                       {j.finding.last_seen ? `, last ${j.finding.last_seen}` : ""}
                     </dd>
@@ -323,7 +323,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
-          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <span className="faint mono">{utc(ms(a.last_seen))}</span></> : "never"}</dd>
+          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <span className="faint num">{utc(ms(a.last_seen))}</span></> : "never"}</dd>
           {a.revoked_at && (
             <>
               <dt>Revoked</dt>
@@ -331,19 +331,19 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             </>
           )}
           <dt>Jobs</dt>
-          <dd className="mono">
+          <dd className="num">
             {a.jobs_done} done · {a.jobs_failed} failed · {a.jobs_blocked} blocked
           </dd>
           <dt>Pull requests</dt>
-          <dd className="mono">
+          <dd className="num">
             {a.prs_merged} merged of {a.prs_opened} opened
           </dd>
           <dt>CI green</dt>
-          <dd className="mono">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
+          <dd className="num">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
           <dt>Median job</dt>
-          <dd className="mono">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
+          <dd className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
           <dt>Improve attempts</dt>
-          <dd className="mono" title={a.attempts_kept == null ? "Not a namespace driver" : undefined}>
+          <dd className="num" title={a.attempts_kept == null ? "Not a namespace driver" : undefined}>
             {attemptsText(a)}
           </dd>
           <dt>Flags</dt>

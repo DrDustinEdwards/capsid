@@ -201,7 +201,7 @@ function Row({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
         {s.script ?? none}
       </td>
       <td data-label="Revision">
-        <span className="mono">{s.revision}</span>
+        <span className="num">{s.revision}</span>
         <div className="src" title={Number.isNaN(at) ? s.updated_at : utc(at)}>
           {Number.isNaN(at) ? `updated ${s.updated_at}` : `updated ${ago(at, now)}`}
         </div>

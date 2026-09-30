@@ -47,7 +47,7 @@ export function Deploys() {
                 <tbody>
                   {list.map(({ s, d }) => (
                     <tr key={`${siteKey(s)}-${d.id}`} className="click" data-row="" data-open={`site:${siteKey(s)}`} tabIndex={0}>
-                      <td className="mono" title={utc(ms(d.created_on))}>
+                      <td className="num" title={utc(ms(d.created_on))}>
                         {ago(ms(d.created_on), now)}
                       </td>
                       <td>

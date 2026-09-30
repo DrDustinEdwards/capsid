@@ -25,9 +25,9 @@ export function Incidents() {
                     {ago(ms(snap.pass_at), now)} {passStale(snap, now) && <St kind="warn">stale</St>}
                   </dd>
                   <dt>Cadence</dt>
-                  <dd className="mono">every {snap.cadence_min} min</dd>
+                  <dd className="num">every {snap.cadence_min} min</dd>
                   <dt>Duration</dt>
-                  <dd className="mono">{(snap.pass_ms / 1000).toFixed(1)}s</dd>
+                  <dd className="num">{(snap.pass_ms / 1000).toFixed(1)}s</dd>
                   <dt>Site map</dt>
                   <dd>
                     {!snap.site_map ? (
