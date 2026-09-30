@@ -391,3 +391,12 @@ describe("the Portal's reads", () => {
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
   });
 });
+
+describe("GET /portal/api/packages/history", () => {
+  it("answers only for a configured package, so the route cannot fetch an arbitrary name from npm", async () => {
+    const res = await call("/portal/api/packages/history?name=left-pad");
+    expect(res.status).toBe(404);
+    expect(await res.text()).toMatch(/left-pad is not a configured package/);
+    expect((await call("/portal/api/packages/history")).status).toBe(400);
+  });
+});
