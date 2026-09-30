@@ -37,8 +37,17 @@ test("one row per pull request the evidence named", () => {
   assert.equal(recorded.length, 2);
   assert.match(recorded[0].sql, /INSERT INTO job_outcome_prs/);
   // With no merge state read for them, merged and merge_verified_at bind NULL: nobody
-  // counted, never 0. A read state is covered in test-integration/outcome-prs.test.ts.
-  assert.deepEqual(recorded[0].params, ["job_1", "https://github.com/o/r/pull/1", null, null]);
+  // counted, never 0, and no identity is pinned (the sweep pins it on its first read).
+  // A read state is covered in test-integration/outcome-prs.test.ts.
+  assert.deepEqual(recorded[0].params, ["job_1", "https://github.com/o/r/pull/1", null, null, null, null]);
+});
+
+test("a pull request complete read is pinned to the one GitHub answered with", () => {
+  const { recorded, db } = recorder();
+  const url = "https://github.com/o/r/pull/1";
+  const now = new Date("2026-09-30T00:00:00.000Z");
+  outcomePrStatements(db, "job_1", [url], { [url]: true }, now, { [url]: { node_id: "PR_one", created_at: "2026-09-29T00:00:00Z" } });
+  assert.deepEqual(recorded[0].params, ["job_1", url, 1, now.toISOString(), "PR_one", "2026-09-29T00:00:00Z"]);
 });
 
 test("a repeated pull request is written once, because a batch conflict would abort the outcome write", () => {

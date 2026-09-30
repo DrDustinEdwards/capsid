@@ -343,6 +343,121 @@ test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2
   });
 });
 
+// A pull request's identity (job_6092edef11e1). A URL names a number, and a recreated or
+// transferred repo hands its numbers out again, so a later read by URL can land on a
+// different pull request. The row pins the one it named and refuses any other.
+
+const REPO_PATH = "/repos/DrDustinEdwards/capsid-mcp";
+
+// A D1 stand-in for reverifyPr: the repo mapping, the join rows it selects, and every
+// statement it writes, kept as SQL with its bound values.
+function reverifyEnv(rows: Array<Record<string, unknown>>) {
+  const written: Array<{ sql: string; args: unknown[] }> = [];
+  const env = fakeEnv({
+    DB: {
+      prepare: (sql: string) => ({
+        bind: (...args: unknown[]) => ({
+          sql,
+          args,
+          first: async () => ({ repos: JSON.stringify(REPOS) }),
+          all: async () => (/FROM job_outcome_prs/.test(sql) ? { results: rows } : { results: [] }),
+        }),
+      }),
+      batch: async (statements: Array<{ sql: string; args: unknown[] }>) => {
+        written.push(...statements.map((s) => ({ sql: s.sql, args: s.args })));
+        return [];
+      },
+    },
+    APP_KV: fakeKv({ seedToken: true }).kv,
+  });
+  return { env, written };
+}
+
+const setsMerged = (w: { sql: string }) => /SET merged/.test(w.sql);
+const setsUnverifiable = (w: { sql: string }) => /SET unverifiable/.test(w.sql);
+
+test("REPRODUCED: a pull request number now held by a different pull request does not verify", async () => {
+  // Pinned to PR_old when the outcome was recorded; the number now answers as PR_new,
+  // merged. Before the fix the row took the new pull request's merge state.
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: "PR_old", named_at: "2026-09-10T00:00:00.000Z" }]);
+  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" } } }, async () => {
+    const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
+    assert.deepEqual(out, [], "a pull request that is not the one the row named was reported as re-verified");
+  });
+  assert.equal(written.filter(setsMerged).length, 0, "the merge state of a different pull request was written");
+  const marked = written.filter(setsUnverifiable);
+  assert.equal(marked.length, 1);
+  assert.ok(marked[0].args.includes("identity-changed"), JSON.stringify(marked[0].args));
+});
+
+test("the pull request the row pinned is re-verified as before", async () => {
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: "PR_same", named_at: "2026-09-10T00:00:00.000Z" }]);
+  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_same", created_at: "2026-09-09T00:00:00Z" } } }, async () => {
+    const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
+    assert.deepEqual(out, [{ job_id: "job_x", pr_url: PR_URL, merged: true, changed: true }]);
+  });
+  assert.equal(written.filter(setsMerged).length, 1);
+  assert.equal(written.filter(setsUnverifiable).length, 0);
+});
+
+test("BACKFILL: a row with no pinned id whose repo was created after the outcome is marked recreated and not read by number", async () => {
+  // The claude-skills case: recorded 2026-09-17, repo recreated 2026-09-29.
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" }]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" } },
+      [`GET ${REPO_PATH}`]: { body: { created_at: "2026-09-29T19:13:35Z" } },
+    },
+    async () => {
+      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
+    }
+  );
+  assert.equal(written.filter(setsMerged).length, 0);
+  const marked = written.filter(setsUnverifiable);
+  assert.equal(marked.length, 1);
+  assert.ok(marked[0].args.includes("repo-recreated"), JSON.stringify(marked[0].args));
+});
+
+test("BACKFILL: a row with no pinned id, in a repo older than the outcome, whose pull request was opened after it, is not that pull request", async () => {
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: { body: { merged: false, node_id: "PR_later", created_at: "2026-09-20T00:00:00Z" } },
+      [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
+    },
+    async () => {
+      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
+    }
+  );
+  assert.equal(written.filter(setsMerged).length, 0);
+  assert.ok(written.filter(setsUnverifiable)[0]?.args.includes("identity-changed"));
+});
+
+test("BACKFILL: a row with no pinned id, in an unchanged repo, is pinned on this read and re-verified", async () => {
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_same", created_at: "2026-09-16T00:00:00Z" } },
+      [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
+    },
+    async () => {
+      const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
+      assert.equal(out.length, 1);
+    }
+  );
+  const merged = written.filter(setsMerged);
+  assert.equal(merged.length, 1);
+  assert.ok(merged[0].args.includes("PR_same"), "the row was not pinned to the pull request it was checked against");
+});
+
+test("BACKFILL fails closed: a repo that cannot be read leaves the unpinned row as it was", async () => {
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
+  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_x", created_at: "2026-09-16T00:00:00Z" } } }, async () => {
+    assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
+  });
+  assert.deepEqual(written, []);
+});
+
 // the bar a job can set on a driver's history
 
 test("a min_record nobody set is no requirement", () => {
