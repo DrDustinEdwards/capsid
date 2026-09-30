@@ -32,6 +32,7 @@ import {
   readBudget,
   readMode,
 } from "./improve-state";
+import { breakerState, type BreakerState } from "./job-breaker";
 import { verifyTaskDoc } from "./improve-task";
 import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
 import { loadAgentRecords, type AgentRecord } from "./agent-record";
@@ -122,6 +123,9 @@ async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsS
 export interface NamespaceStatus {
   namespace: string;
   paused: string | null;
+  // The queue's circuit breaker (src/job-breaker.ts): open when the namespace's drivers
+  // failed the threshold of jobs in 24 hours, until the seat or Dustin resets it.
+  breaker: BreakerState;
   anchor_pinned: boolean;
   anchor_problem: string | null;
   best: { sha: string; score: number; recorded_at: string } | null;
@@ -326,6 +330,7 @@ export async function improveStatus(
     out.push({
       namespace,
       paused: await pausedReason(env.APP_KV, namespace),
+      breaker: await breakerState(env, namespace, new Date()),
       anchor_pinned: Boolean(verification.pinned),
       anchor_problem: refusal,
       best: best ? { sha: best.sha, score: best.score, recorded_at: best.recorded_at } : null,

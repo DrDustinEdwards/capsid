@@ -18,6 +18,7 @@ import {
 import { signTaskBody, verifySignedBody } from "./improve-task";
 import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
 import { offerForClaim } from "./job-skill-offers";
+import { breakerRefusal, breakerState } from "./job-breaker";
 import {
   actorShapeRefusal,
   guardedTransition,
@@ -292,6 +293,12 @@ export async function claimJob(
       .first<JobRow>();
     if (!candidate) return refuse("claim", `no queued jobs in ${args.namespace}.`);
   }
+
+  // A namespace whose drivers keep failing stops handing out work until a person looks
+  // (src/job-breaker.ts). Checked before anything else touches the candidate, so an
+  // open breaker leaves the queue exactly as it was.
+  const breaker = await breakerState(env, candidate.namespace, now);
+  if (breaker.open) return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
 
   // What the job needs of the driver is checked before the lease is taken. A claim
   // that took the lease and then refused would park the job on a driver that cannot do
