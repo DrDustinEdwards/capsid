@@ -41,7 +41,7 @@ export function Ci() {
                         <St kind={st.kind}>{st.label}</St>
                       </td>
                       <td className="mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
-                      <td className="mono" title={c.latest ? utc(ms(c.latest.created_at)) : undefined}>
+                      <td className="num" title={c.latest ? utc(ms(c.latest.created_at)) : undefined}>
                         {c.latest ? ago(ms(c.latest.created_at), now) : <span className="faint">runs could not be read</span>}
                       </td>
                       <td>
@@ -87,8 +87,8 @@ export function Ci() {
                     </td>
                     <td>{job ? job.title : <span className="mono faint">{p.job_id}</span>}</td>
                     <td>{p.merged === true ? <St kind="ok">Merged</St> : p.merged === false ? <St kind="crit">Not merged</St> : <St kind="run">Open</St>}</td>
-                    <td className="mono">{p.merge_verified_at ? ago(ms(p.merge_verified_at), now) : <span className="faint">not yet</span>}</td>
-                    <td className="mono">{ago(ms(p.recorded_at), now)}</td>
+                    <td className="num">{p.merge_verified_at ? ago(ms(p.merge_verified_at), now) : <span className="faint">not yet</span>}</td>
+                    <td className="num">{ago(ms(p.recorded_at), now)}</td>
                   </tr>
                 );
               })}
@@ -126,7 +126,7 @@ export function Ci() {
                     <St kind="warn">{a.failed}</St>
                   </td>
                   <td className="muted">{a.why}</td>
-                  <td className="mono">{ago(ms(a.at), now)}</td>
+                  <td className="num">{ago(ms(a.at), now)}</td>
                 </tr>
               ))}
               {!live.awaiting_seat.length && (

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import { JOB, PROBE, cfNoData, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
-import { age, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
+import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 
@@ -22,7 +22,7 @@ export function Panel({ title, src, children, className, count }: { title: strin
     <section className={`panel${className ? ` ${className}` : ""}`}>
       <header>
         <h2>{title}</h2>
-        {count != null && <span className="mono faint">{count}</span>}
+        {count != null && <span className="num faint">{count}</span>}
         {src != null && <span className="src">{src}</span>}
       </header>
       {children}
@@ -101,7 +101,7 @@ export function BackupCell({ s }: { s: SiteSnapshot }) {
   const width = Math.min(100, (backup.age_hours / BACKUP_LIMIT_HOURS) * 100);
   return (
     <>
-      <span className={over ? "mono hot" : "mono"}>{backup.age_hours.toFixed(1)}h</span> <span className="faint mono">/ {BACKUP_LIMIT_HOURS}h</span>
+      <span className={over ? "num hot" : "num"}>{backup.age_hours.toFixed(1)}h</span> <span className="faint num">/ {BACKUP_LIMIT_HOURS}h</span>
       <div className="backupbar" role="img" aria-label={`Backup age ${backup.age_hours.toFixed(1)} of ${BACKUP_LIMIT_HOURS} hours`}>
         <i className={over ? "crit" : backup.age_hours > BACKUP_LIMIT_HOURS * 0.75 ? "warn" : ""} style={{ width: `${width}%` }} />
       </div>
@@ -152,7 +152,7 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <BackupCell s={s} />
                 </td>
                 <td data-label="Probe">
-                  <span className="mono">{s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}</span>
+                  <span className="num">{s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}</span>
                   <div className="src">
                     {s.health_path ?? "/"} · {ago(ms(s.checked_at), now)}
                   </div>
@@ -198,19 +198,20 @@ export function QueueRows({ jobs, compact }: { jobs: OpsJob[]; compact?: boolean
         return (
           <div className="qgroup" key={g.label}>
             <h3>
-              {g.label} <span className="mono faint">{list.length}</span>
+              {g.label} <span className="num faint">{list.length}</span>
             </h3>
             {list.length ? (
               list.map((j) => {
                 const pr = feed.live.prs.find((p) => p.job_id === j.id);
+                // Plain English in the row; the job id is in the drawer (D11).
                 const sub =
                   j.status === "blocked"
                     ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
                     : j.status === "claimed"
-                      ? `Held by ${j.claimed_by ?? "no holder"}`
+                      ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
                       : j.status === "queued"
-                        ? `${j.finding ? "Watcher finding · " : ""}${j.id}`
-                        : `${pr ? `PR ${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ?? j.id}`;
+                        ? `${j.finding ? "Watcher finding · " : ""}priority ${j.priority}`
+                        : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                 const k = JOB[j.status];
                 return (
                   <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
@@ -249,13 +250,22 @@ export function IncidentFeed({ limit, ns }: { limit?: number; ns?: string }) {
     <div className="feed">
       {items.map((it) => {
         const kind = it.open ? it.sev : "ok";
+        // The fingerprint is raw detail: in the job's drawer when the finding has a job,
+        // and on hover when it has none to open (D11).
         return (
-          <div className="frow" key={`${it.fp}-${it.ref ?? ""}`} data-row="" data-open={it.ref ?? undefined} tabIndex={it.ref ? 0 : undefined}>
-            <Icon kind={kind} style={{ color: `var(--${kind})`, marginTop: 2 }} />
-            <div>
+          <div
+            className={kind === "crit" ? "frow sev-crit" : "frow"}
+            key={`${it.fp}-${it.ref ?? ""}`}
+            data-row=""
+            data-open={it.ref ?? undefined}
+            tabIndex={it.ref ? 0 : undefined}
+            title={it.ref ? undefined : `fingerprint ${it.fp}`}
+          >
+            <Icon kind={kind} style={{ color: `var(--${kind})` }} />
+            <div className="t">
               <b>{it.title}</b>
               <div className="sub">
-                <span className="ns">{it.ns}</span> · {it.open ? "open" : "closed"}, {it.status} · <span className="mono">{it.fp}</span>
+                <span className="ns">{it.ns}</span> · {it.open ? "open" : "closed"}, {it.status}
               </div>
             </div>
             <div className="m">

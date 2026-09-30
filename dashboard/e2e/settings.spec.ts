@@ -53,7 +53,7 @@ test.describe.serial("the site configuration", () => {
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(row(page)).toContainText("Sample I renamed");
     await expect(row(page)).toContainText("Vercel");
-    await expect(row(page).locator('td[data-label="Revision"] .mono')).toHaveText("2");
+    await expect(row(page).locator('td[data-label="Revision"] .num')).toHaveText("2");
   });
 
   test("a refusal from the server is shown in the dialog, verbatim", async ({ page }) => {

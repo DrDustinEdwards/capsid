@@ -1,5 +1,5 @@
 import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSnapshot, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
-import { DAY, HOUR, SLOT_MS, age, ago, hostOf, ms } from "./format";
+import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
 
 // The status vocabulary: every state is a shape, a word and a colour.
 export type Kind = "ok" | "warn" | "crit" | "nodata" | "run" | "queued" | "blocked" | "done";
@@ -194,7 +194,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   }
   for (const j of live.jobs) {
     if (j.status === "claimed" && j.lease_expires && ms(j.lease_expires) < now) {
-      out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ?? "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}` });
+      out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}` });
     }
   }
   for (const a of live.awaiting_seat) {
@@ -257,7 +257,9 @@ export function incidents(feed: OpsFeed): Incident[] {
   // minutes. Decided when the feed was read; no job is posted for it.
   for (const s of feed.live.sessions) {
     if (!s.incident) continue;
-    const who = s.job_id ?? s.agent;
+    // Named by the job's title, not its id: the id is in the job's drawer (D11).
+    const job = s.job_id ? feed.live.jobs.find((j) => j.id === s.job_id) : undefined;
+    const who = job ? `"${job.title}"` : agentLabel(s.agent);
     items.push({
       sev: s.incident === "failure" ? "crit" : "warn",
       open: true,
