@@ -47,7 +47,9 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker"];
+// The namespaces whose queue breaker is open in the sample, until a reset closes it.
+const BREAKER_OPEN = ["sample-b"];
 // Registered in the mock but with no site row, so an add has somewhere to go. The site
 // map in the fixture reports it as unmapped.
 const EXTRA_REGISTERED = ["sample-i"];
@@ -77,6 +79,8 @@ function shift(value: unknown, delta: number): unknown {
 // What the controls changed since the dev server started.
 interface MockState {
   paused: Map<string, string | null>;
+  // Namespaces whose breaker was reset since the mock started.
+  breakerReset: Set<string>;
   mode: string | null;
   seat: boolean | null;
   jobs: Map<string, Partial<OpsJob>>;
@@ -241,6 +245,16 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       if (n.paused != null) throw new Refusal(400, `${ns} is already paused: ${n.paused}`);
       return { summary: `Pause the improve loop for ${ns}.`, done: `Paused the improve loop for ${ns}.`, changes: [`improve:paused:${ns}: not set -> "${reason}"`, "The next scheduled run for this namespace is skipped."], apply: (st) => void st.paused.set(ns, reason) };
     }
+    case "reset_breaker": {
+      const ns = need(params, "namespace", "The namespace");
+      if (!f.live.namespaces.some((x) => x.name === ns)) throw new Refusal(400, `${ns} is not a roster namespace.`);
+      return {
+        summary: `Reset the queue's circuit breaker for ${ns}.`,
+        done: `Reset the circuit breaker for ${ns}.`,
+        changes: [`jobs:breaker:reset:${ns}: -> now. Holder fails before now stop counting.`],
+        apply: (st) => void st.breakerReset.add(ns),
+      };
+    }
     case "unpause": {
       const ns = need(params, "namespace", "The namespace");
       const n = f.live.namespaces.find((x) => x.name === ns);
@@ -360,7 +374,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
   }
 }
 
-function namespaces(f: OpsFeed): PortalNamespaces {
+function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
   const now = mockNow();
   const iso = (agoMs: number) => new Date(now - agoMs).toISOString();
   const H = 3_600_000;
@@ -398,13 +412,19 @@ function namespaces(f: OpsFeed): PortalNamespaces {
     latest_report: null,
     jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
     skills: { candidate: 0, live: 0, retired: 0, offered: 0, used: 0, use_rate: null, last_evaluation: null },
+    breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
   };
+  const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");
+  const breaker = (ns: string): PortalNamespace["breaker"] =>
+    BREAKER_OPEN.includes(ns) && !st.breakerReset.has(ns)
+      ? { open: true, failed: 3, threshold: 3, since, reset_at: null }
+      : { open: false, failed: 0, threshold: 3, since, reset_at: st.breakerReset.has(ns) ? new Date(now).toISOString() : null };
   return {
     generated: new Date(now).toISOString(),
     namespaces: f.live.namespaces.map((n) => {
       const js = f.live.jobs.filter((j) => j.namespace === n.name);
       const count = (s: OpsJob["status"]) => js.filter((j) => j.status === s).length;
-      return { ...empty, ...detail[n.name], namespace: n.name, paused: n.paused, jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
+      return { ...empty, ...detail[n.name], namespace: n.name, paused: n.paused, breaker: breaker(n.name), jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
     }),
   };
 }
@@ -621,7 +641,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), activity: seedActivity(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), activity: seedActivity(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -687,7 +707,7 @@ export function mockOpsApi(): Plugin {
           action(req, res, path.endsWith("preview") ? "preview" : "perform").catch(next);
           return;
         }
-        if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st)));
+        if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st), st));
         if (path === "/portal/api/sign-out") {
           if (req.method !== "POST") return send(res, 405, { error: "method" });
           if (req.headers["x-capsid-csrf"] !== csrf()) return refuse(res, 403, "csrf validation failed: reload Capsid Portal and try again.");

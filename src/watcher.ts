@@ -253,6 +253,16 @@ export function statusFindings(status: StatusReport): Finding[] {
         ])
       );
     }
+    // An open breaker stops the namespace's queue until a person resets it, so it is
+    // said; the watcher files it and nothing more (src/job-breaker.ts).
+    if (ns.breaker?.open) {
+      out.push(
+        finding(ns.namespace, `breaker-open-${ns.namespace}`, `the queue's circuit breaker for ${ns.namespace} is open`, [
+          `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
+          "No job in this namespace is handed out until the seat or Dustin resets it: improve_run action breaker_reset, or Reset breaker in the Portal.",
+        ])
+      );
+    }
   }
   return out;
 }
@@ -469,7 +479,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^(health-degraded|backup-stale|backup-never)$/, "health"],
   [/^deploy-drift-/, "master head"],
   [/^schema-behind-/, "migrations"],
-  [/^(budget-|paused-)/, "improve_status"],
+  [/^(budget-|paused-|breaker-open-)/, "improve_status"],
   [/^mirror-no-dump$/, "mirror dumps"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "mirror runs"],
   [/^scorer-unread-/, "scorer identity"],

@@ -38,6 +38,16 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         <b className="mono">{n.namespace}</b>
         <div className="mt4">{n.paused != null ? <St kind="warn">Paused</St> : <St kind="ok">Not paused</St>}</div>
         {n.paused != null && <div className="src wrap">{n.paused || "no reason recorded"}</div>}
+        {n.breaker.open && (
+          <>
+            <div className="mt4">
+              <St kind="crit">Queue stopped</St>
+            </div>
+            <div className="src wrap">
+              circuit breaker: {n.breaker.failed} jobs failed by their holders since {n.breaker.since} UTC (threshold {n.breaker.threshold})
+            </div>
+          </>
+        )}
       </td>
       <td data-label="Driver">
         <Driver ns={n.namespace} />
@@ -98,15 +108,22 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>
       </td>
       <td className="ctl">
-        {n.paused != null ? (
-          <button type="button" className="btn" onClick={() => confirm({ action: "unpause", params: { namespace: n.namespace }, title: `Unpause ${n.namespace}`, onDone: onChanged })}>
-            Unpause
-          </button>
-        ) : (
-          <button type="button" className="btn" onClick={() => confirm({ action: "pause", params: { namespace: n.namespace }, title: `Pause ${n.namespace}`, onDone: onChanged })}>
-            Pause
-          </button>
-        )}
+        <div className="toolbar col">
+          {n.breaker.open && (
+            <button type="button" className="btn" onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset the circuit breaker for ${n.namespace}`, onDone: onChanged })}>
+              Reset breaker
+            </button>
+          )}
+          {n.paused != null ? (
+            <button type="button" className="btn" onClick={() => confirm({ action: "unpause", params: { namespace: n.namespace }, title: `Unpause ${n.namespace}`, onDone: onChanged })}>
+              Unpause
+            </button>
+          ) : (
+            <button type="button" className="btn" onClick={() => confirm({ action: "pause", params: { namespace: n.namespace }, title: `Pause ${n.namespace}`, onDone: onChanged })}>
+              Pause
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
