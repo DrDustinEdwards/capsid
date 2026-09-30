@@ -4,6 +4,7 @@ import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 export const VIEWS = [
   { id: "overview", label: "Overview", key: "o" },
   { id: "sites", label: "Sites", key: "s" },
+  { id: "packages", label: "Packages", key: "p" },
   { id: "incidents", label: "Incidents", key: "i" },
   { id: "queue", label: "Queue", key: "q" },
   { id: "deploys", label: "Deploys", key: "d" },
@@ -18,13 +19,12 @@ export const VIEWS = [
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
-// The views on offer: Sites only while at least one site is configured (hasSites in
-// lib/derive.ts). Every other view is always there, Settings included, since that is
-// where the first site is added.
+// The views on offer: Sites only while at least one site is configured, Packages only
+// while a package is (hasSites and hasPackages in lib/derive.ts). Every other view is
+// always there, Settings included, since that is where the first of each is added.
 export type ViewDef = (typeof VIEWS)[number];
-const WITHOUT_SITES: ReadonlyArray<ViewDef> = VIEWS.filter((v) => v.id !== "sites");
-export function viewsFor(sites: boolean): ReadonlyArray<ViewDef> {
-  return sites ? VIEWS : WITHOUT_SITES;
+export function viewsFor(sites: boolean, packages = true): ReadonlyArray<ViewDef> {
+  return VIEWS.filter((v) => (v.id !== "sites" || sites) && (v.id !== "packages" || packages));
 }
 export type DrawerType = "site" | "job" | "agent";
 
