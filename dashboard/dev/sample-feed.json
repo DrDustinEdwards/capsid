@@ -63,7 +63,7 @@
     ],
     "health": {
       "status": "ok",
-      "sha": "2b75d85",
+      "sha": "5a3c9e1",
       "dirty": false,
       "builtAt": "2026-09-28T10:24:00.000Z",
       "schema_version": "0042",
@@ -92,7 +92,7 @@
       {
         "namespace": "sample",
         "latest": {
-          "head_sha": "2b75d85e0c1f",
+          "head_sha": "5a3c9e1b7d20",
           "status": "completed",
           "conclusion": "success",
           "created_at": "2026-09-28T10:18:00.000Z",
@@ -140,7 +140,7 @@
         "state": "ok",
         "http_status": 200,
         "latency_ms": 133,
-        "sha": "2b75d85",
+        "sha": "5a3c9e1",
         "error": null,
         "checked_at": "2026-09-28T11:47:13.405Z",
         "ring": "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111--1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110111111111111111111111111111",
@@ -1317,7 +1317,7 @@
         "finding": null
       },
       {
-        "id": "job_195c11e2667b",
+        "id": "job_d524d7459d9e",
         "namespace": "sample-b",
         "title": "Publish queue shows scheduled posts",
         "status": "done",
@@ -1357,7 +1357,7 @@
       {
         "id": "job_f71dff903287",
         "namespace": "sample",
-        "title": "Watcher: deploy drift, live sha behind main [deploy-drift-d88c043]",
+        "title": "Watcher: deploy drift, live sha behind main [deploy-drift-4e7f2a0]",
         "status": "superseded",
         "priority": 0,
         "posted_by": "agent:watcher",
@@ -1372,7 +1372,7 @@
         "command": null,
         "result_ref": null,
         "finding": {
-          "fingerprint": "deploy-drift-d88c043",
+          "fingerprint": "deploy-drift-4e7f2a0",
           "seen_count": null,
           "last_seen": null
         }
@@ -1545,7 +1545,7 @@
         "recorded_at": "2026-09-28T11:10:00.000Z"
       },
       {
-        "job_id": "job_195c11e2667b",
+        "job_id": "job_d524d7459d9e",
         "pr_url": "https://github.com/example-org/sample-b/pull/214",
         "merged": true,
         "merge_verified_at": "2026-09-28T06:12:00.000Z",
