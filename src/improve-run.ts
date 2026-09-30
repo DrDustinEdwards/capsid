@@ -341,7 +341,7 @@ export async function improveStatus(
       latest_report: report
         ? { path: `${namespace}/${report.path}`, integrity: integrityOf(report.body), generated: report.updated_at }
         : null,
-      jobs: await jobsSummary(env.DB, namespace, new Date()),
+      jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       skills: await skillsSummary(env.DB, namespace),
     });
