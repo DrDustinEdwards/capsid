@@ -280,7 +280,9 @@ export function App() {
         case "Enter": {
           if (k.route.drawer || k.sel < 0 || t.closest("[data-open], a, button")) return;
           const ref = rows()[k.sel]?.dataset.open;
-          if (ref) a.open(ref);
+          // The drawer focuses its Close button as it opens, inside this keydown; without
+          // this the browser activates that button with the same Enter and closes it again.
+          if (ref) (e.preventDefault(), a.open(ref));
           return;
         }
       }
@@ -333,6 +335,8 @@ export function App() {
     if (target.closest("a, button, input")) return;
     const el = target.closest<HTMLElement>("[data-open]");
     if (el?.dataset.open) {
+      // Enter on a focused row: cancel its default action for the same reason as above.
+      if ("key" in e) e.preventDefault();
       const rs = rows();
       setSel(rs.indexOf(el));
       open(el.dataset.open);
