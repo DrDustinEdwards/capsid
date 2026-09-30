@@ -10,7 +10,6 @@ body {
   color: var(--text);
   font: 400 13px/1.4 var(--ui);
   -webkit-font-smoothing: antialiased;
-  font-variant-numeric: tabular-nums;
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
