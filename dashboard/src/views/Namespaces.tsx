@@ -108,7 +108,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>
       </td>
       <td className="ctl">
-        <div className="toolbar">
+        <div className="toolbar col">
           {n.breaker.open && (
             <button type="button" className="btn" onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset the circuit breaker for ${n.namespace}`, onDone: onChanged })}>
               Reset breaker
