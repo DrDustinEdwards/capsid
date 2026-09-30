@@ -8,6 +8,7 @@ import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readCloudflare } from "./ops-cloudflare";
 import type { SiteCloudflare } from "./ops-types";
@@ -28,10 +29,13 @@ import {
 // deciding at 03:00 what to do about a red default branch, so it writes the finding
 // down with the evidence and a named caller picks it up.
 //
-// Deduplication is the queue's own rule: `post` refuses a duplicate while a job with
-// the same (namespace, title) is open, and the title carries the fingerprint, so a
-// finding posts once and is refused every pass after that until it clears. A
-// separate fingerprint table would be a second answer that could disagree.
+// Deduplication has two layers. The queue's own rule: `post` refuses a duplicate
+// while a job with the same (namespace, title) is open, and the title carries the
+// fingerprint. And the watcher's memory of each finding across jobs
+// (src/watcher-findings.ts, the watcher_findings table): an open job alone forgot a
+// finding the moment a person superseded or failed its job, and the next pass filed it
+// again. The row remembers that a person ended it, and a cleared finding stays quiet
+// for REOPEN_QUIET_MS before it may be filed again.
 
 const WATCHER_NAME = "watcher";
 export const WATCHER_ACTOR = `agent:${WATCHER_NAME}`;
@@ -135,6 +139,8 @@ export interface Finding {
   namespace: string;
   title: string;
   body: string;
+  // The evidence lines, kept on the finding's row per sighting (src/watcher-findings.ts).
+  evidence?: string[];
 }
 
 const finding = (namespace: string, fingerprint: string, headline: string, evidence: string[]): Finding => ({
@@ -154,6 +160,7 @@ const finding = (namespace: string, fingerprint: string, headline: string, evide
     "reads a surface every half hour and a finding can clear itself between the post and",
     "the claim. If it has cleared, fail this job saying so.",
   ].join("\n"),
+  evidence,
 });
 
 /** What /health says that should not be true. `masterSha` and `latestMigration` come
@@ -259,7 +266,11 @@ export interface CiRun {
 }
 
 /** A default branch that has been red for longer than a flake. Reads the most recent
- *  COMPLETED run, because a run still in flight is not yet an answer. */
+ *  COMPLETED run, because a run still in flight is not yet an answer.
+ *
+ *  One incident per namespace, not per commit: the fingerprint is `ci-red-<namespace>`
+ *  and the head sha is evidence. It carried the sha until 2026-09-29, and every red
+ *  commit on a red branch was filed as a new finding (13 times in three days). */
 export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding[] {
   const latest = runs.find((r) => r.status === "completed");
   if (!latest) return [];
@@ -269,7 +280,7 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   const hours = (now.getTime() - since) / 3_600_000;
   if (hours < CI_RED_HOURS) return [];
   return [
-    finding(namespace, `ci-red-${latest.head_sha.slice(0, 7)}`, `${namespace} CI is red on its default branch`, [
+    finding(namespace, `ci-red-${namespace}`, `${namespace} CI is red on its default branch`, [
       `conclusion: ${latest.conclusion}`,
       `head sha: ${latest.head_sha}`,
       `red since: ${latest.created_at} (${hours.toFixed(1)} hours)`,
@@ -426,7 +437,7 @@ export async function clearFinding(env: Env, id: string, now: Date): Promise<boo
     `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
      WHERE id = ?1 AND status = 'queued' AND posted_by = ?4 RETURNING id`
   )
-    .bind(id, "cleared", now.toISOString(), WATCHER_ACTOR)
+    .bind(id, CLEARED_SUMMARY, now.toISOString(), WATCHER_ACTOR)
     .first<{ id: string }>();
   return won !== null;
 }
@@ -567,32 +578,93 @@ export interface PassReaders {
   findings: () => Promise<Pick<Gathered, "findings" | "ran">>;
   open: () => Promise<Map<string, string>>;
   clear: (id: string) => Promise<boolean>;
-  post: (f: Finding) => Promise<{ ok: boolean; refusal?: string }>;
+  post: (f: Finding) => Promise<{ ok: true; jobId: string } | { ok: false; refusal?: string }>;
+  memory: FindingMemory;
 }
 
-export async function runPass(readers: PassReaders): Promise<{ posted: string[]; cleared: string[] }> {
+export interface PassResult {
+  posted: string[];
+  cleared: string[];
+  // Seen and not filed: dismissed by a person, or inside the quiet period.
+  held: string[];
+}
+
+// A keyed write that moved nothing lost a race with another pass (the tick and the
+// Portal's Refresh). Said, not swallowed; the next pass reads the row again.
+function moved(ok: boolean, fingerprint: string, what: string): void {
+  if (!ok) console.error(`WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass`);
+}
+
+export async function runPass(readers: PassReaders, now: Date): Promise<PassResult> {
   const { findings: found, ran } = await readers.findings();
   const byFingerprint = new Map(found.map((f) => [f.fingerprint, f]));
   const open = await readers.open();
+  const rows = await readers.memory.load(found.map((f) => f.fingerprint));
+
+  // Absent, and the check that would find it again ran. A failed read is not
+  // evidence the problem went away.
+  const clearable = (fingerprint: string): boolean => {
+    if (byFingerprint.has(fingerprint)) return false;
+    const owner = owningCheck(fingerprint);
+    return !owner || ran.has(owner);
+  };
 
   const cleared: string[] = [];
   for (const [fingerprint, id] of open) {
-    if (byFingerprint.has(fingerprint)) continue;
-    const owner = owningCheck(fingerprint);
-    if (owner && !ran.has(owner)) continue;
+    if (!clearable(fingerprint)) continue;
     if (await readers.clear(id)) cleared.push(fingerprint);
+  }
+  // The rows follow whether or not a job moved: a job a driver has claimed stays with
+  // its driver, and the finding is cleared all the same. A dismissed finding that stops
+  // being seen clears the same way, and its quiet period starts now.
+  for (const row of rows.values()) {
+    if (row.state === "cleared" || !clearable(row.fingerprint)) continue;
+    moved(await readers.memory.clear(row, now), row.fingerprint, "clear");
   }
 
   const posted: string[] = [];
-  for (const f of found.slice(0, MAX_FINDINGS_PER_PASS)) {
-    // Already open is the deduplication working. Skipped rather than posted and
-    // refused, so the log does not fill with refusals every pass while it persists.
-    if (open.has(f.fingerprint)) continue;
-    const result = await readers.post(f);
-    if (result.ok) posted.push(f.fingerprint);
-    else console.error(`WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}`);
+  const held: string[] = [];
+  for (const f of found) {
+    const row: FindingRow | null = rows.get(f.fingerprint) ?? null;
+    const openJob = open.get(f.fingerprint) ?? null;
+    // How the row's job ended, read only when the decision turns on it.
+    const rowJob = !openJob && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
+    const verdict = onSighting(row, openJob, rowJob, now);
+
+    if (verdict.do === "bump") {
+      // Already open is the deduplication working. Counted rather than posted and
+      // refused, so the log does not fill with refusals every pass while it persists.
+      moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
+    } else if (verdict.do === "adopt") {
+      moved(
+        row ? await readers.memory.open(row, f, verdict.jobId, now) : await readers.memory.insert(f, "open", verdict.jobId, now),
+        f.fingerprint,
+        "adoption of its open job"
+      );
+    } else if (verdict.do === "dismiss") {
+      held.push(f.fingerprint);
+      moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
+    } else if (verdict.do === "quiet") {
+      held.push(f.fingerprint);
+      moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, `sighting (${verdict.why})`);
+    } else {
+      // The bound on posts per pass. The rest are found again next pass.
+      if (posted.length >= MAX_FINDINGS_PER_PASS) continue;
+      const result = await readers.post(f);
+      if (result.ok) {
+        posted.push(f.fingerprint);
+        moved(
+          row ? await readers.memory.open(row, f, result.jobId, now) : await readers.memory.insert(f, "open", result.jobId, now),
+          f.fingerprint,
+          "record of its new job"
+        );
+      } else {
+        console.error(`WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}`);
+        if (row) moved(await readers.memory.sight(row, f, now), f.fingerprint, "sighting");
+      }
+    }
   }
-  return { posted, cleared };
+  return { posted, cleared, held };
 }
 
 /** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
@@ -606,21 +678,27 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   const agent = watcherAgent();
   const started = Date.now();
   const gathered = await gather();
-  const { posted, cleared } = await runPass({
-    findings: async () => gathered,
-    open: () => openWatcherFingerprints(env),
-    clear: (id) => clearFinding(env, id, now),
-    post: async (f) =>
-      postJob(env, agent, now, {
-        namespace: f.namespace,
-        title: f.title,
-        body: f.body,
-        priority: 9,
-        // A finding is not a gate. The work it leads to may hit one and block then;
-        // marking it here would demand a human confirmation before anyone read it.
-        gate_required: false,
-      }),
-  });
+  const { posted, cleared, held } = await runPass(
+    {
+      findings: async () => gathered,
+      open: () => openWatcherFingerprints(env),
+      clear: (id) => clearFinding(env, id, now),
+      post: async (f) => {
+        const result = await postJob(env, agent, now, {
+          namespace: f.namespace,
+          title: f.title,
+          body: f.body,
+          priority: 9,
+          // A finding is not a gate. The work it leads to may hit one and block then;
+          // marking it here would demand a human confirmation before anyone read it.
+          gate_required: false,
+        });
+        return result.ok && result.job ? { ok: true as const, jobId: result.job.id } : { ok: false as const, refusal: result.refusal };
+      },
+      memory: d1FindingMemory(env),
+    },
+    now
+  );
 
   // The pass, kept for the dashboard. Before the stamp: a snapshot that fails to write
   // throws, the stamp is not written, and the next tick runs the pass again.
@@ -646,7 +724,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   await env.APP_KV.put(WATCHER_LAST_KEY, now.toISOString());
   return {
     ran: true,
-    note: `${due.reason} posted ${posted.length}, cleared ${cleared.length}.`,
+    note: `${due.reason} posted ${posted.length}, cleared ${cleared.length}, held ${held.length}.`,
     posted,
     cleared,
   };
@@ -840,9 +918,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...scorer);
   }
 
-  // The open-job map is keyed by fingerprint alone, and a ci-red fingerprint does
-  // not name its namespace, so the ci check counts as run only when every roster
-  // repo was read.
+  // The ci check counts as run only when every roster repo was read. A ci-red
+  // fingerprint names its namespace, but ownership is per check, not per repo, so a
+  // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
   for (const namespace of ROSTER) {
     const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);

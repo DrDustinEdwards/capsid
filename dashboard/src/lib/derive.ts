@@ -252,6 +252,23 @@ export function incidents(feed: OpsFeed): Incident[] {
       items.push({ sev: HOT.test(fp) ? "crit" : "warn", open: true, title: `Check '${c.id}' reports a finding`, fp, ns: "watcher", at: ms(feed.snapshot?.pass_at ?? feed.live.generated), ref: null, status: "no job in the live window" });
     }
   }
+  // A live session the feed marks as an incident (src/ops-feed.ts, opsSessionFrom):
+  // stopped on a failure a person must act on, or waiting on input for over ten
+  // minutes. Decided when the feed was read; no job is posted for it.
+  for (const s of feed.live.sessions) {
+    if (!s.incident) continue;
+    const who = s.job_id ?? s.agent;
+    items.push({
+      sev: s.incident === "failure" ? "crit" : "warn",
+      open: true,
+      title: s.incident === "failure" ? `Session for ${who} stopped: ${s.last_failure ?? "unknown"}` : `Session for ${who} is waiting on input`,
+      fp: `session-${s.incident}-${s.session_id.slice(0, 8)}`,
+      ns: s.namespace ?? "sessions",
+      at: ms(s.last_event_at),
+      ref: s.job_id ? `job:${s.job_id}` : null,
+      status: s.incident === "failure" ? "a person must act" : `${s.last_notification_type ?? "input"} pending`,
+    });
+  }
   return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
 }
 

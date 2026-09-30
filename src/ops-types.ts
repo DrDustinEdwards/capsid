@@ -146,8 +146,10 @@ export interface OpsJob {
   waits_on: string | null;
   command: string | null;
   result_ref: string | null;
-  // Posted by agent:watcher, with its fingerprint from the title.
-  finding: { fingerprint: string } | null;
+  // Posted by agent:watcher, with its fingerprint from the title, and how often the
+  // watcher has seen it (seen_count, last_seen) while this is the finding's current
+  // job; both null otherwise (src/watcher-findings.ts).
+  finding: { fingerprint: string; seen_count: number | null; last_seen: string | null } | null;
 }
 
 export interface OpsAgent {
@@ -197,6 +199,37 @@ export interface OpsSeatStart {
   recent: Array<{ job_id: string; namespace: string | null; at: string; run_id: number | null; run_url: string | null }>;
 }
 
+// A Claude Code session Capsid has heard from through its hooks (POST /ops/hooks,
+// src/ops-hooks.ts). Summaries only: no prompt, response or tool content is kept.
+export interface OpsSession {
+  session_id: string;
+  // The key that reported it, as an actor string (agent:<name>).
+  agent: string;
+  // The job it was first bound to, and that job's namespace; null when the key held no
+  // single job at its first event.
+  job_id: string | null;
+  namespace: string | null;
+  // SessionStart's source (startup, resume, clear, compact, fork) and model.
+  source: string | null;
+  model: string | null;
+  permission_mode: string | null;
+  started_at: string;
+  last_event_at: string;
+  // The newest hook event's name, and the newest Notification's type.
+  last_event: string;
+  last_notification_type: string | null;
+  // Waiting on a person: a permission prompt, an idle prompt, an elicitation dialog.
+  needs_input: boolean;
+  // The newest StopFailure's error (rate_limit, billing_error, ...), until a turn ends
+  // normally.
+  last_failure: string | null;
+  // Why the session is an incident now, decided when the feed is read (no job is
+  // posted): "failure" for a StopFailure a person must act on (rate_limit,
+  // billing_error, authentication_failed, account_on_hold, oauth_org_not_allowed),
+  // "waiting" for needing input more than ten minutes. Null otherwise.
+  incident: "failure" | "waiting" | null;
+}
+
 export interface OpsLoop {
   mode: string;
   budget: {
@@ -216,6 +249,9 @@ export interface OpsLive {
   prs: OpsPr[];
   awaiting_seat: OpsAwaitingSeat[];
   seat_start: OpsSeatStart;
+  // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
+  // first, at most 50.
+  sessions: OpsSession[];
   loop: OpsLoop;
   // Every roster namespace with its improve-loop pause reason, null when not paused.
   // One KV get per namespace; the heavy per-namespace detail is GET

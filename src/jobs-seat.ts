@@ -15,7 +15,7 @@ import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy"
 import { readRepoFile } from "./github/contents";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { verifySignedBody } from "./improve-task";
-import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
+import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { commandFromSummary, failJob } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
@@ -101,7 +101,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
-    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now)));
+    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, undefined, await readJobUsage(env.DB, job.id))));
   }
   if (!(await guardedTransition(env, current, statements))) {
     const moved = await readJob(env.DB, id);

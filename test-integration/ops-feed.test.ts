@@ -111,8 +111,22 @@ describe("the feed against real D1", () => {
     expect(blocked.waits_on).toBe("waiting on the push");
     expect(blocked.command).toBe("git push -u origin feat/x");
     const finding = feed.live.jobs.find((j) => j.id === "job_00000000000d")!;
-    expect(finding.finding).toEqual({ fingerprint: "ci-red-abc1234" });
+    expect(finding.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: null, last_seen: null });
     expect(finding.updated_at, "a datetime('now') value is handed over as ISO").toMatch(/T.*Z$/);
+  });
+
+  it("a watcher job that is its finding's current job carries how often the finding was seen", async () => {
+    await env.DB.prepare("DELETE FROM watcher_findings").run();
+    await env.DB.prepare(
+      `INSERT INTO watcher_findings (fingerprint, namespace, title, state, job_id, first_seen_at, last_seen_at, seen_count, evidence, updated_at)
+       VALUES ('ci-red-abc1234', 'sample', 'Watcher: CI red [ci-red-abc1234]', 'open', 'job_00000000000d', ?1, ?2, 7, '[]', ?2)`
+    )
+      .bind(iso(DAY), iso(HOUR))
+      .run();
+    const feed = await opsFeed(env as unknown as Env, NOW);
+    expect(feed.live.jobs.map((j) => j.id).sort(), "the join multiplied or dropped a job").toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
+    expect(feed.live.jobs.find((j) => j.id === "job_00000000000d")!.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: 7, last_seen: iso(HOUR) });
+    await env.DB.prepare("DELETE FROM watcher_findings").run();
   });
 
   it("lists pull requests from the last seven days with their three merge states, and the week's seat starts with their runs", async () => {

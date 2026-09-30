@@ -8,6 +8,7 @@ import {
   SEAT_START_CAP_KEY,
   SEAT_START_EVENT,
   SEAT_START_KEY,
+  seatTraceparent,
   sessionsInFlight,
   setSeatStart,
   startSeatSession,
@@ -40,7 +41,7 @@ function scopedAgent(name: string, kind: Agent["kind"]): Agent {
 
 // A fake GitHub: the repo's visibility, and the dispatches it received.
 function github(opts: { private?: boolean; dispatchStatus?: number } = {}) {
-  const dispatches: Array<{ event_type: string; client_payload: { job_id: string } }> = [];
+  const dispatches: Array<{ event_type: string; client_payload: { job_id: string; traceparent?: string } }> = [];
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -126,10 +127,28 @@ describe("a start", () => {
     const id = await queued("a job");
     const started = await startSeatSession(jobsEnv(), seatAgent(), NOW, id);
     expect(started.ok, started.refusal).toBe(true);
-    expect(dispatches).toEqual([{ event_type: SEAT_START_EVENT, client_payload: { job_id: id } }]);
+    const traceparent = await seatTraceparent(id, NOW);
+    expect(dispatches).toEqual([{ event_type: SEAT_START_EVENT, client_payload: { job_id: id, traceparent } }]);
     const audit = await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'job-seat-started'").first<{ actor: string; params: string }>();
     expect(audit?.actor).toBe("agent:seat");
-    expect(JSON.parse(audit!.params)).toMatchObject({ job_id: id, repo: REPO });
+    expect(JSON.parse(audit!.params)).toMatchObject({ job_id: id, repo: REPO, traceparent });
+  });
+
+  it("the dispatch carries a W3C traceparent: trace id from the job id, a span per start, sampled", async () => {
+    const dispatches = github();
+    const id = await queued("a traced job");
+    expect((await startSeatSession(jobsEnv(), seatAgent(), NOW, id)).ok).toBe(true);
+    const sent = dispatches[0]?.client_payload.traceparent ?? "";
+    expect(sent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    const digest = async (s: string) =>
+      [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const [, trace, span] = sent.split("-");
+    expect(trace).toBe((await digest(id)).slice(0, 32));
+    expect(span).toBe((await digest(`${id}:${NOW.toISOString()}`)).slice(0, 16));
+    // A second start of the same job is the same trace and a different span.
+    const later = await seatTraceparent(id, new Date(NOW.getTime() + 60_000));
+    expect(later.split("-")[1]).toBe(trace);
+    expect(later.split("-")[2]).not.toBe(span);
   });
 
   it("is the seat's act: a driver is refused", async () => {
