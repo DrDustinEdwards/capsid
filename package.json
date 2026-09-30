@@ -5,6 +5,10 @@
   "type": "module",
   "description": "Capsid: a Cloudflare-native MCP server serving a consolidated knowledge base from D1 and R2",
   "license": "MIT",
+  "engines": {
+    "node": ">=24.21.0",
+    "npm": ">=11.15.0"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "node scripts/deploy.mjs",
