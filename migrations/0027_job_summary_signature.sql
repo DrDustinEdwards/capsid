@@ -1,0 +1,14 @@
+-- A JOB'S RESULT SUMMARY IS SIGNED WHEN ITS HOLDER WRITES IT (job_9e602b31888f item 4,
+-- OWASP ASI07).
+--
+-- A blocked job's result_summary carries the exact command a person is asked to run,
+-- and the Portal offers it with a Copy button. The job body was signed; the command was
+-- plain text in a row. This column holds an HMAC of the summary under the job body's
+-- key, bound to the job id (src/job-signing.ts), written in the same UPDATE as the
+-- summary by complete, fail and block. Every other writer of result_summary clears it,
+-- so a signature always matches the summary beside it or is absent.
+--
+-- NULL means unsigned: every row written before this column, and every summary a writer
+-- other than the holder set. It is reported as legacy-unsigned, never as verified.
+-- Additive only; applies in either order with 0026.
+ALTER TABLE jobs ADD COLUMN summary_sig TEXT;

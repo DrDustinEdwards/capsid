@@ -16,7 +16,8 @@ import { readRepoFile } from "./github/contents";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
 import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
-import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
+import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
+import { signJobText } from "./job-signing";
 import { commandFromSummary, failJob } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
@@ -74,10 +75,10 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   const job: JobRow = { ...current, status: "failed", result_summary: reason, lease_expires: null, updated_at: now.toISOString() };
   const statements = [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?3, lease_expires = NULL, updated_at = ?2
+      `UPDATE jobs SET status = 'failed', result_summary = ?3, summary_sig = NULL, lease_expires = NULL, updated_at = ?2
        WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
     ).bind(id, now.toISOString(), reason),
-    ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
+    ...(await mirrorStatements(env, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
     revokeBoundKeys(env.DB, id),
     // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
@@ -188,7 +189,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
       `UPDATE jobs SET status = 'queued', claimed_by = NULL, lease_expires = NULL, updated_at = ?2
        WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?3 RETURNING id`
     ).bind(id, now.toISOString(), current.claimed_by),
-    ...(await mirrorStatements(env.DB, job, "job-released", agent.actor)),
+    ...(await mirrorStatements(env, job, "job-released", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
     // Back in the queue, a bound key would resolve again inside its pending window.
     revokeBoundKeys(env.DB, id),
@@ -302,11 +303,11 @@ export async function supersedeJob(
   // changed since the read (a gate hit, a claim) aborts all three.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'superseded', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+      `UPDATE jobs SET status = 'superseded', result_summary = ?2, summary_sig = NULL, lease_expires = NULL, updated_at = ?3
        WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
          AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
     ).bind(id, summary, now.toISOString(), current.claimed_by),
-    ...(await mirrorStatements(env.DB, job, "job-superseded", agent.actor)),
+    ...(await mirrorStatements(env, job, "job-superseded", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-superseded", job, {
       reason,
       replaced_by: replacedBy,
@@ -633,6 +634,9 @@ export async function resumeJob(
     corrections_count: current.corrections_count + spend,
     updated_at: now.toISOString(),
   };
+  // Signed with the job body's key, over the approval, the full note and who gave it,
+  // bound to this job (src/job-signing.ts); latestResumeNote checks it on every read.
+  const noteSig = await signJobText(env.IMPROVE_SCORE_SECRET, "resume-note", id, resumeNoteFields(reason, fullNote ?? null, actor));
   const resumeNote: ResumeNote = {
     reason,
     ...(fullNote ? { note: fullNote } : {}),
@@ -640,6 +644,7 @@ export async function resumeJob(
     at: now.toISOString(),
     ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
     ...(spend ? { correction: true as const } : {}),
+    signature: noteSig ? "verified" : "unconfigured",
   };
   // The touch this resume records. A correction sends the work back; an approval clears
   // the gate, on the signed policy or by the seat (admin or can_merge); anything else is
@@ -689,10 +694,11 @@ export async function resumeJob(
          resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
        WHERE id = ?1 AND status = 'blocked' RETURNING id`
     ).bind(id, job.claimed_by, now.toISOString(), expires, spend, job.status),
-    ...(await mirrorStatements(env.DB, job, "job-resumed", actor, resumeNote)),
+    ...(await mirrorStatements(env, job, "job-resumed", actor, resumeNote)),
     jobAudit(env.DB, actor, "job-resumed", job, {
       approved: reason,
       ...(fullNote ? { note: fullNote } : {}),
+      ...(noteSig ? { sig: noteSig } : {}),
       held_by: job.claimed_by,
       ...(toQueue ? { returned_to: "queued", previous_holder: holder } : {}),
       ...(take ? { taken: true } : {}),

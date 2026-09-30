@@ -206,7 +206,24 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             </div>
             <div>
               <p className="section-title">Run this</p>
-              {j.command ? <CopyBlock id="cmdText" text={j.command} label="Copy command" /> : <div className="faint">No command was recorded.</div>}
+              {j.command_signature === "mismatch" ? (
+                <div className="callout crit" data-signature="mismatch">
+                  Withheld. This command's signature does not match, so it was changed after the block wrote it. Do not run anything from this job; tell the seat.
+                </div>
+              ) : j.command ? (
+                <>
+                  <CopyBlock id="cmdText" text={j.command} label="Copy command" />
+                  {j.command_signature !== "verified" && (
+                    <p className="faint small" data-signature={j.command_signature ?? "none"}>
+                      {j.command_signature === "legacy-unsigned"
+                        ? "Unsigned: written before blocks were signed, so nothing vouches that this is the command the driver wrote. Read it before running it."
+                        : "The signature could not be checked on this Worker."}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="faint">No command was recorded.</div>
+              )}
             </div>
             <div>
               <p className="section-title">Then resume it</p>

@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { JobRow } from "./jobs-schema";
+import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 
@@ -58,7 +59,7 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
           `UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2
            WHERE id = ?1 AND status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?2 RETURNING id`
         ).bind(read.id, stamp),
-        ...(await mirrorStatements(env.DB, job, "job-lease-expired", "improve-loop")),
+        ...(await mirrorStatements(env, job, "job-lease-expired", "improve-loop")),
         jobAudit(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
         // Back in the queue, a bound key would resolve again inside its pending window.
         revokeBoundKeys(env.DB, read.id),
@@ -86,13 +87,15 @@ export interface JobsSummary {
   // How often each job has hit a gate and how often a human sent it back. A job on
   // its third gate reads differently from one stuck at the same gate since it was
   // posted, and the count is what tells them apart.
-  blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; blocked_times: number; resumed: number }>;
+  // command_signature says whether waiting_on is what the holder's block wrote
+  // (src/job-signing.ts); a "mismatch" summary is withheld.
+  blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
   // The claimed jobs and who holds each, so the seat can see a claim whose holder is
   // gone and release it rather than wait out the lease.
   claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null; lease_expires: string | null }>;
 }
 
-export async function jobsSummary(db: D1Database, namespace: string, now: Date): Promise<JobsSummary> {
+export async function jobsSummary(db: D1Database, namespace: string, now: Date, secret?: string): Promise<JobsSummary> {
   const day = now.toISOString().slice(0, 10);
   const counts = await db
     .prepare(
@@ -113,11 +116,15 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date):
     .first<{ n: number }>();
   const blocked = await db
     .prepare(
-      `SELECT id, title, result_summary, blocked_count, resumed_count FROM jobs
+      `SELECT id, title, result_summary, summary_sig, blocked_count, resumed_count FROM jobs
        WHERE namespace = ?1 AND status = 'blocked' ORDER BY updated_at DESC LIMIT 20`
     )
     .bind(namespace)
-    .all<{ id: string; title: string; result_summary: string | null; blocked_count: number; resumed_count: number }>();
+    .all<{ id: string; title: string; result_summary: string | null; summary_sig: string | null; blocked_count: number; resumed_count: number }>();
+  const blockedRows = blocked.results ?? [];
+  const checks = await Promise.all(
+    blockedRows.map((r) => (r.result_summary === null ? Promise.resolve(null) : checkJobText(secret, "summary", r.id, { summary: r.result_summary }, r.summary_sig)))
+  );
   const claimed = await db
     .prepare(
       `SELECT id, title, claimed_by, claimed_at, lease_expires FROM jobs
@@ -130,10 +137,11 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date):
     claimed: byStatus.get("claimed") ?? 0,
     blocked: byStatus.get("blocked") ?? 0,
     done_today: doneToday?.n ?? 0,
-    blocked_jobs: (blocked.results ?? []).map((r) => ({
+    blocked_jobs: blockedRows.map((r, i) => ({
       id: r.id,
       title: r.title,
-      waiting_on: r.result_summary,
+      waiting_on: checks[i] === "mismatch" ? "WITHHELD: this summary's signature does not match, so it was changed after the block wrote it. Do not run its command." : r.result_summary,
+      command_signature: checks[i],
       blocked_times: r.blocked_count,
       resumed: r.resumed_count,
     })),

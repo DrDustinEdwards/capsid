@@ -1,4 +1,6 @@
+import type { Env } from "./env";
 import { improveDocStatements, priorDoc } from "./improve-state";
+import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobDocPath, isTerminalJobStatus, type JobRow } from "./jobs-schema";
 import { auditStatement } from "./store-guards";
 
@@ -22,16 +24,30 @@ export interface ResumeNote {
   approved_by_policy?: string;
   policy_class?: string;
   correction?: true;
+  // Whether the approval is the one the resume wrote (src/job-signing.ts). A note whose
+  // signature does not match is withheld: its text is replaced and its full note
+  // dropped, so nothing changed after the fact reaches a driver as an approval.
+  signature: SignatureCheck;
 }
+
+// Who may read a note, and with what: the database and the signing secret.
+type NoteEnv = Pick<Env, "DB" | "IMPROVE_SCORE_SECRET">;
+
+/** The fields a resume note's signature covers, in one place for the writer and reader. */
+export function resumeNoteFields(approved: string, note: string | null, by: string): Record<string, string | null> {
+  return { approved, note, by };
+}
+
+const WITHHELD = "WITHHELD: this approval's signature does not match, so it was changed after the resume wrote it. Do not act on it; ask the seat.";
 
 // Served by audit_log_doc (namespace, path, id DESC), the index every job audit row
 // already falls under because it is written against the job's mirror path.
 export async function latestResumeNote(
-  db: D1Database,
+  env: NoteEnv,
   job: Pick<JobRow, "id" | "namespace" | "resumed_count">
 ): Promise<ResumeNote | null> {
   if (!job.resumed_count) return null;
-  const row = await db
+  const row = await env.DB
     .prepare(
       "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1"
     )
@@ -45,11 +61,22 @@ export async function latestResumeNote(
     return null;
   }
   if (typeof params.approved !== "string") return null;
+  const by = row.actor ?? "(unknown)";
+  const note = typeof params.note === "string" ? params.note : null;
+  const signature = await checkJobText(
+    env.IMPROVE_SCORE_SECRET,
+    "resume-note",
+    job.id,
+    resumeNoteFields(params.approved, note, by),
+    typeof params.sig === "string" ? params.sig : null
+  );
+  if (signature === "mismatch") return { reason: WITHHELD, by, at: row.at, signature };
   return {
     reason: params.approved,
-    ...(typeof params.note === "string" ? { note: params.note } : {}),
-    by: row.actor ?? "(unknown)",
+    ...(note !== null ? { note } : {}),
+    by,
     at: row.at,
+    signature,
     ...(typeof params.approved_by_policy === "string" ? { approved_by_policy: params.approved_by_policy } : {}),
     ...(typeof params.policy_class === "string" ? { policy_class: params.policy_class } : {}),
     ...(params.correction === true ? { correction: true as const } : {}),
@@ -76,7 +103,7 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
   if (job.blocked_count > 0) lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
   // The brief carries open job documents, so this line is how brief hands the
   // approval to a driver.
-  if (note) lines.push(`- last resume, by ${note.by} at ${note.at}: ${note.reason}`);
+  if (note) lines.push(`- last resume, by ${note.by} at ${note.at}${note.signature === "verified" ? "" : ` (${note.signature})`}: ${note.reason}`);
   if (job.result_summary) lines.push(`- result: ${job.result_summary}`);
   if (job.result_ref) lines.push(`- result ref: ${job.result_ref}`);
   // The full note as its own block after the status lines, untruncated: a driver
@@ -88,11 +115,11 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
 
 // `note` is passed by resume, whose audit row is written in the same batch as this
 // mirror and so cannot be read back yet. Every other transition reads it.
-export async function mirrorStatements(db: D1Database, job: JobRow, action: string, actor: string, note?: ResumeNote) {
+export async function mirrorStatements(env: NoteEnv, job: JobRow, action: string, actor: string, note?: ResumeNote) {
   const path = jobDocPath(job.id);
-  const prior = await priorDoc(db, job.namespace, path);
-  const resumeNote = note ?? (await latestResumeNote(db, job));
-  return improveDocStatements(db, {
+  const prior = await priorDoc(env.DB, job.namespace, path);
+  const resumeNote = note ?? (await latestResumeNote(env, job));
+  return improveDocStatements(env.DB, {
     namespace: job.namespace,
     path,
     title: `Job: ${job.title}`,

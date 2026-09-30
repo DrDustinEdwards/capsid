@@ -7,6 +7,7 @@ import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
 import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
+import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
@@ -113,6 +114,7 @@ export interface JobFeedRow {
   gate_required: number;
   result_ref: string | null;
   result_summary: string | null;
+  summary_sig?: string | null;
   // From the finding's watcher_findings row when this job is its current one
   // (src/watcher-findings.ts). Null, or absent, otherwise.
   finding_seen_count?: number | null;
@@ -126,7 +128,7 @@ const FINGERPRINT = /\[([^\]]+)\]\s*$/;
 
 /** A job as the feed shows it. A blocked job's summary is split into what it waits on
  *  and the exact command (commandFromSummary), so the app can show the command to copy. */
-export function opsJobFrom(row: JobFeedRow): OpsJob {
+export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | null = null): OpsJob {
   const blocked = row.status === "blocked";
   const summary = row.result_summary;
   const marker = summary === null ? -1 : summary.indexOf(RESUME_MARKER);
@@ -147,7 +149,9 @@ export function opsJobFrom(row: JobFeedRow): OpsJob {
     resumed_count: row.resumed_count,
     gate_required: row.gate_required === 1,
     waits_on: waitsOn,
-    command: blocked ? commandFromSummary(summary) : null,
+    // A command whose signature does not match is withheld, so it cannot be copied.
+    command: blocked && commandSignature !== "mismatch" ? commandFromSummary(summary) : null,
+    command_signature: blocked ? commandSignature : null,
     result_ref: row.result_ref,
     finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
   };
@@ -253,7 +257,7 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
   return next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
-async function liveJobs(db: D1Database, now: Date): Promise<OpsJob[]> {
+async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<OpsJob[]> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   // datetime() on both sides: updated_at is written both as ISO and as D1's default
   // text form, and the two do not compare as text. The watcher's finding row joins
@@ -262,7 +266,7 @@ async function liveJobs(db: D1Database, now: Date): Promise<OpsJob[]> {
   const { results } = await db
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
-              j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary,
+              j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
               wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
        FROM jobs j LEFT JOIN watcher_findings wf ON wf.job_id = j.id
        WHERE j.status IN (${open}) OR datetime(j.updated_at) >= datetime(?1)
@@ -270,7 +274,15 @@ async function liveJobs(db: D1Database, now: Date): Promise<OpsJob[]> {
     )
     .bind(new Date(now.getTime() - DAY_MS).toISOString(), ...OPEN_JOB_STATUSES)
     .all<JobFeedRow>();
-  return (results ?? []).map(opsJobFrom);
+  const rows = results ?? [];
+  const checks = await Promise.all(
+    rows.map((r) =>
+      r.status === "blocked" && r.result_summary !== null
+        ? checkJobText(secret, "summary", r.id, { summary: r.result_summary }, r.summary_sig ?? null)
+        : Promise.resolve(null)
+    )
+  );
+  return rows.map((r, i) => opsJobFrom(r, checks[i]));
 }
 
 async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
@@ -371,7 +383,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
   const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions] = await Promise.all([
-    liveJobs(env.DB, now),
+    liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
     env.APP_KV.get(AWAITING_SEAT_KEY),
