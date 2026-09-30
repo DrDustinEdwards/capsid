@@ -209,7 +209,7 @@ export function Timeline({ sites, days, now, width }: { sites: SiteSnapshot[]; d
         </text>
         <line x1={L} x2={W - R} y1={cy} y2={cy} stroke="var(--line-strong)" strokeWidth="1" />
         {why && (
-          <text x={L + 8} y={cy - 5} fontSize="10" fontFamily="var(--mono)" fill="var(--faint)">
+          <text x={L + 8} y={cy - 5} fontSize="10" fontFamily="var(--mono)" fill="var(--dim)">
             {`Deploys: no data, ${why}`}
           </text>
         )}
