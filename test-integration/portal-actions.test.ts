@@ -17,6 +17,7 @@ import {
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions";
 import { SEAT_START_KEY } from "../src/seat-start";
+import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -86,7 +87,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, SEAT_START_KEY, ...ROSTER.map(pausedKey)];
+const KEYS = [MODE_KEY, SEAT_START_KEY, BREAKER_THRESHOLD_KEY, ...ROSTER.map(pausedKey), ...ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -184,12 +185,16 @@ const CASES: Record<string, Case> = {
     },
     after: async () => expect(await siteRow("txasm")).toBeNull(),
   },
+  reset_breaker: {
+    params: async () => ({ namespace: "capsid" }),
+    after: async () => expect(await env.APP_KV.get(breakerResetKey("capsid"))).not.toBeNull(),
+  },
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, eleven actions", () => {
+  it("covers the allow-list, twelve actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(11);
+    expect(Object.keys(CASES).length).toBe(12);
   });
 
   for (const action of PORTAL_ACTIONS) {
