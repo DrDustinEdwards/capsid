@@ -8,6 +8,7 @@ import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
 import { breakerState, resetBreaker } from "./job-breaker";
+import { addPackage, describePackage, editPackage, readPackageRow, removePackage, validatePackage } from "./ops-packages";
 import { IMPROVE_MODES, onRoster, pausedKey, ROSTER } from "./improve-schema";
 import { IMPROVE_ACTOR, pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
@@ -73,6 +74,9 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "site_edit",
   "site_remove",
   "reset_breaker",
+  "package_add",
+  "package_edit",
+  "package_remove",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -114,6 +118,12 @@ function describeAction(action: PortalAction, params: ActionParams): string {
       return `Remove ${ns} from the Portal's site configuration. The watcher stops probing it on its next pass.`;
     case "reset_breaker":
       return `Reset the queue's circuit breaker for ${ns}. Jobs its drivers failed before now stop counting, so ${ns} hands out work again until the threshold is reached anew.`;
+    case "package_add":
+      return `Add the npm package ${params.name ?? ""} to the packages Capsid Portal watches. The watcher reads it from its next pass.`;
+    case "package_edit":
+      return `Change how Capsid Portal watches the package ${params.name ?? ""}. The watcher reads the new row on its next pass.`;
+    case "package_remove":
+      return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
   }
 }
 
@@ -261,6 +271,38 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         await auditClick(env, actor, action, result.site.namespace, params);
         break;
       }
+      case "package_add":
+      case "package_edit":
+      case "package_remove": {
+        // Checked again here, as the site controls are: the token binds the params, not
+        // the rules they were checked against.
+        let result;
+        if (action === "package_remove") {
+          const revision = revisionOf(params.revision);
+          if (!params.name || revision === null) return { ok: false, refusal: "package_remove needs a name and the revision it previewed." };
+          result = await removePackage(env.DB, actor, params.name, revision);
+        } else {
+          const checked = validatePackage(params);
+          if (!checked.ok) return { ok: false, refusal: checked.refusal };
+          if (action === "package_add") {
+            result = await addPackage(env.DB, actor, checked.pkg);
+          } else {
+            const revision = revisionOf(params.revision);
+            if (revision === null) return { ok: false, refusal: "package_edit needs the revision it previewed." };
+            result = await editPackage(env.DB, actor, checked.pkg, revision);
+          }
+        }
+        if (!result.ok) return { ok: false, refusal: result.refusal };
+        committed = true;
+        summary =
+          action === "package_add"
+            ? `Added ${describePackage(result.pkg)}.`
+            : action === "package_edit"
+              ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
+              : `Removed ${result.pkg.name} from the packages.`;
+        await auditClick(env, actor, action, null, params);
+        break;
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -312,6 +354,9 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script"],
   site_remove: ["namespace", "revision"],
   reset_breaker: ["namespace"],
+  package_add: ["name", "repo", "formerly"],
+  package_edit: ["name", "revision", "repo", "formerly"],
+  package_remove: ["name", "revision"],
 };
 
 type Gated = { ok: true; email: string; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
@@ -575,6 +620,48 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           ...(registered ? [`${p.namespace} is still registered, so the site-map check reports it as unmapped until it has a row again.`] : []),
         ],
         audit: [`ops-site-removed by ${actor}`, click],
+      };
+    }
+    case "package_add": {
+      const checked = validatePackage(p);
+      if (!checked.ok) return refused(checked.refusal);
+      const existing = await readPackageRow(env.DB, checked.pkg.name);
+      if (existing) return refused(`${checked.pkg.name} is already configured (${describePackage(existing)}). Edit it instead.`);
+      return {
+        ok: true,
+        changes: [
+          `ops_packages: add ${describePackage(checked.pkg)}.`,
+          "The watcher reads it from its next pass: about nine requests to npm, deps.dev and GitHub per pass. The Packages view appears once a package is configured.",
+        ],
+        audit: [`ops-package-added by ${actor}`, click],
+      };
+    }
+    case "package_edit": {
+      const revision = revisionOf(p.revision);
+      if (revision === null) return refused("package_edit needs the revision of the row it edits.");
+      const checked = validatePackage(p);
+      if (!checked.ok) return refused(checked.refusal);
+      const before = await readPackageRow(env.DB, checked.pkg.name);
+      if (!before) return refused(`${checked.pkg.name} is not configured. Add it instead.`);
+      if (before.revision !== revision) return refused(`${checked.pkg.name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`);
+      const diffs = (["repo", "formerly"] as const).filter((k) => before[k] !== checked.pkg[k]).map((k) => `  ${k}: ${shown(before[k])} -> ${shown(checked.pkg[k])}`);
+      if (diffs.length === 0) return refused(`the edit changes nothing in ${checked.pkg.name}.`);
+      return {
+        ok: true,
+        changes: [`ops_packages ${checked.pkg.name}, revision ${revision} -> ${revision + 1}:`, ...diffs],
+        audit: [`ops-package-edited by ${actor}`, click],
+      };
+    }
+    case "package_remove": {
+      const revision = revisionOf(p.revision);
+      if (!p.name || revision === null) return refused("package_remove needs a name and the revision of the row it removes.");
+      const before = await readPackageRow(env.DB, p.name);
+      if (!before) return refused(`${p.name} is not configured.`);
+      if (before.revision !== revision) return refused(`${p.name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`);
+      return {
+        ok: true,
+        changes: [`ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and its weekly GitHub rows stay.`],
+        audit: [`ops-package-removed by ${actor}`, click],
       };
     }
     case "revoke_agent": {
