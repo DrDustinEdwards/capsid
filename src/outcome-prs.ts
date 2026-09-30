@@ -180,23 +180,25 @@ async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promis
 type Decision = { kind: "verify"; pin?: PrIdentity } | { kind: "mark"; why: Unverifiable; note: string } | { kind: "leave" };
 
 /**
- * Whether the pull request GitHub answered with is the one a row named.
+ * Whether the pull request GitHub answered with is the one a row named. answered is
+ * null when the pull request could not be read (a recreated repository may not have
+ * reached the number yet).
  *
  * A pinned row compares node ids. An unpinned row (recorded before the id was kept, or
  * complete could not read it) is pinned now, unless the repository was created after
- * the outcome named the pull request (it was recreated) or the pull request answering
- * was opened after it; neither can be the one named. Anything that cannot be compared
- * leaves the row as it was, to be tried again: a guess would be the failure this exists
- * to prevent.
+ * the outcome named the pull request (it was recreated, decided without the pull
+ * request) or the pull request answering was opened after it; neither can be the one
+ * named. Anything that cannot be compared leaves the row as it was, to be tried again:
+ * a guess would be the failure this exists to prevent.
  */
 function decide(
   row: { pr_node_id: string | null; named_at: string | null },
-  answered: PrIdentity,
+  answered: PrIdentity | null,
   repoCreated: string | null,
   prUrl: string
 ): Decision {
-  if (!answered.node_id) return { kind: "leave" };
   if (row.pr_node_id) {
+    if (!answered?.node_id) return { kind: "leave" };
     if (row.pr_node_id === answered.node_id) return { kind: "verify" };
     return {
       kind: "mark",
@@ -206,8 +208,7 @@ function decide(
   }
   const named = instant(row.named_at);
   const born = instant(repoCreated);
-  const opened = instant(answered.created_at);
-  if (Number.isNaN(named) || Number.isNaN(born) || Number.isNaN(opened)) return { kind: "leave" };
+  if (Number.isNaN(named) || Number.isNaN(born)) return { kind: "leave" };
   if (born > named) {
     return {
       kind: "mark",
@@ -215,6 +216,9 @@ function decide(
       note: `the repository behind ${prUrl} was created ${repoCreated}, after the outcome named this pull request (${row.named_at}), so the number no longer names it`,
     };
   }
+  if (!answered?.node_id) return { kind: "leave" };
+  const opened = instant(answered.created_at);
+  if (Number.isNaN(opened)) return { kind: "leave" };
   if (opened > named) {
     return {
       kind: "mark",
@@ -250,15 +254,15 @@ export async function reverifyPr(
   const named = rows.results ?? [];
   if (named.length === 0) return [];
 
+  // A failed read of the pull request writes no merge state; only a row whose
+  // repository was recreated can still be decided, since that needs no pull request.
   const facts = await prFacts(env, namespace, prUrl);
-  // A failed read leaves every row as it was.
-  if (typeof facts === "string") return [];
-  const answered: PrIdentity = { node_id: facts.node_id, created_at: facts.created_at };
+  const answered: PrIdentity | null = typeof facts === "string" ? null : { node_id: facts.node_id, created_at: facts.created_at };
 
   // Read once, and only when some row has nothing pinned to compare against.
   const repoCreated = named.some((r) => !r.pr_node_id) ? await repoCreatedAt(env, namespace, prUrl) : null;
 
-  const merged = facts.merged === true;
+  const merged = typeof facts !== "string" && facts.merged === true;
   const out: ReverifyOutcome[] = [];
   for (const row of named) {
     const decision = decide(row, answered, repoCreated, prUrl);

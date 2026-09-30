@@ -418,6 +418,39 @@ test("BACKFILL: a row with no pinned id whose repo was created after the outcome
   assert.ok(marked[0].args.includes("repo-recreated"), JSON.stringify(marked[0].args));
 });
 
+test("BACKFILL: a recreated repo that has not reached the number yet still marks the row, from the repo alone", async () => {
+  // claude-skills today: recreated at #1, so pull/8 answers 404.
+  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" }]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: { status: 404, body: { message: "Not Found" } },
+      [`GET ${REPO_PATH}`]: { body: { created_at: "2026-09-29T19:13:35Z" } },
+    },
+    async () => {
+      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
+    }
+  );
+  assert.equal(written.filter(setsMerged).length, 0);
+  assert.ok(written.filter(setsUnverifiable)[0]?.args.includes("repo-recreated"), JSON.stringify(written));
+});
+
+test("a pull request that cannot be read, in a repo older than the outcome, leaves the row for the next sweep", async () => {
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" },
+    { job_id: "job_y", merged: null, pr_node_id: "PR_pinned", named_at: "2026-09-17T10:00:00.000Z" },
+  ]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: { status: 502, body: {} },
+      [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
+    },
+    async () => {
+      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
+    }
+  );
+  assert.deepEqual(written, []);
+});
+
 test("BACKFILL: a row with no pinned id, in a repo older than the outcome, whose pull request was opened after it, is not that pull request", async () => {
   const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
   await withFetch(
