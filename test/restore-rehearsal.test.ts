@@ -333,3 +333,24 @@ test("PLANT: a table a migration seeds restores to exactly its dump, seed rows g
     assert.equal(summary.tables, TABLES.length);
   });
 });
+
+// Migration 0023's tables are append-only by trigger: a DELETE of any row aborts. The
+// restore empties each table before importing it, and a DELETE on an empty table
+// fires no row trigger, so they restore like any other table.
+test("the append-only claims tables restore with their rows", () => {
+  withDump((dir) => {
+    setRows(dir, "job_claims", [
+      { id: 1, job_id: "job_000000000001", action: "complete", agent: "agent:sample-driver", namespace: "sample", raw: "{}", prs_opened: null, tests_run: 3, recorded_at: "2026-09-29T00:00:00.000Z" },
+    ]);
+    setRows(dir, "job_evaluations", [
+      { id: 1, job_id: "job_000000000001", claim_id: 1, name: "pr_merged", score_value: null, score_label: "unknown", agreement: "unclaimed", evaluator: "worker", evaluator_id: "capsid@abc1234", recorded_at: "2026-09-29T00:00:00.000Z" },
+    ]);
+    setRows(dir, "job_touches", [
+      { id: 1, job_id: "job_000000000001", namespace: "sample", kind: "gate", actor: "agent:sample-driver", actor_kind: "driver", waited_ms: null, detail: "{}", at: "2026-09-29T00:00:00.000Z" },
+    ]);
+    const summary = rehearse(dir, MIGRATIONS);
+    assert.equal(summary.tables, TABLES.length);
+    // Two documents plus the three rows above.
+    assert.equal(summary.totalRows, 5);
+  });
+});

@@ -19,7 +19,9 @@ import { outcomeFrom, outcomeStatement, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { commandFromSummary, failJob } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
+import { actorKind, touchStatement } from "./job-touches";
 import type { JobSkills } from "./job-outcomes";
+import type { ClaimInput, ClaimRaw } from "./job-claims";
 import {
   actorShapeRefusal,
   callerIsSeat,
@@ -78,6 +80,18 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     ...(await mirrorStatements(env.DB, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
     revokeBoundKeys(env.DB, id),
+    // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
+    // a gate a resume already answered is not this touch's wait.
+    touchStatement(env.DB, {
+      job_id: id,
+      namespace: job.namespace,
+      kind: "admin_fail",
+      actor: agent.actor,
+      actor_kind: actorKind(agent.actor, { seat: true }),
+      detail: { reason, from: current.status, held_by: current.claimed_by },
+      sinceGate: current.status === "blocked",
+      at: now.toISOString(),
+    }),
   ];
   // An outcome row, for the same reason `fail` writes one: a job the seat had to close
   // because its driver never came back is the kind of ending the record should show.
@@ -102,19 +116,33 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
 // fail through the jobs tool. The holder failing its own job is an ordinary fail. The
 // seat failing a job somebody else holds, or nobody holds, is adminFailJob. Anyone else
 // gets failJob's own refusal for a job it does not hold.
+//
+// The claim goes to the holder path only. The seat failing somebody else's job made no
+// claim about that work, so adminFailJob records none.
 export async function failAsCaller(
   env: Env,
   agent: Agent,
   now: Date,
   id: string,
   reason: string,
-  skills?: JobSkills
+  skills?: JobSkills,
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
+    // A claim is the holder's account of its own work. The seat failing a job it does
+    // not hold has none to give, and one sent anyway is refused rather than dropped, so
+    // nobody reads a silence as a recorded claim.
+    const sent = typeof said.claim === "string" ? said.claim.trim() !== "" : said.claim !== undefined;
+    if (sent) {
+      return refuse(
+        "fail",
+        `${id} is held by ${current.claimed_by ?? "nobody"}, so this is the seat's fail and takes no claim: a claim is the holder's account of its own work. Send it without claim.`
+      );
+    }
     return adminFailJob(env, agent, now, id, reason);
   }
-  return failJob(env, agent, now, id, reason, skills);
+  return failJob(env, agent, now, id, reason, skills, said);
 }
 
 // Release: the seat returning a claimed job to the queue when its holder is gone (the
@@ -164,6 +192,16 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
     // Back in the queue, a bound key would resolve again inside its pending window.
     revokeBoundKeys(env.DB, id),
+    touchStatement(env.DB, {
+      job_id: id,
+      namespace: job.namespace,
+      kind: "release",
+      actor: agent.actor,
+      actor_kind: actorKind(agent.actor, { seat: true }),
+      detail: { reason, held_by: current.claimed_by },
+      sinceGate: false, // only a claimed job is released, so no gate is open
+      at: now.toISOString(),
+    }),
   ]);
   if (!won) {
     const moved = await readJob(env.DB, id);
@@ -276,6 +314,16 @@ export async function supersedeJob(
       held_by: current.claimed_by,
     }),
     revokeBoundKeys(env.DB, id),
+    touchStatement(env.DB, {
+      job_id: id,
+      namespace: job.namespace,
+      kind: "supersede",
+      actor: agent.actor,
+      actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
+      detail: { reason, replaced_by: replacedBy, from: current.status, held_by: current.claimed_by },
+      sinceGate: false, // only a queued or claimed job is superseded, so no gate is open
+      at: now.toISOString(),
+    }),
   ]);
   if (!won) {
     const moved = await readJob(env.DB, id);
@@ -593,6 +641,45 @@ export async function resumeJob(
     ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
     ...(spend ? { correction: true as const } : {}),
   };
+  // The touch this resume records. A correction sends the work back; an approval clears
+  // the gate, on the signed policy or by the seat (admin or can_merge); anything else is
+  // a plain resume by another write-grant caller. A driver approving its own branch push
+  // or pull request on the policy is the policy's approval, not a person's. The note, when
+  // there is one, is a row of its own, so a count of approvals is not a count of notes.
+  const touchKind = correction ? "correction" : policyMatch || isSeat ? "approval" : "resume";
+  const touchActorKind = actorKind(actor, { policy: policyMatch !== null && !isSeat, seat: isSeat });
+  const touches = [
+    touchStatement(env.DB, {
+      job_id: id,
+      namespace: current.namespace,
+      kind: touchKind,
+      actor,
+      actor_kind: touchActorKind,
+      detail: {
+        reason,
+        command: commandFromSummary(current.result_summary),
+        ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
+        ...(take ? { taken: true } : {}),
+        ...(toQueue ? { returned_to: "queued" } : {}),
+      },
+      sinceGate: true,
+      at: now.toISOString(),
+    }),
+    ...(fullNote
+      ? [
+          touchStatement(env.DB, {
+            job_id: id,
+            namespace: current.namespace,
+            kind: "note",
+            actor,
+            actor_kind: touchActorKind,
+            detail: { note: fullNote },
+            sinceGate: false,
+            at: now.toISOString(),
+          }),
+        ]
+      : []),
+  ];
   // One static statement for both returns, so the source guards and the query-plan
   // test read one shape: ?6 is 'claimed' or 'queued', and ?2 and ?4 are NULL for the
   // queue.
@@ -621,6 +708,7 @@ export async function resumeJob(
         ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass, policy_detail: policyMatch.detail }
         : {}),
     }),
+    ...touches,
   ]);
   if (!won) {
     return refuse("resume", `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`);
