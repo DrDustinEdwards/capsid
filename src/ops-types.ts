@@ -145,6 +145,10 @@ export interface OpsJob {
   // (commandFromSummary). Null otherwise.
   waits_on: string | null;
   command: string | null;
+  // Whether that command is the one the holder's block wrote (src/job-signing.ts):
+  // "mismatch" withholds it (command is null), "legacy-unsigned" is a block from before
+  // signing. Null for a job that is not blocked.
+  command_signature: "verified" | "legacy-unsigned" | "mismatch" | "unconfigured" | null;
   result_ref: string | null;
   // Posted by agent:watcher, with its fingerprint from the title, and how often the
   // watcher has seen it (seen_count, last_seen) while this is the finding's current

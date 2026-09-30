@@ -100,10 +100,10 @@ export async function markJobFailed(
   const failed = { ...job, status: "failed" as const, result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
   const committed = await guardedTransition(env, job, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+      `UPDATE jobs SET status = 'failed', result_summary = ?2, summary_sig = NULL, lease_expires = NULL, updated_at = ?3
        WHERE id = ?1 AND status = ?4 RETURNING id`
     ).bind(job.id, summary, now.toISOString(), fromStatus),
-    ...(await mirrorStatements(env.DB, failed, auditAction, actor)),
+    ...(await mirrorStatements(env, failed, auditAction, actor)),
     jobAudit(env.DB, actor, auditAction, failed, auditParams),
     revokeBoundKeys(env.DB, job.id),
   ]);

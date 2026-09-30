@@ -444,7 +444,7 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
  *  write is not closed underneath its driver; RETURNING, not meta.changes. */
 export async function clearFinding(env: Env, id: string, now: Date): Promise<boolean> {
   const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+    `UPDATE jobs SET status = 'failed', result_summary = ?2, summary_sig = NULL, lease_expires = NULL, updated_at = ?3
      WHERE id = ?1 AND status = 'queued' AND posted_by = ?4 RETURNING id`
   )
     .bind(id, CLEARED_SUMMARY, now.toISOString(), WATCHER_ACTOR)

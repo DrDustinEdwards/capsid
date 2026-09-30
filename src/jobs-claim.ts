@@ -160,7 +160,7 @@ export async function postJob(
       job.review_required,
       job.created_at
     ),
-    ...(await mirrorStatements(env.DB, job, "job-posted", actor)),
+    ...(await mirrorStatements(env, job, "job-posted", actor)),
     jobAudit(env.DB, actor, "job-posted", job, {
       title: job.title,
       priority: job.priority,
@@ -243,7 +243,7 @@ export async function listJobs(
   const truncated = rows.length > JOBS_ROWS_MAX;
   // One named job carries its latest resume note. Not every row of a wide list, which
   // would cost one read per resumed job.
-  const listNote = args.id && rows.length === 1 ? await latestResumeNote(env.DB, rows[0]) : null;
+  const listNote = args.id && rows.length === 1 ? await latestResumeNote(env, rows[0]) : null;
   return {
     ok: true,
     action: "list",
@@ -351,6 +351,17 @@ export async function claimJob(
     return refuse("claim", `${candidate.id} failed its signature check and has been marked failed: ${verdict.reason}`);
   }
 
+  // The approval a resume handed on is checked the same way, before the lease: a note
+  // changed after the resume wrote it is an instruction nobody gave, so the job is
+  // failed rather than handed to a driver with it (src/job-signing.ts).
+  const claimNote = await latestResumeNote(env, candidate);
+  if (claimNote?.signature === "mismatch") {
+    const reason = `its last resume note's signature does not match: the approval was changed after ${claimNote.by} wrote it at ${claimNote.at}.`;
+    const marked = await markJobFailed(env, candidate, "queued", reason, "job-resume-note-refused", actor, { reason }, now);
+    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "carries a resume note that failed its signature check");
+    return refuse("claim", `${candidate.id} was not handed out and has been marked failed: ${reason}`);
+  }
+
   const expires = leaseUntil(now);
   const claimed: JobRow = {
     ...candidate,
@@ -373,7 +384,7 @@ export async function claimJob(
       `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3
        WHERE id = ?1 AND status = 'queued' RETURNING id`
     ).bind(candidate.id, actor, now.toISOString(), expires),
-    ...(await mirrorStatements(env.DB, claimed, "job-claimed", actor)),
+    ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
     jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
     ...(offer.record ? [offer.record] : []),
   ]);
@@ -381,7 +392,7 @@ export async function claimJob(
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
   }
   // A job that went back to the queue after a resume (an expired lease) reaches its
-  // next driver here, so the approval has to come with it.
-  const claimNote = await latestResumeNote(env.DB, claimed);
+  // next driver here, so the approval has to come with it: the note read and checked
+  // above, before the lease.
   return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}), offered_skills: offer.skills };
 }

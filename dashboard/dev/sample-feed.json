@@ -1149,6 +1149,7 @@
         "gate_required": false,
         "waits_on": "Clear the billing hold on the backup account, then run the mirror.",
         "command": "gh workflow run mirror --repo example-org/sample-backups",
+        "command_signature": "verified",
         "result_ref": null,
         "finding": {
           "fingerprint": "mirror-run-failed",
@@ -1172,6 +1173,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": null
       },
@@ -1191,6 +1193,7 @@
         "gate_required": true,
         "waits_on": "Read the design and answer its DECIDE list in a resume note.",
         "command": "Read sample/research/design-paired-comparison.md and answer its DECIDE list (9 points) in a resume note.",
+        "command_signature": "verified",
         "result_ref": null,
         "finding": null
       },
@@ -1210,6 +1213,7 @@
         "gate_required": false,
         "waits_on": "Merge sample-b #15 when its CI runs green.",
         "command": "gh pr merge 15 --repo example-org/sample-b --squash",
+        "command_signature": "legacy-unsigned",
         "result_ref": null,
         "finding": null
       },
@@ -1229,6 +1233,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": null
       },
@@ -1248,6 +1253,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": null
       },
@@ -1267,6 +1273,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": {
           "fingerprint": "errors-sample-c",
@@ -1290,6 +1297,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": {
           "fingerprint": "probe-sample-f",
@@ -1313,6 +1321,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": "https://github.com/example-org/sample-a/pull/190",
         "finding": null
       },
@@ -1332,6 +1341,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": null
       },
@@ -1351,6 +1361,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": null
       },
@@ -1370,6 +1381,7 @@
         "gate_required": false,
         "waits_on": null,
         "command": null,
+        "command_signature": null,
         "result_ref": null,
         "finding": {
           "fingerprint": "deploy-drift-4e7f2a0",

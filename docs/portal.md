@@ -12,7 +12,7 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 - the Namespaces view: pause and unpause, and reset the queue's circuit breaker when it is open;
 - the Settings view: add, edit and remove a site.
 
-Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (the routes are below). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons.
+Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (the routes are below). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
 ## Where each view gets its data
 
