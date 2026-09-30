@@ -19,5 +19,5 @@
     "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "dev", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "dev", "e2e", "screenshots", "vite.config.ts", "playwright.config.ts", "playwright.shots.config.ts"]
 }
