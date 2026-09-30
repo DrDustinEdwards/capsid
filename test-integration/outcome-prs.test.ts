@@ -191,6 +191,17 @@ describe("unverifiable rows", () => {
     expect(JSON.parse(String(row?.verified)).prs_opened).not.toBe(true);
   });
 
+  it("a row counted merged and then marked leaves the merged count", async () => {
+    // manage_pr's merge path re-reads a pull request whatever its row holds, so a row
+    // already counted can be found to name a different pull request later.
+    await outcome("job_counted", { prs_merged: null });
+    await prRow("job_counted", PR(50), null, null);
+    await env.DB.batch(reverifyStatements(env.DB, "job_counted", PR(50), true, NOW, { node_id: "PR_fifty", created_at: "2026-09-01T00:00:00Z" }));
+    expect((await outcomeRow("job_counted"))?.prs_merged).toBe(1);
+    await env.DB.batch(unverifiableStatements(env.DB, "job_counted", PR(50), "identity-changed", "moved", NOW));
+    expect((await outcomeRow("job_counted"))?.prs_merged, "a pull request nobody can verify stayed in the merged count").toBe(0);
+  });
+
   it("complete pins the pull requests it read", async () => {
     await outcome("job_read");
     await env.DB.batch(outcomePrStatements(env.DB, "job_read", [PR(1)], { [PR(1)]: false }, NOW, { [PR(1)]: { node_id: "PR_one", created_at: "2026-09-08T00:00:00Z" } }));
