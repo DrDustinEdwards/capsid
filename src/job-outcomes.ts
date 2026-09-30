@@ -224,6 +224,11 @@ interface PrFacts {
   // The repo this pull request is on, resolved through the namespace mapping, so the
   // CI lookup asks that repo and not the namespace primary.
   repo: string;
+  // Which pull request answered at this number: GitHub's global node id and when it was
+  // opened. A recreated or transferred repo reuses numbers, so a URL alone does not say
+  // which pull request an outcome named (src/outcome-prs.ts). Null when GitHub omitted it.
+  node_id: string | null;
+  created_at: string | null;
 }
 
 export interface EvidenceVerdict {
@@ -240,6 +245,9 @@ export interface EvidenceVerdict {
   // the Worker could not read is absent, never false. Written to job_outcome_prs at
   // complete time, so the row says which pull requests were verified.
   pr_states?: Record<string, boolean>;
+  // Each pull request read, by URL: which one it was, pinned on its join row so a later
+  // read of the same URL can tell whether the number still names it.
+  pr_identity?: Record<string, { node_id: string | null; created_at: string | null }>;
   // What GitHub itself said, kept apart from the fields above, which mix it with the
   // driver's numbers. job_evaluations (src/job-claims.ts) sets these beside the claim,
   // so a check that disagreed with the driver is recorded as a disagreement rather
@@ -273,7 +281,7 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
     return `${url}: ${err instanceof Error ? err.message : String(err)}`;
   }
   // Caught too: verifyEvidence promises its callers a note, never a throw.
-  let pr: { merged?: boolean; commits?: number; changed_files?: number; head?: { sha?: string } };
+  let pr: { merged?: boolean; commits?: number; changed_files?: number; head?: { sha?: string }; node_id?: string; created_at?: string };
   try {
     const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`);
     if (!resp.ok) return `${url}: GitHub answered ${resp.status}, so its state could not be read`;
@@ -287,6 +295,8 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
     changed_files: typeof pr.changed_files === "number" ? pr.changed_files : 0,
     head_sha: pr.head?.sha ?? "",
     repo: resolved.full,
+    node_id: typeof pr.node_id === "string" && pr.node_id ? pr.node_id : null,
+    created_at: typeof pr.created_at === "string" && pr.created_at ? pr.created_at : null,
   };
 }
 
@@ -388,6 +398,7 @@ export async function verifyEvidence(
     }
   }
   verdict.pr_states = Object.fromEntries([...read].map(([url, f]) => [url, f.merged]));
+  verdict.pr_identity = Object.fromEntries([...read].map(([url, f]) => [url, { node_id: f.node_id, created_at: f.created_at }]));
   github.merged = { ...verdict.pr_states };
 
   // A partly read list keeps what was read. prs_merged counts the pull requests that
