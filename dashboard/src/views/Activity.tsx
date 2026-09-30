@@ -141,7 +141,7 @@ export function Activity() {
               <tbody>
                 {data.rows.map((r) => (
                   <tr key={r.id} data-row="">
-                    <td className="mono" title={utc(ms(r.at))}>
+                    <td className="num" title={utc(ms(r.at))}>
                       {ago(ms(r.at), now)}
                     </td>
                     <td className="mono">{r.actor ?? <None />}</td>

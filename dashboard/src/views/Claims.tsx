@@ -36,7 +36,7 @@ function message<T>(r: Answer<T>): string {
 
 // A wait in milliseconds as "3.2h". Null is no wait measured, never zero.
 function wait(msValue: number | null) {
-  return msValue === null ? <None what="no wait" /> : <span className="mono">{age(0, msValue)}</span>;
+  return msValue === null ? <None what="no wait" /> : <span className="num">{age(0, msValue)}</span>;
 }
 
 function totals(group: ClaimsGroup): ClaimsAgreementCounts {
@@ -130,7 +130,7 @@ function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
           <td data-label="Agreement">
             <Agreement a={e.agreement} />
           </td>
-          <td className="mono" data-label="Score">
+          <td className="num" data-label="Score">
             {e.score_label}
             {e.score_value !== null ? ` (${e.score_value})` : ""}
           </td>
@@ -246,7 +246,7 @@ function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
               <tbody>
                 {data.touches.map((t) => (
                   <tr key={t.id} data-row="">
-                    <td className="mono" data-label="When" title={utc(ms(t.at))}>
+                    <td className="num" data-label="When" title={utc(ms(t.at))}>
                       {ago(ms(t.at), now)}
                     </td>
                     <td className="mono" data-label="Kind">
@@ -428,10 +428,10 @@ export function Claims() {
                     <td className="mono" data-label="Namespace">
                       {g.namespace}
                     </td>
-                    <td className="mono" data-label="Jobs">
+                    <td className="num" data-label="Jobs">
                       {g.jobs}
                     </td>
-                    <td className="mono" data-label="Claims">
+                    <td className="num" data-label="Claims">
                       {g.claims}
                     </td>
                     <td data-label="Checks">
@@ -475,7 +475,7 @@ export function Claims() {
                       {name}
                     </td>
                     {AGREEMENTS.map((a) => (
-                      <td key={a} className="mono" data-label={a}>
+                      <td key={a} className="num" data-label={a}>
                         {c[a]}
                       </td>
                     ))}
