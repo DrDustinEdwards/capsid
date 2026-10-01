@@ -38,12 +38,12 @@ test("a package is added from Settings through the confirm dialog, and removed a
   await page.getByRole("button", { name: "Preview the add", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText('ops_packages: add npm "sample-extra", repository example-org/sample-extra');
-  await dialog.getByRole("button", { name: "Do it" }).click();
+  await dialog.getByRole("button", { name: "Add package", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   const row = page.locator('main tr[data-package="sample-extra"]');
   await expect(row).toHaveCount(1);
   await row.getByRole("button", { name: "Remove sample-extra" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Do it" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove package", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(row).toHaveCount(0);
 });
