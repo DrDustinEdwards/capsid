@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useApp, type DrawerType } from "./ctx";
-import type { OpsAgent, OpsJob, SiteSnapshot } from "../types";
+import type { OpsAgent, OpsJob, PortalActivityRow, SiteSnapshot } from "../types";
+import { fetchActivity } from "../lib/api";
 import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
@@ -327,6 +328,135 @@ function FragmentPr({ url, merged }: { url: string; merged: boolean | null }) {
   );
 }
 
+// One audit row (GET /portal/api/activity?id=), read when the drawer opens: the reason
+// typed with the change, a field-by-field before and after, and the row's other fields
+// by name (src/audit-detail.ts). Never the raw params.
+function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
+  const { now, signOut } = useApp();
+  const [state, setState] = useState<{ row: PortalActivityRow | null; error: string | null; loading: boolean }>({ row: null, error: null, loading: true });
+  useEffect(() => {
+    let alive = true;
+    setState({ row: null, error: null, loading: true });
+    void fetchActivity({ id }).then((r) => {
+      if (!alive) return;
+      if (r.kind === "signed-out") return signOut();
+      if (r.kind === "ok") return setState({ row: r.value.rows[0] ?? null, error: null, loading: false });
+      setState({ row: null, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message, loading: false });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id, signOut]);
+  if (state.loading) {
+    return (
+      <>
+        <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
+        <div className="dbody">
+          <div className="loading" role="status">
+            Reading the row...
+          </div>
+        </div>
+      </>
+    );
+  }
+  if (state.error !== null) {
+    return (
+      <>
+        <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
+        <div className="dbody">
+          <div className="callout crit" role="alert">
+            Could not read the row: {state.error}
+          </div>
+        </div>
+      </>
+    );
+  }
+  const r = state.row;
+  if (!r) {
+    return (
+      <>
+        <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
+        <div className="dbody">
+          <div className="callout">There is no audit row with this id. Rows older than the retention are pruned after the nightly dump.</div>
+        </div>
+      </>
+    );
+  }
+  const d = r.detail;
+  return (
+    <>
+      <Head label={`Audit row · ${r.namespace ?? "no namespace"}`} title={r.action ?? "no action"} sub={`#${r.id} · ${r.actor ?? "no actor"}`} onClose={onClose} />
+      <div className="dbody">
+        {d.reason !== null && (
+          <div>
+            <p className="section-title">Reason</p>
+            <div className="callout reason">{d.reason}</div>
+          </div>
+        )}
+        {d.changes !== null && (
+          <div>
+            <p className="section-title">What changed</p>
+            {d.changes.length === 0 ? (
+              <p className="faint">No field changed.</p>
+            ) : (
+              <dl className="kv diff">
+                {d.changes.map((c) => (
+                  <Fragment key={c.field}>
+                    <dt>{c.field}</dt>
+                    <dd>
+                      {c.before !== null && (
+                        <del className="mono" aria-label={`before: ${c.before}`}>
+                          {c.before}
+                        </del>
+                      )}
+                      {c.after !== null ? (
+                        <ins className="mono" aria-label={`after: ${c.after}`}>
+                          {c.after}
+                        </ins>
+                      ) : (
+                        <span className="faint">removed</span>
+                      )}
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            )}
+          </div>
+        )}
+        <div>
+          <p className="section-title">Recorded</p>
+          <dl className="kv">
+            <dt>When</dt>
+            <dd>
+              {ago(ms(r.at), now)} <When t={ms(r.at)} />
+            </dd>
+            <dt>Actor</dt>
+            <dd className="mono">{r.actor ?? <span className="faint">none</span>}</dd>
+            {r.path && (
+              <>
+                <dt>Path</dt>
+                <dd className="mono wrap">{r.path}</dd>
+              </>
+            )}
+            {d.fields.map((f) => (
+              <Fragment key={f.name}>
+                <dt>{f.name}</dt>
+                <dd className="mono wrap">{f.value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+          {d.unreadable && <p className="faint">This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate that rule.</p>}
+          {d.withheld > 0 && (
+            <p className="faint">
+              {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown: hashes, signatures and nested values stay in the audit log.
+            </p>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   const { feed, now } = useApp();
   const a = feed.live.agents.find((x) => x.name === name);
@@ -436,6 +566,8 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
     body = j ? <JobBody j={j} onClose={onClose} /> : <Missing what={`Job ${ref.id}`} onClose={onClose} />;
   } else if (ref?.type === "agent") {
     body = <AgentBody name={ref.id} onClose={onClose} />;
+  } else if (ref?.type === "audit") {
+    body = <AuditBody key={ref.id} id={ref.id} onClose={onClose} />;
   }
   // A row inside the drawer (an agent's "Holding now") opens by click or by Enter.
   const openRow = (e: ReactMouseEvent | ReactKeyboardEvent): boolean => {

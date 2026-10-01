@@ -58,7 +58,7 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 
 Four views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
-- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
+- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`. A row opens a drawer that reads that one row (`?id=`) and shows what it recorded: the reason typed with the change, a field-by-field before and after where the row carries both (the old value struck through above the new), and the row's other fields by name. The Worker turns the params into named fields (`src/audit-detail.ts`) and never sends them raw: a hash, a signature, a token or a nested value is counted as not shown and stays in the audit log.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 
@@ -204,7 +204,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
   - Both need the header `X-Capsid-CSRF` to equal the cookie `capsid_portal_csrf`. The feed body carries that value, and a cross-site page cannot read the feed.
   - Refusals: 400 refused, 403 CSRF or cross-site, 410 expired (preview again), 413 too large.
   - A perform writes the shared mutator's audit row, then `portal-<action>` under `access:<email>`. Rows from before the move say `console-<action>` ([schema.md](schema.md)).
-- **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered.
+- **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered, each with its named detail; **`?id=`** returns that one row, and an id that is not a positive whole number is refused with 400.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
 - **`POST /portal/api/sign-out`**, above.

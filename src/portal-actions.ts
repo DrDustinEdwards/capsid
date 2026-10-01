@@ -891,11 +891,14 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
   return jsonResponse(body);
 }
 
-/** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. */
+/** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. ?id=:
+ *  that one row, for the Activity drawer. */
 export async function handlePortalActivity(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  const filter = activityFilterFrom(new URL(request.url));
+  const parsed = activityFilterFrom(new URL(request.url));
+  if (!parsed.ok) return new Response(parsed.refusal, { status: 400, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
+  const filter = parsed.filter;
   const rows = await loadActivity(env.DB, filter);
   const body: PortalActivity = {
     generated: now.toISOString(),
