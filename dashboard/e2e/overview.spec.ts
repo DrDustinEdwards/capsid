@@ -112,7 +112,7 @@ test("the blocked jobs are one row whose children are the jobs, then a link to t
   await expect(kids.locator(".att-child")).toHaveCount(3);
   await expect(kids.getByRole("link", { name: "Open Queue" })).toHaveAttribute("href", "/portal/queue");
   await kids.locator(".att-child").first().click();
-  await expect(page.locator("aside.drawer.on")).toBeVisible();
+  await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
 const NOTICE_TITLES = [/no Cloudflare data/, /could not run/, /could not be read/, /Site map drift/, /silent/];
@@ -143,6 +143,8 @@ test("with no problems it says all clear, and the notices row stays under it", a
     snap.ci = snap.ci.map((c) => (c.latest ? { ...c, latest: { ...c.latest, conclusion: "success" } } : c));
     f.live.jobs = f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "claimed");
     f.live.awaiting_seat = [];
+    // Session incidents are problems too (Needs attention lists them).
+    f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
     f.live.loop.budget.exceeded = false;
   });
   await visit(page, "overview");
@@ -274,5 +276,5 @@ test("D18: a cell with no data says two words, its reason on hover; the backup c
   await expect(page.locator("main table.fleet .nodata-cell")).toHaveCount(0);
   // The panel does: Sample G's has the full sentence.
   await page.locator('main table.fleet tr[data-open="site:Sample G"]').click();
-  await expect(page.locator("aside.drawer.on")).toContainText("No data: Cloudflare read not configured");
+  await expect(page.locator("dialog.drawer[open]")).toContainText("No data: Cloudflare read not configured");
 });
