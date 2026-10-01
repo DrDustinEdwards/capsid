@@ -451,6 +451,30 @@ async function gateAccessRedirect(clientId, form) {
   record("5 approve redirects to Access", problem === null, `status=${resp.status} location=${shown}${problem ? `: ${problem}` : ""} (not followed)`);
 }
 
+// Gate 7: the Portal on its own host (src/portal-host.ts). With no session, its root and
+// any other path on it (here /mcp, which must not reach the MCP endpoint) answer with a
+// redirect to the Access sign-in, whichever of the Worker's login or Access at the edge
+// sends it; never the app, never a 401 from /mcp. Not followed.
+const PORTAL_ORIGIN = (process.env.PORTAL_ORIGIN ?? "https://portal.dustinedwards.info").replace(/\/$/, "");
+async function gatePortalHost() {
+  const problems = [];
+  for (const path of ["/", "/mcp"]) {
+    let resp;
+    try {
+      resp = await request(`${PORTAL_ORIGIN}${path}`, { redirect: "manual", headers: { "Cache-Control": "no-cache" } });
+    } catch (err) {
+      record("7 Portal host sends to Access", COULD_NOT_RUN, `${PORTAL_ORIGIN}${path}: ${noAnswer(err).message}`);
+      return;
+    }
+    const location = resp.headers.get("location") ?? "";
+    const host = URL.canParse(location) ? new URL(location).hostname : "";
+    if (resp.status !== 302 || !host.endsWith(".cloudflareaccess.com")) {
+      problems.push(`${path}: status ${resp.status}, location host ${host || "(none)"}; expected 302 to the Access team domain`);
+    }
+  }
+  record("7 Portal host sends to Access", problems.length === 0, problems.length === 0 ? `${PORTAL_ORIGIN} / and /mcp redirect to Access (not followed)` : problems.join("; "));
+}
+
 const clientId = await (async () => {
   await gateHealth();
   await gateBackupFreshness();
@@ -470,6 +494,8 @@ if (clientId && clientId !== COULD_NOT_RUN) {
 } else {
   record("3 consent form renders", upstream("2 CIMD only, no registration"), "skipped: no probe client from gate 2");
 }
+// Independent of the MCP client gates above, so it runs whatever they found.
+await gatePortalHost();
 
 // process.exitCode rather than process.exit(): exiting with fetch sockets still closing
 // trips a libuv assertion on Windows and replaces the exit code with 3221226505.
