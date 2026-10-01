@@ -57,6 +57,11 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted);
 }
 .iconbtn { width: 32px; padding: 0; justify-content: center; }
+/* The top bar's Settings link: a button to look at, current on the Settings view. */
+.topset { color: var(--text); text-decoration: none; }
+.topset:hover { text-decoration: none; }
+.topset[aria-current="page"] { background: var(--accent-soft); border-color: var(--accent); }
+.topset[aria-current="page"] svg { color: var(--accent); }
 .btn.spin svg { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

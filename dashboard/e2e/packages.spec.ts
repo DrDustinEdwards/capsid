@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { OpsFeed } from "../src/types.ts";
-import { VIEW_COUNT, visit } from "./views.ts";
+import { RAIL_COUNT, visit } from "./views.ts";
 
 // The optional Packages view (capsid/decisions.md, 2026-09-29) against the dev mock,
 // whose fixture configures one made-up package, sample-pkg, formerly sample-old.
@@ -60,7 +60,7 @@ async function withoutPackages(page: Page) {
 test("with no package configured there is no Packages view, and /packages shows the overview", async ({ page }) => {
   await withoutPackages(page);
   await visit(page, "overview");
-  await expect(page.locator("nav.rail a")).toHaveCount(VIEW_COUNT - 1);
+  await expect(page.locator("nav.rail a")).toHaveCount(RAIL_COUNT - 1);
   await expect(page.locator("nav.rail a").filter({ hasText: /^Packages/ })).toHaveCount(0);
   await page.goto("./packages");
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
