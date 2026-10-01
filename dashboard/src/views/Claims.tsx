@@ -395,7 +395,7 @@ export function Claims() {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="linkbtn" disabled={agg.loading} onClick={() => setTick((t) => t + 1)}>
+            <button type="button" className="btn" disabled={agg.loading} onClick={() => setTick((t) => t + 1)}>
               {agg.loading ? "Reading..." : "Read again"}
             </button>
           </>

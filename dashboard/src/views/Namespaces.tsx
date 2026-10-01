@@ -165,7 +165,7 @@ export function Namespaces() {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="linkbtn" disabled={load.loading} onClick={() => void read()}>
+            <button type="button" className="btn" disabled={load.loading} onClick={() => void read()}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

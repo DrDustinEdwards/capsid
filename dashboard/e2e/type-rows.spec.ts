@@ -54,8 +54,9 @@ test("D2: two-line list rows are 47 px and one-line table rows about 34 px", asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await visit(page, "overview");
   const rows = await heights(page, LIST_ROWS);
-  // 11 attention rows, 8 queue rows and 6 incident rows in the sample feed.
-  expect(rows.length).toBe(25);
+  // 13 attention rows (two of them session incidents), 8 queue rows and 6 incident rows
+  // in the sample feed.
+  expect(rows.length).toBe(27);
   expect(rows.filter((h) => Math.abs(h - 47) > 0.5)).toEqual([]);
   // The Activity table has one line in every cell.
   await visit(page, "activity");
@@ -81,7 +82,7 @@ test("D6: no rule between list rows; rules kept between table rows", async ({ pa
     }
     return { n, out };
   }, LIST_ROWS);
-  expect(lists.n).toBe(25);
+  expect(lists.n).toBe(27);
   expect(lists.out).toEqual([]);
   // Table rows other than the last keep a 1 px rule under each cell.
   const cells = await page.evaluate(() =>
@@ -105,7 +106,7 @@ test("D9: one status glyph per list row, and the red edge only on critical rows"
       crit,
     }));
   }, LIST_ROWS);
-  expect(rows.length).toBe(25);
+  expect(rows.length).toBe(27);
   expect(rows.filter((r) => r.glyphs !== 1).map((r) => `${r.cls}: ${r.glyphs} glyphs`)).toEqual([]);
   const critical = rows.filter((r) => r.critical);
   const other = rows.filter((r) => !r.critical);
@@ -176,7 +177,7 @@ test("D11: list rows carry no job id or fingerprint; the drawer does", async ({ 
   await visit(page, "incidents");
   // A watcher finding's row, not a live session's (those open a job with no finding).
   await page.locator('main .frow[data-open^="job:"]').filter({ hasNotText: "Session for" }).first().click();
-  const drawer = page.locator("aside.drawer.on");
+  const drawer = page.locator("dialog.drawer[open]");
   await expect(drawer).toBeVisible();
   await expect(drawer.locator("header .mono")).toHaveText(/^job_[0-9a-f]{12}$/);
   await expect(drawer.locator("dt", { hasText: "Finding" })).toHaveCount(1);

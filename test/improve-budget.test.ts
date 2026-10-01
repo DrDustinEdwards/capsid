@@ -143,8 +143,11 @@ test("the KV month field re-anchors the meter, which is how a human resets it mi
 
 test("improve_status reports spend against cap", async () => {
   await withFetch({}, async () => {
+    // improveStatus reads the budget on the real clock, so the run is dated inside the
+    // current UTC month. A fixed date stopped counting the day the month turned.
+    const thisMonth = new Date().toISOString().slice(0, 7);
     const { env } = await harness({
-      runs: [spentRun({ id: "capsid-r1", ci_minutes: 12, cost_usd: 3.5 })],
+      runs: [spentRun({ id: "capsid-r1", ci_minutes: 12, cost_usd: 3.5, started: `${thisMonth}-01 00:00:00` })],
     });
     const status = await improveStatus(env, "capsid");
     assert.equal(status.budget.caps.actions_minutes_month, BUDGET_DEFAULTS.actions_minutes_month);

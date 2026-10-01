@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import { JOB, PROBE, cfNoData, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
@@ -30,16 +31,51 @@ export function Panel({ title, src, children, className, count }: { title: strin
   );
 }
 
+// A view's namespace filter: its own, in the address as ?ns=<namespace>, so picking one
+// on Incidents leaves Sites alone, and a filtered view can be reloaded or shared. "all"
+// when absent. Other query parameters are kept.
+export function useNsFilter(): [string, (ns: string) => void] {
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const ns = new URLSearchParams(search).get("ns") || "all";
+  const set = useCallback(
+    (next: string) => {
+      const qs = new URLSearchParams(search);
+      if (next === "all") qs.delete("ns");
+      else qs.set("ns", next);
+      const q = qs.toString();
+      navigate(q ? `${location}?${q}` : location, { replace: true });
+    },
+    [search, location, navigate],
+  );
+  return [ns, set];
+}
+
 export function NsChips({ list }: { list: string[] }) {
-  const { filters, setFilters } = useApp();
+  const [ns, setNs] = useNsFilter();
   const all = ["all", ...new Set(list)];
+  // A namespace from the address that this list does not carry still shows, pressed.
+  if (!all.includes(ns)) all.push(ns);
   return (
     <div className="toolbar" role="group" aria-label="Filter by namespace">
-      {all.map((ns) => (
-        <button key={ns} type="button" className="chip" aria-pressed={filters.ns === ns} onClick={() => setFilters({ ns })}>
-          {ns === "all" ? "All" : ns}
+      {all.map((n) => (
+        <button key={n} type="button" className="chip" aria-pressed={ns === n} onClick={() => setNs(n)}>
+          {n === "all" ? "All" : n}
         </button>
       ))}
+    </div>
+  );
+}
+
+// What a filtered list says when the filter leaves it empty: which filter, and a way back
+// (pattern catalogue, N-empty).
+export function FilterEmpty({ children, onShowAll }: { children: ReactNode; onShowAll: () => void }) {
+  return (
+    <div className="body toolbar" role="status" data-filter-empty="">
+      <span className="faint">{children}</span>
+      <button type="button" className="btn" onClick={onShowAll}>
+        Show all
+      </button>
     </div>
   );
 }

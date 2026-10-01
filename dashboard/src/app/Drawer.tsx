@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useApp, type DrawerType } from "./ctx";
 import type { OpsAgent, OpsJob, SiteSnapshot } from "../types";
 import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
@@ -154,16 +154,16 @@ function JobControls({ j }: { j: OpsJob }) {
       <p className="section-title">Change it</p>
       <div className="toolbar">
         {blocked && (
-          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `Resume ${j.id}` })}>
+          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `Resume job: ${j.title}` })}>
             Resume
           </button>
         )}
         {claimed && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "release_job", params, title: `Release ${j.id}` })}>
+          <button type="button" className="btn" onClick={() => confirm({ action: "release_job", params, title: `Release job: ${j.title}` })}>
             Release
           </button>
         )}
-        <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark ${j.id} failed` })}>
+        <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })}>
           Mark failed
         </button>
       </div>
@@ -181,7 +181,7 @@ function AgentControls({ a }: { a: OpsAgent }) {
     <div>
       <p className="section-title">Change it</p>
       <div className="toolbar">
-        <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke ${a.name}` })}>
+        <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke agent ${a.name}` })}>
           Revoke
         </button>
       </div>
@@ -388,21 +388,38 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   );
 }
 
+// The detail panel: a native modal <dialog> opened with showModal(), so the page behind
+// is inert and Tab stays inside (audit DECIDE 9). The route drives it: an address
+// /<view>/<type>/<id> opens it, and closing it (Close, Esc, a click on the backdrop)
+// navigates back to /<view>. It slides in from the right (styles.css, drawer), and focus
+// returns to the row that opened it.
 export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => void }) {
   const { feed, open } = useApp();
   // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
-  const panel = useRef<HTMLElement>(null);
+  const panel = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
+  const routed = useRef(route != null);
+  routed.current = route != null;
   const key = route ? `${route.type}:${route.id}` : "";
   useEffect(() => {
+    const d = panel.current;
+    if (!d) return;
     if (route) {
       // Remember what had focus before the drawer opened, once, to hand it back.
-      if (!opener.current) opener.current = document.activeElement;
+      if (!d.open) {
+        opener.current = document.activeElement;
+        d.showModal();
+      }
       setShown(route);
-      panel.current?.querySelector<HTMLElement>("[data-close]")?.focus();
-    } else if (opener.current instanceof HTMLElement) {
-      opener.current.focus();
+      d.querySelector<HTMLElement>("[data-close]")?.focus();
+    } else if (d.open) {
+      d.close();
+      // Back to the row that opened it; when that is gone, or sat in a dialog since closed
+      // (the command menu), to the view.
+      const from = opener.current;
+      const back = from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])") ? from : document.querySelector<HTMLElement>("main");
+      back?.focus();
       opener.current = null;
     }
   }, [key]);
@@ -417,24 +434,44 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   } else if (ref?.type === "agent") {
     body = <AgentBody name={ref.id} onClose={onClose} />;
   }
+  // A row inside the drawer (an agent's "Holding now") opens by click or by Enter.
+  const openRow = (e: ReactMouseEvent | ReactKeyboardEvent): boolean => {
+    const t = e.target as Element;
+    const el = t.closest<HTMLElement>("[data-open]");
+    if (!el?.dataset.open || t.closest("a,button")) return false;
+    open(el.dataset.open);
+    return true;
+  };
   return (
-    <>
-      <div className={`scrim${route ? " on" : ""}`} onClick={onClose} />
-      <aside
-        ref={panel}
-        className={`drawer${route ? " on" : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="drawerTitle"
-        aria-hidden={!route}
-        inert={!route}
-        onClick={(e) => {
-          const el = (e.target as Element).closest<HTMLElement>("[data-open]");
-          if (el?.dataset.open && !(e.target as Element).closest("a,button")) open(el.dataset.open);
-        }}
-      >
-        {body}
-      </aside>
-    </>
+    <dialog
+      ref={panel}
+      className="drawer"
+      aria-labelledby="drawerTitle"
+      onCancel={(e) => {
+        // Esc: the route closes the dialog, so the address and the panel stay one thing.
+        e.preventDefault();
+        onClose();
+      }}
+      onClose={() => {
+        // Closed some other way while the address still names it: follow the address.
+        if (routed.current) onClose();
+      }}
+      onClick={(e) => {
+        const d = panel.current;
+        if (d && e.target === d) {
+          // A click on the dialog element itself outside its box is the backdrop.
+          const r = d.getBoundingClientRect();
+          if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return onClose();
+        }
+        openRow(e);
+      }}
+      onKeyDown={(e) => {
+        // Enter on a focused row: cancel its default so the new panel's Close button is
+        // not activated by the same key.
+        if (e.key === "Enter" && openRow(e)) e.preventDefault();
+      }}
+    >
+      {body}
+    </dialog>
   );
 }
