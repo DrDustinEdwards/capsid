@@ -47,3 +47,36 @@ test("a job transition's two rows say which is the job's and which its mirror do
   await expect(posted.nth(0)).toContainText("job-posted (job)");
   await expect(posted.nth(1)).toContainText("job-posted (mirror document)");
 });
+
+// The Activity drawer (job_fe0da37c07e0 PR 2): a row opens the audit row it is, with
+// the reason typed, the before and after field by field, and the rest by name.
+test("an Activity row opens its audit row: the reason, the before and after, and the named fields", async ({ page }) => {
+  await page.goto("activity");
+  await page.locator("tbody tr[data-row]").filter({ hasText: "ops-site-edited" }).click();
+  const drawer = page.locator("dialog.drawer");
+  await expect(drawer.getByRole("heading", { name: "ops-site-edited" })).toBeVisible();
+  await expect(page).toHaveURL(/\/activity\/audit\/\d+$/);
+  const origin = drawer.locator(".kv.diff dd").first();
+  await expect(origin.locator("del")).toHaveText("https://sample-b.example.com");
+  await expect(origin.locator("ins")).toHaveText("https://www.sample-b.example.com");
+  await expect(drawer.locator(".kv.diff dt")).toHaveText(["Origin", "Health path", "Revision"]);
+
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/activity$/);
+  await page.locator("tbody tr[data-row]").filter({ hasText: "portal-mode" }).click();
+  await expect(drawer.locator(".callout.reason")).toHaveText("Nightly runs are paused while the budget resets.");
+  await expect(drawer.locator(".kv").last()).toContainText("Mode");
+});
+
+test("an audit row opened by its address reads that row; a write's hash is counted, not shown", async ({ page }) => {
+  await page.goto("activity/audit/1000");
+  const drawer = page.locator("dialog.drawer");
+  await expect(drawer.getByRole("heading", { name: "write" })).toBeVisible();
+  await expect(drawer).toContainText("1 recorded field is not shown");
+});
+
+test("an address naming no audit row says so", async ({ page }) => {
+  await page.goto("activity/audit/5");
+  await expect(page.locator("dialog.drawer").getByRole("heading", { name: "Audit row #5" })).toBeVisible();
+  await expect(page.locator("dialog.drawer")).toContainText("There is no audit row with this id.");
+});
