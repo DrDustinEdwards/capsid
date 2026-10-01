@@ -64,6 +64,12 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
     return res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
   }
   if (url.pathname.startsWith("/.well-known/")) return json(200, {});
+  // The Portal's own host, played under /portal-host (PORTAL_ORIGIN below): with no
+  // session its root and its /mcp send the caller to the Access sign-in (gate 7).
+  if (url.pathname === "/portal-host/" || url.pathname === "/portal-host/mcp") {
+    res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/login/portal" });
+    return res.end();
+  }
   if (url.pathname === "/portal/") {
     res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization" });
     return res.end();
@@ -105,6 +111,9 @@ async function run(handler: Handler, drop: (req: IncomingMessage, nth: number) =
       VERIFY_POLL_INTERVAL_MS: "5",
       VERIFY_FETCH_TRIES: "2",
       VERIFY_PROBE_CLIENT_ID: `http://127.0.0.1:${port}/probe-client.json`,
+      // Gate 7 checks the Portal's own host; this stub plays it, so no run reaches the
+      // real portal.dustinedwards.info.
+      PORTAL_ORIGIN: `http://127.0.0.1:${port}/portal-host`,
     };
     delete env.CLOUDFLARE_ACCOUNT_ID;
     delete env.CLOUDFLARE_API_TOKEN;

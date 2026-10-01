@@ -14,7 +14,7 @@ export interface AuthoritativeCounts {
 export const AUTHORITATIVE: Record<string, AuthoritativeCounts> = {
   capsid: {
     tools: Object.keys(TOOL_GRANTS).length,
-    liveGates: 8,
+    liveGates: 9,
     htmlEnforcedHeaders: 6,
     htmlReportOnlyHeaders: 1,
   },
