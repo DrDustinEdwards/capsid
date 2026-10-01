@@ -70,7 +70,9 @@ export function useOpsFeed() {
 }
 
 export type RefreshResult =
-  | { kind: "ok"; feed: OpsFeed }
+  // warning: the pass ran but its audit row naming you was not written (the Worker's
+  // X-Capsid-Warning header, src/ops-feed.ts).
+  | { kind: "ok"; feed: OpsFeed; warning: string | null }
   | { kind: "limited"; allowedAt: number | null }
   | { kind: "signed-out" }
   | { kind: "error"; message: string };
@@ -93,8 +95,12 @@ export async function requestRefresh(): Promise<RefreshResult> {
       if (allowedAt == null && Number.isFinite(retry) && retry > 0) allowedAt = Date.now() + retry * 1000;
       return { kind: "limited", allowedAt };
     }
-    if (!res.ok) return { kind: "error", message: `Refresh answered ${res.status}` };
-    return { kind: "ok", feed: await asFeed(res) };
+    if (!res.ok) {
+      // The Worker says why in plain text; the status alone is no reason.
+      const why = (await res.text().catch(() => "")).trim().slice(0, 300);
+      return { kind: "error", message: why ? `${why} (HTTP ${res.status})` : `the server answered HTTP ${res.status}` };
+    }
+    return { kind: "ok", feed: await asFeed(res), warning: res.headers.get("x-capsid-warning") };
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }
