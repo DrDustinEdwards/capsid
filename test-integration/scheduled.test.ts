@@ -55,9 +55,13 @@ describe("the four cron expressions", () => {
     const dumped = await env.MEDIA.get(documentsDump!.key);
     expect(await dumped!.text()).toContain("cron-fixture.md");
 
+    // One row. Where the backup credential is not configured (CI, and a local run), the
+    // dump lands and the prune refuses, and the row says so rather than "ok".
     const runs = await ledger("backup");
-    expect(runs.map((r) => r.outcome)).toEqual(["ok"]);
-    expect(runs[0]!.reason).toMatch(/^wrote \d+ dump objects \(\d+ documents\); pruned /);
+    expect(runs).toHaveLength(1);
+    const run = runs[0]!;
+    expect(run.reason).toMatch(run.outcome === "refused" ? /^wrote \d+ dump objects, and the prune refused: \S/ : /^wrote \d+ dump objects \(\d+ documents\); pruned /);
+    expect(["ok", "refused"]).toContain(run.outcome);
   });
 
   it("the improve opener runs and writes nothing while the mode is off", async () => {
