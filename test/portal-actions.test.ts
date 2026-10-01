@@ -411,6 +411,24 @@ test("each switch's click row records its reason", async () => {
   }
 });
 
+test("PLANT: a click row records the address the click came from, and null when there is none", async () => {
+  for (const [action, params] of SWITCH_CASES) {
+    for (const [header, recorded] of [["203.0.113.7", "203.0.113.7"], ["2001:db8::7", "2001:db8::7"], [null, null]] as const) {
+      const w = world();
+      const { token } = await previewOk(w, action, { ...params, reason: "from somewhere" });
+      const req = await perform({ token });
+      if (header) req.headers.set("CF-Connecting-IP", header);
+      const res = await handlePortalPerform(req, w.env, NOW, deps);
+      assert.equal(res.status, 200, await res.clone().text());
+      const click = w.d1.recorded.find((r) => r.params[1] === `portal-${action}`);
+      assert.ok(click, `${action} wrote no click row`);
+      const detail = JSON.parse(String(click.params[4])) as Record<string, unknown>;
+      assert.ok("source_address" in detail, `${action}'s click row has no source_address at all`);
+      assert.equal(detail.source_address, recorded, `${action} with ${header}`);
+    }
+  }
+});
+
 test("PLANT: an Undo previews and writes portal-undo-<action>, its own row, never portal-<action>", async () => {
   for (const [action, params] of SWITCH_CASES) {
     const w = world();
