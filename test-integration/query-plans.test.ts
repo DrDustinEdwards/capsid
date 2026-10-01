@@ -29,7 +29,7 @@ const WHOLE_TABLE_BY_DESIGN = [
   { file: "backup.ts", sql: /^SELECT \* FROM /i, why: "the nightly dump reads every row of a table on purpose" },
   {
     file: "portal-activity.ts",
-    sql: /^SELECT id, at, actor, action, namespace, path, CASE .* END AS target FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/is,
+    sql: /^SELECT id, at, actor, action, namespace, path, CASE .* END AS target, params FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/is,
     why:
       "the Portal's UNFILTERED activity read. With no WHERE and ORDER BY id DESC LIMIT 50, SQLite walks the rowid " +
       "b-tree backwards and stops at 50 rows: the plan carries NO TEMP B-TREE, so nothing is sorted, and it reads " +
@@ -152,6 +152,13 @@ describe("query plans", () => {
       "SELECT at, actor, action, namespace, path FROM audit_log WHERE namespace = ?1 AND actor = ?2 ORDER BY id DESC LIMIT ?3",
       3,
       "audit_log_ns_recent",
+    ],
+    // The Activity drawer reads one row by its id, through the primary key.
+    [
+      "by id",
+      "SELECT at, actor, action, namespace, path FROM audit_log WHERE id = ?1 ORDER BY id DESC LIMIT ?2",
+      2,
+      "INTEGER PRIMARY KEY",
     ],
   ];
 

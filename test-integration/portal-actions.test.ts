@@ -422,12 +422,25 @@ describe("the Portal's reads", () => {
     const response = await call(`${PORTAL_ACTIVITY_PATH}?namespace=sample&actor=agent:sample`);
     expect(response.status).toBe(200);
     const body = (await response.json()) as PortalActivity;
-    expect(body.filter).toEqual({ namespace: "sample", actor: "agent:sample" });
+    expect(body.filter).toEqual({ namespace: "sample", actor: "agent:sample", id: null });
     expect(body.limit).toBe(50);
     expect(body.rows.map((r) => r.path)).toEqual(["a.md"]);
     expect(body.rows[0].at).toMatch(/T.*Z$/);
     const all = (await (await call(PORTAL_ACTIVITY_PATH)).json()) as PortalActivity;
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
+
+    // The drawer's read: one row by id, with its detail and without its params.
+    const one = (await (await call(`${PORTAL_ACTIVITY_PATH}?id=${all.rows[1]!.id}`)).json()) as PortalActivity;
+    expect(one.filter.id).toBe(all.rows[1]!.id);
+    expect(one.rows.map((r) => r.path)).toEqual(["b.md"]);
+    expect(one.rows[0]!.detail).toEqual({ reason: null, changes: null, fields: [], withheld: 0, unreadable: false });
+    expect(Object.keys(one.rows[0]!)).not.toContain("params");
+  });
+
+  it("an activity id that is not a row id is refused with 400, never read as no filter", async () => {
+    const response = await call(`${PORTAL_ACTIVITY_PATH}?id=1%20OR%201=1`);
+    expect(response.status).toBe(400);
+    expect(await response.text()).toMatch(/^id must be an audit row id/);
   });
 });
 

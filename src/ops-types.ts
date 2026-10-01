@@ -377,7 +377,7 @@ export interface OpsFeed {
 //   POST /portal/api/actions/preview    body PortalActionRequest -> PortalPreview
 //   POST /portal/api/actions/perform    body { token }           -> PortalPerformed
 //   GET  /portal/api/namespaces                                   -> PortalNamespaces
-//   GET  /portal/api/activity?namespace=&actor=                   -> PortalActivity
+//   GET  /portal/api/activity?namespace=&actor= | ?id=           -> PortalActivity
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
@@ -483,11 +483,41 @@ export interface PortalActivityRow {
   // path: "job" for the job and "document" for its mirror document. null when the
   // row's params name neither.
   target: "job" | "document" | null;
+  // What the row recorded, by name (src/audit-detail.ts). Never the raw params.
+  detail: AuditDetail;
+}
+
+// One field of an audit row's params, labelled in plain English.
+export interface AuditField {
+  name: string;
+  value: string;
+}
+
+// One field that differs between a row's `before` and `after`. before is null for a
+// field the change added, after is null for one it removed.
+export interface AuditChange {
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface AuditDetail {
+  // The reason typed with the change, when the row carries one.
+  reason: string | null;
+  // Field by field, when the row carries a before or an after; null when it carries neither.
+  changes: AuditChange[] | null;
+  fields: AuditField[];
+  // Recorded fields not shown: hashes, signatures and nested values.
+  withheld: number;
+  // The params are not JSON (rows older than that rule), so nothing can be shown.
+  unreadable: boolean;
 }
 
 export interface PortalActivity {
   generated: string;
-  filter: { namespace: string | null; actor: string | null };
+  // id: one row by its id, for the Activity drawer; the namespace and actor filters
+  // are then not applied.
+  filter: { namespace: string | null; actor: string | null; id: number | null };
   // Newest first, at most `limit`.
   rows: PortalActivityRow[];
   limit: number;
