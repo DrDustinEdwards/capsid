@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, join } from "node:path";
 import { capsidClient, requireHttps } from "./capsid-rpc.mjs";
 
-export const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
+export const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
 // The four tables of the claims dataset, in the order they are written and listed.
 export const EXPORT_TABLES = ["job_claims", "job_evaluations", "job_touches", "job_outcomes"];

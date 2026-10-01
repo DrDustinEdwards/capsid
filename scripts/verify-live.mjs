@@ -27,7 +27,7 @@ import { canaryReport, checkCanary } from "./canary-lib.mjs";
 import { PROBE_CLIENT_ID, PROBE_REDIRECT, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 
-const ORIGIN = (process.argv[2] ?? "https://capsid.dustin-edwards.workers.dev").replace(/\/$/, "");
+const ORIGIN = (process.argv[2] ?? "https://mcp.dustinedwards.info").replace(/\/$/, "");
 // Overridable because CI's sha gate waits on a rollout that has only just started and
 // needs a longer budget than an interactive run.
 const POLL_ATTEMPTS = Number(process.env.VERIFY_POLL_ATTEMPTS ?? 10);
@@ -353,9 +353,10 @@ async function gateSecurityHeaders(clientId) {
     ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/backup 401", "other", { url: `${ORIGIN}/ops/backup`, init: { method: "POST" } }],
-    // Capsid Portal with no session: the Portal gate answers with the sign-in redirect,
-    // never the app. A 200 here would be the dashboard served to anyone.
-    ["/portal/ no session", "other", { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 302 }],
+    // The MCP host serves the machine surface only (src/mcp-host.ts): the Portal is not
+    // here, on its own host (gate 7). A 302 here is the Portal answering on the wrong
+    // host, and a 200 is the app served to anyone.
+    ["/portal/ not on this host", "other", { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 404 }],
     // The Portal moved from /console with no redirects (capsid/research/
     // design-portal-unify.md): each old address is the Worker's plain 404. A 302 here is
     // a redirect somebody added, and a 200 is the old page back.

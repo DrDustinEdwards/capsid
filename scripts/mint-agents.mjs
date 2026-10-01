@@ -28,7 +28,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 
-export const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
+export const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
 // The six of docs/bootstrap.md. Drivers carry NO flags: a driver opens pull
 // requests and a human merges them, and can_merge is how that stops being true.

@@ -10,8 +10,9 @@
 //     old link lands on the new address;
 //   - /portal/assets/... is served as it is, not redirected. The built app names its
 //     hashed files by that absolute path (dashboard/vite.config.ts base), on both hosts.
-// Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes stay on
-// capsid.dustin-edwards.workers.dev, and on this host they are Portal paths behind the gate.
+// Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes are on
+// mcp.dustinedwards.info (src/mcp-host.ts), and on this host they are Portal paths behind
+// the gate.
 
 // The same values as portal-auth's PORTAL_PATH and PORTAL_PREFIX, stated here rather than
 // imported, because portal-auth imports this module.

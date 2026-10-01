@@ -18,16 +18,21 @@ describe("discovery", () => {
     // its path-suffixed location only, on the canonical host, and every 401 challenge
     // names that URL. Measured 2026-09-27: 0.10.3 also answered the bare
     // /.well-known/oauth-protected-resource and any host; 1.1.0 answers 404 to both.
-    const resource = await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource/mcp");
-    expect(resource.status).toBe(200);
-    const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
-    // The audience is pinned to the deployed origin (RFC 8707): a token minted for this
-    // server must not be presentable at whatever host asked for the metadata.
-    expect(resourceDoc.resource).toBe("https://capsid.dustin-edwards.workers.dev/mcp");
-    expect(resourceDoc.authorization_servers).toEqual(["https://capsid.dustin-edwards.workers.dev"]);
-    expect((await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource")).status).toBe(404);
-    const challenge = await SELF.fetch("https://capsid.dustin-edwards.workers.dev/mcp", { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } });
-    expect(challenge.headers.get("WWW-Authenticate")).toContain('resource_metadata="https://capsid.dustin-edwards.workers.dev/.well-known/oauth-protected-resource/mcp"');
+    // Each MCP host is its own resource (src/mcp-host.ts): mcp.dustinedwards.info, and the
+    // old workers.dev address for the hours of the same-day cut, each served by its own
+    // provider (src/index.ts).
+    for (const origin of ["https://mcp.dustinedwards.info", "https://capsid.dustin-edwards.workers.dev"]) {
+      const resource = await SELF.fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
+      expect(resource.status, origin).toBe(200);
+      const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
+      // The audience is pinned to the host's own origin (RFC 8707): a token minted for one
+      // host must not be presentable at another.
+      expect(resourceDoc.resource).toBe(`${origin}/mcp`);
+      expect(resourceDoc.authorization_servers).toEqual([origin]);
+      expect((await SELF.fetch(`${origin}/.well-known/oauth-protected-resource`)).status).toBe(404);
+      const challenge = await SELF.fetch(`${origin}/mcp`, { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } });
+      expect(challenge.headers.get("WWW-Authenticate")).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`);
+    }
 
     const server = await SELF.fetch("https://capsid.test/.well-known/oauth-authorization-server");
     expect(server.status).toBe(200);

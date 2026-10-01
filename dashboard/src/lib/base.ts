@@ -1,5 +1,5 @@
-// Where the Portal lives, read from the page's own address: "/portal" on
-// capsid.dustin-edwards.workers.dev (and the dev server), "" on portal.dustinedwards.info,
+// Where the Portal lives, read from the page's own address: "/portal" on the dev server
+// and the test hosts, "" on portal.dustinedwards.info,
 // where the Portal is the whole host (src/portal-host.ts). The router and every API URL
 // build on it, so one build serves both hosts. The hashed files keep their /portal/assets/
 // paths on both (vite.config.ts base), which the Worker serves as they are.

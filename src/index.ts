@@ -12,6 +12,7 @@ import { openRuns, tickRuns } from "./improve-run";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
+import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 
 // Spelled once. wrangler.jsonc declares them; test/improve-cron.test.ts derives
 // one list from the other and fails in both directions.
@@ -51,23 +52,33 @@ function withCacheDefault(response: Response, pathname: string): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-const CANONICAL_MCP_URL = "https://capsid.dustin-edwards.workers.dev/mcp";
+// The RFC 8707 resource is per host. workers-oauth-provider binds every access token to
+// ONE configured resource and refuses a token whose audience origin is not the host the
+// request arrived on (token_audience_unbound, audience_mismatch), so one provider cannot
+// serve /mcp on two hosts. The MCP endpoint lives at MCP_URL; the old address keeps its
+// own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
+// claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
+// The step that turns workers.dev off removes legacyProvider.
+function oauthProvider(resource: string) {
+  return new OAuthProvider({
+    apiRoute: "/mcp",
+    apiHandler,
+    defaultHandler,
+    authorizeEndpoint: "/authorize",
+    tokenEndpoint: "/token",
+    resourceMetadata: { resource },
+    // CIMD only (capsid/mcp-wrapper-standard.md, amendment 2026-09-27; design PR 4 of
+    // capsid/research/design-capsid-access-login.md): a client's id is the URL of its
+    // metadata document, and there is no registration endpoint. Clients registered by
+    // DCR before PR 4 keep their KV records until the registration TTL they were given.
+    // The provider advertises CIMD only while the global_fetch_strictly_public
+    // compatibility flag is set (wrangler.jsonc.example).
+    clientIdMetadataDocumentEnabled: true,
+  });
+}
 
-const provider = new OAuthProvider({
-  apiRoute: "/mcp",
-  apiHandler,
-  defaultHandler,
-  authorizeEndpoint: "/authorize",
-  tokenEndpoint: "/token",
-  resourceMetadata: { resource: CANONICAL_MCP_URL },
-  // CIMD only (capsid/mcp-wrapper-standard.md, amendment 2026-09-27; design PR 4 of
-  // capsid/research/design-capsid-access-login.md): a client's id is the URL of its
-  // metadata document, and there is no registration endpoint. Clients registered by
-  // DCR before PR 4 keep their KV records until the registration TTL they were given.
-  // The provider advertises CIMD only while the global_fetch_strictly_public
-  // compatibility flag is set (wrangler.jsonc.example).
-  clientIdMetadataDocumentEnabled: true,
-});
+const provider = oauthProvider(MCP_URL);
+const legacyProvider = oauthProvider(LEGACY_MCP_URL);
 
 export default {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -80,6 +91,10 @@ export default {
     const host = portalHostRequest(original);
     if ("redirect" in host) return withSecurityHeaders(host.redirect);
     const request = host.request;
+    // The MCP host serves the machine surface only, and the old address's /portal is
+    // retired (src/mcp-host.ts). Also before the provider, for the same reason.
+    const refused = hostRefusal(request);
+    if (refused) return withSecurityHeaders(withCacheDefault(refused, new URL(request.url).pathname));
     const pathname = new URL(request.url).pathname;
     if (pathname === "/mcp") {
       const originProblem = mcpOriginProblem(request);
@@ -87,7 +102,7 @@ export default {
         return withSecurityHeaders(withCacheDefault(new Response(originProblem, { status: 403 }), pathname));
       }
     }
-    const response = await provider.fetch(request, env, ctx);
+    const response = await (new URL(request.url).hostname === LEGACY_HOST ? legacyProvider : provider).fetch(request, env, ctx);
     return withSecurityHeaders(withCacheDefault(response, pathname));
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches three of the
