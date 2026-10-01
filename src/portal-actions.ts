@@ -4,6 +4,7 @@ import { agentActor } from "./agents-schema";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
 import { portalGate, portalSignOutCookies } from "./portal-auth";
+import { portalCookiePath } from "./portal-host";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
@@ -915,7 +916,7 @@ export async function handlePortalSignOut(request: Request, env: Env, now: Date 
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
   const headers = new Headers({ "Cache-Control": "no-store" });
-  for (const cookie of portalSignOutCookies()) headers.append("Set-Cookie", cookie);
+  for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url)))) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 204, headers });
 }
 
