@@ -184,8 +184,11 @@ export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
   return get<PortalNamespaces>(NAMESPACES_URL);
 }
 
-export function fetchActivity(filter: { namespace: string; actor: string }): Promise<Answer<PortalActivity>> {
+// GET /portal/api/activity: the newest audit rows, filtered; or, with id, that one row
+// for the Activity drawer.
+export function fetchActivity(filter: { namespace?: string; actor?: string; id?: string }): Promise<Answer<PortalActivity>> {
   const qs = new URLSearchParams();
+  if (filter.id) qs.set("id", filter.id);
   if (filter.namespace) qs.set("namespace", filter.namespace);
   if (filter.actor) qs.set("actor", filter.actor);
   const s = qs.toString();

@@ -197,7 +197,7 @@ export function App() {
       const type = ref.slice(0, i);
       const id = ref.slice(i + 1);
       if (type === "view") return isView(id) ? go(id) : undefined;
-      if (type === "site" || type === "job" || type === "agent") navigate(routePath(route.view, { type, id }) + qs);
+      if (type === "site" || type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }) + qs);
     },
     [go, navigate, route.view, qs],
   );

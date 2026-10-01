@@ -531,19 +531,23 @@ function seedActivity(): PortalActivityRow[] {
   const M = 60_000;
   // A job transition writes two rows with one action, actor, path and second, one for
   // the job and one for its mirror document, as the Worker does (src/portal-activity.ts).
-  const rows: Array<[number, string | null, string | null, string | null, string | null, PortalActivityRow["target"]]> = [
-    [4, "agent:sample-driver", "write", "sample", "sample/notes/run-log.md", "document"],
-    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "job"],
-    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "document"],
-    [26, "agent:sample-driver", "jobs.block", "sample", "sample/jobs/job_7c1e44b0a912.md", "job"],
-    [48, "seat", "jobs.resume", "sample", "sample/jobs/job_91b3c0de5a24.md", "job"],
-    [95, "agent:sample-b-driver", "write", "sample-b", "sample-b/core.md", "document"],
-    [180, ACTOR, "portal.mode", null, null, null],
-    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", null],
-    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", null],
-    [720, "agent:sample-c-driver", "improve.run", "sample-c", null, null],
+  // What each row recorded, by name, as src/audit-detail.ts reads it from the params.
+  const none = { reason: null, changes: null, fields: [], withheld: 0, unreadable: false };
+  const d = (over: Partial<PortalActivityRow["detail"]>): PortalActivityRow["detail"] => ({ ...none, ...over });
+  const rows: Array<[number, string | null, string | null, string | null, string | null, PortalActivityRow["target"], PortalActivityRow["detail"]]> = [
+    [4, "agent:sample-driver", "write", "sample", "sample/notes/run-log.md", "document", d({ fields: [{ name: "Mode", value: "append" }], withheld: 1 })],
+    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "job", d({ fields: [{ name: "Job", value: "job_9ab0bcf483ae" }, { name: "Priority", value: "40" }] })],
+    [11, "agent:watcher", "job-posted", "sample-b", "jobs/job_9ab0bcf483ae.md", "document", d({ withheld: 1 })],
+    [26, "agent:sample-driver", "jobs.block", "sample", "sample/jobs/job_7c1e44b0a912.md", "job", d({ reason: "The push is ready for the seat.", fields: [{ name: "Job", value: "job_7c1e44b0a912" }, { name: "Status", value: "blocked" }] })],
+    [48, "seat", "jobs.resume", "sample", "sample/jobs/job_91b3c0de5a24.md", "job", d({ reason: "Merged #41 and confirmed the deploy.", fields: [{ name: "Job", value: "job_91b3c0de5a24" }] })],
+    [70, ACTOR, "ops-site-edited", "sample-b", null, null, d({ changes: [{ field: "Origin", before: "https://sample-b.example.com", after: "https://www.sample-b.example.com" }, { field: "Health path", before: "none", after: "/health" }, { field: "Revision", before: "3", after: "4" }] })],
+    [95, "agent:sample-b-driver", "write", "sample-b", "sample-b/core.md", "document", d({ fields: [{ name: "Mode", value: "overwrite" }], withheld: 1 })],
+    [180, ACTOR, "portal-mode", null, null, null, d({ reason: "Nightly runs are paused while the budget resets.", fields: [{ name: "Mode", value: "off" }] })],
+    [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", null, d({})],
+    [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", null, d({ unreadable: true })],
+    [720, "agent:sample-c-driver", "improve.run", "sample-c", null, null, d({ fields: [{ name: "Ran", value: "yes" }, { name: "Note", value: "baseline scored" }] })],
   ];
-  return rows.map(([m, actor, action, namespace, path, target], i) => ({ id: 1000 - i, at: new Date(now - m * M).toISOString(), actor, action, namespace, path, target }));
+  return rows.map(([m, actor, action, namespace, path, target, detail], i) => ({ id: 1000 - i, at: new Date(now - m * M).toISOString(), actor, action, namespace, path, target, detail }));
 }
 
 // The Worker's own cap (ACTIVITY_LIMIT in src/portal-activity.ts), so the screenshots
@@ -780,7 +784,17 @@ export function mockOpsApi(): Plugin {
       const p = plan(f, t.action, t.params);
       p.apply(st);
       const ns = t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
-      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date(mockNow()).toISOString(), actor: ACTOR, action: clickName(t.action, t.params), namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
+      const { reason, ...named } = t.params;
+      st.activity.unshift({
+        id: (st.activity[0]?.id ?? 0) + 1,
+        target: null,
+        at: new Date(mockNow()).toISOString(),
+        actor: ACTOR,
+        action: clickName(t.action, t.params),
+        namespace: ns,
+        path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null,
+        detail: { reason: reason ?? null, changes: null, fields: Object.entries(named).map(([k, v]) => ({ name: k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " "), value: v })), withheld: 0, unreadable: false },
+      });
       const out: PortalPerformed = { action: t.action, summary: p.done, warning: process.env.WF_MOCK === "warn" ? "The action happened, but its audit row was not written." : null, feed: feed(nextRefresh, st) };
       return send(res, 200, out);
     } catch (e) {
@@ -814,8 +828,11 @@ export function mockOpsApi(): Plugin {
         if (path === "/portal/api/activity") {
           const namespace = url.searchParams.get("namespace") || null;
           const actor = url.searchParams.get("actor") || null;
-          const rows = st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor)).slice(0, ACTIVITY_LIMIT);
-          const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor }, rows, limit: ACTIVITY_LIMIT };
+          const rawId = url.searchParams.get("id");
+          if (rawId !== null && !/^[1-9][0-9]{0,15}$/.test(rawId)) return refuse(res, 400, `id must be an audit row id, a positive whole number; got ${JSON.stringify(rawId)}.`);
+          const id = rawId === null ? null : Number(rawId);
+          const rows = (id !== null ? st.activity.filter((r) => r.id === id) : st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor))).slice(0, ACTIVITY_LIMIT);
+          const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor, id }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
         }
         if (path === "/portal/api/packages/history") {
