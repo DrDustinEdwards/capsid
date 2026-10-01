@@ -85,6 +85,9 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   site_edit: "Save changes",
   site_remove: "Remove site",
   reset_breaker: "Reset breaker",
+  package_add: "Add package",
+  package_edit: "Save changes",
+  package_remove: "Remove package",
 };
 
 export function performLabel(action: PortalAction, params: Record<string, string>): string {
@@ -93,10 +96,10 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "reset_breaker", "release_job"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job"]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
-export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove"]);
+export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove"]);
 
 export const AppCtx = createContext<Ctx | null>(null);
 
