@@ -326,10 +326,35 @@ export interface OpsLive {
   packages: OpsPackageConfig[];
 }
 
+// The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag
+// decided when the feed was read. failing: the newest run threw or was refused.
+// quiet: a periodic task with no run in twice its period. never: no run recorded.
+export type OpsTaskRunOutcome = "ok" | "skipped" | "refused" | "threw";
+
+export interface OpsTaskRun {
+  started_at: string;
+  finished_at: string;
+  outcome: OpsTaskRunOutcome;
+  // One line: what the run did, or why it did not.
+  reason: string;
+}
+
+export interface OpsTask {
+  id: string;
+  label: string;
+  // Null for a task whose runs follow the work, which is flagged only when it fails.
+  period_ms: number | null;
+  flag: "failing" | "quiet" | "never" | null;
+  // Newest first, at most five.
+  recent: OpsTaskRun[];
+}
+
 export interface OpsFeed {
   // Null until the watcher has written its first pass.
   snapshot: OpsSnapshot | null;
   live: OpsLive;
+  // The run ledger, or why it could not be read.
+  scheduled: { tasks: OpsTask[]; error: null } | { tasks: null; error: string };
   // When the next on-demand pass is allowed (POST /portal/api/ops/refresh), or null
   // when one is allowed now.
   refresh_allowed_at: string | null;

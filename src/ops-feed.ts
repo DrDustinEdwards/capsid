@@ -17,7 +17,8 @@ import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive,
 import { runUrl } from "./runner-key";
 import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
-import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
+import { readTaskRuns, taskStates, TASKS } from "./task-runs";
+import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
 // /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
@@ -31,7 +32,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 13 statements plus N:
+//   D1, 22 statements plus N:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -42,6 +43,8 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
+//     9  task_runs: each scheduled task's newest runs, one keyed read per task in
+//        one batch (src/task-runs.ts, TASKS)
 //   KV, 7 gets plus one per ROSTER namespace (5 today, so 12): ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, and each namespace's pause key.
@@ -52,7 +55,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 13, kv: 7 + ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 7 + ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -419,11 +422,27 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
 // the handler, so opsFeed reads storage only.
 export type OpsFeedData = Omit<OpsFeed, "csrf">;
 
+/** The run ledger as the feed shows it. A failed read is said in the panel, not
+ *  turned into a failure of the whole feed. */
+async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof readTaskRuns>> } | { error: string }> {
+  try {
+    return { read: await readTaskRuns(env.DB) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`OPS_FEED_TASK_RUNS_UNREADABLE ${message}`);
+    return { error: message };
+  }
+}
+
 export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
-  const [snapshot, live, last] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY)]);
+  const [snapshot, live, last, runs] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY), scheduled(env)]);
   return {
     snapshot,
     live,
+    scheduled:
+      "error" in runs
+        ? { tasks: null, error: runs.error }
+        : { tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? DEFAULT_CADENCE_MINUTES), error: null },
     refresh_allowed_at: refreshAllowedAt(last, now),
     cloudflare_configured: Boolean(env.CF_OPS_TOKEN),
   };
