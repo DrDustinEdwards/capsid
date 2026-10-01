@@ -1,6 +1,7 @@
 import { useApp } from "../app/ctx";
 import { agentLabel, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
+import { Anchors } from "../ui/anchors";
 import { FilterEmpty, NsChips, PageHead, Panel, QueueRows, useNsFilter } from "./shared";
 
 export function SeatStart() {
@@ -59,7 +60,7 @@ export function LiveSessions() {
   return (
     <>
       {list.map((s) => (
-        <div className="qrow" key={s.session_id} data-row="" data-session={s.session_id} data-open={s.job_id ? `job:${s.job_id}` : undefined} tabIndex={s.job_id ? 0 : undefined}>
+        <div className={s.last_failure && s.incident === "failure" ? "qrow sev-crit" : "qrow"} key={s.session_id} data-row="" data-session={s.session_id} data-open={s.job_id ? `job:${s.job_id}` : undefined} tabIndex={s.job_id ? 0 : undefined}>
           {s.last_failure ? (
             <St kind={s.incident === "failure" ? "crit" : "warn"}>Failed</St>
           ) : s.needs_input ? (
@@ -95,13 +96,14 @@ export function Queue() {
   const nss = [...new Set(all.map((j) => j.namespace))];
   return (
     <div className="page">
-      <PageHead title="Queue">Every namespace, grouped by what it needs. A blocked job shows what it waits on; open it for the exact command and the resume call.</PageHead>
+      <Anchors />
+      <PageHead title="Queue" />
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
       </div>
       <div className="grid2">
-        <Panel title="Jobs" src="live · D1 jobs, read on each refresh">
+        <Panel title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
@@ -111,7 +113,7 @@ export function Queue() {
             <QueueRows jobs={jobs} />
           )}
         </Panel>
-        <Panel title="By namespace">
+        <Panel title="By namespace" id="by-namespace" section="By namespace">
           <div className="scroll-x">
             <table className="list">
               <tbody>
@@ -145,7 +147,7 @@ export function Queue() {
             <SeatStart />
           </div>
         </Panel>
-        <Panel title="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
+        <Panel title="Live sessions" id="live-sessions" section="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
           <LiveSessions />
         </Panel>
       </div>

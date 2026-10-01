@@ -6,7 +6,7 @@ import { NoSnapshot, PageHead, Panel } from "./shared";
 export function Backups() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
-  const head = <PageHead title="Backups">The primary store's nightly dump and the off-account mirror. A stale dump or a dead mirror is shown in red on purpose.</PageHead>;
+  const head = <PageHead title="Backups" />;
   if (!snap) {
     return (
       <div className="page">

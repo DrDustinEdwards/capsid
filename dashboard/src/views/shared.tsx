@@ -2,29 +2,29 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
-import { JOB, PROBE, cfNoData, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
+import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 
-export function PageHead({ title, children }: { title: string; children?: ReactNode }) {
+// The heading only: what a view is for is one line in the shortcut sheet (design D13).
+export function PageHead({ title }: { title: string }) {
   return (
     <div className="pagehead">
-      <div>
-        <h1>{title}</h1>
-        {children && <p>{children}</p>}
-      </div>
+      <h1>{title}</h1>
     </div>
   );
 }
 
-export function Panel({ title, src, children, className, count }: { title: string; src?: ReactNode; children: ReactNode; className?: string; count?: number }) {
+// section: the name the anchor bar gives this panel (ui/anchors.tsx), with id its target.
+export function Panel({ title, src, children, className, count, id, section, more }: { title: string; src?: ReactNode; children: ReactNode; className?: string; count?: number; id?: string; section?: string; more?: ReactNode }) {
   return (
-    <section className={`panel${className ? ` ${className}` : ""}`}>
+    <section className={`panel${className ? ` ${className}` : ""}`} id={id} data-section={section}>
       <header>
         <h2>{title}</h2>
         {count != null && <span className="num faint">{count}</span>}
         {src != null && <span className="src">{src}</span>}
+        {more}
       </header>
       {children}
     </section>
@@ -93,7 +93,7 @@ export function NoSnapshot() {
 export function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   const { now } = useApp();
   const cf = cfOk(s);
-  if (!cf) return <NoData reason={cfNoData(s.cloudflare) ?? ""} />;
+  if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
   const d = cf.deploys[0];
   if (!d) return <span className="faint">No deploys recorded</span>;
   return (
@@ -109,8 +109,8 @@ export function LiveDeployCell({ s }: { s: SiteSnapshot }) {
 
 export function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   const cf = cfOk(s);
-  if (!cf) return <NoData reason={cfNoData(s.cloudflare) ?? ""} />;
-  if (!cf.errors24) return <NoData reason={cf.errors_reason ?? "the analytics read failed"} />;
+  if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
+  if (!cf.errors24) return <NoData brief reason="the analytics read failed" />;
   const t = errorTotals(cf.errors24);
   const hot = t.rate != null && t.rate > 0.01;
   return (
@@ -125,13 +125,14 @@ export function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
 
 // Capsid's own backup is the only one the feed carries (snapshot.health.backup, against
 // the 26-hour window /health uses). Every other site's backup is not reported until its
-// health contract says so, and that is shown as no data, never as "none" or a zero.
+// health contract says so, and that is shown as no data, never as "none" or a zero. The
+// column header says so once; each cell says "No data" (design D18).
 const BACKUP_LIMIT_HOURS = 26;
 
 export function BackupCell({ s }: { s: SiteSnapshot }) {
   const { feed } = useApp();
   const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
-  if (!backup) return <NoData reason="not reported by the site" />;
+  if (!backup) return <NoData brief reason="not reported by the site" />;
   if (backup.age_hours == null) return <St kind="crit">Never</St>;
   const over = backup.age_hours > BACKUP_LIMIT_HOURS;
   const width = Math.min(100, (backup.age_hours / BACKUP_LIMIT_HOURS) * 100);
@@ -157,7 +158,9 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
             <th>Uptime, 2-hour ticks</th>
             <th>Live deploy</th>
             <th>Errors 24h</th>
-            <th>Backup age</th>
+            <th>
+              Backup age <span className="th-note">only Capsid reports one</span>
+            </th>
             <th>Probe</th>
           </tr>
         </thead>
@@ -204,12 +207,21 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
 
 // ---- queue -------------------------------------------------------------------------------
 
-const GROUPS: Array<{ key: OpsJob["status"][]; label: string; compact: boolean }> = [
-  { key: ["blocked"], label: "Blocked, waiting on you", compact: true },
-  { key: ["claimed"], label: "Running", compact: true },
-  { key: ["queued"], label: "Queued", compact: true },
-  { key: ["done"], label: "Done in the last 24h", compact: false },
-  { key: ["failed", "superseded"], label: "Failed or superseded, last 24h", compact: false },
+// The Queue's groups, in order. Blocked jobs are ordered by priority, then the newest
+// update first, and a job blocked for over 7 days waits in Stale, after them (audit
+// ruling 10, lib/derive.ts blockedOrder). Done and Failed start collapsed: nothing in
+// them needs a person.
+type QueueGroup = { id: string; label: string; pick: (jobs: OpsJob[], now: number) => OpsJob[]; collapsed?: boolean; hideEmpty?: boolean };
+
+const byStatus = (st: OpsJob["status"][]) => (jobs: OpsJob[]) => jobs.filter((j) => st.includes(j.status)).sort((a, b) => ms(a.updated_at) - ms(b.updated_at));
+
+const GROUPS: QueueGroup[] = [
+  { id: "blocked", label: "Blocked, waiting on you", pick: (jobs, now) => blockedOrder(jobs, now).blocked },
+  { id: "stale", label: "Stale, blocked over 7 days", pick: (jobs, now) => blockedOrder(jobs, now).stale, hideEmpty: true },
+  { id: "running", label: "Running", pick: byStatus(["claimed"]) },
+  { id: "queued", label: "Queued", pick: (jobs) => jobs.filter((j) => j.status === "queued").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)) },
+  { id: "done", label: "Done in the last 24h", pick: byStatus(["done"]), collapsed: true },
+  { id: "failed", label: "Failed or superseded, last 24h", pick: byStatus(["failed", "superseded"]), collapsed: true },
 ];
 
 export function jobMeta(j: OpsJob, now: number): string {
@@ -225,48 +237,64 @@ export function jobMeta(j: OpsJob, now: number): string {
   }
 }
 
-export function QueueRows({ jobs, compact }: { jobs: OpsJob[]; compact?: boolean }) {
+export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
   const { now, feed } = useApp();
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   return (
     <>
-      {GROUPS.filter((g) => !compact || g.compact).map((g) => {
-        const list = jobs.filter((j) => g.key.includes(j.status)).sort((a, b) => (g.key[0] === "queued" ? b.priority - a.priority : 0) || ms(a.updated_at) - ms(b.updated_at));
+      {GROUPS.map((g) => {
+        const list = g.pick(jobs, now);
+        if (g.hideEmpty && !list.length) return null;
+        // A collapsed group is a disclosure (APG): a button that says whether it is open.
+        const shown = !g.collapsed || open[g.id] === true;
+        const bodyId = `qg-${g.id}`;
         return (
-          <div className="qgroup" key={g.label}>
+          <div className="qgroup" key={g.id} data-group={g.id}>
             <h3>
-              {g.label} <span className="num faint">{list.length}</span>
+              {g.collapsed ? (
+                <button type="button" className="disclose" aria-expanded={shown} aria-controls={bodyId} onClick={() => setOpen((o) => ({ ...o, [g.id]: !shown }))}>
+                  <span className="chev" aria-hidden="true" />
+                  {g.label} <span className="num faint">{list.length}</span>
+                </button>
+              ) : (
+                <>
+                  {g.label} <span className="num faint">{list.length}</span>
+                </>
+              )}
             </h3>
-            {list.length ? (
-              list.map((j) => {
-                const pr = feed.live.prs.find((p) => p.job_id === j.id);
-                // Plain English in the row; the job id is in the drawer (D11).
-                const sub =
-                  j.status === "blocked"
-                    ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
-                    : j.status === "claimed"
-                      ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
-                      : j.status === "queued"
-                        ? `${j.finding ? "Watcher finding · " : ""}priority ${j.priority}`
-                        : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
-                const k = JOB[j.status];
-                return (
-                  <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
-                    <St kind={k.kind}>{k.label}</St>
-                    <div className="t">
-                      <b>{j.title}</b>
-                      <div>{sub}</div>
+            <div id={bodyId} hidden={!shown}>
+              {!shown ? null : list.length ? (
+                list.map((j) => {
+                  const pr = feed.live.prs.find((p) => p.job_id === j.id);
+                  // Plain English in the row; the job id is in the drawer (D11).
+                  const sub =
+                    j.status === "blocked"
+                      ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
+                      : j.status === "claimed"
+                        ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
+                        : j.status === "queued"
+                          ? `${j.finding ? "Watcher finding · " : ""}priority ${j.priority}`
+                          : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
+                  const k = JOB[j.status];
+                  return (
+                    <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                      <St kind={k.kind}>{k.label}</St>
+                      <div className="t">
+                        <b>{j.title}</b>
+                        <div>{sub}</div>
+                      </div>
+                      <div className="m">
+                        <span className="ns">{j.namespace}</span>
+                        <br />
+                        {jobMeta(j, now)}
+                      </div>
                     </div>
-                    <div className="m">
-                      <span className="ns">{j.namespace}</span>
-                      <br />
-                      {jobMeta(j, now)}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="empty-group">None</div>
-            )}
+                  );
+                })
+              ) : (
+                <div className="empty-group">None</div>
+              )}
+            </div>
           </div>
         );
       })}
@@ -276,11 +304,10 @@ export function QueueRows({ jobs, compact }: { jobs: OpsJob[]; compact?: boolean
 
 // ---- incidents -----------------------------------------------------------------------------
 
-export function IncidentFeed({ limit, ns }: { limit?: number; ns?: string }) {
+export function IncidentFeed({ ns }: { ns?: string }) {
   const { feed, now } = useApp();
   let items = incidents(feed);
   if (ns && ns !== "all") items = items.filter((x) => x.ns === ns);
-  if (limit) items = items.slice(0, limit);
   if (!items.length) return <div className="allclear">No watcher findings in the live window.</div>;
   return (
     <div className="feed">
@@ -337,12 +364,13 @@ function useWidth(): [number | null, (el: HTMLElement | null) => void] {
   return [w, ref];
 }
 
-export function TimelinePanel({ title, days, src }: { title: string; days: number; src: string }) {
+export function TimelinePanel({ title, days, src, id, section }: { title: string; days: number; src: string; id?: string; section?: string }) {
   const { feed, now } = useApp();
   const [width, ref] = useWidth();
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
+  // The legend sits in the header beside the source, so the chart is all the body holds.
   return (
-    <Panel title={title} src={src} className="tl">
+    <Panel title={title} src={sites.length ? <span className="tl-head"><TimelineLegend /><span>{src}</span></span> : src} className="tl" id={id} section={section}>
       {!hasSites(feed) ? (
         <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
       ) : sites.length ? (
@@ -350,7 +378,6 @@ export function TimelinePanel({ title, days, src }: { title: string; days: numbe
           <div className="scroll-x tl-pad" ref={ref}>
             <Timeline sites={sites} days={days} now={now} width={width} />
           </div>
-          <TimelineLegend />
         </>
       ) : (
         <div className="body">

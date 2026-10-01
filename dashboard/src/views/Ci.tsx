@@ -15,7 +15,7 @@ export function Ci() {
   const live = feed.live;
   return (
     <div className="page">
-      <PageHead title="CI and merges">The default branch of every roster repo, and the pull requests agents opened or the seat merged.</PageHead>
+      <PageHead title="CI and merges" />
       <Panel title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
           <div className="scroll-x">

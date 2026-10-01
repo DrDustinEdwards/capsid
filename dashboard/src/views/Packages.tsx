@@ -229,7 +229,7 @@ export function Packages() {
   const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
   return (
     <div className="page">
-      <PageHead title="Packages">Each package configured in Settings: its versions, downloads, dependents and repository, as the watcher last read them.</PageHead>
+      <PageHead title="Packages" />
       {!feed.snapshot && <NoSnapshot />}
       {feed.live.packages.map((cfg) => (
         <PackagePanel key={cfg.name} cfg={cfg} snap={byName.get(cfg.name) ?? null} />

@@ -35,6 +35,24 @@ export function cfNoData(cf: SiteCloudflare | undefined): string | null {
   return cf.reason;
 }
 
+// The same, in a few words for a table cell; the full sentence is in the site's panel
+// (design D18).
+export function cfShort(cf: SiteCloudflare | undefined): string | null {
+  if (!cf) return "not read on this pass";
+  switch (cf.state) {
+    case "ok":
+      return null;
+    case "no-token":
+      return "Cloudflare read not configured";
+    case "not-cloudflare":
+      return "not on Cloudflare";
+    case "unresolved":
+      return "Worker not found";
+    case "error":
+      return "Cloudflare read failed";
+  }
+}
+
 export function cfOk(s: SiteSnapshot) {
   return s.cloudflare?.state === "ok" ? s.cloudflare : null;
 }
@@ -115,6 +133,9 @@ export interface Attention {
   sub: string;
   at: number;
   open: OpenRef;
+  // Rows with the same key are one kind with one cause, and fold into one row on the
+  // Overview (attentionGroups). The facet is what tells them apart: a repo, an agent.
+  group?: { key: GroupKey; facet: string };
 }
 
 export function attentionItems(feed: OpsFeed, now: number): Attention[] {
@@ -123,7 +144,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   const live = feed.live;
   const sitesOn = hasSites(feed);
   if (!snap) {
-    out.push({ sev: "nodata", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:incidents" });
+    // A warning, not a notice: until the first pass nothing about sites or backups is known.
+    out.push({ sev: "warn", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:incidents" });
   } else {
     if (passStale(snap, now)) {
       out.push({ sev: "warn", kind: "Watcher", title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`, sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`, at: ms(snap.pass_at), open: "view:incidents" });
@@ -146,7 +168,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     }
     const h = snap.health;
     if (!h) {
-      out.push({ sev: "nodata", kind: "Backup", title: "Capsid health was not read on the last pass", sub: "Backup age is unknown", at: ms(snap.pass_at), open: "view:backups" });
+      // A warning, not a notice: an unknown backup is not a quiet fact (audit ruling 3).
+      out.push({ sev: "warn", kind: "Backup", title: "Capsid health was not read on the last pass", sub: "Backup age is unknown", at: ms(snap.pass_at), open: "view:backups" });
     } else {
       if (h.status === "degraded") out.push({ sev: "warn", kind: "Health", title: "Capsid reports degraded health", sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`, at: ms(snap.pass_at), open: "view:backups" });
       if (h.backup.warning || !h.backup.last_ok) {
@@ -155,7 +178,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     }
     const m = snap.mirror;
     if (!m) {
-      out.push({ sev: "nodata", kind: "Backup", title: "The off-account mirror was not read on the last pass", sub: "", at: ms(snap.pass_at), open: "view:backups" });
+      out.push({ sev: "warn", kind: "Backup", title: "The off-account mirror was not read on the last pass", sub: "Its newest dump is unknown", at: ms(snap.pass_at), open: "view:backups" });
     } else {
       const dumpAge = m.newest_dump ? now - ms(m.newest_dump) : null;
       const failed = m.last_run?.conclusion != null && m.last_run.conclusion !== "success";
@@ -195,15 +218,16 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sub: [...new Set(blocked.map((j) => j.namespace))].join(", "),
       at: Math.max(...blocked.map((j) => ms(j.updated_at))),
       open: blocked.length === 1 && blocked[0] ? `job:${blocked[0].id}` : "view:queue",
+      group: { key: "blocked", facet: "" },
     });
   }
   for (const j of live.jobs) {
     if (j.status === "claimed" && j.lease_expires && ms(j.lease_expires) < now) {
-      out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}` });
+      out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}`, group: { key: "lease", facet: j.namespace } });
     }
   }
   for (const a of live.awaiting_seat) {
-    out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:ci" });
+    out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:ci", group: { key: "pr-seat", facet: a.repo } });
   }
   if (live.loop.budget.exceeded) {
     out.push({ sev: "warn", kind: "Budget", title: `The ${live.loop.budget.month} budget is exceeded`, sub: `${live.loop.budget.spend.ci_minutes} of ${live.loop.budget.caps.actions_minutes_month} min · $${live.loop.budget.spend.cost_usd.toFixed(2)} of $${live.loop.budget.caps.model_usd_month}`, at: ms(live.generated), open: "view:agents" });
@@ -225,11 +249,140 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   }
   for (const a of live.agents) {
     if (a.kind === "driver" && !a.revoked_at && a.last_seen && now - ms(a.last_seen) > 7 * DAY) {
-      out.push({ sev: "nodata", kind: "Agent", title: `${a.name} has been silent for ${Math.floor((now - ms(a.last_seen)) / DAY)} days`, sub: `last seen ${ago(ms(a.last_seen), now)}`, at: ms(a.last_seen), open: `agent:${a.name}` });
+      out.push({ sev: "nodata", kind: "Agent", title: `${a.name} has been silent for ${Math.floor((now - ms(a.last_seen)) / DAY)} days`, sub: `last seen ${ago(ms(a.last_seen), now)}`, at: ms(a.last_seen), open: `agent:${a.name}`, group: { key: "silent", facet: a.name } });
     }
   }
-  const rank: Record<Sev, number> = { crit: 0, warn: 1, nodata: 2 };
-  return out.sort((a, b) => rank[a.sev] - rank[b.sev] || b.at - a.at);
+  return out.sort(worstFirst);
+}
+
+const RANK: Record<Sev, number> = { crit: 0, warn: 1, nodata: 2 };
+function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): number {
+  return RANK[a.sev] - RANK[b.sev] || b.at - a.at;
+}
+
+// ---- needs attention, grouped (audit ruling 3) ---------------------------------------
+//
+// Two tiers. A problem (critical or warning) needs a person; a notice (missing data, a
+// check that could not run, CI that could not be read, site map drift, a silent
+// driver) is a fact with nothing to do now. Session incidents join as problems when
+// attentionItems lists them: a failure is critical, a session waiting on input a
+// warning. The tier follows from the severity, so any new row lands in the right one.
+
+export type Tier = "problem" | "notice";
+export type GroupKey = "blocked" | "pr-seat" | "lease" | "silent";
+
+export function tierOf(a: { sev: Sev }): Tier {
+  return a.sev === "nodata" ? "notice" : "problem";
+}
+
+// A group shows up to this many children, then a link to the full view.
+export const GROUP_CHILDREN = 5;
+// Past this many problem rows the rest of the warnings wait behind "N more warnings".
+// Critical rows are always shown.
+export const PROBLEM_ROWS = 8;
+
+const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
+  // The blocked row is already one row (attentionItems); the group gives it children.
+  blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Queue" },
+  "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "ci", label: "CI and merges" },
+  lease: { title: (n) => `${n} running jobs have an expired lease`, view: "queue", label: "Queue" },
+  silent: { title: (n) => `${n} drivers have been silent for over 7 days`, view: "agents", label: "Agents" },
+};
+
+export interface AttentionRow extends Attention {
+  key: string;
+  // A group: its first children, how many it holds, and the view that lists them all.
+  children?: Attention[];
+  total?: number;
+  view?: { id: string; label: string };
+}
+
+export interface AttentionGroups {
+  // Worst first: critical, then warnings, newest first within each.
+  problems: AttentionRow[];
+  notices: AttentionRow[];
+  // How many notice items the notice rows stand for (a group counts each of its items).
+  noticeCount: number;
+}
+
+function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
+  const out: AttentionRow[] = [];
+  const byKey = new Map<GroupKey, Attention[]>();
+  for (const a of items) {
+    // A critical row is never folded into a collapsed group.
+    if (a.group && a.sev !== "crit") {
+      const list = byKey.get(a.group.key) ?? [];
+      list.push(a);
+      byKey.set(a.group.key, list);
+    } else out.push({ ...a, key: `${a.kind}|${a.title}` });
+  }
+  for (const [key, list] of byKey) {
+    const g = GROUPS[key];
+    const first = list[0]!;
+    if (key === "blocked") {
+      const { blocked, stale } = blockedOrder(feed.live.jobs, now);
+      const jobs = [...blocked, ...stale];
+      // One blocked job opens that job; more open in place.
+      if (jobs.length < 2) {
+        out.push({ ...first, key: "group:blocked" });
+        continue;
+      }
+      out.push({
+        ...first,
+        title: g.title(jobs.length),
+        key: "group:blocked",
+        children: jobs.slice(0, GROUP_CHILDREN).map((j) => ({ sev: "warn", kind: "Queue", title: j.title, sub: `${j.namespace} · waits on: ${j.waits_on ?? "no reason recorded"}`, at: ms(j.updated_at), open: `job:${j.id}` })),
+        total: jobs.length,
+        view: { id: g.view, label: g.label },
+      });
+      continue;
+    }
+    if (list.length < 2) {
+      out.push({ ...first, key: `${first.kind}|${first.title}` });
+      continue;
+    }
+    const sorted = [...list].sort(worstFirst);
+    const facets = [...new Set(sorted.map((a) => a.group!.facet))];
+    out.push({
+      sev: sorted[0]!.sev,
+      kind: first.kind,
+      title: g.title(list.length),
+      sub: facets.length > 3 ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more` : facets.join(", "),
+      at: Math.max(...list.map((a) => a.at)),
+      open: `view:${g.view}`,
+      group: first.group,
+      key: `group:${key}`,
+      children: sorted.slice(0, GROUP_CHILDREN),
+      total: list.length,
+      view: { id: g.view, label: g.label },
+    });
+  }
+  return out.sort(worstFirst);
+}
+
+export function attentionGroups(feed: OpsFeed, now: number): AttentionGroups {
+  const items = attentionItems(feed, now);
+  const notices = items.filter((a) => tierOf(a) === "notice");
+  return {
+    problems: fold(items.filter((a) => tierOf(a) === "problem"), feed, now),
+    notices: fold(notices, feed, now),
+    noticeCount: notices.length,
+  };
+}
+
+// ---- blocked jobs (audit ruling 10) ---------------------------------------------------
+//
+// Priority first (high first), then the newest update first. A job blocked for more than
+// 7 days goes to its own Stale group, after the rest.
+
+export const STALE_BLOCKED_MS = 7 * DAY;
+
+export function blockedOrder(jobs: OpsJob[], now: number): { blocked: OpsJob[]; stale: OpsJob[] } {
+  const list = jobs.filter((j) => j.status === "blocked").sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
+  return {
+    blocked: list.filter((j) => now - ms(j.updated_at) <= STALE_BLOCKED_MS),
+    stale: list.filter((j) => now - ms(j.updated_at) > STALE_BLOCKED_MS),
+  };
 }
 
 // ---- incidents ------------------------------------------------------------------
