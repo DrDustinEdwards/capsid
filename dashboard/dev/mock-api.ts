@@ -28,9 +28,11 @@ import type {
   ClaimsGroup,
   OpsFeed,
   OpsJob,
+  OpsPackageConfig,
   OpsSiteConfig,
   PortalAction,
   PortalActivity,
+  PortalPackageHistory,
   PortalActivityRow,
   PortalClaimsAggregate,
   PortalClaimsJob,
@@ -47,7 +49,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove"];
 // The namespaces whose queue breaker is open in the sample, until a reset closes it.
 const BREAKER_OPEN = ["sample-b"];
 // Registered in the mock but with no site row, so an add has somewhere to go. The site
@@ -87,6 +89,8 @@ interface MockState {
   revoked: Map<string, string>;
   // The site configuration as it stands, every row, by namespace.
   sites: OpsSiteConfig[];
+  // The package configuration as it stands.
+  packages: OpsPackageConfig[];
   activity: PortalActivityRow[];
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
@@ -109,6 +113,42 @@ function seedSites(): OpsSiteConfig[] {
   const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
   const delta = mockNow() - Date.parse(raw.live.generated);
   return raw.live.sites.map((s) => ({ ...s, updated_at: sqlNow(Date.parse(`${s.updated_at.replace(" ", "T")}Z`) + delta) }));
+}
+
+// The fixture's packages. WF_MOCK=no-packages starts with none, so the Packages view
+// is not offered.
+function seedPackages(): OpsPackageConfig[] {
+  if (process.env.WF_MOCK === "no-packages") return [];
+  const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as OpsFeed;
+  return raw.live.packages.map((p) => ({ ...p }));
+}
+
+// A made-up daily history for a configured package: the former name from 2025-06-01
+// to 2026-06-30, then the current name, a few downloads a day with a weekly rhythm.
+function mockHistory(p: OpsPackageConfig): PortalPackageHistory {
+  const now = mockNow();
+  const days: PortalPackageHistory["days"] = [];
+  const DAY = 86_400_000;
+  for (let t = Date.parse("2025-06-01T00:00:00Z"); t < now - DAY; t += DAY) {
+    const day = new Date(t).toISOString().slice(0, 10);
+    const name = p.formerly && day < "2026-07-01" ? p.formerly : p.name;
+    const n = Math.round(3 + 2 * Math.sin(t / (7 * DAY)) + ((t / DAY) % 11 === 0 ? 20 : 0));
+    if (n > 0) days.push({ day, downloads: n, name });
+  }
+  return {
+    name: p.name,
+    formerly: p.formerly,
+    generated: new Date(now).toISOString(),
+    fetched_at: new Date(now).toISOString(),
+    days,
+    first_day: days[0]?.day ?? null,
+    last_day: days[days.length - 1]?.day ?? null,
+    notes: [],
+    weeks: [
+      { week: "2026-W39", stars: 4, open_issues: 1, open_prs: 2, latest_release: "v0.3.0" },
+      { week: "2026-W38", stars: 3, open_issues: 1, open_prs: 1, latest_release: "v0.2.0" },
+    ],
+  };
 }
 
 // Registered namespaces: the roster, every row the fixture seeds, and EXTRA_REGISTERED.
@@ -179,6 +219,7 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   out.live.jobs = out.live.jobs.map((j) => ({ ...j, ...st.jobs.get(j.id) }));
   for (const a of out.live.agents) if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
   out.live.sites = st.sites.map((s) => ({ ...s }));
+  out.live.packages = st.packages.map((p) => ({ ...p }));
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
@@ -369,6 +410,45 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           ...(registered().has(ns) ? [`${ns} is still registered, so the site-map check reports it as unmapped until it has a row again.`] : []),
         ],
         apply: (st) => void (st.sites = st.sites.filter((s) => s.namespace !== ns)),
+      };
+    }
+    case "package_add":
+    case "package_edit": {
+      const name = need(params, "name", "The npm name");
+      if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/.test(name)) throw new Refusal(400, `the name '${name}' is not an npm package name.`);
+      const repo = params.repo?.trim() || null;
+      const formerly = params.formerly?.trim() || null;
+      const before = f.live.packages.find((p) => p.name === name);
+      if (action === "package_add") {
+        if (before) throw new Refusal(400, `${name} is already configured. Edit it instead.`);
+        return {
+          summary: `Add ${name}.`,
+          done: `Added ${name}.`,
+          changes: [`ops_packages: add npm "${name}"${repo ? `, repository ${repo}` : ""}${formerly ? `, formerly "${formerly}"` : ""}.`],
+          apply: (st) => void st.packages.push({ name, registry: "npm", repo, formerly, revision: 1, updated_at: sqlNow(mockNow()) }),
+        };
+      }
+      const revision = revisionOf(params.revision);
+      if (!before || revision === null) throw new Refusal(400, `${name} is not configured.`);
+      if (before.revision !== revision) throw new Refusal(400, `${name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`);
+      return {
+        summary: `Change ${name}.`,
+        done: `Changed ${name}.`,
+        changes: [`ops_packages ${name}, revision ${revision} -> ${revision + 1}.`],
+        apply: (st) => void (st.packages = st.packages.map((p) => (p.name === name ? { ...p, repo, formerly, revision: p.revision + 1, updated_at: sqlNow(mockNow()) } : p))),
+      };
+    }
+    case "package_remove": {
+      const name = need(params, "name", "The npm name");
+      const revision = revisionOf(params.revision);
+      const before = f.live.packages.find((p) => p.name === name);
+      if (!before || revision === null) throw new Refusal(400, `${name} is not configured.`);
+      if (before.revision !== revision) throw new Refusal(400, `${name} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and try again.`);
+      return {
+        summary: `Remove ${name}.`,
+        done: `Removed ${name}.`,
+        changes: [`ops_packages: remove ${name}. Its weekly rows stay.`],
+        apply: (st) => void (st.packages = st.packages.filter((p) => p.name !== name)),
       };
     }
   }
@@ -641,7 +721,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), activity: seedActivity(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -695,7 +775,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -720,6 +800,13 @@ export function mockOpsApi(): Plugin {
           const rows = st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor)).slice(0, ACTIVITY_LIMIT);
           const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
+        }
+        if (path === "/portal/api/packages/history") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const name = url.searchParams.get("name")?.trim() ?? "";
+          const p = st.packages.find((x) => x.name === name);
+          if (!p) return send(res, 404, { error: `${name} is not a configured package.` });
+          return send(res, 200, mockHistory(p));
         }
         if (path === "/portal/api/claims") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

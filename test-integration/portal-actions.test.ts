@@ -102,8 +102,13 @@ beforeEach(async () => {
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
   await env.DB.prepare("DELETE FROM ops_sites WHERE namespace = 'sample'").run();
+  await env.DB.prepare("DELETE FROM ops_packages").run();
   for (const key of KEYS) await env.APP_KV.delete(key);
 });
+
+async function packageRow(name: string) {
+  return env.DB.prepare("SELECT * FROM ops_packages WHERE name = ?1").bind(name).first<Record<string, unknown>>();
+}
 
 async function siteRow(namespace: string) {
   return env.DB.prepare("SELECT * FROM ops_sites WHERE namespace = ?1").bind(namespace).first<Record<string, unknown>>();
@@ -189,12 +194,30 @@ const CASES: Record<string, Case> = {
     params: async () => ({ namespace: "capsid" }),
     after: async () => expect(await env.APP_KV.get(breakerResetKey("capsid"))).not.toBeNull(),
   },
+  package_add: {
+    params: async () => ({ name: "sample-pkg", repo: "example-org/sample-pkg", formerly: "sample-old" }),
+    after: async () => expect(await packageRow("sample-pkg")).toMatchObject({ repo: "example-org/sample-pkg", formerly: "sample-old", revision: 1 }),
+  },
+  package_edit: {
+    params: async () => {
+      await env.DB.prepare("INSERT INTO ops_packages (name, repo) VALUES ('sample-pkg', 'example-org/sample-pkg')").run();
+      return { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" };
+    },
+    after: async () => expect(await packageRow("sample-pkg")).toMatchObject({ formerly: "sample-old", revision: 2 }),
+  },
+  package_remove: {
+    params: async () => {
+      await env.DB.prepare("INSERT INTO ops_packages (name) VALUES ('sample-pkg')").run();
+      return { name: "sample-pkg", revision: "1" };
+    },
+    after: async () => expect(await packageRow("sample-pkg")).toBeNull(),
+  },
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twelve actions", () => {
+  it("covers the allow-list, fifteen actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(12);
+    expect(Object.keys(CASES).length).toBe(15);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -366,5 +389,14 @@ describe("the Portal's reads", () => {
     expect(body.rows[0].at).toMatch(/T.*Z$/);
     const all = (await (await call(PORTAL_ACTIVITY_PATH)).json()) as PortalActivity;
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
+  });
+});
+
+describe("GET /portal/api/packages/history", () => {
+  it("answers only for a configured package, so the route cannot fetch an arbitrary name from npm", async () => {
+    const res = await call("/portal/api/packages/history?name=left-pad");
+    expect(res.status).toBe(404);
+    expect(await res.text()).toMatch(/left-pad is not a configured package/);
+    expect((await call("/portal/api/packages/history")).status).toBe(400);
   });
 });

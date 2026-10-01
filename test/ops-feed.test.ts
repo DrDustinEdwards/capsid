@@ -235,6 +235,7 @@ const FEED: OpsFeedData = {
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
     sites: [],
+    packages: [],
     namespaces: [{ name: "sample", paused: null }],
   },
   refresh_allowed_at: null,

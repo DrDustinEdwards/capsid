@@ -5,6 +5,7 @@ import { ago, msSql, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
 import { PageHead, Panel } from "./shared";
+import { PackageSettings } from "./SettingsPackages";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -233,7 +234,7 @@ export function Settings() {
   const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.namespace}`) : "";
   return (
     <div className="page">
-      <PageHead title="Settings">The sites the watcher probes, one row per namespace. A row with no origin records that a namespace serves no site. Every change shows a preview before anything is written.</PageHead>
+      <PageHead title="Settings">The sites the watcher probes, one row per namespace, and the npm packages it reads. A row with no origin records that a namespace serves no site. Every change shows a preview before anything is written.</PageHead>
       {!hasSites(feed) && (
         <div className="callout" role="status">
           No site is configured, so the watcher probes nothing and the Portal shows no Sites view. Add a site to start.
@@ -274,6 +275,7 @@ export function Settings() {
           <div className="body faint">No rows. Add a site, or record that a namespace serves none.</div>
         )}
       </Panel>
+      <PackageSettings />
     </div>
   );
 }
