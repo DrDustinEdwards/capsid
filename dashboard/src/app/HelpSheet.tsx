@@ -1,5 +1,23 @@
 import { useEffect, useRef } from "react";
-import type { ViewDef } from "./ctx";
+import type { ViewDef, ViewId } from "./ctx";
+
+// What each view is for, in a line. These were the intro sentences under each view's
+// heading (design D13 moved them here). CI and merges has none: its intro only restated
+// its name.
+const ABOUT: Partial<Record<ViewId, string>> = {
+  overview: "Problems first, worst first; then the sites and the week of deploys.",
+  sites: "Health comes from each site's own route; a root 200 is liveness, not health.",
+  incidents: "Watcher findings, open first. Each is posted once and clears on its own.",
+  queue: "A blocked job shows what it waits on; open it for the command and the resume call.",
+  deploys: "From Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
+  agents: "Every credential and when it was last seen. Verified columns are what the Worker checked against GitHub.",
+  backups: "The nightly dump and the off-account mirror. A stale dump or a dead mirror is red on purpose.",
+  namespaces: "Each roster namespace: its improve loop, driver, truth report, jobs and skills.",
+  activity: "The audit log, newest first: who did what, where.",
+  claims: "What each agent said beside what the Worker verified. A field not stated is never zero.",
+  packages: "Each package configured in Settings: its versions, downloads, dependents and repository.",
+  settings: "The sites the watcher probes and the npm packages it reads. Every change is previewed first.",
+};
 
 export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: { open: boolean; onClose: () => void; views: ReadonlyArray<ViewDef>; singleKeys: boolean; setSingleKeys: (v: boolean) => void }) {
   const dlg = useRef<HTMLDialogElement>(null);
@@ -22,7 +40,7 @@ export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: {
             Command menu (also <kbd>/</kbd>)
           </dd>
           {views.map((v) => (
-            <FragmentRow key={v.id} k={v.key} label={v.label} />
+            <FragmentRow key={v.id} k={v.key} label={v.label} about={ABOUT[v.id]} />
           ))}
           <dt>
             <kbd>j</kbd> <kbd>k</kbd>
@@ -70,13 +88,16 @@ export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: {
   );
 }
 
-function FragmentRow({ k, label }: { k: string; label: string }) {
+function FragmentRow({ k, label, about }: { k: string; label: string; about?: string }) {
   return (
     <>
       <dt>
         <kbd>g</kbd> <kbd>{k}</kbd>
       </dt>
-      <dd>{label}</dd>
+      <dd>
+        {label}
+        {about && <span className="about">{about}</span>}
+      </dd>
     </>
   );
 }

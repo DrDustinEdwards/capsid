@@ -6,6 +6,24 @@ import { ALL_VIEWS, VIEW_COUNT, visit } from "./views.ts";
 // so a selector that stops matching fails rather than passing on nothing.
 
 const LIST_ROWS = "main .att-row, main .qrow, main .frow";
+// The Overview no longer carries the Queue and Incidents panels (the UI audit's ruling
+// 2), so their rows are measured on their own views. Rows of a closed group are not
+// drawn. With the sample feed: 9 attention rows (8 problems, two of them session
+// incidents, and the notices row), 11
+// queue rows (Blocked 2, Stale 1, Running 1, Queued 4, live sessions 3) and 7 incident
+// rows.
+const LIST_VIEWS = ["overview", "queue", "incidents"] as const;
+const LIST_COUNT = 27;
+
+// fn's results on each list view, in turn.
+async function acrossLists<T>(page: Page, fn: () => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  for (const v of LIST_VIEWS) {
+    await visit(page, v);
+    out.push(...(await fn()));
+  }
+  return out;
+}
 
 // Every element with its own visible text, in main, the top bar and the menu.
 async function textElements(page: Page): Promise<Array<{ text: string; size: number; family: string; tag: string }>> {
@@ -52,11 +70,8 @@ function heights(page: Page, sel: string): Promise<number[]> {
 
 test("D2: two-line list rows are 47 px and one-line table rows about 34 px", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await visit(page, "overview");
-  const rows = await heights(page, LIST_ROWS);
-  // 13 attention rows (two of them session incidents), 8 queue rows and 6 incident rows
-  // in the sample feed.
-  expect(rows.length).toBe(27);
+  const rows = await acrossLists(page, () => heights(page, LIST_ROWS));
+  expect(rows.length).toBe(LIST_COUNT);
   expect(rows.filter((h) => Math.abs(h - 47) > 0.5)).toEqual([]);
   // The Activity table has one line in every cell.
   await visit(page, "activity");
@@ -67,46 +82,56 @@ test("D2: two-line list rows are 47 px and one-line table rows about 34 px", asy
 
 test("D6: no rule between list rows; rules kept between table rows", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await visit(page, "overview");
-  const lists = await page.evaluate((sel) => {
-    const out: string[] = [];
-    let n = 0;
-    for (const el of document.querySelectorAll<HTMLElement>(sel)) {
-      n++;
-      const cs = getComputedStyle(el);
-      const widths = [cs.borderTopWidth, cs.borderBottomWidth, cs.borderLeftWidth, cs.borderRightWidth];
-      if (widths.some((w) => w !== "0px")) out.push(`${el.className}: borders ${widths.join(" ")}`);
-      // The group around queue rows draws none either.
-      const g = el.closest<HTMLElement>(".qgroup");
-      if (g && getComputedStyle(g).borderBottomWidth !== "0px") out.push(`qgroup around ${el.className}: bottom border`);
-    }
-    return { n, out };
-  }, LIST_ROWS);
-  expect(lists.n).toBe(27);
+  const lists = { n: 0, out: [] as string[] };
+  for (const part of await acrossLists(page, async () => [
+    await page.evaluate((sel) => {
+      const out: string[] = [];
+      let n = 0;
+      for (const el of document.querySelectorAll<HTMLElement>(sel)) {
+        n++;
+        const cs = getComputedStyle(el);
+        const widths = [cs.borderTopWidth, cs.borderBottomWidth, cs.borderLeftWidth, cs.borderRightWidth];
+        if (widths.some((w) => w !== "0px")) out.push(`${el.className}: borders ${widths.join(" ")}`);
+        // The group around queue rows draws none either.
+        const g = el.closest<HTMLElement>(".qgroup");
+        if (g && getComputedStyle(g).borderBottomWidth !== "0px") out.push(`qgroup around ${el.className}: bottom border`);
+      }
+      return { n, out };
+    }, LIST_ROWS),
+  ])) {
+    lists.n += part.n;
+    lists.out.push(...part.out);
+  }
+  expect(lists.n).toBe(LIST_COUNT);
   expect(lists.out).toEqual([]);
-  // Table rows other than the last keep a 1 px rule under each cell.
-  const cells = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>("main table.fleet tbody tr:not(:last-child) > td")].map((td) => getComputedStyle(td).borderBottomWidth),
-  );
+  // The Overview's Sites table keeps a 1 px rule over each row.
+  await visit(page, "overview");
+  const brief = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("main table.brief tbody td")].map((td) => getComputedStyle(td).borderTopWidth));
+  expect(brief.length).toBe(40);
+  expect(brief.filter((w) => w !== "1px")).toEqual([]);
+  // The fleet table on Sites: rows other than the last keep a 1 px rule under each cell.
+  await visit(page, "sites");
+  const cells = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("main table.fleet tbody tr:not(:last-child) > td")].map((td) => getComputedStyle(td).borderBottomWidth));
   expect(cells.length).toBeGreaterThan(20);
   expect(cells.filter((w) => w !== "1px")).toEqual([]);
 });
 
 test("D9: one status glyph per list row, and the red edge only on critical rows", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await visit(page, "overview");
-  const rows = await page.evaluate((sel) => {
-    const crit = getComputedStyle(document.documentElement).getPropertyValue("--crit").trim();
-    return [...document.querySelectorAll<HTMLElement>(sel)].map((el) => ({
-      cls: el.className,
-      glyphs: el.querySelectorAll("svg").length,
-      // The glyph's own colour class, st.crit or the icon's colour: critical or not.
-      critical: !!el.querySelector(".st.crit") || el.querySelector("svg")?.getAttribute("style")?.includes("var(--crit)") === true,
-      shadow: getComputedStyle(el).boxShadow,
-      crit,
-    }));
-  }, LIST_ROWS);
-  expect(rows.length).toBe(27);
+  const rows = await acrossLists(page, () =>
+    page.evaluate((sel) => {
+      const crit = getComputedStyle(document.documentElement).getPropertyValue("--crit").trim();
+      return [...document.querySelectorAll<HTMLElement>(sel)].map((el) => ({
+        cls: el.className,
+        glyphs: el.querySelectorAll("svg").length,
+        // The glyph's own colour class, st.crit or the icon's colour: critical or not.
+        critical: !!el.querySelector(".st.crit") || el.querySelector("svg")?.getAttribute("style")?.includes("var(--crit)") === true,
+        shadow: getComputedStyle(el).boxShadow,
+        crit,
+      }));
+    }, LIST_ROWS),
+  );
+  expect(rows.length).toBe(LIST_COUNT);
   expect(rows.filter((r) => r.glyphs !== 1).map((r) => `${r.cls}: ${r.glyphs} glyphs`)).toEqual([]);
   const critical = rows.filter((r) => r.critical);
   const other = rows.filter((r) => !r.critical);
@@ -171,7 +196,7 @@ test("D11: list rows carry no job id or fingerprint; the drawer does", async ({ 
     rows += res.n;
     found.push(...res.out.map((o) => `${view}: ${o}`));
   }
-  expect(rows).toBeGreaterThan(40);
+  expect(rows).toBe(LIST_COUNT);
   expect(found).toEqual([]);
   // The raw detail moved to the drawer: a watcher job's drawer shows its id and fingerprint.
   await visit(page, "incidents");

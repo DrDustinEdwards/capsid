@@ -54,17 +54,17 @@ function readPair(page: Page, selector: string, part: "color" | "border"): Promi
   );
 }
 
-// Text that the sample feed puts on the Overview and the Sites view, in each tone the app
+// Text that the sample feed puts on the Overview, Sites and the Queue, in each tone the app
 // uses, and one control border. Every selector must match, so a renamed class fails here
 // rather than passing vacuously.
-const TEXT: Array<{ view: "overview" | "sites"; sel: string; what: string }> = [
+const TEXT: Array<{ view: "overview" | "sites" | "queue"; sel: string; what: string }> = [
   { view: "overview", sel: ".pagehead h1", what: "the heading" },
-  { view: "overview", sel: ".pagehead p", what: "muted text" },
+  { view: "overview", sel: ".tile .l", what: "muted text" },
   { view: "overview", sel: ".attention > header .src", what: "dim text" },
   { view: "overview", sel: ".att-row .st.crit", what: "a critical status word" },
   { view: "overview", sel: ".att-row .st.warn", what: "a warning status word" },
   { view: "overview", sel: ".att-row .st.nodata", what: "a no-data status word" },
-  { view: "overview", sel: ".qrow .st.run", what: "a running status word" },
+  { view: "queue", sel: ".qrow .st.run", what: "a running status word" },
   { view: "overview", sel: ".rail a:not([aria-current])", what: "an inactive menu item" },
   { view: "overview", sel: ".rail .count.hot", what: "a critical menu count" },
   { view: "overview", sel: ".tile.crit .v", what: "a critical figure" },
@@ -79,7 +79,7 @@ for (const scheme of ["light", "dark"] as const) {
   test.describe(`${scheme} theme`, () => {
     test.use({ colorScheme: scheme });
 
-    for (const view of ["overview", "sites"] as const) {
+    for (const view of ["overview", "sites", "queue"] as const) {
       test(`${view}: every text tone reaches 4.5:1 against what is behind it`, async ({ page }) => {
         await visit(page, view);
         const wanted = TEXT.filter((t) => t.view === view);

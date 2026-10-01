@@ -113,7 +113,8 @@ async function siteItems(page: Page) {
   return {
     rail: await page.locator("nav.rail a").filter({ hasText: /^Sites/ }).count(),
     tile: await page.locator(".tiles .tile").filter({ hasText: "Sites up" }).count(),
-    fleet: await page.getByRole("heading", { level: 2, name: "Fleet" }).count(),
+    // The Overview's one row per site (audit ruling 1).
+    fleet: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
     timeline: await page.getByRole("heading", { level: 2, name: "Deploys and downtime, 7 days" }).count(),
     attention: await page.locator(".att-row .kind").filter({ hasText: /^Site$/ }).count(),
   };

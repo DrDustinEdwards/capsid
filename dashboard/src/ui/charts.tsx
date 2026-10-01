@@ -158,7 +158,7 @@ export function ErrorChart({ site }: { site: SiteSnapshot }) {
 export const TIMELINE_MIN_W = 760;
 
 export function Timeline({ sites, days, now, width }: { sites: SiteSnapshot[]; days: number; now: number; width?: number | null }) {
-  const W = Math.max(TIMELINE_MIN_W, Math.floor(width ?? 1100)), rowH = 30, L = 150, R = 16, T = 26;
+  const W = Math.max(TIMELINE_MIN_W, Math.floor(width ?? 1100)), rowH = 24, L = 150, R = 16, T = 26;
   const pw = W - L - R;
   const H = T + sites.length * rowH + 8;
   const t1 = now, t0 = t1 - days * DAY;
