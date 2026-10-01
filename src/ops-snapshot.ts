@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
 import type { OpsSite } from "./ops-sites";
-import type { CiObservation, MirrorObservation, OpsSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
+import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -186,6 +186,9 @@ export interface SnapshotInput {
   // This pass's Cloudflare state per site, keyed by namespace (src/ops-cloudflare.ts).
   // A probed site with no entry is written without the field, never with last pass's.
   cloudflare?: Record<string, SiteCloudflare>;
+  // This pass's packages; undefined when they could not be read, and then the last
+  // pass's are kept rather than shown as gone.
+  packages?: PackageSnapshot[];
 }
 
 /** The snapshot for this pass, carrying each site's ring forward from `prev`. A site
@@ -224,6 +227,7 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
     ci: input.ci,
     site_map: input.site_map,
     sites,
+    ...(input.packages ? { packages: input.packages } : prev?.packages ? { packages: prev.packages } : {}),
   };
 }
 

@@ -1128,6 +1128,53 @@
           "reason": "Runs on Vercel; the Cloudflare read does not apply"
         }
       }
+    ],
+    "packages": [
+      {
+        "name": "sample-pkg",
+        "registry": "npm",
+        "at": "2026-09-28T11:47:20.000Z",
+        "npm": {
+          "state": "ok",
+          "latest": "0.3.0",
+          "dist_tags": {
+            "latest": "0.3.0",
+            "next": "0.4.0-rc.1"
+          },
+          "versions": 6,
+          "modified": "2026-09-26T14:02:11.000Z"
+        },
+        "downloads": {
+          "state": "ok",
+          "last_week": 41,
+          "last_month": 188,
+          "through": "2026-09-27",
+          "by_version_last_week": {
+            "0.3.0": 33,
+            "0.2.0": 6,
+            "0.4.0-rc.1": 2
+          }
+        },
+        "dependents": {
+          "state": "ok",
+          "version": "0.3.0",
+          "direct": 2,
+          "indirect": 5,
+          "total": 7
+        },
+        "github": {
+          "state": "ok",
+          "repo": "example-org/sample-pkg",
+          "stars": 4,
+          "open_issues": 1,
+          "open_prs": 2,
+          "open_prs_capped": false,
+          "latest_release": {
+            "tag": "v0.3.0",
+            "published_at": "2026-09-26T14:00:00.000Z"
+          }
+        }
+      }
     ]
   },
   "live": {
@@ -1788,6 +1835,16 @@
         "self_probe": false,
         "revision": 1,
         "updated_at": "2026-09-21 12:00:00"
+      }
+    ],
+    "packages": [
+      {
+        "name": "sample-pkg",
+        "registry": "npm",
+        "repo": "example-org/sample-pkg",
+        "formerly": "sample-old",
+        "revision": 1,
+        "updated_at": "2026-09-27 10:00:00"
       }
     ]
   },

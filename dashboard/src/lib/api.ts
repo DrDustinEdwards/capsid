@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPerformed, PortalPreview } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview } from "../types";
 
 export const FEED_URL = "/portal/api/ops";
 export const REFRESH_URL = "/portal/api/ops/refresh";
@@ -8,6 +8,7 @@ export const PERFORM_URL = "/portal/api/actions/perform";
 export const NAMESPACES_URL = "/portal/api/namespaces";
 export const ACTIVITY_URL = "/portal/api/activity";
 export const CLAIMS_URL = "/portal/api/claims";
+export const PACKAGE_HISTORY_URL = "/portal/api/packages/history";
 export const SIGN_OUT_URL = "/portal/api/sign-out";
 export const APP_URL = "/portal/";
 export const POLL_MS = 60_000;
@@ -195,6 +196,12 @@ export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<Portal
   for (const key of ["namespace", "agent", "since", "until"] as const) if (filter[key]) qs.set(key, filter[key]);
   const s = qs.toString();
   return get<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
+}
+
+// GET /portal/api/packages/history?name=: one configured package's daily downloads,
+// joined to its former name's, and its weekly GitHub numbers. Fetched when asked for.
+export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
+  return get<PortalPackageHistory>(`${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`);
 }
 
 // GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. A job

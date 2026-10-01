@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
-import { attentionItems, counts, hasSites, passStale } from "../lib/derive";
+import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
 import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
@@ -17,6 +17,7 @@ import type { OpsFeed } from "../types";
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   overview: Overview,
   sites: lazy(() => import("../views/Sites").then((m) => ({ default: m.Sites }))),
+  packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
   incidents: lazy(() => import("../views/Incidents").then((m) => ({ default: m.Incidents }))),
   queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
   deploys: lazy(() => import("../views/Deploys").then((m) => ({ default: m.Deploys }))),
@@ -83,14 +84,16 @@ export function App() {
   // Until the feed answers, the Sites view is assumed on offer, so a configured install
   // does not see it flicker in.
   const sitesOn = feed ? hasSites(feed) : true;
-  const views = viewsFor(sitesOn);
+  const packagesOn = feed ? hasPackages(feed) : true;
+  const views = viewsFor(sitesOn, packagesOn);
   const parsed = parseRoute(location);
-  // With no site configured, /sites is not a view: it shows the overview, and the
-  // address is replaced below.
-  const route = parsed.view === "sites" && !sitesOn ? { view: "overview" as const, drawer: null } : parsed;
+  // With no site configured, /sites is not a view, and with no package, /packages is
+  // not: either shows the overview, and the address is replaced below.
+  const hidden = (parsed.view === "sites" && !sitesOn) || (parsed.view === "packages" && !packagesOn);
+  const route = hidden ? { view: "overview" as const, drawer: null } : parsed;
   useEffect(() => {
-    if (parsed.view === "sites" && !sitesOn) navigate(routePath("overview"), { replace: true });
-  }, [parsed.view, sitesOn, navigate]);
+    if (hidden) navigate(routePath("overview"), { replace: true });
+  }, [hidden, navigate]);
   // Relative times are measured on the server's clock (portalNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
   const tick = useTick(15_000);

@@ -122,6 +122,64 @@ export interface OpsSnapshot {
   ci: CiObservation[];
   site_map: SiteMapDrift | null;
   sites: SiteSnapshot[];
+  // Each configured package as this pass read it (src/ops-packages.ts). Optional, so a
+  // snapshot written before the panel existed still parses; absent or empty with no
+  // package configured.
+  packages?: PackageSnapshot[];
+}
+
+// One row of the Portal's package configuration (ops_packages, migrations/0028).
+export interface OpsPackageConfig {
+  // The npm name, the row's key.
+  name: string;
+  registry: "npm";
+  // owner/name on GitHub, or null.
+  repo: string | null;
+  // An earlier npm name whose download history is shown joined to this one, or null.
+  formerly: string | null;
+  // Counts edits. package_edit and package_remove name the revision they previewed.
+  revision: number;
+  updated_at: string;
+}
+
+// One part of a package's read: what it said, or why it could not be read. "none" is
+// an answer (no repository configured, no dependents on record), not a failure.
+export type PackagePart<T> = ({ state: "ok" } & T) | { state: "none"; reason: string } | { state: "error"; reason: string };
+
+// What one watcher pass read for one package. Every source is named where it is used
+// (src/ops-packages.ts), with what it counts and what it misses.
+export interface PackageSnapshot {
+  name: string;
+  registry: "npm";
+  at: string;
+  // registry.npmjs.org, the abbreviated document.
+  npm: PackagePart<{ latest: string | null; dist_tags: Record<string, string>; versions: number; modified: string | null }>;
+  // api.npmjs.org: the last 7 and 30 days, and per version for the last 7 days only
+  // (npm keeps no per-version history). through is the last day npm has counted.
+  downloads: PackagePart<{ last_week: number; last_month: number; through: string | null; by_version_last_week: Record<string, number> }>;
+  // deps.dev v3alpha, for the default version: distinct packages that depend on it,
+  // directly or through another package. Counts only; no public API lists them.
+  dependents: PackagePart<{ version: string; direct: number; indirect: number; total: number }>;
+  // The GitHub App's read of the repository.
+  github: PackagePart<{ repo: string; stars: number; open_issues: number; open_prs: number; open_prs_capped: boolean; latest_release: { tag: string; published_at: string | null } | null }>;
+}
+
+// GET /portal/api/packages/history?name=: the daily download history of one configured
+// package, joined to its former name's, and its weekly GitHub numbers.
+export interface PortalPackageHistory {
+  name: string;
+  formerly: string | null;
+  generated: string;
+  // Served from the cache when it is younger than its TTL; the time it was fetched.
+  fetched_at: string;
+  // One entry per day with any count, oldest first; each day names which package the
+  // count came from.
+  days: Array<{ day: string; downloads: number; name: string }>;
+  first_day: string | null;
+  last_day: string | null;
+  // Why a range could not be read, and anything else a reader should know.
+  notes: string[];
+  weeks: Array<{ week: string; stars: number; open_issues: number; open_prs: number; latest_release: string | null }>;
 }
 
 export type OpsJobStatus = "queued" | "claimed" | "blocked" | "done" | "failed" | "superseded";
@@ -264,6 +322,8 @@ export interface OpsLive {
   // The site configuration, every row. With no row that has an origin, the Portal
   // shows no Sites view and no site items on the Overview.
   sites: OpsSiteConfig[];
+  // The package configuration, every row. With none, the Portal shows no Packages view.
+  packages: OpsPackageConfig[];
 }
 
 export interface OpsFeed {
@@ -294,6 +354,7 @@ export interface OpsFeed {
 //   GET  /portal/api/namespaces                                   -> PortalNamespaces
 //   GET  /portal/api/activity?namespace=&actor=                   -> PortalActivity
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
+//   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -310,7 +371,10 @@ export type PortalAction =
   | "site_add"
   | "site_edit"
   | "site_remove"
-  | "reset_breaker";
+  | "reset_breaker"
+  | "package_add"
+  | "package_edit"
+  | "package_remove";
 
 // params by action:
 //   pause         { namespace, reason }   reason required
@@ -327,6 +391,9 @@ export type PortalAction =
 //                 every field is the row as it will be; revision is the one shown
 //   site_remove   { namespace, revision }
 //   reset_breaker { namespace }           the queue's circuit breaker (src/job-breaker.ts)
+//   package_add   { name, repo?, formerly? }
+//   package_edit  { name, revision, repo?, formerly? }   the row as it will be
+//   package_remove { name, revision }
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;

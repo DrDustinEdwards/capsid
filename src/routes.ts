@@ -49,6 +49,7 @@ import {
 } from "./portal-actions";
 import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "./portal-auth";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
+import { handlePortalPackageHistory, PORTAL_PACKAGE_HISTORY_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 
 const APPROVAL_COOKIE = "capsid_approved";
@@ -599,6 +600,7 @@ export const defaultHandler = {
     if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
     if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
     if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
+    if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
     if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
     if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
     // The app and everything under it, every method: the handler gates first.

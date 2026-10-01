@@ -44,12 +44,31 @@ const SITE_ROWS: OpsSiteConfig[] = [
   { namespace: "capsid", name: "Capsid", origin: "https://capsid.example.com", health_path: "/health", platform: "cloudflare", script: "capsid", self_probe: true, revision: 3, updated_at: "2026-09-28 00:00:00" },
 ];
 
+// The package configuration, answered the same way (ops_packages).
+const PACKAGE_ROWS = [{ name: "sample-pkg", registry: "npm", repo: "example-org/sample-pkg", formerly: null, revision: 1, updated_at: "2026-09-28 00:00:00" }];
+
 function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
   const toRow = (s: OpsSiteConfig) => ({ ...s, self_probe: s.self_probe ? 1 : 0 });
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop !== "prepare") return Reflect.get(target, prop, receiver);
       return (sql: string) => {
+        if (/FROM ops_packages/i.test(sql)) {
+          const statement = {
+            params: [] as unknown[],
+            bind(...params: unknown[]) {
+              statement.params = params;
+              return statement;
+            },
+            async first() {
+              return PACKAGE_ROWS.find((p) => p.name === statement.params[0]) ?? null;
+            },
+            async all() {
+              return { results: PACKAGE_ROWS, meta: {} };
+            },
+          };
+          return statement;
+        }
         if (!/FROM ops_sites/i.test(sql)) return target.prepare(sql);
         const statement = {
           params: [] as unknown[],
@@ -162,6 +181,7 @@ const FEED: OpsFeedData = {
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
     namespaces: [],
     sites: [],
+    packages: [],
   },
   refresh_allowed_at: null,
   cloudflare_configured: false,
@@ -225,14 +245,20 @@ const EVERY_ACTION = [
   ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
   ["site_remove", { namespace: "capsid", revision: "3" }],
   ["reset_breaker", { namespace: "capsid" }],
+  ["package_add", { name: "sample-new", repo: "example-org/sample-new" }],
+  ["package_edit", { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" }],
+  ["package_remove", { name: "sample-pkg", revision: "1" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the three site edits and the breaker reset, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the three site edits, the breaker reset and the three package edits, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
     "fail_job",
     "mode",
+    "package_add",
+    "package_edit",
+    "package_remove",
     "pause",
     "release_job",
     "reset_breaker",
@@ -245,7 +271,7 @@ test("the Portal's actions are the eight the old /console page had, the three si
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 12);
+  assert.equal(PORTAL_ACTIONS.length, 15);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -346,9 +372,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions and the site edits are performed against real D1 in
+// transitions, the site edits and the package edits are performed against real D1 in
 // test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && !a.startsWith("site_"))) {
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && !a.startsWith("site_") && !a.startsWith("package_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);

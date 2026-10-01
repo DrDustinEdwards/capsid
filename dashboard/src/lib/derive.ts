@@ -18,6 +18,11 @@ export function hasSites(feed: OpsFeed): boolean {
   return feed.live.sites.some((s) => s.origin !== null);
 }
 
+// The Packages view is on offer only while a package is configured (ops_packages).
+export function hasPackages(feed: OpsFeed): boolean {
+  return feed.live.packages.length > 0;
+}
+
 export function siteKey(s: SiteSnapshot): string {
   return s.name;
 }
