@@ -1,7 +1,8 @@
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { PORTAL_CSRF_COOKIE, PORTAL_PATH, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate, sourceAddress } from "./portal-auth";
+import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate, sourceAddress } from "./portal-auth";
+import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { ROSTER } from "./improve-schema";
@@ -64,13 +65,13 @@ export { PORTAL_CSRF_COOKIE };
 const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
-function portalCsrf(request: Request): { value: string; setCookie: string | null } {
+export function portalCsrf(request: Request): { value: string; setCookie: string | null } {
   const presented = getCookie(request, PORTAL_CSRF_COOKIE);
   if (presented !== null && CSRF_SHAPE.test(presented)) return { value: presented, setCookie: null };
   const value = crypto.randomUUID();
   return {
     value,
-    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${PORTAL_PATH}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
+    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${portalCookiePath(new URL(request.url))}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
   };
 }
 

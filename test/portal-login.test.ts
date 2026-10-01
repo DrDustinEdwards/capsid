@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { clearIdTokenKeysCache, type Jwk } from "../src/access-jwt.ts";
-import { handlePortalCallback, readPortalSession, startPortalLogin } from "../src/portal-auth.ts";
+import { handlePortalCallback, portalSignOutCookies, readPortalSession, startPortalLogin } from "../src/portal-auth.ts";
+import { portalCsrf } from "../src/ops-feed.ts";
+import { PORTAL_HOST } from "../src/portal-host.ts";
 import { fakeKv } from "./fakes.ts";
 
 // Capsid Portal's callback through the shared Access for SaaS login (src/access-login.ts),
@@ -198,3 +200,63 @@ for (const stored of ["/portalx", "/console", "https://example.com/portal/", "//
     assert.equal(res.headers.get("Location"), "/portal/");
   });
 }
+
+// ---- the Portal's own host (portal.dustinedwards.info, src/portal-host.ts) ------------
+// The router hands these handlers the rewritten request (/x on the Portal host is /portal/x
+// here), so they see the Portal host's origin and an internal /portal path.
+
+const PORTAL_ORIGIN = `https://${PORTAL_HOST}`;
+
+test("on the Portal host the login sends Access /callback, scopes its cookies to Path=/, and returns to the root path", async () => {
+  const e = env();
+  const start = await startPortalLogin(new Request(`${PORTAL_ORIGIN}/portal/jobs`), e, "/portal/jobs");
+  const location = String(start.headers.get("Location"));
+  assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
+  assert.match(setCookies(start)[0], /^capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=600$/);
+  const state = String(new URL(location).searchParams.get("state"));
+  const bodies = stubAccess(location);
+  const res = await handlePortalCallback(
+    new Request(`${PORTAL_ORIGIN}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
+    e,
+    new Date()
+  );
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get("Location"), "/jobs");
+  assert.equal(bodies[0]?.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`, "the exchange must name the same callback the start sent");
+  const cookies = setCookies(res);
+  assert.match(cookies[0], /^capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=43200$/);
+  assert.equal(cookies[1], "capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+});
+
+// PLANT: host-only cookies. The Portal's cookies must never carry a Domain attribute, on
+// either host: Domain=dustinedwards.info would hand the session to every subdomain of the
+// family, the public sites included (capsid/decisions.md 2026-10-01). Every cookie the
+// Portal sets is collected here: the login state, the session, the sign-out pair and the
+// CSRF cookie, on workers.dev and on the Portal host.
+test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to its host's Portal path", async () => {
+  const seen: Array<{ host: string; cookie: string }> = [];
+  for (const [origin, path] of [[ORIGIN, "/portal"], [PORTAL_ORIGIN, "/"]] as const) {
+    const e = env();
+    const start = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal/");
+    const location = String(start.headers.get("Location"));
+    stubAccess(location);
+    const state = String(new URL(location).searchParams.get("state"));
+    const done = await handlePortalCallback(
+      new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
+      e,
+      new Date()
+    );
+    const csrf = portalCsrf(new Request(`${origin}/portal/api/ops`)).setCookie;
+    assert.ok(csrf, "a request with no CSRF cookie must be given one");
+    const cookies = [...setCookies(start), ...setCookies(done), ...portalSignOutCookies(path), csrf];
+    for (const cookie of cookies) {
+      seen.push({ host: origin, cookie });
+      assert.doesNotMatch(cookie, /;\s*domain\s*=/i, `${origin} set a cookie with a Domain: ${cookie}`);
+      const attributes = cookie.split(";").map((a) => a.trim());
+      assert.ok(attributes.includes(`Path=${path}`), `${origin} set a cookie outside ${path}: ${cookie}`);
+    }
+  }
+  // Two hosts, each: the state cookie, the session and the cleared state, two sign-out
+  // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
+  assert.equal(seen.length, 12);
+});
