@@ -1950,13 +1950,13 @@
         "id": "auto-merge",
         "label": "Auto-merge step",
         "period_ms": null,
-        "flag": "failing",
+        "flag": null,
         "recent": [
           {
             "started_at": "2026-09-28T11:57:59.700Z",
             "finished_at": "2026-09-28T11:58:00.000Z",
-            "outcome": "refused",
-            "reason": "the policy document does not name required_checks, which this Worker enforces. Refusing rather than merging against a policy that describes less than the code does."
+            "outcome": "ok",
+            "reason": "policy 5: 0 merged, 1 left for the seat"
           }
         ]
       },
