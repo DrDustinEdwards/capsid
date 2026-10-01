@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
@@ -81,6 +81,10 @@ function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollA
 export function App() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
   const [location, navigate] = useLocation();
+  // A view's own filters live in its query string (?ns=, say); opening and closing a
+  // drawer over the view keeps them.
+  const search = useSearch();
+  const qs = search ? `?${search}` : "";
   // Until the feed answers, the Sites view is assumed on offer, so a configured install
   // does not see it flicker in.
   const sitesOn = feed ? hasSites(feed) : true;
@@ -102,14 +106,13 @@ export function App() {
     if (feed) setSkew(ms(feed.live.generated) - Date.now());
   }, [feed]);
   const now = portalNow(tick, skew, feed ? ms(feed.live.generated) : 0);
-  const [filters, setFiltersState] = useState<Filters>({ ns: "all", q: "", range: "7d" });
+  const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [singleKeys, setSingleKeysState] = useState(() => readPref("wf-single-keys") !== "off");
   const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
-  const [sel, setSel] = useState(-1);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mainRef = useRef<HTMLElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -128,7 +131,6 @@ export function App() {
   const go = useCallback(
     (v: ViewId) => {
       navigate(routePath(v));
-      setSel(-1);
       mainRef.current?.scrollTo(0, 0);
     },
     [navigate],
@@ -140,12 +142,12 @@ export function App() {
       const type = ref.slice(0, i);
       const id = ref.slice(i + 1);
       if (type === "view") return isView(id) ? go(id) : undefined;
-      if (type === "site" || type === "job" || type === "agent") navigate(routePath(route.view, { type, id }));
+      if (type === "site" || type === "job" || type === "agent") navigate(routePath(route.view, { type, id }) + qs);
     },
-    [go, navigate, route.view],
+    [go, navigate, route.view, qs],
   );
 
-  const closeDrawer = useCallback(() => navigate(routePath(route.view)), [navigate, route.view]);
+  const closeDrawer = useCallback(() => navigate(routePath(route.view) + qs), [navigate, route.view, qs]);
 
   const copy = useCallback(
     (text: string) => {
@@ -203,22 +205,31 @@ export function App() {
 
   const setFilters = useCallback((f: Partial<Filters>) => {
     setFiltersState((p) => ({ ...p, ...f }));
-    setSel(-1);
   }, []);
 
-  // Selection for j and k: every [data-row] in main, in document order.
-  const rows = () => Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-row]") ?? []);
-  useEffect(() => {
-    rows().forEach((el, i) => el.classList.toggle("sel", i === sel));
-  });
-  useEffect(() => setSel(-1), [route.view]);
+  // j and k move keyboard focus itself among the visible [data-row] elements in main, in
+  // document order, so the selection is the focused row: no index to go stale when the
+  // feed changes, and Enter opens it (onRowActivate). A row that is not in the tab order
+  // is made focusable by script only (tabIndex -1).
+  const rows = () => Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-row]") ?? []).filter((el) => el.getClientRects().length > 0);
+  const step = (dir: 1 | -1) => {
+    const r = rows();
+    if (!r.length) return;
+    const cur = document.activeElement?.closest<HTMLElement>("[data-row]");
+    const i = cur ? r.indexOf(cur) : -1;
+    const el = r[i < 0 ? (dir === 1 ? 0 : r.length - 1) : Math.max(0, Math.min(r.length - 1, i + dir))];
+    if (!el) return;
+    if (!el.hasAttribute("tabindex")) el.tabIndex = -1;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: "nearest" });
+  };
 
   // Keyboard grammar. Latest values through a ref so one listener serves.
   const confirming = confirmReq != null;
-  const keys = useRef({ singleKeys, palette, help, confirming, route, sel, views });
-  keys.current = { singleKeys, palette, help, confirming, route, sel, views };
-  const act = useRef({ go, open, refresh, theme, closeDrawer, toggleRail });
-  act.current = { go, open, refresh, theme, closeDrawer, toggleRail };
+  const keys = useRef({ singleKeys, palette, help, confirming, route, views });
+  keys.current = { singleKeys, palette, help, confirming, route, views };
+  const act = useRef({ go, refresh, theme, toggleRail, step });
+  act.current = { go, refresh, theme, toggleRail, step };
   useEffect(() => {
     let gAt = 0;
     const onKey = (e: KeyboardEvent) => {
@@ -232,10 +243,8 @@ export function App() {
         return;
       }
       if (k.palette || k.help) return; // the open dialog owns the keys; Esc closes it natively
-      if (e.key === "Escape") {
-        if (k.route.drawer) a.closeDrawer();
-        return;
-      }
+      // The drawer is a modal dialog: its own cancel event closes it on Esc (Drawer.tsx).
+      if (e.key === "Escape") return;
       const t = e.target as HTMLElement;
       if (t.closest("input, textarea, select, [contenteditable='true']") || e.ctrlKey || e.metaKey || e.altKey) return;
       if (!k.singleKeys) return;
@@ -271,23 +280,11 @@ export function App() {
           return;
         }
         case "j":
-        case "k": {
+        case "k":
           if (k.route.drawer) return;
-          const r = rows();
-          if (!r.length) return;
-          const next = Math.max(0, Math.min(r.length - 1, k.sel + (e.key === "j" ? 1 : -1)));
-          setSel(next);
-          r[next]?.scrollIntoView({ block: "nearest" });
+          e.preventDefault();
+          a.step(e.key === "j" ? 1 : -1);
           return;
-        }
-        case "Enter": {
-          if (k.route.drawer || k.sel < 0 || t.closest("[data-open], a, button")) return;
-          const ref = rows()[k.sel]?.dataset.open;
-          // The drawer focuses its Close button as it opens, inside this keydown; without
-          // this the browser activates that button with the same Enter and closes it again.
-          if (ref) (e.preventDefault(), a.open(ref));
-          return;
-        }
       }
     };
     document.addEventListener("keydown", onKey);
@@ -338,15 +335,15 @@ export function App() {
     if (target.closest("a, button, input")) return;
     const el = target.closest<HTMLElement>("[data-open]");
     if (el?.dataset.open) {
-      // Enter on a focused row: cancel its default action for the same reason as above.
+      // Enter on a focused row: the drawer focuses its Close button as it opens, inside
+      // this keydown; without this the browser activates that button with the same Enter.
       if ("key" in e) e.preventDefault();
-      const rs = rows();
-      setSel(rs.indexOf(el));
       open(el.dataset.open);
     }
   };
 
   const c = feed ? counts(feed) : null;
+  // Every critical row of Needs attention, session incidents included (derive.ts).
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c
     ? {
@@ -358,6 +355,15 @@ export function App() {
         namespaces: { n: c.paused, cls: "warm" },
       }
     : {};
+
+  // The page title names the view, and the open panel's subject before it (WCAG 2.4.2):
+  // "Fix the probe · Queue · Capsid Portal".
+  const d = route.drawer;
+  const subject = !d ? "" : d.type === "job" ? (feed?.live.jobs.find((j) => j.id === d.id)?.title ?? `Job ${d.id}`) : d.id;
+  const pageTitle = [subject, VIEWS.find((v) => v.id === route.view)?.label, "Capsid Portal"].filter(Boolean).join(" · ");
+  useEffect(() => {
+    document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
+  }, [pageTitle, signedOut]);
 
   const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, signOut } : null;
   const View = VIEW_COMPONENTS[route.view];
@@ -433,7 +439,9 @@ export function App() {
         <button type="button" className={`btn iconbtn${spinning ? " spin" : ""}`} title="Refresh (r)" aria-label="Refresh" onClick={() => void refresh()} disabled={signedOut}>
           <RefreshIcon />
         </button>
-        <button type="button" className="btn" aria-label="Open command menu" onClick={() => setPalette(true)}>
+        {/* The name starts with the visible word (WCAG 2.5.3), and stays when the word is
+            hidden at phone width. */}
+        <button type="button" className="btn" aria-label="Search, open the command menu" onClick={() => setPalette(true)}>
           <SearchIcon />
           <span className="hide-sm">Search</span> <kbd className="hide-sm">Ctrl K</kbd>
         </button>
@@ -459,7 +467,6 @@ export function App() {
               aria-label={named}
               data-tip={railCollapsed ? (named ?? v.label) : undefined}
               data-tip-side={railCollapsed ? "right" : undefined}
-              onClick={() => setSel(-1)}
             >
               <NavIcon id={v.id} />
               <span className="lbl">{v.label}</span>

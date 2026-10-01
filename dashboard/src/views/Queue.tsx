@@ -1,7 +1,7 @@
 import { useApp } from "../app/ctx";
 import { agentLabel, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
-import { NsChips, PageHead, Panel, QueueRows } from "./shared";
+import { FilterEmpty, NsChips, PageHead, Panel, QueueRows, useNsFilter } from "./shared";
 
 export function SeatStart() {
   const { feed, now, confirm } = useApp();
@@ -88,9 +88,10 @@ export function LiveSessions() {
 
 export function Queue() {
   const { feed, filters, setFilters } = useApp();
+  const [ns, setNs] = useNsFilter();
   const all = feed.live.jobs;
   const q = filters.q.trim().toLowerCase();
-  const jobs = all.filter((j) => (filters.ns === "all" || j.namespace === filters.ns) && (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)));
+  const jobs = all.filter((j) => (ns === "all" || j.namespace === ns) && (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)));
   const nss = [...new Set(all.map((j) => j.namespace))];
   return (
     <div className="page">
@@ -101,7 +102,14 @@ export function Queue() {
       </div>
       <div className="grid2">
         <Panel title="Jobs" src="live · D1 jobs, read on each refresh">
-          <QueueRows jobs={jobs} />
+          {!jobs.length && all.length ? (
+            <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
+              No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
+              {ns !== "all" ? ` in the namespace ${ns}` : ""}.
+            </FilterEmpty>
+          ) : (
+            <QueueRows jobs={jobs} />
+          )}
         </Panel>
         <Panel title="By namespace">
           <div className="scroll-x">

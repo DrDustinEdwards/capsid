@@ -2,18 +2,21 @@ import { useApp } from "../app/ctx";
 import { incidents, passStale } from "../lib/derive";
 import { ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
-import { IncidentFeed, NoSnapshot, NsChips, PageHead, Panel } from "./shared";
+import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, Panel, useNsFilter } from "./shared";
 
 export function Incidents() {
-  const { feed, now, filters } = useApp();
+  const { feed, now } = useApp();
+  const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
+  const all = incidents(feed);
+  const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
     <div className="page">
       <PageHead title="Incidents">Watcher findings, open first. Each has a fingerprint, is posted once, and clears on its own when the condition goes away.</PageHead>
-      <NsChips list={incidents(feed).map((x) => x.ns)} />
+      <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel title="Findings" src="jobs posted by agent:watcher">
-          <IncidentFeed ns={filters.ns} />
+          {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the namespace {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
         </Panel>
         <Panel title="Last watcher pass" src={snap ? utc(ms(snap.pass_at)) : "none yet"}>
           {snap ? (

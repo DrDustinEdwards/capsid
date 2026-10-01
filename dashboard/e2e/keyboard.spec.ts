@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// j and k move a selection through the rows, Enter opens the selected row, Esc closes it,
-// and the selection can be seen: the row's background changes and it carries a ring at
-// 3:1 against that background (design-portal-linear.md D8). Before this the selected
-// row differed from the surface by 1.06:1.
+// j and k move keyboard focus through the rows (the selection is the focused row), Enter
+// opens it, Esc closes the panel and hands focus back, and the selection can be seen: the
+// row's background changes and it carries a ring at 3:1 against that background
+// (design-portal-linear.md D8). Before this the selected row differed from the surface
+// by 1.06:1.
 
 function ratio(a: [number, number, number], b: [number, number, number]): number {
   const lum = (c: [number, number, number]) => {
@@ -28,7 +29,7 @@ const rgb = (s: string): [number, number, number] => {
 async function selected(page: Page): Promise<{ index: number; title: string; bg: string; shadow: string; surface: string }> {
   return page.evaluate(() => {
     const rows = Array.from(document.querySelectorAll<HTMLElement>("main [data-row]"));
-    const index = rows.findIndex((r) => r.classList.contains("sel"));
+    const index = rows.findIndex((r) => r === document.activeElement?.closest("[data-row]"));
     const row = rows[index];
     const s = row ? getComputedStyle(row) : null;
     return {
@@ -58,13 +59,12 @@ for (const scheme of ["light", "dark"] as const) {
       expect((await selected(page)).index).toBe(0);
       const first = await selected(page);
       await page.keyboard.press("Enter");
-      const drawer = page.locator("aside.drawer.on");
+      const drawer = page.locator("dialog.drawer[open]");
       await expect(drawer).toBeVisible();
-      await expect(drawer).toHaveAttribute("aria-hidden", "false");
       await expect(drawer.locator("h2")).toHaveText(first.title);
       await page.keyboard.press("Escape");
       await expect(drawer).toHaveCount(0);
-      expect((await selected(page)).index, "Esc keeps the selection").toBe(0);
+      await expect.poll(async () => (await selected(page)).index, { message: "Esc keeps the selection" }).toBe(0);
     });
 
     test("the selected row can be seen: a changed background and a ring at 3:1", async ({ page }) => {

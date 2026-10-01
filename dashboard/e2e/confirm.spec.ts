@@ -20,8 +20,8 @@ test("Pause with a typed reason, then Preview, shows the preview and performs", 
   await dialog.getByLabel("Reason (required)").pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Do it" })).toBeVisible();
-  await dialog.getByRole("button", { name: "Do it" }).click();
+  await expect(dialog.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.locator("tr[data-row]").filter({ hasText: "sample-b" }).getByRole("button", { name: "Unpause" })).toBeVisible();
 });
@@ -92,8 +92,8 @@ test.describe("on a phone", () => {
     await dialog.getByLabel("Reason (required)").pressSequentially("testing");
     await dialog.getByRole("button", { name: "Preview" }).tap();
     await expect(dialog.getByText("What changes")).toBeVisible();
-    for (const name of ["Do it", "Cancel"]) {
-      await expect(dialog.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
+    for (const name of ["Pause", "Cancel"]) {
+      await expect(dialog.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
     }
   });
 });

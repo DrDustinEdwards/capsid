@@ -32,8 +32,9 @@ export function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
 }
 
+// The namespace filter is not here: each view keeps its own in the address (?ns=),
+// through useNsFilter in views/shared.tsx.
 export interface Filters {
-  ns: string;
   q: string;
   range: "24h" | "7d" | "30d";
 }
@@ -49,7 +50,8 @@ export interface Ctx {
   copy: (text: string) => void;
   // A short message in the toast.
   say: (msg: string) => void;
-  // Opens the confirm dialog for one control: it previews, then performs on "Do it".
+  // Opens the confirm dialog for one control: it previews, then performs on the button
+  // named for the action (performLabel).
   confirm: (req: ConfirmRequest) => void;
   // The session ended: show the signed-out page.
   signOut: () => void;
@@ -60,13 +62,41 @@ export interface Ctx {
 export interface ConfirmRequest {
   action: PortalAction;
   params: Record<string, string>;
-  // The dialog's heading before the preview answers, e.g. "Pause sample".
+  // The dialog's heading before the preview answers, in plain words, e.g. "Pause sample"
+  // or "Resume job: <its title>". Raw ids stay in the drawer.
   title: string;
   // Called after a successful perform, once the app has taken the new feed.
   onDone?: (p: PortalPerformed) => void;
 }
 
 export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job"]);
+
+// The confirm dialog's perform button, named for what it does (audit DECIDE 11).
+const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
+  pause: "Pause",
+  unpause: "Unpause",
+  mode: "Set mode",
+  seat_start: (p) => (p.value === "off" ? "Turn off" : "Turn on"),
+  resume_job: "Resume job",
+  release_job: "Release job",
+  fail_job: "Mark failed",
+  revoke_agent: "Revoke agent",
+  site_add: "Add site",
+  site_edit: "Save changes",
+  site_remove: "Remove site",
+  reset_breaker: "Reset breaker",
+};
+
+export function performLabel(action: PortalAction, params: Record<string, string>): string {
+  const l = PERFORM_LABEL[action];
+  return typeof l === "function" ? l(params) : l;
+}
+
+// One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "reset_breaker", "release_job"]);
+
+// Destructive actions: the perform button is the danger style and sits apart from Cancel.
+export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove"]);
 
 export const AppCtx = createContext<Ctx | null>(null);
 
