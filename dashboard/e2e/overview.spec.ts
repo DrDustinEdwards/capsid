@@ -62,6 +62,8 @@ test("each tile is a link to its view", async ({ page }) => {
   await visit(page, "overview");
   const tiles = page.locator("main .tiles a.tile");
   await expect(tiles).toHaveCount(6);
+  // A link to assistive technology too, not only in the markup.
+  await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(6);
   await expect(tiles.filter({ hasText: "Blocked on you" })).toHaveAttribute("href", "/portal/queue");
   await tiles.filter({ hasText: "Open findings" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Incidents" })).toBeVisible();
