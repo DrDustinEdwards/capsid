@@ -173,6 +173,7 @@ const FEED: OpsFeedData = {
   scheduled: { tasks: [], error: null },
   live: {
     generated: NOW.toISOString(),
+    store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
     jobs: [],
     agents: [],
     prs: [],

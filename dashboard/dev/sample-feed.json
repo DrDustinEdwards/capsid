@@ -1846,7 +1846,11 @@
         "revision": 1,
         "updated_at": "2026-09-27 10:00:00"
       }
-    ]
+    ],
+    "store": {
+      "size_bytes": 50646220,
+      "cap_bytes": 10737418240
+    }
   },
   "refresh_allowed_at": null,
   "scheduled": {

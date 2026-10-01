@@ -1,5 +1,6 @@
 import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, OpsTaskRun, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
 import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
+import { storeAttention } from "./store";
 
 // The status vocabulary: every state is a shape, a word and a colour.
 export type Kind = "ok" | "warn" | "crit" | "nodata" | "run" | "queued" | "blocked" | "done";
@@ -237,6 +238,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   if (!feed.cloudflare_configured) {
     out.push({ sev: "nodata", kind: "Watcher", title: "Cloudflare read not configured", sub: "Deploy and error columns show no data until it is", at: ms(live.generated), open: "view:deploys" });
   }
+  const store = storeAttention(feed);
+  if (store) out.push({ sev: "warn", kind: "Backup", ...store, at: ms(live.generated), open: "view:backups" });
   const blocked = live.jobs.filter((j) => j.status === "blocked");
   if (blocked.length) {
     out.push({

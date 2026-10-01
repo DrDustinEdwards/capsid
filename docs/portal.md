@@ -54,7 +54,8 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - seat-started sessions with their GitHub run links;
 - the improve loop's mode and budget;
 - each roster namespace's pause reason;
-- the site and package configuration.
+- the site and package configuration;
+- the D1 store's size, from the jobs read's `meta.size_after` (every D1 result carries it, so it costs no read of its own).
 
 **The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
 
@@ -123,6 +124,7 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
   - If the analytics query fails, the error column shows the query's error text.
 - **Uptime.** Each half-hour slot the watcher did not run is hatched, not counted as up.
 - **Backups.** Capsid's backup age comes from its own `/health`. No other site reports a backup yet: that arrives with each site's `/health` contract, one PR in each site's repo. Until then the column says so.
+- **The store's size.** The Backups view's primary panel shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-feed.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Needs attention as a warning, Foxhound's threshold (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 5). The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
 
 ## The Cloudflare token
 

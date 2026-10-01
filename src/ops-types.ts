@@ -324,6 +324,9 @@ export interface OpsLive {
   sites: OpsSiteConfig[];
   // The package configuration, every row. With none, the Portal shows no Packages view.
   packages: OpsPackageConfig[];
+  // The D1 store's size, from the jobs read's meta.size_after (null when D1 did not
+  // report it), against the per-database cap (D1_CAP_BYTES in src/ops-feed.ts).
+  store: { size_bytes: number | null; cap_bytes: number };
 }
 
 // The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag
