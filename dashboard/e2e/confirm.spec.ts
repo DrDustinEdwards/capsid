@@ -102,7 +102,8 @@ test.describe("on a phone", () => {
     await dialog.getByLabel("Reason (required)").pressSequentially("testing");
     await dialog.getByRole("button", { name: "Preview" }).tap();
     await expect(dialog.getByText("What changes")).toBeVisible();
-    for (const name of ["Pause", "Cancel"]) {
+    // The dialog is Mark failed, so its perform button is named for that (ruling 11).
+    for (const name of ["Mark failed", "Cancel"]) {
       await expect(dialog.getByRole("button", { name, exact: true })).toBeInViewport({ ratio: 1 });
     }
   });
