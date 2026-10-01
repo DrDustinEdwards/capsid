@@ -116,7 +116,7 @@ export function Activity() {
         src={
           <>
             {data ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="linkbtn" disabled={load.loading} onClick={() => setTick((t) => t + 1)}>
+            <button type="button" className="btn" disabled={load.loading} onClick={() => setTick((t) => t + 1)}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

@@ -12,7 +12,7 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 - the Namespaces view: pause and unpause, and reset the queue's circuit breaker when it is open;
 - the Settings view: add, edit and remove a site, and add, edit and remove a package.
 
-Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until "Do it" (the routes are below). Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
+Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
 ## Where each view gets its data
 
@@ -122,7 +122,8 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
   - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
-  - `j` and `k` move through a list, Enter opens the row, and Esc closes.
+  - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
+  - `f` goes to the Queue's text filter. A namespace filter belongs to its view and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
   - `r` refreshes and `t` switches light and dark.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
   - `?` lists the keys. The sheet can turn single-key shortcuts off.
@@ -142,7 +143,8 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
   - the collapsible sidebar;
   - the Claims view: the aggregate, its filter, and a job's claims beside their checks;
   - contrast as painted, in both themes: each text tone, the status words and pills, and a button's border, against what is behind them;
-  - the keyboard: `j` and `k` move the selection, Enter opens the row and Esc closes it, and the selected row can be seen (a changed background and a ring at 3:1).
+  - the keyboard: `j` and `k` move focus, Enter opens the row and Esc closes it, and the selected row can be seen (a changed background and a ring at 3:1);
+  - the audit's eight defects (`e2e/defects.spec.ts`): the panel keeps Tab inside, Enter opens a held job, a namespace filter stays with its view, session incidents reach Needs attention, the confirm dialog's named button and focus, and each view's page title.
 - **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. The initial JavaScript must be at most 100 KB gzip, each lazily loaded view at most 40 KB, and all CSS at most 12 KB.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/portal/callback` with the app's `index.html`, or serve the app's files without the gate.
 

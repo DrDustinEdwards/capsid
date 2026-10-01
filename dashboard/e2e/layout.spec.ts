@@ -53,12 +53,11 @@ for (const d of DRAWERS) {
     await page.setViewportSize({ width: 1024, height: 900 });
     await visit(page, d.from);
     await page.locator(`main [data-open^="${d.type}:"]`).first().click();
-    const drawer = page.locator("aside.drawer.on");
+    const drawer = page.locator("dialog.drawer[open]");
     await expect(drawer).toBeVisible();
-    await expect(drawer).toHaveAttribute("aria-hidden", "false");
     // The drawer slides in; measure once it has arrived.
     await expect.poll(() => drawer.evaluate((el) => getComputedStyle(el).transform)).toBe("none");
-    expectNoSideways(await measure(page, "aside.drawer.on"), `the ${d.type} drawer at 1024`);
+    expectNoSideways(await measure(page, "dialog.drawer[open]"), `the ${d.type} drawer at 1024`);
     expectNoSideways(await measure(page), `main behind the ${d.type} drawer at 1024`);
   });
 }

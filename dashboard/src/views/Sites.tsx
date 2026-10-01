@@ -2,10 +2,11 @@ import { useApp } from "../app/ctx";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
-import { FleetTable, NoSnapshot, NsChips, PageHead, Panel } from "./shared";
+import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, Panel, useNsFilter } from "./shared";
 
 export function Sites() {
-  const { feed, now, filters } = useApp();
+  const { feed, now } = useApp();
+  const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const head = (
     <PageHead title="Sites">One row per deployed site. Health comes from each site's own route where it has one; a root 200 is shown as liveness, not health.</PageHead>
@@ -18,13 +19,14 @@ export function Sites() {
       </div>
     );
   }
-  const list = snap.sites.filter((s) => filters.ns === "all" || s.namespace === filters.ns);
+  const list = snap.sites.filter((s) => ns === "all" || s.namespace === ns);
+  const emptied = !list.length && snap.sites.length > 0;
   return (
     <div className="page">
       {head}
       <NsChips list={snap.sites.map((s) => s.namespace)} />
       <Panel title="Fleet" src={`watcher pass ${ago(ms(snap.pass_at), now)}`}>
-        <FleetTable sites={list} />
+        {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No site in the namespace {ns}.</FilterEmpty> : <FleetTable sites={list} />}
       </Panel>
       <Panel title="Health contract coverage" src="GET /health returning {status, sha}">
         <div className="scroll-x">
