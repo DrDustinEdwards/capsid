@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { OpsFeed } from "../src/types.ts";
-import { VIEW_COUNT, visit } from "./views.ts";
+import { RAIL_COUNT, visit } from "./views.ts";
 
 // The Settings view: the site configuration, edited through the confirm dialog, against
 // the production build and the dev mock (dev/mock-api.ts), which keeps changes in memory
@@ -135,8 +135,9 @@ test("with no site configured, there is no Sites view and the Overview shows no 
   await withoutSites(page);
   await visit(page, "overview");
   expect(await siteItems(page)).toEqual({ rail: 0, tile: 0, fleet: 0, timeline: 0, attention: 0 });
-  await expect(page.locator("nav.rail a")).toHaveCount(VIEW_COUNT - 1);
-  await expect(page.locator("nav.rail a").filter({ hasText: "Settings" })).toHaveCount(1);
+  await expect(page.locator("nav.rail a")).toHaveCount(RAIL_COUNT - 1);
+  // Settings stays reachable: the top bar's button, where the first site is added.
+  await expect(page.locator("header.top").getByRole("link", { name: "Settings", exact: true })).toBeVisible();
   // Everything else is still there.
   await expect(page.getByRole("heading", { level: 2, name: "Needs attention" })).toBeVisible();
   await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
@@ -172,12 +173,12 @@ test("with no site configured, there is no Sites view and the Overview shows no 
 test.describe("on a phone, with no site configured", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("the Sites tab gives way to Settings", async ({ page }) => {
+  test("there is no Sites tab, and Settings is under More", async ({ page }) => {
     await withoutSites(page);
     await visit(page, "overview");
-    const tabs = page.locator("nav.tabbar a");
-    await expect(tabs).toHaveCount(5);
-    await expect(tabs.filter({ hasText: /^Sites/ })).toHaveCount(0);
-    await expect(tabs.filter({ hasText: "Settings" })).toHaveCount(1);
+    const tabs = page.locator("nav.tabbar > a, nav.tabbar > button");
+    await expect(tabs).toHaveText([/^Overview/, /^Queue/, /^Incidents/, /^More$/]);
+    await page.locator("nav.tabbar").getByRole("button", { name: "More" }).tap();
+    await expect(page.getByRole("dialog").getByRole("link", { name: /^Settings/ })).toBeVisible();
   });
 });

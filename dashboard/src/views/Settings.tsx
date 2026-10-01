@@ -3,6 +3,8 @@ import { useApp } from "../app/ctx";
 import { hasSites } from "../lib/derive";
 import { ago, msSql, utc } from "../lib/format";
 import { St } from "../ui/icons";
+import { Switch } from "../ui/Switch";
+import { setSingleKeys, setThemeChoice, useSingleKeys, useThemeChoice, type ThemeChoice } from "../lib/prefs";
 import type { OpsSiteConfig } from "../types";
 import { PageHead, Panel } from "./shared";
 import { PackageSettings } from "./SettingsPackages";
@@ -276,6 +278,41 @@ export function Settings() {
         )}
       </Panel>
       <PackageSettings />
+      <Display />
     </div>
+  );
+}
+
+// Display: this browser's own preferences (DECIDE 8). Each applies at once and is
+// remembered in localStorage; nothing is sent to the Worker.
+const THEMES: ReadonlyArray<{ value: ThemeChoice; label: string; note: string }> = [
+  { value: "system", label: "System", note: "follows this device's light or dark setting" },
+  { value: "light", label: "Light", note: "" },
+  { value: "dark", label: "Dark", note: "" },
+];
+
+function Display() {
+  const choice = useThemeChoice();
+  const singleKeys = useSingleKeys();
+  return (
+    <Panel title="Display" src="this browser only">
+      <div className="body stack-gap">
+        <fieldset className="radios">
+          <legend className="section-title">Theme</legend>
+          {THEMES.map((t) => (
+            <label key={t.value}>
+              <input type="radio" name="theme" value={t.value} checked={choice === t.value} onChange={() => setThemeChoice(t.value)} /> {t.label}
+              {t.note && <span className="faint"> ({t.note})</span>}
+            </label>
+          ))}
+        </fieldset>
+        <div className="prefrow">
+          <Switch id="display-single-keys" label="Single-key shortcuts" checked={singleKeys} onClick={() => setSingleKeys(!singleKeys)} />
+          <span>
+            Single-key shortcuts <span className="faint">(g then a letter, j, k, r, t and the rest; turn off if they clash with a screen reader)</span>
+          </span>
+        </div>
+      </div>
+    </Panel>
   );
 }

@@ -1,24 +1,20 @@
-import { useApp } from "../app/ctx";
+import { Link } from "wouter";
+import { routePath, useApp } from "../app/ctx";
 import { agentLabel, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { FilterEmpty, NsChips, PageHead, Panel, QueueRows, useNsFilter } from "./shared";
 
+// The state only: the switch is in the Automation panel on Namespaces (DECIDE 7).
 export function SeatStart() {
-  const { feed, now, confirm } = useApp();
+  const { feed, now } = useApp();
   const s = feed.live.seat_start;
   return (
     <dl className="kv">
-      <dt>Switch</dt>
+      <dt>Seat start</dt>
       <dd className="toolbar">
         {s.enabled ? <St kind="ok">On</St> : <St kind="nodata">Off</St>}
-        <button
-          type="button"
-          className="btn"
-          onClick={() => confirm({ action: "seat_start", params: { value: s.enabled ? "off" : "on" }, title: s.enabled ? "Turn seat start off" : "Turn seat start on" })}
-        >
-          {s.enabled ? "Turn off" : "Turn on"}
-        </button>
+        <Link href={routePath("namespaces")}>Change it in Namespaces</Link>
       </dd>
       <dt>In flight</dt>
       <dd className="num">

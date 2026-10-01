@@ -53,6 +53,10 @@ export interface Ctx {
   // Opens the confirm dialog for one control: it previews, then performs on the button
   // named for the action (performLabel).
   confirm: (req: ConfirmRequest) => void;
+  // A performed action: takes its feed and shows its result in the message region,
+  // which stays until dismissed or replaced by the next action. An automation switch
+  // passes its reverse change as undo, and the message offers Undo.
+  performed: (p: PortalPerformed, undo?: UndoRequest) => void;
   // The session ended: show the signed-out page.
   signOut: () => void;
 }
@@ -67,6 +71,15 @@ export interface ConfirmRequest {
   title: string;
   // Called after a successful perform, once the app has taken the new feed.
   onDone?: (p: PortalPerformed) => void;
+}
+
+// The reverse of a switch change, sent by the message's Undo as its own action, with
+// params.undo "true" so the Worker writes portal-undo-<action>. focus is the id of the
+// switch that focus returns to.
+export interface UndoRequest {
+  action: PortalAction;
+  params: Record<string, string>;
+  focus?: string;
 }
 
 export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job"]);
