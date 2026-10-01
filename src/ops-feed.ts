@@ -1,7 +1,7 @@
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate } from "./portal-auth";
+import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
@@ -18,7 +18,8 @@ import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive,
 import { runUrl } from "./runner-key";
 import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
-import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
+import { readTaskRuns, taskStates, TASKS } from "./task-runs";
+import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
 // /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
@@ -32,7 +33,7 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 13 statements plus N:
+//   D1, 22 statements plus N:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -43,6 +44,8 @@ import { gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type Watcher
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
+//     9  task_runs: each scheduled task's newest runs, one keyed read per task in
+//        one batch (src/task-runs.ts, TASKS)
 //   KV, 7 gets plus one per ROSTER namespace (5 today, so 12): ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, and each namespace's pause key.
@@ -53,7 +56,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 13, kv: 7 + ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 7 + ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -260,13 +263,27 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
   return next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
-async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<OpsJob[]> {
+// The store's size against D1's cap (capsid/decisions.md 2026-09-30, "admin panels
+// review adopted", item 5). Every D1 result carries the database's size in
+// meta.size_after, so the jobs read below reports it and the feed makes no extra read
+// (Foxhound reads it the same way: PRAGMA page_count is not authorized on D1). 10 GB is
+// the per-database cap on Workers Paid (developers.cloudflare.com/d1/platform/limits);
+// on Workers Free it is 500 MB, and this is the one line to change.
+export const D1_CAP_BYTES = 10 * 1024 ** 3;
+
+/** The size a D1 result reports, or null when its meta has no number for it. */
+export function sizeFrom(meta: unknown): number | null {
+  const size = (meta as { size_after?: unknown } | null | undefined)?.size_after;
+  return typeof size === "number" && Number.isFinite(size) && size >= 0 ? size : null;
+}
+
+async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   // datetime() on both sides: updated_at is written both as ISO and as D1's default
   // text form, and the two do not compare as text. The watcher's finding row joins
   // on the job it is currently filed as, so a watcher job shows how often its finding
   // has been seen; one row per fingerprint, so the join cannot multiply a job.
-  const { results } = await db
+  const { results, meta } = await db
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
               j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
@@ -285,7 +302,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
         : Promise.resolve(null)
     )
   );
-  return rows.map((r, i) => opsJobFrom(r, checks[i]));
+  return { jobs: rows.map((r, i) => opsJobFrom(r, checks[i])), sizeBytes: sizeFrom(meta) };
 }
 
 async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
@@ -385,7 +402,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -403,7 +420,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
   ]);
   return {
     generated: now.toISOString(),
-    jobs,
+    jobs: jobRead.jobs,
     agents: agents.map(opsAgentFrom),
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
@@ -413,6 +430,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     namespaces,
     sites,
     packages,
+    store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
   };
 }
 
@@ -420,11 +438,27 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
 // the handler, so opsFeed reads storage only.
 export type OpsFeedData = Omit<OpsFeed, "csrf">;
 
+/** The run ledger as the feed shows it. A failed read is said in the panel, not
+ *  turned into a failure of the whole feed. */
+async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof readTaskRuns>> } | { error: string }> {
+  try {
+    return { read: await readTaskRuns(env.DB) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`OPS_FEED_TASK_RUNS_UNREADABLE ${message}`);
+    return { error: message };
+  }
+}
+
 export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
-  const [snapshot, live, last] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY)]);
+  const [snapshot, live, last, runs] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY), scheduled(env)]);
   return {
     snapshot,
     live,
+    scheduled:
+      "error" in runs
+        ? { tasks: null, error: runs.error }
+        : { tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? DEFAULT_CADENCE_MINUTES), error: null },
     refresh_allowed_at: refreshAllowedAt(last, now),
     cloudflare_configured: Boolean(env.CF_OPS_TOKEN),
   };
@@ -497,7 +531,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`OPS_REFRESH_PASS_FAILED ${message}`);
-    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message })]);
+    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message, source_address: sourceAddress(request) })]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
 
@@ -505,7 +539,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   let warning: string | null = null;
   try {
     await env.DB.batch([
-      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared }),
+      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared, source_address: sourceAddress(request) }),
     ]);
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not

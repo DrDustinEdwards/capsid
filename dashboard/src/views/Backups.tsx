@@ -1,5 +1,6 @@
 import { useApp } from "../app/ctx";
-import { DAY, ago, ms } from "../lib/format";
+import { DAY, ago, bytes, ms } from "../lib/format";
+import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { NoSnapshot, PageHead, Panel } from "./shared";
@@ -47,6 +48,20 @@ export function Backups() {
                   <dt>Store</dt>
                   <dd className="mono">
                     d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv {h.bindings.app_kv}
+                  </dd>
+                  <dt>Size</dt>
+                  <dd className="num" data-store-size="">
+                    {(() => {
+                      const use = storeUse(feed);
+                      const s = feed.live.store;
+                      if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
+                      return (
+                        <>
+                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} ({(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
+                          {use.warn && <St kind="warn">over half the cap</St>}
+                        </>
+                      );
+                    })()}
                   </dd>
                   <dt>Schema</dt>
                   <dd className="mono">{h.schema_version ?? "not reported"}</dd>

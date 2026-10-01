@@ -225,8 +225,10 @@ function recordingDb() {
 
 const FEED: OpsFeedData = {
   snapshot: null,
+  scheduled: { tasks: [], error: null },
   live: {
     generated: NOW.toISOString(),
+    store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
     jobs: [],
     agents: [],
     prs: [],
@@ -365,6 +367,16 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
   assert.equal(audit.params[0], "access:admin@example.com");
   assert.equal(audit.params[1], "portal-ops-refresh");
   assert.equal(JSON.parse(String(audit.params[4])).ran, true);
+  // No CF-Connecting-IP on this request: recorded as null, not left out.
+  assert.equal(JSON.parse(String(audit.params[4])).source_address, null);
+});
+
+test("a refresh's audit row records the address it came from", async () => {
+  const { db, batches } = recordingDb();
+  const res = await handleOpsRefresh(await refreshRequest({ [OPS_REFRESH_HEADER]: "refresh", "CF-Connecting-IP": "198.51.100.4" }), env(fakeKv(), db), NOW, { feed, gather: gathered });
+  assert.equal(res.status, 200, await res.clone().text());
+  const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
+  assert.equal(JSON.parse(String(audit?.params[4])).source_address, "198.51.100.4");
 });
 
 test("PLANT: a second refresh inside two minutes is refused with 429 and a Retry-After", async () => {

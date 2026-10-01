@@ -26,7 +26,7 @@ export type ViewDef = (typeof VIEWS)[number];
 export function viewsFor(sites: boolean, packages = true): ReadonlyArray<ViewDef> {
   return VIEWS.filter((v) => (v.id !== "sites" || sites) && (v.id !== "packages" || packages));
 }
-export type DrawerType = "site" | "job" | "agent";
+export type DrawerType = "site" | "job" | "agent" | "audit";
 
 export function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
@@ -125,13 +125,13 @@ export function useApp(): Ctx {
 // Routes, relative to the /portal base:
 //   /                      overview
 //   /<view>                a view
-//   /<view>/<type>/<id>    a view with a drawer open over it (site, job, agent)
+//   /<view>/<type>/<id>    a view with a drawer open over it (site, job, agent, audit row)
 export interface Route {
   view: ViewId;
   drawer: { type: DrawerType; id: string } | null;
 }
 
-const TYPES: DrawerType[] = ["site", "job", "agent"];
+const TYPES: DrawerType[] = ["site", "job", "agent", "audit"];
 
 export function parseRoute(path: string): Route {
   const segs = path.split("/").filter(Boolean).map((s) => {

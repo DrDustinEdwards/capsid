@@ -13,6 +13,7 @@ import { HelpSheet } from "./HelpSheet";
 import { MoreIcon, MoreSheet } from "./MoreSheet";
 import { Overview } from "../views/Overview";
 import type { OpsFeed, PortalPerformed } from "../types";
+import { lasting, withMessage, type Message } from "../lib/messages";
 
 // The overview ships in the initial chunk; every other view loads on first visit.
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
@@ -39,17 +40,6 @@ const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ defaul
 // screen it is the top bar's Settings button, not a view in the left menu.
 const TABS: ViewId[] = ["overview", "queue", "incidents", "sites"];
 
-// A performed action's result, in the message region: it stays until dismissed or
-// replaced by the next action, and carries Undo for a switch change. A warning (the
-// click's audit row was not written) is part of it and never clears by itself.
-interface Message {
-  text: string;
-  warning: string | null;
-  undo: UndoRequest | null;
-  // An Undo that was refused or could not be sent.
-  error: string | null;
-  busy: boolean;
-}
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
@@ -128,7 +118,8 @@ export function App() {
   const dark = useDarkTheme();
   const [more, setMore] = useState(false);
   const moreBtn = useRef<HTMLButtonElement>(null);
-  const [message, setMessage] = useState<Message | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const nextMessage = useRef(1);
   const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
@@ -147,12 +138,20 @@ export function App() {
 
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), []);
 
+  // The newest first. Plain results before it go; anything lasting stays.
+  const post = useCallback((m: Omit<Message, "id">) => {
+    const id = nextMessage.current++;
+    setMessages((all) => withMessage(all, { ...m, id }));
+  }, []);
+  const update = useCallback((id: number, m: Omit<Message, "id">) => setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))), []);
+  const fail = useCallback((text: string) => post({ text, warning: null, undo: null, error: null, busy: false, failure: true }), [post]);
+
   const performed = useCallback(
     (p: PortalPerformed, undo?: UndoRequest) => {
       accept(p.feed);
-      setMessage({ text: p.summary, warning: p.warning, undo: undo ?? null, error: null, busy: false });
+      post({ text: p.summary, warning: p.warning, undo: undo ?? null, error: null, busy: false, failure: false });
     },
-    [accept],
+    [accept, post],
   );
 
   // Undo sends the reverse change as its own action (params.undo "true"), which the
@@ -163,19 +162,25 @@ export function App() {
     async (m: Message) => {
       const u = m.undo;
       if (!u || m.busy) return;
-      setMessage({ ...m, busy: true, error: null });
+      update(m.id, { ...m, busy: true, error: null });
       const r = await runAction(csrfRef.current, { action: u.action, params: u.params });
-      if (r.kind === "signed-out") return (setMessage(null), signOut());
+      if (r.kind === "signed-out") return (setMessages([]), signOut());
       if (r.kind !== "ok") {
         const why = r.kind === "error" ? `Undo could not reach the server: ${r.message}` : `Undo was refused: ${r.message}`;
-        return setMessage({ ...m, busy: false, error: why });
+        return update(m.id, { ...m, busy: false, error: why });
       }
       accept(r.value.feed);
-      setMessage({ text: `Undone. ${r.value.summary}`, warning: r.value.warning, undo: null, error: null, busy: false });
+      const done = { text: `Undone. ${r.value.summary}`, warning: r.value.warning, undo: null, error: null, busy: false, failure: false };
+      // A result that carried a warning keeps it, without its Undo, and the undo's own
+      // result arrives beside it; a plain one becomes the undo's result.
+      if (m.warning !== null) {
+        update(m.id, { ...m, undo: null, busy: false });
+        post(done);
+      } else update(m.id, done);
       const back = u.focus;
       if (back) requestAnimationFrame(() => document.getElementById(back)?.focus());
     },
-    [accept, signOut],
+    [accept, post, signOut, update],
   );
 
   const closeMore = useCallback(() => {
@@ -197,7 +202,7 @@ export function App() {
       const type = ref.slice(0, i);
       const id = ref.slice(i + 1);
       if (type === "view") return isView(id) ? go(id) : undefined;
-      if (type === "site" || type === "job" || type === "agent") navigate(routePath(route.view, { type, id }) + qs);
+      if (type === "site" || type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }) + qs);
     },
     [go, navigate, route.view, qs],
   );
@@ -208,10 +213,10 @@ export function App() {
     (text: string) => {
       navigator.clipboard.writeText(text).then(
         () => say("Copied"),
-        (e: unknown) => say(`Copy failed (${e instanceof Error ? e.message : "no clipboard"}): select the text and copy it`),
+        (e: unknown) => fail(`Copy failed (${e instanceof Error ? e.message : "no clipboard"}): select the text and copy it.`),
       );
     },
-    [say],
+    [say, fail],
   );
 
   const refresh = useCallback(async () => {
@@ -219,14 +224,18 @@ export function App() {
     setSpinning(true);
     const r = await requestRefresh();
     setSpinning(false);
-    if (r.kind === "ok") return (accept(r.feed), say("Refreshed: a new watcher pass ran"));
+    if (r.kind === "ok") {
+      accept(r.feed);
+      if (r.warning) return post({ text: "Refreshed: a new watcher pass ran.", warning: r.warning, undo: null, error: null, busy: false, failure: false });
+      return say("Refreshed: a new watcher pass ran");
+    }
     if (r.kind === "signed-out") return signOut();
     if (r.kind === "limited") {
       const at = r.allowedAt ?? (feed?.refresh_allowed_at ? ms(feed.refresh_allowed_at) : null);
       return say(at ? `Refresh is rate limited. The next is allowed ${ago(at)} (${utc(at).slice(11)}).` : "Refresh is rate limited. Try again shortly.");
     }
-    say(`Refresh failed: ${r.message}`);
-  }, [accept, feed, say, signOut, spinning]);
+    fail(`Refresh failed: ${r.message}`);
+  }, [accept, feed, say, fail, post, signOut, spinning]);
 
   // Sign out: the Worker expires the Portal's cookies, then the signed-out page says
   // it was a choice, not an expiry.
@@ -237,10 +246,10 @@ export function App() {
     setLeaving(true);
     const r = await signOutRequest(feed.csrf);
     setLeaving(false);
-    if (r.kind === "error") return say(`Sign out failed: ${r.message}`);
+    if (r.kind === "error") return fail(`Sign out failed: ${r.message}`);
     setLeftByChoice(true);
     signOut();
-  }, [feed, leaving, say, signOut]);
+  }, [feed, leaving, fail, signOut]);
 
   const theme = useCallback(() => say(toggleTheme() === "dark" ? "Dark" : "Light"), [say]);
 
@@ -383,7 +392,30 @@ export function App() {
     };
   }, []);
 
-  const list = useMemo(() => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy }, now), [feed, views, go, open, refresh, theme, copy, now]);
+  // A stop from the command menu presses its switch on Namespaces, so the switch's own
+  // reason field opens and the change goes the way a click would send it. The rows
+  // arrive with the namespaces read, so it waits for the switch, and says so if it never
+  // appears rather than doing nothing.
+  const flip = useCallback(
+    (id: string) => {
+      go("namespaces");
+      const until = Date.now() + 3000;
+      const press = () => {
+        const el = document.getElementById(id);
+        if (el instanceof HTMLButtonElement && !el.disabled) {
+          el.focus();
+          el.click();
+        } else if (Date.now() < until) setTimeout(press, 50);
+        else say(`That switch is not on Namespaces right now (${id}). Flip it there.`);
+      };
+      setTimeout(press, 0);
+    },
+    [go, say],
+  );
+  const list = useMemo(
+    () => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }, now),
+    [feed, views, go, open, refresh, theme, copy, confirm, flip, now],
+  );
 
   const onRowActivate = (e: ReactMouseEvent | ReactKeyboardEvent) => {
     const target = e.target as Element;
@@ -648,11 +680,11 @@ export function App() {
       <div className={`toast${toast.on ? " on" : ""}`} role="status" aria-live="polite">
         {toast.msg}
       </div>
-      <div className="msg-region" role="status" aria-live="polite" aria-label="Result of the last action">
-        {message && (
-          <div className={`msg${message.warning || message.error ? " warn" : ""}`}>
+      <div className="msg-region" role="status" aria-live="polite" aria-label="Results and failures, until dismissed">
+        {messages.map((message) => (
+          <div key={message.id} className={`msg${lasting(message) ? " warn" : ""}`} data-lasting={lasting(message) ? "" : undefined}>
             <span className="grow">
-              {message.text}
+              {message.failure ? <span role="alert">{message.text}</span> : message.text}
               {message.warning && (
                 <>
                   {" "}
@@ -675,14 +707,14 @@ export function App() {
               className="btn"
               disabled={message.busy}
               onClick={() => {
-                setMessage(null);
+                setMessages((all) => all.filter((x) => x.id !== message.id));
                 mainRef.current?.focus();
               }}
             >
               Dismiss
             </button>
           </div>
-        )}
+        ))}
       </div>
       <div className="tip" ref={tipRef} aria-hidden="true" />
     </>

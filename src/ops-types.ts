@@ -324,12 +324,40 @@ export interface OpsLive {
   sites: OpsSiteConfig[];
   // The package configuration, every row. With none, the Portal shows no Packages view.
   packages: OpsPackageConfig[];
+  // The D1 store's size, from the jobs read's meta.size_after (null when D1 did not
+  // report it), against the per-database cap (D1_CAP_BYTES in src/ops-feed.ts).
+  store: { size_bytes: number | null; cap_bytes: number };
+}
+
+// The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag
+// decided when the feed was read. failing: the newest run threw or was refused.
+// quiet: a periodic task with no run in twice its period. never: no run recorded.
+export type OpsTaskRunOutcome = "ok" | "skipped" | "refused" | "threw";
+
+export interface OpsTaskRun {
+  started_at: string;
+  finished_at: string;
+  outcome: OpsTaskRunOutcome;
+  // One line: what the run did, or why it did not.
+  reason: string;
+}
+
+export interface OpsTask {
+  id: string;
+  label: string;
+  // Null for a task whose runs follow the work, which is flagged only when it fails.
+  period_ms: number | null;
+  flag: "failing" | "quiet" | "never" | null;
+  // Newest first, at most five.
+  recent: OpsTaskRun[];
 }
 
 export interface OpsFeed {
   // Null until the watcher has written its first pass.
   snapshot: OpsSnapshot | null;
   live: OpsLive;
+  // The run ledger, or why it could not be read.
+  scheduled: { tasks: OpsTask[]; error: null } | { tasks: null; error: string };
   // When the next on-demand pass is allowed (POST /portal/api/ops/refresh), or null
   // when one is allowed now.
   refresh_allowed_at: string | null;
@@ -352,7 +380,7 @@ export interface OpsFeed {
 //   POST /portal/api/actions/preview    body PortalActionRequest -> PortalPreview
 //   POST /portal/api/actions/perform    body { token }           -> PortalPerformed
 //   GET  /portal/api/namespaces                                   -> PortalNamespaces
-//   GET  /portal/api/activity?namespace=&actor=                   -> PortalActivity
+//   GET  /portal/api/activity?namespace=&actor= | ?id=           -> PortalActivity
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
@@ -458,11 +486,41 @@ export interface PortalActivityRow {
   // path: "job" for the job and "document" for its mirror document. null when the
   // row's params name neither.
   target: "job" | "document" | null;
+  // What the row recorded, by name (src/audit-detail.ts). Never the raw params.
+  detail: AuditDetail;
+}
+
+// One field of an audit row's params, labelled in plain English.
+export interface AuditField {
+  name: string;
+  value: string;
+}
+
+// One field that differs between a row's `before` and `after`. before is null for a
+// field the change added, after is null for one it removed.
+export interface AuditChange {
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface AuditDetail {
+  // The reason typed with the change, when the row carries one.
+  reason: string | null;
+  // Field by field, when the row carries a before or an after; null when it carries neither.
+  changes: AuditChange[] | null;
+  fields: AuditField[];
+  // Recorded fields not shown: hashes, signatures and nested values.
+  withheld: number;
+  // The params are not JSON (rows older than that rule), so nothing can be shown.
+  unreadable: boolean;
 }
 
 export interface PortalActivity {
   generated: string;
-  filter: { namespace: string | null; actor: string | null };
+  // id: one row by its id, for the Activity drawer; the namespace and actor filters
+  // are then not applied.
+  filter: { namespace: string | null; actor: string | null; id: number | null };
   // Newest first, at most `limit`.
   rows: PortalActivityRow[];
   limit: number;

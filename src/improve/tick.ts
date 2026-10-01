@@ -4,6 +4,7 @@ import { autoMergeTick } from "../auto-merge-tick";
 import { runEvaluationCycle } from "../skills-evaluate";
 import { sweepIfDue } from "../outcome-prs";
 import { expireJobLeases } from "../jobs";
+import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
@@ -66,61 +67,91 @@ export interface TickOutcome {
 
 export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   // The steps before the runs spend no model tokens, so they sit outside the budget
-  // check: an exhausted budget must not stop them. Each is wrapped so one throw does
-  // not stop the rest of the tick.
+  // check: an exhausted budget must not stop them. Each is its own task in the run
+  // ledger (src/task-runs.ts): runTask records a run, and records and logs a throw
+  // without rethrowing it, so one step's throw does not stop the rest of the tick. A
+  // step that was not due returns null from its judge and records nothing.
   //
   // The work queue's lease sweep: one keyed UPDATE. Gated on the budget, it would leave
   // a job held by a dead session for as long as the caps stay exceeded, the state it
-  // exists to clear. Reported through console, not TickOutcome, because a requeued job
-  // is not a run transition.
-  try {
-    const expired = await expireJobLeases(env, now);
-    if (expired.requeued.length > 0) {
-      console.log(`JOB_LEASE_EXPIRED returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`);
-    }
-  } catch (err) {
-    console.error(`JOB_LEASE_SWEEP_THREW: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  // exists to clear. Recorded only when it returned a job, so the ledger is not one
+  // empty sweep every five minutes.
+  await runTask(
+    env,
+    "lease-sweep",
+    () => expireJobLeases(env, now),
+    (expired): TaskResult => {
+      if (expired.requeued.length === 0) return null;
+      const line = `returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`;
+      console.log(`JOB_LEASE_EXPIRED ${line}`);
+      return { outcome: "ok", reason: line };
+    },
+    { tag: "JOB_LEASE_SWEEP_THREW:", rethrow: false }
+  );
 
   // Auto-merge. It spends no model tokens and no CI minutes, and an exhausted improve
   // budget says nothing about whether a driver's finished pull request should land.
-  // The policy document decides whether it does anything; it ships disabled.
-  try {
-    const merged = await autoMergeTick(env, now);
-    if (merged.ran) console.log(`AUTO_MERGE ${merged.note}`);
-  } catch (err) {
-    console.error(`AUTO_MERGE_THREW: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  // The policy document decides whether it does anything; it ships disabled, and a
+  // disabled policy is not a run. A policy that cannot be read or is refused is.
+  await runTask(
+    env,
+    "auto-merge",
+    () => autoMergeTick(env, now),
+    (merged): TaskResult => {
+      if (merged.ran) {
+        console.log(`AUTO_MERGE ${merged.note}`);
+        return { outcome: "ok", reason: merged.note };
+      }
+      return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
+    },
+    { tag: "AUTO_MERGE_THREW:", rethrow: false }
+  );
 
   // The skill evaluation cycle, gated on its own fortnightly cadence: the tick runs every
   // five minutes, so all but about one call in four thousand return after one KV read.
-  try {
-    const cycle = await runEvaluationCycle(env, now);
-    if (cycle.ran) console.log(`SKILL_CYCLE ${cycle.note}`);
-  } catch (err) {
-    console.error(`SKILL_CYCLE_THREW: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  await runTask(
+    env,
+    "skill-cycle",
+    () => runEvaluationCycle(env, now),
+    (cycle): TaskResult => {
+      if (!cycle.ran) return null;
+      console.log(`SKILL_CYCLE ${cycle.note}`);
+      return { outcome: "ok", reason: cycle.note };
+    },
+    { tag: "SKILL_CYCLE_THREW:", rethrow: false }
+  );
 
   // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
   // broken pass can do is add a row to the queue.
-  try {
-    const watched = await watcherTick(env, now, () => gatherFindings(env, now));
-    if (watched.ran) console.log(`WATCHER ${watched.note}`);
-  } catch (err) {
-    console.error(`WATCHER_THREW: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  await runTask(
+    env,
+    "watcher",
+    () => watcherTick(env, now, () => gatherFindings(env, now)),
+    (watched): TaskResult => {
+      if (!watched.ran) return null;
+      console.log(`WATCHER ${watched.note}`);
+      return { outcome: "ok", reason: watched.note };
+    },
+    { tag: "WATCHER_THREW:", rethrow: false }
+  );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
   // written, because the driver blocks and the seat merges afterwards. The merge path
   // corrects the rows it can see; this catches the rest (a merge done with gh rather
   // than manage_pr, and rows written before the join table existed). Bounded per
   // sweep, so the cost is fixed however far behind it is.
-  try {
-    const swept = await sweepIfDue(env, now);
-    if (swept) console.log(`OUTCOME_SWEEP checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}`);
-  } catch (err) {
-    console.error(`OUTCOME_SWEEP_THREW: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  await runTask(
+    env,
+    "outcome-sweep",
+    () => sweepIfDue(env, now),
+    (swept): TaskResult => {
+      if (!swept) return null;
+      const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}`;
+      console.log(`OUTCOME_SWEEP ${line}`);
+      return { outcome: "ok", reason: line };
+    },
+    { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
+  );
 
   const runs = await advanceableRuns(env.DB, RUNS_PER_TICK);
   // An exceeded cap advances nothing. Active runs wait for the caps to rise or the month
