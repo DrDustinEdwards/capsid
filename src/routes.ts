@@ -48,7 +48,6 @@ import {
   PORTAL_SIGN_OUT_PATH,
 } from "./portal-actions";
 import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "./portal-auth";
-import { portalHostRequest } from "./portal-host";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalPackageHistory, PORTAL_PACKAGE_HISTORY_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
@@ -574,11 +573,9 @@ async function handleImproveScore(request: Request, env: Env): Promise<Response>
 
 export const defaultHandler = {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // portal.dustinedwards.info serves the Portal and nothing else: /x there is /portal/x
-    // here, and an old /portal address redirects to the root (src/portal-host.ts).
-    const host = portalHostRequest(original);
-    if ("redirect" in host) return host.redirect;
-    const request = host.request;
+    // The Portal host's rewrite has already run, in src/index.ts, before the OAuth
+    // provider: a request here for portal.dustinedwards.info is already a /portal path.
+    const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);

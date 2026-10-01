@@ -34,7 +34,7 @@ A view with three or more sections that is taller than two screens of the window
 
 ## Its own host
 
-The Portal is served at https://portal.dustinedwards.info, a Custom Domain on the capsid Worker (capsid/decisions.md 2026-10-01, "one address pattern for the family"). It is a separate origin from every public site, so nothing on a public page can reach the Portal's session. `src/portal-host.ts` does it, before any other route:
+The Portal is served at https://portal.dustinedwards.info, a Custom Domain on the capsid Worker (capsid/decisions.md 2026-10-01, "one address pattern for the family"). It is a separate origin from every public site, so nothing on a public page can reach the Portal's session. `src/portal-host.ts` does it, first in the Worker's fetch (`src/index.ts`), before the OAuth provider, which answers its own routes (`/mcp`, `/token`, `/authorize`, its metadata) without reaching any other handler:
 
 - **The Portal at the root.** On that host a request for `/x` is handled as `/portal/x`, so every Portal route, the gate and every check apply unchanged: `/` is the app, `/api/ops` the feed, `/callback` the sign-in's return.
 - **Nothing else.** `/mcp`, `/health` and the `/ops` routes stay on capsid.dustin-edwards.workers.dev. On the Portal host they are Portal paths behind the gate.

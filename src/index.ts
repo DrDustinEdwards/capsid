@@ -11,6 +11,7 @@ import { chicagoHour } from "./improve-schema";
 import { openRuns, tickRuns } from "./improve-run";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
+import { portalHostRequest } from "./portal-host";
 
 // Spelled once. wrangler.jsonc declares them; test/improve-cron.test.ts derives
 // one list from the other and fails in both directions.
@@ -69,7 +70,16 @@ const provider = new OAuthProvider({
 });
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts):
+    // /x there is /portal/x here, and an old /portal address redirects to the root. It
+    // runs FIRST, before the OAuth provider, because the provider answers its own routes
+    // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
+    // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
+    // live gate 7 rolled #218's deploy back (run 36863432268).
+    const host = portalHostRequest(original);
+    if ("redirect" in host) return withSecurityHeaders(host.redirect);
+    const request = host.request;
     const pathname = new URL(request.url).pathname;
     if (pathname === "/mcp") {
       const originProblem = mcpOriginProblem(request);
