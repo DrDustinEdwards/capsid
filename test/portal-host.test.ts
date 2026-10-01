@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { PORTAL_HOST, portalBase, portalCookiePath, portalHostRequest, publicPortalPath } from "../src/portal-host.ts";
 
 // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts). The
-// router asks portalHostRequest first: on the Portal host /x is handled as /portal/x, an
+// Worker asks portalHostRequest first, in src/index.ts before the OAuth provider
+// (test-integration/portal-host.test.ts runs it through the whole Worker): on the Portal host /x is handled as /portal/x, an
 // old /portal address redirects to the root, and the hashed files keep their path.
 
 const PORTAL = `https://${PORTAL_HOST}`;
