@@ -1,0 +1,6 @@
+{
+  "measured_at": "036d615",
+  "knip (Worker)": { "Unused devDependencies": 0, "Unused exports": 12, "Unused exported types": 29 },
+  "knip (dashboard)": { "Unused exports": 6, "Unused exported types": 2 },
+  "jscpd": { "clones": 23, "percentage": 0.59 }
+}
