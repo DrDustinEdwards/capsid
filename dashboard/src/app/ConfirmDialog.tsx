@@ -167,7 +167,10 @@ export function ConfirmDialog({
       onClose={() => finish(null)}
     >
       <div className="card">
-        <h2 id="confirmTitle">{preview ? preview.summary : req.title}</h2>
+        {/* The heading stays in plain words (req.title); the server's summary, which can
+            name a job by its id, sits under it once the preview answers. */}
+        <h2 id="confirmTitle">{req.title}</h2>
+        {preview && <p className="muted note" data-summary="">{preview.summary}</p>}
         {needsReason && !preview && (
           <form
             id="confirmForm"
