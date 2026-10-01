@@ -33,7 +33,7 @@ jobs:
         id: pull
         env:
           BACKUP_CREDENTIAL_KEY: ${{ secrets.BACKUP_CREDENTIAL_KEY }}
-          CAPSID_URL: https://capsid.dustin-edwards.workers.dev
+          CAPSID_URL: https://mcp.dustinedwards.info
           AWS_DEFAULT_REGION: auto
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
