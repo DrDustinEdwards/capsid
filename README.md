@@ -55,7 +55,7 @@ An optional loop that proposes one scoped change at a time to a roster of reposi
 
 ## The Capsid Portal
 
-The Portal is the administrator's view of Capsid, one app served at `/portal/`. It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
+The Portal is the administrator's view of Capsid, one app served at `/portal/`, and on its own host when `PORTAL_HOST` in `src/portal-host.ts` names one (this deployment's is portal.dustinedwards.info, where the Portal is the whole host). It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
 
 ![Overview](docs/images/overview-light.png)
 
@@ -141,7 +141,7 @@ A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md]
 1. Create the D1 database, two separate KV namespaces (`APP_KV`, `OAUTH_KV`) and the R2 bucket(s), then copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored) and fill in the ids.
 2. Apply the migrations with `npx wrangler d1 migrations apply capsid --remote`. The deploy job fails if the live database is behind.
 3. Set secrets with `npx wrangler secret put <NAME>`. Required for the logins and repo access: `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`, `COOKIE_ENCRYPTION_KEY`, `GITHUB_APP_PRIVATE_KEY` (with `GITHUB_APP_CLIENT_ID` as a var). `IMPROVE_SCORE_SECRET` signs jobs and score reports; without it the work queue refuses to post a job. `OPERATOR_KEY_HASH` bootstraps the first agents and is then removed. Optional: `ANTHROPIC_API_KEY` (the loop's api mode), `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read), and the `R2_*` credential-minting secrets for the holdout and backup mirror.
-4. Create a Cloudflare Access for SaaS (OIDC) app with redirect URLs `/callback` and `/portal/callback`, limited to your email ([docs/auth.md](docs/auth.md)).
+4. Create a Cloudflare Access for SaaS (OIDC) app with redirect URLs `/callback` and `/portal/callback`, plus `https://<your Portal host>/callback` if the Portal has its own host, limited to your email ([docs/auth.md](docs/auth.md)).
 
 Before a push, run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `npm run deploy` builds the Portal first and stops if the build or its size budget fails; `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
 
