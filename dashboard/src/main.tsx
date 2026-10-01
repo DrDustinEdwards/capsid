@@ -14,6 +14,7 @@ import "@fontsource/martian-mono/latin-600.css";
 import "./tokens.css";
 import "./styles.css";
 import { applySavedTheme } from "./lib/prefs";
+import { BASE } from "./lib/base";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 
@@ -25,7 +26,7 @@ if (!root) throw new Error("Watch Floor: index.html has no #root");
 // The base matches vite.config.ts `base`, without the trailing slash.
 createRoot(root).render(
   <StrictMode>
-    <Router base="/portal">
+    <Router base={BASE}>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>

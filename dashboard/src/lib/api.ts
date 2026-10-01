@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BASE } from "./base";
 import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview } from "../types";
 
-export const FEED_URL = "/portal/api/ops";
-export const REFRESH_URL = "/portal/api/ops/refresh";
-export const PREVIEW_URL = "/portal/api/actions/preview";
-export const PERFORM_URL = "/portal/api/actions/perform";
-export const NAMESPACES_URL = "/portal/api/namespaces";
-export const ACTIVITY_URL = "/portal/api/activity";
-export const CLAIMS_URL = "/portal/api/claims";
-export const PACKAGE_HISTORY_URL = "/portal/api/packages/history";
-export const SIGN_OUT_URL = "/portal/api/sign-out";
-export const APP_URL = "/portal/";
+// Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
+// workers.dev, /api/... on portal.dustinedwards.info.
+export const FEED_URL = `${BASE}/api/ops`;
+export const REFRESH_URL = `${BASE}/api/ops/refresh`;
+export const PREVIEW_URL = `${BASE}/api/actions/preview`;
+export const PERFORM_URL = `${BASE}/api/actions/perform`;
+export const NAMESPACES_URL = `${BASE}/api/namespaces`;
+export const ACTIVITY_URL = `${BASE}/api/activity`;
+export const CLAIMS_URL = `${BASE}/api/claims`;
+export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
+export const SIGN_OUT_URL = `${BASE}/api/sign-out`;
+export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
 
 // The Portal session ended: Access answers with a redirect to its login, or the

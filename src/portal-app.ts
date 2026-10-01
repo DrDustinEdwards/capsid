@@ -1,6 +1,7 @@
 import { DASHBOARD_CSP } from "./dashboard-csp";
 import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
+import { portalBase } from "./portal-host";
 
 // Capsid Portal's built files, served at /portal/ (capsid/research/design-ops-console.md,
 // moved from /console/app/ by capsid/research/design-portal-unify.md). Every request
@@ -72,9 +73,9 @@ export async function handlePortalApp(request: Request, env: Env, now: Date = ne
 
   const headers = new Headers(response.headers);
   // A redirect from the assets router names a path inside the assets directory; the
-  // browser needs it under /portal.
+  // browser needs it under the Portal's base on this host (/portal, or the root).
   const location = headers.get("Location");
-  if (location?.startsWith("/")) headers.set("Location", PORTAL_PATH + location);
+  if (location?.startsWith("/")) headers.set("Location", portalBase(url) + location);
 
   if (response.ok && path === "/") {
     headers.set("Cache-Control", "no-store");
