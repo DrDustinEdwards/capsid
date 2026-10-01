@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
-import { NEEDS_REASON, type ConfirmRequest } from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, performLabel, type ConfirmRequest } from "./ctx";
 
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
-// rows, and performs only on "Do it". Cancel sends nothing further.
+// rows, and performs only on the button named for the action (performLabel). Cancel and
+// Esc close it; a click outside does not, so a typed reason is never lost that way. For
+// a one-way action the preview puts focus on Cancel, not on perform (audit DECIDE 11).
 export function ConfirmDialog({
   req,
   csrf,
@@ -21,6 +23,7 @@ export function ConfirmDialog({
 }) {
   const dlg = useRef<HTMLDialogElement>(null);
   const doIt = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const opener = useRef<Element | null>(null);
   const started = useRef(false);
@@ -30,7 +33,10 @@ export function ConfirmDialog({
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<PortalPreview | null>(null);
   const [pending, setPending] = useState<null | "preview" | "perform">(null);
-  const [error, setError] = useState<{ text: string; expired: boolean } | null>(null);
+  // field: the error is about the reason field itself, so the field is marked invalid.
+  const [error, setError] = useState<{ text: string; expired: boolean; field?: boolean } | null>(null);
+  const label = performLabel(req.action, req.params);
+  const destructive = DESTRUCTIVE.has(req.action);
 
   const finish = (performed: PortalPerformed | null) => {
     if (finished.current) return;
@@ -43,7 +49,7 @@ export function ConfirmDialog({
     // gone (a revoked agent loses its Revoke button), to the drawer or the page. After
     // the next frame, so the new feed has rendered first.
     requestAnimationFrame(() => {
-      const back = from instanceof HTMLElement && from.isConnected ? from : (document.querySelector<HTMLElement>(".drawer.on [data-close]") ?? document.querySelector<HTMLElement>("main"));
+      const back = from instanceof HTMLElement && from.isConnected ? from : (document.querySelector<HTMLElement>("dialog.drawer[open] [data-close]") ?? document.querySelector<HTMLElement>("main"));
       back?.focus();
     });
   };
@@ -65,7 +71,7 @@ export function ConfirmDialog({
   const runPreview = async (why: string) => {
     const typed = needsReason ? why.trim() : "";
     if (needsReason && !typed) {
-      setError({ text: "A reason is required. Type what you are doing and why, then preview.", expired: false });
+      setError({ text: "A reason is required. Type what you are doing and why, then preview.", expired: false, field: true });
       reasonRef.current?.focus();
       return;
     }
@@ -125,7 +131,7 @@ export function ConfirmDialog({
   }, []);
 
   useEffect(() => {
-    if (preview) doIt.current?.focus();
+    if (preview) (ONE_WAY.has(req.action) ? cancelRef : doIt).current?.focus();
   }, [preview]);
 
   const busy = pending != null;
@@ -133,8 +139,8 @@ export function ConfirmDialog({
   let primary = null;
   if (preview) {
     primary = (
-      <button ref={doIt} type="button" className="btn primary" disabled={busy} onClick={() => void runPerform()}>
-        {pending === "perform" ? "Doing it..." : "Do it"}
+      <button ref={doIt} type="button" className={destructive ? "btn danger ml-auto" : "btn primary"} disabled={busy} onClick={() => void runPerform()}>
+        {pending === "perform" ? "Working..." : label}
       </button>
     );
   } else if (needsReason || error) {
@@ -159,10 +165,12 @@ export function ConfirmDialog({
         if (busy) e.preventDefault();
       }}
       onClose={() => finish(null)}
-      onClick={(e) => e.target === dlg.current && !busy && finish(null)}
     >
       <div className="card">
-        <h2 id="confirmTitle">{preview ? preview.summary : req.title}</h2>
+        {/* The heading stays in plain words (req.title); the server's summary, which can
+            name a job by its id, sits under it once the preview answers. */}
+        <h2 id="confirmTitle">{req.title}</h2>
+        {preview && <p className="muted note" data-summary="">{preview.summary}</p>}
         {needsReason && !preview && (
           <form
             id="confirmForm"
@@ -182,6 +190,8 @@ export function ConfirmDialog({
               autoFocus
               value={reason}
               disabled={busy}
+              aria-invalid={error?.field ? true : undefined}
+              aria-describedby={error?.field ? "confirmError" : undefined}
               onChange={(e) => setReason(e.target.value)}
               onKeyDown={(e) => {
                 // Ctrl or Cmd with Enter previews; a plain Enter is a new line.
@@ -231,16 +241,18 @@ export function ConfirmDialog({
           </>
         )}
         {error && (
-          <div className="callout crit" role="alert">
+          <div className="callout crit" role="alert" id="confirmError">
             {error.expired && <b>The confirmation expired. Preview again to get a new one. </b>}
             <span className="prewrap">{error.text}</span>
           </div>
         )}
+        {/* A destructive perform sits apart from Cancel, at the far end, after it. */}
         <div className="toolbar">
-          {primary}
-          <button type="button" className="btn" disabled={busy} onClick={() => finish(null)}>
+          {!(preview && destructive) && primary}
+          <button ref={cancelRef} type="button" className="btn" disabled={busy} onClick={() => finish(null)}>
             Cancel
           </button>
+          {preview && destructive && primary}
         </div>
       </div>
     </dialog>

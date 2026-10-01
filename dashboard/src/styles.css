@@ -261,19 +261,25 @@ table.list { width: 100%; border-collapse: collapse; }
 .meter { height: 8px; border-radius: 4px; background: var(--sunken); overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--accent); }
 
-/* drawer */
-.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.18s; }
-.scrim.on { opacity: 1; pointer-events: auto; }
+/* drawer: a native modal <dialog> (showModal) at the right edge. It slides in on open
+   (@starting-style) and out on close (display and overlay stay through the transition);
+   its ::backdrop is the scrim. Reduced motion drops both, below. */
 .drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 100%); z-index: 41;
-  background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow);
-  transform: translateX(102%); transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
-  display: flex; flex-direction: column;
+  position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px, 100%); height: 100%; max-width: none; max-height: none;
+  border: 0; border-left: 1px solid var(--line); padding: 0;
+  background: var(--surface); box-shadow: var(--shadow);
+  transform: translateX(102%);
+  transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1), display 0.22s allow-discrete, overlay 0.22s allow-discrete;
+  flex-direction: column;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.drawer.on { transform: none; }
+.drawer[open] { display: flex; transform: none; }
+@starting-style { .drawer[open] { transform: translateX(102%); } }
+.drawer::backdrop { background: var(--scrim); opacity: 0; transition: opacity 0.18s, display 0.18s allow-discrete, overlay 0.18s allow-discrete; }
+.drawer[open]::backdrop { opacity: 1; }
+@starting-style { .drawer[open]::backdrop { opacity: 0; } }
 .drawer > header { display: flex; align-items: start; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
-.drawer > header h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+.drawer > header h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
 .drawer .dbody { overflow-y: auto; padding: 16px 18px 40px; display: grid; gap: 18px; }
 .kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 7px 14px; font-size: 13px; }
 .kv dt { color: var(--muted); }
@@ -361,12 +367,15 @@ ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13
 ul.plain.mono { font-size: 12px; }
 [data-open] { cursor: pointer; }
 .qrow:focus-visible, .frow:focus-visible, .att-row:focus-visible, tr[data-open]:focus-visible { outline-offset: -2px; }
+/* Selection is keyboard focus: j and k move focus among the rows (App.tsx), and the
+   focused row wears the selected look, a changed background and a ring at 3:1. */
+main [data-row]:focus-visible { outline-offset: -2px; background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
+main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), inset 0 0 0 1px var(--accent-line); }
 .banner { margin: 16px 24px 0; border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .loading { color: var(--muted); padding: 40px 0; text-align: center; }
 .signedout { margin: 12vh auto 0; max-width: 460px; text-align: center; display: grid; gap: 12px; justify-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
 .signedout h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; }
 .signedout p { margin: 0; color: var(--muted); }
-.drawer[aria-hidden="true"] { visibility: hidden; transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 0.22s; }
 
 .tabbar { display: none; }
 

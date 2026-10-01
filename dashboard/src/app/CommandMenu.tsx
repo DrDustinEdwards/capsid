@@ -97,6 +97,7 @@ export function CommandMenu({ open, onClose, list }: { open: boolean; onClose: (
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
         placeholder="Jump to a site, job, agent or view..."
+        aria-label="Search commands"
         autoComplete="off"
         spellCheck={false}
         role="combobox"

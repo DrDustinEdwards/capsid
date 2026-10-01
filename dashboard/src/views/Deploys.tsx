@@ -2,18 +2,19 @@ import { useApp, type Filters } from "../app/ctx";
 import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { DAY, ago, ms, shortId, utc } from "../lib/format";
-import { NoSnapshot, NsChips, PageHead, Panel, TimelinePanel } from "./shared";
+import { NoSnapshot, NsChips, PageHead, Panel, TimelinePanel, useNsFilter } from "./shared";
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
 
 export function Deploys() {
   const { feed, now, filters, setFilters } = useApp();
+  const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const days = filters.range === "24h" ? 1 : filters.range === "30d" ? 30 : 7;
   const rows: Array<{ s: SiteSnapshot; d: CfDeploy }> = [];
   for (const s of snap?.sites ?? []) for (const d of cfOk(s)?.deploys ?? []) rows.push({ s, d });
   const list = rows
-    .filter((x) => now - ms(x.d.created_on) < days * DAY && (filters.ns === "all" || x.s.namespace === filters.ns))
+    .filter((x) => now - ms(x.d.created_on) < days * DAY && (ns === "all" || x.s.namespace === ns))
     .sort((a, b) => ms(b.d.created_on) - ms(a.d.created_on));
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
@@ -62,7 +63,16 @@ export function Deploys() {
                   {!list.length && (
                     <tr>
                       <td colSpan={6} className="faint">
-                        No deploys in this range.
+                        {ns === "all" ? (
+                          "No deploys in this range."
+                        ) : (
+                          <span className="toolbar" role="status" data-filter-empty="">
+                            No deploys for the namespace {ns} in this range.
+                            <button type="button" className="btn" onClick={() => setNs("all")}>
+                              Show all
+                            </button>
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )}

@@ -18,7 +18,7 @@ async function openAdd(page: Page) {
 }
 
 test.describe.serial("the site configuration", () => {
-  test("add a site through the form: preview, Do it, and the row appears", async ({ page }) => {
+  test("add a site through the form: preview, Add site, and the row appears", async ({ page }) => {
     await openAdd(page);
     await expect(row(page)).toHaveCount(0);
     await page.getByLabel("Namespace", { exact: true }).fill(NS);
@@ -29,7 +29,7 @@ test.describe.serial("the site configuration", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("What changes")).toBeVisible();
     await expect(dialog).toContainText("ops_sites: add sample-i");
-    await dialog.getByRole("button", { name: "Do it" }).click();
+    await dialog.getByRole("button", { name: "Add site", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(row(page)).toHaveCount(1);
     await expect(row(page)).toContainText("https://sample-i.example.com");
@@ -49,7 +49,7 @@ test.describe.serial("the site configuration", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText('name: "Sample I" -> "Sample I renamed"');
     await expect(dialog).toContainText("revision 1 -> 2");
-    await dialog.getByRole("button", { name: "Do it" }).click();
+    await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(row(page)).toContainText("Sample I renamed");
     await expect(row(page)).toContainText("Vercel");
@@ -63,7 +63,7 @@ test.describe.serial("the site configuration", () => {
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("alert")).toHaveText("the origin must start with https://; got 'http://sample-j.example.com'.");
-    await expect(dialog.getByRole("button", { name: "Do it" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Add site", exact: true })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     // Cancel keeps what was typed.
@@ -75,7 +75,7 @@ test.describe.serial("the site configuration", () => {
     await row(page).getByRole("button", { name: `Remove ${NS}` }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(`ops_sites: remove ${NS}`);
-    await dialog.getByRole("button", { name: "Do it" }).click();
+    await dialog.getByRole("button", { name: "Remove site", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(row(page)).toHaveCount(0);
   });
