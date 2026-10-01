@@ -1,5 +1,5 @@
 import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
-import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
+import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, bytes, hostOf, ms } from "./format";
 
 // The status vocabulary: every state is a shape, a word and a colour.
 export type Kind = "ok" | "warn" | "crit" | "nodata" | "run" | "queued" | "blocked" | "done";
@@ -117,6 +117,16 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
 
 // ---- watcher staleness --------------------------------------------------------
 
+// The D1 store against its cap: a warning from half, Foxhound's threshold.
+export const STORE_WARN_FRACTION = 0.5;
+
+export function storeUse(feed: OpsFeed): { fraction: number; warn: boolean } | null {
+  const s = feed.live.store;
+  if (s.size_bytes === null) return null;
+  const fraction = s.size_bytes / s.cap_bytes;
+  return { fraction, warn: fraction >= STORE_WARN_FRACTION };
+}
+
 export function passStale(snap: OpsSnapshot | null, now: number): boolean {
   return !snap || now - ms(snap.pass_at) > 2 * snap.cadence_min * 60_000;
 }
@@ -205,6 +215,10 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     if (sitesOn && drift && (drift.unmapped.length || drift.unknown.length)) {
       out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:incidents" });
     }
+  }
+  const use = storeUse(feed);
+  if (use?.warn) {
+    out.push({ sev: "warn", kind: "Backup", title: `The D1 store is at ${(use.fraction * 100).toFixed(0)}% of its ${bytes(live.store.cap_bytes)} cap`, sub: `${bytes(live.store.size_bytes ?? 0)} used`, at: ms(live.generated), open: "view:backups" });
   }
   if (!feed.cloudflare_configured) {
     out.push({ sev: "nodata", kind: "Watcher", title: "Cloudflare read not configured", sub: "Deploy and error columns show no data until it is", at: ms(live.generated), open: "view:deploys" });
