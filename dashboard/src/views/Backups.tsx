@@ -1,6 +1,6 @@
 import { useApp } from "../app/ctx";
 import { DAY, ago, bytes, ms } from "../lib/format";
-import { storeUse } from "../lib/derive";
+import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { NoSnapshot, PageHead, Panel } from "./shared";
