@@ -234,7 +234,7 @@ export function Settings() {
   const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.namespace}`) : "";
   return (
     <div className="page">
-      <PageHead title="Settings">The sites the watcher probes, one row per namespace, and the npm packages it reads. A row with no origin records that a namespace serves no site. Every change shows a preview before anything is written.</PageHead>
+      <PageHead title="Settings" />
       {!hasSites(feed) && (
         <div className="callout" role="status">
           No site is configured, so the watcher probes nothing and the Portal shows no Sites view. Add a site to start.

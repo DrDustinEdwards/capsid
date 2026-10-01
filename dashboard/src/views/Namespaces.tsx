@@ -152,7 +152,7 @@ export function Namespaces() {
   const data = load.data;
   return (
     <div className="page">
-      <PageHead title="Namespaces">Every roster namespace: its improve loop, driver, truth report, jobs and skills. Pause stops the loop for one namespace; it asks for a reason.</PageHead>
+      <PageHead title="Namespaces" />
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the namespaces: {load.error}

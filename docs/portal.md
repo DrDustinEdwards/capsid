@@ -14,6 +14,19 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 
 Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
+## The Overview
+
+The Overview answers one question: does anything need me? It holds, in order:
+- six summary tiles, each a link to its view;
+- **Needs attention**, the problems only, critical then warnings. Rows of one kind and cause fold into one row that opens in place to its first five, then a link to the full view: "4 pull requests await the seat", "30 jobs are waiting on you". A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings";
+- one **Notices** row at the foot of that list, closed, for facts with nothing to do now: a site with no Cloudflare data, the Cloudflare read not configured, a check that could not run, CI that could not be read, site map drift, drivers silent for over 7 days. "Health not read" and "mirror not read" stay warnings, because an unknown backup is not a quiet fact;
+- **Sites**, one row per site (status, 7-day uptime, live deploy, errors); every column is in the Sites view;
+- **Deploys and downtime, 7 days**.
+
+It has no Queue or Incidents panel: their counts are tiles and their problems are rows. With no site configured there is no site tile, Sites table or timeline. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, and those blocked for over 7 days wait under "Stale"; Done and Failed start closed.
+
+A view with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Deploys in a short window, the Queue with a long list). The Overview is short enough to do without it.
+
 ## Where each view gets its data
 
 The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types.ts`. The app and the Worker both typecheck against that file. The feed has two parts.

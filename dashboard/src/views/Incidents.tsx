@@ -12,7 +12,7 @@ export function Incidents() {
   const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
     <div className="page">
-      <PageHead title="Incidents">Watcher findings, open first. Each has a fingerprint, is posted once, and clears on its own when the condition goes away.</PageHead>
+      <PageHead title="Incidents" />
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel title="Findings" src="jobs posted by agent:watcher">

@@ -336,7 +336,7 @@ export function Claims() {
 
   return (
     <div className="page">
-      <PageHead title="Claims">What each agent said at complete, fail and block, beside what the Worker verified, and every time a human touched a job. A field an agent did not state shows as not stated, never as zero.</PageHead>
+      <PageHead title="Claims" />
       <form
         className="toolbar"
         role="search"

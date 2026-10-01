@@ -70,7 +70,7 @@ export function Activity() {
 
   return (
     <div className="page">
-      <PageHead title="Activity">The audit log, newest first: who did what, where. Filter by namespace or actor.</PageHead>
+      <PageHead title="Activity" />
       <form
         className="toolbar"
         role="search"
