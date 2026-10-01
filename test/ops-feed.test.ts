@@ -225,6 +225,7 @@ function recordingDb() {
 
 const FEED: OpsFeedData = {
   snapshot: null,
+  scheduled: { tasks: [], error: null },
   live: {
     generated: NOW.toISOString(),
     jobs: [],

@@ -1,4 +1,4 @@
-import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
+import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, OpsTaskRun, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
 import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
 
 // The status vocabulary: every state is a shape, a word and a colour.
@@ -117,6 +117,14 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
 
 // ---- watcher staleness --------------------------------------------------------
 
+// A run's outcome in the run ledger (src/task-runs.ts), as the Portal shows it.
+export const TASK_OUTCOME: Record<OpsTaskRun["outcome"], { kind: Kind; label: string }> = {
+  ok: { kind: "ok", label: "Ok" },
+  skipped: { kind: "nodata", label: "Skipped" },
+  refused: { kind: "warn", label: "Refused" },
+  threw: { kind: "crit", label: "Threw" },
+};
+
 export function passStale(snap: OpsSnapshot | null, now: number): boolean {
   return !snap || now - ms(snap.pass_at) > 2 * snap.cadence_min * 60_000;
 }
@@ -204,6 +212,26 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     const drift = snap.site_map;
     if (sitesOn && drift && (drift.unmapped.length || drift.unknown.length)) {
       out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:incidents" });
+    }
+  }
+  // The run ledger (src/task-runs.ts): a scheduled task whose newest run threw or was
+  // refused, or a periodic one with no run in twice its period. A failing or quiet
+  // backup is critical, as a stale backup is above. A task with no run yet is shown on
+  // Incidents only: after the ledger's first deploy every task starts there.
+  if (feed.scheduled.error !== null) {
+    out.push({ sev: "nodata", kind: "Scheduled", title: "The run ledger could not be read", sub: feed.scheduled.error, at: ms(live.generated), open: "view:incidents" });
+  } else {
+    for (const t of feed.scheduled.tasks) {
+      const last = t.recent[0];
+      if (!last || (t.flag !== "failing" && t.flag !== "quiet")) continue;
+      out.push({
+        sev: t.id === "backup" ? "crit" : "warn",
+        kind: "Scheduled",
+        title: t.flag === "failing" ? `${t.label}: its last run ${TASK_OUTCOME[last.outcome].label.toLowerCase()}` : `${t.label} has not run for ${age(ms(last.finished_at), now)}`,
+        sub: last.reason,
+        at: ms(last.finished_at),
+        open: "view:incidents",
+      });
     }
   }
   if (!feed.cloudflare_configured) {

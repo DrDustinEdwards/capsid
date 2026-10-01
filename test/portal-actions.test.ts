@@ -170,6 +170,7 @@ const perform = (body: unknown, opts?: Opts) => post(PORTAL_PERFORM_PATH, body, 
 // The feed a perform returns, in place of the live read.
 const FEED: OpsFeedData = {
   snapshot: null,
+  scheduled: { tasks: [], error: null },
   live: {
     generated: NOW.toISOString(),
     jobs: [],

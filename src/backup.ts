@@ -128,6 +128,9 @@ export const TABLES = [
   "agent_sessions",
   "session_events",
   "session_usage",
+  // The run ledger (migrations/0029_task_runs.sql): each scheduled task's runs,
+  // pruned at 14 days in code (src/task-runs.ts).
+  "task_runs",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

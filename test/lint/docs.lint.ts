@@ -42,7 +42,7 @@ test("the restore runbook states the table count TABLES actually has", () => {
   const restore = restoreRunbook();
   // The count is spelled out in prose in three places. Derived from TABLES, so the
   // next addition fails here rather than being found during a restore.
-  const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two", "twenty-three", "twenty-four", "twenty-five", "twenty-six", "twenty-seven"];
+  const words = ["five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "twenty-one", "twenty-two", "twenty-three", "twenty-four", "twenty-five", "twenty-six", "twenty-seven", "twenty-eight", "twenty-nine", "thirty"];
   const correct = words[TABLES.length - 5];
   assert.ok(correct, `TABLES has ${TABLES.length} entries, outside the words this check can spell`);
   for (const [i, word] of words.entries()) {
