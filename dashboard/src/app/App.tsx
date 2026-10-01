@@ -383,7 +383,30 @@ export function App() {
     };
   }, []);
 
-  const list = useMemo(() => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy }, now), [feed, views, go, open, refresh, theme, copy, now]);
+  // A stop from the command menu presses its switch on Namespaces, so the switch's own
+  // reason field opens and the change goes the way a click would send it. The rows
+  // arrive with the namespaces read, so it waits for the switch, and says so if it never
+  // appears rather than doing nothing.
+  const flip = useCallback(
+    (id: string) => {
+      go("namespaces");
+      const until = Date.now() + 3000;
+      const press = () => {
+        const el = document.getElementById(id);
+        if (el instanceof HTMLButtonElement && !el.disabled) {
+          el.focus();
+          el.click();
+        } else if (Date.now() < until) setTimeout(press, 50);
+        else say(`That switch is not on Namespaces right now (${id}). Flip it there.`);
+      };
+      setTimeout(press, 0);
+    },
+    [go, say],
+  );
+  const list = useMemo(
+    () => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }, now),
+    [feed, views, go, open, refresh, theme, copy, confirm, flip, now],
+  );
 
   const onRowActivate = (e: ReactMouseEvent | ReactKeyboardEvent) => {
     const target = e.target as Element;
