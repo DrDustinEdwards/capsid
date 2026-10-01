@@ -1,7 +1,7 @@
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { PORTAL_CSRF_COOKIE, PORTAL_PATH, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate } from "./portal-auth";
+import { PORTAL_CSRF_COOKIE, PORTAL_PATH, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate, sourceAddress } from "./portal-auth";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { ROSTER } from "./improve-schema";
@@ -496,7 +496,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`OPS_REFRESH_PASS_FAILED ${message}`);
-    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message })]);
+    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message, source_address: sourceAddress(request) })]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
 
@@ -504,7 +504,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   let warning: string | null = null;
   try {
     await env.DB.batch([
-      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared }),
+      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared, source_address: sourceAddress(request) }),
     ]);
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not

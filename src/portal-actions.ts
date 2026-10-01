@@ -3,7 +3,7 @@ import { revokeAgent } from "./agents-admin";
 import { agentActor } from "./agents-schema";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
-import { portalGate, portalSignOutCookies } from "./portal-auth";
+import { portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
@@ -163,10 +163,11 @@ function required(params: ActionParams, field: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-// The click's own audit row, naming the admin. The shared mutators' rows do not say
-// who asked (improveControl records a pause as `improve-loop`).
-async function auditClick(env: Env, actor: string, action: PortalAction, namespace: string | null, params: unknown, name = `${CLICK_AUDIT_PREFIX}${action}`) {
-  await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, params)]);
+// The click's own audit row, naming the admin and the address the click came from
+// (sourceAddress). The shared mutators' rows do not say who asked (improveControl
+// records a pause as `improve-loop`).
+async function auditClick(env: Env, actor: string, source: string | null, action: PortalAction, namespace: string | null, params: object, name = `${CLICK_AUDIT_PREFIX}${action}`) {
+  await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, { ...params, source_address: source })]);
 }
 
 export type ActionResult =
@@ -177,7 +178,7 @@ export type ActionResult =
 
 /** One action, performed by the administrator `email`: the shared mutator the MCP tool
  *  calls, then the click's audit row. Nothing here reimplements a transition. */
-async function performAction(env: Env, email: string, now: Date, action: PortalAction, params: ActionParams): Promise<ActionResult> {
+async function performAction(env: Env, email: string, source: string | null, now: Date, action: PortalAction, params: ActionParams): Promise<ActionResult> {
   const agent = adminAgentForEmail(email);
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
@@ -203,7 +204,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         const result = await improveControl(env, action, action === "pause" ? { namespace, reason } : { namespace });
         committed = true;
         summary = action === "pause" ? `Paused the improve loop for ${namespace}.` : `Unpaused ${namespace}.`;
-        await auditClick(env, actor, action, namespace, switchDetail(result), click);
+        await auditClick(env, actor, source, action, namespace, switchDetail(result), click);
         break;
       }
       case "mode": {
@@ -212,7 +213,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         const result = await improveControl(env, "mode", { value });
         committed = true;
         summary = `Set the improve mode to ${value}.`;
-        await auditClick(env, actor, action, null, switchDetail(result), click);
+        await auditClick(env, actor, source, action, null, switchDetail(result), click);
         break;
       }
       case "reset_breaker": {
@@ -222,7 +223,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         if (!result.ok) return { ok: false, refusal: result.error };
         committed = true;
         summary = `Reset the circuit breaker for ${namespace}.`;
-        await auditClick(env, actor, action, namespace, result.state);
+        await auditClick(env, actor, source, action, namespace, result.state);
         break;
       }
       case "seat_start": {
@@ -231,7 +232,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         const result = await setSeatStart(env, actor, { value });
         committed = true;
         summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
-        await auditClick(env, actor, action, null, switchDetail(result), click);
+        await auditClick(env, actor, source, action, null, switchDetail(result), click);
         break;
       }
       case "resume_job":
@@ -267,7 +268,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
             : action === "release_job"
               ? `Released ${id} back to the queue.`
               : `Marked ${id} failed.`;
-        await auditClick(env, actor, action, result.job?.namespace ?? null, { id, reason });
+        await auditClick(env, actor, source, action, result.job?.namespace ?? null, { id, reason });
         break;
       }
       case "revoke_agent": {
@@ -277,7 +278,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         if (!result.ok) return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
         committed = true;
         summary = `Revoked the agent ${name}.`;
-        await auditClick(env, actor, action, null, { name });
+        await auditClick(env, actor, source, action, null, { name });
         break;
       }
       case "site_add":
@@ -309,7 +310,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
             : action === "site_edit"
               ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
               : `Removed ${result.site.namespace} from the site configuration.`;
-        await auditClick(env, actor, action, result.site.namespace, params);
+        await auditClick(env, actor, source, action, result.site.namespace, params);
         break;
       }
       case "package_add":
@@ -341,7 +342,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
             : action === "package_edit"
               ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
               : `Removed ${result.pkg.name} from the packages.`;
-        await auditClick(env, actor, action, null, params);
+        await auditClick(env, actor, source, action, null, params);
         break;
       }
     }
@@ -846,7 +847,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
   if (!verified.ok) return textResponse(verified.refusal, verified.status);
   const { action, params } = verified.claims;
 
-  const result = await performAction(env, gated.email, now, action, params);
+  const result = await performAction(env, gated.email, sourceAddress(request), now, action, params);
   if (!result.ok) return textResponse(result.refusal, 400);
 
   let data: OpsFeedData;
