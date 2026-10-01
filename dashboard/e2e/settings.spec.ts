@@ -175,7 +175,7 @@ test.describe("on a phone, with no site configured", () => {
   test("the Sites tab gives way to Settings", async ({ page }) => {
     await withoutSites(page);
     await visit(page, "overview");
-    const tabs = page.locator("nav.tabbar a");
+    const tabs = page.locator("nav.tabbar > a, nav.tabbar > button");
     await expect(tabs).toHaveCount(5);
     await expect(tabs.filter({ hasText: /^Sites/ })).toHaveCount(0);
     await expect(tabs.filter({ hasText: "Settings" })).toHaveCount(1);

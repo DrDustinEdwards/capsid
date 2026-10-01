@@ -188,7 +188,7 @@ test.describe("on a phone", () => {
     await page.addInitScript((k) => localStorage.setItem(k, "collapsed"), RAIL_PREF);
     await visit(page, "overview");
     await expect(page.locator("nav.rail")).toBeHidden();
-    const tabs = page.locator("nav.tabbar a");
+    const tabs = page.locator("nav.tabbar > a, nav.tabbar > button");
     await expect(tabs).toHaveCount(5);
     for (const t of await tabs.all()) await expect(t).toBeInViewport({ ratio: 1 });
     await expect(page.locator(".top .brand")).toContainText("Capsid Portal");

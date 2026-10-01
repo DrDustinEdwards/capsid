@@ -1,13 +1,14 @@
-import { useApp } from "../app/ctx";
-import { LOOP_MODES, agentState, attemptsText, loopMode, nsList, type LoopMode } from "../lib/derive";
+import { Link } from "wouter";
+import { routePath, useApp } from "../app/ctx";
+import { agentState, attemptsText, loopMode, nsList } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { PageHead, Panel } from "./shared";
 
-const MODE_BUTTON: Record<LoopMode, string> = { api: "Switch to API", subscription: "Switch to subscription", off: "Turn off" };
-
+// The mode is a status word here; the switch and "Runs on" are in the Automation panel on
+// Namespaces (DECIDE 7).
 export function Agents() {
-  const { feed, now, confirm } = useApp();
+  const { feed, now } = useApp();
   const live = feed.live;
   const mode = loopMode(live.loop.mode);
   const b = live.loop.budget;
@@ -81,11 +82,7 @@ export function Agents() {
             <dt>Mode</dt>
             <dd className="toolbar">
               <St kind={mode.kind}>{mode.label}</St>
-              {LOOP_MODES.filter((m) => m !== live.loop.mode).map((m) => (
-                <button key={m} type="button" className="btn" onClick={() => confirm({ action: "mode", params: { value: m }, title: `Set the improve loop to ${loopMode(m).label}` })}>
-                  {MODE_BUTTON[m]}
-                </button>
-              ))}
+              <Link href={routePath("namespaces")}>Change it in Namespaces</Link>
             </dd>
             <dt>Actions minutes</dt>
             <dd>

@@ -171,6 +171,15 @@ export function performAction(csrf: string, token: string): Promise<Answer<Porta
   return post<PortalPerformed>(PERFORM_URL, csrf, { token });
 }
 
+// A switch has no dialog: its applied reason is the confirmation, so it previews and
+// performs in sequence. A refusal at either step comes back as it is, to be shown
+// beside the switch.
+export async function runAction(csrf: string, req: PortalActionRequest): Promise<Answer<PortalPerformed>> {
+  const preview = await previewAction(csrf, req);
+  if (preview.kind !== "ok") return preview;
+  return performAction(csrf, preview.value.token);
+}
+
 export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
   return get<PortalNamespaces>(NAMESPACES_URL);
 }

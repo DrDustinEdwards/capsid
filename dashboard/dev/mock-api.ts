@@ -50,6 +50,22 @@ const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
 const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove"];
+// The automation switches: a reason in both directions, and an optional undo: "true"
+// that the Worker records as portal-undo-<action> (src/portal-actions.ts).
+const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start"];
+
+// The click row's action name, as the Worker names it, in the mock's "portal." form.
+function clickName(action: PortalAction, params: Record<string, string>): string {
+  return `portal.${params.undo === "true" ? "undo-" : ""}${action}`;
+}
+
+// The Worker's checks on the switches' shared params, with its refusal text.
+function checkSwitch(action: PortalAction, params: Record<string, string>): void {
+  if (params.undo !== undefined && !SWITCHES.includes(action)) throw new Refusal(400, `${action} takes no undo; 'undo' is not one of them.`);
+  if (!SWITCHES.includes(action)) return;
+  if (params.undo !== undefined && params.undo !== "true") throw new Refusal(400, `${action}'s undo is "true" or absent; got '${params.undo}'.`);
+  if (!(params.reason ?? "").trim()) throw new Refusal(400, `${action} needs a reason. It is recorded in the audit row with the change.`);
+}
 // The namespaces whose queue breaker is open in the sample, until a reset closes it.
 const BREAKER_OPEN = ["sample-b"];
 // Registered in the mock but with no site row, so an add has somewhere to go. The site
@@ -270,6 +286,7 @@ function need(params: Record<string, string>, key: string, what: string): string
 // What an action would do against the feed as it stands. Throws a Refusal for a
 // request the Worker would refuse.
 function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>): { summary: string; done: string; changes: string[]; apply: (st: MockState) => void } {
+  checkSwitch(action, params);
   const now = new Date(mockNow()).toISOString();
   const job = () => {
     const id = need(params, "id", "The job id");
@@ -280,7 +297,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
   switch (action) {
     case "pause": {
       const ns = need(params, "namespace", "The namespace");
-      const reason = need(params, "reason", "A reason");
+      const reason = params.reason?.trim() ?? "";
       const n = f.live.namespaces.find((x) => x.name === ns);
       if (!n) throw new Refusal(400, `${ns} is not a roster namespace.`);
       if (n.paused != null) throw new Refusal(400, `${ns} is already paused: ${n.paused}`);
@@ -748,7 +765,7 @@ export function mockOpsApi(): Plugin {
         const token = randomUUID();
         const expires = mockNow() + TOKEN_MS;
         st.tokens.set(token, { action: a, params, expires });
-        const out: PortalPreview = { action: a, summary: p.summary, changes: p.changes, audit: [`portal.${a} by ${ACTOR}`], token, expires_at: new Date(expires).toISOString() };
+        const out: PortalPreview = { action: a, summary: p.summary, changes: p.changes, audit: [`${clickName(a, params)} by ${ACTOR}`], token, expires_at: new Date(expires).toISOString() };
         return send(res, 200, out);
       }
       const token = (body as { token?: unknown }).token;
@@ -763,7 +780,7 @@ export function mockOpsApi(): Plugin {
       const p = plan(f, t.action, t.params);
       p.apply(st);
       const ns = t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
-      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date(mockNow()).toISOString(), actor: ACTOR, action: `portal.${t.action}`, namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
+      st.activity.unshift({ id: (st.activity[0]?.id ?? 0) + 1, target: null, at: new Date(mockNow()).toISOString(), actor: ACTOR, action: clickName(t.action, t.params), namespace: ns, path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null });
       const out: PortalPerformed = { action: t.action, summary: p.done, warning: process.env.WF_MOCK === "warn" ? "The action happened, but its audit row was not written." : null, feed: feed(nextRefresh, st) };
       return send(res, 200, out);
     } catch (e) {

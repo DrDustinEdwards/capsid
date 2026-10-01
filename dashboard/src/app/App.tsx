@@ -1,17 +1,18 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { APP_URL, POLL_MS, requestRefresh, signOutRequest, useOpsFeed } from "../lib/api";
+import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
-import { RAIL_PREF, readPref, toggleTheme, writePref } from "../lib/prefs";
+import { RAIL_PREF, readPref, setSingleKeys, toggleTheme, useDarkTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
-import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type ViewId } from "./ctx";
+import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
 import { HelpSheet } from "./HelpSheet";
+import { MoreIcon, MoreSheet } from "./MoreSheet";
 import { Overview } from "../views/Overview";
-import type { OpsFeed } from "../types";
+import type { OpsFeed, PortalPerformed } from "../types";
 
 // The overview ships in the initial chunk; every other view loads on first visit.
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
@@ -33,8 +34,21 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 
+// The phone tab bar (DECIDE 12): four views, then More, which lists every other view.
 // With no site configured, Settings takes the Sites tab, so a phone can reach it.
-const TABS: ViewId[] = ["overview", "sites", "queue", "incidents", "ci"];
+const TABS: ViewId[] = ["overview", "queue", "incidents", "sites"];
+
+// A performed action's result, in the message region: it stays until dismissed or
+// replaced by the next action, and carries Undo for a switch change. A warning (the
+// click's audit row was not written) is part of it and never clears by itself.
+interface Message {
+  text: string;
+  warning: string | null;
+  undo: UndoRequest | null;
+  // An Undo that was refused or could not be sent.
+  error: string | null;
+  busy: boolean;
+}
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
@@ -109,7 +123,11 @@ export function App() {
   const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
-  const [singleKeys, setSingleKeysState] = useState(() => readPref("wf-single-keys") !== "off");
+  const singleKeys = useSingleKeys();
+  const dark = useDarkTheme();
+  const [more, setMore] = useState(false);
+  const moreBtn = useRef<HTMLButtonElement>(null);
+  const [message, setMessage] = useState<Message | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
@@ -127,6 +145,42 @@ export function App() {
   }, []);
 
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), []);
+
+  const performed = useCallback(
+    (p: PortalPerformed, undo?: UndoRequest) => {
+      accept(p.feed);
+      setMessage({ text: p.summary, warning: p.warning, undo: undo ?? null, error: null, busy: false });
+    },
+    [accept],
+  );
+
+  // Undo sends the reverse change as its own action (params.undo "true"), which the
+  // Worker records as portal-undo-<action>. Focus goes back to the switch it undid.
+  const csrfRef = useRef("");
+  csrfRef.current = feed?.csrf ?? "";
+  const undo = useCallback(
+    async (m: Message) => {
+      const u = m.undo;
+      if (!u || m.busy) return;
+      setMessage({ ...m, busy: true, error: null });
+      const r = await runAction(csrfRef.current, { action: u.action, params: u.params });
+      if (r.kind === "signed-out") return (setMessage(null), signOut());
+      if (r.kind !== "ok") {
+        const why = r.kind === "error" ? `Undo could not reach the server: ${r.message}` : `Undo was refused: ${r.message}`;
+        return setMessage({ ...m, busy: false, error: why });
+      }
+      accept(r.value.feed);
+      setMessage({ text: `Undone. ${r.value.summary}`, warning: r.value.warning, undo: null, error: null, busy: false });
+      const back = u.focus;
+      if (back) requestAnimationFrame(() => document.getElementById(back)?.focus());
+    },
+    [accept, signOut],
+  );
+
+  const closeMore = useCallback(() => {
+    setMore(false);
+    requestAnimationFrame(() => moreBtn.current?.focus());
+  }, []);
 
   const go = useCallback(
     (v: ViewId) => {
@@ -188,11 +242,6 @@ export function App() {
   }, [feed, leaving, say, signOut]);
 
   const theme = useCallback(() => say(toggleTheme() === "dark" ? "Dark" : "Light"), [say]);
-
-  const setSingleKeys = useCallback((v: boolean) => {
-    setSingleKeysState(v);
-    writePref("wf-single-keys", v ? "on" : "off");
-  }, []);
 
   const railRef = useRef(railCollapsed);
   railRef.current = railCollapsed;
@@ -365,7 +414,15 @@ export function App() {
     document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
   }, [pageTitle, signedOut]);
 
-  const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, signOut } : null;
+  const tabs: ViewId[] = sitesOn ? TABS : TABS.map((id) => (id === "sites" ? "settings" : id));
+  const moreItems = views
+    .filter((v) => !tabs.includes(v.id))
+    .map((v) => {
+      const b = badge[v.id];
+      return { id: v.id, label: v.label, count: b?.n ? `${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : null, current: route.view === v.id };
+    });
+
+  const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;
   const View = VIEW_COMPONENTS[route.view];
 
   let content: ReactNode;
@@ -445,7 +502,7 @@ export function App() {
           <SearchIcon />
           <span className="hide-sm">Search</span> <kbd className="hide-sm">Ctrl K</kbd>
         </button>
-        <button type="button" className="btn iconbtn" title="Theme (t)" aria-label="Switch theme" onClick={theme}>
+        <button type="button" className="btn iconbtn" title="Dark theme (t)" aria-label="Dark theme" aria-pressed={dark} onClick={theme}>
           <ThemeIcon />
         </button>
         {!signedOut && (
@@ -519,17 +576,21 @@ export function App() {
         {content}
       </main>
       <nav className="tabbar" aria-label="Sections">
-        {(sitesOn ? TABS : TABS.map((id) => (id === "sites" ? "settings" : id))).map((id) => {
+        {tabs.map((id) => {
           const v = VIEWS.find((x) => x.id === id)!;
           const b = badge[id];
           return (
             <Link key={id} href={routePath(id)} aria-current={route.view === id ? "page" : undefined}>
               <NavIcon id={id} size={20} />
-              {id === "ci" ? "CI" : v.label}
+              {v.label}
               {b?.n ? <span className="badge">{b.n}</span> : null}
             </Link>
           );
         })}
+        <button ref={moreBtn} type="button" className={moreItems.some((m) => m.current) ? "cur" : undefined} aria-haspopup="dialog" aria-expanded={more} onClick={() => setMore(true)}>
+          <MoreIcon />
+          More
+        </button>
       </nav>
     </div>
   );
@@ -546,6 +607,7 @@ export function App() {
       )}
       <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
       <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+      <MoreSheet open={more} onClose={closeMore} items={moreItems} />
       {confirmReq && feed && (
         <Suspense fallback={null}>
           <ConfirmDialog
@@ -555,8 +617,7 @@ export function App() {
             onClose={(p) => {
               setConfirmReq(null);
               if (!p) return;
-              accept(p.feed);
-              say(p.warning ? `${p.summary}${/[.!?]$/.test(p.summary) ? "" : "."} Warning: ${p.warning}` : p.summary);
+              performed(p);
               confirmReq.onDone?.(p);
             }}
           />
@@ -564,6 +625,42 @@ export function App() {
       )}
       <div className={`toast${toast.on ? " on" : ""}`} role="status" aria-live="polite">
         {toast.msg}
+      </div>
+      <div className="msg-region" role="status" aria-live="polite" aria-label="Result of the last action">
+        {message && (
+          <div className={`msg${message.warning || message.error ? " warn" : ""}`}>
+            <span className="grow">
+              {message.text}
+              {message.warning && (
+                <>
+                  {" "}
+                  <b>Warning:</b> {message.warning}
+                </>
+              )}
+              {message.error && (
+                <span className="err" role="alert">
+                  {message.error}
+                </span>
+              )}
+            </span>
+            {message.undo && (
+              <button type="button" className="btn" disabled={message.busy} onClick={() => void undo(message)}>
+                {message.busy ? "Undoing..." : "Undo"}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn"
+              disabled={message.busy}
+              onClick={() => {
+                setMessage(null);
+                mainRef.current?.focus();
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
       <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
