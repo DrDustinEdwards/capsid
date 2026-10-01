@@ -37,14 +37,14 @@ In the driver repo's `.claude/settings.json`. The key is read from the environme
 ```json
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "Notification": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "StopFailure": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "ConfigChange": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "https://capsid.dustin-edwards.workers.dev/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }]
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "Notification": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "StopFailure": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "ConfigChange": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }]
   },
-  "allowedHttpHookUrls": ["https://capsid.dustin-edwards.workers.dev/ops/hooks"]
+  "allowedHttpHookUrls": ["https://mcp.dustinedwards.info/ops/hooks"]
 }
 ```
 

@@ -65,7 +65,7 @@ test("the Capsid key comes from the OIDC exchange, before checkout, and no long-
   const step = CODE.slice(exchange, checkout);
   assert.match(step, /JOB_ID: \$\{\{ steps\.job\.outputs\.id \}\}/);
   assert.match(step, /"&audience=capsid"/);
-  assert.match(step, /https:\/\/capsid\.dustin-edwards\.workers\.dev\/ops\/runner-key/);
+  assert.match(step, /https:\/\/mcp\.dustinedwards\.info\/ops\/runner-key/);
   assert.match(step, /::add-mask::" \+ key/);
   assert.match(step, /capsid-mcp\.json/);
 });
@@ -205,7 +205,7 @@ test("harden-runner is the first step, pinned, and carries no sudo option", () =
 // canary (actions run 36296347138) reached, less the probe's raw socket and Claude
 // Code's metrics host. GitHub's Actions hosts are the agent's own implicit list.
 const ALLOWED_ENDPOINTS = [
-  "capsid.dustin-edwards.workers.dev:443",
+  "mcp.dustinedwards.info:443",
   "github.com:443",
   "api.github.com:443",
   "release-assets.githubusercontent.com:443",

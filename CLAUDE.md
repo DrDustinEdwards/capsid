@@ -1,6 +1,6 @@
 # CLAUDE.md - capsid
 
-Capsid is a single-user Cloudflare Worker that serves the portfolio's knowledge base (D1, R2) over MCP and reaches GitHub through an App. Live: https://capsid.dustin-edwards.workers.dev/mcp. This is a public MIT repo.
+Capsid is a single-user Cloudflare Worker that serves the portfolio's knowledge base (D1, R2) over MCP and reaches GitHub through an App. Live: https://mcp.dustinedwards.info/mcp; the Portal at https://portal.dustinedwards.info. This is a public MIT repo.
 
 Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting. They outrank this file. The tests enforce the code's invariants. This file lists what a test cannot catch, or what goes wrong before a test runs.
 

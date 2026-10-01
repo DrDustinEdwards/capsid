@@ -48,7 +48,7 @@ jobs:
       #
       # Block, with the list the audit-mode canary recorded (actions run 36296347138,
       # harden-runner's post-step log). Each host, and the process that reached it:
-      #   capsid.dustin-edwards.workers.dev   node (the key exchange), claude (MCP)
+      #   mcp.dustinedwards.info   node (the key exchange), claude (MCP)
       #   github.com                          git-remote-http (checkout), node (setup-node,
       #                                       the Action's setup), claude (the sandbox proxy:
       #                                       git push and the canary's github_curl)
@@ -74,7 +74,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >-
-            capsid.dustin-edwards.workers.dev:443
+            mcp.dustinedwards.info:443
             github.com:443
             api.github.com:443
             release-assets.githubusercontent.com:443
@@ -166,7 +166,7 @@ jobs:
               const oidc = await fetch(url + "&audience=capsid", { headers: { Authorization: "bearer " + bearer } });
               if (!oidc.ok) { console.error("GitHub refused the OIDC token request: " + oidc.status); process.exit(1); }
               const token = (await oidc.json()).value;
-              const res = await fetch("https://capsid.dustin-edwards.workers.dev/ops/runner-key", {
+              const res = await fetch("https://mcp.dustinedwards.info/ops/runner-key", {
                 method: "POST",
                 headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
                 body: JSON.stringify({ job_id: process.env.JOB_ID }),
@@ -174,7 +174,7 @@ jobs:
               if (!res.ok) { console.error("Capsid refused the exchange (" + res.status + "): " + (await res.text()).slice(0, 300)); process.exit(1); }
               const { key } = await res.json();
               console.log("::add-mask::" + key);
-              const config = { mcpServers: { capsid: { type: "http", url: "https://capsid.dustin-edwards.workers.dev/ops/mcp", headers: { Authorization: "Bearer " + key } } } };
+              const config = { mcpServers: { capsid: { type: "http", url: "https://mcp.dustinedwards.info/ops/mcp", headers: { Authorization: "Bearer " + key } } } };
               fs.writeFileSync(process.env.RUNNER_TEMP + "/capsid-mcp.json", JSON.stringify(config), { mode: 0o600 });
             })().catch((err) => { console.error("the exchange failed: " + err.message); process.exit(1); });
           '

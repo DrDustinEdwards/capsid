@@ -11,7 +11,8 @@ import { cimdClient } from "./cimd-stub";
 // authorization request's, so this is the test that says an upgrade changed nothing a
 // client sees. It runs on the canonical host, the one tokens are bound to.
 
-const ORIGIN = "https://capsid.dustin-edwards.workers.dev";
+// The MCP endpoint's host (src/mcp-host.ts): the round trip runs through its provider.
+const ORIGIN = "https://mcp.dustinedwards.info";
 const REDIRECT = "https://client.example.com/callback";
 // RFC 7636 appendix B: this verifier's S256 challenge is E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM.
 const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";

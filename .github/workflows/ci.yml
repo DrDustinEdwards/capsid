@@ -321,7 +321,7 @@ jobs:
           DEPLOY_ATTEMPT: ${{ needs.deploy.outputs.attempt }}
         run: |
           set -euo pipefail
-          HEALTH_URL=https://capsid.dustin-edwards.workers.dev/health
+          HEALTH_URL=https://mcp.dustinedwards.info/health
           # No -f on curl and no abort on its failure: a /health that answers 5xx, or
           # not at all, must reach the guard as "unreadable" rather than end this step
           # before it decides anything.
