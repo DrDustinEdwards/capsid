@@ -12,12 +12,13 @@ const ABOUT: Partial<Record<ViewId, string>> = {
   deploys: "From Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
   agents: "Every credential and when it was last seen. Verified columns are what the Worker checked against GitHub.",
   backups: "The nightly dump and the off-account mirror. A stale dump or a dead mirror is red on purpose.",
-  namespaces: "Each roster namespace: its improve loop, driver, truth report, jobs and skills.",
+  namespaces: "The automation switches, then each roster namespace with its switch. A switch asks for a reason and offers Undo.",
   activity: "The audit log, newest first: who did what, where.",
   claims: "What each agent said beside what the Worker verified. A field not stated is never zero.",
   packages: "Each package configured in Settings: its versions, downloads, dependents and repository.",
   settings: "The sites the watcher probes and the npm packages it reads. Every change is previewed first.",
 };
+import { Switch } from "../ui/Switch";
 
 export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: { open: boolean; onClose: () => void; views: ReadonlyArray<ViewDef>; singleKeys: boolean; setSingleKeys: (v: boolean) => void }) {
   const dlg = useRef<HTMLDialogElement>(null);
@@ -75,9 +76,12 @@ export function HelpSheet({ open, onClose, views, singleKeys, setSingleKeys }: {
           </dt>
           <dd>This sheet</dd>
         </dl>
-        <label>
-          <input type="checkbox" checked={singleKeys} onChange={(e) => setSingleKeys(e.target.checked)} /> Single-key shortcuts (turn off if they clash with a screen reader)
-        </label>
+        <div className="prefrow">
+          <Switch id="help-single-keys" label="Single-key shortcuts" checked={singleKeys} onClick={() => setSingleKeys(!singleKeys)} />
+          <span>
+            Single-key shortcuts <span className="faint">(turn off if they clash with a screen reader; applies at once)</span>
+          </span>
+        </div>
         <div className="toolbar">
           <button type="button" className="btn" onClick={onClose}>
             Close

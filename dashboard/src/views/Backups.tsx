@@ -1,6 +1,7 @@
 import { useApp } from "../app/ctx";
-import { DAY, ago, ms, utc } from "../lib/format";
+import { DAY, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
+import { When } from "../ui/When";
 import { NoSnapshot, PageHead, Panel } from "./shared";
 
 export function Backups() {
@@ -34,7 +35,7 @@ export function Backups() {
                 {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
                 <dl className="kv">
                   <dt>Last good dump</dt>
-                  <dd className="num">{h.backup.last_ok ? `${utc(ms(h.backup.last_ok))} (${ago(ms(h.backup.last_ok), now)})` : <St kind="crit">None recorded</St>}</dd>
+                  <dd className="num">{h.backup.last_ok ? <>{ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} /></> : <St kind="crit">None recorded</St>}</dd>
                   <dt>Age</dt>
                   <dd className="num">{h.backup.age_hours == null ? <St kind="nodata">No data</St> : `${h.backup.age_hours.toFixed(1)}h`}</dd>
                   <dt>State</dt>
@@ -70,7 +71,7 @@ export function Backups() {
                 )}
                 <dl className="kv">
                   <dt>Newest dump</dt>
-                  <dd className="num">{m.newest_dump ? `${utc(ms(m.newest_dump))} (${ago(ms(m.newest_dump), now)})` : "none"}</dd>
+                  <dd className="num">{m.newest_dump ? <>{ago(ms(m.newest_dump), now)} <When t={ms(m.newest_dump)} /></> : "none"}</dd>
                   <dt>Last run</dt>
                   <dd>
                     {m.last_run ? (

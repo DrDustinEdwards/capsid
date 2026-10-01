@@ -4,6 +4,7 @@ import type { OpsAgent, OpsJob, SiteSnapshot } from "../types";
 import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
+import { When } from "../ui/When";
 import { ErrorChart, UptimeFoot, UptimeTicks } from "../ui/charts";
 import { jobMeta } from "../views/shared";
 import { agentState, attemptsText, nsList } from "../lib/derive";
@@ -61,7 +62,7 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
           <dl className="kv">
             <dt>Checked</dt>
             <dd>
-              {ago(ms(s.checked_at), now)} <span className="faint num">{utc(ms(s.checked_at))}</span>
+              {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
             </dd>
             <dt>URL</dt>
             <dd className="mono">
@@ -246,11 +247,11 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <dd className="mono">{j.posted_by}</dd>
             <dt>Created</dt>
             <dd>
-              {ago(ms(j.created_at), now)} <span className="faint num">{utc(ms(j.created_at))}</span>
+              {ago(ms(j.created_at), now)} <When t={ms(j.created_at)} />
             </dd>
             <dt>Last change</dt>
             <dd>
-              {ago(ms(j.updated_at), now)} <span className="faint num">{utc(ms(j.updated_at))}</span>
+              {ago(ms(j.updated_at), now)} <When t={ms(j.updated_at)} />
             </dd>
             {j.claimed_by && (
               <>
@@ -340,11 +341,13 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
-          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <span className="faint num">{utc(ms(a.last_seen))}</span></> : "never"}</dd>
+          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} /></> : "never"}</dd>
           {a.revoked_at && (
             <>
               <dt>Revoked</dt>
-              <dd>{utc(ms(a.revoked_at))}</dd>
+              <dd>
+                <When t={ms(a.revoked_at)} />
+              </dd>
             </>
           )}
           <dt>Jobs</dt>

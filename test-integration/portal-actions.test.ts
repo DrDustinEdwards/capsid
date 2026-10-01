@@ -125,16 +125,16 @@ const CASES: Record<string, Case> = {
   unpause: {
     params: async () => {
       await env.APP_KV.put(pausedKey("capsid"), "an old reason");
-      return { namespace: "capsid" };
+      return { namespace: "capsid", reason: "the regression is fixed" };
     },
     after: async () => expect(await env.APP_KV.get(pausedKey("capsid"))).toBeNull(),
   },
   mode: {
-    params: async () => ({ value: "off" }),
+    params: async () => ({ value: "off", reason: "stop the loop" }),
     after: async () => expect(await env.APP_KV.get(MODE_KEY)).toBe("off"),
   },
   seat_start: {
-    params: async () => ({ value: "off" }),
+    params: async () => ({ value: "off", reason: "no session should start" }),
     after: async () => expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("off"),
   },
   resume_job: {
@@ -252,6 +252,45 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(click?.actor).toBe(ACTOR);
     });
   }
+});
+
+describe("the automation switches against real D1 and KV", () => {
+  it("unpause, mode and seat_start refuse a missing reason at preview, as pause does, and write nothing", async () => {
+    await env.APP_KV.put(pausedKey("capsid"), "an old reason");
+    const auditBefore = await auditRows();
+    const kvBefore = await Promise.all(KEYS.map((k) => env.APP_KV.get(k)));
+    for (const [action, params] of [
+      ["pause", { namespace: "foxing" }],
+      ["unpause", { namespace: "capsid" }],
+      ["mode", { value: "off" }],
+      ["seat_start", { value: "on" }],
+    ] as const) {
+      const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params } });
+      expect(res.status, `${action} without a reason`).toBe(400);
+      expect(await res.text()).toMatch(new RegExp(`^${action} needs a reason`));
+    }
+    expect(await auditRows()).toEqual(auditBefore);
+    expect(await Promise.all(KEYS.map((k) => env.APP_KV.get(k)))).toEqual(kvBefore);
+  });
+
+  it("a switch and its Undo write their own click rows: portal-seat_start, then portal-undo-seat_start, each with its reason", async () => {
+    const flip = async (params: Record<string, string>) => {
+      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "seat_start", params } })).json()) as PortalPreview;
+      const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+      expect(performed.status, await performed.clone().text()).toBe(200);
+      return preview;
+    };
+    await flip({ value: "on", reason: "queued jobs are waiting" });
+    expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("on");
+    const undo = await flip({ value: "off", reason: "Undo: queued jobs are waiting", undo: "true" });
+    expect(undo.audit).toContain(`portal-undo-seat_start by ${ACTOR}`);
+    expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("off");
+    const clicks = (await auditRows()).filter((r) => r.action.endsWith("seat_start"));
+    expect(clicks.map((r) => r.action)).toEqual(["portal-seat_start", "portal-undo-seat_start"]);
+    expect(JSON.parse(clicks[0].params)).toMatchObject({ reason: "queued jobs are waiting" });
+    expect(JSON.parse(clicks[0].params).undo).toBeUndefined();
+    expect(JSON.parse(clicks[1].params)).toMatchObject({ reason: "Undo: queued jobs are waiting", undo: true });
+  });
 });
 
 describe("the job actions against real D1", () => {

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { RAIL_PREF } from "../src/lib/prefs.ts";
-import { ALL_VIEWS, VIEW_COUNT, visit } from "./views.ts";
+import { RAIL_COUNT, RAIL_VIEWS, visit } from "./views.ts";
 
 // The collapsible side menu (the rail): a real button, remembered per browser, icons in
 // the same column as the header logo in both states.
@@ -32,7 +32,7 @@ async function geometry(page: Page) {
 function expectOneColumn(g: Awaited<ReturnType<typeof geometry>>, state: string) {
   expect(g.logo, `${state}: no header logo`).not.toBeNull();
   expect(g.logo!.width).toBeGreaterThan(0);
-  expect(g.icons, `${state}: one icon per view`).toHaveLength(VIEW_COUNT);
+  expect(g.icons, `${state}: one icon per view in the menu`).toHaveLength(RAIL_COUNT);
   const left = g.icons[0]!.left;
   for (const i of g.icons) {
     expect(i.width, `${state}: an icon is not drawn`).toBeGreaterThan(0);
@@ -52,14 +52,14 @@ test("collapsing hides the labels and keeps the logo and every icon, in one colu
   expectOneColumn(open, "expanded");
   expect(open.rail!.width).toBeCloseTo(208, 0);
   for (const l of open.labels) expect(l.width).toBeGreaterThan(20);
-  for (const v of ALL_VIEWS) await expect(page.locator("nav.rail").getByText(v.label, { exact: true })).toBeVisible();
+  for (const v of RAIL_VIEWS) await expect(page.locator("nav.rail").getByText(v.label, { exact: true })).toBeVisible();
 
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
   const shut = await geometry(page);
   expectOneColumn(shut, "collapsed");
   expect(shut.rail!.width).toBeCloseTo(56, 0);
-  expect(shut.labels).toHaveLength(VIEW_COUNT);
+  expect(shut.labels).toHaveLength(RAIL_COUNT);
   // Visually hidden, still in the accessibility tree.
   for (const l of shut.labels) expect(l.width).toBeLessThanOrEqual(1);
   await expect(page.locator(".top .brand svg")).toBeVisible();
@@ -72,9 +72,9 @@ test("collapsing hides the labels and keeps the logo and every icon, in one colu
 test("collapsed, every icon has a tooltip and an accessible name, and a count shows as a dot", async ({ page }) => {
   await visit(page, "overview");
   await toggle(page).click();
-  await expect(railLinks(page)).toHaveCount(VIEW_COUNT);
+  await expect(railLinks(page)).toHaveCount(RAIL_COUNT);
   let counted = 0;
-  for (const [i, v] of ALL_VIEWS.entries()) {
+  for (const [i, v] of RAIL_VIEWS.entries()) {
     const link = railLinks(page).nth(i);
     const name = await link.evaluate((el) => el.getAttribute("aria-label") ?? el.textContent ?? "");
     expect(name.startsWith(v.label), `${v.label}: accessible name is "${name}"`).toBe(true);
@@ -102,14 +102,14 @@ test("collapsed, every icon has a tooltip and an accessible name, and a count sh
   expect(counted).toBeGreaterThanOrEqual(3);
 
   // The tooltip shows on hover and on keyboard focus, beside the icon.
-  const sites = railLinks(page).nth(ALL_VIEWS.findIndex((v) => v.id === "sites"));
+  const sites = railLinks(page).nth(RAIL_VIEWS.findIndex((v) => v.id === "sites"));
   await sites.hover();
   await expect(page.locator(".tip.on")).toHaveText((await sites.getAttribute("data-tip"))!);
   const tipBox = await page.locator(".tip.on").boundingBox();
   const railBox = await page.locator("nav.rail").boundingBox();
   expect(tipBox!.x).toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
   await page.mouse.move(700, 500);
-  const queue = railLinks(page).nth(ALL_VIEWS.findIndex((v) => v.id === "queue"));
+  const queue = railLinks(page).nth(RAIL_VIEWS.findIndex((v) => v.id === "queue"));
   await queue.focus();
   await expect(page.locator(".tip.on")).toHaveText((await queue.getAttribute("data-tip"))!);
 });
@@ -188,7 +188,7 @@ test.describe("on a phone", () => {
     await page.addInitScript((k) => localStorage.setItem(k, "collapsed"), RAIL_PREF);
     await visit(page, "overview");
     await expect(page.locator("nav.rail")).toBeHidden();
-    const tabs = page.locator("nav.tabbar a");
+    const tabs = page.locator("nav.tabbar > a, nav.tabbar > button");
     await expect(tabs).toHaveCount(5);
     for (const t of await tabs.all()) await expect(t).toBeInViewport({ ratio: 1 });
     await expect(page.locator(".top .brand")).toContainText("Capsid Portal");

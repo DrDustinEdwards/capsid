@@ -5,6 +5,9 @@ import { VIEWS, routePath, type ViewId } from "../src/app/ctx.ts";
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
 export const VIEW_COUNT = 13;
+// The left menu holds every view but Settings, which is the top bar's Settings button.
+export const RAIL_VIEWS = ALL_VIEWS.filter((v) => v.id !== "settings");
+export const RAIL_COUNT = VIEW_COUNT - 1;
 
 // Relative to the /portal/ base URL.
 export function urlOf(id: ViewId): string {
