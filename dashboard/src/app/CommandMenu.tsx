@@ -1,17 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpsFeed } from "../types";
 import type { ViewDef, ViewId } from "./ctx";
+import { stopCommands, type Command, type StopActions } from "../lib/stops";
 import { JOB, PROBE, hasSites, siteKey } from "../lib/derive";
 import { ago, hostOf, ms } from "../lib/format";
 
-export interface Command {
-  group: string;
-  text: string;
-  hint: string;
-  run: () => void;
-}
-
-export interface Actions {
+export interface Actions extends StopActions {
   go: (v: ViewId) => void;
   open: (ref: string) => void;
   refresh: () => void;
@@ -26,6 +20,7 @@ export function commands(feed: OpsFeed | null, views: ReadonlyArray<ViewDef>, a:
   for (const s of sites) out.push({ group: "Site", text: `${s.name}  ${hostOf(s.origin)}`, hint: PROBE[s.state].label, run: () => a.open(`site:${siteKey(s)}`) });
   for (const j of feed?.live.jobs ?? []) out.push({ group: "Job", text: j.title, hint: `${JOB[j.status].label} · ${j.namespace}`, run: () => a.open(`job:${j.id}`) });
   for (const g of feed?.live.agents ?? []) out.push({ group: "Agent", text: g.name, hint: g.last_seen ? ago(ms(g.last_seen), now) : "never seen", run: () => a.open(`agent:${g.name}`) });
+  out.push(...stopCommands(feed, a));
   out.push({ group: "Action", text: "Refresh now", hint: "r", run: a.refresh });
   out.push({ group: "Action", text: "Switch light and dark", hint: "t", run: a.theme });
   out.push({ group: "Action", text: "Show keyboard shortcuts", hint: "?", run: a.help });
@@ -96,7 +91,7 @@ export function CommandMenu({ open, onClose, list }: { open: boolean; onClose: (
         ref={input}
         value={q}
         onChange={(e) => (setQ(e.target.value), setSel(0))}
-        placeholder="Jump to a site, job, agent or view..."
+        placeholder="Jump to a site, job, agent or view, or stop something..."
         aria-label="Search commands"
         autoComplete="off"
         spellCheck={false}
