@@ -85,8 +85,39 @@ export type ActionParams = Record<string, string | undefined>;
 // /portal say console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
 
+// The four automation switches (pause, unpause, mode, seat_start) take a reason in both
+// directions, and an Undo from the Portal's result message sends the reverse change with
+// undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
+// own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
+const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start"]);
+const UNDO_INFIX = "undo-";
+
+/** The click row's action name: `portal-<action>`, or `portal-undo-<action>` for an Undo. */
+export function clickAuditAction(action: PortalAction, params: ActionParams): string {
+  return `${CLICK_AUDIT_PREFIX}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
+}
+
+/** What a switch without a reason is told, at preview and again at perform. */
+function switchReasonRefusal(action: PortalAction): string {
+  switch (action) {
+    case "pause":
+      return "pause needs a reason: what you are looking at. The pause has no expiry, and the reason is what whoever unpauses it reads.";
+    case "unpause":
+      return "unpause needs a reason: why the loop may run for this namespace again. It is recorded in the audit row with the change.";
+    case "mode":
+      return "mode needs a reason: why the improve loop changes how it runs. It is recorded in the audit row with the change.";
+    default:
+      return "seat_start needs a reason: why seat-started sessions go on or off. It is recorded in the audit row with the change.";
+  }
+}
+
 /** What each action is about to do, naming the target, for the confirm step. */
 function describeAction(action: PortalAction, params: ActionParams): string {
+  const said = describeOnce(action, params);
+  return params.undo === "true" ? `Undo: ${said}` : said;
+}
+
+function describeOnce(action: PortalAction, params: ActionParams): string {
   const ns = params.namespace ?? "";
   const id = params.id ?? "";
   switch (action) {
@@ -134,8 +165,8 @@ function required(params: ActionParams, field: string): string | null {
 
 // The click's own audit row, naming the admin. The shared mutators' rows do not say
 // who asked (improveControl records a pause as `improve-loop`).
-async function auditClick(env: Env, actor: string, action: PortalAction, namespace: string | null, params: unknown) {
-  await env.DB.batch([auditStatement(env.DB, actor, `${CLICK_AUDIT_PREFIX}${action}`, namespace, null, params)]);
+async function auditClick(env: Env, actor: string, action: PortalAction, namespace: string | null, params: unknown, name = `${CLICK_AUDIT_PREFIX}${action}`) {
+  await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, params)]);
 }
 
 export type ActionResult =
@@ -152,17 +183,27 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
   // Set once the mutator succeeds, so the catch knows whether the action happened.
   let committed = false;
   let summary = "";
+  // The switches: a reason in both directions, checked again here because the token
+  // binds the params and a token signed before this rule could lack one. The reason and
+  // whether this is an Undo go in the click row; the shared mutators for unpause, mode
+  // and seat_start record no reason, and their contract is left as it is.
+  const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
+  if (SWITCHES.has(action) && !switchReason) return { ok: false, refusal: switchReasonRefusal(action) };
+  const undo = params.undo === "true";
+  const click = clickAuditAction(action, params);
+  const switchDetail = (result: object) => ({ ...result, reason: switchReason, ...(undo ? { undo: true } : {}) });
   try {
     switch (action) {
       case "pause":
       case "unpause": {
         const namespace = required(params, "namespace");
         if (!namespace) return { ok: false, refusal: `${action} needs a namespace.` };
-        const reason = params.reason?.trim() || undefined;
-        const result = await improveControl(env, action, { namespace, reason });
+        const reason = switchReason ?? undefined;
+        // improveControl records the reason in its improve-paused row; unpause takes none.
+        const result = await improveControl(env, action, action === "pause" ? { namespace, reason } : { namespace });
         committed = true;
         summary = action === "pause" ? `Paused the improve loop for ${namespace}.` : `Unpaused ${namespace}.`;
-        await auditClick(env, actor, action, namespace, result);
+        await auditClick(env, actor, action, namespace, switchDetail(result), click);
         break;
       }
       case "mode": {
@@ -171,7 +212,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         const result = await improveControl(env, "mode", { value });
         committed = true;
         summary = `Set the improve mode to ${value}.`;
-        await auditClick(env, actor, action, null, result);
+        await auditClick(env, actor, action, null, switchDetail(result), click);
         break;
       }
       case "reset_breaker": {
@@ -190,7 +231,7 @@ async function performAction(env: Env, email: string, now: Date, action: PortalA
         const result = await setSeatStart(env, actor, { value });
         committed = true;
         summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
-        await auditClick(env, actor, action, null, result);
+        await auditClick(env, actor, action, null, switchDetail(result), click);
         break;
       }
       case "resume_job":
@@ -342,10 +383,10 @@ function isPortalAction(value: unknown): value is PortalAction {
 // The params each action takes. Anything else is refused rather than carried into a
 // token nobody reads.
 const FIELDS: Record<PortalAction, readonly string[]> = {
-  pause: ["namespace", "reason"],
-  unpause: ["namespace"],
-  mode: ["value"],
-  seat_start: ["value"],
+  pause: ["namespace", "reason", "undo"],
+  unpause: ["namespace", "reason", "undo"],
+  mode: ["value", "reason", "undo"],
+  seat_start: ["value", "reason", "undo"],
   resume_job: ["id", "reason"],
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
@@ -444,12 +485,13 @@ function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace:
  *  no KV put, which test/portal-actions.test.ts asserts for every action. */
 async function planAction(env: Env, email: string, action: PortalAction, p: Record<string, string>): Promise<Plan> {
   const actor = adminAgentForEmail(email).actor;
-  const click = `${CLICK_AUDIT_PREFIX}${action} by ${actor}`;
+  const click = `${clickAuditAction(action, p)} by ${actor}`;
+  if (p.undo !== undefined && p.undo !== "true") return refused(`${action}'s undo is "true" or absent; got '${p.undo}'.`);
   switch (action) {
     case "pause": {
       const bad = rosterRefusal(action, p.namespace);
       if (bad) return refused(bad);
-      if (!p.reason) return refused("pause needs a reason: what you are looking at. The pause has no expiry, and the reason is what whoever unpauses it reads.");
+      if (!p.reason) return refused(switchReasonRefusal(action));
       const current = await pausedReason(env.APP_KV, p.namespace);
       return {
         ok: true,
@@ -478,6 +520,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
     case "unpause": {
       const bad = rosterRefusal(action, p.namespace);
       if (bad) return refused(bad);
+      if (!p.reason) return refused(switchReasonRefusal(action));
       const current = await pausedReason(env.APP_KV, p.namespace);
       return {
         ok: true,
@@ -493,6 +536,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
       if (!p.value || !(IMPROVE_MODES as readonly string[]).includes(p.value)) {
         return refused(`mode must be one of ${IMPROVE_MODES.join(", ")}; got '${p.value ?? ""}'.`);
       }
+      if (!p.reason) return refused(switchReasonRefusal(action));
       const current = await readMode(env.APP_KV);
       return {
         ok: true,
@@ -506,6 +550,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
     }
     case "seat_start": {
       if (p.value !== "on" && p.value !== "off") return refused(`seat_start must be "on" or "off"; got '${p.value ?? ""}'.`);
+      if (!p.reason) return refused(switchReasonRefusal(action));
       const state = await seatStartState(env);
       const current = state.enabled ? "on" : "off";
       return {

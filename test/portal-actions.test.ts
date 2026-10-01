@@ -234,9 +234,9 @@ test("PLANT: a merge or a mint is refused at preview and at perform, even fully 
 
 const EVERY_ACTION = [
   ["pause", { namespace: "foxing", reason: "holdout rebuild" }],
-  ["unpause", { namespace: "capsid" }],
-  ["mode", { value: "subscription" }],
-  ["seat_start", { value: "on" }],
+  ["unpause", { namespace: "capsid", reason: "the regression is fixed" }],
+  ["mode", { value: "subscription", reason: "move the loop onto the subscription" }],
+  ["seat_start", { value: "on", reason: "queued jobs are waiting" }],
   ["resume_job", { id: "job_blocked00001", reason: "ran the push" }],
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
   ["fail_job", { id: "job_queued000001", reason: "superseded" }],
@@ -336,11 +336,11 @@ test("a pause preview names the key and the reason it replaces", async () => {
 test("preview refuses what the mutator would refuse, and writes nothing", async () => {
   for (const [action, params, pattern] of [
     ["pause", { namespace: "all", reason: "everything" }, /"all" is refused/],
-    ["unpause", { namespace: "all" }, /"all" is refused/],
+    ["unpause", { namespace: "all", reason: "x" }, /"all" is refused/],
     ["pause", { namespace: "nosuch", reason: "x" }, /not on the improve roster/],
     ["pause", { namespace: "capsid" }, /needs a reason/],
-    ["mode", { value: "banana" }, /banana/],
-    ["seat_start", { value: "maybe" }, /"on" or "off"/],
+    ["mode", { value: "banana", reason: "x" }, /banana/],
+    ["seat_start", { value: "maybe", reason: "x" }, /"on" or "off"/],
     ["resume_job", { id: "job_queued000001", reason: "x" }, /not blocked/],
     ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
@@ -362,6 +362,84 @@ test("a revoked agent is refused at preview", async () => {
   const res = await handlePortalPreview(await preview({ action: "revoke_agent", params: { name: "capsid-driver" } }), w.env, NOW);
   assert.equal(res.status, 400);
   assert.match(await res.text(), /already revoked/);
+});
+
+// The automation switches: a reason in both directions, and an Undo that says so
+
+const SWITCH_CASES = [
+  ["pause", { namespace: "foxing" }],
+  ["unpause", { namespace: "capsid" }],
+  ["mode", { value: "subscription" }],
+  ["seat_start", { value: "on" }],
+] as const;
+
+test("PLANT: unpause, mode and seat_start REFUSE a missing or blank reason at preview, as pause does, and write nothing", async () => {
+  for (const [action, params] of SWITCH_CASES) {
+    for (const reason of [undefined, "   "]) {
+      const w = world();
+      const res = await handlePortalPreview(await preview({ action, params: reason === undefined ? params : { ...params, reason } }), w.env, NOW);
+      assert.equal(res.status, 400, `${action} previewed with reason ${JSON.stringify(reason)}`);
+      assert.match(await res.text(), new RegExp(`^${action} needs a reason`));
+      wroteNothing(w, `${action} with no reason`);
+    }
+  }
+});
+
+test("PLANT: a signed switch token with no reason (issued before the rule) is refused at perform and changes nothing", async () => {
+  for (const [action, params] of SWITCH_CASES) {
+    const w = world();
+    const token = await forge({ v: 1, action, params, email: EMAIL, exp: NOW.getTime() / 1000 + 60 });
+    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    assert.equal(res.status, 400, `${action} with no reason was performed`);
+    assert.match(await res.text(), /needs a reason/);
+    wroteNothing(w, `${action} perform with no reason`);
+  }
+});
+
+test("each switch's click row records its reason", async () => {
+  for (const [action, params] of SWITCH_CASES) {
+    const w = world();
+    const reason = `because of ${action}`;
+    const { token } = await previewOk(w, action, { ...params, reason });
+    const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+    assert.equal(res.status, 200, await res.clone().text());
+    const click = w.d1.recorded.find((r) => r.params[1] === `portal-${action}`);
+    assert.ok(click, `${action} wrote no click row`);
+    const detail = JSON.parse(String(click.params[4])) as Record<string, unknown>;
+    assert.equal(detail.reason, reason);
+    assert.equal(detail.undo, undefined, `a plain ${action} says it is an undo`);
+  }
+});
+
+test("PLANT: an Undo previews and writes portal-undo-<action>, its own row, never portal-<action>", async () => {
+  for (const [action, params] of SWITCH_CASES) {
+    const w = world();
+    const reason = "Undo: a mistaken flip";
+    const body = await previewOk(w, action, { ...params, reason, undo: "true" });
+    assert.ok(body.audit.includes(`portal-undo-${action} by ${ACTOR}`), `${action}'s undo preview does not list its own row: ${JSON.stringify(body.audit)}`);
+    assert.ok(!body.audit.includes(`portal-${action} by ${ACTOR}`), `${action}'s undo preview lists the plain click row`);
+    assert.match(body.summary, /^Undo: /);
+    wroteNothing(w, `${action} undo preview`);
+    const res = await handlePortalPerform(await perform({ token: body.token }), w.env, NOW, deps);
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.deepEqual(auditRows(w.d1).sort(), [...body.audit].sort());
+    const click = w.d1.recorded.find((r) => r.params[1] === `portal-undo-${action}`);
+    assert.equal(click?.params[0], ACTOR);
+    const detail = JSON.parse(String(click?.params[4])) as Record<string, unknown>;
+    assert.equal(detail.undo, true);
+    assert.equal(detail.reason, reason);
+  }
+});
+
+test("undo is refused on any other value, and on an action that is not a switch", async () => {
+  const w = world();
+  const bad = await handlePortalPreview(await preview({ action: "mode", params: { value: "off", reason: "x", undo: "yes" } }), w.env, NOW);
+  assert.equal(bad.status, 400);
+  assert.match(await bad.text(), /undo is "true" or absent/);
+  const other = await handlePortalPreview(await preview({ action: "fail_job", params: { id: "job_queued000001", reason: "x", undo: "true" } }), w.env, NOW);
+  assert.equal(other.status, 400);
+  assert.match(await other.text(), /'undo' is not one of them/);
+  wroteNothing(w, "a refused undo");
 });
 
 // Perform
@@ -400,7 +478,7 @@ test("the click row names the administrator, and the mutator's row says what hap
 
 test("a replay inside five minutes is allowed: the transitions are guarded, not the token", async () => {
   const w = world();
-  const { token } = await previewOk(w, "mode", { value: "off" });
+  const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
   for (const at of [NOW, LATER(4 * 60_000)]) {
     const res = await handlePortalPerform(await perform({ token }), w.env, at, deps);
     assert.equal(res.status, 200, await res.clone().text());
@@ -410,7 +488,7 @@ test("a replay inside five minutes is allowed: the transitions are guarded, not 
 
 test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {
   const w = world();
-  const { token } = await previewOk(w, "mode", { value: "off" });
+  const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
   const res = await handlePortalPerform(await perform({ token }), w.env, LATER(5 * 60_000 + 1_000), deps);
   assert.equal(res.status, 410);
   assert.match(await res.text(), /expired: preview again/);
@@ -451,7 +529,7 @@ test("PLANT: a perform body carrying params is refused, whatever the token", asy
 
 test("a token issued to another session is refused with 403", async () => {
   const w = world();
-  const { token } = await previewOk(w, "mode", { value: "off" });
+  const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
   // ADMIN_EMAIL changed between the preview and the perform, and the new administrator
   // signed in: a valid session, a valid signature, the wrong person.
   const other = world({ adminEmail: "other@example.com" });
@@ -482,7 +560,7 @@ test("a mutator refusal at perform is a 400 with its refusal, and no click row",
 
 test("an action that happened but whose click row failed returns 200 with the warning, in the body and a header", async () => {
   const w = world();
-  const { token } = await previewOk(w, "mode", { value: "off" });
+  const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
   const db = w.d1.db as unknown as { batch: (s: Array<{ params?: unknown[] }>) => Promise<unknown> };
   const batch = db.batch.bind(db);
   db.batch = async (statements) => {
@@ -511,16 +589,16 @@ test("an action that happened but whose click row failed returns 200 with the wa
 test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; same-origin and absent pass", async () => {
   for (const site of ["cross-site", "same-site", "none"]) {
     const w = world();
-    const res = await handlePortalPreview(await preview({ action: "mode", params: { value: "off" } }, { site }), w.env, NOW);
+    const res = await handlePortalPreview(await preview({ action: "mode", params: { value: "off", reason: "stop the loop" } }, { site }), w.env, NOW);
     assert.equal(res.status, 403, `preview served Sec-Fetch-Site: ${site}`);
-    const { token } = await previewOk(w, "mode", { value: "off" });
+    const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
     const performed = await handlePortalPerform(await perform({ token }, { site }), w.env, NOW, deps);
     assert.equal(performed.status, 403, `perform served Sec-Fetch-Site: ${site}`);
     wroteNothing(w, `Sec-Fetch-Site: ${site}`);
   }
   for (const site of ["same-origin", null]) {
     const w = world();
-    const res = await handlePortalPreview(await preview({ action: "mode", params: { value: "off" } }, { site }), w.env, NOW);
+    const res = await handlePortalPreview(await preview({ action: "mode", params: { value: "off", reason: "stop the loop" } }, { site }), w.env, NOW);
     assert.equal(res.status, 200, `preview refused Sec-Fetch-Site: ${site}`);
   }
 });
@@ -555,7 +633,7 @@ test("all seven routes refuse a bearer with 403 and send an anonymous caller to 
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };
-    const body = method === "POST" ? JSON.stringify({ action: "mode", params: { value: "off" } }) : undefined;
+    const body = method === "POST" ? JSON.stringify({ action: "mode", params: { value: "off", reason: "stop the loop" } }) : undefined;
     // A bearer beside a valid session and CSRF pair is still refused: the gate reads it first.
     const bearer = await handler(new Request(`https://capsid.example${path}`, { method, headers: { ...headers, Authorization: "Bearer capsid_x" }, body }), world().env);
     assert.equal(bearer.status, 403, `${path} served a bearer`);

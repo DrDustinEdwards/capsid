@@ -7,12 +7,14 @@ Capsid Portal is the administrator's view of Capsid, one app at `/portal/`: ever
 **It carries fifteen controls**, each on the row it changes:
 - the job drawer: resume a blocked job, release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
-- the Queue view: the seat-start switch;
-- the Agents view: the improve mode;
-- the Namespaces view: pause and unpause, and reset the queue's circuit breaker when it is open;
+- the Namespaces view: the Automation panel, with the seat-start switch and the improve loop's switch and its "Runs on" choice (Subscription or API); one switch per roster namespace, On while it runs and Off while it is paused (pause and unpause); and reset the queue's circuit breaker when it is open;
 - the Settings view: add, edit and remove a site, and add, edit and remove a package.
 
-Every control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
+The Queue view shows seat start, and the Agents view the improve mode, as a status word that links to Namespaces.
+
+**The automation switches** (seat start, the improve loop and each namespace's pause; ruled 2026-09-30) do not move when flipped. Each opens a one-line reason beside it: Enter applies, Esc cancels and returns focus to the switch, and an empty reason is an error on the field that sends nothing. A reason is required in both directions, and the Worker refuses `pause`, `unpause`, `mode` and `seat_start` without one. On Apply the app previews and performs in sequence, with no dialog; a refusal is shown beside the switch. Once it applies the switch moves, and the result stays in the message at the foot of the screen, with Undo, until it is dismissed or the next action replaces it. Undo sends the reverse change as its own action with `undo: "true"` and the reason "Undo: " and the original reason (an undone unpause pauses again with the reason it had), and the Worker writes `portal-undo-<action>` for it. Changing "Runs on" while the loop is on is a change of mode and asks for a reason the same way; while the loop is off the choice is held until the switch turns on, starting at Subscription.
+
+Every other control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Its result stays in the message until dismissed, and a warning that the click's audit row was not written is part of it. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
 ## The Overview
 
@@ -26,6 +28,7 @@ The Overview answers one question: does anything need me? It holds, in order:
 It has no Queue or Incidents panel: their counts are tiles and their problems are rows. With no site configured there is no site tile, Sites table or timeline. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, and those blocked for over 7 days wait under "Stale"; Done and Failed start closed.
 
 A view with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Deploys in a short window, the Queue with a long list). The Overview is short enough to do without it.
+
 
 ## Where each view gets its data
 
@@ -68,6 +71,8 @@ Optional, like the sites (capsid/decisions.md, 2026-09-29): with no package conf
 A pass costs up to nine requests per package. No rate limit is published for npm or deps.dev.
 
 **The daily history** is read when asked for, not pass by pass: from each name's first publish (the full registry document's `time.created`) to yesterday, in ranges of at most 540 days, under npm's 18-month cap, since npm silently shortens a longer range. A package's former name (`formerly`, as enarratio was abscissa) is read the same way and shown joined to it, each day labelled. It is cached six hours in KV (`packages:history:v1:<name>`), about 30 bytes a day. A range npm would not answer is named as missing, never counted as zero.
+
+**Exact times** in a panel or a detail field are shown in the viewer's own time zone with UTC beside it, in a `<time>` element, and need no hover. Rows keep relative times.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
 
@@ -131,15 +136,15 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 ## Using it
 
-- **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar.
+- **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Overview, Queue, Incidents, Sites (Settings when no site is configured) and More, which lists every other view with its count.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
   - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
   - `f` goes to the Queue's text filter. A namespace filter belongs to its view and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
-  - `r` refreshes and `t` switches light and dark.
+  - `r` refreshes and `t` switches light and dark. The top bar's theme button is named "Dark theme" and is pressed while dark is in effect. **Settings, Display** chooses System, Light or Dark: System removes the saved choice (localStorage `wf-theme`), so the device's setting applies.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
-  - `?` lists the keys. The sheet can turn single-key shortcuts off.
+  - `?` lists the keys. Single-key shortcuts can be turned off with a switch, in that sheet or in Settings, Display; it applies at once (localStorage `wf-single-keys`).
 - **Width:** no view scrolls sideways from 1024 px up. The wide tables (Namespaces, the fleet, Agents) turn each row into a card when their panel is too narrow for the columns.
 - **Freshness:** the top bar shows when the live part was read and when the watcher's pass ran. The stamp turns to the warning colour when the pass is older than two cadences, which means the watcher has gone quiet. The app polls every 60 seconds while its tab is visible.
 
@@ -151,6 +156,8 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Deploy:** `scripts/deploy.mjs` builds it into `dashboard/dist` before every deploy, and the Worker serves those files as its static assets. A failed build stops the deploy.
 - **Browser tests:** `npm run test:browser`, after `npm run build:dashboard`, drives the built app in Chromium through Playwright (`dashboard/e2e`). It runs under `vite preview` with the dev mock and the Worker's own page CSP (`src/dashboard-csp.ts`). CI runs it after the build. What it covers:
   - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
+  - the automation switches: no move before the reason is applied, the empty-reason error, Esc, a refusal beside the switch, and the message with Undo that stays;
+  - the phone tab bar and its More sheet; the theme button's pressed state, Display's System, Light and Dark, the single-key switch, and exact times in the panel;
   - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
   - the phone layout;
   - the collapsible sidebar;

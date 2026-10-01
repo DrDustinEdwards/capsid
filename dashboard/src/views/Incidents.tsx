@@ -1,7 +1,8 @@
 import { useApp } from "../app/ctx";
 import { incidents, passStale } from "../lib/derive";
-import { ago, ms, utc } from "../lib/format";
+import { ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
+import { When } from "../ui/When";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, Panel, useNsFilter } from "./shared";
 
 export function Incidents() {
@@ -18,7 +19,7 @@ export function Incidents() {
         <Panel title="Findings" src="jobs posted by agent:watcher">
           {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the namespace {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
         </Panel>
-        <Panel title="Last watcher pass" src={snap ? utc(ms(snap.pass_at)) : "none yet"}>
+        <Panel title="Last watcher pass" src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}>
           {snap ? (
             <>
               <div className="body">

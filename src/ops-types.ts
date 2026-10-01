@@ -377,10 +377,13 @@ export type PortalAction =
   | "package_remove";
 
 // params by action:
-//   pause         { namespace, reason }   reason required
-//   unpause       { namespace }
-//   mode          { value: "api" | "subscription" | "off" }
-//   seat_start    { value: "on" | "off" }
+//   pause         { namespace, reason, undo? }   reason required
+//   unpause       { namespace, reason, undo? }   reason required
+//   mode          { value: "api" | "subscription" | "off", reason, undo? }   reason required
+//   seat_start    { value: "on" | "off", reason, undo? }                     reason required
+//                 undo: "true" marks the reverse of a change just made, from the
+//                 Portal's Undo; the click row is then portal-undo-<action>
+//                 instead of portal-<action>.
 //   resume_job    { id, reason }          reason required
 //   release_job   { id, reason }          reason required
 //   fail_job      { id, reason }          reason required

@@ -50,6 +50,16 @@ export function utc(t: number): string {
   return `${new Date(t).toISOString().replace("T", " ").slice(0, 16)}Z`;
 }
 
+// An exact time for a panel or a detail field (ruled 2026-09-30, DECIDE 13): the
+// viewer's own zone, named, with UTC beside it, and the ISO form for a <time> element.
+// Rows keep relative times only.
+const LOCAL = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+
+export function exactTime(t: number): { iso: string; local: string; utc: string } {
+  if (!Number.isFinite(t)) return { iso: "", local: "an unreadable time", utc: "" };
+  return { iso: new Date(t).toISOString(), local: LOCAL.format(t), utc: utc(t).replace("Z", " UTC") };
+}
+
 export function pct(x: number | null, dp = 2): string {
   return x == null ? "-" : `${(x * 100).toFixed(dp)}%`;
 }

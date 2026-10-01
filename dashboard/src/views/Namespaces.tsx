@@ -1,17 +1,142 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchNamespaces } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
-import { ago, ms, pct, shortId, utc } from "../lib/format";
+import { ago, ms, pct, shortId } from "../lib/format";
 import { St } from "../ui/icons";
+import { AutomationSwitch, ReasonForm, useApplySwitch } from "../ui/Switch";
+import { When } from "../ui/When";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { PageHead, Panel } from "./shared";
+
+// The Automation panel and the roster (ruled 2026-09-30, DECIDE 5, 6 and 7). Every
+// automation change is a switch that asks for a reason beside it, moves only when the
+// change has applied, and offers Undo in the app's message. The breaker reset is one-way,
+// so it keeps its preview and confirm.
 
 // The last good read stays on screen while a new one runs or after one fails.
 interface Load {
   data: PortalNamespaces | null;
   loading: boolean;
   error: string | null;
+}
+
+type RunsOn = "subscription" | "api";
+const RUNS_ON: ReadonlyArray<{ value: RunsOn; label: string }> = [
+  { value: "subscription", label: "Subscription" },
+  { value: "api", label: "API" },
+];
+const runsOnLabel = (v: RunsOn) => RUNS_ON.find((r) => r.value === v)?.label ?? v;
+const isRunsOn = (m: string): m is RunsOn => m === "subscription" || m === "api";
+
+function Automation() {
+  const { feed } = useApp();
+  const apply = useApplySwitch();
+  const seat = feed.live.seat_start;
+  const mode = feed.live.loop.mode;
+  const loopOn = isRunsOn(mode);
+  // What the loop runs on when it is turned on. Nothing is stored while it is off, so
+  // the choice starts at Subscription and holds for this page only until the switch
+  // turns on (DECIDE 6).
+  const [chosen, setChosen] = useState<RunsOn>(loopOn ? mode : "subscription");
+  useEffect(() => {
+    if (isRunsOn(mode)) setChosen(mode);
+  }, [mode]);
+  // A change of "Runs on" while the loop is on is a change of mode, so it asks a reason.
+  const [pendingRuns, setPendingRuns] = useState<RunsOn | null>(null);
+  const radioFocus = () => requestAnimationFrame(() => document.querySelector<HTMLInputElement>('input[name="runs-on"]:checked')?.focus());
+  const shownRuns = pendingRuns ?? (loopOn ? mode : chosen);
+
+  return (
+    <Panel title="Automation" src="each change is recorded in Activity with its reason">
+      <div className="auto">
+        <div className="auto-row">
+          <div className="what">
+            <b>Seat start</b>
+            <span>Starts a Claude Code session on GitHub's runners for a queued capsid or dustinedwards job, billed to the subscription, up to the cap.</span>
+          </div>
+          <AutomationSwitch
+            id="sw-seat"
+            label="Seat start"
+            checked={seat.enabled}
+            verb={(next) => (next ? "Turning seat start on" : "Turning seat start off")}
+            onApply={(next, why) =>
+              apply(
+                { action: "seat_start", params: { value: next ? "on" : "off", reason: why } },
+                { action: "seat_start", params: { value: next ? "off" : "on", reason: `Undo: ${why}`, undo: "true" }, focus: "sw-seat" },
+              )
+            }
+          >
+            <span className="state-note">
+              {seat.enabled ? `${seat.in_flight} of ${seat.max_sessions} session${seat.max_sessions === 1 ? "" : "s"} in flight` : "No session starts until this is on."}
+            </span>
+          </AutomationSwitch>
+        </div>
+        <div className="auto-row">
+          <div className="what">
+            <b>Improve loop</b>
+            <span>Improve attempts in every roster namespace that is not paused, within the month's budget.</span>
+          </div>
+          <AutomationSwitch
+            id="sw-loop"
+            label="Improve loop"
+            checked={loopOn}
+            verb={(next) => (next ? `Turning the improve loop on, on ${runsOnLabel(chosen)}` : "Turning the improve loop off")}
+            onApply={(next, why) =>
+              apply(
+                { action: "mode", params: { value: next ? chosen : "off", reason: why } },
+                { action: "mode", params: { value: mode, reason: `Undo: ${why}`, undo: "true" }, focus: "sw-loop" },
+              )
+            }
+          >
+            <span className="state-note">{loopOn ? `Running on ${runsOnLabel(mode)}.` : `Off. It runs on ${runsOnLabel(chosen)} when turned on.`}</span>
+          </AutomationSwitch>
+          <div className="runs">
+            <span id="runs-on-label">Runs on</span>
+            <span className="seg" role="radiogroup" aria-labelledby="runs-on-label">
+              {RUNS_ON.map((r) => (
+                <Fragment key={r.value}>
+                  <input
+                    type="radio"
+                    name="runs-on"
+                    id={`runs-on-${r.value}`}
+                    value={r.value}
+                    checked={shownRuns === r.value}
+                    onChange={() => {
+                      if (!loopOn) return setChosen(r.value);
+                      setPendingRuns(r.value === mode ? null : r.value);
+                    }}
+                  />
+                  <label htmlFor={`runs-on-${r.value}`}>{r.label}</label>
+                </Fragment>
+              ))}
+            </span>
+            {pendingRuns && (
+              <ReasonForm
+                id="runs-on-why"
+                verb={`Changing the improve loop to run on ${runsOnLabel(pendingRuns)}`}
+                onCancel={() => {
+                  setPendingRuns(null);
+                  radioFocus();
+                }}
+                onApply={async (why) => {
+                  const err = await apply(
+                    { action: "mode", params: { value: pendingRuns, reason: why } },
+                    { action: "mode", params: { value: mode, reason: `Undo: ${why}`, undo: "true" }, focus: `runs-on-${mode}` },
+                  );
+                  if (!err) {
+                    setPendingRuns(null);
+                    radioFocus();
+                  }
+                  return err;
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
 }
 
 function Driver({ ns }: { ns: string }) {
@@ -27,105 +152,141 @@ function Driver({ ns }: { ns: string }) {
   );
 }
 
-function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
-  const { now, confirm } = useApp();
+// The loop's detail for one namespace, under the row's disclosure: at 1440 px the nine
+// columns did not fit without the card layout, and five of them are empty while the loop
+// is off (audit finding 15).
+function LoopDetail({ n }: { n: PortalNamespace }) {
+  const { now } = useApp();
   const r = n.last_run;
   const rep = n.latest_report;
   const sk = n.skills;
   return (
-    <tr data-row="">
-      <td>
-        <b className="mono">{n.namespace}</b>
-        <div className="mt4">{n.paused != null ? <St kind="warn">Paused</St> : <St kind="ok">Not paused</St>}</div>
-        {n.paused != null && <div className="src wrap">{n.paused || "no reason recorded"}</div>}
-        {n.breaker.open && (
-          <>
-            <div className="mt4">
-              <St kind="crit">Queue stopped</St>
-            </div>
-            <div className="src wrap">
-              circuit breaker: {n.breaker.failed} jobs failed by their holders since {n.breaker.since} UTC (threshold {n.breaker.threshold})
-            </div>
-          </>
-        )}
-      </td>
-      <td data-label="Driver">
-        <Driver ns={n.namespace} />
-      </td>
-      <td data-label="Anchor">
+    <dl className="kv">
+      <dt>Anchor</dt>
+      <dd>
         {n.anchor_problem ? <St kind="crit">Problem</St> : n.anchor_pinned ? <St kind="ok">Pinned</St> : <St kind="nodata">Not pinned</St>}
         {n.anchor_problem && <div className="src wrap">{n.anchor_problem}</div>}
-      </td>
-      <td data-label="Last run">
+      </dd>
+      <dt>Last run</dt>
+      <dd>
         {r ? (
           <>
-            <span>{r.status}</span>
-            <div className="src" title={utc(ms(r.started))}>
-              {ago(ms(r.started), now)} · {r.attempts} tried, {r.kept} kept, {r.reverts} reverted
-            </div>
+            {r.status}, {ago(ms(r.started), now)}: {r.attempts} tried, {r.kept} kept, {r.reverts} reverted. <When t={ms(r.started)} />
           </>
         ) : (
           <St kind="nodata">No runs yet</St>
         )}
-      </td>
-      <td data-label="Best score">
+      </dd>
+      <dt>Best score</dt>
+      <dd>
         {n.best ? (
           <>
-            <span className="num">{n.best.score}</span>
-            <div className="src" title={utc(ms(n.best.recorded_at))}>
-              {shortId(n.best.sha, 7)} · {ago(ms(n.best.recorded_at), now)}
-            </div>
+            <span className="num">{n.best.score}</span> <span className="mono">{shortId(n.best.sha, 7)}</span>, {ago(ms(n.best.recorded_at), now)}. <When t={ms(n.best.recorded_at)} />
           </>
         ) : (
           <St kind="nodata">No best yet</St>
         )}
-      </td>
-      <td data-label="Integrity">
+      </dd>
+      <dt>Integrity</dt>
+      <dd>
         {!rep ? (
           <St kind="nodata">No truth report</St>
-        ) : rep.integrity == null ? (
-          <>
-            <St kind="nodata">No integrity figure</St>
-            <div className="src">report {ago(ms(rep.generated), now)}</div>
-          </>
         ) : (
           <>
-            <span className="num">{pct(rep.integrity, 0)}</span>
-            <div className="src">report {ago(ms(rep.generated), now)}</div>
+            {rep.integrity == null ? <St kind="nodata">No integrity figure</St> : <span className="num">{pct(rep.integrity, 0)}</span>} <span className="faint">report {ago(ms(rep.generated), now)}</span>
           </>
         )}
-      </td>
-      <td data-label="Jobs" className="num nowrap">
-        {n.jobs.queued} queued · {n.jobs.claimed} running
-        <div className="src">
-          {n.jobs.blocked} blocked · {n.jobs.done_today} done today
-        </div>
-      </td>
-      <td data-label="Skills">
-        <span className="num nowrap">
+      </dd>
+      <dt>Skills</dt>
+      <dd>
+        <span className="num">
           {sk.live} live · {sk.candidate} candidate · {sk.retired} retired
         </span>
         <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>
-      </td>
-      <td className="ctl">
-        <div className="toolbar col">
+      </dd>
+    </dl>
+  );
+}
+
+function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
+  const { feed, confirm } = useApp();
+  const apply = useApplySwitch();
+  const [open, setOpen] = useState(false);
+  // The pause state is the feed's, which the perform returns, so the switch moves as
+  // soon as the change applies; the rest of the row is the namespaces read.
+  const live = feed.live.namespaces.find((x) => x.name === n.namespace);
+  const paused = live ? live.paused : n.paused;
+  const loopOn = feed.live.loop.mode !== "off";
+  const swId = `sw-ns-${n.namespace}`;
+  const detailId = `ns-detail-${n.namespace}`;
+  return (
+    <>
+      <tr data-row="">
+        <td>
+          <b className="mono">{n.namespace}</b>
           {n.breaker.open && (
-            <button type="button" className="btn" onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset the circuit breaker for ${n.namespace}`, onDone: onChanged })}>
-              Reset breaker
-            </button>
+            <>
+              <div className="mt4">
+                <St kind="crit">Queue stopped</St>
+              </div>
+              <div className="src wrap">
+                circuit breaker: {n.breaker.failed} jobs failed by their holders since {n.breaker.since} UTC (threshold {n.breaker.threshold})
+              </div>
+            </>
           )}
-          {n.paused != null ? (
-            <button type="button" className="btn" onClick={() => confirm({ action: "unpause", params: { namespace: n.namespace }, title: `Unpause ${n.namespace}`, onDone: onChanged })}>
-              Unpause
+        </td>
+        <td data-label="Improve loop" className="w30">
+          <AutomationSwitch
+            id={swId}
+            label={`Improve loop for ${n.namespace}`}
+            checked={paused == null}
+            verb={(next) => (next ? `Unpausing ${n.namespace}` : `Pausing ${n.namespace}`)}
+            onApply={(next, why) =>
+              next
+                ? // Undo of an unpause pauses it again with the reason it had, so it reads as before.
+                  apply(
+                    { action: "unpause", params: { namespace: n.namespace, reason: why } },
+                    { action: "pause", params: { namespace: n.namespace, reason: paused || `Undo: ${why}`, undo: "true" }, focus: swId },
+                  )
+                : apply(
+                    { action: "pause", params: { namespace: n.namespace, reason: why } },
+                    { action: "unpause", params: { namespace: n.namespace, reason: `Undo: ${why}`, undo: "true" }, focus: swId },
+                  )
+            }
+          >
+            <span className="state-note wrap">{paused != null ? `Paused: ${paused || "no reason recorded"}` : loopOn ? "Running" : "Not paused. The loop is off for every namespace."}</span>
+          </AutomationSwitch>
+        </td>
+        <td data-label="Driver">
+          <Driver ns={n.namespace} />
+        </td>
+        <td data-label="Jobs" className="num nowrap">
+          {n.jobs.queued} queued · {n.jobs.claimed} running
+          <div className="src">
+            {n.jobs.blocked} blocked · {n.jobs.done_today} done today
+          </div>
+        </td>
+        <td className="ctl">
+          <div className="toolbar">
+            {n.breaker.open && (
+              <button type="button" className="btn" onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset the circuit breaker for ${n.namespace}`, onDone: onChanged })}>
+                Reset breaker
+              </button>
+            )}
+            <button type="button" className="btn" aria-expanded={open} aria-controls={detailId} aria-label={`Loop detail for ${n.namespace}`} onClick={() => setOpen((o) => !o)}>
+              Loop detail
             </button>
-          ) : (
-            <button type="button" className="btn" onClick={() => confirm({ action: "pause", params: { namespace: n.namespace }, title: `Pause ${n.namespace}`, onDone: onChanged })}>
-              Pause
-            </button>
-          )}
-        </div>
-      </td>
-    </tr>
+          </div>
+        </td>
+      </tr>
+      {open && (
+        <tr id={detailId} className="detailrow">
+          <td colSpan={5}>
+            <LoopDetail n={n} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -153,6 +314,7 @@ export function Namespaces() {
   return (
     <div className="page">
       <PageHead title="Namespaces" />
+      <Automation />
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the namespaces: {load.error}
@@ -177,17 +339,13 @@ export function Namespaces() {
           </div>
         ) : data && data.namespaces.length ? (
           <div className="scroll-x reflow">
-            <table className="list cards-below-1320">
+            <table className="list cards-below-1100 roster">
               <thead>
                 <tr>
                   <th>Namespace</th>
+                  <th>Improve loop</th>
                   <th>Driver</th>
-                  <th>Anchor</th>
-                  <th>Last run</th>
-                  <th>Best score</th>
-                  <th>Integrity</th>
                   <th>Jobs</th>
-                  <th>Skills</th>
                   <th>
                     <span className="sr-only">Controls</span>
                   </th>
