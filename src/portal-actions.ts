@@ -93,7 +93,7 @@ const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unp
 const UNDO_INFIX = "undo-";
 
 /** The click row's action name: `portal-<action>`, or `portal-undo-<action>` for an Undo. */
-export function clickAuditAction(action: PortalAction, params: ActionParams): string {
+function clickAuditAction(action: PortalAction, params: ActionParams): string {
   return `${CLICK_AUDIT_PREFIX}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
 }
 
