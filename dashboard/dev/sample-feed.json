@@ -1846,9 +1846,161 @@
         "revision": 1,
         "updated_at": "2026-09-27 10:00:00"
       }
-    ]
+    ],
+    "store": {
+      "size_bytes": 50646220,
+      "cap_bytes": 10737418240
+    }
   },
   "refresh_allowed_at": null,
+  "scheduled": {
+    "error": null,
+    "tasks": [
+      {
+        "id": "tick",
+        "label": "Five-minute tick",
+        "period_ms": 300000,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T11:57:58.000Z",
+            "finished_at": "2026-09-28T11:58:00.000Z",
+            "outcome": "ok",
+            "reason": "no improve run to advance"
+          },
+          {
+            "started_at": "2026-09-28T11:52:58.000Z",
+            "finished_at": "2026-09-28T11:53:00.000Z",
+            "outcome": "ok",
+            "reason": "no improve run to advance"
+          },
+          {
+            "started_at": "2026-09-28T11:47:58.000Z",
+            "finished_at": "2026-09-28T11:48:00.000Z",
+            "outcome": "ok",
+            "reason": "1 improve run(s) looked at, 1 moved"
+          }
+        ]
+      },
+      {
+        "id": "watcher",
+        "label": "Watcher pass",
+        "period_ms": 1800000,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T11:47:51.000Z",
+            "finished_at": "2026-09-28T11:48:00.000Z",
+            "outcome": "ok",
+            "reason": "posted 0, cleared 1, held 0"
+          },
+          {
+            "started_at": "2026-09-28T11:17:52.000Z",
+            "finished_at": "2026-09-28T11:18:00.000Z",
+            "outcome": "ok",
+            "reason": "posted 1, cleared 0, held 0"
+          }
+        ]
+      },
+      {
+        "id": "backup",
+        "label": "Backup",
+        "period_ms": 86400000,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T06:59:20.000Z",
+            "finished_at": "2026-09-28T07:00:00.000Z",
+            "outcome": "ok",
+            "reason": "wrote 30 dump objects (412 documents); pruned 1 dumps, 3 versions, 0 audit rows"
+          },
+          {
+            "started_at": "2026-09-27T06:59:22.000Z",
+            "finished_at": "2026-09-27T07:00:00.000Z",
+            "outcome": "ok",
+            "reason": "wrote 30 dump objects (409 documents); pruned 1 dumps, 0 versions, 0 audit rows"
+          }
+        ]
+      },
+      {
+        "id": "improve-open",
+        "label": "Improve opener",
+        "period_ms": 86400000,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T05:59:58.000Z",
+            "finished_at": "2026-09-28T06:00:00.000Z",
+            "outcome": "ok",
+            "reason": "mode=off sample:skipped"
+          }
+        ]
+      },
+      {
+        "id": "skills-refresh",
+        "label": "Skills refresh",
+        "period_ms": 604800000,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-26T07:59:58.000Z",
+            "finished_at": "2026-09-26T08:00:00.000Z",
+            "outcome": "ok",
+            "reason": "checked=3 changed=none posted=none"
+          }
+        ]
+      },
+      {
+        "id": "auto-merge",
+        "label": "Auto-merge step",
+        "period_ms": null,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T11:57:59.700Z",
+            "finished_at": "2026-09-28T11:58:00.000Z",
+            "outcome": "ok",
+            "reason": "policy 5: 0 merged, 1 left for the seat"
+          }
+        ]
+      },
+      {
+        "id": "lease-sweep",
+        "label": "Job lease sweep",
+        "period_ms": null,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T08:59:59.900Z",
+            "finished_at": "2026-09-28T09:00:00.000Z",
+            "outcome": "ok",
+            "reason": "returned 1 job(s) to queued: job_000000000a1"
+          }
+        ]
+      },
+      {
+        "id": "skill-cycle",
+        "label": "Skill evaluation cycle",
+        "period_ms": null,
+        "flag": "never",
+        "recent": []
+      },
+      {
+        "id": "outcome-sweep",
+        "label": "Merge-state sweep",
+        "period_ms": null,
+        "flag": null,
+        "recent": [
+          {
+            "started_at": "2026-09-28T02:59:57.000Z",
+            "finished_at": "2026-09-28T03:00:00.000Z",
+            "outcome": "ok",
+            "reason": "checked 4, changed 1, seeded 0"
+          }
+        ]
+      }
+    ]
+  },
   "cloudflare_configured": true,
   "csrf": "sample-csrf-0000000000000000"
 }

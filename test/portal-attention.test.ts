@@ -124,3 +124,38 @@ test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they
   assert.equal(row?.total, 7);
   assert.deepEqual(row?.children?.map((c) => c.open), ["4", "2", "3", "1", "5"].map((d) => `job:job_00000000000${d}`));
 });
+
+// ---- the run ledger (src/task-runs.ts) ------------------------------------------
+
+test("PLANT: a scheduled task that failed or went quiet is a problem; a backup is critical; no run yet is not listed", async () => {
+  const { attentionItems } = await import("../dashboard/src/lib/derive.ts");
+  const { f, now } = feed();
+  assert.ok(f.scheduled.tasks, "the sample feed carries the run ledger");
+  const tasks = f.scheduled.tasks;
+  const at = new Date(now - 60_000).toISOString();
+  const set = (id: string, flag: "failing" | "quiet" | "never" | null, outcome: "ok" | "threw" | "refused" = "ok") => {
+    const t = tasks.find((x) => x.id === id)!;
+    t.flag = flag;
+    t.recent = flag === "never" ? [] : [{ started_at: at, finished_at: at, outcome, reason: `${id} reason` }];
+  };
+  for (const t of tasks) set(t.id, null);
+  set("backup", "failing", "threw");
+  set("watcher", "quiet");
+  set("skill-cycle", "never");
+  const rows = attentionItems(f, now).filter((a) => a.kind === "Scheduled");
+  assert.deepEqual(
+    rows.map((r) => [r.sev, r.title, r.sub]),
+    [
+      ["crit", "Backup: its last run threw", "backup reason"],
+      ["warn", "Watcher pass has not run for 1m", "watcher reason"],
+    ]
+  );
+});
+
+test("a run ledger that could not be read is a notice that says why", async () => {
+  const { attentionItems } = await import("../dashboard/src/lib/derive.ts");
+  const { f, now } = feed();
+  f.scheduled = { tasks: null, error: "D1_ERROR: no such table: task_runs" };
+  const rows = attentionItems(f, now).filter((a) => a.kind === "Scheduled");
+  assert.deepEqual(rows.map((r) => [r.sev, r.sub]), [["nodata", "D1_ERROR: no such table: task_runs"]]);
+});

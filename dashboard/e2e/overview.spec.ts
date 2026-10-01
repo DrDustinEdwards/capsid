@@ -148,6 +148,8 @@ test("with no problems it says all clear, and the notices row stays under it", a
     // Session incidents are problems too (Needs attention lists them).
     f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
     f.live.loop.budget.exceeded = false;
+    // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
+    for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
   });
   await visit(page, "overview");
   await expect(attention(page).getByText("All clear. Nothing needs you.")).toBeVisible();

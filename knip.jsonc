@@ -1,0 +1,16 @@
+{
+  // Knip for the Worker package (no-bloat phase 0, job_372c30140e24). Detection is
+  // Knip's; this file only names what Knip cannot see by convention (knip.dev,
+  // "Configuration"): the Worker's entry (wrangler.jsonc is not committed, so the
+  // Wrangler plugin cannot read its "main"), the scripts and tests run by path, the
+  // .d.mts declarations tsc reads beside each .mjs, the dashboard's re-export of the
+  // feed types, the cloudflare: virtual modules vitest-pool-workers provides, and
+  // the Windows schtasks binary. The dashboard runs on Knip's defaults (its Vite, React and
+  // Playwright plugins find its entries) with `knip --directory dashboard`.
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/index.ts", "scripts/*.mjs", "scripts/*.d.mts", "test/**/*.ts", "test-integration/**/*.ts", "dashboard/src/types.ts"],
+  "project": ["src/**/*.ts", "scripts/**/*.{mjs,mts}", "test/**/*.ts", "test-integration/**/*.ts"],
+  // jscpd is run by scripts/no-bloat-report.mjs through its bin, which Knip does not trace.
+  "ignoreDependencies": ["cloudflare", "jscpd"],
+  "ignoreBinaries": ["schtasks"]
+}

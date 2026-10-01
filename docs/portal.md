@@ -12,9 +12,11 @@ Capsid Portal is the administrator's view of Capsid, one app at https://portal.d
 
 The Queue view shows seat start, and the Agents view the improve mode, as a status word that links to Namespaces.
 
-**The automation switches** (seat start, the improve loop and each namespace's pause; ruled 2026-09-30) do not move when flipped. Each opens a one-line reason beside it: Enter applies, Esc cancels and returns focus to the switch, and an empty reason is an error on the field that sends nothing. A reason is required in both directions, and the Worker refuses `pause`, `unpause`, `mode` and `seat_start` without one. On Apply the app previews and performs in sequence, with no dialog; a refusal is shown beside the switch. Once it applies the switch moves, and the result stays in the message at the foot of the screen, with Undo, until it is dismissed or the next action replaces it. Undo sends the reverse change as its own action with `undo: "true"` and the reason "Undo: " and the original reason (an undone unpause pauses again with the reason it had), and the Worker writes `portal-undo-<action>` for it. Changing "Runs on" while the loop is on is a change of mode and asks for a reason the same way; while the loop is off the choice is held until the switch turns on, starting at Subscription.
+**The automation switches** (seat start, the improve loop and each namespace's pause; ruled 2026-09-30) do not move when flipped. Each opens a one-line reason beside it: Enter applies, Esc cancels and returns focus to the switch, and an empty reason is an error on the field that sends nothing. A reason is required in both directions, and the Worker refuses `pause`, `unpause`, `mode` and `seat_start` without one. On Apply the app previews and performs in sequence, with no dialog; a refusal is shown beside the switch. Once it applies the switch moves, and the result stays in the message at the foot of the screen, with Undo, until it is dismissed or the next action replaces it (a result with a warning is never replaced; see below). Undo sends the reverse change as its own action with `undo: "true"` and the reason "Undo: " and the original reason (an undone unpause pauses again with the reason it had), and the Worker writes `portal-undo-<action>` for it. Changing "Runs on" while the loop is on is a change of mode and asks for a reason the same way; while the loop is off the choice is held until the switch turns on, starting at Subscription.
 
-Every other control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Its result stays in the message until dismissed, and a warning that the click's audit row was not written is part of it. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
+Every other control opens a dialog that previews what will change and the audit rows it will write, and nothing happens until its perform button, named for the action ("Revoke agent", "Mark failed", "Pause"), is pressed (the routes are below). For a one-way action (revoke, mark failed, release, remove a site, reset the breaker) the preview puts focus on Cancel. Esc and Cancel close the dialog; a click outside it does not, so a typed reason is not lost. Its result stays in the message until dismissed, and a warning that the click's audit row was not written is part of it. Refresh reads the feed again and runs one watcher pass on demand, at most once per two minutes.
+
+**Warnings and failures stay until dismissed** (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 3). The message region at the foot of the screen holds a stack, newest first. A plain result is replaced by the next one. A result carrying a warning (an audit row naming you was not written, from a control, an Undo or a Refresh's `X-Capsid-Warning` header), an Undo that failed, and a failure (a Refresh, with the Worker's own reason; a copy; a sign out) each stay, whatever happens after them, until their own Dismiss. The missing audit row is the one fact Activity cannot show later, because the missing row is the failure. Only plain confirmations (Copied, the theme, a Refresh that worked or is rate limited) go to the toast that clears itself. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
 ## The Overview
 
@@ -42,7 +44,7 @@ The Portal is served at https://portal.dustinedwards.info, a Custom Domain on th
 
 ## Where each view gets its data
 
-The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types.ts`. The app and the Worker both typecheck against that file. The feed has two parts.
+The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types.ts`. The app and the Worker both typecheck against that file. The feed has three parts.
 
 **The snapshot** is the watcher's last pass, one KV read of `ops:snapshot`. The watcher writes it every 30 minutes, or on Refresh (`src/ops-snapshot.ts`, [autonomy.md](autonomy.md)). It holds:
 - each check's result: clear, finding, or could not run;
@@ -62,13 +64,27 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - seat-started sessions with their GitHub run links;
 - the improve loop's mode and budget;
 - each roster namespace's pause reason;
-- the site and package configuration.
+- the site and package configuration;
+- the D1 store's size, from the jobs read's `meta.size_after` (every D1 result carries it, so it costs no read of its own).
+
+**The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
 
 Four views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
-- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
+- **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`. A row opens a drawer that reads that one row (`?id=`) and shows what it recorded: the reason typed with the change, a field-by-field before and after where the row carries both (the old value struck through above the new), and the row's other fields by name. The Worker turns the params into named fields (`src/audit-detail.ts`) and never sends them raw: a hash, a signature, a token or a nested value is counted as not shown and stays in the audit log.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
+
+## Scheduled tasks
+
+Every scheduled task writes one row per run to `task_runs` (`migrations/0029_task_runs.sql`): which task, when it started and finished, its outcome, and one line on what it did or why it did not. The outcome is `ok`, `skipped`, `refused` or `threw`. Every task goes through `runTask` in `src/task-runs.ts`, the one writer:
+
+- the four cron branches in `src/index.ts`: the backup, the improve opener, the skills refresh and the five-minute tick;
+- the five steps the tick carries (`src/improve/tick.ts`): the job lease sweep, auto-merge, the skill evaluation cycle, the watcher pass and the merge-state sweep.
+
+A step that was not due makes no run and writes no row: the watcher between passes, the opener's other UTC hour, the skills refresh on any day but its own, auto-merge under a disabled policy, a lease sweep that returned nothing. A refused merge policy is a run, recorded as `refused`. A ledger write that fails never stops the task; it is logged as `TASK_RUN_UNRECORDED`, and the task then shows as quiet. Rows older than 14 days are pruned, 50 at a time, on each write.
+
+**Incidents** shows every task in the Scheduled tasks panel: its state, its newest run and what it did, with the four runs before it folded underneath. A task is flagged, and listed in Needs attention, when its newest run threw or was refused (Failing), or when a periodic task has had no run in twice its period (Not running): the tick every 5 minutes, the watcher at its own cadence, the backup and the opener daily, the skills refresh weekly. A failing or quiet backup is critical; the rest are warnings. A task with no run recorded yet is shown as No run yet and is not flagged, since every task starts there after the migration. Adapted from Foxhound's cron run history (capsid/decisions.md 2026-09-30, "admin panels review adopted").
 
 ## Packages
 
@@ -118,6 +134,7 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
   - If the analytics query fails, the error column shows the query's error text.
 - **Uptime.** Each half-hour slot the watcher did not run is hatched, not counted as up.
 - **Backups.** Capsid's backup age comes from its own `/health`. No other site reports a backup yet: that arrives with each site's `/health` contract, one PR in each site's repo. Until then the column says so.
+- **The store's size.** The Backups view's primary panel shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-feed.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Needs attention as a warning, Foxhound's threshold (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 5). The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
 
 ## The Cloudflare token
 
@@ -148,7 +165,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. Until that address is verified live, https://capsid.dustin-edwards.workers.dev/portal/ answers too; a follow-up retires it. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Overview, Queue, Incidents, Sites (none when no site is configured) and More, which lists every other view with its count, Settings among them.
 - **Keyboard:**
-  - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
+  - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Namespaces and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
   - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
   - `f` goes to the Queue's text filter. A namespace filter belongs to its view and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
@@ -187,6 +204,7 @@ The administrator's Access session, and nothing else (`src/portal-auth.ts`).
 - **Sign out** (`POST /portal/api/sign-out`, the button in the top bar) expires `capsid_portal` and `capsid_portal_csrf` in this browser. It passes the same checks as an action, so another site cannot sign the administrator out. It ends the Portal session only: the Access session at the team domain is Cloudflare's, so the next visit may sign in again without asking for the email. The cookie is a signed assertion, not a session record, so a copy taken from this browser stays valid until it expires.
 - **Machines.** An operator key or an agent key gets a 403 that says so. Those authenticate to `/ops/mcp`, which serves the same state through `improve_status` and `jobs`. A login redirect would send a machine to the Access sign-in.
 - **It never merges and it never mints.** Merging can start a CI deploy, so that stays with `manage_pr` behind a caller holding `can_merge`. Minting hands out a key, so that stays with the `agents` tool. Neither is in the Portal's action list, and a test asserts their absence.
+- **Each click names where it came from.** A Portal click's audit row (`portal-<action>`, `portal-undo-<action>`) and a Refresh's `portal-ops-refresh` row carry `source_address`: the address the request came from, Cloudflare's `CF-Connecting-IP`, which the edge sets and a client cannot (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 6). A value that is not an IPv4 or IPv6 address is recorded as null, and so is a request with none. The Activity drawer shows it as Source address.
 
 ## Routes
 
@@ -201,7 +219,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
   - Both need the header `X-Capsid-CSRF` to equal the cookie `capsid_portal_csrf`. The feed body carries that value, and a cross-site page cannot read the feed.
   - Refusals: 400 refused, 403 CSRF or cross-site, 410 expired (preview again), 413 too large.
   - A perform writes the shared mutator's audit row, then `portal-<action>` under `access:<email>`. Rows from before the move say `console-<action>` ([schema.md](schema.md)).
-- **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered.
+- **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered, each with its named detail; **`?id=`** returns that one row, and an id that is not a positive whole number is refused with 400.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
 - **`POST /portal/api/sign-out`**, above.

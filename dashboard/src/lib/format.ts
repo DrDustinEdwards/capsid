@@ -64,6 +64,16 @@ export function pct(x: number | null, dp = 2): string {
   return x == null ? "-" : `${(x * 100).toFixed(dp)}%`;
 }
 
+// A byte count in binary units, as D1's limits are stated: "12.3 MB", "10 GB".
+export function bytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) (v /= 1024), i++;
+  return `${v >= 100 || Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}
+
 export function fmtN(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }

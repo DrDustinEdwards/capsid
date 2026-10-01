@@ -22,6 +22,8 @@ export type {
   OpsSession,
   OpsSiteConfig,
   OpsSnapshot,
+  OpsTask,
+  OpsTaskRun,
   PortalAction,
   PortalActionRequest,
   PortalActivity,

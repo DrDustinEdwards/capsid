@@ -140,7 +140,7 @@ export function Activity() {
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr key={r.id} data-row="">
+                  <tr key={r.id} className="click" data-row="" data-open={`audit:${r.id}`} tabIndex={0}>
                     <td className="num" title={utc(ms(r.at))}>
                       {ago(ms(r.at), now)}
                     </td>

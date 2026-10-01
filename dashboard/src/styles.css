@@ -365,6 +365,11 @@ table.list { width: 100%; border-collapse: collapse; }
   font-family: var(--mono); font-size: 12px; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px;
   padding: 10px 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.55;
 }
+/* An audit row before and after (the Activity drawer): the old value struck through above the new. */
+.kv.diff dd { display: grid; gap: 3px; justify-items: start; }
+.kv.diff del, .kv.diff ins { text-decoration-thickness: 1px; border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+.kv.diff del { background: var(--crit-soft); text-decoration-line: line-through; }
+.kv.diff ins { background: var(--ok-soft); text-decoration: none; }
 .section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 .callout { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; background: var(--raised); }
 .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
@@ -539,7 +544,7 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 .when .faint { white-space: nowrap; }
 
 /* The result of an action: stays until dismissed or replaced, not on a timer. */
-.msg-region { position: fixed; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 70; max-width: min(560px, calc(100% - 32px)); }
+.msg-region { display: grid; gap: 8px; position: fixed; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 70; max-width: min(560px, calc(100% - 32px)); }
 .msg { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 8px 8px 14px; font-size: 13px; }
 .msg.warn { border-color: var(--warn); }
 .msg .err { display: block; }

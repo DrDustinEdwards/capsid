@@ -165,6 +165,14 @@ jobs:
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard
 
+      # THE NO-BLOAT REPORT (capsid/decisions.md 2026-10-01, "no bloat, as a standing plan").
+      # Warn-only by ruling: Knip on the Worker and the dashboard, and jscpd over the source,
+      # against scripts/no-bloat-baseline.json. What grew is a ::warning:: line and a table
+      # in the job summary. The script always exits 0, so it never blocks a merge; a tool
+      # that cannot run is said as a warning. Page weight is the build step above. About 10 s.
+      - name: No-bloat report (warn-only)
+        run: npm run report:bloat
+
       # The app in a real browser (dashboard/e2e, Playwright): the build above under
       # vite preview, the dev mock, and the Worker's page CSP. A Preview click that did
       # nothing live, and pages that scrolled sideways, passed every other step here.

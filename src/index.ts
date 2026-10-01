@@ -9,7 +9,8 @@ import type { Env, Props } from "./env";
 import { buildServer } from "./server";
 import { chicagoHour } from "./improve-schema";
 import { openRuns, tickRuns } from "./improve-run";
-import { runSkillsRefresh } from "./skills-refresh";
+import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
+import { runTask, type TaskResult } from "./task-runs";
 
 // Spelled once. wrangler.jsonc declares them; test/improve-cron.test.ts derives
 // one list from the other and fails in both directions.
@@ -82,26 +83,35 @@ export default {
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches three of the
   // four expressions and Cloudflare delivers once per expression. Open cron is two
   // UTC hours because 03:00 America/Chicago is 08:00 or 09:00 depending on DST;
-  // chicagoHour() picks the real 03:00. Each branch is its own try so a throwing
-  // tick cannot stop the backup.
+  // chicagoHour() picks the real 03:00. Each branch is its own task so a throwing
+  // tick cannot stop the backup. runTask (src/task-runs.ts) records every run in the
+  // run ledger, logs a throw with the tag named here, and rethrows it so the
+  // invocation shows as failed.
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const cron = controller.cron;
 
     if (cron === BACKUP_CRON) {
       ctx.waitUntil(
-        runBackup(env)
-          .then((result) => {
-            if (result.ran && result.prune_refused !== null) {
-              console.error(`BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}`);
-            } else if (!result.ran) {
+        runTask(
+          env,
+          "backup",
+          () => runBackup(env),
+          (result): TaskResult => {
+            if (!result.ran) {
               console.error(`BACKUP_CRON_SKIPPED ${result.skipped}`);
+              return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
             }
-          })
-          .catch((err) => {
-            console.error(`BACKUP_CRON_THREW ${err instanceof Error ? `${err.message}
-${err.stack}` : String(err)}`);
-            throw err;
-          })
+            if (result.prune_refused !== null) {
+              console.error(`BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}`);
+              return { outcome: "refused", reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}` };
+            }
+            return {
+              outcome: "ok",
+              reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps, ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
+            };
+          },
+          { tag: "BACKUP_CRON_THREW", rethrow: true }
+        )
       );
     }
 
@@ -109,60 +119,64 @@ ${err.stack}` : String(err)}`);
       const now = new Date();
       const hour = chicagoHour(now);
       if (hour !== IMPROVE_OPEN_HOUR_CT) {
+        // The other of the two UTC hours: not a run, so not recorded.
         console.log(`IMPROVE_OPEN_SKIPPED local hour is ${hour}, not ${IMPROVE_OPEN_HOUR_CT}`);
       } else {
         ctx.waitUntil(
-          openRuns(env, now)
-            .then((summary) => {
-              console.log(
-                `IMPROVE_OPENED mode=${summary.mode} ${summary.outcomes
-                  .map((o) => `${o.namespace}:${o.opened ? "opened" : "skipped"}`)
-                  .join(" ")}`
-              );
-            })
-            .catch((err) => {
-              console.error(`IMPROVE_OPEN_THREW ${err instanceof Error ? `${err.message}
-${err.stack}` : String(err)}`);
-              throw err;
-            })
+          runTask(
+            env,
+            "improve-open",
+            () => openRuns(env, now),
+            (summary): TaskResult => {
+              const line = `mode=${summary.mode} ${summary.outcomes.map((o) => `${o.namespace}:${o.opened ? "opened" : "skipped"}`).join(" ")}`;
+              console.log(`IMPROVE_OPENED ${line}`);
+              return { outcome: "ok", reason: line };
+            },
+            { tag: "IMPROVE_OPEN_THREW", rethrow: true }
+          )
         );
       }
     }
 
     if (cron === IMPROVE_TICK_CRON) {
       ctx.waitUntil(
-        tickRuns(env, new Date())
-          .then((outcomes) => {
+        runTask(
+          env,
+          "tick",
+          () => tickRuns(env, new Date()),
+          (outcomes): TaskResult => {
             for (const o of outcomes) {
               console.log(`IMPROVE_TICK ${o.runId} ${o.from} -> ${o.to}: ${o.note}`);
             }
-          })
-          .catch((err) => {
-            console.error(`IMPROVE_TICK_THREW ${err instanceof Error ? `${err.message}
-${err.stack}` : String(err)}`);
-            throw err;
-          })
+            const moved = outcomes.filter((o) => o.from !== o.to).length;
+            return { outcome: "ok", reason: outcomes.length === 0 ? "no improve run to advance" : `${outcomes.length} improve run(s) looked at, ${moved} moved` };
+          },
+          { tag: "IMPROVE_TICK_THREW", rethrow: true }
+        )
       );
     }
 
     if (cron === SKILLS_REFRESH_CRON) {
       ctx.waitUntil(
-        runSkillsRefresh(env, new Date())
-          .then((outcome) => {
+        runTask(
+          env,
+          "skills-refresh",
+          () => runSkillsRefresh(env, new Date()),
+          (outcome): TaskResult => {
             if (!outcome.ran) {
               console.log(`SKILLS_REFRESH_SKIPPED ${outcome.skipped}`);
-              return;
+              // Not its day of the week is not a run; switched off is a skip worth showing.
+              return outcome.skipped?.startsWith(NOT_ITS_DAY) ? null : { outcome: "skipped", reason: `skipped: ${outcome.skipped ?? "no reason given"}` };
             }
-            console.log(
-              `SKILLS_REFRESH checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`
-            );
+            const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`;
+            console.log(`SKILLS_REFRESH ${line}`);
             for (const r of outcome.refused) console.error(`SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}`);
-          })
-          .catch((err) => {
-            console.error(`SKILLS_REFRESH_THREW ${err instanceof Error ? `${err.message}
-${err.stack}` : String(err)}`);
-            throw err;
-          })
+            return outcome.refused.length > 0
+              ? { outcome: "refused", reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}` }
+              : { outcome: "ok", reason: line };
+          },
+          { tag: "SKILLS_REFRESH_THREW", rethrow: true }
+        )
       );
     }
   },

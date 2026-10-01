@@ -25,12 +25,15 @@
     "lint": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
-    "sync:scorer": "node scripts/sync-scorer.mjs"
+    "sync:scorer": "node scripts/sync-scorer.mjs",
+    "report:bloat": "node scripts/no-bloat-report.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@types/node": "24.13.3",
+    "jscpd": "5.3.2",
+    "knip": "6.38.0",
     "typescript": "6.0.3",
     "vitest": "4.1.11",
     "wrangler": "4.107.0"

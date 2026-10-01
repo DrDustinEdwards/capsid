@@ -137,13 +137,17 @@ function jobBody(slug: string, url: string): string {
   ].join("\n");
 }
 
+// How a skip on any day but the configured one begins: the cron fires daily, so that
+// skip is not a run, and the run ledger (src/index.ts) leaves it out.
+export const NOT_ITS_DAY = "today is UTC day";
+
 export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutcome> {
   const empty: RefreshOutcome = { ran: false, skipped: null, checked: 0, changed: [], posted: [], refused: [] };
 
   const schedule = await readSchedule(env.APP_KV);
   if (!schedule.enabled) return { ...empty, skipped: schedule.reason ?? "disabled" };
   if (now.getUTCDay() !== schedule.dayUtc) {
-    return { ...empty, skipped: `today is UTC day ${now.getUTCDay()}, not ${schedule.dayUtc}` };
+    return { ...empty, skipped: `${NOT_ITS_DAY} ${now.getUTCDay()}, not ${schedule.dayUtc}` };
   }
 
   const overview = await fetchGuide(OVERVIEW);
