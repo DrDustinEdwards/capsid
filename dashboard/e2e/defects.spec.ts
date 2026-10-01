@@ -101,6 +101,23 @@ test("the revoke confirm focuses Cancel, names its button Revoke agent, and a cl
   await expect(perform).toBeVisible();
 });
 
+// Defect 5 (D11): the heading names the job by its title, before and after the preview;
+// the server's summary, which carries the id, sits under it.
+test("the mark-failed confirm keeps a plain heading with no job id after the preview", async ({ page }) => {
+  await page.goto("./queue/job/job_7c1e44b0a912");
+  await expect(drawer(page)).toBeVisible();
+  await drawer(page).getByRole("button", { name: "Mark failed", exact: true }).click();
+  const confirm = page.locator("dialog.confirm[open]");
+  await confirm.getByLabel("Reason (required)").fill("checking the heading");
+  await confirm.getByRole("button", { name: "Preview" }).click();
+  await expect(confirm.getByText("What changes")).toBeVisible();
+  const heading = confirm.getByRole("heading", { level: 2 });
+  await expect(heading).toContainText("Mark job failed:");
+  await expect(heading).not.toContainText("job_");
+  await expect(confirm.locator("[data-summary]")).not.toBeEmpty();
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+});
+
 // Defect 6: j and k move keyboard focus itself, from the focused row.
 test("j with focus on row 3 moves focus to row 4", async ({ page }) => {
   await visit(page, "queue");
