@@ -32,7 +32,7 @@ A view with three or more sections that is taller than two screens of the window
 
 ## Where each view gets its data
 
-The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types.ts`. The app and the Worker both typecheck against that file. The feed has two parts.
+The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types.ts`. The app and the Worker both typecheck against that file. The feed has three parts.
 
 **The snapshot** is the watcher's last pass, one KV read of `ops:snapshot`. The watcher writes it every 30 minutes, or on Refresh (`src/ops-snapshot.ts`, [autonomy.md](autonomy.md)). It holds:
 - each check's result: clear, finding, or could not run;
@@ -54,11 +54,24 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - each roster namespace's pause reason;
 - the site and package configuration.
 
+**The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
+
 Four views read more when they open, and not on every poll:
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
+
+## Scheduled tasks
+
+Every scheduled task writes one row per run to `task_runs` (`migrations/0029_task_runs.sql`): which task, when it started and finished, its outcome, and one line on what it did or why it did not. The outcome is `ok`, `skipped`, `refused` or `threw`. Every task goes through `runTask` in `src/task-runs.ts`, the one writer:
+
+- the four cron branches in `src/index.ts`: the backup, the improve opener, the skills refresh and the five-minute tick;
+- the five steps the tick carries (`src/improve/tick.ts`): the job lease sweep, auto-merge, the skill evaluation cycle, the watcher pass and the merge-state sweep.
+
+A step that was not due makes no run and writes no row: the watcher between passes, the opener's other UTC hour, the skills refresh on any day but its own, auto-merge under a disabled policy, a lease sweep that returned nothing. A refused merge policy is a run, recorded as `refused`. A ledger write that fails never stops the task; it is logged as `TASK_RUN_UNRECORDED`, and the task then shows as quiet. Rows older than 14 days are pruned, 50 at a time, on each write.
+
+**Incidents** shows every task in the Scheduled tasks panel: its state, its newest run and what it did, with the four runs before it folded underneath. A task is flagged, and listed in Needs attention, when its newest run threw or was refused (Failing), or when a periodic task has had no run in twice its period (Not running): the tick every 5 minutes, the watcher at its own cadence, the backup and the opener daily, the skills refresh weekly. A failing or quiet backup is critical; the rest are warnings. A task with no run recorded yet is shown as No run yet and is not flagged, since every task starts there after the migration. Adapted from Foxhound's cron run history (capsid/decisions.md 2026-09-30, "admin panels review adopted").
 
 ## Packages
 

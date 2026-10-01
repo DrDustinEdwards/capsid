@@ -31,16 +31,12 @@ test("the scheduled live gate asserts the live sha equals master head", () => {
 });
 
 // scanner-rule: conventions-verification, enumerate every site. src/index.ts cannot load under node --test
-test("both improve crons rethrow after logging, like the backup cron", () => {
+test("every cron branch rethrows after logging, so a failed invocation reports failed", () => {
   const idx = read("src/index.ts");
-  // BACKUP_CRON_THREW is the known-true case that proves this matcher is not
-  // vacuously passing.
-  for (const marker of ["BACKUP_CRON_THREW", "IMPROVE_OPEN_THREW", "IMPROVE_TICK_THREW"]) {
-    const from = idx.indexOf(marker);
-    assert.ok(from > 0, `${marker} is missing`);
-    // From the log marker to the end of its catch arrow (the first `})` after it).
-    const segment = idx.slice(from, from + idx.slice(from).indexOf("})"));
-    assert.match(segment, /throw err/, `${marker} logs but does not rethrow, so a failed invocation reports clean`);
+  // Each branch runs through runTask (src/task-runs.ts), which logs the throw with
+  // its tag and rethrows it only when told to; test/task-runs.test.ts runs both.
+  for (const marker of ["BACKUP_CRON_THREW", "IMPROVE_OPEN_THREW", "IMPROVE_TICK_THREW", "SKILLS_REFRESH_THREW"]) {
+    assert.match(idx, new RegExp(`tag: "${marker}", rethrow: true`), `${marker} logs but does not rethrow, so a failed invocation reports clean`);
   }
 });
 

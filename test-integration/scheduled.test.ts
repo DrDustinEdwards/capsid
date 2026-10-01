@@ -19,6 +19,12 @@ import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "
 const controller = (cron: string) =>
   ({ cron, scheduledTime: Date.now(), noRetry() {} }) as unknown as ScheduledController;
 
+// The run ledger's rows for one task (src/task-runs.ts), oldest first.
+async function ledger(task: string) {
+  const { results } = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id").bind(task).all<{ outcome: string; reason: string }>();
+  return results ?? [];
+}
+
 async function fire(cron: string) {
   const ctx = createExecutionContext();
   await worker.scheduled?.(controller(cron), env, ctx);
@@ -26,6 +32,11 @@ async function fire(cron: string) {
 }
 
 describe("the four cron expressions", () => {
+  // The ledger assertions below count rows, so each test starts from an empty ledger.
+  beforeEach(async () => {
+    await env.DB.prepare("DELETE FROM task_runs").run();
+  });
+
   it("the backup cron writes real dumps to real R2", async () => {
     await env.DB.prepare(
       `INSERT INTO documents (namespace, path, title, body, type, status)
@@ -43,6 +54,14 @@ describe("the four cron expressions", () => {
     expect(documentsDump, `no documents dump among ${listed.objects.map((o: { key: string }) => o.key).join(", ")}`).toBeTruthy();
     const dumped = await env.MEDIA.get(documentsDump!.key);
     expect(await dumped!.text()).toContain("cron-fixture.md");
+
+    // One row. Where the backup credential is not configured (CI, and a local run), the
+    // dump lands and the prune refuses, and the row says so rather than "ok".
+    const runs = await ledger("backup");
+    expect(runs).toHaveLength(1);
+    const run = runs[0]!;
+    expect(run.reason).toMatch(run.outcome === "refused" ? /^wrote \d+ dump objects, and the prune refused: \S/ : /^wrote \d+ dump objects \(\d+ documents\); pruned /);
+    expect(["ok", "refused"]).toContain(run.outcome);
   });
 
   it("the improve opener runs and writes nothing while the mode is off", async () => {
@@ -57,6 +76,9 @@ describe("the four cron expressions", () => {
     await fire(IMPROVE_TICK_CRON);
     const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
     expect(runs?.n).toBe(0);
+    // The tick's own row, and none for a step with nothing to do: no lease to return.
+    expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "no improve run to advance" }]);
+    expect(await ledger("lease-sweep")).toEqual([]);
   });
 
   // The skills refresh fires daily and gates on its weekday inside the handler, so
@@ -73,6 +95,8 @@ describe("the four cron expressions", () => {
     await fire(SKILLS_REFRESH_CRON);
     expect((await skillsJobs())?.n).toBe(0);
     expect(await env.APP_KV.get(guideKey("fable-5-1"))).toBeNull();
+    // Not its day is not a run, so the ledger has nothing for it.
+    expect(await ledger("skills-refresh")).toEqual([]);
   });
 
   it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
@@ -91,6 +115,7 @@ describe("the four cron expressions", () => {
     }
     expect((await skillsJobs())?.n).toBe(1);
     expect(await env.APP_KV.get(guideKey("fable-5-1"))).toMatch(/^[0-9a-f]{64}$/);
+    expect((await ledger("skills-refresh")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 
   it("an unrecognised cron expression does no work at all", async () => {
@@ -115,6 +140,8 @@ describe("the four cron expressions", () => {
       await waitOnExecutionContext(ctx).catch(() => {});
       const lines = logged.mock.calls.map((args) => args.map(String).join(" "));
       expect(lines.some((l) => l.includes("BACKUP_CRON_THREW") && l.includes("planted MEDIA failure")), lines.join(" | ")).toBe(true);
+      // And the run ledger says so, where the Portal reads it.
+      expect(await ledger("backup")).toEqual([{ outcome: "threw", reason: "planted MEDIA failure" }]);
     } finally {
       logged.mockRestore();
     }
