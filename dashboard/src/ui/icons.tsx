@@ -82,7 +82,18 @@ export function Pill({ kind, children }: { kind: Kind; children: ReactNode }) {
   );
 }
 
-export function NoData({ reason }: { reason: string }) {
+// No data is a state with a reason. In a panel the reason is written out. In a table cell
+// (brief) the cell says two words, and a short reason shows on hover and is read by a
+// screen reader; the full sentence is in the row's panel (design D18).
+export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
+  if (brief)
+    return (
+      <span className="st nodata" data-tip={reason || undefined}>
+        <Icon kind="nodata" />
+        No data
+        {reason && <span className="sr-only">: {reason}</span>}
+      </span>
+    );
   return (
     <span className="nodata-cell">
       <St kind="nodata">No data</St>

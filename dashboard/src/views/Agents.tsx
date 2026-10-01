@@ -15,7 +15,7 @@ export function Agents() {
   const usdFrac = b.caps.model_usd_month ? b.spend.cost_usd / b.caps.model_usd_month : 0;
   return (
     <div className="page">
-      <PageHead title="Agents">Every credential, what it did, and when it was last seen. Counts and rates only; the verified columns are what the Worker checked against GitHub.</PageHead>
+      <PageHead title="Agents" />
       <Panel title="Roster" src="agents · job outcomes">
         <div className="scroll-x reflow">
           <table className="list cards-below-1100">

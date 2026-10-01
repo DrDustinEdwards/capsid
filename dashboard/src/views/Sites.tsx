@@ -9,7 +9,7 @@ export function Sites() {
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const head = (
-    <PageHead title="Sites">One row per deployed site. Health comes from each site's own route where it has one; a root 200 is shown as liveness, not health.</PageHead>
+    <PageHead title="Sites" />
   );
   if (!snap) {
     return (

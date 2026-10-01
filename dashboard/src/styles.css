@@ -1,6 +1,6 @@
 /* Colours, fonts, shadows: tokens.css, generated from the seed by scripts/palette.mjs and
    loaded before this file (main.tsx). Only the app's own dimensions live here. */
-:root { --rail: 208px; --top: 56px; }
+:root { --rail: 208px; --top: 44px; }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -25,11 +25,12 @@ a:hover { text-decoration: underline; }
 .faint { color: var(--dim); }
 .label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
 
-/* shell */
+/* shell. The top bar and the side menu sit on the ground tone with no rule; the view's
+   panels are the lit surface (design D4, D5). */
 .app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--top) minmax(0, 1fr); height: 100%; }
 .top {
   grid-column: 1 / -1; display: flex; align-items: center; gap: 12px;
-  padding-inline: 16px; border-bottom: 1px solid var(--line); background: var(--surface);
+  padding-inline: 16px; background: var(--ground);
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: calc(var(--rail) - 16px); font-weight: 800; letter-spacing: -0.02em; font-size: 15px; }
@@ -59,16 +60,20 @@ a:hover { text-decoration: underline; }
 .btn.spin svg { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Items 30 px with 14 px icons, centred in a 16 px column under the header logo. The
+   active item is on the lit surface; the red and amber counts keep full strength, since
+   they are the alert channel. */
 .rail {
-  border-right: 1px solid var(--line); background: var(--surface); padding: 14px 10px;
-  display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+  background: var(--ground); padding: 10px;
+  display: flex; flex-direction: column; gap: 1px; overflow-y: auto;
 }
 .rail a {
-  display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px;
-  padding: 7px 10px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none;
+  display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 10px;
+  height: 30px; padding: 0 10px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none;
 }
-.rail a:hover { background: var(--raised); color: var(--text); }
-.rail a[aria-current="page"] { background: var(--accent-soft); color: var(--text); }
+.rail a > svg { width: 14px; height: 14px; justify-self: center; }
+.rail a:hover { background: var(--sunken); color: var(--text); }
+.rail a[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
 .rail a[aria-current="page"] svg { color: var(--accent); }
 .rail .count { font-size: 11px; color: var(--dim); }
 .rail .count.hot { color: var(--crit); font-weight: 600; }
@@ -82,7 +87,7 @@ a:hover { text-decoration: underline; }
   display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 12px; width: 100%;
   padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 12px; text-align: left;
 }
-.rail .railbtn:hover { background: var(--raised); color: var(--text); }
+.rail .railbtn:hover { background: var(--sunken); color: var(--text); }
 .rail .railbtn svg { justify-self: center; }
 
 /* The collapsed side menu: icons only, in the column they hold when expanded (20 px from
@@ -92,8 +97,8 @@ a:hover { text-decoration: underline; }
 .rail-collapsed .rail a, .rail-collapsed .rail .railbtn { position: relative; grid-template-columns: 16px; padding-right: 0; }
 .rail-collapsed .rail .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rail-collapsed .rail .count { position: absolute; top: 4px; left: 25px; width: 7px; height: 7px; border-radius: 50%; overflow: hidden; font-size: 0; color: transparent; }
-.rail-collapsed .rail .count.hot { background: var(--crit); box-shadow: 0 0 0 2px var(--surface); }
-.rail-collapsed .rail .count.warm { background: var(--warn); box-shadow: 0 0 0 2px var(--surface); }
+.rail-collapsed .rail .count.hot { background: var(--crit); box-shadow: 0 0 0 2px var(--ground); }
+.rail-collapsed .rail .count.warm { background: var(--warn); box-shadow: 0 0 0 2px var(--ground); }
 .rail-collapsed .rail .hint { padding: 10px 0 0; gap: 2px; }
 .rail-collapsed .rail .railtoggle .railicon { transform: scaleX(-1); }
 
@@ -102,10 +107,10 @@ a:hover { text-decoration: underline; }
    document, past the scrolling table, and a mobile browser widens its layout viewport to
    reach it: at 390 px the document was 1189 px wide and a centred dialog sat off screen. */
 main { overflow-y: auto; min-width: 0; position: relative; }
-.page { padding: 20px 24px 64px; display: grid; gap: 20px; max-width: 1480px; }
+.page { padding: 16px 24px 48px; display: grid; gap: 14px; max-width: 1480px; }
+/* The heading alone: what a view is for is in the shortcut sheet (design D13). */
 .pagehead { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
-.pagehead h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; text-wrap: balance; }
-.pagehead p { margin: 2px 0 0; color: var(--muted); max-width: 70ch; }
+.pagehead h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
 
 /* status vocabulary: shape + text + colour */
 .st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; white-space: nowrap; }
@@ -130,9 +135,11 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 /* panels */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
 /* A panel's header sits on the raised tone instead of a rule under it. */
-.panel > header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--raised); border-radius: 10px 10px 0 0; flex-wrap: wrap; }
+.panel > header { display: flex; align-items: center; gap: 10px; padding: 9px 16px; background: var(--raised); border-radius: 10px 10px 0 0; flex-wrap: wrap; }
 .panel > header h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
 .panel > header .src { margin-left: auto; }
+.panel > header .more { margin-left: auto; font-size: 12px; font-weight: 500; }
+.panel > header .src + .more { margin-left: 0; }
 .panel .body { padding: 14px 16px; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
 .scroll-x { overflow-x: auto; position: relative; }
@@ -140,7 +147,7 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 /* attention strip. Lists carry no rules between rows: hover and selection carry the
    structure. One status glyph per row, and a red left edge on critical rows only. */
 .attention { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
-.attention > header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--raised); flex-wrap: wrap; }
+.attention > header { display: flex; align-items: center; gap: 12px; padding: 9px 16px; background: var(--raised); flex-wrap: wrap; }
 .attention h2 { margin: 0; font-size: 13px; font-weight: 600; }
 .att-row {
   display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 12px;
@@ -154,17 +161,75 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 .att-row .what b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-row .what div { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-row .when { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
-.allclear { padding: 18px 16px; display: flex; gap: 10px; align-items: center; color: var(--ok); font-weight: 600; }
+.allclear { padding: 14px 16px; display: flex; gap: 10px; align-items: center; color: var(--ok); font-weight: 600; }
 
-/* stat tiles */
-.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
-.tiles.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; cursor: pointer; text-align: left; min-width: 0; }
-.tile:hover { border-color: var(--muted); }
-.tile .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
-.tile .v small { font-size: 12px; color: var(--muted); letter-spacing: 0; }
-.tile .d { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A group of like rows, and the notices, open in place (APG Disclosure). The button is
+   the row's one control, stretched over it, so the whole row toggles. Children sit under
+   the group, indented to the title's column. */
+.att-row.grp { position: relative; }
+.rowlink { display: block; width: 100%; border: 0; background: none; padding: 0; text-align: left; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowlink::after { content: ""; position: absolute; inset: 0; }
+.rowlink:focus-visible { outline: none; }
+.att-row:has(.rowlink:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.chev { display: inline-block; width: 7px; height: 7px; margin: 0 3px 2px 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 0.12s; }
+.att-row:has([aria-expanded="true"]) .chev, .disclose[aria-expanded="true"] .chev { transform: rotate(45deg); }
+.att-child { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 4px 16px 4px 116px; background: var(--raised); cursor: pointer; }
+.att-child:hover { background: var(--sunken); }
+.att-child.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.att-child .what { min-width: 0; }
+.att-child .what b { font-weight: 500; display: block; overflow-wrap: anywhere; }
+.att-child .what div { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.att-child .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.grouplink { padding: 4px 16px 8px 116px; background: var(--raised); font-size: 12px; }
+.notices { border-top: 1px solid var(--line); }
+.notices .rowlink { font-weight: 500; }
+.att-more { padding: 4px 16px 8px 116px; font-size: 12px; }
+
+/* stat tiles: figure and label on one line, the detail beneath. A tile is never
+   narrower than its text (flex 1 0 auto), so the row wraps to more rows instead of
+   cutting a word; only a tile wider than the whole row wraps its detail (design D3). */
+.tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.tile { flex: 1 0 auto; max-width: 100%; display: grid; gap: 1px; padding: 7px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text); text-decoration: none; }
+.tile:hover { border-color: var(--line-strong); text-decoration: none; }
+.tile .t1 { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.tile .v { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.tile .v small { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.tile .l { font-size: 12px; color: var(--muted); }
+.tile .d { font-size: 12px; color: var(--muted); }
 .tile.crit .v { color: var(--crit); } .tile.warn .v { color: var(--warn); } .tile.ok .v { color: var(--ok); }
+
+/* The Overview's Sites table: one 34 px row per site, five columns. As its panel
+   narrows, the host goes, then the deploy and error columns (all are in Sites). */
+.sites-brief { container-type: inline-size; }
+table.brief { width: 100%; border-collapse: collapse; }
+.brief th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 7px 12px; white-space: nowrap; }
+.brief td { height: 34px; padding: 0 12px; border-top: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+.brief tbody tr { cursor: pointer; }
+.brief tbody tr:hover { background: var(--raised); }
+.brief tbody tr.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.brief .site b { font-weight: 600; }
+.brief .host { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.brief .c-up { width: 34%; }
+.upline { display: flex; align-items: center; gap: 8px; }
+.upline .ticks { flex: 1; height: 18px; }
+.upline .ticks i { min-width: 1px; }
+@container (max-width: 820px) { .brief .host { display: none; } }
+@container (max-width: 620px) {
+  .brief thead, .brief .c-deploy, .brief .c-err { display: none; }
+  .brief td { padding: 0 8px; }
+  .upline .ticks { gap: 0; min-width: 84px; }
+}
+.sites-brief > .grouplink { padding: 8px 12px; background: none; border-top: 1px solid var(--line); }
+
+/* The anchor bar (ui/anchors.tsx): pinned to the top of main on a long view, on the
+   ground tone. main keeps focused rows clear of it (scroll-padding-top, WCAG 2.4.11). */
+.anchor-host { display: contents; }
+.anchors { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 2px; margin: -16px -24px 0; padding: 6px 24px; background: var(--ground); overflow-x: auto; }
+.anchors-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-right: 8px; white-space: nowrap; }
+.anchors a { border-bottom: 2px solid transparent; color: var(--muted); font-size: 12px; font-weight: 500; padding: 4px 8px; white-space: nowrap; text-decoration: none; }
+.anchors a:hover { color: var(--text); }
+.anchors a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
+main:has(.anchors) { scroll-padding-top: 48px; }
 
 /* fleet table */
 table.fleet { width: 100%; border-collapse: collapse; }
@@ -191,14 +256,19 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .tl .scroll-x > svg { display: block; width: 100%; height: auto; }
 @media (max-width: 820px) { .tl .scroll-x > svg { min-width: 760px; } }
 .tl-legend svg { flex: none; }
-.tl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 0 16px 12px; }
+.tl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.tl-head { display: inline-flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
 
 /* queue */
 .qgroup > h3 { margin: 0; display: flex; align-items: center; gap: 8px; padding: 6px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--raised); }
+.qgroup > h3 .disclose { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
+.qgroup > h3 .disclose .chev { margin: 0 2px 2px 0; }
 .qrow { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 16px; cursor: pointer; }
 .qrow:hover { background: var(--raised); }
 .qrow.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.qrow.sev-crit { box-shadow: inset 3px 0 var(--crit); }
+.qrow.sev-crit.sel { box-shadow: inset 3px 0 var(--crit), inset 0 0 0 1px var(--accent-line); }
 .qrow .t { min-width: 0; }
 .qrow .t b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qrow .t div { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -215,6 +285,8 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .frow .t { min-width: 0; }
 .frow b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .frow .sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The namespace's monospace face would otherwise stretch the line (D2, 47 px rows). */
+.frow .sub .ns { line-height: 1; }
 .frow .m { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
 
 /* generic list table: rules stay between table rows, where they align the columns. A
@@ -344,6 +416,8 @@ dialog { color: var(--text); }
 .chart { width: 100%; height: auto; display: block; }
 .nodata-cell { display: grid; gap: 2px; }
 .nodata-cell .src { white-space: normal; max-width: 22ch; }
+.th-note { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--dim); }
+.help .about { display: block; font-size: 12px; color: var(--muted); }
 .chip.flag { height: 20px; font-size: 11px; margin-right: 4px; }
 .stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--sunken); }
 .stack i.b { background: var(--warn); } .stack i.r { background: var(--info); } .stack i.q { background: var(--line-strong); }
@@ -366,7 +440,7 @@ select.search { padding-right: 6px; }
 ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 ul.plain.mono { font-size: 12px; }
 [data-open] { cursor: pointer; }
-.qrow:focus-visible, .frow:focus-visible, .att-row:focus-visible, tr[data-open]:focus-visible { outline-offset: -2px; }
+.qrow:focus-visible, .frow:focus-visible, .att-row:focus-visible, .att-child:focus-visible, tr[data-open]:focus-visible { outline-offset: -2px; }
 /* Selection is keyboard focus: j and k move focus among the rows (App.tsx), and the
    focused row wears the selected look, a changed background and a ring at 3:1. */
 main [data-row]:focus-visible { outline-offset: -2px; background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
@@ -380,7 +454,6 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
 .tabbar { display: none; }
 
 @media (max-width: 1180px) {
-  .tiles, .tiles.five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 820px) {
@@ -389,7 +462,8 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
   .brand { min-width: 0; }
   .brand small, .top .hide-sm, .fresh .long { display: none; }
   .page { padding: 16px 16px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 16px; }
-  .tiles, .tiles.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .anchors { margin: -16px -16px 0; padding: 6px 16px; }
+  .att-child, .grouplink, .att-more { padding-left: 16px; }
   .tabbar {
     display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
@@ -397,8 +471,10 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
   .tabbar a { display: grid; justify-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; text-decoration: none; position: relative; }
   .tabbar a[aria-current="page"] { color: var(--accent); }
   .tabbar a .badge { position: absolute; top: 0; left: calc(50% + 6px); font-size: 11px; background: var(--crit); color: var(--surface); border-radius: 8px; padding: 0 4px; }
-  .att-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .att-row .kind { display: none; }
+  /* The kind's word goes, its glyph stays; titles wrap instead of being cut. */
+  .att-row { grid-template-columns: 14px minmax(0, 1fr) auto; }
+  .att-row .kind .st { font-size: 0; gap: 0; }
+  .att-row .what b, .rowlink { white-space: normal; }
   .qrow { grid-template-columns: minmax(0, 1fr) auto; }
   .qrow .st { grid-column: 1 / -1; }
   .kv { grid-template-columns: 116px minmax(0, 1fr); }

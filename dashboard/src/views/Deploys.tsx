@@ -2,6 +2,7 @@ import { useApp, type Filters } from "../app/ctx";
 import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { DAY, ago, ms, shortId, utc } from "../lib/format";
+import { Anchors } from "../ui/anchors";
 import { NoSnapshot, NsChips, PageHead, Panel, TimelinePanel, useNsFilter } from "./shared";
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
@@ -19,7 +20,8 @@ export function Deploys() {
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
     <div className="page">
-      <PageHead title="Deploys">What serves traffic on every Worker, from Cloudflare's own record, so a hand-run wrangler deploy shows up too.</PageHead>
+      <Anchors />
+      <PageHead title="Deploys" />
       <div className="toolbar">
         {RANGES.map((r) => (
           <button key={r} type="button" className="chip" aria-pressed={filters.range === r} onClick={() => setFilters({ range: r })}>
@@ -28,11 +30,11 @@ export function Deploys() {
         ))}
         <span className="faint ml6">range</span>
       </div>
-      <TimelinePanel title="Timeline" days={days} src={days > 7 ? "the probe ring holds 7 days; older downtime is not shown" : "deploys and probe failures"} />
+      <TimelinePanel title="Timeline" id="timeline" section="Timeline" days={days} src={days > 7 ? "the probe ring holds 7 days; older downtime is not shown" : "deploys and probe failures"} />
       {snap ? (
         <>
           <NsChips list={snap.sites.map((s) => s.namespace)} />
-          <Panel title="Every deploy" count={list.length} src="at most 10 per site, newest first">
+          <Panel title="Every deploy" id="every-deploy" section="Every deploy" count={list.length} src="at most 10 per site, newest first">
             <div className="scroll-x">
               <table className="list">
                 <thead>
@@ -81,7 +83,7 @@ export function Deploys() {
             </div>
           </Panel>
           {missing.length > 0 && (
-            <Panel title="Sites with no deploy data" count={missing.length}>
+            <Panel title="Sites with no deploy data" id="no-deploy-data" section="No deploy data" count={missing.length}>
               <div className="scroll-x">
                 <table className="list">
                   <tbody>
