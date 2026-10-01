@@ -848,6 +848,8 @@ export function mockOpsApi(): Plugin {
           return send(res, 429, { error: "too soon", refresh_allowed_at: new Date(nextRefresh).toISOString() });
         }
         nextRefresh = mockNow() + REFRESH_GAP_MS;
+        // As the Worker does when the pass ran and its audit row was not written.
+        if (process.env.WF_MOCK === "warn") res.setHeader("x-capsid-warning", "the pass ran, but the Portal audit row naming access:admin@example.com was not written: D1 is unavailable");
         return send(res, 200, feed(nextRefresh, st));
   };
 
