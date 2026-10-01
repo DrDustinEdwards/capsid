@@ -35,7 +35,8 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 
 // The phone tab bar (DECIDE 12): four views, then More, which lists every other view.
-// With no site configured, Settings takes the Sites tab, so a phone can reach it.
+// With no site configured there is no Sites tab. Settings is under More: on a wide
+// screen it is the top bar's Settings button, not a view in the left menu.
 const TABS: ViewId[] = ["overview", "queue", "incidents", "sites"];
 
 // A performed action's result, in the message region: it stays until dismissed or
@@ -353,6 +354,12 @@ export function App() {
       const r = el.getBoundingClientRect();
       const tw = tip.offsetWidth;
       const th = tip.offsetHeight;
+      if (el.dataset.tipSide === "below") {
+        // The top bar's buttons: a tip above them would leave the window or cover them.
+        tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
+        tip.style.top = `${r.bottom + 6}px`;
+        return;
+      }
       if (el.dataset.tipSide === "right") {
         // Clear of the menu's edge, not over it.
         const edge = el.closest("nav")?.getBoundingClientRect().right ?? r.right;
@@ -414,7 +421,10 @@ export function App() {
     document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
   }, [pageTitle, signedOut]);
 
-  const tabs: ViewId[] = sitesOn ? TABS : TABS.map((id) => (id === "sites" ? "settings" : id));
+  const tabs: ViewId[] = sitesOn ? TABS : TABS.filter((id) => id !== "sites");
+  // Settings lives in the top bar, not the left menu; it keeps its view, its g then e
+  // shortcut and its command-menu entry, which read the full views list.
+  const railViews = views.filter((v) => v.id !== "settings");
   const moreItems = views
     .filter((v) => !tabs.includes(v.id))
     .map((v) => {
@@ -505,6 +515,18 @@ export function App() {
         <button type="button" className="btn iconbtn" title="Dark theme (t)" aria-label="Dark theme" aria-pressed={dark} onClick={theme}>
           <ThemeIcon />
         </button>
+        {/* Settings, after the theme button and before Sign out; current on the Settings
+            view. On a phone it is under More instead (.top .hide-sm). */}
+        <Link
+          href={routePath("settings")}
+          className="btn iconbtn topset hide-sm"
+          aria-label="Settings"
+          aria-current={route.view === "settings" ? "page" : undefined}
+          data-tip="Settings (g e)"
+          data-tip-side="below"
+        >
+          <NavIcon id="settings" />
+        </Link>
         {!signedOut && (
           <button type="button" className="btn" onClick={() => void leave()} disabled={!feed || leaving}>
             Sign out
@@ -512,7 +534,7 @@ export function App() {
         )}
       </header>
       <nav className="rail" id="rail" aria-label="Sections">
-        {views.map((v) => {
+        {railViews.map((v) => {
           const b = badge[v.id];
           // With a count, the name says what it counts: "Sites, 2 down or degraded".
           const named = b?.n ? `${v.label}, ${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : undefined;

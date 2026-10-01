@@ -136,7 +136,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 ## Using it
 
-- **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Overview, Queue, Incidents, Sites (Settings when no site is configured) and More, which lists every other view with its count.
+- **Where:** https://capsid.dustin-edwards.workers.dev/portal/, signed in through Cloudflare Access as `ADMIN_EMAIL`. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Overview, Queue, Incidents, Sites (none when no site is configured) and More, which lists every other view with its count, Settings among them.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, and copies a blocked job's command.
   - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
@@ -157,7 +157,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 - **Browser tests:** `npm run test:browser`, after `npm run build:dashboard`, drives the built app in Chromium through Playwright (`dashboard/e2e`). It runs under `vite preview` with the dev mock and the Worker's own page CSP (`src/dashboard-csp.ts`). CI runs it after the build. What it covers:
   - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
   - the automation switches: no move before the reason is applied, the empty-reason error, Esc, a refusal beside the switch, and the message with Undo that stays;
-  - the phone tab bar and its More sheet; the theme button's pressed state, Display's System, Light and Dark, the single-key switch, and exact times in the panel;
+  - the phone tab bar and its More sheet; Settings in the top bar and under More; the theme button's pressed state, Display's System, Light and Dark, the single-key switch, and exact times in the panel;
   - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
   - the phone layout;
   - the collapsible sidebar;
