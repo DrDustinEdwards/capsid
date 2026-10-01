@@ -22,7 +22,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 
-const ORIGIN_DEFAULT = "https://capsid.dustin-edwards.workers.dev";
+const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
 // The namespace to repo-folder map, the same one .claude/commands/improve.md carries.
 // A namespace with no folder here is not schedulable from this machine.

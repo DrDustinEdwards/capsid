@@ -70,9 +70,10 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/login/portal" });
     return res.end();
   }
+  // The MCP host serves no Portal (src/mcp-host.ts): the plain 404.
   if (url.pathname === "/portal/") {
-    res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization" });
-    return res.end();
+    res.writeHead(404, NON_HTML);
+    return res.end("not found");
   }
   if (url.pathname === "/csp-report") {
     res.writeHead(204, NON_HTML);
@@ -294,18 +295,18 @@ test("a probe document GitHub does not serve is could-not-run, not a refusal", a
   assert.match(out, /NORUN {2}3 consent form renders/);
 });
 
-test("gate 6 refuses a Portal app that answers without a session", async () => {
+test("gate 6 refuses the Portal answering on the MCP host", async () => {
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.url !== "/portal/") return false;
-      res.writeHead(200, { ...HTML });
-      res.end("<!doctype html><title>app</title>");
+      res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization" });
+      res.end();
       return true;
     }),
     () => false
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}6 security headers per class\n.*\/portal\/ no session: status 200, expected 302/);
+  assert.match(out, /FAIL {2}6 security headers per class\n.*\/portal\/ not on this host: status 302, expected 404/);
 });
 
 test("gate 6 refuses an old /console address that answers anything but 404", async () => {

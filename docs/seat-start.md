@@ -66,7 +66,7 @@ The first passing hardened run (actions run 36296347138) ran harden-runner in `a
 
 | host | reached by |
 | --- | --- |
-| `capsid.dustin-edwards.workers.dev` | node (the key exchange), claude (MCP) |
+| `mcp.dustinedwards.info` | node (the key exchange), claude (MCP) |
 | `github.com` | git (checkout), node (setup-node, the Action's setup), claude (the sandbox proxy: `git push`, the probe's `github_curl`) |
 | `api.github.com` | node (setup-node), bun and gh (the Action) |
 | `release-assets.githubusercontent.com` | node (setup-node, the Action's setup) |

@@ -292,7 +292,7 @@ jobs:
         env:
           IMPROVE_SCORE_KEY: ${{ secrets.IMPROVE_SCORE_KEY }}
           IMPROVE_NAMESPACE: ${{ vars.IMPROVE_NAMESPACE }}
-          CAPSID_URL: https://capsid.dustin-edwards.workers.dev
+          CAPSID_URL: https://mcp.dustinedwards.info
           AWS_DEFAULT_REGION: auto
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
@@ -581,7 +581,7 @@ jobs:
         env:
           IMPROVE_SCORE_KEY: ${{ secrets.IMPROVE_SCORE_KEY }}
           IMPROVE_NAMESPACE: ${{ vars.IMPROVE_NAMESPACE }}
-          CAPSID_URL: https://capsid.dustin-edwards.workers.dev
+          CAPSID_URL: https://mcp.dustinedwards.info
           RUN_ID: ${{ inputs.run_id }}
           ATTEMPT_ID: ${{ inputs.attempt_id }}
           ATTEMPT_HEAD_SHA: ${{ needs.build.outputs.head_sha }}

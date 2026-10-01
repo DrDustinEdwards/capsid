@@ -4,7 +4,7 @@
 // It fails, and names each value, on:
 //   - an email address outside example.com and example.org;
 //   - a hostname other than example.com or example.org (and their subdomains),
-//     github.com under an example owner, and capsid.dustin-edwards.workers.dev;
+//     github.com under an example owner, and mcp.dustinedwards.info;
 //   - a portfolio name (a real site, project or person);
 //   - a job id that is not the sample shape, or one the mock names that the feed lacks;
 //   - a token-shaped string (the shapes src/redact.ts redacts, restated here because a
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_FILES = ["../dev/sample-feed.json", "../dev/mock-api.ts"].map((p) => fileURLToPath(new URL(p, import.meta.url)));
 
 const ALLOWED_EMAIL_DOMAIN = /^(?:[a-z0-9-]+\.)*example\.(?:com|org)$/i;
-const ALLOWED_HOST = /^(?:(?:[a-z0-9-]+\.)*example\.(?:com|org)|capsid\.dustin-edwards\.workers\.dev|github\.com)$/i;
+const ALLOWED_HOST = /^(?:(?:[a-z0-9-]+\.)*example\.(?:com|org)|mcp\.dustinedwards\.info|github\.com)$/i;
 // github.com is allowed only as a path under an example owner.
 const GITHUB_OK = /^github\.com\/example(?:-org)?\//i;
 

@@ -81,7 +81,7 @@ user settings, managed settings or the shell only. So this goes in
     "OTEL_METRICS_EXPORTER": "otlp",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://capsid.dustin-edwards.workers.dev/ops/otlp"
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://mcp.dustinedwards.info/ops/otlp"
   }
 }
 ```
@@ -138,7 +138,7 @@ decision, and would take:
      CLAUDE_CODE_ENABLE_TELEMETRY: "1"
      OTEL_METRICS_EXPORTER: otlp
      OTEL_EXPORTER_OTLP_PROTOCOL: http/json
-     OTEL_EXPORTER_OTLP_ENDPOINT: https://capsid.dustin-edwards.workers.dev/ops/otlp
+     OTEL_EXPORTER_OTLP_ENDPOINT: https://mcp.dustinedwards.info/ops/otlp
      OTEL_RESOURCE_ATTRIBUTES: capsid.job_id=${{ steps.job.outputs.id }}
    ```
 
@@ -156,5 +156,5 @@ decision, and would take:
    concluding either way. If it does disable OTLP, the seat's sessions report nothing
    and their outcome rows stay NULL, which is the honest answer.
 
-Egress needs no change: `capsid.dustin-edwards.workers.dev:443` is already on the
+Egress needs no change: `mcp.dustinedwards.info:443` is already on the
 harden-runner list.
