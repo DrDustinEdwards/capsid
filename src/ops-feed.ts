@@ -262,13 +262,27 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
   return next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
-async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<OpsJob[]> {
+// The store's size against D1's cap (capsid/decisions.md 2026-09-30, "admin panels
+// review adopted", item 5). Every D1 result carries the database's size in
+// meta.size_after, so the jobs read below reports it and the feed makes no extra read
+// (Foxhound reads it the same way: PRAGMA page_count is not authorized on D1). 10 GB is
+// the per-database cap on Workers Paid (developers.cloudflare.com/d1/platform/limits);
+// on Workers Free it is 500 MB, and this is the one line to change.
+export const D1_CAP_BYTES = 10 * 1024 ** 3;
+
+/** The size a D1 result reports, or null when its meta has no number for it. */
+export function sizeFrom(meta: unknown): number | null {
+  const size = (meta as { size_after?: unknown } | null | undefined)?.size_after;
+  return typeof size === "number" && Number.isFinite(size) && size >= 0 ? size : null;
+}
+
+async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   // datetime() on both sides: updated_at is written both as ISO and as D1's default
   // text form, and the two do not compare as text. The watcher's finding row joins
   // on the job it is currently filed as, so a watcher job shows how often its finding
   // has been seen; one row per fingerprint, so the join cannot multiply a job.
-  const { results } = await db
+  const { results, meta } = await db
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
               j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
@@ -287,7 +301,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
         : Promise.resolve(null)
     )
   );
-  return rows.map((r, i) => opsJobFrom(r, checks[i]));
+  return { jobs: rows.map((r, i) => opsJobFrom(r, checks[i])), sizeBytes: sizeFrom(meta) };
 }
 
 async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
@@ -387,7 +401,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobs, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -405,7 +419,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
   ]);
   return {
     generated: now.toISOString(),
-    jobs,
+    jobs: jobRead.jobs,
     agents: agents.map(opsAgentFrom),
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
@@ -415,6 +429,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     namespaces,
     sites,
     packages,
+    store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
   };
 }
 

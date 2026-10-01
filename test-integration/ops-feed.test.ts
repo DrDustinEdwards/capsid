@@ -104,6 +104,14 @@ describe("the feed against real D1", () => {
     expect(again.reads.d1.length).toBe(OPS_FEED_READS.d1);
   });
 
+  it("reports the store's size from the jobs read's meta, with no read of its own, against the 10 GB cap", async () => {
+    // The PLANT above counts every statement, so a size read of its own would fail it.
+    const feed = await opsFeed(env as unknown as Env, NOW);
+    expect(typeof feed.live.store.size_bytes, "real D1 reports meta.size_after").toBe("number");
+    expect(feed.live.store.size_bytes!).toBeGreaterThan(0);
+    expect(feed.live.store.cap_bytes).toBe(10 * 1024 ** 3);
+  });
+
   it("lists every open job and every job that ended in the last day, and nothing older", async () => {
     const feed = await opsFeed(env as unknown as Env, NOW);
     expect(feed.live.jobs.map((j) => j.id).sort()).toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
