@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
 import { fetchActivity } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalActivity } from "../types";
-import { PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { PageHead } from "./shared";
 
 interface Load {
   data: PortalActivity | null;
@@ -111,6 +113,7 @@ export function Activity() {
         </div>
       )}
       <Panel
+        flush
         title="Audit log"
         count={data?.rows.length}
         src={
@@ -124,7 +127,7 @@ export function Activity() {
       >
         {!data && load.loading ? (
           <div className="loading" role="status">
-            Reading the activity...
+            <Spinner label="Reading the activity..." />
           </div>
         ) : data && data.rows.length ? (
           <div className="scroll-x">

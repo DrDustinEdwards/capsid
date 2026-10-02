@@ -3,7 +3,8 @@ import { routePath, useApp } from "../app/ctx";
 import { agentState, attemptsText, loopMode, nsList } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
-import { PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { PageHead } from "./shared";
 
 // The mode is a status word here; the switch and "Runs on" are in the Automation panel on
 // Namespaces (DECIDE 7).
@@ -17,7 +18,7 @@ export function Agents() {
   return (
     <div className="page">
       <PageHead title="Agents" />
-      <Panel title="Roster" src="agents · job outcomes">
+      <Panel flush title="Roster" src="agents · job outcomes">
         <div className="scroll-x reflow">
           <table className="list cards-below-1100">
             <thead>
@@ -76,7 +77,7 @@ export function Agents() {
           </table>
         </div>
       </Panel>
-      <Panel title="Improve loop and budget" src={`month ${b.month}`}>
+      <Panel flush title="Improve loop and budget" src={`month ${b.month}`}>
         <div className="body">
           <dl className="kv">
             <dt>Mode</dt>

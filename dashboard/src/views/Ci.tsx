@@ -2,7 +2,8 @@ import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
 import { ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
-import { NoSnapshot, PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { NoSnapshot, PageHead } from "./shared";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
@@ -16,7 +17,7 @@ export function Ci() {
   return (
     <div className="page">
       <PageHead title="CI and merges" />
-      <Panel title="Default branches" src="watcher ci check · GitHub App">
+      <Panel flush title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
           <div className="scroll-x">
             <table className="list">
@@ -58,12 +59,10 @@ export function Ci() {
             </table>
           </div>
         ) : (
-          <div className="body">
-            <NoSnapshot />
-          </div>
+          <NoSnapshot />
         )}
       </Panel>
-      <Panel title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
+      <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x">
           <table className="list">
             <thead>
@@ -103,7 +102,7 @@ export function Ci() {
           </table>
         </div>
       </Panel>
-      <Panel title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
+      <Panel flush title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
         <div className="scroll-x">
           <table className="list">
             <thead>

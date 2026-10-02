@@ -137,15 +137,6 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 .ns { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .src { font-size: 11px; color: var(--dim); }
 
-/* panels */
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
-/* A panel's header sits on the raised tone instead of a rule under it. */
-.panel > header { display: flex; align-items: center; gap: 10px; padding: 9px 16px; background: var(--raised); border-radius: 10px 10px 0 0; flex-wrap: wrap; }
-.panel > header h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
-.panel > header .src { margin-left: auto; }
-.panel > header .more { margin-left: auto; font-size: 12px; font-weight: 500; }
-.panel > header .src + .more { margin-left: 0; }
-.panel .body { padding: 14px 16px; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
 .scroll-x { overflow-x: auto; position: relative; }
 
@@ -166,7 +157,6 @@ main { overflow-y: auto; min-width: 0; position: relative; }
 .att-row .what b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-row .what div { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-row .when { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
-.allclear { padding: 14px 16px; display: flex; gap: 10px; align-items: center; color: var(--ok); font-weight: 600; }
 
 /* A group of like rows, and the notices, open in place (APG Disclosure). The button is
    the row's one control, stretched over it, so the whole row toggles. Children sit under
@@ -419,6 +409,8 @@ dialog { color: var(--text); }
 .w50 { width: 50%; }
 .small { font-size: 12px; margin: 6px 0 0; }
 .note { margin: 0; font-size: 12px; }
+/* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
+.body { padding: 14px 16px; }
 .stack-gap { display: grid; gap: 12px; }
 .tl-pad { padding: 6px 8px 0; }
 .src.hot, .mono.hot, .num.hot { color: var(--crit); }
@@ -456,7 +448,7 @@ ul.plain.mono { font-size: 12px; }
 main [data-row]:focus-visible { outline-offset: -2px; background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
 main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), inset 0 0 0 1px var(--accent-line); }
 .banner { margin: 16px 24px 0; border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
-.loading { color: var(--muted); padding: 40px 0; text-align: center; }
+.loading { padding: 40px 0; text-align: center; }
 .signedout { margin: 12vh auto 0; max-width: 460px; text-align: center; display: grid; gap: 12px; justify-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
 .signedout h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; }
 .signedout p { margin: 0; color: var(--muted); }
