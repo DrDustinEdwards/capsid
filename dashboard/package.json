@@ -8,8 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check && vite build",
-    "check": "node scripts/palette.mjs --check && node scripts/fixture-check.mjs && tsc --noEmit -p .",
-    "tokens": "node scripts/palette.mjs",
+    "check": "node scripts/fixture-check.mjs && tsc --noEmit -p .",
     "size": "node scripts/size-budget.mjs",
     "preview": "vite preview",
     "e2e": "playwright test",
@@ -21,6 +20,7 @@
   "dependencies": {
     "@fontsource/martian-mono": "^5.3.0",
     "@fontsource/schibsted-grotesk": "^5.3.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.1.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "wouter": "^3.11.0"

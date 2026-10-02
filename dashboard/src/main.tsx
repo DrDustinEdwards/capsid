@@ -10,8 +10,9 @@ import "@fontsource/schibsted-grotesk/latin-800.css";
 import "@fontsource/martian-mono/latin-400.css";
 import "@fontsource/martian-mono/latin-500.css";
 import "@fontsource/martian-mono/latin-600.css";
-// The design tokens first (generated from the seed by scripts/palette.mjs), then the app's styles.
-import "./tokens.css";
+// Capsomer's layer order and tokens first (in the cap.* layers, so the app's unlayered styles
+// win), then the app's styles.
+import "capsomer/tokens.css";
 import "./styles.css";
 import { applySavedTheme } from "./lib/prefs";
 import { BASE } from "./lib/base";
