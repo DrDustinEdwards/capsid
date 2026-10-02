@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, type Answer } from "../lib/api";
@@ -6,7 +7,8 @@ import type { Kind } from "../lib/derive";
 import { age, ago, ms, utc } from "../lib/format";
 import type { ClaimsAgreement, ClaimsAgreementCounts, ClaimsGroup, JobClaimRow, JobEvaluationRow, PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { St } from "../ui/icons";
-import { PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { PageHead } from "./shared";
 
 interface Load<T> {
   data: T | null;
@@ -148,7 +150,7 @@ function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
   const orphans = data.evaluations.filter((e) => e.claim_id === null || !data.claims.some((c) => c.id === e.claim_id));
   return (
     <>
-      <Panel title={`Job ${job.id}`} src={`${job.namespace} · ${job.status}${job.claimed_by ? ` · held by ${job.claimed_by}` : ""}`}>
+      <Panel flush title={`Job ${job.id}`} src={`${job.namespace} · ${job.status}${job.claimed_by ? ` · held by ${job.claimed_by}` : ""}`}>
         <div className="body">
           <p>{job.title}</p>
           {data.truncated.length > 0 && (
@@ -159,7 +161,7 @@ function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
           {data.outcome === null && <p className="faint">No outcome recorded: the job has not completed or failed.</p>}
         </div>
       </Panel>
-      <Panel title="Claim against verified" count={data.claims.length} src="each claim as the agent sent it, and each check the Worker ran on it">
+      <Panel flush title="Claim against verified" count={data.claims.length} src="each claim as the agent sent it, and each check the Worker ran on it">
         {data.claims.length === 0 ? (
           <div className="body faint">No claim recorded for this job: it has not reached complete, fail or block since claims were recorded.</div>
         ) : (
@@ -228,7 +230,7 @@ function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
           </div>
         )}
       </Panel>
-      <Panel title="Touch log" count={data.touches.length} src="every time a human, or a policy acting for one, touched this job, oldest first">
+      <Panel flush title="Touch log" count={data.touches.length} src="every time a human, or a policy acting for one, touched this job, oldest first">
         {data.touches.length === 0 ? (
           <div className="body faint">No touch recorded: nobody gated, resumed, released or reviewed this job.</div>
         ) : (
@@ -390,6 +392,7 @@ export function Claims() {
         </div>
       )}
       <Panel
+        flush
         title="By agent"
         count={data?.groups.length}
         src={
@@ -403,7 +406,7 @@ export function Claims() {
       >
         {!data && agg.loading ? (
           <div className="loading" role="status">
-            Reading the claims...
+            <Spinner label="Reading the claims..." />
           </div>
         ) : data && data.groups.length ? (
           <div className="scroll-x reflow">
@@ -457,7 +460,7 @@ export function Claims() {
         )}
       </Panel>
       {checks.length > 0 && (
-        <Panel title="By check" count={checks.length} src="every agent above, summed">
+        <Panel flush title="By check" count={checks.length} src="every agent above, summed">
           <div className="scroll-x reflow">
             <table className="list cards-below-1100">
               <thead>
@@ -516,7 +519,7 @@ export function Claims() {
       </form>
       {detail.loading && (
         <div className="loading" role="status">
-          Reading the job...
+          <Spinner label="Reading the job..." />
         </div>
       )}
       {detail.error && (

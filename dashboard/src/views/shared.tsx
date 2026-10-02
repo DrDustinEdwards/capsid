@@ -1,3 +1,5 @@
+import { Empty } from "capsomer/react/empty";
+import { Panel } from "capsomer/react/panel";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
@@ -13,21 +15,6 @@ export function PageHead({ title }: { title: string }) {
     <div className="pagehead">
       <h1>{title}</h1>
     </div>
-  );
-}
-
-// section: the name the anchor bar gives this panel (ui/anchors.tsx), with id its target.
-export function Panel({ title, src, children, className, count, id, section, more }: { title: string; src?: ReactNode; children: ReactNode; className?: string; count?: number; id?: string; section?: string; more?: ReactNode }) {
-  return (
-    <section className={`panel${className ? ` ${className}` : ""}`} id={id} data-section={section}>
-      <header>
-        <h2>{title}</h2>
-        {count != null && <span className="num faint">{count}</span>}
-        {src != null && <span className="src">{src}</span>}
-        {more}
-      </header>
-      {children}
-    </section>
   );
 }
 
@@ -71,20 +58,25 @@ export function NsChips({ list }: { list: string[] }) {
 // (pattern catalogue, N-empty).
 export function FilterEmpty({ children, onShowAll }: { children: ReactNode; onShowAll: () => void }) {
   return (
-    <div className="body toolbar" role="status" data-filter-empty="">
-      <span className="faint">{children}</span>
-      <button type="button" className="btn" onClick={onShowAll}>
-        Show all
-      </button>
+    <div role="status" data-filter-empty="">
+      <Empty
+        kind="no-match"
+        title={children}
+        action={
+          <button type="button" className="btn" onClick={onShowAll}>
+            Show all
+          </button>
+        }
+      />
     </div>
   );
 }
 
 export function NoSnapshot() {
   return (
-    <div className="callout">
-      <St kind="nodata">No data</St> The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear after it does.
-    </div>
+    <Empty kind="nothing-yet" title={<St kind="nodata">No data</St>}>
+      The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear after it does.
+    </Empty>
   );
 }
 
@@ -308,7 +300,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
   const { feed, now } = useApp();
   let items = incidents(feed);
   if (ns && ns !== "all") items = items.filter((x) => x.ns === ns);
-  if (!items.length) return <div className="allclear">No watcher findings in the live window.</div>;
+  if (!items.length) return <Empty kind="all-clear" title="No watcher findings in the live window." />;
   return (
     <div className="feed">
       {items.map((it) => {
@@ -370,7 +362,7 @@ export function TimelinePanel({ title, days, src, id, section }: { title: string
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
   // The legend sits in the header beside the source, so the chart is all the body holds.
   return (
-    <Panel title={title} src={sites.length ? <span className="tl-head"><TimelineLegend /><span>{src}</span></span> : src} className="tl" id={id} section={section}>
+    <Panel flush title={title} src={sites.length ? <span className="tl-head"><TimelineLegend /><span>{src}</span></span> : src} className="tl" id={id} section={section}>
       {!hasSites(feed) ? (
         <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
       ) : sites.length ? (
@@ -380,9 +372,7 @@ export function TimelinePanel({ title, days, src, id, section }: { title: string
           </div>
         </>
       ) : (
-        <div className="body">
-          <NoSnapshot />
-        </div>
+        <NoSnapshot />
       )}
     </Panel>
   );

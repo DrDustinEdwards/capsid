@@ -6,7 +6,8 @@ import { St } from "../ui/icons";
 import { Switch } from "../ui/Switch";
 import { setSingleKeys, setThemeChoice, useSingleKeys, useThemeChoice, type ThemeChoice } from "../lib/prefs";
 import type { OpsSiteConfig } from "../types";
-import { PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { PageHead } from "./shared";
 import { PackageSettings } from "./SettingsPackages";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
@@ -110,10 +111,10 @@ function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void 
 
   const f = (k: string) => `${id}-${k}`;
   return (
-    <section className="panel" ref={box} aria-labelledby={f("h")}>
-      <header>
+    <section className="cap-panel" ref={box} aria-labelledby={f("h")}>
+      <header className="cap-panel-head">
         <h2 id={f("h")}>{adding ? "Add a site" : `Edit ${editing.row.namespace}`}</h2>
-        {!adding && <span className="src">revision {editing.row.revision}</span>}
+        {!adding && <span className="cap-panel-src">revision {editing.row.revision}</span>}
       </header>
       <form
         className="siteform"
@@ -248,7 +249,7 @@ export function Settings() {
         </button>
       </div>
       {editing && <SiteForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
-      <Panel title="Sites" count={rows.length} src="D1 ops_sites">
+      <Panel flush title="Sites" count={rows.length} src="D1 ops_sites">
         {rows.length ? (
           <div className="scroll-x reflow">
             <table className="list cards-below-1320">
@@ -295,7 +296,7 @@ function Display() {
   const choice = useThemeChoice();
   const singleKeys = useSingleKeys();
   return (
-    <Panel title="Display" src="this browser only">
+    <Panel flush title="Display" src="this browser only">
       <div className="body stack-gap">
         <fieldset className="radios">
           <legend className="section-title">Theme</legend>

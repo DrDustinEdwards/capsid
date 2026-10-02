@@ -4,7 +4,8 @@ import { fetchPackageHistory } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
-import { NoSnapshot, PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { NoSnapshot, PageHead } from "./shared";
 
 // The optional Packages panel (capsid/decisions.md, 2026-09-29): one panel per package
 // configured in Settings, as the watcher's last pass read it (src/ops-packages.ts), and
@@ -120,7 +121,7 @@ function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnaps
   const { now } = useApp();
   const enc = encodeURIComponent(cfg.name);
   return (
-    <Panel title={cfg.name} src={snap ? `read ${ago(ms(snap.at), now)}` : "not read yet"}>
+    <Panel flush title={cfg.name} src={snap ? `read ${ago(ms(snap.at), now)}` : "not read yet"}>
       <div className="body stack-gap" data-package={cfg.name}>
         {!snap ? (
           <p className="faint">The watcher reads this package on its next pass.</p>
