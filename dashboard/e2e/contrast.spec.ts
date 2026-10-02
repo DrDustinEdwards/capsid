@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
 // Contrast as the browser paints it, in both themes: the colour of real text against the
-// background behind it, not the tokens on their own (scripts/palette.mjs checks those).
+// background behind it, not the tokens on their own (Capsomer's palette check covers those).
 // WCAG 2.2: 4.5:1 for text, 3:1 for a control's boundary and the selection ring.
 
 interface Reading {

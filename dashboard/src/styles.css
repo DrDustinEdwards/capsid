@@ -1,5 +1,5 @@
-/* Colours, fonts, shadows: tokens.css, generated from the seed by scripts/palette.mjs and
-   loaded before this file (main.tsx). Only the app's own dimensions live here. */
+/* Colours, fonts, shadows: Capsomer's tokens, loaded before this file (main.tsx). Only the
+   app's own dimensions live here. */
 :root { --rail: 208px; --top: 44px; }
 
 * { box-sizing: border-box; }
