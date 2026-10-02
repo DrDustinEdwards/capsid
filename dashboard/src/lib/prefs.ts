@@ -35,7 +35,7 @@ export const RAIL_PREF = "wf-rail";
 
 // The theme: "light" or "dark" saved, or nothing saved, which follows the system
 // (prefers-color-scheme). The choice is the data-theme attribute on <html>; with none,
-// tokens.css follows the system.
+// Capsomer's tokens follow the system.
 export const THEME_PREF = "wf-theme";
 export type Theme = "light" | "dark";
 export type ThemeChoice = "system" | Theme;
