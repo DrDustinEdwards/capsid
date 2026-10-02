@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Spinner } from "capsomer/react/empty";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
@@ -493,7 +494,7 @@ export function App() {
           </div>
         ) : (
           <div className="loading" role="status">
-            Reading the feed...
+            <Spinner label="Reading the feed..." />
           </div>
         )}
       </div>
@@ -510,7 +511,7 @@ export function App() {
           fallback={
             <div className="page">
               <div className="loading" role="status">
-                Loading...
+                <Spinner label="Loading..." />
               </div>
             </div>
           }

@@ -4,7 +4,8 @@ import { ago, age, ms } from "../lib/format";
 import type { OpsTask } from "../types";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
-import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, Panel, useNsFilter } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
 export function Incidents() {
   const { feed, now } = useApp();
@@ -17,10 +18,10 @@ export function Incidents() {
       <PageHead title="Incidents" />
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
-        <Panel title="Findings" src="jobs posted by agent:watcher">
+        <Panel flush title="Findings" src="jobs posted by agent:watcher">
           {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the namespace {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
         </Panel>
-        <Panel title="Last watcher pass" src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}>
+        <Panel flush title="Last watcher pass" src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}>
           {snap ? (
             <>
               <div className="body">
@@ -71,9 +72,7 @@ export function Incidents() {
               </div>
             </>
           ) : (
-            <div className="body">
-              <NoSnapshot />
-            </div>
+            <NoSnapshot />
           )}
         </Panel>
       </div>
@@ -95,7 +94,7 @@ function ScheduledTasks() {
   const { feed, now } = useApp();
   const s = feed.scheduled;
   return (
-    <Panel title="Scheduled tasks" src="run ledger" id="scheduled">
+    <Panel flush title="Scheduled tasks" src="run ledger" id="scheduled">
       {s.error !== null ? (
         <div className="body">
           <div className="callout">

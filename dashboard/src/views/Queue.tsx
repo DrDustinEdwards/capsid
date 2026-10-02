@@ -3,7 +3,9 @@ import { routePath, useApp } from "../app/ctx";
 import { agentLabel, ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
-import { FilterEmpty, NsChips, PageHead, Panel, QueueRows, useNsFilter } from "./shared";
+import { Empty } from "capsomer/react/empty";
+import { Panel } from "capsomer/react/panel";
+import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 
 // The state only: the switch is in the Automation panel on Namespaces (DECIDE 7).
 export function SeatStart() {
@@ -50,7 +52,7 @@ export function SeatStart() {
 export function LiveSessions() {
   const { feed, now } = useApp();
   const list = feed.live.sessions;
-  if (!list.length) return <div className="allclear">No live sessions in the last 24 hours.</div>;
+  if (!list.length) return <Empty kind="all-clear" title="No live sessions in the last 24 hours." />;
   // A row names the session's job by its title; the id is in the job's drawer (D11).
   const title = (id: string | null) => (id ? (feed.live.jobs.find((j) => j.id === id)?.title ?? "A job outside the live window") : "No job bound");
   return (
@@ -99,7 +101,7 @@ export function Queue() {
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
       </div>
       <div className="grid2">
-        <Panel title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
+        <Panel flush title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
@@ -109,7 +111,7 @@ export function Queue() {
             <QueueRows jobs={jobs} />
           )}
         </Panel>
-        <Panel title="By namespace" id="by-namespace" section="By namespace">
+        <Panel flush title="By namespace" id="by-namespace" section="By namespace">
           <div className="scroll-x">
             <table className="list">
               <tbody>
@@ -143,7 +145,7 @@ export function Queue() {
             <SeatStart />
           </div>
         </Panel>
-        <Panel title="Live sessions" id="live-sessions" section="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
+        <Panel flush title="Live sessions" id="live-sessions" section="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
           <LiveSessions />
         </Panel>
       </div>
