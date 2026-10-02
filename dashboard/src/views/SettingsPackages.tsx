@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useApp } from "../app/ctx";
 import { ago, msSql, utc } from "../lib/format";
 import type { OpsPackageConfig } from "../types";
-import { Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import {  } from "./shared";
 
 // The package configuration (live.packages, the ops_packages table): one row per npm
 // package the Packages view shows. Every change goes through the confirm dialog, which
@@ -50,10 +51,10 @@ function PackageForm({ editing, onClose }: { editing: Editing; onClose: () => vo
     });
   };
   return (
-    <section className="panel" ref={box} aria-labelledby={f("h")}>
-      <header>
+    <section className="cap-panel" ref={box} aria-labelledby={f("h")}>
+      <header className="cap-panel-head">
         <h2 id={f("h")}>{adding ? "Add a package" : `Edit ${editing.row.name}`}</h2>
-        {!adding && <span className="src">revision {editing.row.revision}</span>}
+        {!adding && <span className="cap-panel-src">revision {editing.row.revision}</span>}
       </header>
       <form
         className="siteform"
@@ -113,7 +114,7 @@ export function PackageSettings() {
         </button>
       </div>
       {editing && <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
-      <Panel title="Packages" count={rows.length} src="D1 ops_packages">
+      <Panel flush title="Packages" count={rows.length} src="D1 ops_packages">
         {rows.length ? (
           <div className="scroll-x">
             <table className="list">

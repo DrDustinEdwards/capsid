@@ -3,7 +3,8 @@ import { DAY, ago, bytes, ms } from "../lib/format";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
-import { NoSnapshot, PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { NoSnapshot, PageHead } from "./shared";
 
 export function Backups() {
   const { feed, now } = useApp();
@@ -25,7 +26,7 @@ export function Backups() {
     <div className="page">
       {head}
       <div className="grid2">
-        <Panel title="Primary: Capsid D1" src="/health backup">
+        <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body stack-gap">
             {!h ? (
               <div className="callout">
@@ -70,7 +71,7 @@ export function Backups() {
             )}
           </div>
         </Panel>
-        <Panel title="Off-account mirror" src="mirror workflow">
+        <Panel flush title="Off-account mirror" src="mirror workflow">
           <div className="body stack-gap">
             {!m ? (
               <div className="callout">

@@ -6,8 +6,10 @@ import { DAY, age, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import type { SiteSnapshot } from "../types";
 import { Anchors } from "../ui/anchors";
 import { UptimeTicks, errorTotals } from "../ui/charts";
-import { Icon, NoData, St } from "../ui/icons";
-import { NoSnapshot, PageHead, Panel, TimelinePanel } from "./shared";
+import { NoData, St } from "../ui/icons";
+import { Empty } from "capsomer/react/empty";
+import { Panel } from "capsomer/react/panel";
+import { NoSnapshot, PageHead, TimelinePanel } from "./shared";
 
 // The Overview answers one question: does anything need me? In order: six summary
 // tiles, the problems worst first with like rows grouped, the notices collapsed, one
@@ -75,18 +77,19 @@ export function Overview() {
       {sitesOn && (
         <>
           <Panel
+            flush
             title="Sites"
             id="sites"
             section="Sites"
             count={snap?.sites.length}
             src={snap ? `watcher pass ${ago(ms(snap.pass_at), now)}` : undefined}
             more={
-              <Link className="more" href={routePath("sites")}>
+              <Link href={routePath("sites")}>
                 All columns in Sites
               </Link>
             }
           >
-            {snap ? <SitesTable sites={snap.sites} /> : <div className="body"><NoSnapshot /></div>}
+            {snap ? <SitesTable sites={snap.sites} /> : <NoSnapshot />}
           </Panel>
           <TimelinePanel title="Deploys and downtime, 7 days" days={7} src="Cloudflare deployments · probe ring" id="deploys" section="Deploys" />
         </>
@@ -131,9 +134,7 @@ function NeedsAttention({ sitesOn }: { sitesOn: boolean }) {
           )}
         </div>
       ) : (
-        <div className="allclear">
-          <Icon kind="ok" /> All clear. Nothing needs you.
-        </div>
+        <Empty kind="all-clear" title="All clear. Nothing needs you." />
       )}
       {notices.length > 0 && <Notices rows={notices} count={noticeCount} />}
     </section>

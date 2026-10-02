@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import type { OpsAgent, OpsJob, PortalActivityRow, SiteSnapshot } from "../types";
 import { fetchActivity } from "../lib/api";
@@ -353,7 +354,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
         <div className="dbody">
           <div className="loading" role="status">
-            Reading the row...
+            <Spinner label="Reading the row..." />
           </div>
         </div>
       </>

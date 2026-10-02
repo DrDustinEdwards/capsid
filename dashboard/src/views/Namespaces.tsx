@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { fetchNamespaces } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
@@ -7,7 +8,8 @@ import { St } from "../ui/icons";
 import { AutomationSwitch, ReasonForm, useApplySwitch } from "../ui/Switch";
 import { When } from "../ui/When";
 import type { PortalNamespace, PortalNamespaces } from "../types";
-import { PageHead, Panel } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { PageHead } from "./shared";
 
 // The Automation panel and the roster (ruled 2026-09-30, DECIDE 5, 6 and 7). Every
 // automation change is a switch that asks for a reason beside it, moves only when the
@@ -48,7 +50,7 @@ function Automation() {
   const shownRuns = pendingRuns ?? (loopOn ? mode : chosen);
 
   return (
-    <Panel title="Automation" src="each change is recorded in Activity with its reason">
+    <Panel flush title="Automation" src="each change is recorded in Activity with its reason">
       <div className="auto">
         <div className="auto-row">
           <div className="what">
@@ -322,6 +324,7 @@ export function Namespaces() {
         </div>
       )}
       <Panel
+        flush
         title="Roster"
         count={data?.namespaces.length}
         src={
@@ -335,7 +338,7 @@ export function Namespaces() {
       >
         {!data && load.loading ? (
           <div className="loading" role="status">
-            Reading the namespaces...
+            <Spinner label="Reading the namespaces..." />
           </div>
         ) : data && data.namespaces.length ? (
           <div className="scroll-x reflow">

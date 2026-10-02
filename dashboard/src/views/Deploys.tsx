@@ -3,7 +3,8 @@ import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { DAY, ago, ms, shortId, utc } from "../lib/format";
 import { Anchors } from "../ui/anchors";
-import { NoSnapshot, NsChips, PageHead, Panel, TimelinePanel, useNsFilter } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { NoSnapshot, NsChips, PageHead, TimelinePanel, useNsFilter } from "./shared";
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
 
@@ -34,7 +35,7 @@ export function Deploys() {
       {snap ? (
         <>
           <NsChips list={snap.sites.map((s) => s.namespace)} />
-          <Panel title="Every deploy" id="every-deploy" section="Every deploy" count={list.length} src="at most 10 per site, newest first">
+          <Panel flush title="Every deploy" id="every-deploy" section="Every deploy" count={list.length} src="at most 10 per site, newest first">
             <div className="scroll-x">
               <table className="list">
                 <thead>
@@ -83,7 +84,7 @@ export function Deploys() {
             </div>
           </Panel>
           {missing.length > 0 && (
-            <Panel title="Sites with no deploy data" id="no-deploy-data" section="No deploy data" count={missing.length}>
+            <Panel flush title="Sites with no deploy data" id="no-deploy-data" section="No deploy data" count={missing.length}>
               <div className="scroll-x">
                 <table className="list">
                   <tbody>

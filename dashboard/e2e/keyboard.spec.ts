@@ -37,7 +37,7 @@ async function selected(page: Page): Promise<{ index: number; title: string; bg:
       title: row?.querySelector("b")?.textContent ?? "",
       bg: s?.backgroundColor ?? "",
       shadow: s?.boxShadow ?? "",
-      surface: getComputedStyle(document.querySelector(".panel")!).backgroundColor,
+      surface: getComputedStyle(document.querySelector(".cap-panel")!).backgroundColor,
     };
   });
 }

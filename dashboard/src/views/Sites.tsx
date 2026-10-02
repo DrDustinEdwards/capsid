@@ -2,7 +2,8 @@ import { useApp } from "../app/ctx";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
-import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, Panel, useNsFilter } from "./shared";
+import { Panel } from "capsomer/react/panel";
+import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
 export function Sites() {
   const { feed, now } = useApp();
@@ -25,10 +26,10 @@ export function Sites() {
     <div className="page">
       {head}
       <NsChips list={snap.sites.map((s) => s.namespace)} />
-      <Panel title="Fleet" src={`watcher pass ${ago(ms(snap.pass_at), now)}`}>
+      <Panel flush title="Fleet" src={`watcher pass ${ago(ms(snap.pass_at), now)}`}>
         {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No site in the namespace {ns}.</FilterEmpty> : <FleetTable sites={list} />}
       </Panel>
-      <Panel title="Health contract coverage" src="GET /health returning {status, sha}">
+      <Panel flush title="Health contract coverage" src="GET /health returning {status, sha}">
         <div className="scroll-x">
           <table className="list">
             <thead>
