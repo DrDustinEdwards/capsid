@@ -55,6 +55,24 @@ describe("clearFinding", () => {
     expect(await row("job_000000000001")).toEqual({ status: "failed", result_summary: "cleared" });
   });
 
+  it("closes the job's mirror document in the same write, and leaves a claimed job's mirror alone", async () => {
+    // The stranded-mirror bug: the row failed while documents.status stayed active.
+    for (const id of ["job_000000000010", "job_000000000011"]) {
+      await seed(id, id.endsWith("11") ? { status: "claimed" } : {});
+      await env.DB.prepare(
+        "INSERT INTO documents (namespace, path, title, body, type, tags, status) VALUES ('capsid', ?1, 't', 'b', 'task', 'jobs', 'active')"
+      )
+        .bind(`jobs/${id}.md`)
+        .run();
+    }
+    const mirror = (id: string) =>
+      env.DB.prepare("SELECT status FROM documents WHERE path = ?1").bind(`jobs/${id}.md`).first<{ status: string }>();
+    expect(await clearFinding(env_, "job_000000000010", NOW)).toBe(true);
+    expect(await clearFinding(env_, "job_000000000011", NOW)).toBe(false);
+    expect((await mirror("job_000000000010"))?.status).toBe("closed");
+    expect((await mirror("job_000000000011"))?.status).toBe("active");
+  });
+
   it("cannot close a job a driver claimed, nor somebody else's job, and reports false when it moved nothing", async () => {
     await seed("job_000000000002", { status: "claimed" });
     await seed("job_000000000003", { posted_by: "github:DrDustinEdwards" });
@@ -75,5 +93,54 @@ describe("a job blocked on a human is not a watcher finding", () => {
     const { findings, ran } = await gatherFindings(env_, NOW);
     expect(findings.filter((f) => f.fingerprint.startsWith("blocked-"))).toEqual([]);
     expect([...ran] as string[]).not.toContain("blocked jobs");
+  });
+});
+
+describe("migrations/0030, the mirror backfill", () => {
+  // Already run on an empty store at setup, so its statements run again over seeded rows.
+  const backfill = env.TEST_MIGRATIONS.find((m) => m.name === "0030_close_finished_job_mirrors.sql");
+  const statusOf = (id: string) =>
+    env.DB.prepare("SELECT status FROM documents WHERE path = ?1").bind(`jobs/${id}.md`).first<{ status: string }>();
+
+  it("closes the active mirror of every finished job, snapshots and audits each, and leaves open jobs and other documents alone", async () => {
+    expect(backfill, "no migration named 0030_close_finished_job_mirrors.sql").toBeTruthy();
+    const jobs: Array<[string, string]> = [
+      ["job_bf0000000001", "failed"],
+      ["job_bf0000000002", "done"],
+      ["job_bf0000000003", "superseded"],
+      ["job_bf0000000004", "queued"],
+      ["job_bf0000000005", "claimed"],
+      ["job_bf0000000006", "blocked"],
+    ];
+    for (const [id, status] of jobs) {
+      await seed(id, { status });
+      await env.DB.prepare(
+        "INSERT INTO documents (namespace, path, title, body, type, tags, status) VALUES ('capsid', ?1, 't', 'b', 'task', 'jobs', 'active')"
+      )
+        .bind(`jobs/${id}.md`)
+        .run();
+    }
+    // A document that is not a mirror, and an already closed mirror.
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', 'jobs/job_bf0000000001-notes.md', 't', 'b', 'task', 'active')"
+    ).run();
+
+    const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
+    for (const query of backfill!.queries) await env.DB.prepare(query).run();
+    const audited = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
+    const versions = await env.DB.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE path LIKE 'jobs/job_bf%'").first<{ n: number }>();
+
+    for (const [id, status] of jobs) {
+      const finished = ["failed", "done", "superseded"].includes(status);
+      expect((await statusOf(id))?.status, `${id} (${status})`).toBe(finished ? "closed" : "active");
+    }
+    expect((await statusOf("job_bf0000000001-notes"))?.status).toBe("active");
+    expect(audited!.n - before!.n).toBe(3);
+    expect(versions!.n).toBe(3);
+
+    // Run again: nothing left to close, so nothing more is written.
+    for (const query of backfill!.queries) await env.DB.prepare(query).run();
+    const again = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
+    expect(again!.n).toBe(audited!.n);
   });
 });
