@@ -538,6 +538,19 @@ WHERE action LIKE 'portal-%' OR action LIKE 'console-%'
 ORDER BY id DESC LIMIT 50;
 ```
 
+**Reads of the rules are audited.** A `read` of `capsid/conventions.md`, or a `brief` (which
+carries it), writes one `conventions-read` row under the caller's actor, at most one per
+caller per hour (`src/conventions-read.ts`, `test-integration/conventions-read.test.ts`).
+The row is in namespace `capsid` with no path, because a row addressed to the document
+would make the reader its `last_actor`. `params` are `{"via": "read" | "brief",
+"for_namespace": ...}`. Per caller over the last week:
+
+```sql
+SELECT actor, COUNT(*) AS hours_with_a_read FROM audit_log
+WHERE action = 'conventions-read' AND at >= datetime('now', '-7 days')
+GROUP BY actor ORDER BY hours_with_a_read DESC;
+```
+
 **The site configuration** is the table `ops_sites`, one row per namespace
 (docs/portal.md, "Sites are configuration"). Its edits are audited as
 `ops-site-added`, `ops-site-edited` and `ops-site-removed` under `access:<email>`,
