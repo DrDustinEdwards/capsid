@@ -28,9 +28,10 @@ const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);
-// A usage figure the agent read off its own session. finite() so NaN and Infinity, which
-// JSON cannot carry but a caller object can, are refused here and never reach SUM().
-const usageAmount = z.number().finite().nonnegative();
+// A usage figure the agent read off its own session. zod's number() already refuses NaN
+// and Infinity, which JSON cannot carry but a caller object can; the claim test pins that,
+// so neither can reach SUM().
+const usageAmount = z.number().nonnegative();
 
 // Strict at every level: an unknown key is refused, never dropped. A dropped key is a
 // claim the agent made and the record does not have, which is the loss this table
