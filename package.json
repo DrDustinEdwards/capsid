@@ -29,7 +29,7 @@
     "report:bloat": "node scripts/no-bloat-report.mjs"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "4.20260702.1",
     "@types/node": "24.13.3",
     "jscpd": "5.3.2",
