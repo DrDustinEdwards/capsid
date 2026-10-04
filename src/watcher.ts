@@ -10,6 +10,7 @@ import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { markJobFailed, readJob } from "./jobs-transition";
 import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
+import { readRepoMap, unmappedRepos, type RepoMapRead } from "./unmapped-repos";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
 import { readCloudflare } from "./ops-cloudflare";
@@ -472,6 +473,7 @@ export const WATCHER_CHECKS = [
   "scorer surface",
   "ci",
   "site map",
+  "repo map",
   "site probes",
   "cloudflare",
 ] as const;
@@ -488,6 +490,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^(scorer-diverged-|scorer-identity-unknown$)/, "scorer surface"],
   [/^ci-red-/, "ci"],
   [/^site-map-drift-/, "site map"],
+  [/^unmapped-repo/, "repo map"],
   [/^site-down-/, "site probes"],
   [/^site-errors-/, "cloudflare"],
 ];
@@ -532,6 +535,35 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
       "The Portal shows only configured sites, so an unmapped site is one nobody is watching.",
     ]),
   ];
+}
+
+/** One finding per repo the GitHub App can see that no namespace maps, naming it and the
+ *  namespace its name suggests. It proposes; mapping is admin-only and never automatic
+ *  (capsid/decisions.md 2026-09-13). Every finding says what the read covered, so a clear
+ *  pass is never "0 unmapped" over "0 listed". */
+function unmappedRepoFindings(read: RepoMapRead): Finding[] {
+  const covered = `the App's ${read.installations} installation(s) list ${read.installed.length} repos; ${read.mapped.size} are mapped to a namespace; ${read.onPurpose.size} are named unmapped on purpose`;
+  return unmappedRepos(read).map((r) =>
+    finding("capsid", `unmapped-repo-${r.full_name.toLowerCase().replace("/", "--")}`, `${r.full_name} is visible to the GitHub App but no namespace maps it`, [
+      `${r.full_name}: ${r.private ? "private" : "public"}, ${r.archived ? "archived" : "not archived"}, last push ${r.pushed_at ?? "unknown"}`,
+      r.suggested
+        ? `likely namespace: ${r.suggested} (from the repo name). Map it with update_namespace, adding ${r.full_name} with a label.`
+        : "no registered namespace matches its name. Register one with register_namespace, or map it into an existing namespace with update_namespace.",
+      "If it is unmapped on purpose (archived, frozen, or going away), list it in capsid/unmapped-repos.md, one owner/name per line, and this stops.",
+      covered,
+      "This check only proposes. Mapping is the authorization boundary and stays with the seat or Dustin.",
+    ])
+  );
+}
+
+/** The App's repo list could not be read whole, so unmapped repos cannot be found. Fails
+ *  closed: this is a finding, and the "repo map" check does not count as run, so an open
+ *  unmapped-repo finding is not cleared on no evidence. */
+function repoMapUnreadableFinding(reason: string): Finding {
+  return finding("capsid", "unmapped-repos-unreadable", "the GitHub App's repository list could not be read, so unmapped repos cannot be found", [
+    reason,
+    "Until this reads, no repo is being checked against the namespace mapping.",
+  ]);
 }
 
 /** A site down on two probes in a row: the previous snapshot's ring ended in '0' and
@@ -982,6 +1014,18 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     ran.add("site map");
     observed.siteMap = siteMapDrift(registered, config);
     out.push(...siteMapFindings(observed.siteMap));
+  }
+
+  // The App's repos against the namespace mapping. Read whole or not at all: a failed
+  // or empty read is its own finding and leaves the check un-run (src/unmapped-repos.ts).
+  try {
+    const repoMap = await readRepoMap(env);
+    ran.add("repo map");
+    out.push(...unmappedRepoFindings(repoMap));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`WATCHER_READ_FAILED repo map: ${reason}`);
+    out.push(repoMapUnreadableFinding(reason));
   }
 
   // Every configured site, probed in turn. With none configured nothing is probed and

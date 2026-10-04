@@ -113,6 +113,69 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
   return data.token;
 }
 
+// What the App can see, for the watcher's unmapped-repo check (src/unmapped-repos.ts).
+// Listing /installation/repositories needs an installation token covering every repo,
+// which getInstallationToken deliberately never mints. This one is minted for the call,
+// limited to the metadata:read permission (names, visibility, archived and push date, and
+// nothing else: no contents, no writes), held in a local variable and never stored in
+// KV or logged. It is the only unscoped token in the Worker.
+export interface InstalledRepo {
+  full_name: string;
+  private: boolean;
+  archived: boolean;
+  pushed_at: string | null;
+}
+
+const LIST_PER_PAGE = 100;
+const LIST_MAX_PAGES = 10;
+
+/** Every repo every installation of the App can see. Throws on any failed or partial
+ *  read: a list read in part would read as "everything else is unmapped" or, worse,
+ *  "nothing is". */
+export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRepo[]; installations: number }> {
+  const installations: number[] = [];
+  for (let page = 1; ; page++) {
+    if (page > LIST_MAX_PAGES) throw new Error(`the App has more than ${LIST_MAX_PAGES * LIST_PER_PAGE} installations`);
+    const resp = await appFetch(env, `/app/installations?per_page=${LIST_PER_PAGE}&page=${page}`);
+    if (!resp.ok) throw new Error(`could not list the App's installations (${resp.status})`);
+    const rows = (await resp.json()) as Array<{ id: number }>;
+    installations.push(...rows.map((r) => r.id));
+    if (rows.length < LIST_PER_PAGE) break;
+  }
+
+  const repos: InstalledRepo[] = [];
+  for (const id of installations) {
+    const minted = await appFetch(env, `/app/installations/${id}/access_tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permissions: { metadata: "read" } }),
+    });
+    if (!minted.ok) throw new Error(`could not mint a metadata-only token for installation ${id} (${minted.status})`);
+    const { token } = (await minted.json()) as { token: string };
+    let total = Infinity;
+    const seen: InstalledRepo[] = [];
+    for (let page = 1; seen.length < total; page++) {
+      if (page > LIST_MAX_PAGES) throw new Error(`installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`);
+      const resp = await fetch(`${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`, {
+        headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
+      const body = (await resp.json()) as {
+        total_count: number;
+        repositories: Array<{ full_name: string; private: boolean; archived?: boolean; pushed_at?: string | null }>;
+      };
+      total = body.total_count;
+      if (body.repositories.length === 0) break;
+      for (const r of body.repositories) {
+        seen.push({ full_name: r.full_name, private: r.private, archived: r.archived === true, pushed_at: r.pushed_at ?? null });
+      }
+    }
+    if (seen.length < total) throw new Error(`installation ${id} listed ${seen.length} of ${total} repos`);
+    repos.push(...seen);
+  }
+  return { repos, installations: installations.length };
+}
+
 // One installation covers every repo under a single owner, but each minted token is
 // scoped to one repo, so the token cache is per owner+repo to match.
 
