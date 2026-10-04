@@ -1,4 +1,8 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -26,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && npm run -s check 2>&1 | tail -20 >&2; s=${PIPESTATUS[0]}; [ \"$s\" -ne 0 ] && exit 2; exit 0"
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel)\" && npm run -s check 2>&1 | tail -20 >&2; s=${PIPESTATUS[0]}; [ \"$s\" -ne 0 ] && exit 2; exit 0'"
           }
         ]
       }
