@@ -64,6 +64,8 @@ rows. A column whose metric never arrived is NULL, never 0: NULL means no teleme
 reached Capsid. Once tokens have arrived, a token type with no point is 0, because
 Claude Code exports no point for a counter that did not move.
 
+`job_outcomes` was NULL for every job through 2026-10-04 (347 rows, `session_usage` empty, measured through D1) because the exporter below was never turned on for the machines that run drivers. Until it is, an agent can state what its session used in `claim.usage` (docs/work-queue.md). The `claims` aggregate reports the two sources side by side and never adds them: a job with both would count twice. Telemetry stays the measured one.
+
 The row is written once. Claude Code exports on an interval (60 seconds by default), so
 usage from the last interval before `complete` can arrive after it; it stays in
 `session_usage` and is not added to the row.

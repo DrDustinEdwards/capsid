@@ -857,7 +857,7 @@ export function mockOpsApi(): Plugin {
           const until = isoOrNull(url.searchParams.get("until"));
           if (since === "bad" || until === "bad") return refuse(res, 400, "since and until must be ISO 8601 times such as 2026-09-01.");
           const groups = claimGroups.filter((g) => (!namespace || g.namespace === namespace) && (!agent || g.agent === agent));
-          const out: PortalClaimsAggregate = { generated: new Date(mockNow()).toISOString(), filter: { namespace, agent, since, until }, groups, truncated: [] };
+          const out: PortalClaimsAggregate = { generated: new Date(mockNow()).toISOString(), filter: { namespace, agent, since, until }, groups, waits: [], usage: [], truncated: [] };
           return send(res, 200, out);
         }
         if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh") return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });
