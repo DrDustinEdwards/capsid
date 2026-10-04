@@ -1335,7 +1335,7 @@ test("PLANT: a new head sha for the same PR and reason writes a second row", asy
 test("a PR with no job in its body is logged once, then again only when its head moves", async () => {
   const { d1, env } = await pinnedEnv();
   const noJob = (sha: string) => {
-    const routes = twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as Record<string, { body: unknown }>;
+    const routes = twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as unknown as Record<string, { body: unknown }>;
     const list = routes[`GET ${OWNER}/pulls`].body as Array<{ number: number; head: { sha: string } }>;
     return { ...routes, [`GET ${OWNER}/pulls`]: { body: list.map((p) => (p.number === 30 ? { ...p, head: { ...p.head, sha } } : p)) } };
   };
