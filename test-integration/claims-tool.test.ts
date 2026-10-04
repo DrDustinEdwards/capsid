@@ -131,6 +131,76 @@ describe("the claims tool, as the admin", () => {
     expect(group.touches.waited_ms_median).toBe(2000);
   });
 
+  it("aggregate: each ended wait is classed by the gate it ended, once, however many agents claimed the job", async () => {
+    const { ns, job } = fresh("claims-wait");
+    const at = (sec: number) => `2026-09-02T10:00:${String(sec).padStart(2, "0")}.000Z`;
+    const touch = (kind: string, actorKind: string, waited: number | null, detail: string | null, sec: number) =>
+      env.DB.prepare(
+        `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at) VALUES (?1, ?2, ?3, 'x', ?4, ?5, ?6, ?7)`
+      ).bind(job, ns, kind, actorKind, waited, detail, at(sec));
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`
+      ).bind(job, ns, AGENT),
+      // Two agents claimed the job: a join on job_claims would count each wait twice.
+      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, '{}', ?4)`).bind(job, AGENT, ns, at(0)),
+      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', 'agent:other-driver', ?2, '{}', ?3)`).bind(job, ns, at(9)),
+      touch("gate", "driver", null, JSON.stringify({ reason: "r", command: "git push origin feat/x; gh pr create --fill" }), 1),
+      touch("approval", "policy", 1000, null, 2),
+      touch("gate", "driver", null, JSON.stringify({ reason: "r", command: "Read capsid/x.md and answer D1" }), 3),
+      touch("approval", "human", 5000, JSON.stringify({ reason: "approved" }), 4),
+    ]);
+    const out = await adminRead<ClaimsAggregate>({ namespace: ns });
+    expect(out.waits).toEqual([
+      { namespace: ns, gate_class: "needs_human", ended_by: "human", waits: 1, waited_ms_total: 5000, waited_ms_median: 5000 },
+      { namespace: ns, gate_class: "push_branch+open_pr", ended_by: "policy", waits: 1, waited_ms_total: 1000, waited_ms_median: 1000 },
+    ]);
+    const byAgent = await adminRead<ClaimsAggregate>({ namespace: ns, agent: "agent:other-driver" });
+    expect(byAgent.waits.reduce((n, w) => n + w.waits, 0)).toBe(2);
+    const nobody = await adminRead<ClaimsAggregate>({ namespace: ns, agent: "agent:someone-else" });
+    expect(nobody.waits).toEqual([]);
+  });
+
+  it("aggregate: usage sums claim.usage and the telemetry columns apart, and a figure nobody sent is null", async () => {
+    const { ns, job } = fresh("claims-usage");
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`
+      ).bind(job, ns, AGENT),
+      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, ?4, '2026-09-03T10:00:00.000Z')`).bind(
+        job,
+        AGENT,
+        ns,
+        JSON.stringify({ claim: { usage: { cost_usd: 1.5, active_seconds: 60, tokens: { input: 10 } } } })
+      ),
+      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', ?2, ?3, ?4, '2026-09-03T11:00:00.000Z')`).bind(
+        job,
+        AGENT,
+        ns,
+        JSON.stringify({ claim: { usage: { cost_usd: 0.5 } } })
+      ),
+      // A claim that says nothing about usage is not a reporting row.
+      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'fail', ?2, ?3, ?4, '2026-09-03T12:00:00.000Z')`).bind(
+        job,
+        AGENT,
+        ns,
+        JSON.stringify({ claim: { prs_opened: [] } })
+      ),
+      env.DB.prepare(
+        `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, recorded_at, cost_usd)
+         VALUES (?1, ?2, ?3, 0, 0, 'none', '{}', '2026-09-03 12:00:00', 9)`
+      ).bind(job, AGENT, ns),
+    ]);
+    const out = await adminRead<ClaimsAggregate>({ namespace: ns });
+    expect(out.usage).toEqual([
+      {
+        namespace: ns,
+        telemetry: { rows: 1, cost_usd: 9, active_seconds: null, tokens_input: null, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null },
+        reported: { rows: 2, cost_usd: 2, active_seconds: 60, tokens_input: 10, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null },
+      },
+    ]);
+  });
+
   it("aggregate: since and until bound each table on its own time, and the agent filter is exact", async () => {
     const { ns, job } = fresh("claims-time");
     await plantJob(ns, job);

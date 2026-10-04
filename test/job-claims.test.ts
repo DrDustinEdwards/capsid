@@ -329,3 +329,46 @@ test("PLANT: complete, fail and block refuse a bad claim and write nothing", asy
   assert.equal(blocked.ok, false, "block accepted a bad deploy_state");
   assert.match(blocked.refusal ?? "", /deploy_state/);
 });
+
+// claim.usage: what the session says it used (PR 1 of capsid/research/design-automation-for-speed.md)
+
+const USAGE = { cost_usd: 1.25, active_seconds: 900.5, tokens: { input: 100, output: 200, cache_read: 300, cache_creation: 400 } };
+
+test("claim.usage parses as an object and as a JSON string, and every part is optional", () => {
+  const asObject = parseClaim({ usage: USAGE });
+  assert.ok("claim" in asObject && asObject.claim?.usage);
+  assert.deepEqual(asObject.claim.usage, USAGE);
+  const asString = parseClaim(JSON.stringify({ usage: USAGE }));
+  assert.ok("claim" in asString);
+  assert.deepEqual(asString.claim?.usage, USAGE);
+  for (const part of [{ cost_usd: 0 }, { active_seconds: 12 }, { tokens: { input: 5 } }, {}]) {
+    assert.ok("claim" in parseClaim({ usage: part }), `refused ${JSON.stringify(part)}`);
+  }
+});
+
+test("PLANT: a usage that is negative, not finite, fractional in tokens or carries an unknown key is refused, not trimmed", () => {
+  const cases: unknown[] = [
+    { usage: { cost_usd: -0.01 } },
+    { usage: { cost_usd: Number.NaN } },
+    { usage: { active_seconds: Number.POSITIVE_INFINITY } },
+    { usage: { tokens: { input: 1.5 } } },
+    { usage: { tokens: { input: -1 } } },
+    { usage: { tokens: { total: 5 } } },
+    { usage: { currency: "usd" } },
+    { usage: "1.25" },
+  ];
+  for (const input of cases) {
+    const parsed = parseClaim(input);
+    assert.ok("error" in parsed, `accepted ${JSON.stringify(input)}`);
+    assert.match(parsed.error, /^claim was refused, not trimmed/);
+  }
+});
+
+test("claim.usage is kept whole in raw, with no column of its own, so the aggregate reads exactly what was said", () => {
+  const stored = row({ claim: { usage: USAGE }, raw: { claim: { usage: USAGE } } });
+  assert.deepEqual(JSON.parse(stored.raw).claim.usage, USAGE);
+  const sent = row({ claim: { usage: USAGE }, raw: { claim: JSON.stringify({ usage: USAGE }) } });
+  assert.deepEqual(JSON.parse(sent.raw).claim.usage, USAGE, "a claim sent as a string is stored as one parsed document");
+  assert.equal("usage" in stored, false);
+  assert.equal("cost_usd" in stored, false);
+});

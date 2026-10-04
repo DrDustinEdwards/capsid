@@ -28,6 +28,9 @@ const MAX_CLAIM_VERSION = 128;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);
+// A usage figure the agent read off its own session. finite() so NaN and Infinity, which
+// JSON cannot carry but a caller object can, are refused here and never reach SUM().
+const usageAmount = z.number().finite().nonnegative();
 
 // Strict at every level: an unknown key is refused, never dropped. A dropped key is a
 // claim the agent made and the record does not have, which is the loss this table
@@ -48,6 +51,25 @@ export const claimSchema = z
       .describe("Tests the agent ran, and their result."),
     deploy_state: z.enum(CLAIM_DEPLOY_STATES).optional(),
     files_touched: z.array(bounded(MAX_CLAIM_PATH)).max(MAX_CLAIM_FILES).optional().describe("Repo-relative paths the agent touched."),
+    usage: z
+      .object({
+        cost_usd: usageAmount.optional(),
+        active_seconds: usageAmount.optional(),
+        tokens: z
+          .object({
+            input: count.optional(),
+            output: count.optional(),
+            cache_read: count.optional(),
+            cache_creation: count.optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional()
+      .describe(
+        "What this session used, as the session reports it: cost_usd, active_seconds and tokens {input, output, cache_read, cache_creation}. This session's own total, not a running total across earlier claims on the job. Self-reported, recorded and never used to authorize anything. Telemetry (docs/telemetry.md) stays the measured source; the claims aggregate shows both side by side."
+      ),
     versions: z
       .object({
         model_id: version.optional(),

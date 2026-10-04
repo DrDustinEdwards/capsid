@@ -121,7 +121,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .union([claimSchema, bounded(MAX_BODY)])
           .optional()
           .describe(
-            "For complete, fail and block: what the agent says it did, as an object or a JSON string. prs_opened and prs_merged (pull request URLs), tests {run, passed, failed, result: pass|fail|partial|not_run}, deploy_state (none|pending|deployed|verified|failed), files_touched (paths), versions {model_id, client_name, client_version, permission_mode} (self-reported). Recorded as sent, apart from what the Worker verifies. An omitted field is NULL, never 0; an unknown key or a string that is not JSON is refused."
+            "For complete, fail and block: what the agent says it did, as an object or a JSON string. prs_opened and prs_merged (pull request URLs), tests {run, passed, failed, result: pass|fail|partial|not_run}, deploy_state (none|pending|deployed|verified|failed), files_touched (paths), usage {cost_usd, active_seconds, tokens {input, output, cache_read, cache_creation}} for this session only (self-reported), versions {model_id, client_name, client_version, permission_mode} (self-reported). Recorded as sent, apart from what the Worker verifies. An omitted field is NULL, never 0; an unknown key or a string that is not JSON is refused."
           ),
       },
     },

@@ -282,6 +282,7 @@ seat's `fail` of another credential's job, since that agent made no claim.
 | `deploy_state` | what the agent says about deployment |
 | `files_touched` | a JSON array of the paths the agent says it touched |
 | `model_id`, `client_name`, `client_version`, `permission_mode` | self-reported, recorded and never used to authorize anything |
+| `raw` `claim.usage` | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
 | `capsid_sha` | the Worker's own deployed commit, not the agent's word |
 
 `job_evaluations` holds one row per check, named for OpenTelemetry's

@@ -574,9 +574,48 @@ export interface ClaimsGroup {
   touches: ClaimsTouchSummary;
 }
 
+// One ended wait: a touch with a waited_ms, tied to the gate it ended. gate_class is a
+// class of capsid/policy/gates.md (compound commands joined with "+"), "needs_human"
+// when the gate's command matched none or recorded no command, or "unreadable_gate"
+// when the gate row's detail was not the JSON the writer produces.
+export interface ClaimsWaitRow {
+  namespace: string;
+  gate_class: string;
+  // Who ended the wait: human, policy, seat and so on (job_touches.actor_kind).
+  ended_by: string;
+  waits: number;
+  waited_ms_total: number;
+  waited_ms_median: number;
+}
+
+// Cost, tokens and active time for one source, summed over the rows that carried it.
+// Every figure is null when no row carried it, never 0.
+export interface ClaimsUsageTotals {
+  // Jobs (telemetry) or claims (reported) that carried any usage at all.
+  rows: number;
+  cost_usd: number | null;
+  active_seconds: number | null;
+  tokens_input: number | null;
+  tokens_output: number | null;
+  tokens_cache_read: number | null;
+  tokens_cache_creation: number | null;
+}
+
+// Per namespace, the two sources side by side and never added together: telemetry from
+// job_outcomes (src/job-outcomes.ts readJobUsage) and what the agent reported in
+// claim.usage. A job can appear in both, so a sum across them would count it twice.
+export interface ClaimsUsageRow {
+  namespace: string;
+  telemetry: ClaimsUsageTotals;
+  reported: ClaimsUsageTotals;
+}
+
 export interface ClaimsAggregate {
   filter: ClaimsFilter;
   groups: ClaimsGroup[];
+  // Ended waits by namespace, gate class and who ended them, longest total first.
+  waits: ClaimsWaitRow[];
+  usage: ClaimsUsageRow[];
   // Each bounded read that hit its bound, by name. Empty means the answer is whole.
   truncated: string[];
 }
