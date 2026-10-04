@@ -26,7 +26,7 @@ Code comments cite these by name ("CLAUDE.md, snapshot rule"), not by number.
 6. **Improve loop.** The improve loop stays off unless Dustin turns it on. Only `src/improve-scorer.ts` names `HOLDOUT`. (test/improve-holdout.test.ts)
 7. **No AI trailer.** No commit or pull request carries an AI trailer or footer. `.claude/settings.json` turns attribution off, and CI's `scripts/check-commit-trailers.mjs` refuses a commit that carries one (test/commit-trailers.test.ts).
 8. **Health probe.** `/health` and the backup preflight search `capsid/conventions.md` for the word "conventions" (`src/store-probe.ts`). That document must keep the word, or Capsid reports itself degraded and the backup refuses to prune.
-9. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker directly: `initialize`, `notifications/initialized`, `tools/call`. The token is under `mcpOAuth` in `~/.claude/.credentials.json`. Never print it.
+9. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker on `/ops/mcp` with this project's driver key (the Authorization header in `.mcp.json`): `initialize`, `notifications/initialized`, `tools/list`, then a read tool. Never read `~/.claude/.credentials.json`: its `mcpOAuth` entry is the admin login, and a driver acts only as its own agent. An admin-only tool is verified by the seat. Never print a key.
 
 The other portfolio rules that used to be restated here (a check trusted only after it fails, no swallowed error, D1 `meta.changes`) are in `capsid/conventions.md`.
 
