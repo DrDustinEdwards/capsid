@@ -221,8 +221,8 @@ export function mergeParams(
 // the key, because it can carry counts and times that move without the decision moving.
 // The TTL bounds what a closed PR leaves behind; a decline that outlives it is logged
 // once more.
-export const LAST_DECLINE_PREFIX = "improve:auto-merge-last-decline:";
-export const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
+const LAST_DECLINE_PREFIX = "improve:auto-merge-last-decline:";
+const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
 
 /** Audit a decline unless the same PR was already logged with this head sha and check.
  *  A KV failure logs the row anyway: a repeated row is better than a lost one. */
