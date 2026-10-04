@@ -1267,3 +1267,102 @@ test("PLANT F7-1: a PR whose body names no job is declined without reading its f
   assert.equal(declined.length, 1);
   assert.equal(JSON.parse(String(declined[0].params[4])).head_sha, NO_JOB_SHA);
 });
+
+// a decline is logged when the decision changes (job_2ae86d1630ca)
+//
+// The tick runs every five minutes. A PR it keeps refusing for the same reason on the same
+// head must leave one audit row, not one per tick.
+
+const PROTECTED = [".github/workflows/nightly.yml"];
+const NEW_SHA = "c0ffee00123456789012345678901234567890cd";
+
+function declineRows(d1: { recorded: Array<{ sql: string; params: unknown[] }> }) {
+  return d1.recorded
+    .filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined")
+    .map((r) => JSON.parse(String(r.params[4])) as { head_sha: string; failed: string });
+}
+
+async function tickAt(env: Awaited<ReturnType<typeof pinnedEnv>>["env"], routes: unknown, minute: number) {
+  let out: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
+  await withFetch(routes as never, async () => {
+    out = await autoMergeTick(env, new Date(Date.UTC(2026, 9, 4, 12, minute)));
+  });
+  return out!;
+}
+
+// The same PR, with its head moved to NEW_SHA: the PR list and the per-sha reads follow it.
+function movedHeadRoutes(files: string[]) {
+  const routes = tickRoutes(files) as Record<string, unknown>;
+  const prs = routes[`GET ${OWNER}/pulls`] as { body: Array<{ head: { sha: string } }> };
+  return {
+    ...routes,
+    [`GET ${OWNER}/pulls`]: { body: [{ ...prs.body[0], head: { ...prs.body[0].head, sha: NEW_SHA } }] },
+    [`GET ${OWNER}/commits/${NEW_SHA}/check-runs`]: routes[`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`],
+  };
+}
+
+test("PLANT: the same PR declined for the same reason on two ticks writes one row", async () => {
+  const { d1, env } = await pinnedEnv();
+  const first = await tickAt(env, tickRoutes(PROTECTED), 0);
+  const second = await tickAt(env, tickRoutes(PROTECTED), 5);
+  assert.equal(first.outcomes[0].failed, second.outcomes[0].failed);
+  assert.ok(first.outcomes[0].failed, "the first tick did not decline");
+  assert.equal(declineRows(d1).length, 1, "a repeated decision was logged again");
+  // The seat's view does not depend on the audit log: the PR is still awaiting the seat.
+  assert.equal(second.outcomes[0].merged, false);
+});
+
+test("PLANT: a different reason for the same PR and head writes a second row", async () => {
+  const { d1, env } = await pinnedEnv();
+  await tickAt(env, tickRoutes(PROTECTED), 0);
+  // Same head, now refused for another check: the author is not a driver.
+  await tickAt(env, tickRoutes(["src/limits.ts"], "DrDustinEdwards/capsid", "someone-else"), 5);
+  const rows = declineRows(d1);
+  assert.equal(rows.length, 2);
+  assert.notEqual(rows[0].failed, rows[1].failed);
+  assert.equal(rows[0].head_sha, rows[1].head_sha);
+});
+
+test("PLANT: a new head sha for the same PR and reason writes a second row", async () => {
+  const { d1, env } = await pinnedEnv();
+  const first = await tickAt(env, tickRoutes(PROTECTED), 0);
+  const second = await tickAt(env, movedHeadRoutes(PROTECTED), 5);
+  assert.equal(first.outcomes[0].failed, second.outcomes[0].failed, "the reason moved too, so this does not isolate the head");
+  const rows = declineRows(d1);
+  assert.deepEqual(rows.map((r) => r.head_sha), [HEAD_SHA, NEW_SHA]);
+});
+
+test("a PR with no job in its body is logged once, then again only when its head moves", async () => {
+  const { d1, env } = await pinnedEnv();
+  const noJob = (sha: string) => {
+    const routes = twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as unknown as Record<string, { body: unknown }>;
+    const list = routes[`GET ${OWNER}/pulls`].body as Array<{ number: number; head: { sha: string } }>;
+    return { ...routes, [`GET ${OWNER}/pulls`]: { body: list.map((p) => (p.number === 30 ? { ...p, head: { ...p.head, sha } } : p)) } };
+  };
+  await tickAt(env, noJob(NO_JOB_SHA), 0);
+  await tickAt(env, noJob(NO_JOB_SHA), 5);
+  const bodyDeclines = () => declineRows(d1).filter((r) => r.failed === "body_names_job");
+  assert.equal(bodyDeclines().length, 1);
+  await tickAt(env, noJob(NEW_SHA), 10);
+  assert.deepEqual(bodyDeclines().map((r) => r.head_sha), [NO_JOB_SHA, NEW_SHA]);
+});
+
+test("a merge is still logged, whatever was declined before it", async () => {
+  const { d1, env } = await pinnedEnv();
+  await tickAt(env, tickRoutes(PROTECTED), 0);
+  const merged = await tickAt(env, tickRoutes(["src/limits.ts"]), 5);
+  assert.equal(merged.outcomes[0].merged, true, merged.outcomes[0].why ?? "");
+  const actions = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[1]);
+  assert.deepEqual(actions, ["auto-merge-declined", "auto-merged"]);
+});
+
+test("a KV read that fails still logs the decline", async () => {
+  const { d1, kv, env } = await pinnedEnv();
+  const realGet = kv.kv.get.bind(kv.kv);
+  (kv.kv as { get: unknown }).get = async (key: string, ...rest: unknown[]) => {
+    if (key.startsWith("improve:auto-merge-last-decline:")) throw new Error("kv down");
+    return (realGet as (k: string, ...r: unknown[]) => unknown)(key, ...rest);
+  };
+  await tickAt(env, tickRoutes(PROTECTED), 0);
+  assert.equal(declineRows(d1).length, 1, "a KV outage lost the decline row");
+});
