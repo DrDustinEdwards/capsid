@@ -49,6 +49,21 @@ function Automation() {
   const radioFocus = () => requestAnimationFrame(() => document.querySelector<HTMLInputElement>('input[name="runs-on"]:checked')?.focus());
   const shownRuns = pendingRuns ?? (loopOn ? mode : chosen);
 
+  // The overnight run: the same switch and "Runs on" pattern, with its own radio group.
+  // Choosing the subscription records Dustin's decision, its date and its reasoning with
+  // the switch (src/overnight.ts); the Worker does the recording, and the note below
+  // shows it. The choice starts at API when off: that is the setting the terms allow
+  // without a decision.
+  const night = feed.live.overnight;
+  const nightOn = isRunsOn(night.mode);
+  const [nightChosen, setNightChosen] = useState<RunsOn>(nightOn ? (night.mode as RunsOn) : "api");
+  useEffect(() => {
+    if (isRunsOn(night.mode)) setNightChosen(night.mode);
+  }, [night.mode]);
+  const [pendingNight, setPendingNight] = useState<RunsOn | null>(null);
+  const nightFocus = () => requestAnimationFrame(() => document.querySelector<HTMLInputElement>('input[name="overnight-runs-on"]:checked')?.focus());
+  const shownNight = pendingNight ?? (nightOn ? (night.mode as RunsOn) : nightChosen);
+
   return (
     <Panel flush title="Automation" src="each change is recorded in Activity with its reason">
       <div className="auto">
@@ -135,6 +150,73 @@ function Automation() {
               />
             )}
           </div>
+        </div>
+        <div className="auto-row">
+          <div className="what">
+            <b>Overnight run</b>
+            <span>Runs the per-namespace drivers on this machine overnight, one session per repo, from the overnight plan. Hand-started tabs are unaffected.</span>
+          </div>
+          <AutomationSwitch
+            id="sw-overnight"
+            label="Overnight run"
+            checked={nightOn}
+            verb={(next) => (next ? `Turning the overnight run on, on ${runsOnLabel(nightChosen)}` : "Turning the overnight run off")}
+            onApply={(next, why) =>
+              apply(
+                { action: "overnight", params: { value: next ? nightChosen : "off", reason: why } },
+                { action: "overnight", params: { value: night.mode, reason: `Undo: ${why}`, undo: "true" }, focus: "sw-overnight" },
+              )
+            }
+          >
+            <span className="state-note">{nightOn ? `Running on ${runsOnLabel(night.mode as RunsOn)}.` : `Off. It runs on ${runsOnLabel(nightChosen)} when turned on.`}</span>
+          </AutomationSwitch>
+          <div className="runs">
+            <span id="overnight-runs-on-label">Runs on</span>
+            <span className="seg" role="radiogroup" aria-labelledby="overnight-runs-on-label">
+              {RUNS_ON.map((r) => (
+                <Fragment key={r.value}>
+                  <input
+                    type="radio"
+                    name="overnight-runs-on"
+                    id={`overnight-runs-on-${r.value}`}
+                    value={r.value}
+                    checked={shownNight === r.value}
+                    onChange={() => {
+                      if (!nightOn) return setNightChosen(r.value);
+                      setPendingNight(r.value === night.mode ? null : r.value);
+                    }}
+                  />
+                  <label htmlFor={`overnight-runs-on-${r.value}`}>{r.label}</label>
+                </Fragment>
+              ))}
+            </span>
+            {pendingNight && (
+              <ReasonForm
+                id="overnight-runs-on-why"
+                verb={`Changing the overnight run to run on ${runsOnLabel(pendingNight)}`}
+                onCancel={() => {
+                  setPendingNight(null);
+                  nightFocus();
+                }}
+                onApply={async (why) => {
+                  const err = await apply(
+                    { action: "overnight", params: { value: pendingNight, reason: why } },
+                    { action: "overnight", params: { value: night.mode, reason: `Undo: ${why}`, undo: "true" }, focus: `overnight-runs-on-${night.mode}` },
+                  );
+                  if (!err) {
+                    setPendingNight(null);
+                    nightFocus();
+                  }
+                  return err;
+                }}
+              />
+            )}
+          </div>
+          {night.decision && (
+            <p className="state-note" id="overnight-decision">
+              Decision recorded: {night.decision.decided_by}, {night.decision.decided_on}. {night.decision.ruling}. {night.decision.reasoning} Set {night.decision.set_at.slice(0, 10)} by {night.decision.set_by}: {night.decision.reason}
+            </p>
+          )}
         </div>
       </div>
     </Panel>

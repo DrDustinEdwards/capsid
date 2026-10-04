@@ -125,7 +125,8 @@ test("the improve loop turns on with the chosen Runs on, and Runs on while it is
   // While off, the choice is only held: nothing is sent.
   // The radios are drawn as a segmented control; a click lands on the label.
   await page.locator('label[for="runs-on-api"]').click();
-  await expect(page.getByRole("radio", { name: "API" })).toBeChecked();
+  // Scoped by id: the overnight run has its own Runs on group with the same two names.
+  await expect(page.locator("#runs-on-api")).toBeChecked();
   await loop(page).click();
   await page.getByLabel("Turning the improve loop on, on API. Reason:").fill("try the API run");
   await page.keyboard.press("Enter");
@@ -138,7 +139,7 @@ test("the improve loop turns on with the chosen Runs on, and Runs on while it is
   await expect(field).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(field).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: "API" })).toBeChecked();
+  await expect(page.locator("#runs-on-api")).toBeChecked();
 
   // Leave it as found: off.
   await loop(page).click();
@@ -155,4 +156,46 @@ test("Queue and Agents show the state as a word that links to Namespaces, with n
   await visit(page, "agents");
   await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Change it in Namespaces" })).toBeVisible();
+});
+
+// The overnight run's switch (docs/overnight.md): the same pattern with its own "Runs on"
+// choice. Choosing the subscription records Dustin's decision with the switch, and the
+// panel shows it. Undone at the end, so later specs read the fixture as it was.
+
+const overnight = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
+
+test("PLANT: the overnight run is off and runs on the API key by default, and turning it on asks a reason before it moves", async ({ page }) => {
+  await visit(page, "namespaces");
+  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#overnight-runs-on-api")).toBeChecked();
+  await expect(page.locator("#overnight-runs-on-subscription")).not.toBeChecked();
+  await overnight(page).click();
+  const field = page.getByLabel("Turning the overnight run on, on API. Reason:");
+  await expect(field).toBeFocused();
+  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await page.keyboard.press("Escape");
+  await expect(overnight(page)).toBeFocused();
+});
+
+test("PLANT: choosing the subscription records Dustin's decision, its date and its reasoning where the switch is set, and the panel shows it", async ({ page }) => {
+  await visit(page, "namespaces");
+  await expect(page.locator("#overnight-decision")).toHaveCount(0);
+  // The radios are drawn as a segmented control; a click lands on the label.
+  await page.locator('label[for="overnight-runs-on-subscription"]').click();
+  await overnight(page).click();
+  await page.getByLabel("Turning the overnight run on, on Subscription. Reason:").fill("first supervised night");
+  await page.keyboard.press("Enter");
+  await expect(overnight(page)).toHaveAttribute("aria-checked", "true");
+  await expect(message(page)).toContainText("The overnight run is now subscription.");
+  const decision = page.locator("#overnight-decision");
+  await expect(decision).toContainText("Decision recorded: Dustin Edwards, 2026-10-04.");
+  await expect(decision).toContainText("overnight runs may use the subscription, by Dustin's choice");
+  await expect(decision).toContainText("first supervised night");
+  expect(await newestActivity(page)).toBe("portal.overnight");
+
+  // Leave it as found.
+  await message(page).getByRole("button", { name: "Undo" }).click();
+  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("#overnight-decision")).toHaveCount(0);
+  expect(await newestActivity(page)).toBe("portal.undo-overnight");
 });

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from "../limits";
+import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "../overnight-plan";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { blockJob, claimJob, completeJob, failAsCaller, heartbeatJob, listJobs, postJob, releaseJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
@@ -60,6 +61,13 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
             "For post: the minimum merged pull requests on the claiming agent's record. The claim refuses an agent below it and leaves the job queued."
           ),
         status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
+        view: z
+          .enum(["plan", "digest"])
+          .optional()
+          .describe(
+            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. Both are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
+          ),
+        since: bounded(40).optional().describe('For list with view "digest": the ISO time to report from. Defaults to the last 24 hours.'),
         id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for heartbeat, complete, fail, block, resume, supersede, release and start. For list, narrows to that job, with its body for a caller holding write.'),
         result_summary: bounded(MAX_TITLE).optional().describe('For complete: what happened, in one sentence.'),
         result_ref: resultRef.optional().describe('For complete: where the work landed, a document key or a PR URL.'),
@@ -137,6 +145,12 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           // with an action and no id reads as a call naming no job (src/scope.ts).
           const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace, jobId: args.id });
           if (listRefusal) return fail(listRefusal);
+          if (args.view === "plan") return ok(await readOvernightPlan(env, { namespace: args.namespace }, now));
+          if (args.view === "digest") {
+            const since = digestSinceFrom(args.since, now);
+            if (!since.ok) return fail(since.refusal);
+            return ok(await readOvernightDigest(env, { namespace: args.namespace, since: since.since }, now));
+          }
           if (args.status !== undefined && !isJobStatus(args.status)) {
             return fail(`'${args.status}' is not a job status. One of: ${JOB_STATUSES.join(", ")}.`);
           }

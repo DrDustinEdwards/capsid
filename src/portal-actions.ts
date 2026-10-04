@@ -19,6 +19,7 @@ import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite,
 import { readBoundedText } from "./improve-scorer";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalAction, PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "./ops-types";
+import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
 
@@ -67,6 +68,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "unpause",
   "mode",
   "seat_start",
+  "overnight",
   "resume_job",
   "fail_job",
   "release_job",
@@ -90,7 +92,7 @@ const CLICK_AUDIT_PREFIX = "portal-";
 // directions, and an Undo from the Portal's result message sends the reverse change with
 // undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
 // own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
-const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start"]);
+const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start", "overnight"]);
 const UNDO_INFIX = "undo-";
 
 /** The click row's action name: `portal-<action>`, or `portal-undo-<action>` for an Undo. */
@@ -107,6 +109,8 @@ function switchReasonRefusal(action: PortalAction): string {
       return "unpause needs a reason: why the loop may run for this namespace again. It is recorded in the audit row with the change.";
     case "mode":
       return "mode needs a reason: why the improve loop changes how it runs. It is recorded in the audit row with the change.";
+    case "overnight":
+      return "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded in the audit row with the change.";
     default:
       return "seat_start needs a reason: why seat-started sessions go on or off. It is recorded in the audit row with the change.";
   }
@@ -132,6 +136,12 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return params.value === "on"
         ? "Turn seat-started sessions ON. The seat may then start Claude Code sessions on GitHub's runners for queued capsid and dustinedwards jobs, billed to your subscription, up to the cap. Confirm on the Anthropic billing page after the first run that nothing was billed as API usage."
         : "Turn seat-started sessions OFF. No new session starts; one already running finishes.";
+    case "overnight":
+      return params.value === "off"
+        ? "Turn the overnight run OFF. No scheduled run starts; one already running finishes."
+        : params.value === "subscription"
+          ? "Set the overnight run to run on the SUBSCRIPTION. The scheduler may then start the per-namespace drivers on your machine overnight, billed against your Max plan. This records your decision, its date and its reasoning where the switch is set."
+          : "Set the overnight run to run on the API key. The scheduler refuses to start unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use. Billed per token to your Console account.";
     case "resume_job":
       return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
@@ -234,6 +244,16 @@ async function performAction(env: Env, email: string, source: string | null, now
         committed = true;
         summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
         await auditClick(env, actor, source, action, null, switchDetail(result), click);
+        break;
+      }
+      case "overnight": {
+        const value = required(params, "value");
+        const bad = overnightValueRefusal(value ?? undefined);
+        if (bad) return { ok: false, refusal: bad };
+        const result = await setOvernight(env, actor, now, { value: value ?? undefined, reason: switchReason ?? undefined });
+        committed = true;
+        summary = result.mode === "off" ? "Turned the overnight run off." : `Set the overnight run to run on ${result.mode === "api" ? "the API key" : "the subscription"}.`;
+        await auditClick(env, actor, source, action, null, switchDetail({ mode: result.mode, ...(result.decision ? { decision: result.decision } : {}) }), click);
         break;
       }
       case "resume_job":
@@ -389,6 +409,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   unpause: ["namespace", "reason", "undo"],
   mode: ["value", "reason", "undo"],
   seat_start: ["value", "reason", "undo"],
+  overnight: ["value", "reason", "undo"],
   resume_job: ["id", "reason"],
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
@@ -562,6 +583,30 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           `The cap stays at ${state.max_sessions} session${state.max_sessions === 1 ? "" : "s"} in flight.`,
         ],
         audit: [`seat-start-set by ${actor}`, click],
+      };
+    }
+    case "overnight": {
+      const bad = overnightValueRefusal(p.value);
+      if (bad) return refused(bad);
+      if (!p.reason) return refused(switchReasonRefusal(action));
+      const state = await overnightState(env);
+      const value = p.value as OvernightMode;
+      const decision = decisionFor(value, actor, new Date(), p.reason);
+      return {
+        ok: true,
+        changes: [
+          state.mode === value ? `${OVERNIGHT_MODE_KEY} is already ${value}; it is written again unchanged.` : `${OVERNIGHT_MODE_KEY}: ${state.mode} -> ${value}.`,
+          ...(decision
+            ? [
+                `Recorded with the switch: the decision of ${decision.decided_by} on ${decision.decided_on}, "${decision.ruling}".`,
+                `Reasoning recorded: ${decision.reasoning}`,
+                "Hand-started VS Code tabs are unaffected and stay the default.",
+              ]
+            : value === "api"
+              ? ["The scheduler will refuse to start a run unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use."]
+              : ["No scheduled run starts. Hand-started VS Code tabs are unaffected."]),
+        ],
+        audit: [`overnight-set by ${actor}`, click],
       };
     }
     case "resume_job":

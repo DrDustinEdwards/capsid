@@ -16,6 +16,7 @@ import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
 import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSeatStart, OpsSession } from "./ops-types";
 import { runUrl } from "./runner-key";
+import { overnightState } from "./overnight";
 import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
@@ -402,7 +403,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -417,6 +418,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     readSiteConfig(env.DB),
     liveSessions(env.DB, now),
     readPackageConfig(env.DB),
+    overnightState(env),
   ]);
   return {
     generated: now.toISOString(),
@@ -425,6 +427,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
     seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
+    overnight,
     sessions,
     loop,
     namespaces,

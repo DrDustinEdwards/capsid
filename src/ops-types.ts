@@ -252,6 +252,21 @@ export interface OpsAwaitingSeat {
   at: string;
 }
 
+// The overnight run's switch (src/overnight.ts). decision is present only while the mode is
+// subscription: who decided, when, the ruling and its reasoning, and who set the switch.
+export interface OpsOvernight {
+  mode: "off" | "api" | "subscription";
+  decision: {
+    decided_by: string;
+    decided_on: string;
+    ruling: string;
+    reasoning: string;
+    set_by: string;
+    set_at: string;
+    reason: string;
+  } | null;
+}
+
 export interface OpsSeatStart {
   enabled: boolean;
   max_sessions: number;
@@ -311,6 +326,7 @@ export interface OpsLive {
   prs: OpsPr[];
   awaiting_seat: OpsAwaitingSeat[];
   seat_start: OpsSeatStart;
+  overnight: OpsOvernight;
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
   // first, at most 50.
   sessions: OpsSession[];
@@ -392,6 +408,7 @@ export type PortalAction =
   | "unpause"
   | "mode"
   | "seat_start"
+  | "overnight"
   | "resume_job"
   | "release_job"
   | "fail_job"
@@ -409,6 +426,9 @@ export type PortalAction =
 //   unpause       { namespace, reason, undo? }   reason required
 //   mode          { value: "api" | "subscription" | "off", reason, undo? }   reason required
 //   seat_start    { value: "on" | "off", reason, undo? }                     reason required
+//   overnight     { value: "off" | "api" | "subscription", reason, undo? }   reason required
+//                 choosing subscription records Dustin's decision, its date and its
+//                 reasoning with the switch (src/overnight.ts)
 //                 undo: "true" marks the reverse of a change just made, from the
 //                 Portal's Undo; the click row is then portal-undo-<action>
 //                 instead of portal-<action>.

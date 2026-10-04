@@ -1,3 +1,4 @@
+import { overnightState, type OvernightState } from "./overnight";
 import { seatStartState, sessionsInFlight, type SeatStartState } from "./seat-start";
 import { TRANSITIONS_KEY, transitionMode, type TransitionMode } from "./skills-evaluate";
 import { sha256Hex } from "./auth";
@@ -195,6 +196,9 @@ export interface StatusReport {
   // in_flight is null while the switch is off: nothing new can start, and the count is
   // read only when it decides something.
   seat_start: SeatStartState & { in_flight: number | null };
+  // The overnight run's switch and, when it runs on the subscription, the recorded
+  // decision (src/overnight.ts). The scheduler reads this before it starts a session.
+  overnight: OvernightState;
   // The credential inventory. Revoked rows are included and say so, so "revoked" and
   // "never existed" look different. Never the key or the stored verifier, and only the
   // flags an agent holds. Absent, not empty, for a scoped caller: an empty list would
@@ -362,6 +366,7 @@ export async function improveStatus(
     protected_paths: servedProtectedPaths(),
     policies: await servedPolicies(env),
     seat_start: await seatStartStatus(env),
+    overnight: await overnightState(env),
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,
