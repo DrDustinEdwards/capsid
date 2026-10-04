@@ -182,6 +182,12 @@ reads as a sentence: `capsid-driver-laptop`, `foxing-driver-desktop`. Revoking a
 compromised laptop does not stop the desktop working. `agent:foxing-driver-laptop`
 in the audit log needs no lookup to understand.
 
+An agent from a second client on the same project is a role named `<namespace>-<client>`,
+minted with `--role`: `dustinedwards-grok` is Grok Build's driver for dustinedwards. Each
+client's MCP config must not load another client's servers. Grok Build loads `~/.claude.json`
+and a project's `.mcp.json` unless `[compat.claude] mcps = false` is set in `~/.grok/config.toml`
+(docs.x.ai/build/features/mcp-servers); without it Grok would act as `agent:dustinedwards-driver`.
+
 ### Where the key lives on the machine
 
 The driver reads its own key from a file, one per agent:

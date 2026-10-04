@@ -95,6 +95,15 @@ export const ROLES = [
     flags: { can_merge: true },
     what: "merges pull requests in dustinedwards and nothing else. No direct write, no workflows, no protected paths.",
   },
+  {
+    name: "dustinedwards-grok",
+    kind: "driver",
+    namespaces: ["dustinedwards"],
+    grants: ["read", "write"],
+    // No flags and no repos: the repos axis is derived from the live namespace mapping
+    // in main(), as for any driver.
+    what: "Grok Build's driver for dustinedwards: claims jobs and opens pull requests there, the same scopes as dustinedwards-driver, and never merges.",
+  },
 ];
 
 // What an admin pastes. It names the role rather than restating its scopes, so it
@@ -215,6 +224,18 @@ export function reposForNamespace(map, namespace) {
   return repos;
 }
 
+// Attach the repos axis to every driver that does not name its own, from the live
+// namespace mapping. Its own function so the test can drive it with a fake tool.
+export async function attachRepos(wanted, tool) {
+  const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
+  if (needsRepos.length === 0) return;
+  const mapping = parseNamespaceRepos(await tool("namespaces", {}));
+  for (const a of needsRepos) {
+    // One namespace per driver, which selectAgents and driverFor both guarantee.
+    a.repos = reposForNamespace(mapping, a.namespaces[0]);
+  }
+}
+
 /**
  * Mint one agent into one key file.
  *
@@ -300,14 +321,7 @@ async function main() {
   // The repos axis, attached from the live mapping before anything is minted or
   // printed (see parseNamespaceRepos). A dry run therefore needs the network: it
   // reports the repos axis too.
-  const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
-  if (needsRepos.length > 0) {
-    const mapping = parseNamespaceRepos(await client.tool("namespaces", {}));
-    for (const a of needsRepos) {
-      // One namespace per driver, which selectAgents and driverFor both guarantee.
-      a.repos = reposForNamespace(mapping, a.namespaces[0]);
-    }
-  }
+  await attachRepos(wanted, client.tool);
 
   if (!apply) {
     console.log(`dry run. Would mint ${wanted.length} agent(s) and write keys into ${keyDir()}:`);
