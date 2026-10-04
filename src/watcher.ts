@@ -8,6 +8,7 @@ import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
+import { markJobFailed, readJob } from "./jobs-transition";
 import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
@@ -444,13 +445,13 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
  *  nobody did the work. Keyed on queued, so a job claimed between the read and the
  *  write is not closed underneath its driver; RETURNING, not meta.changes. */
 export async function clearFinding(env: Env, id: string, now: Date): Promise<boolean> {
-  const won = await env.DB.prepare(
-    `UPDATE jobs SET status = 'failed', result_summary = ?2, summary_sig = NULL, lease_expires = NULL, updated_at = ?3
-     WHERE id = ?1 AND status = 'queued' AND posted_by = ?4 RETURNING id`
-  )
-    .bind(id, CLEARED_SUMMARY, now.toISOString(), WATCHER_ACTOR)
-    .first<{ id: string }>();
-  return won !== null;
+  const job = await readJob(env.DB, id);
+  if (!job || job.status !== "queued" || job.posted_by !== WATCHER_ACTOR) return false;
+  // The mirror document closes in the same batch as the row (CLAUDE.md, snapshot rule),
+  // and the batch is guarded on the status read above, so a job claimed in between is
+  // left alone.
+  const result = await markJobFailed(env, job, "queued", CLEARED_SUMMARY, "job-cleared", WATCHER_ACTOR, {}, now);
+  return result.failed;
 }
 
 // One pass, with the IO injected. Order: gather, clear what is no longer found, post
