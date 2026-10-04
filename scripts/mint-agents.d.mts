@@ -20,7 +20,8 @@ export const ROLES: Array<{
   name: string;
   kind: string;
   namespaces: string[];
-  repos: string[];
+  // Optional: a driver role names none, and main() derives it (see attachRepos).
+  repos?: string[];
   grants: string[];
   tools?: string[];
   flags?: Record<string, boolean>;
@@ -49,6 +50,12 @@ export function mintInto(
   agent: { name: string; what?: string },
   path: string
 ): Promise<string>;
+// Attaches the repos axis, from the live mapping, to every driver that names none.
+// Mutates the entries; THROWS through reposForNamespace for an unmapped namespace.
+export function attachRepos(
+  wanted: Array<{ kind: string; namespaces: string[]; repos?: string[] }>,
+  tool: (name: string, args: object) => Promise<string>
+): Promise<void>;
 export function parseArgs(argv: string[]): {
   apply: boolean;
   namespace: string | undefined;

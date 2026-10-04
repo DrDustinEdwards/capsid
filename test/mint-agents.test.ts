@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AGENTS, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
+import { AGENTS, attachRepos, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
 import { ROSTER } from "../src/improve-schema.ts";
 
 // scripts/mint-agents.mjs: the six credentials of docs/bootstrap.md.
@@ -212,4 +212,23 @@ test("an existing key file is skipped and nothing is minted", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("--role dustinedwards-grok selects one driver with no flags, and its repos come from the live mapping", async () => {
+  const picked = selectAgents(undefined, undefined, "dustinedwards-grok");
+  assert.equal(picked.length, 1);
+  const [grok] = picked;
+  assert.equal(grok.kind, "driver");
+  assert.deepEqual(grok.namespaces, ["dustinedwards"]);
+  assert.deepEqual(grok.grants, ["read", "write"]);
+  assert.deepEqual(grok.flags ?? {}, {}, "a second client's driver never merges");
+  assert.equal(grok.repos, undefined, "repos are derived from the mapping, not typed here");
+
+  const mapping = JSON.stringify([{ namespace: "dustinedwards", repos: [{ repo: "sample/site" }] }]);
+  const wanted = structuredClone(picked);
+  await attachRepos(wanted, async () => mapping);
+  assert.deepEqual(wanted[0].repos, ["sample/site"]);
+
+  const unmapped = JSON.stringify([{ namespace: "other", repos: [{ repo: "sample/other" }] }]);
+  await assert.rejects(attachRepos(structuredClone(picked), async () => unmapped), /maps to no repos/);
 });
