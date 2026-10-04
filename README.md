@@ -283,6 +283,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - [docs/schema.md](docs/schema.md) the knowledge model, the document types and the tables
 - [docs/bootstrap.md](docs/bootstrap.md) minting agents and removing the operator key
 - [docs/hooks.md](docs/hooks.md) Claude Code session hooks: what `/ops/hooks` keeps, who may post, the settings for driver repos and Dustin's machine, and what enabling them for seat-started sessions would take
+- [docs/live-checks.md](docs/live-checks.md) The watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages, from a document in the store
 
 ## What Capsid is not
 
