@@ -14,6 +14,7 @@ import { readRepoMap, unmappedRepos, type RepoMapRead } from "./unmapped-repos";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
 import { readCloudflare } from "./ops-cloudflare";
+import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import {
   buildSnapshot,
@@ -476,6 +477,7 @@ export const WATCHER_CHECKS = [
   "repo map",
   "site probes",
   "cloudflare",
+  "live checks",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -493,6 +495,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^unmapped-repo/, "repo map"],
   [/^site-down-/, "site probes"],
   [/^site-errors-/, "cloudflare"],
+  [/^live-/, "live checks"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -565,6 +568,8 @@ function repoMapUnreadableFinding(reason: string): Finding {
     "Until this reads, no repo is being checked against the namespace mapping.",
   ]);
 }
+
+const liveFinding = (f: LiveFinding): Finding => finding(f.namespace, f.fingerprint, f.headline, f.evidence);
 
 /** A site down on two probes in a row: the previous snapshot's ring ended in '0' and
  *  this pass's probe is down too. One failed probe is a blip; a ring that ended in '-'
@@ -1048,6 +1053,23 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (prev) {
       ran.add("site probes");
       out.push(...siteDownFindings(prev.snapshot, probes));
+    }
+  }
+
+  // The live checks (src/live-checks.ts): what capsid/policy/live-checks.md says to
+  // look at, read through the probes this pass just made. No document, no check. A site
+  // that could not be read this pass leaves the check un-run, so an open finding is not
+  // cleared on no evidence.
+  if (sites && probes) {
+    const live = await attempt("live checks", async () => {
+      const config = await readLiveConfig(env.DB);
+      return liveChecks(config, sites, probes, { fetchImpl, head: (namespace) => defaultBranchHead(env, namespace) }, now);
+    });
+    if (live) {
+      if (live.ran) ran.add("live checks");
+      out.push(...live.findings.map(liveFinding));
+      // The count beside the verdict: no findings over zero pages read is not a clean bill.
+      console.log(`WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} findings ${live.findings.length}`);
     }
   }
 
