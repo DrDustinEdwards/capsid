@@ -23,10 +23,11 @@ Code comments cite these by name ("CLAUDE.md, snapshot rule"), not by number.
 4. **One enforcement point.** `checkScope` in `src/scope.ts` is the only grant check. Every served tool refuses a caller without that tool, and every write refuses a read-only caller, with `checkScope`'s refusal and before its handler runs (test/scope.test.ts, the two SWEEP tests). Every repo mutation goes through `guardedWrite` (test/blast-radius.test.ts).
 5. **Path mutation.** Paths change only through `pathMutation()`. State moves are `UPDATE ... WHERE status = ? RETURNING id`. (test/path-mutation.test.ts)
 6. **Improve loop.** The improve loop stays off unless Dustin turns it on. Only `src/improve-scorer.ts` names `HOLDOUT`. (test/improve-holdout.test.ts)
-7. **Health probe.** `/health` and the backup preflight search `capsid/conventions.md` for the word "conventions" (`src/store-probe.ts`). That document must keep the word, or Capsid reports itself degraded and the backup refuses to prune.
-8. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker directly: `initialize`, `notifications/initialized`, `tools/call`. The token is under `mcpOAuth` in `~/.claude/.credentials.json`. Never print it.
+7. **No AI trailer.** No commit or pull request carries an AI trailer or footer. `.claude/settings.json` turns attribution off, and CI's `scripts/check-commit-trailers.mjs` refuses a commit that carries one (test/commit-trailers.test.ts).
+8. **Health probe.** `/health` and the backup preflight search `capsid/conventions.md` for the word "conventions" (`src/store-probe.ts`). That document must keep the word, or Capsid reports itself degraded and the backup refuses to prune.
+9. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker directly: `initialize`, `notifications/initialized`, `tools/call`. The token is under `mcpOAuth` in `~/.claude/.credentials.json`. Never print it.
 
-The portfolio rules that used to be restated here (no AI trailer, a check trusted only after it fails, no swallowed error, D1 `meta.changes`) are in `capsid/conventions.md`; `.claude/settings.json` turns AI attribution off for every session in this repo.
+The other portfolio rules that used to be restated here (a check trusted only after it fails, no swallowed error, D1 `meta.changes`) are in `capsid/conventions.md`.
 
 ## Restore
 
