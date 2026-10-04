@@ -8,6 +8,7 @@ Read `capsid/conventions.md` (the portfolio rules) and `capsid/core.md` in Capsi
 
 - Quick checks before a push: `npm run check`, `npm run check:test`, `npm run lint`, `npm test`. Add `npm run check:dashboard` and `npm run build:dashboard` (it enforces the size budget) when `dashboard/` changed, and `npm run check:scripts` when `scripts/` changed.
 - CI runs everything, including `npm run test:integration` (the Worker in workerd) and `npm run test:browser` (the built Portal in Chromium). Run those two locally only when the change needs them, one heavy session at a time.
+- A Claude Code cloud session starts on Node 22 and npm 10, which cannot `npm ci` this lockfile. `.claude/hooks/session-start.sh` (a SessionStart hook) installs the Node in `.nvmrc` from nodejs.org, checks its SHA-256, puts it on PATH and runs `npm ci`. It does nothing locally. Fix a cloud failure there, not in package.json.
 - `npm ci --prefix dashboard` once before the dashboard checks. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
 - Deploy: `npm run deploy` (builds the dashboard first and stops if the build or its size budget fails), then `EXPECT_SHA=<sha> npm run verify:live`.
 - Secrets: `npx wrangler secret put KEY`.
