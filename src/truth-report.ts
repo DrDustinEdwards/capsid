@@ -72,7 +72,7 @@ export interface TruthInput {
 // A published decision older than this is worth re-reading. A prompt, not a defect.
 export const STALE_DECISION_DAYS = 180;
 
-// The lint cadence in capsid/conventions.md: consolidate at roughly five.
+// Consolidate when a namespace holds more than five unconsolidated documents. Capsid's own threshold; the portfolio conventions no longer state one.
 export const UNCONSOLIDATED_CADENCE = 5;
 
 // Matches a repo path in prose: at least one slash, a file extension, and no
@@ -284,7 +284,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
             {
               check: "unconsolidated",
               subject: namespace,
-              detail: `${unconsolidated.length} unconsolidated documents, over the lint cadence of ~5 in capsid/conventions.md`,
+              detail: `${unconsolidated.length} unconsolidated documents, over the consolidation threshold of 5`,
             },
           ]
         : [],
