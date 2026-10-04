@@ -3,6 +3,7 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
+import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. registerDocTools in ./docs registers them in the published order.
@@ -84,7 +85,11 @@ export function registerReadTool(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first();
       if (!row) return fail(`not found: ${namespace}/${path}`);
-      return ok({ ...row, last_actor: await lastActor(namespace, path) });
+      // Read first: the row recorded below is not addressed to this document, so it
+      // cannot change last_actor, but the order keeps that from depending on it.
+      const lastWriter = await lastActor(namespace, path);
+      if (isConventionsDoc(namespace, path)) await recordConventionsRead(db, actor, "read", namespace);
+      return ok({ ...row, last_actor: lastWriter });
     }
   );
 }
@@ -148,6 +153,7 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace)
           .all(),
       ]);
+      if (conventions) await recordConventionsRead(db, actor, "brief", namespace);
       const openTasks = openTasksResult.results;
       const recentEpisodics = recentEpisodicsResult.results;
       const coreOut = coreOutResult.results;
