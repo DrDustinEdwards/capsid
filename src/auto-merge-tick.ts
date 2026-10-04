@@ -213,6 +213,42 @@ export function mergeParams(
   };
 }
 
+// A decline is logged when the decision for that PR changes, not on every look. The tick
+// runs every five minutes and a PR the policy keeps refusing was logged about 1,400 times
+// a day, with the same PR and the same reason. The last logged decision per PR lives in
+// APP_KV, which the tick already writes: "<head sha> <failed check>". A first decline, a
+// different check, or a new head sha is a change. The reason text (`why`) is not part of
+// the key, because it can carry counts and times that move without the decision moving.
+// The TTL bounds what a closed PR leaves behind; a decline that outlives it is logged
+// once more.
+export const LAST_DECLINE_PREFIX = "improve:auto-merge-last-decline:";
+export const LAST_DECLINE_TTL_SECONDS = 14 * 24 * 60 * 60;
+
+/** Audit a decline unless the same PR was already logged with this head sha and check.
+ *  A KV failure logs the row anyway: a repeated row is better than a lost one. */
+async function auditDeclineOnChange(
+  env: Env,
+  facts: { repo: string; number: number; headSha: string },
+  failed: string,
+  statement: D1PreparedStatement
+): Promise<void> {
+  const key = `${LAST_DECLINE_PREFIX}${facts.repo}#${facts.number}`;
+  const decision = `${facts.headSha} ${failed}`;
+  try {
+    if ((await env.APP_KV.get(key)) === decision) return;
+  } catch (err) {
+    console.error(`AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  // The row first, so a failed KV write repeats a row on the next tick rather than
+  // losing one.
+  await env.DB.batch([statement]);
+  try {
+    await env.APP_KV.put(key, decision, { expirationTtl: LAST_DECLINE_TTL_SECONDS });
+  } catch (err) {
+    console.error(`AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export interface AutoMergeOutcome {
   namespace: string;
   repo: string;
@@ -291,9 +327,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         };
         outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, ...skipped });
         try {
-          await env.DB.batch([
-            improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, { repo: `${owner}/${repo}`, number: pr.number, headSha: pr.head.sha }, skipped, now)),
-          ]);
+          const skippedFacts = { repo: `${owner}/${repo}`, number: pr.number, headSha: pr.head.sha };
+          await auditDeclineOnChange(
+            env,
+            skippedFacts,
+            skipped.failed,
+            improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
+          );
         } catch (err) {
           console.error(`AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -384,9 +424,12 @@ async function judgeOnePr(
       why: verdict.why,
       passed: verdict.passed,
     });
-    await env.DB.batch([
-      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now)),
-    ]);
+    await auditDeclineOnChange(
+      env,
+      facts,
+      verdict.failed,
+      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now))
+    );
     return;
   }
   // merge_method "merge", because a squash would not keep the audited head sha. Pinned
@@ -403,9 +446,12 @@ async function judgeOnePr(
       passed: verdict.passed,
     };
     outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved });
-    await env.DB.batch([
-      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now)),
-    ]);
+    await auditDeclineOnChange(
+      env,
+      facts,
+      moved.failed,
+      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now))
+    );
     return;
   }
   outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed });
