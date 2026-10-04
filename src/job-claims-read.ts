@@ -1,3 +1,4 @@
+import { classifyCommand } from "./gate-policy";
 import type {
   ClaimsAggregate,
   ClaimsAgreement,
@@ -5,6 +6,9 @@ import type {
   ClaimsFilter,
   ClaimsGroup,
   ClaimsJob,
+  ClaimsUsageRow,
+  ClaimsUsageTotals,
+  ClaimsWaitRow,
   JobClaimRow,
   JobEvaluationRow,
   JobTouchRow,
@@ -133,7 +137,72 @@ interface TouchFoldRow {
   waited_ms: number | null;
 }
 
+interface WaitFoldRow {
+  namespace: string;
+  actor_kind: string;
+  waited_ms: number;
+  gate_detail: string | null;
+}
+
+interface UsageSqlRow {
+  namespace: string;
+  n: number;
+  cost_usd: number | null;
+  active_seconds: number | null;
+  tokens_input: number | null;
+  tokens_output: number | null;
+  tokens_cache_read: number | null;
+  tokens_cache_creation: number | null;
+}
+
 const groupKey = (agent: string | null, namespace: string) => JSON.stringify([agent, namespace]);
+
+const NO_USAGE_TOTALS: ClaimsUsageTotals = {
+  rows: 0,
+  cost_usd: null,
+  active_seconds: null,
+  tokens_input: null,
+  tokens_output: null,
+  tokens_cache_read: null,
+  tokens_cache_creation: null,
+};
+
+const usageTotals = (row: UsageSqlRow | undefined): ClaimsUsageTotals =>
+  row
+    ? {
+        rows: row.n,
+        cost_usd: row.cost_usd,
+        active_seconds: row.active_seconds,
+        tokens_input: row.tokens_input,
+        tokens_output: row.tokens_output,
+        tokens_cache_read: row.tokens_cache_read,
+        tokens_cache_creation: row.tokens_cache_creation,
+      }
+    : NO_USAGE_TOTALS;
+
+const WAIT_CLASS_NEEDS_HUMAN = "needs_human";
+const WAIT_CLASS_UNREADABLE = "unreadable_gate";
+
+/**
+ * The class of the gate a wait ended, from the gate row's detail (the JSON a block
+ * writes: reason and command). Reuses the gate policy's own classifier, so "which
+ * waits could the policy have approved" is answered by the code that approves them.
+ * A command that matches no class, or a gate that recorded none, needs a person. A
+ * detail that is not JSON is named, not folded into needs_human: it is a row the writer
+ * should never have produced.
+ */
+export function gateClassOf(detail: string | null): string {
+  if (detail === null) return WAIT_CLASS_NEEDS_HUMAN;
+  let command: unknown;
+  try {
+    command = (JSON.parse(detail) as { command?: unknown } | null)?.command;
+  } catch {
+    return WAIT_CLASS_UNREADABLE;
+  }
+  if (typeof command !== "string") return WAIT_CLASS_NEEDS_HUMAN;
+  const match = classifyCommand(command);
+  return "refused" in match ? WAIT_CLASS_NEEDS_HUMAN : match.klasses.join("+");
+}
 
 function emptyGroup(agent: string | null, namespace: string): ClaimsGroup {
   return {
@@ -155,7 +224,7 @@ function emptyGroup(agent: string | null, namespace: string): ClaimsGroup {
  *  with no claim yet is grouped under agent null. */
 export async function readClaimsAggregate(db: D1Database, filter: ClaimsFilter): Promise<ClaimsAggregate> {
   const { namespace, agent, since, until } = filter;
-  const [claimRows, evaluationRows, touchRows] = await Promise.all([
+  const [claimRows, evaluationRows, touchRows, waitRows, telemetryRows, reportedRows] = await Promise.all([
     db
       .prepare(
         `SELECT agent, namespace, COUNT(DISTINCT job_id) AS jobs, COUNT(*) AS claims FROM job_claims
@@ -185,6 +254,58 @@ export async function readClaimsAggregate(db: D1Database, filter: ClaimsFilter):
       )
       .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
       .all<TouchFoldRow>(),
+    // Each ended wait once, with the gate it ended: the latest gate row on the job
+    // before the touch, which is the row touchStatement measured waited_ms from. The
+    // agent filter is a test, not a join, so a job two agents claimed is not counted
+    // twice.
+    db
+      .prepare(
+        `SELECT t.namespace AS namespace, t.actor_kind AS actor_kind, t.waited_ms AS waited_ms,
+           (SELECT g.detail FROM job_touches g WHERE g.job_id = t.job_id AND g.kind = 'gate' AND g.id < t.id
+            ORDER BY g.id DESC LIMIT 1) AS gate_detail
+         FROM job_touches t
+         WHERE t.waited_ms IS NOT NULL AND (?1 IS NULL OR t.namespace = ?1)
+           AND (?2 IS NULL OR EXISTS (SELECT 1 FROM job_claims c WHERE c.job_id = t.job_id AND c.agent = ?2))
+           AND (?3 IS NULL OR t.at >= ?3) AND (?4 IS NULL OR t.at < ?4)
+         ORDER BY t.id LIMIT ?5`
+      )
+      .bind(namespace, agent, since, until, TOUCH_ROWS + 1)
+      .all<WaitFoldRow>(),
+    // Telemetry: the job_outcomes columns the OTLP receiver fills. A job with none of
+    // the six is not a row here, so "rows" counts jobs that reported something.
+    db
+      .prepare(
+        `SELECT namespace, COUNT(*) AS n, SUM(cost_usd) AS cost_usd, SUM(active_seconds) AS active_seconds,
+           SUM(tokens_input) AS tokens_input, SUM(tokens_output) AS tokens_output,
+           SUM(tokens_cache_read) AS tokens_cache_read, SUM(tokens_cache_creation) AS tokens_cache_creation
+         FROM job_outcomes
+         WHERE (cost_usd IS NOT NULL OR active_seconds IS NOT NULL OR tokens_input IS NOT NULL OR tokens_output IS NOT NULL
+                OR tokens_cache_read IS NOT NULL OR tokens_cache_creation IS NOT NULL)
+           AND (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
+           AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
+         GROUP BY namespace ORDER BY namespace LIMIT ?5`
+      )
+      .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
+      .all<UsageSqlRow>(),
+    // Reported: claim.usage as the agent sent it, kept whole in job_claims.raw. Each
+    // claim is one session's own total, so claims on a job are summed.
+    db
+      .prepare(
+        `SELECT namespace, COUNT(*) AS n,
+           SUM(json_extract(raw, '$.claim.usage.cost_usd')) AS cost_usd,
+           SUM(json_extract(raw, '$.claim.usage.active_seconds')) AS active_seconds,
+           SUM(json_extract(raw, '$.claim.usage.tokens.input')) AS tokens_input,
+           SUM(json_extract(raw, '$.claim.usage.tokens.output')) AS tokens_output,
+           SUM(json_extract(raw, '$.claim.usage.tokens.cache_read')) AS tokens_cache_read,
+           SUM(json_extract(raw, '$.claim.usage.tokens.cache_creation')) AS tokens_cache_creation
+         FROM job_claims
+         WHERE json_extract(raw, '$.claim.usage') IS NOT NULL
+           AND (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR agent = ?2)
+           AND (?3 IS NULL OR recorded_at >= ?3) AND (?4 IS NULL OR recorded_at < ?4)
+         GROUP BY namespace ORDER BY namespace LIMIT ?5`
+      )
+      .bind(namespace, agent, since, until, CLAIMS_GROUP_LIMIT + 1)
+      .all<UsageSqlRow>(),
   ]);
 
   const truncated: string[] = [];
@@ -248,7 +369,35 @@ export async function readClaimsAggregate(db: D1Database, filter: ClaimsFilter):
   const ordered = [...groups.values()].sort(
     (a, b) => (a.agent ?? "").localeCompare(b.agent ?? "") || a.namespace.localeCompare(b.namespace)
   );
-  return { filter, groups: ordered, truncated };
+
+  const ended = new Map<string, { namespace: string; gate_class: string; ended_by: string; list: number[] }>();
+  for (const row of within("waits", waitRows.results, TOUCH_ROWS)) {
+    const gate_class = gateClassOf(row.gate_detail);
+    const key = JSON.stringify([row.namespace, gate_class, row.actor_kind]);
+    const entry = ended.get(key) ?? { namespace: row.namespace, gate_class, ended_by: row.actor_kind, list: [] };
+    entry.list.push(row.waited_ms);
+    ended.set(key, entry);
+  }
+  const waitsRanked: ClaimsWaitRow[] = [...ended.values()]
+    .map((e) => ({
+      namespace: e.namespace,
+      gate_class: e.gate_class,
+      ended_by: e.ended_by,
+      waits: e.list.length,
+      waited_ms_total: e.list.reduce((sum, v) => sum + v, 0),
+      waited_ms_median: median(e.list) as number,
+    }))
+    .sort((a, b) => b.waited_ms_total - a.waited_ms_total || a.namespace.localeCompare(b.namespace) || a.gate_class.localeCompare(b.gate_class));
+
+  const telemetry = new Map(within("usage_telemetry", telemetryRows.results, CLAIMS_GROUP_LIMIT).map((r) => [r.namespace, r]));
+  const reported = new Map(within("usage_reported", reportedRows.results, CLAIMS_GROUP_LIMIT).map((r) => [r.namespace, r]));
+  const usage: ClaimsUsageRow[] = [...new Set([...telemetry.keys(), ...reported.keys()])].sort().map((ns) => ({
+    namespace: ns,
+    telemetry: usageTotals(telemetry.get(ns)),
+    reported: usageTotals(reported.get(ns)),
+  }));
+
+  return { filter, groups: ordered, waits: waitsRanked, usage, truncated };
 }
 
 export interface ClaimsExportPage {
