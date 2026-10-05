@@ -77,8 +77,10 @@ driver agent from its own `~/.capsid/agent-<ns>-driver.key`. A Claude Code cloud
 was measured and rejected: a routine can attach only claude.ai connectors, the registered
 Capsid connector points at `/mcp`, the OAuth admin path, and there is no verified way to
 hand a routine a secret, so a nightly routine would run the whole queue on the wide
-credential the driver agents were minted to replace. The scheduler is off twice over:
-nothing is created without `--apply`, and an installed task is created disabled.
+credential the driver agents were minted to replace. The scheduler is off three times over:
+nothing is created without `--apply`, an installed task is created disabled, and a run starts
+only if the overnight switch is on, on the API key or on the subscription with Dustin's
+recorded decision (docs/overnight.md). Hand-started tabs are the default and are unaffected.
 
 ## The watcher
 

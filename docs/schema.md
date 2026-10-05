@@ -524,8 +524,8 @@ filtered, with ISO times. All three are admin session only.
 
 **A click in the Portal writes two audit rows:** the shared mutator's own row (for
 example `improve-paused` by `improve-loop`, or `job-resumed`), then the click's row,
-`portal-<action>` under `access:<email>`. The four automation switches (`pause`,
-`unpause`, `mode`, `seat_start`) record the reason in that row, and an Undo from the
+`portal-<action>` under `access:<email>`. The five automation switches (`pause`,
+`unpause`, `mode`, `seat_start`, `overnight`) record the reason in that row, and an Undo from the
 Portal's result message writes `portal-undo-<action>` instead, with `"undo": true`
 in its params. The Portal's on-demand watcher pass is
 `portal-ops-refresh`. Rows written before the Portal moved from `/console` to

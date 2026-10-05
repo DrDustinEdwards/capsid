@@ -16,6 +16,7 @@ import {
   PORTAL_PERFORM_PATH,
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions";
+import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { SEAT_START_KEY } from "../src/seat-start";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 
@@ -87,7 +88,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, SEAT_START_KEY, BREAKER_THRESHOLD_KEY, ...ROSTER.map(pausedKey), ...ROSTER.map(breakerResetKey)];
+const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...ROSTER.map(pausedKey), ...ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -136,6 +137,17 @@ const CASES: Record<string, Case> = {
   seat_start: {
     params: async () => ({ value: "off", reason: "no session should start" }),
     after: async () => expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("off"),
+  },
+  overnight: {
+    // The subscription, so the real KV shows the decision record written with the mode.
+    params: async () => ({ value: "subscription", reason: "first supervised night" }),
+    after: async () => {
+      expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("subscription");
+      const decision = JSON.parse((await env.APP_KV.get(OVERNIGHT_DECISION_KEY)) ?? "null");
+      expect(decision.decided_by).toBe("Dustin Edwards");
+      expect(decision.decided_on).toBe("2026-10-04");
+      expect(decision.reason).toBe("first supervised night");
+    },
   },
   resume_job: {
     params: async () => ({ id: await blockedJob("a blocked job"), reason: "I ran the push myself" }),
@@ -215,9 +227,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, fifteen actions", () => {
+  it("covers the allow-list, sixteen actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(15);
+    expect(Object.keys(CASES).length).toBe(16);
   });
 
   for (const action of PORTAL_ACTIONS) {
