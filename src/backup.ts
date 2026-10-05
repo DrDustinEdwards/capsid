@@ -78,7 +78,8 @@ const PAGED = {
   job_claims: { idColumn: "id", pageRows: 200 },
 };
 // wrangler's migration ledger. A restore builds the schema from migrations/, which
-// writes its own, and the rehearsal refuses a file that is not a migrations table.
+// writes its own. The weekly drill builds its scratch database from _schema.json, and a
+// run whose dumped tables differ from TABLES is refused as tables-mismatch.
 const EXCLUDED = ["d1_migrations"];
 
 // Every real table in the schema. test/backup.test.ts derives this list from
@@ -244,7 +245,8 @@ type DocRow = { namespace: string; path: string; body: string | null };
 //
 // The package reads every unpaged table in one D1 batch, which is one transaction, so
 // every table describes the same instant and exported_at describes it. The restore
-// rehearsal checks for the signature a torn read leaves.
+// invariants script (scripts/dump-invariants.mjs) checks for the signature a torn read
+// leaves.
 //
 // The two sidecars, underscore-prefixed so they cannot collide with a table name, are
 // not in D1. Without them a restored improve loop has no mode, pins, pauses, best

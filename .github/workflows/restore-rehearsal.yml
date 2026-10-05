@@ -1,11 +1,15 @@
-# The restore rehearsal (session 3, group 2). Weekly and on demand: pull the newest
-# JSON dump from R2 with a minted one-hour credential and prove it restores into a
-# fresh FTS5 database. It fails loudly when a dump cannot be rebuilt.
+# The restore rehearsal. Weekly and on demand: pull the newest JSON dump from R2 with a
+# minted one-hour credential, check what only Capsid knows about its dump
+# (scripts/dump-invariants.mjs), then run d1-dump's restore drill on it: restore into a
+# local SQLite database, check counts against the marker, FTS5 agreement and a search,
+# and delete the scratch database. It fails loudly when a dump cannot be rebuilt.
 #
-# It uses the SAME /backup/credential mint as the off-account mirror, signed with
+# The pull uses the SAME /backup/credential mint as the off-account mirror, signed with
 # BACKUP_CREDENTIAL_KEY, so that secret belongs on capsid-mcp as well as
-# capsid-backups. The rehearsal reads only the newest run (object-read-only), never
-# writes, and needs no D1 or account access.
+# capsid-backups. The pull reads only the newest run (object-read-only) and never writes.
+# The drill restores into a node:sqlite file and holds no Cloudflare credential: a D1
+# Edit token covers every database in the account, so none belongs in scheduled CI on a
+# public repo (Dustin, 2026-10-05). The drill against a real D1 database is run by hand.
 name: restore-rehearsal
 on:
   schedule:
@@ -18,16 +22,19 @@ permissions:
 jobs:
   rehearse:
     runs-on: ubuntu-latest
-    # A hung aws sync or a wedged node process would otherwise run to GitHub's
-    # 360-minute default while holding BACKUP_CREDENTIAL_KEY. The rehearsal downloads
-    # one dump and rebuilds it in memory.
-    timeout-minutes: 15
+    # A hung aws sync or a wedged drill would otherwise run to GitHub's 360-minute
+    # default while holding a secret. The rehearsal downloads one dump and restores it
+    # into one scratch database.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
+
+      # @dustinedwards/d1-dump, which carries the drill, is a dependency.
+      - run: npm ci
 
       - name: Mint a credential and pull the newest dump
         id: pull
@@ -84,11 +91,25 @@ jobs:
             exit 1
           fi
           echo "newest run: ${NEWEST}"
-          mkdir -p dump
-          aws s3 sync "s3://${DUMP_BUCKET}/${DUMP_PREFIX}${NEWEST}" dump/ --endpoint-url "${DUMP_ENDPOINT}"
+          # Laid out as the keys are (dump/backups/json/<run>/<table>.json), which is the
+          # shape d1-dump's drill reads from a directory.
+          mkdir -p "dump/${DUMP_PREFIX}${NEWEST}"
+          aws s3 sync "s3://${DUMP_BUCKET}/${DUMP_PREFIX}${NEWEST}" "dump/${DUMP_PREFIX}${NEWEST}" --endpoint-url "${DUMP_ENDPOINT}"
+          echo "run_prefix=${DUMP_PREFIX}${NEWEST}" >> "${GITHUB_OUTPUT}"
 
-      # Also fails when the dump is older than 26 hours: the newest prefix is whatever
-      # the last successful backup wrote, so without that check a stopped backup keeps
-      # this green.
-      - name: Rehearse the restore
-        run: node scripts/restore-rehearsal.mjs dump
+      # What only Capsid knows about its dump: the marker lists every file, both sidecars
+      # are present, documents is not empty, and the tables describe one instant.
+      - name: Check the dump's own invariants
+        run: node scripts/dump-invariants.mjs "dump/${{ steps.pull.outputs.run_prefix }}"
+
+      # Fails when the dump is older than 26 hours: the newest prefix is whatever the
+      # last successful backup wrote, so without that check a stopped backup keeps this
+      # green. Also fails on a count that differs from the marker, an FTS5 index that
+      # disagrees with its content table, a search that finds nothing, a statement over
+      # the 100,000 byte statement cap, and a scratch database it could not delete.
+      # --backend sqlite is explicit, so adding Cloudflare variables to this job later
+      # cannot switch the drill to a real D1 database.
+      - name: Restore into a scratch SQLite database and check it
+        env:
+          RUN_PREFIX: ${{ steps.pull.outputs.run_prefix }}
+        run: npx d1-dump drill --dir dump --prefix "${RUN_PREFIX}" --backend sqlite

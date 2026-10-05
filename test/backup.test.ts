@@ -510,7 +510,7 @@ test("an empty versions table still writes a valid dump", async () => {
 test("a version written after the snapshot batch is not in the dump", async () => {
   // The bound is what keeps the dump one instant. Without it, a version written
   // between the batch and the pages would be in the dump while the document write
-  // that caused it was not, which is the torn shape the restore rehearsal checks for.
+  // that caused it was not, which is the torn shape scripts/dump-invariants.mjs checks for.
   const r2 = fakeR2(MIRROR);
   const kv = fakeKv({});
   const d1 = fakeD1({ documents: DOCS, versions: [version(1, "a"), version(2, "b")] });
