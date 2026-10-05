@@ -32,6 +32,8 @@
   "include": [
     "scripts/improve-report.mjs",
     "scripts/improve-report.d.mts",
+    "scripts/admin-exposure-check.mjs",
+    "scripts/admin-exposure-check.d.mts",
     "scripts/schedule-drivers.mjs",
     "scripts/improve-derive-key.mjs",
     "scripts/export-claims.mjs",

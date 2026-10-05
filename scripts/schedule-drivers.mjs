@@ -21,6 +21,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { homedir, tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
+import { checkAdminExposure } from "./admin-exposure-check.mjs";
 
 const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
@@ -243,18 +244,34 @@ export function driverArgs() {
   ];
 }
 
+// Before any claim: a driver launches only from a folder where the admin connector is
+// not loaded and the seat key is not on disk (scripts/admin-exposure-check.mjs). Returns
+// the reason to refuse, or null. A check that cannot run refuses, with its reason.
+/**
+ * @param {string} folder
+ * @param {typeof checkAdminExposure} [check]
+ * @returns {string | null}
+ */
+export function launchRefusal(folder, check = checkAdminExposure) {
+  const result = check({ cwd: folder });
+  return result.ok ? null : `refused to launch the driver: ${result.reasons.join("; ")}`;
+}
+
 /** @param {string} ns */
 async function runOne(ns) {
   const folder = FOLDERS[ns];
   const key = process.env.CAPSID_DRIVER_KEY ?? readKey(ns);
   const started = new Date().toISOString();
+  const refusal = launchRefusal(folder);
   // The driver session (see readKey for its credential). No shell: the arguments carry
   // `*`, `(` and spaces, and an argv keeps cmd.exe from reading any of them.
-  const res = spawnSync("claude", driverArgs(), {
-    cwd: folder,
-    encoding: "utf8",
-    timeout: 4 * 60 * 60 * 1000,
-  });
+  const res = refusal
+    ? { status: 1, stdout: "", stderr: refusal, error: undefined }
+    : spawnSync("claude", driverArgs(), {
+        cwd: folder,
+        encoding: "utf8",
+        timeout: 4 * 60 * 60 * 1000,
+      });
   const finished = new Date().toISOString();
   // A claude that never started leaves no stdout, only res.error.
   const spawnError = res.error ? `\n${res.error.message}` : "";
