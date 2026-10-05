@@ -103,7 +103,7 @@ test("classifyCommand places each of the three classes and refuses anything else
   const pr = classifyCommand("gh pr create --fill --base master");
   assert.ok("klasses" in pr && pr.klasses[0] === "open_pr");
 
-  for (const cmd of ["npm test", "node scripts/restore-rehearsal.mjs", ""]) {
+  for (const cmd of ["npm test", "node scripts/dump-invariants.mjs", ""]) {
     assert.ok("refused" in classifyCommand(cmd), `${cmd} must match no class`);
   }
 });

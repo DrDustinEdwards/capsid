@@ -32,4 +32,4 @@ The other portfolio rules that used to be restated here (a check trusted only af
 
 ## Restore
 
-`wrangler d1 export` fails on this database because of FTS5. Follow the per-table procedure in `docs/backups.md`: import `documents` first, and never export `documents_fts`.
+`wrangler d1 export` fails on this database because of FTS5. Follow the per-table procedure in `docs/backups.md`: import `documents` first, and never export `documents_fts`. The weekly `restore-rehearsal.yml` runs d1-dump's drill (`npx d1-dump drill`) plus `scripts/dump-invariants.mjs`; it needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` as repo secrets, set by Dustin.
