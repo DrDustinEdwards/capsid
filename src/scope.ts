@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Agent } from "./agents";
+import type { AdminWriteObserver } from "./admin-client-audit";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./improve-schema";
 
@@ -415,7 +416,7 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
 // stays a literal call on the server object, which test/invariants.test.ts,
 // test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
 // module must never spell that call itself, or those scanners would count it.
-export function guardRegistrations(server: McpServer, agent: Agent): void {
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     const takesNamespace = Boolean(config?.inputSchema && Object.hasOwn(config.inputSchema, "namespace"));
@@ -441,6 +442,15 @@ export function guardRegistrations(server: McpServer, agent: Agent): void {
       if (takesNamespace && namespace === undefined) {
         const missing = namespaceRefusal(agent, name);
         if (missing) return deny(missing);
+      }
+      // Observation only (src/admin-client-audit.ts): after every refusal above, before
+      // the handler, and only for the admin and a requirement that is not a plain read.
+      // "action" tools (jobs, lint) are included, so a jobs list is recorded too: more
+      // than a write, never less.
+      if (observe && agent.admin && requiredForAction(name, action) !== "read") {
+        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
+          refusal ? deny(refusal) : handler(...callArgs)
+        );
       }
       return handler(...callArgs);
     };
