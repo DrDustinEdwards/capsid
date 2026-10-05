@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
-import { prFacts } from "./job-outcomes";
+import { prFacts, verifyEvidence } from "./job-outcomes";
+import { auditStatement } from "./store-guards";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
 // runs, but the seat merges afterwards, so the row would always read "opened, not
@@ -308,6 +309,69 @@ export interface SweepReport {
   checked: number;
   changed: number;
   seeded: number;
+  // Outcomes whose commits, files and CI were read from GitHub for the first time.
+  backfilled: number;
+}
+
+export const BACKFILL_ACTOR = "system:outcome-backfill";
+
+/**
+ * Outcomes recorded wrong by the bug job_d5262df1dc32 fixed: a pull request named only
+ * in result_ref was never read, so commits, files_changed and ci_green sit unverified
+ * (and prs_opened and prs_merged did too, until the seed below counted them). For each
+ * such row in the window this reads every pull request the job names (its join rows and
+ * its result_ref) the way complete does now, and writes GitHub's numbers. A row is
+ * touched only while its commits are still unverified, and only when every named pull
+ * request was read; one that was not stays as it was for the next sweep. tests_added is
+ * the driver's and is never touched. Each correction is an audit_log row holding the
+ * values before and after, so nothing here is an edit by hand.
+ *
+ * Bounded by `limit` per sweep and by the window, like the rest of the sweep. A row whose
+ * pull request GitHub will not answer for is re-read each sweep until it leaves the window.
+ */
+export async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<{ backfilled: number; unread: number }> {
+  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  const candidates = await env.DB.prepare(
+    `SELECT o.job_id, o.namespace, j.result_ref, o.prs_opened, o.prs_merged, o.commits, o.files_changed, o.ci_green, o.verified
+     FROM job_outcomes o JOIN jobs j ON j.id = o.job_id
+     WHERE o.result_kind = 'pr'
+       AND o.recorded_at >= ?1
+       AND j.status <> 'superseded'
+       AND j.result_ref LIKE 'https://github.com/%/pull/%'
+       AND CASE WHEN json_valid(o.verified) THEN json_extract(o.verified, '$.commits') END = 0
+     ORDER BY o.recorded_at DESC
+     LIMIT ?2`
+  )
+    .bind(cutoff, limit)
+    .all<{ job_id: string; namespace: string; result_ref: string; prs_opened: number | null; prs_merged: number | null; commits: number | null; files_changed: number | null; ci_green: number | null; verified: string }>();
+
+  let backfilled = 0;
+  let unread = 0;
+  for (const row of candidates.results ?? []) {
+    const joined = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1").bind(row.job_id).all<{ pr_url: string }>();
+    const named = (joined.results ?? []).map((r) => r.pr_url);
+    const verdict = await verifyEvidence(env, row.namespace, named.length > 0 ? { prs: named } : undefined, row.result_ref);
+    if (!verdict.verified.commits) {
+      unread += 1;
+      continue;
+    }
+    const urls = [...new Set([...named, row.result_ref.trim()])];
+    await env.DB.batch([
+      ...outcomePrStatements(env.DB, row.job_id, urls, verdict.pr_states, now, verdict.pr_identity),
+      env.DB.prepare(
+        `UPDATE job_outcomes SET prs_opened = ?2, prs_merged = ?3, commits = ?4, files_changed = ?5, ci_green = ?6, verified = ?7
+         WHERE job_id = ?1 AND CASE WHEN json_valid(verified) THEN json_extract(verified, '$.commits') END = 0`
+      ).bind(row.job_id, verdict.prs_opened, verdict.prs_merged, verdict.commits, verdict.files_changed, verdict.ci_green, JSON.stringify(verdict.verified)),
+      auditStatement(env.DB, BACKFILL_ACTOR, "outcome-backfilled", row.namespace, `jobs/${row.job_id}.md`, {
+        job_id: row.job_id,
+        urls,
+        before: { prs_opened: row.prs_opened, prs_merged: row.prs_merged, commits: row.commits, files_changed: row.files_changed, ci_green: row.ci_green, verified: row.verified },
+        after: { prs_opened: verdict.prs_opened, prs_merged: verdict.prs_merged, commits: verdict.commits, files_changed: verdict.files_changed, ci_green: verdict.ci_green, verified: verdict.verified },
+      }),
+    ]);
+    backfilled += 1;
+  }
+  return { backfilled, unread };
 }
 
 /**
@@ -317,6 +381,9 @@ export interface SweepReport {
  */
 export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<SweepReport> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  // First, so a row it corrects gets its join rows with merge state before the seed below
+  // would give it empty ones.
+  const { backfilled } = await backfillOutcomes(env, now, limit);
   const unseeded = await env.DB.prepare(
     `SELECT o.job_id, o.namespace, j.result_ref, j.result_summary
      FROM job_outcomes o
@@ -347,7 +414,7 @@ export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SW
     checked += 1;
     changed += results.filter((r) => r.changed).length;
   }
-  return { checked, changed, seeded };
+  return { checked, changed, seeded, backfilled };
 }
 
 const SWEEP_STAMP_KEY = "outcomes:reverify:last";

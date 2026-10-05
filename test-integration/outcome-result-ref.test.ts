@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent } from "../src/agents";
+import { reverifySweep } from "../src/outcome-prs";
 
 // A pull request named only in result_ref is verified against GitHub, whoever completes
 // the job (job_d5262df1dc32). Before the fix, verification read evidence.prs and nothing
@@ -129,5 +130,54 @@ describe("a pull request named only in result_ref is verified", () => {
     expect(row?.prs_opened).toBeNull();
     expect(JSON.parse(String(row?.verified))).toEqual({ prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false });
     expect(calls).toEqual([]);
+  });
+});
+
+// Rows the bug already wrote. The sweep reads GitHub for them and corrects them through
+// an audit row, never by hand.
+describe("the sweep corrects outcomes recorded before the fix", () => {
+  const UNVERIFIED = JSON.stringify({ prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false });
+
+  async function plant(jobId: string, resultRef: string, verified = UNVERIFIED) {
+    await env.DB.prepare(
+      `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by, result_ref, result_summary)
+       VALUES (?1, ?2, ?3, 'b', 'done', 'github:x', ?4, ?5, 'merged')`
+    ).bind(jobId, NS, `planted ${jobId}`, DRIVER_ACTOR, resultRef).run();
+    await env.DB.prepare(
+      `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, recorded_at)
+       VALUES (?1, ?2, ?3, 0, 0, 'pr', ?4, '2026-10-05T11:00:00.000Z')`
+    ).bind(jobId, DRIVER_ACTOR, NS, verified).run();
+  }
+
+  it("REPRODUCED: an outcome recorded unverified for a merged, green pull request is corrected with an audit row", async () => {
+    stubGitHub();
+    await plant("job_affected001", PR);
+    const report = await reverifySweep(jobsEnv(), LATER);
+    expect(report.backfilled).toBe(1);
+    const row = await outcome("job_affected001");
+    expect(JSON.parse(String(row?.verified))).toEqual(VERIFIED);
+    expect([row?.prs_opened, row?.prs_merged, row?.commits, row?.files_changed, row?.ci_green]).toEqual([1, 1, 2, 3, 1]);
+    const audit = await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'outcome-backfilled' AND path = 'jobs/job_affected001.md'").all<{ actor: string; params: string }>();
+    expect(audit.results.length).toBe(1);
+    expect(audit.results[0].actor).toBe("system:outcome-backfill");
+    const params = JSON.parse(audit.results[0].params);
+    expect(params.before).toMatchObject({ commits: null, ci_green: null, verified: UNVERIFIED });
+    expect(params.after).toMatchObject({ commits: 2, files_changed: 3, ci_green: 1 });
+    // A second sweep finds nothing left to correct.
+    expect((await reverifySweep(jobsEnv(), LATER)).backfilled).toBe(0);
+  });
+
+  it("a row already verified is not read or rewritten, and a pull request GitHub will not answer for is left as it was", async () => {
+    await plant("job_verified001", PR, JSON.stringify(VERIFIED));
+    await env.DB.prepare("UPDATE job_outcomes SET commits = 9 WHERE job_id = 'job_verified001'").run();
+    await plant("job_unread00001", "https://github.com/example/sample/pull/404");
+    const { calls } = stubGitHub();
+    const report = await reverifySweep(jobsEnv(), LATER);
+    expect(report.backfilled).toBe(0);
+    expect((await outcome("job_verified001"))?.commits).toBe(9);
+    expect(JSON.parse(String((await outcome("job_unread00001"))?.verified))).toEqual(JSON.parse(UNVERIFIED));
+    expect(calls.some((u) => u.includes("/pulls/404"))).toBe(true);
+    const audits = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'outcome-backfilled'").first<{ n: number }>();
+    expect(audits?.n).toBe(0);
   });
 });

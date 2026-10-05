@@ -146,7 +146,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => sweepIfDue(env, now),
     (swept): TaskResult => {
       if (!swept) return null;
-      const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}`;
+      const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}, backfilled ${swept.backfilled}`;
       console.log(`OUTCOME_SWEEP ${line}`);
       return { outcome: "ok", reason: line };
     },
