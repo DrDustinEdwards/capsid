@@ -2,6 +2,7 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp";
 import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
+import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
 import { runBackup } from "./backup";
 import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
@@ -36,7 +37,12 @@ const apiHandler = {
       });
     }
     // The admin agent holds every scope; the email Access verified is the audit actor.
-    return createMcpHandler(buildServer(env, adminAgentForEmail(email)), { route: "/mcp" })(request, env, ctx);
+    const admin = adminAgentForEmail(email);
+    // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
+    // acts through. It never refuses on what the client says.
+    await recordAdminInitialize(env.DB, admin.actor, request);
+    const observe = adminWriteObserver(env.DB, admin.actor, request.headers.get("User-Agent"));
+    return createMcpHandler(buildServer(env, admin, "", observe), { route: "/mcp" })(request, env, ctx);
   },
 };
 

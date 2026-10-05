@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Env } from "./env";
 import { legacyAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
+import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { decorateCacheHints } from "./cache-hints";
@@ -41,7 +42,7 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // The caller is an agent (src/agents.ts). A bare grant plus an actor string means an
 // unrestricted caller at that grant: the OPERATOR_KEY_HASH fallback, expressed once so
 // there is no second code path where scopes do not apply.
-export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): McpServer {
+export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver): McpServer {
   const agent = typeof caller === "string" ? legacyAgent(caller, actor) : caller;
   const server = new McpServer(SERVER_INFO);
   const db = env.DB;
@@ -71,7 +72,7 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = ""): Mc
   };
 
   // Before any registration, so every tool registered below is wrapped.
-  guardRegistrations(server, agent);
+  guardRegistrations(server, agent, observeAdminWrite);
 
   registerDocTools(server, ctx);
   registerLintTools(server, ctx);
