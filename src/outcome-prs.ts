@@ -313,7 +313,7 @@ export interface SweepReport {
   backfilled: number;
 }
 
-export const BACKFILL_ACTOR = "system:outcome-backfill";
+const BACKFILL_ACTOR = "system:outcome-backfill";
 
 /**
  * Outcomes recorded wrong by the bug job_d5262df1dc32 fixed: a pull request named only
@@ -329,7 +329,7 @@ export const BACKFILL_ACTOR = "system:outcome-backfill";
  * Bounded by `limit` per sweep and by the window, like the rest of the sweep. A row whose
  * pull request GitHub will not answer for is re-read each sweep until it leaves the window.
  */
-export async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<{ backfilled: number; unread: number }> {
+async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<{ backfilled: number; unread: number }> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
   const candidates = await env.DB.prepare(
     `SELECT o.job_id, o.namespace, j.result_ref, o.prs_opened, o.prs_merged, o.commits, o.files_changed, o.ci_green, o.verified
