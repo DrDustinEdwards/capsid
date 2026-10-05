@@ -96,7 +96,7 @@ describe("the feed against real D1", () => {
     // One pause key per roster namespace, and those are the only per-namespace reads.
     const pauseKeys = reads.kv.filter((key) => key.startsWith("improve:paused:"));
     expect(pauseKeys.sort()).toEqual(ROSTER.map(pausedKey).sort());
-    expect(OPS_FEED_READS.kv).toBe(7 + ROSTER.length);
+    expect(OPS_FEED_READS.kv).toBe(8 + ROSTER.length);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
     const again = counted();

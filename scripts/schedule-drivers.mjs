@@ -22,6 +22,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 import { checkAdminExposure } from "./admin-exposure-check.mjs";
+import { childEnv, prepareRun, acquireHeavyLock, releaseHeavyLock, waitForHeavyLock } from "./overnight-guard.mjs";
 
 const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
@@ -231,9 +232,10 @@ export const DRIVER_DENIED = [
 // outside the working directory prompts even in auto mode, and a -p run denies it.
 const WORKTREES = "C:\\Users\\email\\dev\\worktrees";
 
-export function driverArgs() {
+/** @param {string} [prompt] the session's prompt; the overnight plan builds it (scripts/overnight-guard.mjs). */
+export function driverArgs(prompt = "/improve work") {
   return [
-    "-p", "/improve work",
+    "-p", prompt,
     "--permission-mode", "auto",
     // Anything that would still fall back to a prompt is denied at once, and the model
     // is told nobody can approve it, rather than retrying.
@@ -257,21 +259,70 @@ export function launchRefusal(folder, check = checkAdminExposure) {
   return result.ok ? null : `refused to launch the driver: ${result.reasons.join("; ")}`;
 }
 
+// Where the heavy-suite lock lives: one session at a time across this machine.
+export const HEAVY_LOCK = join(homedir(), ".capsid", "overnight-heavy.lock");
+
 /** @param {string} ns */
 async function runOne(ns) {
   const folder = FOLDERS[ns];
   const key = process.env.CAPSID_DRIVER_KEY ?? readKey(ns);
   const started = new Date().toISOString();
+  // The #244 preflight runs first, before the switch is read and before any claim: a
+  // folder where the admin connector is loaded or the seat key is on disk never launches.
   const refusal = launchRefusal(folder);
-  // The driver session (see readKey for its credential). No shell: the arguments carry
-  // `*`, `(` and spaces, and an argv keeps cmd.exe from reading any of them.
-  const res = refusal
-    ? { status: 1, stdout: "", stderr: refusal, error: undefined }
-    : spawnSync("claude", driverArgs(), {
+  /** @type {{ status: number | null, stdout?: string | null, stderr?: string | null, error?: Error }} */
+  let res;
+  if (refusal) {
+    res = { status: 1, stdout: "", stderr: refusal, error: undefined };
+  } else {
+    const origin = process.env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT;
+    // THE SWITCH FIRST (capsid/decisions.md, 2026-10-04). Off unless Dustin turned it on,
+    // and on the API key or the subscription as he chose. Without the driver key the
+    // switch cannot be read, and an unreadable switch is off.
+    if (!key) {
+      console.error(`overnight run for ${ns} refused: no driver key at ${keyPath(ns)}, so the overnight switch cannot be read.`);
+      return 3;
+    }
+    const client = capsidClient(origin, key, "schedule-drivers");
+    const prepared = await prepareRun(client, ns, process.env);
+    if (!prepared.run) {
+      const line = `overnight run for ${ns} ${prepared.benign ? "skipped" : "refused"}: ${prepared.why}`;
+      console.log(line);
+      if (!prepared.benign) {
+        // Posted, so the morning shows why a night did not run.
+        try {
+          await postLog(ns, client, renderLog(ns, { exitCode: 3, output: line, started, finished: new Date().toISOString() }), chicagoDay(new Date()));
+        } catch (err) {
+          console.error(`could not post the refusal log for ${ns}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      return prepared.benign ? 0 : 3;
+    }
+    console.log(`overnight run for ${ns} ${prepared.note}`);
+    // Heavy repos run one at a time across the machine; the second waits for the first.
+    const lockInfo = { ns, pid: process.pid, started };
+    if (prepared.heavy) {
+      const got = await waitForHeavyLock(HEAVY_LOCK, lockInfo, { waitMs: prepared.budget * 60_000 });
+      if (!got.ok) {
+        console.error(`overnight run for ${ns} refused: the heavy-suite lock is held by ${got.holder?.ns ?? "another session"} and did not free within ${prepared.budget} minutes.`);
+        return 3;
+      }
+    }
+    // The driver session (see readKey for its credential). No shell: the arguments carry
+    // `*`, `(` and spaces, and an argv keeps cmd.exe from reading any of them. The
+    // environment is the parent's with the credential change the switch calls for.
+    try {
+      res = spawnSync("claude", driverArgs(prepared.prompt), {
         cwd: folder,
         encoding: "utf8",
-        timeout: 4 * 60 * 60 * 1000,
+        // The plan's budget and a half hour to finish the job in hand.
+        timeout: (prepared.budget + 30) * 60_000,
+        env: childEnv(process.env, prepared.env),
       });
+    } finally {
+      if (prepared.heavy) releaseHeavyLock(HEAVY_LOCK, ns);
+    }
+  }
   const finished = new Date().toISOString();
   // A claude that never started leaves no stdout, only res.error.
   const spawnError = res.error ? `\n${res.error.message}` : "";

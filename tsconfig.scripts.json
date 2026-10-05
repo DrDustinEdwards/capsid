@@ -35,6 +35,8 @@
     "scripts/admin-exposure-check.mjs",
     "scripts/admin-exposure-check.d.mts",
     "scripts/schedule-drivers.mjs",
+    "scripts/overnight-guard.mjs",
+    "scripts/overnight-guard.d.mts",
     "scripts/improve-derive-key.mjs",
     "scripts/export-claims.mjs",
     "scripts/export-claims.d.mts"

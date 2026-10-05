@@ -90,6 +90,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   unpause: "Unpause",
   mode: "Set mode",
   seat_start: (p) => (p.value === "off" ? "Turn off" : "Turn on"),
+  overnight: (p) => (p.value === "off" ? "Turn off" : p.value === "subscription" ? "Run on subscription" : "Run on API key"),
   resume_job: "Resume job",
   release_job: "Release job",
   fail_job: "Mark failed",

@@ -179,6 +179,7 @@ const FEED: OpsFeedData = {
     prs: [],
     awaiting_seat: [],
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
+    overnight: { mode: "off", decision: null },
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
     namespaces: [],
@@ -239,6 +240,7 @@ const EVERY_ACTION = [
   ["unpause", { namespace: "capsid", reason: "the regression is fixed" }],
   ["mode", { value: "subscription", reason: "move the loop onto the subscription" }],
   ["seat_start", { value: "on", reason: "queued jobs are waiting" }],
+  ["overnight", { value: "api", reason: "first supervised night" }],
   ["resume_job", { id: "job_blocked00001", reason: "ran the push" }],
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
   ["fail_job", { id: "job_queued000001", reason: "superseded" }],
@@ -252,12 +254,13 @@ const EVERY_ACTION = [
   ["package_remove", { name: "sample-pkg", revision: "1" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the three site edits, the breaker reset and the three package edits, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset and the three package edits, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
     "fail_job",
     "mode",
+    "overnight",
     "package_add",
     "package_edit",
     "package_remove",
@@ -273,7 +276,7 @@ test("the Portal's actions are the eight the old /console page had, the three si
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 15);
+  assert.equal(PORTAL_ACTIONS.length, 16);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -343,6 +346,7 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["pause", { namespace: "capsid" }, /needs a reason/],
     ["mode", { value: "banana", reason: "x" }, /banana/],
     ["seat_start", { value: "maybe", reason: "x" }, /"on" or "off"/],
+    ["overnight", { value: "on", reason: "x" }, /overnight must be one of api, subscription, off/],
     ["resume_job", { id: "job_queued000001", reason: "x" }, /not blocked/],
     ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
@@ -373,6 +377,7 @@ const SWITCH_CASES = [
   ["unpause", { namespace: "capsid" }],
   ["mode", { value: "subscription" }],
   ["seat_start", { value: "on" }],
+  ["overnight", { value: "api" }],
 ] as const;
 
 test("PLANT: unpause, mode and seat_start REFUSE a missing or blank reason at preview, as pause does, and write nothing", async () => {
@@ -711,4 +716,44 @@ test("an unknown path under /portal/api/ is a JSON 404 for the administrator, ne
   assert.equal(res.status, 404);
   assert.match(res.headers.get("Content-Type") ?? "", /json/);
   assert.match(await res.text(), /no Portal route at GET \/portal\/api\/typo/);
+});
+
+// The overnight run's switch (src/overnight.ts)
+
+test("PLANT: choosing the subscription previews and records Dustin's decision, its date and its reasoning; the API key records none", async () => {
+  const sub = await previewOk(world(), "overnight", { value: "subscription", reason: "first supervised night" });
+  const text = sub.changes.join("\n");
+  assert.match(text, /decision of Dustin Edwards on 2026-10-04/);
+  assert.match(text, /overnight runs may use the subscription, by Dustin's choice/);
+  assert.match(text, /personal, on Dustin's own repositories, and not shared/);
+  assert.match(text, /Hand-started VS Code tabs are unaffected/);
+  const api = await previewOk(world(), "overnight", { value: "api", reason: "first supervised night" });
+  assert.doesNotMatch(api.changes.join("\n"), /decision of Dustin/);
+  assert.match(api.changes.join("\n"), /ANTHROPIC_API_KEY/);
+});
+
+test("PLANT: performing the subscription choice stores the mode and the decision record with the date, who set it and why; leaving it deletes the record", async () => {
+  const w = world();
+  const { token } = await previewOk(w, "overnight", { value: "subscription", reason: "first supervised night" });
+  const done = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+  assert.equal(done.status, 200, await done.clone().text());
+  assert.equal(await w.kv.kv.get("overnight:mode"), "subscription");
+  const decision = JSON.parse((await w.kv.kv.get("overnight:decision")) ?? "null");
+  assert.equal(decision.decided_by, "Dustin Edwards");
+  assert.equal(decision.decided_on, "2026-10-04");
+  assert.match(decision.ruling, /capsid\/decisions\.md, 2026-10-04/);
+  assert.match(decision.reasoning, /not shared/);
+  assert.equal(decision.set_by, ACTOR);
+  assert.equal(decision.set_at, NOW.toISOString());
+  assert.equal(decision.reason, "first supervised night");
+  // The audit rows carry the same record, so the choice is visible in Activity.
+  const mutator = w.d1.recorded.find((r) => r.params[1] === "overnight-set");
+  assert.ok(mutator, "no overnight-set audit row");
+  assert.match(String(mutator.params[4]), /Dustin Edwards/);
+
+  const off = await previewOk(w, "overnight", { value: "off", reason: "done for now" });
+  const turned = await handlePortalPerform(await perform({ token: off.token }), w.env, NOW, deps);
+  assert.equal(turned.status, 200, await turned.clone().text());
+  assert.equal(await w.kv.kv.get("overnight:mode"), "off");
+  assert.equal(await w.kv.kv.get("overnight:decision"), null);
 });
