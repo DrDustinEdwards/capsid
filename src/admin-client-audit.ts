@@ -26,12 +26,16 @@ export interface AdminWriteCall {
   namespace: string | undefined;
 }
 
-// Resolves to a refusal message, or null to let the call run. A row that could not be
-// written is a refusal, not a log line: the call has not run, and nothing carries on
-// as if it had been recorded (capsid/conventions.md 7.3).
+// Resolves to a refusal message, or null to let the call run. These rows are
+// observation only (D2, ruled by Dustin 2026-10-04), so a row that cannot be written is
+// logged under ADMIN_CLIENT_AUDIT_FAILED and the call proceeds: the observer returns
+// null on every path today. The type keeps the refusal arm because the registrar's
+// contract is shared. Every other audit row keeps its own behavior.
 export type AdminWriteObserver = (call: AdminWriteCall, clientName: string | null) => Promise<string | null>;
 
-const failure = (err: unknown) => (err instanceof Error ? err.message : String(err));
+function reportFailure(what: string, err: unknown): void {
+  console.error(`ADMIN_CLIENT_AUDIT_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}`);
+}
 
 export function adminWriteObserver(db: D1Database, actor: string, userAgent: string | null, now: () => number = Date.now): AdminWriteObserver {
   return async (call, clientName) => {
@@ -45,7 +49,8 @@ export function adminWriteObserver(db: D1Database, actor: string, userAgent: str
       }).run();
       return null;
     } catch (err) {
-      return `the admin client audit row could not be written (${failure(err)}), so ${call.tool} was not run`;
+      reportFailure(call.tool, err);
+      return null;
     }
   };
 }
@@ -70,8 +75,7 @@ export function initializeClient(body: unknown): { client_name: string | null; p
 
 // Reads the request's own body, on a clone, only when it is small enough to be an
 // initialize (they are a few hundred bytes), so a large document write is never read
-// twice. A failed insert throws: the admin's connect fails loudly rather than going
-// unrecorded.
+// twice. A failed insert is logged and the connect proceeds (observation only).
 export async function recordAdminInitialize(
   db: D1Database,
   actor: string,
@@ -89,6 +93,11 @@ export async function recordAdminInitialize(
   }
   const client = initializeClient(body);
   if (!client) return false;
-  await auditStatement(db, actor, "admin-initialize", null, null, { ...client, user_agent: clip(request.headers.get("User-Agent")) }).run();
+  try {
+    await auditStatement(db, actor, "admin-initialize", null, null, { ...client, user_agent: clip(request.headers.get("User-Agent")) }).run();
+  } catch (err) {
+    reportFailure("initialize", err);
+    return false;
+  }
   return true;
 }

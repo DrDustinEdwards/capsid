@@ -118,15 +118,30 @@ test("after the 30-day window the call runs and no row is written", async () => 
   assert.equal(rows.length, 0);
 });
 
-test("a row that cannot be written refuses the call and says why, instead of running it unrecorded", async () => {
+// The rows are observation only (D2), so a failed insert is logged and the call goes
+// through. Console output is captured so the log line is asserted, not just tolerated.
+async function withCapturedErrors<T>(fn: () => Promise<T>): Promise<{ value: T; logged: string[] }> {
+  const logged: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+  try {
+    return { value: await fn(), logged };
+  } finally {
+    console.error = original;
+  }
+}
+
+test("a failed observational insert is logged and the call still runs, never refused", async () => {
   const { db } = fakeDb(true);
   const ran: string[] = [];
   const t = await connect(admin, adminWriteObserver(db, admin.actor, "ua", () => BEFORE), ran);
-  const result = await t.call("write");
+  const { value: result, logged } = await withCapturedErrors(() => t.call("write"));
   await t.close();
-  assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /admin client audit row could not be written \(D1_ERROR: unavailable\), so write was not run/);
-  assert.deepEqual(ran, [], "the handler ran although the audit row was not written");
+  assert.equal(result.isError, undefined, "the call was refused because the observational row failed");
+  assert.equal(result.content[0].text, "ok");
+  assert.deepEqual(ran, ["write"], "the handler did not run");
+  assert.equal(logged.length, 1, "the failure was not logged exactly once");
+  assert.match(logged[0], /ADMIN_CLIENT_AUDIT_FAILED .*write.*D1_ERROR: unavailable/);
 });
 
 test("the observer never refuses on what the client says", async () => {
@@ -179,9 +194,12 @@ test("a tools/call, a GET, a malformed body, an oversize body and the closed win
   assert.equal(rows.length, 0);
 });
 
-test("an initialize whose row cannot be written throws, so the admin's connect fails loudly", async () => {
+test("an initialize whose row cannot be written is logged and does not throw, so the connect proceeds", async () => {
   const { db } = fakeDb(true);
-  await assert.rejects(recordAdminInitialize(db, admin.actor, post(INIT), () => BEFORE), /D1_ERROR: unavailable/);
+  const { value, logged } = await withCapturedErrors(() => recordAdminInitialize(db, admin.actor, post(INIT), () => BEFORE));
+  assert.equal(value, false);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /ADMIN_CLIENT_AUDIT_FAILED .*initialize.*D1_ERROR: unavailable/);
 });
 
 // wiring: the only admin /mcp route passes the observer, and the registrar is given it
