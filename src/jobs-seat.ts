@@ -155,8 +155,8 @@ export async function failAsCaller(
 // under the seat, not the driver. Blocked only: a queued job was never worked, a claimed
 // one has a holder who completes it, and a finished one is not reopened.
 //
-// The seat's close is not a human-touch row: job_touches has no kind for it, and a new
-// kind is a migration. See the pull request for what that leaves unrecorded.
+// The close is a human touch (kind admin_complete, migrations/0031), written in the same
+// batch as the audit row, so the human-effort log shows the job needed the seat.
 async function adminCompleteJob(
   env: Env,
   agent: Agent,
