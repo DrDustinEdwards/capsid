@@ -2,7 +2,7 @@ import { checkSecurityHeaders, failures } from "@dustinedwards/security-headers/
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
-import type { SiteProbe } from "./ops-types";
+import type { SiteProbe, WebAnalyticsSite } from "./ops-types";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
@@ -34,6 +34,7 @@ export const DEPLOY_GRACE_MINUTES = 45;
 // already makes GitHub and Cloudflare reads in the same invocation.
 export const MAX_PAGE_RULES = 20;
 export const MAX_SHA_RULES = 6;
+export const MAX_ANALYTICS_RULES = 20;
 export const MAX_PAGE_BYTES = 1_048_576;
 const PAGE_TIMEOUT_MS = 10_000;
 const PATH_PATTERN = /^\/[A-Za-z0-9._~/%-]{0,199}$/;
@@ -42,7 +43,8 @@ export type LiveRule =
   | { namespace: string; kind: "beacon"; path: string }
   | { namespace: string; kind: "nobeacon"; path: string }
   | { namespace: string; kind: "headers"; path: string }
-  | { namespace: string; kind: "sha" };
+  | { namespace: string; kind: "sha" }
+  | { namespace: string; kind: "analytics" };
 
 export type LiveConfig = { rules: LiveRule[] } | { error: string };
 
@@ -51,10 +53,11 @@ export type LiveConfig = { rules: LiveRule[] } | { error: string };
  * is prose. A `- site` line that does not parse refuses the whole document, because a
  * rule that silently did not apply reads as a page that was checked and found fine.
  *
- *   - site <namespace> beacon <path>     one beacon on this page, and a CSP that allows it
+ *   - site <namespace> beacon <path>     a CSP on this page that lets the beacon load and report
  *   - site <namespace> nobeacon <path>   no beacon on this page
  *   - site <namespace> headers <path>    the OWASP security headers on this page
  *   - site <namespace> sha               the deployed sha is the default branch's head
+ *   - site <namespace> analytics         Web Analytics automatic setup is on for the site's host
  */
 export function parseLiveConfig(body: string): LiveConfig {
   const rules: LiveRule[] = [];
@@ -65,6 +68,11 @@ export function parseLiveConfig(body: string): LiveConfig {
     const parts = line.slice("- site".length).trim().split(/\s+/);
     const [namespace, kind, path, ...rest] = parts;
     if (!namespace || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(namespace)) return { error: `${where}: no site namespace` };
+    if (kind === "analytics") {
+      if (path !== undefined) return { error: `${where}: analytics takes no path` };
+      rules.push({ namespace, kind: "analytics" });
+      continue;
+    }
     if (kind === "sha") {
       if (path !== undefined) return { error: `${where}: sha takes no path` };
       // Capsid's own deploy is the "master head" check; a second finding about the same
@@ -73,13 +81,14 @@ export function parseLiveConfig(body: string): LiveConfig {
       rules.push({ namespace, kind: "sha" });
       continue;
     }
-    if (kind !== "beacon" && kind !== "nobeacon" && kind !== "headers") return { error: `${where}: the rule is beacon, nobeacon, headers or sha` };
+    if (kind !== "beacon" && kind !== "nobeacon" && kind !== "headers") return { error: `${where}: the rule is beacon, nobeacon, headers, analytics or sha` };
     if (path === undefined || rest.length > 0 || !PATH_PATTERN.test(path)) {
       return { error: `${where}: ${kind} needs one path that starts with / and holds only letters, digits and . _ ~ / % - (no query, no host)` };
     }
     rules.push({ namespace, kind, path });
   }
-  if (rules.filter((r) => r.kind !== "sha").length > MAX_PAGE_RULES) return { error: `more than ${MAX_PAGE_RULES} page rules; each is a fetch inside one pass` };
+  if (rules.filter((r) => r.kind === "analytics").length > MAX_ANALYTICS_RULES) return { error: `more than ${MAX_ANALYTICS_RULES} analytics rules` };
+  if (rules.filter((r) => r.kind !== "sha" && r.kind !== "analytics").length > MAX_PAGE_RULES) return { error: `more than ${MAX_PAGE_RULES} page rules; each is a fetch inside one pass` };
   if (rules.filter((r) => r.kind === "sha").length > MAX_SHA_RULES) return { error: `more than ${MAX_SHA_RULES} sha rules; each is a GitHub read inside one pass` };
   return { rules };
 }
@@ -209,7 +218,6 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
   if (page.problem !== null || page.html === null || page.headers === null) return [];
   const url = `${site.origin}${rule.path}`;
   const where = slug(rule.path);
-  const count = beaconCount(page.html);
   const out: LiveFinding[] = [];
   if (rule.kind === "headers") {
     // The package's own check, so the oracle (OWASP's defaults and its test vectors) lives
@@ -228,6 +236,7 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
     return out;
   }
   if (rule.kind === "nobeacon") {
+    const count = beaconCount(page.html);
     if (count > 0) {
       out.push({
         namespace: site.namespace,
@@ -237,14 +246,6 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
       });
     }
     return out;
-  }
-  if (count !== 1) {
-    out.push({
-      namespace: site.namespace,
-      fingerprint: `live-beacon-count-${site.namespace}-${where}`,
-      headline: `${site.name} serves ${count} Web Analytics beacons on a public page, not one`,
-      evidence: [`page: ${url}`, `beacon scripts in the delivered HTML: ${count}, expected 1`, count === 0 ? "No beacon means no traffic is counted for this page." : "Two beacons count every visit twice."],
-    });
   }
   const header = page.headers.get("content-security-policy");
   if (header) {
@@ -303,6 +304,29 @@ export function shaFinding(
       `${Math.floor(minutes)} minutes ago, past the ${DEPLOY_GRACE_MINUTES} minute grace`,
       "A merge whose deploy failed or never ran looks exactly like this.",
     ],
+  };
+}
+
+/** The Web Analytics finding for one site, or null. A Worker cannot see the beacon the edge
+ *  injects, so what is read is the setting that makes Cloudflare inject it: the site's
+ *  host has automatic setup on, and its ruleset is not switched off. */
+export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "origin">, sites: readonly WebAnalyticsSite[]): LiveFinding | null {
+  const host = new URL(site.origin).hostname.toLowerCase();
+  const entry = sites.find((s) => s.host === host);
+  if (!entry) {
+    return {
+      namespace: site.namespace,
+      fingerprint: `live-analytics-missing-${site.namespace}`,
+      headline: `${site.name}'s host has no Web Analytics site, so no traffic is counted`,
+      evidence: [`host: ${host}`, `${sites.length} Web Analytics sites in the account, none for this host`, "Add the host under Web Analytics in the Cloudflare dashboard, with automatic setup."],
+    };
+  }
+  if (entry.auto_install === true && entry.enabled !== false) return null;
+  return {
+    namespace: site.namespace,
+    fingerprint: `live-analytics-off-${site.namespace}`,
+    headline: `${site.name}'s Web Analytics automatic setup is off`,
+    evidence: [`host: ${host}`, `auto_install: ${entry.auto_install}, ruleset enabled: ${entry.enabled}`, "Cloudflare injects the beacon only with automatic setup on, so no traffic is counted for this host."],
   };
 }
 
@@ -381,6 +405,8 @@ export interface LiveSummary {
   pages_read: number;
   shas_expected: number;
   shas_read: number;
+  analytics_expected: number;
+  analytics_read: number;
 }
 
 export interface LiveResult {
@@ -392,7 +418,7 @@ export interface LiveResult {
   summary: LiveSummary;
 }
 
-const NOTHING: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0 };
+const NOTHING: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 };
 
 export async function readLiveConfig(db: D1Database): Promise<{ body: string } | null> {
   const row = await db
@@ -405,6 +431,9 @@ export async function readLiveConfig(db: D1Database): Promise<{ body: string } |
 export interface LiveDeps {
   fetchImpl: FetchLike;
   head: (namespace: string) => Promise<{ sha: string; committed_at: string | null }>;
+  // The account's Web Analytics sites, read once per pass. Throws, with the reason, when
+  // Cloudflare cannot be read (no token, a 403 for a missing permission).
+  analytics: () => Promise<WebAnalyticsSite[]>;
 }
 
 /**
@@ -438,7 +467,8 @@ export async function liveChecks(
   const findings: LiveFinding[] = [];
   const bySite = new Map(sites.map((s) => [s.namespace, s]));
   const probeFor = new Map(probes.map((p) => [p.namespace, p]));
-  const summary: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0 };
+  let analyticsRead: Promise<{ sites: WebAnalyticsSite[] } | { problem: string }> | undefined;
+  const summary: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 };
 
   for (const rule of parsed.rules) {
     const site = bySite.get(rule.namespace);
@@ -452,10 +482,30 @@ export async function liveChecks(
       continue;
     }
     const probe = probeFor.get(rule.namespace);
-    const counted = rule.kind === "sha" ? "shas" : "pages";
+    const counted = rule.kind === "sha" ? "shas" : rule.kind === "analytics" ? "analytics" : "pages";
     summary[`${counted}_expected`] += 1;
     if (!probe || probe.state === "down") continue;
 
+    if (rule.kind === "analytics") {
+      analyticsRead ??= deps.analytics().then(
+        (sites) => ({ sites }),
+        (err: unknown) => ({ problem: (err instanceof Error ? err.message : String(err)).slice(0, 400) })
+      );
+      const read = await analyticsRead;
+      if ("problem" in read) {
+        findings.push({
+          namespace: site.namespace,
+          fingerprint: `live-analytics-unread-${site.namespace}`,
+          headline: `${site.name}'s Web Analytics setting could not be read for the live checks`,
+          evidence: [read.problem, "Not read is not clean: the setting was not judged."],
+        });
+        continue;
+      }
+      summary.analytics_read += 1;
+      const f = analyticsFinding(site, read.sites);
+      if (f) findings.push(f);
+      continue;
+    }
     if (rule.kind === "sha") {
       const head = await deps.head(rule.namespace);
       summary.shas_read += 1;
@@ -481,7 +531,7 @@ export async function liveChecks(
     summary.pages_read += 1;
     findings.push(...pageFindings(site, rule, page));
   }
-  const ran = summary.pages_read === summary.pages_expected && summary.shas_read === summary.shas_expected;
+  const ran = summary.pages_read === summary.pages_expected && summary.shas_read === summary.shas_expected && summary.analytics_read === summary.analytics_expected;
   // One finding per fingerprint: two rules for one unknown site, or the same page named
   // twice, are one problem, and the queue refuses a second job under the same title.
   const unique = [...new Map(findings.map((f) => [f.fingerprint, f])).values()];

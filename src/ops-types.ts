@@ -722,3 +722,12 @@ export interface PortalClaimsAggregate extends ClaimsAggregate {
 export interface PortalClaimsJob extends ClaimsJob {
   generated: string;
 }
+
+/** One Web Analytics site as the live checks read it. The site token is never kept. */
+export interface WebAnalyticsSite {
+  host: string;
+  // Whether the snippet is injected automatically for the host's orange-clouded traffic.
+  auto_install: boolean | null;
+  // The site's ruleset switch, where Cloudflare reports one.
+  enabled: boolean | null;
+}
