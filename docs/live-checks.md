@@ -10,12 +10,15 @@ The watcher's fourth kind of read: what the deployed sites actually serve. Dusti
 | `beacon <path>` | a CSP header on that page does not let `static.cloudflareinsights.com` load as a script | `live-csp-script-<site>-<path>` |
 | `beacon <path>` | a CSP header on that page does not let the beacon report (`'self'` on a site proxied through Cloudflare, `cloudflareinsights.com` on any other) | `live-csp-report-<site>-<path>` |
 | `nobeacon <path>` | the page carries a beacon (conventions 7.9: private and signed-in pages stay out of analytics) | `live-beacon-present-<site>-<path>` |
+| `headers <path>` | the page lacks a header of the OWASP standard set, or its enforced CSP fails the package's policy checks (no enforced policy, `'unsafe-inline'` or `'unsafe-eval'` in scripts, no `object-src 'none'`, no report sink) | `live-headers-<site>-<path>` |
 | `sha` | the site's health route reports a sha that is not the default branch head, and the head was committed more than 45 minutes ago | `live-sha-drift-<site>-<head7>` |
 | `sha` | the site's health route reports no sha | `live-sha-unreported-<site>` |
 
 A page that cannot be read is not clean and not dirty: `live-page-unread-<site>-<path>` (an error, a non-2xx answer, a redirect off the site, a body that is not HTML or is over 1 MiB), and the check does not count as run, so an open finding is not cleared on no evidence. For a `nobeacon` page a login redirect, a 401 or a 403 is the wanted answer: the page is not served to the public, so it counts as read. A site that is down this pass is the `site probes` check's finding and its rules are skipped.
 
 The CSP rules follow Cloudflare's own list (developers.cloudflare.com/web-analytics/faq): `script-src` must allow `static.cloudflareinsights.com`, `connect-src` must allow the report endpoint. A directive a policy omits falls back to `default-src`, and a policy with neither blocks nothing. A `script-src` with `'strict-dynamic'` ignores host sources and the beacon script carries no nonce, so it is a finding. Only enforced policies are judged; a `Content-Security-Policy-Report-Only` header is not.
+
+The `headers` rule runs `checkSecurityHeaders` from `@dustinedwards/security-headers` (a git dependency, pinned by tag) on the page's response headers. The OWASP defaults and the test vectors live in that package alone: the watcher imports them, so a refresh of OWASP's data in the package changes this check with no second copy to keep in step. One finding per page lists up to 12 failed checks. A site that deliberately differs on a header is judged against the standard until the rule takes an override; add one when the first such site needs it.
 
 ## The document
 
@@ -24,13 +27,14 @@ The CSP rules follow Cloudflare's own list (developers.cloudflare.com/web-analyt
 ```
 - site <namespace> beacon <path>
 - site <namespace> nobeacon <path>
+- site <namespace> headers <path>
 - site <namespace> sha
 ```
 
 - `<namespace>` is a site configured in the Portal's Settings (`ops_sites`). A rule for any other name is `live-config-unknown-site-<namespace>`, since it can never run.
 - `<path>` starts with `/` and holds letters, digits and `. _ ~ / % -`. No query, no host: the check fetches the site's configured origin plus this path and nothing else.
 - Up to 20 page rules and 6 sha rules, because each is a fetch or a GitHub read inside one pass.
-- `sha` is for a site that deploys on merge and whose health route reports its sha. A site that ships by hand (dustinedwards deploys by dispatch) would be flagged on every merge, so it gets no `sha` line. `capsid` is refused: its own deploy is the `master head` check.
+- `sha` is for a site that deploys on merge and whose health route reports its sha in the standard format (docs/health-format.md). A site that ships by hand (dustinedwards deploys by dispatch) would be flagged on every merge, so it gets no `sha` line. `capsid` is refused: its own deploy is the `master head` check.
 - Reads only. Every finding is a job posted by the watcher, deduplicated and remembered like the others.
 
 ## What it cannot see

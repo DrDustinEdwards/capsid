@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/security-headers/headers";
 import {
   DEPLOY_GRACE_MINUTES,
   MAX_PAGE_BYTES,
@@ -58,6 +59,7 @@ test("parseLiveConfig reads only '- site' lines, in all three rules, and ignores
       "- site sample beacon /",
       "- site sample beacon /pricing",
       "- site sample nobeacon /account/settings",
+      "- site sample headers /",
       "- site sample sha",
       "- an ordinary bullet",
     ].join("\n")
@@ -67,6 +69,7 @@ test("parseLiveConfig reads only '- site' lines, in all three rules, and ignores
       { namespace: "sample", kind: "beacon", path: "/" },
       { namespace: "sample", kind: "beacon", path: "/pricing" },
       { namespace: "sample", kind: "nobeacon", path: "/account/settings" },
+      { namespace: "sample", kind: "headers", path: "/" },
       { namespace: "sample", kind: "sha" },
     ],
   });
@@ -219,6 +222,44 @@ test("a page that was not read yields no finding about the beacon: not read is n
   const unread = { status: 500, headers: null, html: null, problem: "answered 500", gated: false };
   assert.deepEqual(pageFindings(SITE, beaconRule, unread), []);
   assert.deepEqual(pageFindings(SITE, noBeaconRule, unread), []);
+});
+
+// the security headers
+
+const headersRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "headers", path: "/" };
+const GOOD_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report";
+const goodHeaders = (): Headers => new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP });
+const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({ status: 200, headers, html: page(""), problem: null, gated: false });
+
+test("a page that carries every standard header and an enforced policy is clean under the headers rule", () => {
+  assert.deepEqual(pageFindings(SITE, headersRule, withHeaders(goodHeaders())), []);
+});
+
+test("PLANT: a missing header, a report-only policy and no policy at all each file one finding naming what failed", () => {
+  const noFrame = goodHeaders();
+  noFrame.delete("X-Frame-Options");
+  const missing = pageFindings(SITE, headersRule, withHeaders(noFrame));
+  assert.deepEqual(prints(missing), ["live-headers-sample-root"]);
+  assert.ok(missing[0]?.evidence.some((line) => line.startsWith("X-Frame-Options is present")), "the finding names the header");
+
+  const reportOnly = goodHeaders();
+  reportOnly.set("content-security-policy-report-only", reportOnly.get("content-security-policy") ?? "");
+  reportOnly.delete("content-security-policy");
+  assert.deepEqual(prints(pageFindings(SITE, headersRule, withHeaders(reportOnly))), ["live-headers-sample-root"]);
+
+  assert.deepEqual(prints(pageFindings(SITE, headersRule, withHeaders(new Headers()))), ["live-headers-sample-root"], "a response with none of them");
+});
+
+test("the headers rule counts a page read, and a page it cannot read is unread, not clean", async () => {
+  const body = "- site sample headers /";
+  const ok = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response(page(""), { headers: { "content-type": "text/html", ...Object.fromEntries(goodHeaders()) } }) }), NOW);
+  assert.deepEqual(ok.findings, []);
+  assert.deepEqual(ok.summary, { pages_expected: 1, pages_read: 1, shas_expected: 0, shas_read: 0 });
+  const bare = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => html(page("")) }), NOW);
+  assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
+  const unread = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response("no", { status: 500 }) }), NOW);
+  assert.deepEqual(prints(unread.findings), ["live-page-unread-sample-root"]);
+  assert.equal(unread.ran, false);
 });
 
 // the sha
@@ -386,7 +427,7 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
 
 test("the live checks are a watcher check, and every live-* fingerprint belongs to it", () => {
   assert.ok((WATCHER_CHECKS as readonly string[]).includes("live checks"));
-  for (const fingerprint of ["live-beacon-count-a-root", "live-csp-script-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
+  for (const fingerprint of ["live-beacon-count-a-root", "live-headers-a-root", "live-csp-script-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
     assert.equal(owningCheck(fingerprint), "live checks", fingerprint);
   }
 });
