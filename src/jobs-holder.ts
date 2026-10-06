@@ -61,6 +61,24 @@ function holderRefusal(action: string, id: string, actor: string, current: JobRo
   return null;
 }
 
+// The seat completing a blocked job it does not hold. Null when the job is blocked and
+// held by someone else; otherwise what the job is and what to do instead.
+function seatCloseRefusal(action: string, id: string, seat: string, current: JobRow | null): JobResult | null {
+  if (!current) return refuse(action, `no job ${id}.`);
+  if (current.status === "blocked") {
+    return current.claimed_by === seat
+      ? refuse(action, `${id} is blocked and held by ${seat} itself. A holder resumes its own gate before it completes; the seat's close is for a job another credential blocked.`)
+      : null;
+  }
+  if (current.status === "queued") {
+    return refuse(action, `${id} is queued: nobody has worked it, so there is nothing to complete. A driver claims it, or the seat supersedes it.`);
+  }
+  if (current.status === "claimed") {
+    return refuse(action, `${id} is claimed by ${current.claimed_by}. Its holder completes it, or the seat releases the claim first. The seat completes a job only once it is blocked.`);
+  }
+  return refuse(action, `${id} is already ${current.status}; there is nothing to complete.`);
+}
+
 // What the agent said on one complete, fail or block call, for its job_claims row.
 // `as` and `evidence` are set when the review gate turned the call into another
 // transition: the claim is still the agent's, made on the action it called, and a
@@ -97,13 +115,22 @@ async function holderTransition(
     // the agent made no claim. `as` is the action the agent called, when the review
     // gate turned it into another transition.
     said?: Said;
+    // The seat completing a BLOCKED job another credential holds (completeAsSeat). The
+    // row must be blocked and held by someone else, the UPDATE leaves claimed_by alone,
+    // and so the outcome row, which copies claimed_by, credits the driver that did the
+    // work. The caller is only the actor on the audit, mirror and claim rows.
+    seatCloses?: boolean;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
   const read = await readJob(env.DB, id);
-  const notHeld = holderRefusal(action, id, actor, read);
+  const notHeld = patch.seatCloses ? seatCloseRefusal(action, id, actor, read) : holderRefusal(action, id, actor, read);
   if (notHeld) return notHeld;
   if (!read) return refuse(action, `no job ${id}.`);
+  // What the row must be for this transition to apply, and who holds it. For a holder's
+  // own transition that is the claimed row it holds, as it always was.
+  const fromStatus = patch.seatCloses ? "blocked" : "claimed";
+  const verb = patch.seatCloses ? "admin-complete" : action;
   // The row as the UPDATE below will leave it, computed from the read so the mirror
   // and the outcome can be built before anything is written. The guard at the head of
   // the batch is what keeps the read true when the batch commits.
@@ -140,12 +167,12 @@ async function holderTransition(
   // can be told apart from one changed afterwards (src/job-signing.ts).
   const summarySig = patch.result_summary ? await signJobText(env.IMPROVE_SCORE_SECRET, "summary", id, { summary: patch.result_summary }) : null;
   const statements = [
-    requireJobUnchanged(env.DB, id, "claimed", actor, read.updated_at),
+    requireJobUnchanged(env.DB, id, fromStatus, read.claimed_by, read.updated_at),
     env.DB.prepare(
       `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
          summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?9 END,
          lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8
-       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?7 RETURNING id`
+       WHERE id = ?1 AND status = ?10 AND claimed_by = ?7 RETURNING id`
     ).bind(
       id,
       patch.status,
@@ -153,13 +180,15 @@ async function holderTransition(
       patch.result_ref ?? null,
       patch.lease_expires,
       now.toISOString(),
-      actor,
+      read.claimed_by,
       patch.bumpBlocked ? 1 : 0,
-      summarySig
+      summarySig,
+      fromStatus
     ),
-    ...(await mirrorStatements(env, job, `job-${action}`, actor)),
-    jobAudit(env.DB, actor, `job-${action}`, job, {
+    ...(await mirrorStatements(env, job, `job-${verb}`, actor)),
+    jobAudit(env.DB, actor, `job-${verb}`, job, {
       status: job.status,
+      ...(patch.seatCloses ? { held_by: read.claimed_by } : {}),
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
     }),
@@ -229,7 +258,8 @@ async function holderTransition(
     if (!isMissingRowAbort(err)) throw err;
     // Nothing was written. Say what the row is now, as a lost race would have.
     const current = await readJob(env.DB, id);
-    return holderRefusal(action, id, actor, current) ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
+    const gone = patch.seatCloses ? seatCloseRefusal(action, id, actor, current) : holderRefusal(action, id, actor, current);
+    return gone ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
   }
   // The driver a resume returned the job to is already holding it and learns of the
   // resume by its next call, which is usually a heartbeat.
@@ -458,13 +488,48 @@ async function creditedSkills(env: Env, id: string, reported: JobSkills | undefi
   return skillsForOutcome(env.DB, job, reported);
 }
 
-export async function completeJob(
-  env: Env,
-  agent: Agent,
-  now: Date,
-  id: string,
-  args: { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills; claim?: ClaimInput; raw?: ClaimRaw }
-): Promise<JobResult> {
+type CompleteArgs = { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills; claim?: ClaimInput; raw?: ClaimRaw };
+
+export async function completeJob(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+  return completeWith(env, agent, now, id, args, false);
+}
+
+// The seat completing a blocked job (src/jobs-seat.ts adminCompleteJob checks who may).
+// The same checks and records as a holder's complete; only the row it applies to differs.
+export async function completeAsSeat(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+  return completeWith(env, agent, now, id, args, true);
+}
+
+// The review gate for a close the seat makes. A holder's complete may write (bind the
+// pull request, send the work back, block it); the seat's close writes nothing until the
+// review allows it, so a CHANGES or a BLOCK is answered, not escaped, and a refusal
+// leaves the job exactly as it was.
+async function seatReviewRefusal(env: Env, id: string, args: CompleteArgs): Promise<JobResult | null> {
+  const current = await readJob(env.DB, id);
+  if (!current) return null;
+  let outcome: GateOutcome | null;
+  try {
+    outcome = await reviewGate(
+      env,
+      { namespace: current.namespace, review_required: current.review_required, result_ref: current.result_ref },
+      { requirePullRequest: true, candidateRefs: [args.result_ref, ...(args.evidence?.prs ?? [])] }
+    );
+  } catch (err) {
+    return refuse(
+      "complete",
+      `${id} needs a review and GitHub could not be read: ${err instanceof Error ? err.message : String(err)}. Nothing was written; try again rather than treating an unreadable review as an approval.`
+    );
+  }
+  if (outcome === null || outcome.kind === "proceed") return null;
+  if (outcome.kind === "waiting") return refuse("complete", `${id} is ${outcome.reason} Nothing was written.`);
+  const verdict = outcome.kind === "rework" ? "CHANGES" : "BLOCK";
+  return refuse(
+    "complete",
+    `${id} cannot be completed around its review: review by ${outcome.review.by}: ${verdict}. ${outcome.review.said} A reviewer's ${verdict} is answered by the work or by a new review, not by the seat's close. Nothing was written.`
+  );
+}
+
+async function completeWith(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs, seatCloses: boolean): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
@@ -481,11 +546,13 @@ export async function completeJob(
   // an APPROVE; evidence.prs counts as naming it, so a driver cannot report its work
   // there with a document key in result_ref and escape the gate.
   const completeRaw: ClaimRaw = args.raw ?? { evidence: args.evidence, claim: args.claim, result_summary: args.result_summary, result_ref: args.result_ref };
-  const review = await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
-    requirePullRequest: true,
-    candidateRefs: args.evidence?.prs,
-    said: { claim: claim.claim, raw: completeRaw, as: "complete", evidence: args.evidence },
-  });
+  const review = seatCloses
+    ? await seatReviewRefusal(env, id, args)
+    : await reviewRefusal(env, agent, now, "complete", id, args.result_ref ?? null, {
+        requirePullRequest: true,
+        candidateRefs: args.evidence?.prs,
+        said: { claim: claim.claim, raw: completeRaw, as: "complete", evidence: args.evidence },
+      });
   if (review) return review;
   const unknown = await unknownSkills(env.DB, args.skills);
   if (unknown) return refuse("complete", unknown);
@@ -499,6 +566,7 @@ export async function completeJob(
     evidence: args.evidence,
     skills: credited.skills,
     said: { claim: claim.claim, raw: completeRaw },
+    ...(seatCloses ? { seatCloses: true } : {}),
   });
 }
 
