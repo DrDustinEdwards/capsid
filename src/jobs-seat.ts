@@ -157,7 +157,7 @@ export async function failAsCaller(
 //
 // The seat's close is not a human-touch row: job_touches has no kind for it, and a new
 // kind is a migration. See the pull request for what that leaves unrecorded.
-export async function adminCompleteJob(
+async function adminCompleteJob(
   env: Env,
   agent: Agent,
   now: Date,
@@ -188,6 +188,8 @@ export async function completeAsCaller(
   id: string,
   args: Parameters<typeof completeJob>[4]
 ): Promise<JobResult> {
+  // An argument completeJob refuses before it reads anything is refused the same way here.
+  if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) return adminCompleteJob(env, agent, now, id, args);
   return completeJob(env, agent, now, id, args);
