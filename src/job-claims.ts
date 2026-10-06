@@ -316,7 +316,7 @@ const json = (value: number | null): string | null => (value === null ? null : J
  * GitHub. Pure. A value the Worker could not read is NULL with label unknown, and an
  * unstated claim is NULL with agreement unclaimed: neither is ever a 0 or a false.
  *
- * Only the pull requests in evidence.prs are read (verifyEvidence), so a URL the claim
+ * Only the pull requests in evidence.prs, and a result_ref that is one, are read (verifyEvidence), so a URL the claim
  * names that evidence does not is unread, and a check over it is unchecked rather than
  * guessed.
  */
@@ -357,7 +357,7 @@ export function evaluationRows(
     mergedSet.length === 0
       ? "no pull request was named, so there was nothing to check"
       : mergedMissing > 0
-        ? `${mergedMissing} of ${mergedSet.length} named pull requests could not be read (only evidence.prs is read)`
+        ? `${mergedMissing} of ${mergedSet.length} named pull requests could not be read (only evidence.prs and a pull request result_ref are read)`
         : null
   );
 
@@ -374,13 +374,13 @@ export function evaluationRows(
     openedSet.length === 0
       ? "no pull request was named, so there was nothing to check"
       : openedMissing > 0
-        ? `${openedMissing} of ${openedSet.length} named pull requests could not be read (only evidence.prs is read)`
+        ? `${openedMissing} of ${openedSet.length} named pull requests could not be read (only evidence.prs and a pull request result_ref are read)`
         : null
   );
 
   // commits and files_changed: GitHub's sum over every named pull request, known only
   // when every one was read, against the driver's number as sent.
-  const sums = "GitHub's sum is known only when every pull request in evidence.prs was read";
+  const sums = "GitHub's sum is known only when every pull request in evidence.prs and result_ref was read";
   const commitsVerified = verdict.github?.commits ?? null;
   const filesVerified = verdict.github?.files_changed ?? null;
   const commits = row("commits", claim.commits, commitsVerified, "pass", commitsVerified === null ? sums : null);

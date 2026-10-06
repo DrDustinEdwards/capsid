@@ -260,7 +260,7 @@ test("a pull request claimed merged that GitHub reads as open fails pr_merged an
 });
 
 test("a pull request the Worker could not read leaves the check unchecked, with the reason", () => {
-  // PR2 is claimed merged but was never read: only evidence.prs is read.
+  // PR2 is claimed merged but was never read: only evidence.prs and a pull request result_ref are read.
   const claim = row({ claim: { prs_merged: [PR2] }, evidence: { prs: [PR] } });
   const rows = byName(evaluationRows(claim, facts({ merged: { [PR]: true } }), ctx));
   assert.equal(rows.pr_merged.verified, null);

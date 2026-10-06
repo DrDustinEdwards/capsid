@@ -361,19 +361,36 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
   };
 }
 
+// The pull requests a finished job names: evidence.prs, plus the job's result_ref when it
+// is a pull request URL. A session that sends only result_ref (the seat closing a job it
+// took, or a driver that left evidence out) named its pull request all the same, and
+// GitHub, not the sender, is the authority on it (job_d5262df1dc32). Deduplicated, in
+// order, so the pull request named twice is read and counted once.
+export function namedPrUrls(evidence: JobEvidence | undefined, resultRef: string | null | undefined): string[] {
+  const urls: string[] = [];
+  for (const url of [...(evidence?.prs ?? []), ...(parsePrUrl(resultRef) ? [resultRef!.trim()] : [])]) {
+    if (!urls.includes(url)) urls.push(url);
+  }
+  return urls;
+}
+
 // Best effort, and it never fails the job: with GitHub unreachable the outcome records
 // the driver's own numbers, marked unverified, with a note saying why.
+//
+// resultRef is the job's result_ref. `reported` stays what the evidence said, so the
+// record of what the driver sent is not changed by what the Worker also read.
 export async function verifyEvidence(
   env: Env,
   namespace: string,
-  evidence: JobEvidence | undefined
+  evidence: JobEvidence | undefined,
+  resultRef?: string | null
 ): Promise<EvidenceVerdict> {
   const reported = {
     commits: evidence?.commits ?? null,
     files_changed: evidence?.files_changed ?? null,
     tests_added: evidence?.tests_added ?? null,
   };
-  const urls = evidence?.prs ?? [];
+  const urls = namedPrUrls(evidence, resultRef);
   const github: GitHubFacts = { merged: {}, commits: null, files_changed: null, ci_green: null };
   const verdict: EvidenceVerdict = {
     prs_opened: urls.length > 0 ? urls.length : null,
@@ -383,7 +400,7 @@ export async function verifyEvidence(
     verified: { ...NOTHING_VERIFIED },
     notes: [],
     github,
-    reported: { prs: urls.length > 0 ? [...urls] : null, ...reported },
+    reported: { prs: evidence?.prs && evidence.prs.length > 0 ? [...evidence.prs] : null, ...reported },
   };
   if (urls.length === 0) return verdict;
 
