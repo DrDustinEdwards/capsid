@@ -78,6 +78,44 @@ for (const [name, make, reason] of [
   });
 }
 
+// The cases the verifier was replaced by jose against (centralize D3.3): each is planted
+// first, so a regression names itself.
+test("PLANT: a kid no key answers to is refused after one refetch, and a token with a changed payload is a forgery", async () => {
+  const unknown = await verifyIdToken(await token({}, { header: { kid: "kid-unknown" } }), check, NOW, keys([SIGNER.jwk]));
+  assert.deepEqual(unknown, { ok: false, reason: "no Access key has kid kid-unknown" });
+  // jose reads the keys, then reads them once more when the kid is not in them (the
+  // cooldown is 0, so a rotation is picked up at once). The old verifier read them once.
+  assert.ok(fetches.length <= 2, `an unknown kid fetched the keys ${fetches.length} times, not at most twice`);
+
+  const [head, body, sig] = (await token({})).split(".");
+  const claims = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(body.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))));
+  const forged = `${head}.${b64json({ ...claims, email: "attacker@example.com" })}.${sig}`;
+  const verdict = await verifyIdToken(forged, check, NOW, keys([SIGNER.jwk]));
+  assert.equal(verdict.ok, false, "a payload changed after signing was accepted");
+  if (!verdict.ok) assert.match(verdict.reason, /signature does not verify/);
+});
+
+test("PLANT: only RS256 passes, whatever else the key could verify", async () => {
+  for (const alg of ["RS384", "RS512", "PS256", "ES256"]) {
+    const verdict = await verifyIdToken(await token({}, { header: { alg } }), check, NOW, keys([SIGNER.jwk]));
+    assert.equal(verdict.ok, false, alg);
+    if (!verdict.ok) assert.match(verdict.reason, new RegExp(`alg is ${alg}, not RS256`));
+  }
+});
+
+test("PLANT: a token naming no kid is refused even when the endpoint serves exactly one key", async () => {
+  const verdict = await verifyIdToken(await token({}, { header: { kid: undefined } }), check, NOW, keys([SIGNER.jwk]));
+  assert.deepEqual(verdict, { ok: false, reason: "the ID token names no kid" });
+  assert.deepEqual(await verifyIdToken(await token({}, { header: { kid: "" } }), check, NOW, keys([SIGNER.jwk])), { ok: false, reason: "the ID token names no kid" });
+});
+
+test("the clock is the caller's: the same token passes before its exp and fails at it", async () => {
+  const t = await token({ exp: SECONDS + 10 });
+  assert.equal((await verifyIdToken(t, check, new Date((SECONDS + 9) * 1000), keys([SIGNER.jwk]))).ok, true);
+  const atExp = await verifyIdToken(t, check, new Date((SECONDS + 10) * 1000), keys([SIGNER.jwk]));
+  assert.equal(atExp.ok, false, "a token was still valid at the second its exp names");
+});
+
 test("an unknown kid refetches the keys once, which is how a rotation is picked up", async () => {
   const rotated = await keyPair("kid-2");
   let served: Jwk[] = [SIGNER.jwk];
