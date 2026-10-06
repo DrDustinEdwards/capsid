@@ -18,7 +18,7 @@ import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
-import { commandFromSummary, failJob } from "./jobs-holder";
+import { commandFromSummary, completeAsSeat, completeJob, failJob } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
 import type { JobSkills } from "./job-outcomes";
@@ -144,6 +144,53 @@ export async function failAsCaller(
     return adminFailJob(env, agent, now, id, reason);
   }
   return failJob(env, agent, now, id, reason, skills, said);
+}
+
+// The seat completing a job another credential blocked, the way it can fail one. The job
+// stays held by the driver that did the work, so job_outcomes.agent credits that driver;
+// resume with take then complete makes the seat the holder and credits the seat. The
+// outcome is verified through the same path as a holder's complete (the pull request in
+// result_ref or evidence.prs is read from GitHub), the audit row `job-admin-complete`
+// names the seat as actor and the holder in held_by, and the seat's claim is recorded
+// under the seat, not the driver. Blocked only: a queued job was never worked, a claimed
+// one has a holder who completes it, and a finished one is not reopened.
+//
+// The seat's close is not a human-touch row: job_touches has no kind for it, and a new
+// kind is a migration. See the pull request for what that leaves unrecorded.
+export async function adminCompleteJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: Parameters<typeof completeJob>[4]
+): Promise<JobResult> {
+  if (!callerIsSeat(agent)) {
+    return refuse(
+      "complete",
+      `${agent.actor} may only complete a job it holds. Completing somebody else's blocked job is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+    );
+  }
+  const current = await readJob(env.DB, id);
+  if (!current) return refuse("complete", `no job ${id}.`);
+  // The job's own namespace, since a seat key may be scoped narrower than the admin.
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`);
+  return completeAsSeat(env, agent, now, id, args);
+}
+
+// complete through the jobs tool. The holder completing its own job is an ordinary
+// complete. The seat completing a job somebody else holds is adminCompleteJob. Anyone
+// else gets completeJob's own refusal for a job it does not hold.
+export async function completeAsCaller(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: Parameters<typeof completeJob>[4]
+): Promise<JobResult> {
+  const current = await readJob(env.DB, id);
+  if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) return adminCompleteJob(env, agent, now, id, args);
+  return completeJob(env, agent, now, id, args);
 }
 
 // Release: the seat returning a claimed job to the queue when its holder is gone (the

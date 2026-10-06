@@ -29,7 +29,7 @@ import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, RESUME_MARKER } from "./jobs-holder";
-export { adminFailJob, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
+export { adminCompleteJob, adminFailJob, completeAsCaller, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export type { JobResult } from "./jobs-transition";
 
 // The lease sweep, run by the five-minute improve tick. A claim whose lease has
