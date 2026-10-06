@@ -18,6 +18,12 @@ function tablesInMigrations(): string[] {
     for (const m of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)/gi)) {
       if (!DERIVED.test(m[1])) names.add(m[1]);
     }
+    // A table rebuild (0031) creates a scratch table and renames it over the original, so
+    // the scratch name is not a table the schema ends up with.
+    for (const m of sql.matchAll(/ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi)) {
+      names.delete(m[1]);
+      names.add(m[2]);
+    }
   }
   return [...names].sort();
 }

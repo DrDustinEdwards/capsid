@@ -566,7 +566,25 @@ async function completeWith(env: Env, agent: Agent, now: Date, id: string, args:
     evidence: args.evidence,
     skills: credited.skills,
     said: { claim: claim.claim, raw: completeRaw },
-    ...(seatCloses ? { seatCloses: true } : {}),
+    ...(seatCloses
+      ? {
+          seatCloses: true,
+          // The seat ending a blocked job's wait, in the same batch as the audit row. The job
+          // row it is built from still names the driver, so detail.held_by is who did the work.
+          touches: (job: JobRow) => [
+            touchStatement(env.DB, {
+              job_id: job.id,
+              namespace: job.namespace,
+              kind: "admin_complete",
+              actor: agent.actor,
+              actor_kind: actorKind(agent.actor, { seat: true }),
+              detail: { held_by: job.claimed_by, result_ref: job.result_ref },
+              sinceGate: true,
+              at: now.toISOString(),
+            }),
+          ],
+        }
+      : {}),
   });
 }
 

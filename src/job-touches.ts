@@ -4,10 +4,12 @@
 // agents.
 //
 // Each row rides in the same guarded batch as the transition it records (block, resume,
-// release, supersede, the seat's fail, a review verdict acted on), so a transition the
+// release, supersede, the seat's fail or complete, a review verdict acted on), so a transition the
 // guard refuses writes no touch, and a touch never describes a move that did not happen.
 
-const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "review"] as const;
+// The CHECK on job_touches.kind (migrations/0023, widened by 0031). test/job-touches-migration.test.ts
+// reads the CHECK from the schema every migration builds and compares it with this list both ways.
+export const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "admin_complete", "review"] as const;
 export type TouchKind = (typeof TOUCH_KINDS)[number];
 
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;

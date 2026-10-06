@@ -55,6 +55,10 @@ async function job(id: string) {
 async function outcome(id: string) {
   return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1").bind(id).first<Record<string, unknown>>();
 }
+async function touches(id: string) {
+  return (await env.DB.prepare("SELECT kind, actor, actor_kind, waited_ms, detail FROM job_touches WHERE job_id = ?1 ORDER BY id").bind(id).all<{ kind: string; actor: string; actor_kind: string; waited_ms: number | null; detail: string | null }>()).results;
+}
+
 async function outcomeCount() {
   return (await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes").first<{ n: number }>())?.n ?? 0;
 }
@@ -125,6 +129,29 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(mirror?.status).toBe("closed");
   });
 
+  it("REPRODUCED: the close writes one admin_complete touch, which ends the gate's wait and names the holder", async () => {
+    stubGitHub();
+    const id = await blocked("touch on close");
+    await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "merged by the seat", result_ref: PR });
+    const rows = await touches(id);
+    expect(rows.map((t) => t.kind)).toEqual(["gate", "admin_complete"]);
+    const close = rows[1];
+    expect(close.actor).toBe(SEAT_ACTOR);
+    // access: is the administrator's own login, a person; any other seat credential is "seat".
+    expect(close.actor_kind).toBe("human");
+    // The driver blocked at NOW and the seat closed at LATER, one hour on.
+    expect(close.waited_ms).toBe(3_600_000);
+    expect(JSON.parse(String(close.detail))).toEqual({ held_by: DRIVER_ACTOR, result_ref: PR });
+  });
+
+  it("a seat credential that is not the administrator's login is recorded as a seat", async () => {
+    stubGitHub();
+    const id = await blocked("seat credential");
+    const credential = { ...SEAT, actor: "agent:seat", id: "agent:seat", name: "agent" };
+    await completeAsCaller(jobsEnv(), credential, LATER, id, { result_summary: "merged", result_ref: PR });
+    expect((await touches(id)).find((t) => t.kind === "admin_complete")?.actor_kind).toBe("seat");
+  });
+
   it("contrast: resume with take, then complete, still credits the taker", async () => {
     stubGitHub();
     const id = await blocked("seat takes it");
@@ -147,6 +174,7 @@ describe("the seat completes a blocked job it does not hold", () => {
     const refusedHeld = await completeAsCaller(jobsEnv(), SEAT, LATER, held, { result_summary: "x", result_ref: PR });
     expect(refusedHeld.ok).toBe(false);
     expect(refusedHeld.refusal).toMatch(/Its holder completes it, or the seat releases/);
+    expect((await touches(held)).map((t) => t.kind)).toEqual([]);
     expect((await job(held))?.status).toBe("claimed");
 
     const finished = await blocked("finished");
@@ -207,6 +235,8 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(after?.corrections_count).toBe(before?.corrections_count);
     expect(after?.updated_at).toBe(before?.updated_at);
     expect(await outcomeCount()).toBe(0);
+    // A refused close is not a touch: only the driver's own gate is on the log.
+    expect((await touches(id)).map((t) => t.kind)).toEqual(["gate"]);
   });
 
   it("an APPROVE on the pull request's head lets the seat complete, and the driver is still credited", async () => {
