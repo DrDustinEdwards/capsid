@@ -20,7 +20,7 @@
 --
 -- IF IT STOPS PARTWAY, in order:
 --   - before DROP TABLE: job_touches is untouched. DROP TABLE job_touches_new, then run
---     the file again. (CREATE TABLE below has no IF NOT EXISTS on purpose: a leftover
+--     the file again. (The first statement has no IF NOT EXISTS on purpose: a leftover
 --     scratch table is an earlier failed run and should be seen, not silently reused.)
 --   - after DROP TABLE and before the rename: job_touches_new holds every row. Run the
 --     last four statements (ALTER TABLE ... RENAME, the index, the two triggers).
