@@ -20,6 +20,7 @@ import {
   outcomeStatement,
   readJobUsage,
   signalFor,
+  namedPrUrls,
   verifyEvidence,
   type JobSkills,
   type JobEvidence,
@@ -186,7 +187,7 @@ async function holderTransition(
       : undefined;
   if (claimed) statements.push(claimStatement(env.DB, claimed));
   if (job.status === "done" || job.status === "failed") {
-    const verdict = await verifyEvidence(env, job.namespace, patch.evidence);
+    const verdict = await verifyEvidence(env, job.namespace, patch.evidence, job.result_ref);
     // One evaluation per worker check, the claim and GitHub's value side by side,
     // after the claim row so its claim_id subquery finds it.
     if (claimed) {
@@ -201,7 +202,7 @@ async function holderTransition(
     // One row per pull request the evidence named, in the same batch as the outcome.
     // Without them the outcome keeps counts with no way back to what they counted, and
     // the merge state recorded at complete time could never be corrected.
-    statements.push(...outcomePrStatements(env.DB, job.id, patch.evidence?.prs ?? [], verdict.pr_states, now, verdict.pr_identity));
+    statements.push(...outcomePrStatements(env.DB, job.id, namedPrUrls(patch.evidence, job.result_ref), verdict.pr_states, now, verdict.pr_identity));
     // The credit comes from the verified signal and nowhere else. The driver names
     // offered and used; signalFor reads merge state and CI as this Worker read them off
     // GitHub. An unverifiable job earns nothing in either direction.
