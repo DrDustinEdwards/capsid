@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
+import { parseHealth } from "./health-format";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 
@@ -127,18 +128,6 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
 
 const is2xx = (status: number | null): boolean => status !== null && status >= 200 && status < 300;
 
-// A health body's sha, where it reports one as a string. Anything else (not JSON, no
-// sha field) is a site that does not report a sha, which the dashboard shows as such.
-function shaFrom(body: string | null): string | null {
-  if (!body) return null;
-  try {
-    const parsed = JSON.parse(body) as { sha?: unknown };
-    return typeof parsed.sha === "string" && parsed.sha.length > 0 ? parsed.sha.slice(0, 40) : null;
-  } catch {
-    return null;
-  }
-}
-
 /** One site. The health route when it has one, and the root as well when that route
  *  fails, so a broken health route on a site that is up reads as degraded, not down. */
 export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, selfHealth: HealthReport | null): Promise<SiteProbe> {
@@ -161,7 +150,7 @@ export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, 
   }
   const health = await reach(fetchImpl, site.origin + site.healthPath, true);
   if (is2xx(health.status)) {
-    return { ...base, state: "ok", http_status: health.status, latency_ms: health.latency_ms, sha: shaFrom(health.body), error: null };
+    return { ...base, state: "ok", http_status: health.status, latency_ms: health.latency_ms, sha: parseHealth(health.body).sha, error: null };
   }
   const root = await reach(fetchImpl, site.origin + "/", false);
   const why = health.error ?? `health route answered ${health.status}`;
