@@ -6,6 +6,7 @@ import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { loadRecordRows, recordFor } from "./agent-record";
 import type { JobOutcomeRow } from "./job-outcomes";
 import type { JobListRow } from "./jobs-claim";
+import type { OverlapReport } from "./job-overlaps";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 
 // What every job transition shares: the result shape, the refusal, the row read, the
@@ -60,6 +61,10 @@ export interface JobResult {
   // many the answer leaves out. claim, heartbeat and list for one id (src/jobs-mirror.ts).
   resume_notes?: ResumeNote[];
   resume_notes_dropped?: number;
+  // block and complete: the other open pull requests that change the same files as the one
+  // this call named, or why that could not be checked (src/job-overlaps.ts). Absent when the
+  // call named no pull request of the namespace's repo.
+  overlaps?: OverlapReport;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
 }

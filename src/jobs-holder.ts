@@ -39,6 +39,7 @@ import {
 } from "./job-claims";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
+import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 
@@ -120,6 +121,9 @@ async function holderTransition(
     // and so the outcome row, which copies claimed_by, credits the driver that did the
     // work. The caller is only the actor on the audit, mirror and claim rows.
     seatCloses?: boolean;
+    // The overlap report for the pull request this call named, recorded on the audit row
+    // and returned. Its line is already in result_summary.
+    overlaps?: OverlapReport | null;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -191,6 +195,7 @@ async function holderTransition(
       ...(patch.seatCloses ? { held_by: read.claimed_by } : {}),
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
+      ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
     }),
   ];
   // complete, fail and block all end the run that held the job, so a runner key bound
@@ -270,6 +275,7 @@ async function holderTransition(
     action,
     job,
     ...(outcome ? { outcome } : {}),
+    ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
     ...(heartbeatNote ? { resume_note: heartbeatNote } : {}),
     ...(heartbeatNotes && heartbeatNotes.notes.length > 0 ? { resume_notes: heartbeatNotes.notes } : {}),
     ...(heartbeatNotes && heartbeatNotes.dropped > 0 ? { resume_notes_dropped: heartbeatNotes.dropped } : {}),
@@ -567,9 +573,17 @@ async function completeWith(env: Env, agent: Agent, now: Date, id: string, args:
   if (unknown) return refuse("complete", unknown);
   const credited = await creditedSkills(env, id, args.skills);
   if ("refusal" in credited) return refuse("complete", credited.refusal);
+  // Overlap warning (Track A D1): the pull requests this complete names, against every other
+  // open one. The line rides in the summary the seat reads; the check cannot fail the call.
+  const held = await readJob(env.DB, id);
+  const overlaps = held ? await checkOverlaps(env, held.namespace, namedPrUrls(args.evidence, args.result_ref ?? held.result_ref)) : null;
+  const overlap = overlaps ? overlapLine(overlaps) : null;
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
-    result_summary: args.result_summary,
+    result_summary: overlap ? `${args.result_summary}
+
+${overlap}` : args.result_summary,
+    overlaps,
     result_ref: args.result_ref ?? null,
     lease_expires: null,
     evidence: args.evidence,
@@ -682,7 +696,16 @@ export async function blockJob(
     if (review) return review;
   }
   const command = args.question ? QUESTION_COMMAND : args.command;
-  const text = args.question ? `${QUESTION_PREFIX}${args.reason}` : args.reason;
+  const base = args.question ? `${QUESTION_PREFIX}${args.reason}` : args.reason;
+  // Overlap warning (Track A D1): the pull requests this block names, in the job's result_ref
+  // or as URLs in the command, against every other open one. The line sits before the resume
+  // marker, so commandFromSummary still reads the command and nothing after it.
+  const named = await readJob(env.DB, id);
+  const overlaps = named ? await checkOverlaps(env, named.namespace, [...(named.result_ref ? [named.result_ref.trim()] : []), ...prUrlsIn(command)]) : null;
+  const overlap = overlaps ? overlapLine(overlaps) : null;
+  const text = overlap ? `${base}
+
+${overlap}` : base;
   const summary = command ? `${text}\n\n${RESUME_MARKER}\n\n    ${command}` : text;
   // The cap is applied where the block is written, so a capped job says so in the one
   // field every reader already looks at: the Portal prints result_summary, the driver
@@ -693,6 +716,7 @@ export async function blockJob(
   return holderTransition(env, agent, now, "block", id, {
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
+    overlaps,
     lease_expires: null,
     bumpBlocked: true,
     // The gate is the start of a wait for someone else, which the resume that ends it

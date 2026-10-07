@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
+import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
 import { improveAudit } from "./improve-state";
 import {
   type PolicyCheck,
@@ -24,32 +25,7 @@ interface OpenPr {
   user?: { login?: string } | null;
 }
 
-// Paged GitHub lists are read to the end, and a list not read whole is reported rather
-// than judged. Bounded: GitHub serves at most FILES_LIMIT files for a pull request,
-// and check runs stop at CHECKS_MAX_PAGES. The next page is requested by number; the
-// Link header only says one exists, so its URL never reaches ghFetch.
-const PER_PAGE = 100;
-export const FILES_LIMIT = 3000;
-const FILES_MAX_PAGES = FILES_LIMIT / PER_PAGE;
 const CHECKS_MAX_PAGES = 10;
-
-async function readAllPages<T>(
-  env: Env,
-  owner: string,
-  repo: string,
-  path: string,
-  rowsOf: (body: unknown) => T[],
-  maxPages: number
-): Promise<{ items: T[]; problem: string | null }> {
-  const items: T[] = [];
-  for (let page = 1; page <= maxPages; page++) {
-    const resp = await ghFetch(env, owner, repo, `${path}?per_page=${PER_PAGE}&page=${page}`);
-    if (!resp.ok) return { items, problem: `page ${page} returned ${resp.status}` };
-    items.push(...(rowsOf(await resp.json()) ?? []));
-    if (!/rel="next"/.test(resp.headers.get("Link") ?? "")) return { items, problem: null };
-  }
-  return { items, problem: `more than ${maxPages} pages` };
-}
 
 interface WorkflowRun {
   id: number;
@@ -127,20 +103,15 @@ async function factsForPr(
   }
 
   const [files, checks] = await Promise.all([
-    readAllPages<{ filename: string; previous_filename?: string }>(
-      env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}/files`,
-      (page) => page as Array<{ filename: string; previous_filename?: string }>, FILES_MAX_PAGES
-    ),
+    readPrFiles(env, owner, repo, pr.number),
     readAllPages<{ name: string; status: string; conclusion: string | null }>(
       env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
       (page) => (page as { check_runs: Array<{ name: string; status: string; conclusion: string | null }> }).check_runs,
       CHECKS_MAX_PAGES
     ),
   ]);
-  // A list that reached FILES_LIMIT may have been cut by GitHub with no next page.
-  const filesProblem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
-  // A rename is judged under both names, so moving a refused file is refused.
-  const changedPaths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
+  const filesProblem = files.problem;
+  const changedPaths = files.paths;
   // An incomplete check-run list is not a pass; ci_green refuses it with the reason.
   const ci = checks.problem
     ? { conclusion: null, note: `the check-run list is incomplete (${checks.problem}), so this PR is not evaluated` }
