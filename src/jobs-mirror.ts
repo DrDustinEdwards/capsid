@@ -77,14 +77,17 @@ async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow):
   };
 }
 
-const NOTE_SQL = "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ?3";
-
 export async function latestResumeNote(
   env: NoteEnv,
   job: Pick<JobRow, "id" | "namespace" | "resumed_count">
 ): Promise<ResumeNote | null> {
   if (!job.resumed_count) return null;
-  const row = await env.DB.prepare(NOTE_SQL).bind(job.namespace, jobDocPath(job.id), 1).first<NoteRow>();
+  const row = await env.DB
+    .prepare(
+      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1"
+    )
+    .bind(job.namespace, jobDocPath(job.id))
+    .first<NoteRow>();
   return row ? noteFromRow(env, job, row) : null;
 }
 
@@ -108,7 +111,12 @@ export interface ResumeNotes {
  *  oldest dropped and counted). The newest is first and is what `latestResumeNote` returns. */
 export async function resumeNotes(env: NoteEnv, job: Pick<JobRow, "id" | "namespace" | "resumed_count">): Promise<ResumeNotes> {
   if (!job.resumed_count) return { notes: [], dropped: 0 };
-  const { results } = await env.DB.prepare(NOTE_SQL).bind(job.namespace, jobDocPath(job.id), RESUME_NOTES_MAX_ROWS).all<NoteRow>();
+  const { results } = await env.DB
+    .prepare(
+      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ?3"
+    )
+    .bind(job.namespace, jobDocPath(job.id), RESUME_NOTES_MAX_ROWS)
+    .all<NoteRow>();
   const notes: ResumeNote[] = [];
   let bytes = 0;
   for (const row of results ?? []) {
