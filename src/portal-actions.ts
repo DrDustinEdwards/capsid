@@ -11,7 +11,7 @@ import { improveControl, improveStatus } from "./improve-run";
 import { breakerState, resetBreaker } from "./job-breaker";
 import { addPackage, describePackage, editPackage, readPackageRow, removePackage, validatePackage } from "./ops-packages";
 import { IMPROVE_MODES, onRoster, pausedKey, ROSTER } from "./improve-schema";
-import { IMPROVE_ACTOR, pausedReason, readMode } from "./improve-state";
+import { pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
 import { resumeDestination } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
@@ -212,7 +212,7 @@ async function performAction(env: Env, email: string, source: string | null, now
         if (!namespace) return { ok: false, refusal: `${action} needs a namespace.` };
         const reason = switchReason ?? undefined;
         // improveControl records the reason in its improve-paused row; unpause takes none.
-        const result = await improveControl(env, action, action === "pause" ? { namespace, reason } : { namespace });
+        const result = await improveControl(env, action, action === "pause" ? { namespace, reason, actor } : { namespace, actor });
         committed = true;
         summary = action === "pause" ? `Paused the improve loop for ${namespace}.` : `Unpaused ${namespace}.`;
         await auditClick(env, actor, source, action, namespace, switchDetail(result), click);
@@ -221,7 +221,7 @@ async function performAction(env: Env, email: string, source: string | null, now
       case "mode": {
         const value = required(params, "value");
         if (!value) return { ok: false, refusal: "mode needs a value." };
-        const result = await improveControl(env, "mode", { value });
+        const result = await improveControl(env, "mode", { value, actor });
         committed = true;
         summary = `Set the improve mode to ${value}.`;
         await auditClick(env, actor, source, action, null, switchDetail(result), click);
@@ -523,7 +523,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             ? `${pausedKey(p.namespace)} is set to "${p.reason}", with no expiry. The loop opens no run for ${p.namespace} until it is unpaused.`
             : `${pausedKey(p.namespace)} already holds "${current}"; it is replaced with "${p.reason}", with no expiry.`,
         ],
-        audit: [`improve-paused by ${IMPROVE_ACTOR}`, click],
+        audit: [`improve-paused by ${actor}`, click],
       };
     }
     case "reset_breaker": {
@@ -552,7 +552,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             ? `${p.namespace} is not paused: ${pausedKey(p.namespace)} is already absent, so the delete changes nothing.`
             : `${pausedKey(p.namespace)} ("${current}") is deleted. The next opener may open a run for ${p.namespace}.`,
         ],
-        audit: [`improve-unpaused by ${IMPROVE_ACTOR}`, click],
+        audit: [`improve-unpaused by ${actor}`, click],
       };
     }
     case "mode": {
@@ -568,7 +568,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             ? `improve_mode is already ${p.value}; it is written again unchanged.`
             : `improve_mode: ${current.mode} -> ${p.value}, for every namespace.${current.reason ? ` (It reads ${current.mode} now because ${current.reason}.)` : ""}`,
         ],
-        audit: [`improve-mode-set by ${IMPROVE_ACTOR}`, click],
+        audit: [`improve-mode-set by ${actor}`, click],
       };
     }
     case "seat_start": {

@@ -99,7 +99,7 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           return registered.ok ? ok(registered) : fail(registered.error);
         }
         if (action && action !== "run") {
-          return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release }));
+          return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release, actor: ctx.actor }));
         }
         if (namespace && !onRoster(namespace)) {
           return fail(
