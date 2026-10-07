@@ -7,7 +7,7 @@ import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
-import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
+import { commandFromSummary, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
@@ -160,6 +160,7 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     // A command whose signature does not match is withheld, so it cannot be copied.
     command: blocked && commandSignature !== "mismatch" ? commandFromSummary(summary) : null,
     command_signature: blocked ? commandSignature : null,
+    question: blocked && commandSignature !== "mismatch" && isQuestionSummary(summary),
     result_ref: row.result_ref,
     finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
   };

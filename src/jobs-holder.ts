@@ -634,6 +634,19 @@ export async function failJob(
 // and commandFromSummary reads it back, so the format cannot drift between the two.
 export const RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
 
+// A question block (Track A D4): a session that needs an answer rather than a command run
+// blocks with question: true. The reason is the question, the Worker fixes the command, and
+// the summary starts with this prefix, which is how every reader tells it from a gate. No new
+// status and no column: the seat answers with resume and a note, which claim, heartbeat and
+// list then hand to the driver permanently (resume_notes).
+const QUESTION_PREFIX = "QUESTION: ";
+const QUESTION_COMMAND = "Answer in a resume note";
+
+/** Whether a blocked job's summary is a question block. */
+export function isQuestionSummary(summary: string | null): boolean {
+  return summary !== null && summary.startsWith(QUESTION_PREFIX);
+}
+
 /** The exact command a blocked job is waiting on, or null when it recorded none. */
 export function commandFromSummary(summary: string | null): string | null {
   if (!summary) return null;
@@ -651,9 +664,14 @@ export async function blockJob(
   // review: the verdict that produced this block, when the gate blocked it, recorded
   // as the reviewer's touch beside the gate. said: the agent's claim on the call the
   // gate turned into this block, recorded under the action the agent called.
-  args: { reason: string; command?: string; fromReview?: boolean; review?: Review; claim?: ClaimInput; raw?: ClaimRaw; said?: Said }
+  args: { reason: string; command?: string; question?: boolean; fromReview?: boolean; review?: Review; claim?: ClaimInput; raw?: ClaimRaw; said?: Said }
 ): Promise<JobResult> {
-  if (!args.reason?.trim()) return refuse("block", "block needs a reason: what gate was hit.");
+  if (!args.reason?.trim()) return refuse("block", args.question ? "a question block needs the question as its reason." : "block needs a reason: what gate was hit.");
+  // The command of a question is the Worker's, never the session's: a question that carried a
+  // command would be a gate in disguise, and the seat answers by resuming with a note.
+  if (args.question && args.command?.trim()) {
+    return refuse("block", `a question block takes no command: the Worker fixes it as '${QUESTION_COMMAND}'. Send the question as the reason, or drop question: true and block with the command.`);
+  }
   const blockClaim = parseClaim(args.claim);
   if ("error" in blockClaim) return refuse("block", blockClaim.error);
   // The review gate (see reviewRefusal). `fromReview` is set when the gate itself
@@ -663,7 +681,9 @@ export async function blockJob(
     const review = await reviewRefusal(env, agent, now, "block", id, null, { said: { claim: blockClaim.claim, raw: blockRaw, as: "block" } });
     if (review) return review;
   }
-  const summary = args.command ? `${args.reason}\n\n${RESUME_MARKER}\n\n    ${args.command}` : args.reason;
+  const command = args.question ? QUESTION_COMMAND : args.command;
+  const text = args.question ? `${QUESTION_PREFIX}${args.reason}` : args.reason;
+  const summary = command ? `${text}\n\n${RESUME_MARKER}\n\n    ${command}` : text;
   // The cap is applied where the block is written, so a capped job says so in the one
   // field every reader already looks at: the Portal prints result_summary, the driver
   // reads it to continue, and a human deciding reads it there too. The budget is read
@@ -686,7 +706,7 @@ export async function blockJob(
         kind: "gate",
         actor: agent.actor,
         actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
-        detail: { reason: args.reason, command: args.command ?? null },
+        detail: { reason: args.reason, command: command ?? null, ...(args.question ? { question: true } : {}) },
         sinceGate: false,
         at: now.toISOString(),
       }),

@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { isQuestionSummary } from "./jobs-holder";
 import type { JobRow } from "./jobs-schema";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
@@ -28,7 +29,7 @@ import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 // lease sweep and the improve_status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
-export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, RESUME_MARKER } from "./jobs-holder";
+export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
 export { adminFailJob, completeAsCaller, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export type { JobResult } from "./jobs-transition";
 
@@ -89,7 +90,9 @@ export interface JobsSummary {
   // posted, and the count is what tells them apart.
   // command_signature says whether waiting_on is what the holder's block wrote
   // (src/job-signing.ts); a "mismatch" summary is withheld.
-  blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
+  // question is true for a block that asks something rather than waits on a command run
+  // (jobs block with question: true); the seat answers it with a resume note.
+  blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; question: boolean; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
   // The claimed jobs and who holds each, so the seat can see a claim whose holder is
   // gone and release it rather than wait out the lease.
   claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null; lease_expires: string | null }>;
@@ -141,6 +144,7 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date, 
       id: r.id,
       title: r.title,
       waiting_on: checks[i] === "mismatch" ? "WITHHELD: this summary's signature does not match, so it was changed after the block wrote it. Do not run its command." : r.result_summary,
+      question: checks[i] !== "mismatch" && isQuestionSummary(r.result_summary),
       command_signature: checks[i],
       blocked_times: r.blocked_count,
       resumed: r.resumed_count,
