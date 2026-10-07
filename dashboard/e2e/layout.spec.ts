@@ -11,11 +11,11 @@ test("the view registry lists every view", () => {
 
 const WIDTHS = [1920, 1440, 1280, 1024];
 
-// The side menu at its full width (208 px) and collapsed to icons (56 px), set through
-// its stored preference before the app starts.
+// The menu at its full width (208 px) and collapsed (folded away, 0 px; the 56 px strip stays),
+// set through its stored preference before the app starts.
 const RAIL = [
   { state: "expanded", width: 208 },
-  { state: "collapsed", width: 56 },
+  { state: "collapsed", width: 0 },
 ] as const;
 
 for (const rail of RAIL) {
@@ -31,7 +31,8 @@ for (const rail of RAIL) {
         await visit(page, v.id);
         expect(await page.evaluate(() => document.documentElement.clientWidth)).toBe(width);
         // The menu really is in the state under test.
-        expect(await page.locator("nav.rail").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(rail.width);
+        expect(await page.locator("nav.cap-admin-menu").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(rail.width);
+        expect(await page.locator("nav.cap-admin-strip").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(56);
         problems.push(...sideways(await measure(page), `${v.label} at ${width}, menu ${rail.state}`));
         seen++;
       }

@@ -29,7 +29,7 @@ async function acrossLists<T>(page: Page, fn: () => Promise<T[]>): Promise<T[]> 
 async function textElements(page: Page): Promise<Array<{ text: string; size: number; family: string; tag: string }>> {
   return page.evaluate(() => {
     const out: Array<{ text: string; size: number; family: string; tag: string }> = [];
-    for (const root of document.querySelectorAll("main, header.top, nav.rail")) {
+    for (const root of document.querySelectorAll("main, .cap-admin-bar, nav.cap-admin-menu")) {
       for (const el of root.querySelectorAll<Element>("*")) {
         const own = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent ?? "").join("").trim();
         if (!own) continue;

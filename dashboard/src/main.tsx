@@ -16,6 +16,8 @@ import "capsomer/tokens.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
 import "capsomer/empty.css";
+import "capsomer/dialog.css";
+import "capsomer/admin-shell.css";
 import "./styles.css";
 import { applySavedTheme } from "./lib/prefs";
 import { BASE } from "./lib/base";

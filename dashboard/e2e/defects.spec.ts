@@ -80,7 +80,7 @@ test("a critical session incident appears in Needs attention", async ({ page }) 
   await expect(row.locator(".st.crit")).toHaveCount(1);
   const crit = await attention.locator("[data-row] .st.crit").count();
   expect(crit).toBeGreaterThan(0);
-  await expect(page.locator("nav.rail").getByRole("link", { name: `Overview, ${crit} critical` })).toHaveCount(1);
+  await expect(page.locator("nav.cap-admin-menu").getByRole("link", { name: `Overview, ${crit} critical` })).toHaveCount(1);
 });
 
 // Defect 5 (DECIDE 11): the perform button is named for the action, a one-way action
@@ -134,7 +134,7 @@ test("j with focus on row 3 moves focus to row 4", async ({ page }) => {
 // Defect 8 (SC 2.5.3): the Search button's name contains its visible word.
 test("the Search button's accessible name contains Search", async ({ page }) => {
   await visit(page, "overview");
-  const btn = page.locator("header.top button").filter({ hasText: "Search" });
+  const btn = page.locator("nav.cap-admin-strip button").filter({ hasText: "Search" });
   await expect(btn).toHaveCount(1);
   await expect(btn).toHaveAccessibleName(/^Search\b/);
   // And the command menu's input has a name.

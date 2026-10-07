@@ -7,7 +7,7 @@ import { visit } from "./views.ts";
 // applies at once; and an exact time in the detail panel is the viewer's zone with UTC
 // beside it, in a <time> element.
 
-const themeButton = (page: Page) => page.locator("header.top").getByRole("button", { name: "Dark theme" });
+const themeButton = (page: Page) => page.locator(".cap-admin-bar").getByRole("button", { name: "Dark theme" });
 const dataTheme = (page: Page) => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
 const savedTheme = (page: Page) => page.evaluate(() => localStorage.getItem("wf-theme"));
 

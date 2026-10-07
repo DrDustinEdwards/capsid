@@ -205,7 +205,7 @@ test("the Overview has no anchor bar at 1920 x 1080, with the live-shaped counts
   await visit(page, "overview");
   // Four sections, so only the height keeps it away.
   await expect(page.locator("main [data-section][id]")).toHaveCount(4);
-  const h = await page.locator("main").evaluate((m) => ({ scroll: m.scrollHeight, client: m.clientHeight }));
+  const h = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight, client: window.innerHeight }));
   expect(h.scroll).toBeLessThanOrEqual(2 * h.client);
   await expect(page.getByRole("navigation", { name: "On this page" })).toHaveCount(0);
 });
@@ -220,17 +220,17 @@ test("a view with three sections taller than two screens gets the anchor bar, wi
   expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href")))).toEqual(["#timeline", "#every-deploy", "#no-deploy-data"]);
   await expect(links.nth(0)).toHaveAttribute("aria-current", "location");
   // The scroller keeps a focused row clear of the bar.
-  const pad = await page.locator("main").evaluate((m) => parseFloat(getComputedStyle(m).scrollPaddingTop));
+  const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
   const barH = await bar.evaluate((b) => b.getBoundingClientRect().height);
   expect(pad).toBeGreaterThanOrEqual(barH);
   // Scrolled to the foot, the last section is current.
-  await page.locator("main").evaluate((m) => m.scrollTo(0, m.scrollHeight));
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect(links.nth(2)).toHaveAttribute("aria-current", "location");
   await expect(links.nth(0)).not.toHaveAttribute("aria-current", /.+/);
   // A click jumps there and marks it.
   await links.nth(1).click();
   await expect(links.nth(1)).toHaveAttribute("aria-current", "location");
-  await expect.poll(() => page.locator("#every-deploy").evaluate((el) => Math.round(el.getBoundingClientRect().top - el.closest("main")!.getBoundingClientRect().top))).toBeLessThanOrEqual(Math.ceil(pad) + 1);
+  await expect.poll(() => page.locator("#every-deploy").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThanOrEqual(Math.ceil(pad) + 1);
   expect(new URL(page.url()).hash).toBe("#every-deploy");
   // In a window tall enough, the same view does without it.
   await page.setViewportSize({ width: 1280, height: 1400 });
