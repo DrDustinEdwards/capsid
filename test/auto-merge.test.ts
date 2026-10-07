@@ -434,7 +434,7 @@ test("ci_green: carrel's two jobs both name an install step, and one job's does 
     .map((r) => ({ ...r, conclusion: "success" }));
   const verdict = evaluate(greenPr({ namespace: "carrel", ciSteps }));
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
-  assert.match(verdict.merge === false ? verdict.why : "", /gates / Run npm ci/);
+  assert.match(verdict.merge === false ? verdict.why : "", /gates \/ Run npm ci/);
 });
 
 test("ci_green: a same-named step in another job or workflow does not count", () => {
