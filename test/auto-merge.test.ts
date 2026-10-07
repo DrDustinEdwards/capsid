@@ -17,7 +17,8 @@ import {
   requiredCiLabel,
   type PrFacts,
 } from "../src/auto-merge-policy.ts";
-import { AWAITING_SEAT_KEY, FILES_LIMIT, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import { FILES_LIMIT } from "../src/github/pr-files.ts";
+import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
