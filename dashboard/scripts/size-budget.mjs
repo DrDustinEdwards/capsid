@@ -2,17 +2,22 @@
 // dist/, a missing or unreadable manifest, a manifest with no entry, or any file over
 // its budget exits non-zero.
 //
-//   initial JS (the entry and its static imports)  <= 100 KB gzip
+//   initial JS (the entry and its static imports)  <= 105 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   all CSS                                         <=  12 KB gzip
+//   all CSS                                         <=  13 KB gzip
 //   fonts                                           reported, not budgeted
+//
+// Raised on 2026-10-07 from 100 KB JS and 12 KB CSS (Dustin, after capsid #261): the shell is
+// Capsomer's AdminShell, which carries the strip of apps and tools, the account panel and the
+// phone sheet, beside the command menu the entry already held. The first AdminShell build was
+// 102.8 KB JS and 12.6 KB CSS; the new limits leave room above that, not for more.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 100 * KB, lazyChunk: 40 * KB, css: 12 * KB };
+const BUDGET = { initialJs: 105 * KB, lazyChunk: 40 * KB, css: 13 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");

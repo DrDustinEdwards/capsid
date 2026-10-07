@@ -65,8 +65,8 @@ const TEXT: Array<{ view: "overview" | "sites" | "queue"; sel: string; what: str
   { view: "overview", sel: ".att-row .st.warn", what: "a warning status word" },
   { view: "overview", sel: ".att-row .st.nodata", what: "a no-data status word" },
   { view: "queue", sel: ".qrow .st.run", what: "a running status word" },
-  { view: "overview", sel: ".rail a:not([aria-current])", what: "an inactive menu item" },
-  { view: "overview", sel: ".rail .count.hot", what: "a critical menu count" },
+  { view: "overview", sel: ".cap-admin-menu a:not([aria-current])", what: "an inactive menu item" },
+  { view: "overview", sel: ".cap-admin-menu a:not([aria-current]) .cap-admin-count[data-tone='crit']", what: "a critical menu count" },
   { view: "overview", sel: ".tile.crit .v", what: "a critical figure" },
   { view: "sites", sel: ".fleet .pill.ok", what: "an ok pill" },
   { view: "sites", sel: ".fleet .pill.warn", what: "a warning pill" },
@@ -96,7 +96,7 @@ for (const scheme of ["light", "dark"] as const) {
 
     test("a button's border reaches 3:1 against its background", async ({ page }) => {
       await visit(page, "overview");
-      const r = await readPair(page, ".top .btn", "border");
+      const r = await readPair(page, ".cap-admin-bar .btn", "border");
       expect(r).not.toBeNull();
       expect(r!.ratio, `${r!.fg} on ${r!.bg}`).toBeGreaterThanOrEqual(3);
     });

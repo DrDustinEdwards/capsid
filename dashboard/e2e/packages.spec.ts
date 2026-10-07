@@ -60,8 +60,8 @@ async function withoutPackages(page: Page) {
 test("with no package configured there is no Packages view, and /packages shows the overview", async ({ page }) => {
   await withoutPackages(page);
   await visit(page, "overview");
-  await expect(page.locator("nav.rail a")).toHaveCount(RAIL_COUNT - 1);
-  await expect(page.locator("nav.rail a").filter({ hasText: /^Packages/ })).toHaveCount(0);
+  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT - 1);
+  await expect(page.locator("nav.cap-admin-menu a").filter({ hasText: /^Packages/ })).toHaveCount(0);
   await page.goto("./packages");
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(page).toHaveURL(/\/portal\/$/);

@@ -1,17 +1,18 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
+import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, readPref, setSingleKeys, toggleTheme, useDarkTheme, useSingleKeys, writePref } from "../lib/prefs";
-import { BrandMark, KeysIcon, NavIcon, RailIcon, RefreshIcon, SearchIcon, ThemeIcon } from "../ui/icons";
+import { APPS } from "../lib/apps";
+import { BrandMark, NavIcon, RefreshIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
 import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
 import { HelpSheet } from "./HelpSheet";
-import { MoreIcon, MoreSheet } from "./MoreSheet";
 import { Overview } from "../views/Overview";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -40,6 +41,26 @@ const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ defaul
 // With no site configured there is no Sites tab. Settings is under More: on a wide
 // screen it is the top bar's Settings button, not a view in the left menu.
 const TABS: ViewId[] = ["overview", "queue", "incidents", "sites"];
+
+// The menu's groups, in order (design: Watch, Work, Records). Settings is not a menu entry: it is
+// under the avatar's account panel, with its g then e shortcut and its command-menu entry.
+const GROUPS: Array<{ label: string; views: ViewId[] }> = [
+  { label: "Watch", views: ["overview", "sites", "incidents", "deploys", "backups"] },
+  { label: "Work", views: ["queue", "agents", "ci", "claims"] },
+  { label: "Records", views: ["namespaces", "packages", "activity"] },
+];
+
+// What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
+// status). Down, critical or a red CI run is red (a failure is never violet); paused is amber; what
+// waits on the owner is violet.
+const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
+  overview: "crit",
+  sites: "crit",
+  incidents: "need",
+  queue: "need",
+  ci: "crit",
+  namespaces: "warn",
+};
 
 
 // What each rail count means, for its accessible name and its tooltip.
@@ -117,8 +138,6 @@ export function App() {
   const [help, setHelp] = useState(false);
   const singleKeys = useSingleKeys();
   const dark = useDarkTheme();
-  const [more, setMore] = useState(false);
-  const moreBtn = useRef<HTMLButtonElement>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const nextMessage = useRef(1);
   const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
@@ -184,15 +203,10 @@ export function App() {
     [accept, post, signOut, update],
   );
 
-  const closeMore = useCallback(() => {
-    setMore(false);
-    requestAnimationFrame(() => moreBtn.current?.focus());
-  }, []);
-
   const go = useCallback(
     (v: ViewId) => {
       navigate(routePath(v));
-      mainRef.current?.scrollTo(0, 0);
+      window.scrollTo(0, 0);
     },
     [navigate],
   );
@@ -256,12 +270,12 @@ export function App() {
 
   const railRef = useRef(railCollapsed);
   railRef.current = railCollapsed;
-  const toggleRail = useCallback(() => {
-    const next = !railRef.current;
+  const setRail = useCallback((next: boolean) => {
     setRailCollapsed(next);
     writePref(RAIL_PREF, next ? "collapsed" : "expanded");
     tipRef.current?.classList.remove("on");
   }, []);
+  const toggleRail = useCallback(() => setRail(!railRef.current), [setRail]);
 
   const setFilters = useCallback((f: Partial<Filters>) => {
     setFiltersState((p) => ({ ...p, ...f }));
@@ -455,15 +469,25 @@ export function App() {
   }, [pageTitle, signedOut]);
 
   const tabs: ViewId[] = sitesOn ? TABS : TABS.filter((id) => id !== "sites");
-  // Settings lives in the top bar, not the left menu; it keeps its view, its g then e
-  // shortcut and its command-menu entry, which read the full views list.
-  const railViews = views.filter((v) => v.id !== "settings");
-  const moreItems = views
-    .filter((v) => !tabs.includes(v.id))
-    .map((v) => {
-      const b = badge[v.id];
-      return { id: v.id, label: v.label, count: b?.n ? `${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : null, current: route.view === v.id };
-    });
+  // One menu entry per view on offer, grouped; Settings is under the avatar's account panel.
+  const entryFor = (id: ViewId, group?: string): AdminEntry => {
+    const v = VIEWS.find((x) => x.id === id)!;
+    const b = badge[id];
+    return {
+      id,
+      label: v.label,
+      href: routePath(id),
+      icon: <NavIcon id={id} />,
+      current: route.view === id,
+      count: b?.n || undefined,
+      countNote: BADGE_NOTE[id],
+      tone: COUNT_TONE[id],
+      group,
+    };
+  };
+  const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.filter((id) => views.some((v) => v.id === id)).map((id) => entryFor(id, g.label)));
+  const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
+  const moreEntries = menu.filter((e) => !tabs.includes(e.id as ViewId)).map((e) => ({ ...e, group: undefined }));
 
   const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;
   const View = VIEW_COMPONENTS[route.view];
@@ -522,132 +546,58 @@ export function App() {
     );
   }
 
+  // Right of the tab bar: the page's own bar says how fresh the data is and holds its page-wide
+  // controls (Refresh and the theme). Everything of the owner's sits in the strip.
   const shell = (
-    <div className={`app${railCollapsed ? " rail-collapsed" : ""}`}>
-      <header className="top">
-        <div className="brand">
-          <BrandMark />
-          <div>Capsid Portal</div>
-        </div>
-        {import.meta.env.DEV && (
-          <span className="sample" title="npm run dev serves dev/sample-feed.json: every number here is fake">
-            SAMPLE DATA
-          </span>
-        )}
-        <div className="spacer" />
-        {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
-        <button type="button" className={`btn iconbtn${spinning ? " spin" : ""}`} title="Refresh (r)" aria-label="Refresh" onClick={() => void refresh()} disabled={signedOut}>
-          <RefreshIcon />
-        </button>
-        {/* The name starts with the visible word (WCAG 2.5.3), and stays when the word is
-            hidden at phone width. */}
-        <button type="button" className="btn" aria-label="Search, open the command menu" onClick={() => setPalette(true)}>
-          <SearchIcon />
-          <span className="hide-sm">Search</span> <kbd className="hide-sm">Ctrl K</kbd>
-        </button>
-        <button type="button" className="btn iconbtn" title="Dark theme (t)" aria-label="Dark theme" aria-pressed={dark} onClick={theme}>
-          <ThemeIcon />
-        </button>
-        {/* Settings, after the theme button and before Sign out; current on the Settings
-            view. On a phone it is under More instead (.top .hide-sm). */}
-        <Link
-          href={routePath("settings")}
-          className="btn iconbtn topset hide-sm"
-          aria-label="Settings"
-          aria-current={route.view === "settings" ? "page" : undefined}
-          data-tip="Settings (g e)"
-          data-tip-side="below"
-        >
-          <NavIcon id="settings" />
-        </Link>
-        {!signedOut && (
-          <button type="button" className="btn" onClick={() => void leave()} disabled={!feed || leaving}>
-            Sign out
+    <AdminShell
+      title="Capsid Portal"
+      mark={<BrandMark />}
+      apps={APPS}
+      nav={menu}
+      tabs={tabEntries}
+      more={moreEntries}
+      navLabel="Sections"
+      onSearch={() => setPalette(true)}
+      onHelp={() => setHelp(true)}
+      account={{
+        name: "Owner",
+        initials: "O",
+        appLinks: [
+          { label: "Portal settings", href: routePath("settings"), current: route.view === "settings" },
+          { label: "Keyboard shortcuts", onClick: () => setHelp(true) },
+        ],
+        onSignOut: signedOut ? undefined : () => void leave(),
+        signOutDisabled: !feed || leaving,
+      }}
+      status={
+        <>
+          {import.meta.env.DEV && (
+            <span className="sample" title="npm run dev serves dev/sample-feed.json: every number here is fake">
+              SAMPLE DATA
+            </span>
+          )}
+          {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
+        </>
+      }
+      actions={
+        <>
+          <button type="button" className={`btn iconbtn${spinning ? " spin" : ""}`} data-tip="Refresh (r)" data-tip-side="below" aria-label="Refresh" onClick={() => void refresh()} disabled={signedOut}>
+            <RefreshIcon />
           </button>
-        )}
-      </header>
-      <nav className="rail" id="rail" aria-label="Sections">
-        {railViews.map((v) => {
-          const b = badge[v.id];
-          // With a count, the name says what it counts: "Sites, 2 down or degraded".
-          const named = b?.n ? `${v.label}, ${b.n} ${BADGE_NOTE[v.id] ?? ""}`.trim() : undefined;
-          return (
-            <Link
-              key={v.id}
-              href={routePath(v.id)}
-              aria-current={route.view === v.id ? "page" : undefined}
-              aria-label={named}
-              data-tip={railCollapsed ? (named ?? v.label) : undefined}
-              data-tip-side={railCollapsed ? "right" : undefined}
-            >
-              <NavIcon id={v.id} />
-              <span className="lbl">{v.label}</span>
-              <span className={`count ${b?.n ? b.cls : ""}`}>{b?.n ? b.n : ""}</span>
-            </Link>
-          );
-        })}
-        {railCollapsed ? (
-          <div className="hint">
-            <button type="button" className="railbtn" data-tip="Command menu (Ctrl K)" data-tip-side="right" onClick={() => setPalette(true)}>
-              <SearchIcon />
-              <span className="lbl">Command menu</span>
-            </button>
-            <button type="button" className="railbtn" data-tip="Shortcuts (?)" data-tip-side="right" onClick={() => setHelp(true)}>
-              <KeysIcon />
-              <span className="lbl">Shortcuts</span>
-            </button>
-          </div>
-        ) : (
-          <div className="hint">
-            <button type="button" className="linkish" onClick={() => setPalette(true)}>
-              <span>Command menu</span>
-              <span>
-                <kbd>Ctrl</kbd> <kbd>K</kbd>
-              </span>
-            </button>
-            <button type="button" className="linkish" onClick={() => setHelp(true)}>
-              <span>Shortcuts</span>
-              <kbd>?</kbd>
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          className="railbtn railtoggle"
-          aria-expanded={!railCollapsed}
-          aria-controls="rail"
-          data-tip={railCollapsed ? "Expand menu ([)" : undefined}
-          data-tip-side={railCollapsed ? "right" : undefined}
-          onClick={toggleRail}
-        >
-          <RailIcon />
-          <span className="lbl">{railCollapsed ? "Expand menu" : "Collapse menu"}</span>
-          <kbd className="lbl" aria-hidden="true">
-            [
-          </kbd>
-        </button>
-      </nav>
-      <main ref={mainRef} tabIndex={-1} onClick={onRowActivate} onKeyDown={onRowActivate}>
-        {content}
-      </main>
-      <nav className="tabbar" aria-label="Sections">
-        {tabs.map((id) => {
-          const v = VIEWS.find((x) => x.id === id)!;
-          const b = badge[id];
-          return (
-            <Link key={id} href={routePath(id)} aria-current={route.view === id ? "page" : undefined}>
-              <NavIcon id={id} size={20} />
-              {v.label}
-              {b?.n ? <span className="badge">{b.n}</span> : null}
-            </Link>
-          );
-        })}
-        <button ref={moreBtn} type="button" className={moreItems.some((m) => m.current) ? "cur" : undefined} aria-haspopup="dialog" aria-expanded={more} onClick={() => setMore(true)}>
-          <MoreIcon />
-          More
-        </button>
-      </nav>
-    </div>
+          <button type="button" className="btn iconbtn" data-tip="Dark theme (t)" data-tip-side="below" aria-label="Dark theme" aria-pressed={dark} onClick={theme}>
+            <ThemeIcon />
+          </button>
+        </>
+      }
+      jumpKeys={singleKeys}
+      prefKey={RAIL_PREF}
+      collapsed={railCollapsed}
+      onCollapsedChange={setRail}
+      renderLink={(p) => <Link {...p} />}
+      mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
+    >
+      {content}
+    </AdminShell>
   );
 
   return (
@@ -662,7 +612,6 @@ export function App() {
       )}
       <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
       <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
-      <MoreSheet open={more} onClose={closeMore} items={moreItems} />
       {confirmReq && feed && (
         <Suspense fallback={null}>
           <ConfirmDialog

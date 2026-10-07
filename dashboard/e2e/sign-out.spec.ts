@@ -15,6 +15,7 @@ test("Sign out posts with the feed's CSRF value and shows the signed-out page", 
     return route.continue();
   });
   await page.goto("");
+  await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Signed out" })).toBeVisible();
   await expect(page.getByText("You signed out of Capsid Portal in this browser.")).toBeVisible();
@@ -27,6 +28,7 @@ test("Sign out posts with the feed's CSRF value and shows the signed-out page", 
 test("a refused sign-out is said, and the session stays on screen", async ({ page }) => {
   await page.route(SIGN_OUT_URL, (route) => route.fulfill({ status: 403, contentType: "text/plain", body: "csrf validation failed: reload Capsid Portal and try again." }));
   await page.goto("");
+  await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByText(/Sign out failed: csrf validation failed/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Signed out" })).toBeHidden();
