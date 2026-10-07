@@ -16,7 +16,7 @@ import {
   type RequiredScopes,
 } from "./jobs-schema";
 import { signTaskBody, verifySignedBody } from "./improve-task";
-import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
+import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { offerForClaim } from "./job-skill-offers";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import {
@@ -243,11 +243,14 @@ export async function listJobs(
   const truncated = rows.length > JOBS_ROWS_MAX;
   // One named job carries its latest resume note. Not every row of a wide list, which
   // would cost one read per resumed job.
-  const listNote = args.id && rows.length === 1 ? await latestResumeNote(env, rows[0]) : null;
+  const listNotes = args.id && rows.length === 1 ? await resumeNotes(env, rows[0]) : null;
+  const listNote = listNotes?.notes[0] ?? null;
   return {
     ok: true,
     action: "list",
     ...(listNote ? { resume_note: listNote } : {}),
+    ...(listNotes && listNotes.notes.length > 0 ? { resume_notes: listNotes.notes } : {}),
+    ...(listNotes && listNotes.dropped > 0 ? { resume_notes_dropped: listNotes.dropped } : {}),
     jobs: truncated ? rows.slice(0, JOBS_ROWS_MAX) : rows,
     ...(truncated ? { truncated: true, note: `more than ${JOBS_ROWS_MAX} jobs match; narrow by namespace or status.` } : {}),
   };
@@ -354,7 +357,8 @@ export async function claimJob(
   // The approval a resume handed on is checked the same way, before the lease: a note
   // changed after the resume wrote it is an instruction nobody gave, so the job is
   // failed rather than handed to a driver with it (src/job-signing.ts).
-  const claimNote = await latestResumeNote(env, candidate);
+  const claimNotes = await resumeNotes(env, candidate);
+  const claimNote = claimNotes.notes[0] ?? null;
   if (claimNote?.signature === "mismatch") {
     const reason = `its last resume note's signature does not match: the approval was changed after ${claimNote.by} wrote it at ${claimNote.at}.`;
     const marked = await markJobFailed(env, candidate, "queued", reason, "job-resume-note-refused", actor, { reason }, now);
@@ -394,5 +398,13 @@ export async function claimJob(
   // A job that went back to the queue after a resume (an expired lease) reaches its
   // next driver here, so the approval has to come with it: the note read and checked
   // above, before the lease.
-  return { ok: true, action: "claim", job: claimed, ...(claimNote ? { resume_note: claimNote } : {}), offered_skills: offer.skills };
+  return {
+    ok: true,
+    action: "claim",
+    job: claimed,
+    ...(claimNote ? { resume_note: claimNote } : {}),
+    ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),
+    ...(claimNotes.dropped > 0 ? { resume_notes_dropped: claimNotes.dropped } : {}),
+    offered_skills: offer.skills,
+  };
 }

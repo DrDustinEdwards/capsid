@@ -37,7 +37,7 @@ import {
   type ClaimRaw,
   type JobClaim,
 } from "./job-claims";
-import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
+import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
@@ -263,8 +263,17 @@ async function holderTransition(
   }
   // The driver a resume returned the job to is already holding it and learns of the
   // resume by its next call, which is usually a heartbeat.
-  const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env, job) : null;
-  return { ok: true, action, job, ...(outcome ? { outcome } : {}), ...(heartbeatNote ? { resume_note: heartbeatNote } : {}) };
+  const heartbeatNotes = action === "heartbeat" ? await resumeNotes(env, job) : null;
+  const heartbeatNote = heartbeatNotes?.notes[0] ?? null;
+  return {
+    ok: true,
+    action,
+    job,
+    ...(outcome ? { outcome } : {}),
+    ...(heartbeatNote ? { resume_note: heartbeatNote } : {}),
+    ...(heartbeatNotes && heartbeatNotes.notes.length > 0 ? { resume_notes: heartbeatNotes.notes } : {}),
+    ...(heartbeatNotes && heartbeatNotes.dropped > 0 ? { resume_notes_dropped: heartbeatNotes.dropped } : {}),
+  };
 }
 
 export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {

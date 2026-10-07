@@ -42,18 +42,12 @@ const WITHHELD = "WITHHELD: this approval's signature does not match, so it was 
 
 // Served by audit_log_doc (namespace, path, id DESC), the index every job audit row
 // already falls under because it is written against the job's mirror path.
-export async function latestResumeNote(
-  env: NoteEnv,
-  job: Pick<JobRow, "id" | "namespace" | "resumed_count">
-): Promise<ResumeNote | null> {
-  if (!job.resumed_count) return null;
-  const row = await env.DB
-    .prepare(
-      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1"
-    )
-    .bind(job.namespace, jobDocPath(job.id))
-    .first<{ actor: string | null; params: string | null; at: string }>();
-  if (!row?.params) return null;
+type NoteRow = { actor: string | null; params: string | null; at: string };
+
+// One audit row as the note it recorded, its signature checked, or null when the row is
+// not a readable resume (no params, not JSON, no approved text).
+async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow): Promise<ResumeNote | null> {
+  if (!row.params) return null;
   let params: Record<string, unknown>;
   try {
     params = JSON.parse(row.params) as Record<string, unknown>;
@@ -83,9 +77,57 @@ export async function latestResumeNote(
   };
 }
 
+const NOTE_SQL = "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ?3";
+
+export async function latestResumeNote(
+  env: NoteEnv,
+  job: Pick<JobRow, "id" | "namespace" | "resumed_count">
+): Promise<ResumeNote | null> {
+  if (!job.resumed_count) return null;
+  const row = await env.DB.prepare(NOTE_SQL).bind(job.namespace, jobDocPath(job.id), 1).first<NoteRow>();
+  return row ? noteFromRow(env, job, row) : null;
+}
+
+// Every resume note a driver is handed, together, and no more than this many bytes of
+// them: a job resumed fifteen times (job_5765103c658f, 2026-09-26) carried its PR order
+// and rulings in the early notes, which "the latest only" lost.
+const RESUME_NOTES_MAX_BYTES = 64 * 1024;
+// Rows read for it, so one job with a very long history is one bounded read.
+const RESUME_NOTES_MAX_ROWS = 200;
+
+export interface ResumeNotes {
+  // Newest first. Each note's own signature is checked; one that does not match is
+  // withheld, as the newest one is.
+  notes: ResumeNote[];
+  // Resumes the job recorded that this answer does not carry: older ones past the byte
+  // cap or the row cap, or an audit row that cannot be read as a note.
+  dropped: number;
+}
+
+/** Every resume note for a job, newest first, at most RESUME_NOTES_MAX_BYTES of them (the
+ *  oldest dropped and counted). The newest is first and is what `latestResumeNote` returns. */
+export async function resumeNotes(env: NoteEnv, job: Pick<JobRow, "id" | "namespace" | "resumed_count">): Promise<ResumeNotes> {
+  if (!job.resumed_count) return { notes: [], dropped: 0 };
+  const { results } = await env.DB.prepare(NOTE_SQL).bind(job.namespace, jobDocPath(job.id), RESUME_NOTES_MAX_ROWS).all<NoteRow>();
+  const notes: ResumeNote[] = [];
+  let bytes = 0;
+  for (const row of results ?? []) {
+    const note = await noteFromRow(env, job, row);
+    if (!note) continue;
+    const size = new TextEncoder().encode(JSON.stringify(note)).length;
+    // The newest note is always returned, whatever its size: it is the approval a driver
+    // acts on, and a cap that hid it would be the loss this reads back to prevent.
+    if (notes.length > 0 && bytes + size > RESUME_NOTES_MAX_BYTES) break;
+    notes.push(note);
+    bytes += size;
+  }
+  return { notes, dropped: Math.max(0, job.resumed_count - notes.length) };
+}
+
 // The document a job mirrors to. The prompt is the SIGNED body, byte for byte, so a
 // driver that reads the document rather than the row still verifies the same bytes.
-function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
+function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
+  const note = notes[0] ?? null;
   const lines = [
     `# ${job.title}`,
     "",
@@ -109,6 +151,16 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
   // The full note as its own block after the status lines, untruncated: a driver
   // reading the brief needs every ruling, not the first line of them.
   if (note?.note) lines.push("", "## The last resume's note", "", note.note);
+  // Every earlier resume, newest first: an approval given at one resume is still the
+  // approval after the next (resumeNotes).
+  if (notes.length > 1) {
+    lines.push("", "## Earlier resumes", "");
+    for (const earlier of notes.slice(1)) {
+      lines.push(`- by ${earlier.by} at ${earlier.at}${earlier.signature === "verified" ? "" : ` (${earlier.signature})`}: ${earlier.reason}`);
+      if (earlier.note) lines.push("", earlier.note, "");
+    }
+  }
+  if (dropped > 0) lines.push("", `(${dropped} older resume${dropped === 1 ? "" : "s"} not shown.)`);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
 }
@@ -118,12 +170,15 @@ function renderJobDoc(job: JobRow, note: ResumeNote | null): string {
 export async function mirrorStatements(env: NoteEnv, job: JobRow, action: string, actor: string, note?: ResumeNote) {
   const path = jobDocPath(job.id);
   const prior = await priorDoc(env.DB, job.namespace, path);
-  const resumeNote = note ?? (await latestResumeNote(env, job));
+  // The passed note is the resume being written in this batch, so it is not in the audit
+  // log yet: it leads, and the notes read back are the earlier ones.
+  const history = await resumeNotes(env, job);
+  const notes = note ? [note, ...history.notes] : history.notes;
   return improveDocStatements(env.DB, {
     namespace: job.namespace,
     path,
     title: `Job: ${job.title}`,
-    body: renderJobDoc(job, resumeNote),
+    body: renderJobDoc(job, notes, history.dropped),
     type: "task",
     // Closed on a finished row, and `failed` is as finished as `done`: a failed job's
     // mirror left active would keep brief carrying it as open work.
