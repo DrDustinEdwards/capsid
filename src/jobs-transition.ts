@@ -56,6 +56,10 @@ export interface JobResult {
   // The latest resume's reason, for a job resumed at least once. See
   // latestResumeNote in src/jobs-mirror.ts.
   resume_note?: ResumeNote;
+  // Every resume note, newest first (the newest is resume_note), within a byte cap; and how
+  // many the answer leaves out. claim, heartbeat and list for one id (src/jobs-mirror.ts).
+  resume_notes?: ResumeNote[];
+  resume_notes_dropped?: number;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
 }
