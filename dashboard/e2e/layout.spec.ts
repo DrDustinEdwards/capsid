@@ -11,11 +11,11 @@ test("the view registry lists every view", () => {
 
 const WIDTHS = [1920, 1440, 1280, 1024];
 
-// The menu at its full width (208 px) and collapsed (folded away, 0 px; the 56 px strip stays),
-// set through its stored preference before the app starts.
+// The menu at its full width (208 px) and collapsed to icons (56 px), beside the 56 px strip, set
+// through its stored preference before the app starts.
 const RAIL = [
   { state: "expanded", width: 208 },
-  { state: "collapsed", width: 0 },
+  { state: "collapsed", width: 56 },
 ] as const;
 
 for (const rail of RAIL) {

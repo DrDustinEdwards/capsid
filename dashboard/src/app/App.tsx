@@ -51,13 +51,14 @@ const GROUPS: Array<{ label: string; views: ViewId[] }> = [
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
-// status). Down or critical is red; paused is amber; what waits on the owner is violet.
+// status). Down, critical or a red CI run is red (a failure is never violet); paused is amber; what
+// waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
   overview: "crit",
   sites: "crit",
   incidents: "need",
   queue: "need",
-  ci: "need",
+  ci: "crit",
   namespaces: "warn",
 };
 
@@ -588,6 +589,7 @@ export function App() {
           </button>
         </>
       }
+      jumpKeys={singleKeys}
       prefKey={RAIL_PREF}
       collapsed={railCollapsed}
       onCollapsedChange={setRail}
