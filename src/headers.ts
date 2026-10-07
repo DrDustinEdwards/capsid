@@ -1,11 +1,27 @@
+import { buildSecurityHeaders } from "@dustinedwards/security-headers/headers";
+
 export type SurfaceClass = "html" | "json" | "other";
 
-// One year, includeSubDomains. No preload: that is a vendor-list submission and
-// effectively irreversible.
-export const HSTS = "max-age=31536000; includeSubDomains";
+// THE ENFORCED HEADERS COME FROM THE PACKAGE (CLAUDE.md is silent; conventions and
+// capsid/research/centralize-build-jobs.md, D6.3). @dustinedwards/security-headers holds OWASP's
+// defaults, so none is typed here. Capsid keeps what the package cannot express, and names it:
+//   - Cross-Origin-Opener-Policy-Report-Only: COOP ships on trial, never enforced, pending a
+//     demonstrated case and a ruling, so the package's enforced COOP is removed below.
+//   - Reporting-Endpoints and the report-only CSP on non-HTML: they carry this Worker's own
+//     /csp-report sink (REPORT_PATH), which the package's builder does not model.
+//   - The consent dialog's enforced CSP (CONSENT_DIALOG_HEADERS), set by routes.ts.
+// No preload on HSTS: that is a vendor-list submission and effectively irreversible.
+export const CAPSID_STANDARD_HEADERS: Readonly<Record<string, string>> = buildSecurityHeaders({
+  overrides: {
+    "Cross-Origin-Opener-Policy": {
+      value: null,
+      reason: "COOP is on trial as Report-Only (COOP_REPORT_ONLY) pending a demonstrated case and a ruling",
+    },
+  },
+});
 
-export const PERMISSIONS_POLICY =
-  "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
+export const HSTS = CAPSID_STANDARD_HEADERS["Strict-Transport-Security"];
+export const PERMISSIONS_POLICY = CAPSID_STANDARD_HEADERS["Permissions-Policy"];
 
 export const REPORT_PATH = "/csp-report";
 export const REPORTING_ENDPOINTS = `csp="${REPORT_PATH}"`;
@@ -67,19 +83,12 @@ export function classifySurface(contentType: string | null): SurfaceClass {
 
 export function securityHeadersFor(surface: SurfaceClass): Record<string, string> {
   const base: Record<string, string> = {
-    "Strict-Transport-Security": HSTS,
-    "X-Content-Type-Options": "nosniff",
+    ...CAPSID_STANDARD_HEADERS,
     "Reporting-Endpoints": REPORTING_ENDPOINTS,
   };
 
   if (surface === "html") {
-    return {
-      ...base,
-      "Referrer-Policy": "no-referrer",
-      "X-Frame-Options": "DENY",
-      "Permissions-Policy": PERMISSIONS_POLICY,
-      "Cross-Origin-Opener-Policy-Report-Only": COOP_REPORT_ONLY,
-    };
+    return { ...base, "Cross-Origin-Opener-Policy-Report-Only": COOP_REPORT_ONLY };
   }
 
   // no-store is already applied by withCacheDefault; repeating it here would
