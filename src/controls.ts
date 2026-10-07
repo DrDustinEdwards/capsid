@@ -14,7 +14,7 @@ import { adminFailJob, releaseJob, resumeJob } from "./jobs";
 import { resumeDestination } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
-import type { PortalAction } from "./ops-types";
+import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
@@ -28,7 +28,7 @@ import { auditStatement } from "./store-guards";
 export const TOKEN_TTL_SECONDS = 5 * 60;
 // Its own context string, so this key differs from every other key derived from
 // COOKIE_ENCRYPTION_KEY, and a version bump retires every outstanding token.
-const TOKEN_CONTEXT = "capsid-portal-confirm:v1";
+const TOKEN_CONTEXT = "capsid-portal-confirm:v2";
 
 export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "pause",
@@ -62,9 +62,18 @@ const CLICK_AUDIT_PREFIX = "portal-";
 const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start", "overnight"]);
 const UNDO_INFIX = "undo-";
 
-/** The click row's action name: `portal-<action>`, or `portal-undo-<action>` for an Undo. */
-function clickAuditAction(action: PortalAction, params: ActionParams): string {
-  return `${CLICK_AUDIT_PREFIX}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
+// Which front door an action came in by. A click in the Portal and a call to the
+// controls tool are the same control; the audit row says which (controls design,
+// section 2): portal-<action> from the Portal as it always was, control-<action>
+// from chat.
+export type Surface = "portal" | "chat";
+const CHAT_AUDIT_PREFIX = "control-";
+const auditPrefix = (surface: Surface) => (surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX);
+
+/** The click row's action name: portal-<action>, or portal-undo-<action> for an Undo
+ *  (control- for chat). */
+function clickAuditAction(action: PortalAction, params: ActionParams, surface: Surface = "portal"): string {
+  return `${auditPrefix(surface)}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
 }
 
 /** What a switch without a reason is told, at preview and again at perform. */
@@ -84,7 +93,7 @@ function switchReasonRefusal(action: PortalAction): string {
 }
 
 /** What each action is about to do, naming the target, for the confirm step. */
-export function describeAction(action: PortalAction, params: ActionParams): string {
+function describeAction(action: PortalAction, params: ActionParams): string {
   const said = describeOnce(action, params);
   return params.undo === "true" ? `Undo: ${said}` : said;
 }
@@ -144,8 +153,17 @@ function required(params: ActionParams, field: string): string | null {
 // The click's own audit row, naming the admin and the address the click came from
 // (sourceAddress). The shared mutators' rows do not say who asked (improveControl
 // records a pause as `improve-loop`).
-async function auditClick(env: Env, actor: string, source: string | null, action: PortalAction, namespace: string | null, params: object, name = `${CLICK_AUDIT_PREFIX}${action}`) {
-  await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, { ...params, source_address: source })]);
+async function auditClick(
+  env: Env,
+  actor: string,
+  source: string | null,
+  surface: Surface,
+  action: PortalAction,
+  namespace: string | null,
+  params: object,
+  name = `${auditPrefix(surface)}${action}`
+) {
+  await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, { ...params, surface, source_address: source })]);
 }
 
 export type ActionResult =
@@ -156,7 +174,15 @@ export type ActionResult =
 
 /** One action, performed by the administrator `email`: the shared mutator the MCP tool
  *  calls, then the click's audit row. Nothing here reimplements a transition. */
-export async function performAction(env: Env, email: string, source: string | null, now: Date, action: PortalAction, params: ActionParams): Promise<ActionResult> {
+async function performAction(
+  env: Env,
+  email: string,
+  source: string | null,
+  now: Date,
+  action: PortalAction,
+  params: ActionParams,
+  surface: Surface = "portal"
+): Promise<ActionResult> {
   const agent = adminAgentForEmail(email);
   const actor = agent.actor;
   // Set once the mutator succeeds, so the catch knows whether the action happened.
@@ -169,7 +195,7 @@ export async function performAction(env: Env, email: string, source: string | nu
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason) return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
-  const click = clickAuditAction(action, params);
+  const click = clickAuditAction(action, params, surface);
   const switchDetail = (result: object) => ({ ...result, reason: switchReason, ...(undo ? { undo: true } : {}) });
   try {
     switch (action) {
@@ -182,7 +208,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         const result = await improveControl(env, action, action === "pause" ? { namespace, reason, actor } : { namespace, actor });
         committed = true;
         summary = action === "pause" ? `Paused the improve loop for ${namespace}.` : `Unpaused ${namespace}.`;
-        await auditClick(env, actor, source, action, namespace, switchDetail(result), click);
+        await auditClick(env, actor, source, surface, action, namespace, switchDetail(result), click);
         break;
       }
       case "mode": {
@@ -191,7 +217,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         const result = await improveControl(env, "mode", { value, actor });
         committed = true;
         summary = `Set the improve mode to ${value}.`;
-        await auditClick(env, actor, source, action, null, switchDetail(result), click);
+        await auditClick(env, actor, source, surface, action, null, switchDetail(result), click);
         break;
       }
       case "reset_breaker": {
@@ -201,7 +227,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         if (!result.ok) return { ok: false, refusal: result.error };
         committed = true;
         summary = `Reset the circuit breaker for ${namespace}.`;
-        await auditClick(env, actor, source, action, namespace, result.state);
+        await auditClick(env, actor, source, surface, action, namespace, result.state);
         break;
       }
       case "seat_start": {
@@ -210,7 +236,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         const result = await setSeatStart(env, actor, { value });
         committed = true;
         summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
-        await auditClick(env, actor, source, action, null, switchDetail(result), click);
+        await auditClick(env, actor, source, surface, action, null, switchDetail(result), click);
         break;
       }
       case "overnight": {
@@ -220,7 +246,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         const result = await setOvernight(env, actor, now, { value: value ?? undefined, reason: switchReason ?? undefined });
         committed = true;
         summary = result.mode === "off" ? "Turned the overnight run off." : `Set the overnight run to run on ${result.mode === "api" ? "the API key" : "the subscription"}.`;
-        await auditClick(env, actor, source, action, null, switchDetail({ mode: result.mode, ...(result.decision ? { decision: result.decision } : {}) }), click);
+        await auditClick(env, actor, source, surface, action, null, switchDetail({ mode: result.mode, ...(result.decision ? { decision: result.decision } : {}) }), click);
         break;
       }
       case "resume_job":
@@ -256,7 +282,7 @@ export async function performAction(env: Env, email: string, source: string | nu
             : action === "release_job"
               ? `Released ${id} back to the queue.`
               : `Marked ${id} failed.`;
-        await auditClick(env, actor, source, action, result.job?.namespace ?? null, { id, reason });
+        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason });
         break;
       }
       case "revoke_agent": {
@@ -266,7 +292,7 @@ export async function performAction(env: Env, email: string, source: string | nu
         if (!result.ok) return { ok: false, refusal: result.refusal ?? `revoking ${name} was refused.` };
         committed = true;
         summary = `Revoked the agent ${name}.`;
-        await auditClick(env, actor, source, action, null, { name });
+        await auditClick(env, actor, source, surface, action, null, { name });
         break;
       }
       case "site_add":
@@ -298,7 +324,7 @@ export async function performAction(env: Env, email: string, source: string | nu
             : action === "site_edit"
               ? `Changed ${result.site.namespace}: ${describeSite(result.site)}.`
               : `Removed ${result.site.namespace} from the site configuration.`;
-        await auditClick(env, actor, source, action, result.site.namespace, params);
+        await auditClick(env, actor, source, surface, action, result.site.namespace, params);
         break;
       }
       case "package_add":
@@ -330,7 +356,7 @@ export async function performAction(env: Env, email: string, source: string | nu
             : action === "package_edit"
               ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
               : `Removed ${result.pkg.name} from the packages.`;
-        await auditClick(env, actor, source, action, null, params);
+        await auditClick(env, actor, source, surface, action, null, params);
         break;
       }
     }
@@ -349,10 +375,10 @@ export async function performAction(env: Env, email: string, source: string | nu
 }
 
 
-export const UNKNOWN_ACTION = (action: string) =>
+const UNKNOWN_ACTION = (action: string) =>
   `unknown Portal action '${action}'. The Portal does: ${PORTAL_ACTIONS.join(", ")}. Merging a pull request and minting a credential are deliberately not among them: a merge can start a deploy and stays behind can_merge, and a mint hands out a key.`;
 
-export function isPortalAction(value: unknown): value is PortalAction {
+function isPortalAction(value: unknown): value is PortalAction {
   return typeof value === "string" && (PORTAL_ACTIONS as readonly string[]).includes(value);
 }
 
@@ -380,7 +406,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
 
 /** The action's params from a preview body: only the fields it takes, each a string,
  *  trimmed, blanks dropped. */
-export function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Record<string, string> } | { ok: false; refusal: string } {
+function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Record<string, string> } | { ok: false; refusal: string } {
   if (raw === undefined) raw = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, refusal: "params must be an object of strings." };
   const allowed = FIELDS[action];
@@ -422,9 +448,9 @@ function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace:
 
 /** What the action will change, read from the state now. Reads only: no D1 write and
  *  no KV put, which test/portal-actions.test.ts asserts for every action. */
-export async function planAction(env: Env, email: string, action: PortalAction, p: Record<string, string>): Promise<Plan> {
+async function planAction(env: Env, email: string, action: PortalAction, p: Record<string, string>, surface: Surface = "portal"): Promise<Plan> {
   const actor = adminAgentForEmail(email).actor;
-  const click = `${clickAuditAction(action, p)} by ${actor}`;
+  const click = `${clickAuditAction(action, p, surface)} by ${actor}`;
   if (p.undo !== undefined && p.undo !== "true") return refused(`${action}'s undo is "true" or absent; got '${p.undo}'.`);
   switch (action) {
     case "pause": {
@@ -705,7 +731,10 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
 // The confirmation token: base64url of the canonical claims, a dot, and the hex
 // HMAC-SHA256 of that base64url text under the derived key.
 export interface ConfirmClaims {
-  v: 1;
+  v: 2;
+  // A one-time id: a perform spends it in KV, so a confirmation is used once, by whichever
+  // surface took it (controls design, D2). Version 1 tokens had none and are retired.
+  jti: string;
   action: PortalAction;
   params: Record<string, string>;
   email: string;
@@ -713,11 +742,12 @@ export interface ConfirmClaims {
 }
 
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
+const JTI_SHAPE = /^[0-9a-f]{32}$/;
 
 function canonical(claims: ConfirmClaims): string {
   const params: Record<string, string> = {};
   for (const key of Object.keys(claims.params).sort()) params[key] = claims.params[key];
-  return JSON.stringify({ v: claims.v, action: claims.action, params, email: claims.email, exp: claims.exp });
+  return JSON.stringify({ v: claims.v, jti: claims.jti, action: claims.action, params, email: claims.email, exp: claims.exp });
 }
 
 async function confirmKey(env: Env): Promise<string> {
@@ -727,14 +757,14 @@ async function confirmKey(env: Env): Promise<string> {
   return hmacHex(env.COOKIE_ENCRYPTION_KEY, TOKEN_CONTEXT);
 }
 
-export async function signConfirm(env: Env, claims: ConfirmClaims): Promise<string> {
+async function signConfirm(env: Env, claims: ConfirmClaims): Promise<string> {
   const payload = b64urlEncode(canonical(claims));
   return `${payload}.${await hmacHex(await confirmKey(env), payload)}`;
 }
 
 export type Verified = { ok: true; claims: ConfirmClaims } | { ok: false; status: number; refusal: string };
 
-export async function verifyConfirm(env: Env, token: string, email: string, now: Date): Promise<Verified> {
+async function verifyConfirm(env: Env, token: string, email: string, now: Date): Promise<Verified> {
   if (!TOKEN_SHAPE.test(token)) return { ok: false, status: 403, refusal: "the confirmation token is malformed: preview again." };
   const dot = token.indexOf(".");
   const payload = token.slice(0, dot);
@@ -750,7 +780,7 @@ export async function verifyConfirm(env: Env, token: string, email: string, now:
   }
   const paramsOk =
     claims && typeof claims.params === "object" && claims.params !== null && Object.values(claims.params).every((v) => typeof v === "string");
-  if (claims?.v !== 1 || typeof claims.email !== "string" || typeof claims.exp !== "number" || !paramsOk) {
+  if (claims?.v !== 2 || typeof claims.jti !== "string" || !JTI_SHAPE.test(claims.jti) || typeof claims.email !== "string" || typeof claims.exp !== "number" || !paramsOk) {
     return { ok: false, status: 403, refusal: "the confirmation token verifies but its claims are not the shape this Worker signs: preview again." };
   }
   if (claims.email !== email) return { ok: false, status: 403, refusal: "the confirmation was issued to another session: preview again." };
@@ -759,3 +789,92 @@ export async function verifyConfirm(env: Env, token: string, email: string, now:
   return { ok: true, claims };
 }
 
+
+// ---------------------------------------------------------------------------
+// The registry and its two doors.
+
+/** One control: its name, the params it takes, whether it needs a reason, and the two
+ *  steps every surface goes through. plan writes nothing. perform calls the one
+ *  mutator that exists for the control, then writes the click's audit row. */
+export interface Control {
+  name: PortalAction;
+  fields: readonly string[];
+  reasonRequired: boolean;
+  plan(env: Env, email: string, params: Record<string, string>, surface: Surface): Promise<Plan>;
+  perform(env: Env, email: string, source: string | null, now: Date, params: ActionParams, surface: Surface): Promise<ActionResult>;
+}
+
+export const CONTROLS: readonly Control[] = PORTAL_ACTIONS.map((name) => ({
+  name,
+  fields: FIELDS[name],
+  reasonRequired: SWITCHES.has(name),
+  plan: (env, email, params, surface) => planAction(env, email, name, params, surface),
+  perform: (env, email, source, now, params, surface) => performAction(env, email, source, now, name, params, surface),
+}));
+
+function controlNamed(name: unknown): Control | null {
+  return typeof name === "string" ? (CONTROLS.find((c) => c.name === name) ?? null) : null;
+}
+
+const randomJti = (): string => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+const NONCE_PREFIX = "control-nonce:";
+
+export type Previewed = { ok: true; preview: PortalPreview } | { ok: false; status: number; refusal: string };
+
+/** The preview step for either surface: validate the name and params, plan from the state
+ *  now (a read, never a write), and sign a confirmation for the email. */
+export async function previewControl(env: Env, email: string, name: unknown, rawParams: unknown, now: Date, surface: Surface): Promise<Previewed> {
+  const control = controlNamed(name);
+  if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(String(name ?? "")) };
+  const parsed = paramsFrom(control.name, rawParams);
+  if (!parsed.ok) return { ok: false, status: 400, refusal: parsed.refusal };
+  const plan = await control.plan(env, email, parsed.params, surface);
+  if (!plan.ok) return { ok: false, status: 400, refusal: plan.refusal };
+  const exp = Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS;
+  const token = await signConfirm(env, { v: 2, jti: randomJti(), action: control.name, params: parsed.params, email, exp });
+  return {
+    ok: true,
+    preview: {
+      action: control.name,
+      summary: describeAction(control.name, parsed.params),
+      changes: plan.changes,
+      audit: plan.audit,
+      token,
+      expires_at: new Date(exp * 1000).toISOString(),
+    },
+  };
+}
+
+export type Performed = { ok: true; action: PortalAction; result: Extract<ActionResult, { ok: true }> } | { ok: false; status: number; refusal: string };
+
+/** The perform step for either surface: the token must verify for the email, then it is
+ *  spent (a confirmation is used once, whichever surface took it), then the control runs.
+ *  A token is spent even when the control then refuses: the refusal is about state, and
+ *  the next try starts from a fresh preview that shows the state as it is. KV has no
+ *  compare-and-set, so two performs of one token inside the same instant could both
+ *  pass the check; every mutator is guarded on the state it moves from, which is what
+ *  stops the second. */
+export async function performControl(env: Env, email: string, token: unknown, source: string | null, now: Date, surface: Surface): Promise<Performed> {
+  if (typeof token !== "string") return { ok: false, status: 400, refusal: "a perform needs the token its preview returned." };
+  const verified = await verifyConfirm(env, token, email, now);
+  if (!verified.ok) return { ok: false, status: verified.status, refusal: verified.refusal };
+  const { action, params, jti, exp } = verified.claims;
+  const control = controlNamed(action);
+  if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(String(action)) };
+
+  const nonceKey = `${NONCE_PREFIX}${jti}`;
+  if ((await env.APP_KV.get(nonceKey)) !== null) {
+    return { ok: false, status: 409, refusal: "this confirmation was already used: preview again to get a new one." };
+  }
+  // Held until the token itself would have expired, plus a minute for clock skew, and not
+  // under KV's 60 second floor.
+  await env.APP_KV.put(nonceKey, now.toISOString(), { expirationTtl: Math.max(60, exp - Math.floor(now.getTime() / 1000) + 60) });
+
+  const result = await control.perform(env, email, source, now, params, surface);
+  if (!result.ok) return { ok: false, status: 400, refusal: result.refusal };
+  return { ok: true, action: control.name, result };
+}

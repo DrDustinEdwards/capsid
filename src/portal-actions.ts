@@ -1,5 +1,5 @@
 import { getCookie, timingSafeEqual } from "./auth";
-import { describeAction, isPortalAction, paramsFrom, performAction, planAction, PORTAL_ACTIONS, signConfirm, TOKEN_TTL_SECONDS, UNKNOWN_ACTION, verifyConfirm } from "./controls";
+import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
 import { portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
@@ -7,7 +7,7 @@ import type { Env } from "./env";
 import { improveStatus } from "./improve-run";
 import { readBoundedText } from "./improve-scorer";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
-import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "./ops-types";
+import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types";
 // The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
 // src/ops-types.ts). They replaced the old /console page's forms, which called this
@@ -104,25 +104,9 @@ async function gateActionRequest(request: Request, env: Env, now: Date): Promise
 export async function handlePortalPreview(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
-  const { action } = gated.body;
-  if (!isPortalAction(action)) return textResponse(UNKNOWN_ACTION(String(action ?? "")), 400);
-  const parsed = paramsFrom(action, gated.body.params);
-  if (!parsed.ok) return textResponse(parsed.refusal, 400);
-
-  const plan = await planAction(env, gated.email, action, parsed.params);
-  if (!plan.ok) return textResponse(plan.refusal, 400);
-
-  const exp = Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS;
-  const token = await signConfirm(env, { v: 1, action, params: parsed.params, email: gated.email, exp });
-  const preview: PortalPreview = {
-    action,
-    summary: describeAction(action, parsed.params),
-    changes: plan.changes,
-    audit: plan.audit,
-    token,
-    expires_at: new Date(exp * 1000).toISOString(),
-  };
-  return jsonResponse(preview);
+  const previewed = await previewControl(env, gated.email, gated.body.action, gated.body.params, now, "portal");
+  if (!previewed.ok) return textResponse(previewed.refusal, previewed.status);
+  return jsonResponse(previewed.preview);
 }
 
 // What the perform can be handed in a test in place of the live feed read.
@@ -142,15 +126,9 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
       400
     );
   }
-  const { token } = gated.body;
-  if (typeof token !== "string") return textResponse("a perform needs the token its preview returned.", 400);
-
-  const verified = await verifyConfirm(env, token, gated.email, now);
-  if (!verified.ok) return textResponse(verified.refusal, verified.status);
-  const { action, params } = verified.claims;
-
-  const result = await performAction(env, gated.email, sourceAddress(request), now, action, params);
-  if (!result.ok) return textResponse(result.refusal, 400);
+  const did = await performControl(env, gated.email, gated.body.token, sourceAddress(request), now, "portal");
+  if (!did.ok) return textResponse(did.refusal, did.status);
+  const { action, result } = did;
 
   let data: OpsFeedData;
   try {

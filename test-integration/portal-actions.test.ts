@@ -317,14 +317,17 @@ describe("the job actions against real D1", () => {
     expect((await job(id))?.status).toBe("queued");
   });
 
-  it("a second perform of the same token is refused by the transition, not the token, and writes no click row", async () => {
+  it("a second perform of the same token is refused as already used, and writes no click row; a fresh preview is refused by the transition", async () => {
     const id = await blockedJob("resumed twice");
     const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
     expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status).toBe(200);
     const clicks = (await auditRows()).filter((r) => r.action === "portal-resume_job").length;
     const again = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
-    expect(again.status).toBe(400);
-    expect(await again.text()).toMatch(/not blocked/);
+    expect(again.status).toBe(409);
+    expect(await again.text()).toMatch(/already used/);
+    const fresh = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
+    expect(fresh.status).toBe(400);
+    expect(await fresh.text()).toMatch(/not blocked/);
     expect((await auditRows()).filter((r) => r.action === "portal-resume_job").length).toBe(clicks);
   });
 
