@@ -8,8 +8,8 @@ import { improveStatus } from "../src/improve-run";
 import { MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types";
+import { PORTAL_ACTIONS } from "../src/controls";
 import {
-  PORTAL_ACTIONS,
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,
   PORTAL_NAMESPACES_PATH,

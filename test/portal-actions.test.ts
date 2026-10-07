@@ -12,7 +12,6 @@ import {
   handlePortalPerform,
   handlePortalPreview,
   handlePortalSignOut,
-  PORTAL_ACTIONS,
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,
   PORTAL_NAMESPACES_PATH,
@@ -20,6 +19,7 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
+import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
