@@ -400,6 +400,43 @@ test("ci_green: each required step, skipped or missing, refuses on its own", () 
   }
 });
 
+// Carrel and Capsomer: the lists are read off each repo's ci.yml, and the counts are stated
+// so a list that matched nothing could not pass for one that was checked.
+test("ci_green: carrel and capsomer hold the steps their workflows run, and a rename refuses", () => {
+  assert.equal(AUTO_MERGE_REQUIRED_CI.carrel.length, 10, "carrel: 7 steps of check and 3 of gates");
+  assert.equal(AUTO_MERGE_REQUIRED_CI.capsomer.length, 7, "capsomer: 7 blocking steps of check");
+  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.carrel.map((r) => r.job))].sort(), ["check", "gates"]);
+  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.capsomer.map((r) => r.job))], ["check"]);
+  for (const namespace of ["carrel", "capsomer"]) {
+    const required = AUTO_MERGE_REQUIRED_CI[namespace];
+    const green = required.map((r) => ({ ...r, conclusion: "success" }));
+    const merged = evaluate(greenPr({ namespace, ciSteps: green }));
+    assert.equal(merged.merge, true, merged.merge ? "" : merged.why);
+    for (const step of required) {
+      // A renamed step, a skipped one and a missing one each leave the required name unproven.
+      const variants = [
+        required.map((r) => ({ ...r, step: r === step ? `${r.step} (renamed)` : r.step, conclusion: "success" })),
+        required.map((r) => ({ ...r, conclusion: r === step ? "skipped" : "success" })),
+        required.filter((r) => r !== step).map((r) => ({ ...r, conclusion: "success" })),
+      ];
+      for (const ciSteps of variants) {
+        const verdict = evaluate(greenPr({ namespace, ciSteps }));
+        assert.equal(verdict.merge === false && verdict.failed, "ci_green", `${namespace} ${requiredCiLabel(step)}`);
+        assert.ok(verdict.merge === false && verdict.why.includes(requiredCiLabel(step)), `${namespace} ${requiredCiLabel(step)}`);
+      }
+    }
+  }
+});
+
+test("ci_green: carrel's two jobs both name an install step, and one job's does not stand for the other", () => {
+  const ciSteps = AUTO_MERGE_REQUIRED_CI.carrel
+    .filter((r) => !(r.job === "gates" && r.step === "Run npm ci"))
+    .map((r) => ({ ...r, conclusion: "success" }));
+  const verdict = evaluate(greenPr({ namespace: "carrel", ciSteps }));
+  assert.equal(verdict.merge === false && verdict.failed, "ci_green");
+  assert.match(verdict.merge === false ? verdict.why : "", /gates / Run npm ci/);
+});
+
 test("ci_green: a same-named step in another job or workflow does not count", () => {
   const ciSteps = CAPSID_CI.map((r) =>
     r.step === "Tests" ? { ...r, job: "score", conclusion: "success" } : { ...r, conclusion: "success" }
