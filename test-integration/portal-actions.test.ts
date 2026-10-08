@@ -5,7 +5,7 @@ import { legacyAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { improveStatus } from "../src/improve-run";
-import { MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema";
+import { MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types";
 import {
@@ -88,7 +88,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...ROSTER.map(pausedKey), ...ROSTER.map(breakerResetKey)];
+const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...LOOP_ROSTER.map(pausedKey), ...LOOP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -252,7 +252,7 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(body.action).toBe(action);
       expect(body.warning).toBeNull();
       expect(body.feed.csrf).toBe(CSRF);
-      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...ROSTER]);
+      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...LOOP_ROSTER]);
       await CASES[action].after(params);
 
       // The rows written are the rows the preview said would be. A job transition
@@ -414,7 +414,7 @@ describe("the Portal's reads", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const body = (await response.json()) as PortalNamespaces;
-    expect(body.namespaces.map((n) => n.namespace)).toEqual([...ROSTER]);
+    expect(body.namespaces.map((n) => n.namespace)).toEqual([...LOOP_ROSTER]);
     expect(body.namespaces.find((n) => n.namespace === "foxing")?.paused).toBe("looking at a regression");
     const status = await improveStatus(workerEnv());
     for (const ns of status.namespaces) {
