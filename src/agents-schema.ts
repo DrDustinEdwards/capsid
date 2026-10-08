@@ -40,6 +40,26 @@ export interface AgentScopes {
   tools: ScopeList;
   grants: AgentGrant[];
   flags: Record<ScopeFlag, boolean>;
+  // How many jobs this agent may hold claimed at once (docs/work-queue.md, "More than
+  // one claim"). Absent means DEFAULT_MAX_CLAIMS. Not an axis checkScope reads: the
+  // claim and resume paths read it through claimLimit.
+  max_claims?: number;
+}
+
+// One claim at a time unless the admin raises it, so an agent nobody re-scoped works
+// exactly as it did before the limit existed. The ceiling bounds a typo, not a policy.
+export const DEFAULT_MAX_CLAIMS = 1;
+export const MAX_CLAIMS_CEILING = 4;
+
+/** Whether a value is a claim limit this system accepts: a whole number from 1 to the ceiling. */
+export function isClaimLimit(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_CLAIMS_CEILING;
+}
+
+/** The claim limit a set of scopes carries. A stored value that is not a valid limit
+ *  reads as the default, so a damaged row holds one claim rather than many. */
+export function claimLimit(scopes: AgentScopes): number {
+  return isClaimLimit(scopes.max_claims) ? scopes.max_claims : DEFAULT_MAX_CLAIMS;
 }
 
 export interface AgentRow {
@@ -114,6 +134,8 @@ export function parseScopes(json: string | null | undefined): AgentScopes {
     tools: parseList(record.tools),
     grants,
     flags,
+    // Kept only when it is a valid limit; anything else is left out and reads as the default.
+    ...(isClaimLimit(record.max_claims) ? { max_claims: record.max_claims } : {}),
   };
 }
 

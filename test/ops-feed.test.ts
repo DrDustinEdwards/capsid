@@ -117,6 +117,7 @@ test("an agent is shown with the record improve_status computes for it, and with
     namespaces: ["sample"],
     grants: ["read", "write"],
     flags: ["can_merge"],
+    max_claims: 1,
     last_seen: "2026-09-28 11:00:00",
     revoked_at: null,
     record,
