@@ -1,3 +1,5 @@
+import { base64url } from "jose";
+
 export function bytesToHex(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return [...view].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -10,7 +12,7 @@ function binaryFromBytes(bytes: Uint8Array): string {
 }
 
 export function b64urlFromBytes(bytes: Uint8Array): string {
-  return btoa(binaryFromBytes(bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return base64url.encode(bytes);
 }
 
 export function b64urlEncode(text: string): string {
@@ -18,8 +20,7 @@ export function b64urlEncode(text: string): string {
 }
 
 export function b64urlDecode(encoded: string): string {
-  const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-  return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  return new TextDecoder().decode(base64url.decode(encoded));
 }
 
 // Plain base64, not url-safe: GitHub's contents API encoding.
