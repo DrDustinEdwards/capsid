@@ -17,7 +17,9 @@ import {
   requiredCiLabel,
   type PrFacts,
 } from "../src/auto-merge-policy.ts";
-import { AWAITING_SEAT_KEY, FILES_LIMIT, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import { FILES_LIMIT } from "../src/github/pr-files.ts";
+import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import { LOOP_ROSTER, ROSTER, onLoopRoster, onRoster, scheduledFor } from "../src/improve-schema.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
@@ -399,6 +401,43 @@ test("ci_green: each required step, skipped or missing, refuses on its own", () 
   }
 });
 
+// Carrel and Capsomer: the lists are read off each repo's ci.yml, and the counts are stated
+// so a list that matched nothing could not pass for one that was checked.
+test("ci_green: carrel and capsomer hold the steps their workflows run, and a rename refuses", () => {
+  assert.equal(AUTO_MERGE_REQUIRED_CI.carrel.length, 10, "carrel: 7 steps of check and 3 of gates");
+  assert.equal(AUTO_MERGE_REQUIRED_CI.capsomer.length, 7, "capsomer: 7 blocking steps of check");
+  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.carrel.map((r) => r.job))].sort(), ["check", "gates"]);
+  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.capsomer.map((r) => r.job))], ["check"]);
+  for (const namespace of ["carrel", "capsomer"]) {
+    const required = AUTO_MERGE_REQUIRED_CI[namespace];
+    const green = required.map((r) => ({ ...r, conclusion: "success" }));
+    const merged = evaluate(greenPr({ namespace, ciSteps: green }));
+    assert.equal(merged.merge, true, merged.merge ? "" : merged.why);
+    for (const step of required) {
+      // A renamed step, a skipped one and a missing one each leave the required name unproven.
+      const variants = [
+        required.map((r) => ({ ...r, step: r === step ? `${r.step} (renamed)` : r.step, conclusion: "success" })),
+        required.map((r) => ({ ...r, conclusion: r === step ? "skipped" : "success" })),
+        required.filter((r) => r !== step).map((r) => ({ ...r, conclusion: "success" })),
+      ];
+      for (const ciSteps of variants) {
+        const verdict = evaluate(greenPr({ namespace, ciSteps }));
+        assert.equal(verdict.merge === false && verdict.failed, "ci_green", `${namespace} ${requiredCiLabel(step)}`);
+        assert.ok(verdict.merge === false && verdict.why.includes(requiredCiLabel(step)), `${namespace} ${requiredCiLabel(step)}`);
+      }
+    }
+  }
+});
+
+test("ci_green: carrel's two jobs both name an install step, and one job's does not stand for the other", () => {
+  const ciSteps = AUTO_MERGE_REQUIRED_CI.carrel
+    .filter((r) => !(r.job === "gates" && r.step === "Run npm ci"))
+    .map((r) => ({ ...r, conclusion: "success" }));
+  const verdict = evaluate(greenPr({ namespace: "carrel", ciSteps }));
+  assert.equal(verdict.merge === false && verdict.failed, "ci_green");
+  assert.match(verdict.merge === false ? verdict.why : "", /gates \/ Run npm ci/);
+});
+
 test("ci_green: a same-named step in another job or workflow does not count", () => {
   const ciSteps = CAPSID_CI.map((r) =>
     r.step === "Tests" ? { ...r, job: "score", conclusion: "success" } : { ...r, conclusion: "success" }
@@ -533,6 +572,22 @@ test("parseMergePolicy refuses a namespace that is not on the improve roster", (
   const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, julieedwards"));
   assert.ok("error" in parsed);
   assert.match(parsed.error, /julieedwards/);
+});
+
+test("parseMergePolicy accepts carrel and capsomer, which are on the roster for auto-merge only", () => {
+  const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, carrel, capsomer"));
+  assert.ok("policy" in parsed, "error" in parsed ? parsed.error : "");
+  assert.deepEqual(parsed.policy.namespaces, ["capsid", "carrel", "capsomer"]);
+});
+
+test("carrel and capsomer are on the roster but not in the improve loop's", () => {
+  for (const ns of ["carrel", "capsomer"]) {
+    assert.ok(onRoster(ns), `${ns} must be on the roster`);
+    assert.ok(!onLoopRoster(ns), `${ns} must not be on the loop roster`);
+    assert.ok(!(LOOP_ROSTER as readonly string[]).includes(ns), `${ns} must not be iterated by the loop`);
+    assert.ok(!scheduledFor(new Date()).includes(ns as never), `${ns} must never be scheduled to open a run`);
+  }
+  assert.ok(ROSTER.length > LOOP_ROSTER.length, "the roster counts what it names");
 });
 
 async function envWithPolicy(body: string | null) {

@@ -10,7 +10,7 @@ import {
   parseBackupCredentialRequest,
   verifyBackupCredentialRequest,
 } from "../src/improve-scorer.ts";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -25,8 +25,8 @@ test("the backup credential key derives from the root with its own context, uneq
   const backup = await deriveBackupCredentialKey(root);
   assert.match(backup, /^[0-9a-f]{64}$/);
   assert.equal(backup, await deriveBackupCredentialKey(root), "derivation must be deterministic");
-  assert.ok(ROSTER.length > 0, "the roster is empty, so no score key was compared");
-  for (const namespace of ROSTER) {
+  assert.ok(LOOP_ROSTER.length > 0, "the roster is empty, so no score key was compared");
+  for (const namespace of LOOP_ROSTER) {
     assert.notEqual(backup, await deriveScoreKey(root, namespace), `the backup key collides with the ${namespace} score key`);
   }
 });
@@ -85,7 +85,7 @@ test("verification refuses a bad signature and admits a good one", async () => {
   const ok = await verifyBackupCredentialRequest(env, { timestamp, signature: good, body }, now);
   assert.equal(ok.ok, true, `a correctly signed request was refused: ${ok.ok ? "" : ok.refusal}`);
 
-  // A ROSTER key must not open the backup endpoint: the derivation contexts differ.
+  // A LOOP_ROSTER key must not open the backup endpoint: the derivation contexts differ.
   const scoreKey = await deriveScoreKey("root-secret", "capsid");
   const cross = createHmac("sha256", scoreKey).update(`${timestamp}.${body}`).digest("hex");
   const refused = await verifyBackupCredentialRequest(env, { timestamp, signature: cross, body }, now);

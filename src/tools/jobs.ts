@@ -3,6 +3,8 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from "../limits";
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "../overnight-plan";
+import { readModelLearning } from "../model-learning";
+import { JOB_KINDS } from "../model-routing";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { blockJob, claimJob, completeAsCaller, failAsCaller, heartbeatJob, listJobs, postJob, releaseJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
@@ -34,7 +36,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("jobs"),
       description:
-        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. It returns offered_skills: up to three skills matched to the job's title and prompt, each with its instructions inline. The Worker records that offer at the job's first claim, and a later claim of the same job returns the same skills. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence or in a pull request result_ref against GitHub; the seat may complete a BLOCKED job another credential holds, which stays that holder's outcome; the response carries the row and a note for each check that could not run. action "fail" needs a reason. action "block" needs a reason and the command the human must run. complete, fail and block take an optional claim (what the agent says it did), recorded as sent in job_claims before anything is verified. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. Without take, when that driver holds another claim or the job was blocked by a shared identity (access:, github: or opkey:), the job goes back to queued instead. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. action "start" starts a Claude Code session on GitHub's runners for one queued job in capsid or dustinedwards, by a repository_dispatch to that namespace's repo; it is for the admin or a can_merge caller, and is refused while the seat_start switch is off, for a repo that is not public, while a session for that repo is in flight, or at the cap. action "release" returns a claimed job held by another credential to the queue; it needs reason, is for the admin or a can_merge caller, and writes no job_outcomes row. heartbeat, complete and block act only on the claimed job this caller holds. fail does too, except for the admin or a can_merge caller, which may fail a job somebody else holds; that writes the holder's job_outcomes row. An expired lease returns the job to queued on the five-minute tick.`,
+        `The work queue. Every job mirrors to <namespace>/jobs/<id>.md, rewritten on each transition. list needs the read grant; every other action needs the write grant. action "post" queues a job from namespace, title and body. The body is signed, and a driver refuses a body that does not verify. post is refused while a job with the same (namespace, title) is queued, claimed or blocked, and the refusal names that job. action "list" filters by namespace, status and id and returns each job's fields without the body; the body comes back from claim, or from list for one named id when the caller holds write. action "claim" takes the highest-priority queued job in a namespace, or a named id, with a ${JOB_LEASE_SECONDS / 3600}-hour lease. It returns offered_skills: up to three skills matched to the job's title and prompt, each with its instructions inline. The Worker records that offer at the job's first claim, and a later claim of the same job returns the same skills. Refused when the caller already holds a claim, or lacks the job's required_flags or min_record. action "heartbeat" extends the lease. action "complete" needs result_summary and writes one job_outcomes row, verifying each pull request named in evidence or in a pull request result_ref against GitHub; the seat may complete a BLOCKED job another credential holds, which stays that holder's outcome; the response carries the row and a note for each check that could not run. block and complete that name a pull request of the namespace's repo (result_ref, evidence.prs, or a URL in the command) also read the files of every other open pull request there and, where any share a file, add one Overlaps line to the summary and return overlaps; a read that failed says not checked and never blocks the call. action "fail" needs a reason. action "block" needs a reason and the command the human must run, or question: true with the question as the reason (the Worker fixes the command as 'Answer in a resume note', and the seat answers with a resume note). complete, fail and block take an optional claim (what the agent says it did), recorded as sent in job_claims before anything is verified. action "resume" returns a blocked job to claimed with a fresh lease for the driver that blocked it, or for the caller with take. Without take, when that driver holds another claim or the job was blocked by a shared identity (access:, github: or opkey:), the job goes back to queued instead. It needs reason and re-verifies the body's signature. resume, claim, heartbeat and list for one id return resume_note (reason, note, by, at). A plain resume by the job's own claimant is refused unless that caller is the admin or holds can_merge; the claimant may still resume with approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} across every job posted for the same work, and past the cap resume is refused for everyone but the admin. action "supersede" ends a job replaced before any work was done (status superseded, no job_outcomes row); it needs reason. Allowed on a queued job for any caller that may write its namespace, and on a claimed job with no work recorded (no gate hit, resume, correction or result_ref) for the holder, the admin or a can_merge caller. action "start" starts a Claude Code session on GitHub's runners for one queued job in capsid or dustinedwards, by a repository_dispatch to that namespace's repo; it is for the admin or a can_merge caller, and is refused while the seat_start switch is off, for a repo that is not public, while a session for that repo is in flight, or at the cap. action "release" returns a claimed job held by another credential to the queue; it needs reason, is for the admin or a can_merge caller, and writes no job_outcomes row. heartbeat, complete and block act only on the claimed job this caller holds. fail does too, except for the admin or a can_merge caller, which may fail a job somebody else holds; that writes the holder's job_outcomes row. An expired lease returns the job to queued on the five-minute tick.`,
       inputSchema: {
         action: z.enum(JOB_ACTIONS).describe("post | list | claim | heartbeat | complete | fail | block | resume | supersede | release | start."),
         namespace: nsName.optional().describe('For post, the namespace the work belongs to. For list and claim, the namespace to filter or pick from.'),
@@ -60,12 +62,18 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .describe(
             "For post: the minimum merged pull requests on the claiming agent's record. The claim refuses an agent below it and leaves the job queued."
           ),
-        status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
-        view: z
-          .enum(["plan", "digest"])
+        kind: z
+          .enum(JOB_KINDS)
           .optional()
           .describe(
-            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. Both are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
+            `For post: the job's kind (${JOB_KINDS.join(", ")}). Optional: when absent Capsid reads it from the poster and the title. The kind and the job's risk decide the model Capsid recommends; nobody names a model.`
+          ),
+        status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
+        view: z
+          .enum(["plan", "digest", "models"])
+          .optional()
+          .describe(
+            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. "models" returns what the model routing has learned: per job kind and model, the share merged with green CI, corrections and cost, with the rule changes the evidence supports (never applied). All three are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
           ),
         since: bounded(40).optional().describe('For list with view "digest": the ISO time to report from. Defaults to the last 24 hours.'),
         id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for heartbeat, complete, fail, block, resume, supersede, release and start. For list, narrows to that job, with its body for a caller holding write.'),
@@ -81,6 +89,12 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .optional()
           .describe("For supersede: the id of the replacing job, which must exist, be in the same namespace and not be this job. Omit it for a withdrawal."),
         command: bounded(MAX_TITLE).optional().describe('For block: the exact command the human must run.'),
+        question: z
+          .boolean()
+          .optional()
+          .describe(
+            "For block: true when the session needs an answer, not a command run. reason is the question; the Worker fixes the command as 'Answer in a resume note' (a command sent with it is refused). The job is marked a question in improve_status and the Portal's feed, and the seat answers with resume and a note, which every later claim, heartbeat and list for the job returns."
+          ),
         approved_by_policy: bounded(32)
           .optional()
           .describe(
@@ -146,6 +160,13 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace, jobId: args.id });
           if (listRefusal) return fail(listRefusal);
           if (args.view === "plan") return ok(await readOvernightPlan(env, { namespace: args.namespace }, now));
+          // Outcomes across every namespace, as a rate per kind and model: a caller scoped to
+          // one namespace has no business reading the whole account's record.
+          if (args.view === "models") {
+            const wide = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: "*", jobId: args.id });
+            if (wide) return fail(`the models view reads every namespace's outcomes, which this caller may not: ${wide}`);
+            return ok({ ok: true, action: "list", models: await readModelLearning(env.DB, now) });
+          }
           if (args.view === "digest") {
             const since = digestSinceFrom(args.since, now);
             if (!since.ok) return fail(since.refusal);
@@ -181,6 +202,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
                 required_scopes: args.required_flags ? { flags: args.required_flags } : undefined,
                 min_record: args.min_record,
                 review_required: args.review_required,
+                kind: args.kind,
               })
             );
           }
@@ -233,6 +255,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
               await blockJob(env, agent, now, args.id, {
                 reason: args.reason ?? "",
                 command: args.command,
+                question: args.question,
                 claim: args.claim,
                 raw: { claim: args.claim, reason: args.reason, command: args.command },
               })

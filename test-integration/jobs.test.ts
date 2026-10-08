@@ -578,6 +578,116 @@ describe("the resume note", () => {
     expect(after?.body).toContain("approved the migration");
   });
 
+  // A question block (Track A D4): the session asks, the Worker fixes the command, every
+  // reader can tell it from a gate, and the answer is a resume note the driver keeps.
+  async function claimedJob(title: string) {
+    const posted = await post({ title });
+    const id = posted.job!.id;
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+    return id;
+  }
+  const blockedRow = async (id: string) => (await jobsSummary(env.DB, "capsid", NOW)).blocked_jobs.find((j) => j.id === id);
+
+  it("a question block asks with the Worker's fixed command, and improve_status marks it a question while a gate is not", async () => {
+    const asking = await claimedJob("a question is asked");
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, asking, { reason: "Keep the old route or the new one for /health?", question: true });
+    expect(blocked.ok, blocked.refusal).toBe(true);
+    expect(blocked.job?.status).toBe("blocked");
+    expect(blocked.job?.result_summary).toMatch(/^QUESTION: Keep the old route or the new one for \/health\?/);
+    expect(blocked.job?.result_summary).toContain("Answer in a resume note");
+    expect((await blockedRow(asking))?.question).toBe(true);
+
+    const gate = await claimedJob("a gate is hit");
+    await blockJob(jobsEnv(), DRIVER, NOW, gate, { reason: "needs a push", command: "git push origin feat/x" });
+    expect((await blockedRow(gate))?.question).toBe(false);
+  });
+
+  it("PLANT: a question block that carries its own command is refused, and the job stays claimed", async () => {
+    const id = await claimedJob("a question with a command");
+    const refused = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "which one?", question: true, command: "rm -rf /" });
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/takes no command/);
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).jobs?.[0]?.status).toBe("claimed");
+    const empty = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "  ", question: true });
+    expect(empty.ok).toBe(false);
+    expect(empty.refusal).toMatch(/needs the question/);
+  });
+
+  it("the seat answers with a resume note, and the driver reads it on heartbeat and on every later claim", async () => {
+    const id = await claimedJob("a question is answered");
+    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "Which route do I keep?", question: true });
+    const answered = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "keep the old route", { note: "Keep /health as it is; add /ready beside it." });
+    expect(answered.ok, answered.refusal).toBe(true);
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(beat.resume_notes?.map((n) => n.reason)).toEqual(["keep the old route"]);
+    expect(beat.resume_notes?.[0]?.note).toContain("add /ready beside it");
+    // A second question and answer: the first answer is still there.
+    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "And the metrics path?", question: true });
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "leave metrics out");
+    const later = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(later.resume_notes?.map((n) => n.reason)).toEqual(["leave metrics out", "keep the old route"]);
+  });
+
+  // Every resume note, not only the latest (docs/work-queue.md; Track A 2a): an approval
+  // given at one resume is still there after the next.
+  async function resumedThrice(title: string) {
+    const id = await blockedJob(title);
+    for (const reason of ["first ruling: use option B", "second ruling: keep the old route", "third ruling: merge in PR order"]) {
+      const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, reason);
+      expect(resumed.ok, resumed.refusal).toBe(true);
+      await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "another question", command: "git push origin feat/x" });
+    }
+    return id;
+  }
+  const REASONS = ["third ruling: merge in PR order", "second ruling: keep the old route", "first ruling: use option B"];
+
+  it("claim, heartbeat and list return every resume note, newest first, with resume_note still the newest", async () => {
+    const id = await resumedThrice("every note reaches the next claim");
+    // The last block left it blocked, so resume once more to put a driver back on it.
+    await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "fourth ruling: ship it");
+    const all = ["fourth ruling: ship it", ...REASONS];
+
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    expect(beat.resume_notes?.map((n) => n.reason)).toEqual(all);
+    expect(beat.resume_note?.reason).toBe(all[0]);
+    expect(beat.resume_notes_dropped).toBeUndefined();
+
+    const listed = await listJobs(jobsEnv(), { namespace: "capsid", id });
+    expect(listed.resume_notes?.map((n) => n.reason)).toEqual(all);
+
+    const later = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 1000);
+    await expireJobLeases(jobsEnv(), later);
+    const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    expect(claimed.resume_notes?.map((n) => n.reason)).toEqual(all);
+    expect(claimed.resume_notes?.every((n) => n.signature === "verified")).toBe(true);
+  });
+
+  it("the mirrored document lists the earlier resumes under the last one", async () => {
+    const id = await resumedThrice("every note in the mirror");
+    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(id)).first<{ body: string }>();
+    const body = doc?.body ?? "";
+    expect(body).toContain("## Earlier resumes");
+    for (const reason of REASONS) expect(body, reason).toContain(reason);
+    expect(body.indexOf("second ruling")).toBeLessThan(body.indexOf("first ruling"));
+  });
+
+  it("the notes are capped at 64 KB, the oldest dropped and counted, the newest always kept", async () => {
+    const id = await blockedJob("notes past the cap");
+    const big = (n: number) => `ruling ${n}: ` + "x".repeat(15_000);
+    for (let n = 1; n <= 6; n++) {
+      await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, `note ${n}`, { note: big(n) });
+      if (n < 6) await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "again", command: "git push origin feat/x" });
+    }
+    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id);
+    const sent = beat.resume_notes ?? [];
+    expect(sent.length).toBeLessThan(6);
+    expect(sent[0]?.reason).toBe("note 6");
+    expect(JSON.stringify(sent).length).toBeLessThanOrEqual(64 * 1024);
+    expect(beat.resume_notes_dropped).toBe(6 - sent.length);
+    expect(sent.map((n) => n.reason)).toEqual(["note 6", "note 5", "note 4", "note 3", "note 2"].slice(0, sent.length));
+  });
+
   // The full note. reason is bounded at MAX_TITLE; note carries an approval with
   // rulings or a plan in full.
   const LONG_NOTE = [

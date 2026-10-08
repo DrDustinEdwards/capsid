@@ -211,4 +211,3 @@ export async function handlePortalApiNotFound(request: Request, env: Env, now: D
   const path = new URL(request.url).pathname;
   return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, {}, 404);
 }
-

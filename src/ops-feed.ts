@@ -5,9 +5,9 @@ import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGa
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
-import { ROSTER } from "./improve-schema";
+import { LOOP_ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
-import { commandFromSummary, RESUME_MARKER } from "./jobs-holder";
+import { commandFromSummary, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
@@ -47,7 +47,7 @@ import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, ty
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
-//   KV, 8 gets plus one per ROSTER namespace (5 today, so 13): ops:snapshot, the
+//   KV, 8 gets plus one per LOOP_ROSTER namespace (5 today, so 13): ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, the overnight switch's mode (its decision record is
 //     read only while the mode is subscription), and each namespace's pause key.
@@ -58,7 +58,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 8 + ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 8 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -160,6 +160,7 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     // A command whose signature does not match is withheld, so it cannot be copied.
     command: blocked && commandSignature !== "mismatch" ? commandFromSummary(summary) : null,
     command_signature: blocked ? commandSignature : null,
+    question: blocked && commandSignature !== "mismatch" && isQuestionSummary(summary),
     result_ref: row.result_ref,
     finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
   };
@@ -415,7 +416,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     liveLoop(env, now),
     // Read as the loop reads it (pausedReason), so an unreadable key shows as a pause
     // with its reason, the way the loop treats it.
-    Promise.all(ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
+    Promise.all(LOOP_ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
     readSiteConfig(env.DB),
     liveSessions(env.DB, now),
     readPackageConfig(env.DB),

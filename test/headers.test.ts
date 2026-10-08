@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { checkSecurityHeaders, failures } from "@dustinedwards/security-headers/check";
+import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/security-headers/headers";
 import {
+  CAPSID_STANDARD_HEADERS,
   classifySurface,
   COOP_REPORT_ONLY,
   CSP_REPORT_ONLY_NON_HTML,
@@ -32,16 +35,41 @@ test("case does not change the class", () => {
   assert.equal(classifySurface("Application/JSON"), "json");
 });
 
-test("HTML carries the six enforced headers", () => {
+test("HTML carries every header of the package's standard set, and COOP only as Report-Only", () => {
   const h = securityHeadersFor("html");
+  for (const [name, value] of Object.entries(CAPSID_STANDARD_HEADERS)) assert.equal(h[name], value, `html lost ${name}`);
   assert.equal(h["Strict-Transport-Security"], HSTS);
-  assert.equal(h["X-Content-Type-Options"], "nosniff");
-  assert.equal(h["Referrer-Policy"], "no-referrer");
-  assert.equal(h["X-Frame-Options"], "DENY");
   assert.equal(h["Permissions-Policy"], PERMISSIONS_POLICY);
-  // The seventh is on trial, not enforced.
+  // The one header Capsid does not take from the package, kept on trial, not enforced.
   assert.equal(h["Cross-Origin-Opener-Policy-Report-Only"], COOP_REPORT_ONLY);
   assert.equal(h["Cross-Origin-Opener-Policy"], undefined);
+});
+
+test("the set differs from the package's standard by exactly one header, derived both ways", () => {
+  const missing = Object.keys(STANDARD_SECURITY_HEADERS).filter((k) => !(k in CAPSID_STANDARD_HEADERS));
+  const extra = Object.keys(CAPSID_STANDARD_HEADERS).filter((k) => !(k in STANDARD_SECURITY_HEADERS));
+  assert.deepEqual(missing, ["Cross-Origin-Opener-Policy"]);
+  assert.deepEqual(extra, []);
+  assert.ok(Object.keys(STANDARD_SECURITY_HEADERS).length > 5, "the package's set was read, not an empty one");
+});
+
+test("every class passes the package's own check against the set Capsid declared, with a count of what it read", () => {
+  for (const cls of ["html", "json", "other"] as const) {
+    const results = checkSecurityHeaders(new Headers(withSecurityHeaders(new Response("x", { headers: { "Content-Type": cls === "html" ? "text/html" : cls === "json" ? "application/json" : "text/plain" } })).headers), {
+      standard: CAPSID_STANDARD_HEADERS,
+      csp: false,
+    });
+    assert.equal(results.length, Object.keys(CAPSID_STANDARD_HEADERS).length, `${cls}: the check read a different number of headers than the set holds`);
+    assert.deepEqual(failures(results), [], `${cls} fails the package check`);
+  }
+});
+
+test("PLANT: a response that lacks a header of the set fails the check, as a header dropped from /health would", () => {
+  const health = withSecurityHeaders(Response.json({ status: "ok" }));
+  const headers = new Headers(health.headers);
+  headers.delete("X-Frame-Options");
+  const failed = failures(checkSecurityHeaders(headers, { standard: CAPSID_STANDARD_HEADERS, csp: false }));
+  assert.deepEqual(failed.map((r) => r.name), ["X-Frame-Options is present"]);
 });
 
 test("JSON carries nosniff and HSTS, and no enforced CSP", () => {
@@ -162,5 +190,6 @@ test("HSTS does not claim preload", () => {
   // preload is a submission to a browser-vendor list and is effectively
   // irreversible.
   assert.doesNotMatch(HSTS, /preload/);
-  assert.match(HSTS, /max-age=31536000/);
+  // OWASP's value, two years, taken from the package; never shorter than the one year Capsid sent before.
+  assert.ok(Number(/max-age=(\d+)/.exec(HSTS)?.[1]) >= 31536000, `HSTS lasts less than a year: ${HSTS}`);
 });

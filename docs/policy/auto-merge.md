@@ -165,9 +165,8 @@ because a green run nobody has written a step list for proves nothing.
 
 ## Required CI, capsid
 
-This policy does not cover capsid, so nothing here is checked today. The list stays
-because the code holds it and the two must agree, and because it is what a capsid
-pull request would need if the namespace is ever covered again.
+The signed document covers capsid again from 2026-10-07, so every step below must have run
+to success.
 
 - step `.github/workflows/ci.yml / checks / Typecheck src, tests, integration tests and the copied scorer script`
 - step `.github/workflows/ci.yml / checks / Lint dead exports and doc drift`
@@ -188,6 +187,42 @@ there, because this repo does not hold that workflow.
 - step `.github/workflows/ci.yml / Gates, clean checkout / Slop`
 - step `.github/workflows/ci.yml / Gates, clean checkout / Gates`
 
+## Required CI, carrel
+
+Every step of both jobs of Carrel's `ci.yml`, read off `main` on 2026-10-07. Carrel's
+command steps carry no `name:`, so GitHub reports them as `Run <command>`, and the names
+below are those. A change to a command's text in Carrel's workflow refuses every Carrel
+pull request until this list is updated. No test in this repo can catch a rename there,
+because this repo does not hold that workflow.
+
+- step `.github/workflows/ci.yml / check / Run npm ci`
+- step `.github/workflows/ci.yml / check / Run npm run typecheck`
+- step `.github/workflows/ci.yml / check / Run npm test`
+- step `.github/workflows/ci.yml / check / Run npm run check:postinstall`
+- step `.github/workflows/ci.yml / check / Run npm run check:mcp-roles`
+- step `.github/workflows/ci.yml / check / Install Chromium for the accessibility scan`
+- step `.github/workflows/ci.yml / check / Run npm run check:a11y`
+- step `.github/workflows/ci.yml / gates / Run npm ci`
+- step `.github/workflows/ci.yml / gates / Run npm run check:conformance`
+- step `.github/workflows/ci.yml / gates / Run npm run check:plants`
+
+## Required CI, capsomer
+
+Every blocking step of the `check` job in Capsomer's `ci.yml`, read off `main` on
+2026-10-07. The steps that file marks warn-only are not listed: the forced-colours
+screenshots, the size report, the token check, the site summary and the artifact upload
+run with `continue-on-error` or `always()`, so their success proves nothing about the
+change. The `results` job runs on a push to `main` only and is skipped on a pull request.
+The separate `No bloat` workflow is warn-only by Capsomer's own ruling and is not required.
+
+- step `.github/workflows/ci.yml / check / Install`
+- step `.github/workflows/ci.yml / check / Palette, scales, unit tests, types`
+- step `.github/workflows/ci.yml / check / Every family's contrast pairs, both themes (blocking, rule 18)`
+- step `.github/workflows/ci.yml / check / Build the behaviour modules and wrappers`
+- step `.github/workflows/ci.yml / check / Build the site and every states page`
+- step `.github/workflows/ci.yml / check / Install Chromium`
+- step `.github/workflows/ci.yml / check / Keyboard and accessibility tests, both themes`
+
 ## What a merge means
 
 A merge under this policy is also a deploy wherever the repo deploys on merge to its
@@ -204,6 +239,18 @@ same ruling and refused, because it would make every merge a release. So an auto
 there lands on `main` and ships nothing, and releasing stays `npm run ship` or the
 dispatch button. Measured from that workflow on 2026-09-19. If it ever gains an
 `on: push` deploy, this paragraph is wrong and the namespace needs deciding again.
+
+**Carrel and Capsomer.** Their step lists are written above and held in the code, but this
+policy does not cover them until the `namespaces` line names them, and the parser refuses
+a namespace that is not on `ROSTER` in `src/improve-schema.ts`, which today lists neither.
+Putting them on the roster is a separate ruling: the roster also sets the improve loop's
+attempt caps and scorer rotation. When covered, a Carrel merge deploys once
+`job_391a68d912c3` lands its deploy-on-merge workflow (today it ships nothing), and a
+Capsomer merge to `main` deploys the Capsomer site, because Cloudflare's Git integration
+builds on push (its `DEPLOY.md`). Both are unattended production deploys.
+
+Because the code now holds both lists, the signed document must carry both sections too,
+or `loadMergePolicy` refuses it and nothing auto-merges anywhere until it is re-signed.
 
 Anything else waits for the seat. A pull request that fails any check is left open,
 audited with the check that refused it, and reported under `improve_status` as

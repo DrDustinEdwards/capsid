@@ -68,10 +68,12 @@ export function Anchors() {
     const ro = new ResizeObserver(measure);
     ro.observe(page);
     ro.observe(scroller);
+    // The document's own height follows its content, so a taller window is told by resize.
+    window.addEventListener("resize", measure);
     // A section that appears or goes (a panel with data, a feed update) re-counts too.
     const mo = new MutationObserver(measure);
     mo.observe(page, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-section", "id", "hidden"] });
-    return () => (ro.disconnect(), mo.disconnect());
+    return () => (ro.disconnect(), mo.disconnect(), window.removeEventListener("resize", measure));
   }, []);
 
   useEffect(() => {

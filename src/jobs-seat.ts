@@ -470,8 +470,17 @@ export async function resumeDestination(
         ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
         : (await isRunnerActor(db, holder))
           ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
-          : null;
+          : (await isRevokedActor(db, holder))
+            ? `${holder} is revoked and can no longer claim, so ${id} went back to the queue for the next session.`
+            : null;
   return { held, toQueue };
+}
+
+/** A minted agent whose key was revoked: it can never act on a job handed back to it. */
+async function isRevokedActor(db: D1Database, actor: string): Promise<boolean> {
+  if (!actor.startsWith("agent:")) return false;
+  const row = await db.prepare("SELECT revoked_at FROM agents WHERE name = ?1").bind(actor.slice("agent:".length)).first<{ revoked_at: string | null }>();
+  return row?.revoked_at != null;
 }
 
 /** The head commit of the job's own pull request, and the mapped repo it is on.
@@ -769,4 +778,79 @@ export async function resumeJob(
     return refuse("resume", `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`);
   }
   return { ok: true, action: "resume", job, resume_note: resumeNote, ...(toQueue ? { note: toQueue } : {}) };
+}
+
+/** The actor that returns a blocked job whose pull requests have all merged
+ *  (src/merge-resume.ts). A system actor, not a caller: it holds no grant, passes no
+ *  checkScope, and can do exactly what autoResumeJob does. (capsid/decisions.md,
+ *  2026-10-03, stale jobs D1.) */
+export const MERGE_RESUME_ACTOR = "system:merge-resume";
+
+/** Resume a BLOCKED job to its holder, or to the queue when the holder cannot act, on
+ *  the strength of one fact the caller has read: every pull request the job names has
+ *  merged. Never completes, never takes the lease, never approves a gate command; the
+ *  holder's own claim still finishes the job. Returns false when the job moved between
+ *  the caller's read and this write, in which case nothing was written. */
+export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: string): Promise<{ resumed: boolean; to: "holder" | "queue" }> {
+  const holder = job.claimed_by;
+  if (job.status !== "blocked" || !holder) return { resumed: false, to: "holder" };
+  const { held, toQueue } = await resumeDestination(env.DB, holder, job.id, false);
+  const queued = toQueue !== null || held !== null;
+  const expires = queued ? null : leaseUntil(now);
+  const reason = "every pull request this job names has merged";
+  const next: JobRow = {
+    ...job,
+    status: queued ? "queued" : "claimed",
+    claimed_by: queued ? null : holder,
+    lease_expires: expires,
+    resumed_count: job.resumed_count + 1,
+    updated_at: now.toISOString(),
+  };
+  const noteSig = await signJobText(env.IMPROVE_SCORE_SECRET, "resume-note", job.id, resumeNoteFields(reason, note, MERGE_RESUME_ACTOR));
+  const resumeNote: ResumeNote = {
+    reason,
+    note,
+    by: MERGE_RESUME_ACTOR,
+    at: now.toISOString(),
+    signature: noteSig ? "verified" : "unconfigured",
+  };
+  const kind = actorKind(MERGE_RESUME_ACTOR);
+  const won = await guardedTransition(env, job, [
+    env.DB.prepare(
+      `UPDATE jobs SET status = ?6, claimed_by = ?2, lease_expires = ?4,
+         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
+       WHERE id = ?1 AND status = 'blocked' RETURNING id`
+    ).bind(job.id, next.claimed_by, now.toISOString(), expires, 0, next.status),
+    ...(await mirrorStatements(env, next, "job-resumed", MERGE_RESUME_ACTOR, resumeNote)),
+    jobAudit(env.DB, MERGE_RESUME_ACTOR, "job-resumed", next, {
+      approved: reason,
+      note,
+      ...(noteSig ? { sig: noteSig } : {}),
+      held_by: next.claimed_by,
+      ...(queued ? { returned_to: "queued", previous_holder: holder } : {}),
+      lease_expires: expires,
+      resumed_count: next.resumed_count,
+    }),
+    touchStatement(env.DB, {
+      job_id: job.id,
+      namespace: job.namespace,
+      kind: "resume",
+      actor: MERGE_RESUME_ACTOR,
+      actor_kind: kind,
+      detail: { reason, ...(queued ? { returned_to: "queued" } : {}) },
+      sinceGate: true,
+      at: now.toISOString(),
+    }),
+    touchStatement(env.DB, {
+      job_id: job.id,
+      namespace: job.namespace,
+      kind: "note",
+      actor: MERGE_RESUME_ACTOR,
+      actor_kind: kind,
+      detail: { note },
+      sinceGate: false,
+      at: now.toISOString(),
+    }),
+  ]);
+  return { resumed: won, to: queued ? "queue" : "holder" };
 }

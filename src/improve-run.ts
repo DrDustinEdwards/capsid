@@ -10,7 +10,7 @@ import {
   DRIVER_LEASE_TTL_SECONDS,
   IMPROVE_MODES,
   MODE_KEY,
-  ROSTER,
+  LOOP_ROSTER,
   RUN_CONDITIONS,
   driverKey,
   isRunCondition,
@@ -284,7 +284,7 @@ export async function improveStatus(
   const { mode, reason } = await readMode(env.APP_KV);
   const budget = await checkBudget(env, new Date());
   const allowed = scope?.namespaces ?? "*";
-  const requested = only ? [only] : [...ROSTER];
+  const requested = only ? [only] : [...LOOP_ROSTER];
   const namespaces = allowed === "*" ? requested : requested.filter((n) => allowed.includes(n));
   const out: NamespaceStatus[] = [];
 
@@ -399,7 +399,7 @@ export async function improveRunManual(
   }
   const condition: RunCondition = opts.condition ?? DEFAULT_CONDITION;
   if (opts.dryRun) {
-    const namespaces = opts.namespace ? [opts.namespace] : [...ROSTER];
+    const namespaces = opts.namespace ? [opts.namespace] : [...LOOP_ROSTER];
     const opened: OpenOutcome[] = [];
     for (const ns of namespaces) {
       opened.push(await openOne(env, ns, mode, now, condition, { preview: true }));
@@ -508,8 +508,8 @@ ${next.join(",")}`,
   if (action === "claim") {
     const target = (opts.namespace ?? "").trim();
     if (!target) throw new Error('claim needs a namespace. Nothing was changed.');
-    if (!(ROSTER as readonly string[]).includes(target)) {
-      throw new Error(`'${target}' is not on the improve roster (${ROSTER.join(", ")}). Nothing was changed.`);
+    if (!(LOOP_ROSTER as readonly string[]).includes(target)) {
+      throw new Error(`'${target}' is not on the improve roster (${LOOP_ROSTER.join(", ")}). Nothing was changed.`);
     }
     const key = driverKey(target);
     if (opts.release === true) {
@@ -570,10 +570,10 @@ ${next.join(",")}`,
   if (action === "pause" || action === "unpause") {
     const target = (opts.namespace ?? "").trim();
     if (!target) throw new Error(`${action} needs a namespace, or "all". Nothing was changed.`);
-    if (target !== "all" && !(ROSTER as readonly string[]).includes(target)) {
-      throw new Error(`'${target}' is not on the improve roster (${ROSTER.join(", ")}) and is not "all". Nothing was changed.`);
+    if (target !== "all" && !(LOOP_ROSTER as readonly string[]).includes(target)) {
+      throw new Error(`'${target}' is not on the improve roster (${LOOP_ROSTER.join(", ")}) and is not "all". Nothing was changed.`);
     }
-    const namespaces = target === "all" ? [...ROSTER] : [target];
+    const namespaces = target === "all" ? [...LOOP_ROSTER] : [target];
     const reason = opts.reason?.trim() || "paused via improve_run";
     const audits = [];
     for (const ns of namespaces) {

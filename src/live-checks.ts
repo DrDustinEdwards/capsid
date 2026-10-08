@@ -1,3 +1,4 @@
+import { checkSecurityHeaders, failures } from "@dustinedwards/security-headers/check";
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
@@ -40,6 +41,7 @@ const PATH_PATTERN = /^\/[A-Za-z0-9._~/%-]{0,199}$/;
 export type LiveRule =
   | { namespace: string; kind: "beacon"; path: string }
   | { namespace: string; kind: "nobeacon"; path: string }
+  | { namespace: string; kind: "headers"; path: string }
   | { namespace: string; kind: "sha" };
 
 export type LiveConfig = { rules: LiveRule[] } | { error: string };
@@ -51,6 +53,7 @@ export type LiveConfig = { rules: LiveRule[] } | { error: string };
  *
  *   - site <namespace> beacon <path>     one beacon on this page, and a CSP that allows it
  *   - site <namespace> nobeacon <path>   no beacon on this page
+ *   - site <namespace> headers <path>    the OWASP security headers on this page
  *   - site <namespace> sha               the deployed sha is the default branch's head
  */
 export function parseLiveConfig(body: string): LiveConfig {
@@ -70,7 +73,7 @@ export function parseLiveConfig(body: string): LiveConfig {
       rules.push({ namespace, kind: "sha" });
       continue;
     }
-    if (kind !== "beacon" && kind !== "nobeacon") return { error: `${where}: the rule is beacon, nobeacon or sha` };
+    if (kind !== "beacon" && kind !== "nobeacon" && kind !== "headers") return { error: `${where}: the rule is beacon, nobeacon, headers or sha` };
     if (path === undefined || rest.length > 0 || !PATH_PATTERN.test(path)) {
       return { error: `${where}: ${kind} needs one path that starts with / and holds only letters, digits and . _ ~ / % - (no query, no host)` };
     }
@@ -208,6 +211,22 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
   const where = slug(rule.path);
   const count = beaconCount(page.html);
   const out: LiveFinding[] = [];
+  if (rule.kind === "headers") {
+    // The package's own check, so the oracle (OWASP's defaults and its test vectors) lives
+    // in one place and the watcher holds no second copy.
+    const results = checkSecurityHeaders(page.headers);
+    if (results.length === 0) throw new Error("checkSecurityHeaders returned no results, so a pass would mean nothing was checked");
+    const failed = failures(results);
+    if (failed.length > 0) {
+      out.push({
+        namespace: site.namespace,
+        fingerprint: `live-headers-${site.namespace}-${where}`,
+        headline: `${site.name} is missing security headers on a page that must carry them`,
+        evidence: [`page: ${url}`, `${failed.length} of ${results.length} header checks failed`, ...failed.slice(0, 12).map((r) => `${r.name}: ${r.detail}`)],
+      });
+    }
+    return out;
+  }
   if (rule.kind === "nobeacon") {
     if (count > 0) {
       out.push({

@@ -111,7 +111,7 @@ async function withoutSites(page: Page) {
 
 async function siteItems(page: Page) {
   return {
-    rail: await page.locator("nav.rail a").filter({ hasText: /^Sites/ }).count(),
+    rail: await page.locator("nav.cap-admin-menu a").filter({ hasText: /^Sites/ }).count(),
     tile: await page.locator(".tiles .tile").filter({ hasText: "Sites up" }).count(),
     // The Overview's one row per site (audit ruling 1).
     fleet: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
@@ -135,9 +135,11 @@ test("with no site configured, there is no Sites view and the Overview shows no 
   await withoutSites(page);
   await visit(page, "overview");
   expect(await siteItems(page)).toEqual({ rail: 0, tile: 0, fleet: 0, timeline: 0, attention: 0 });
-  await expect(page.locator("nav.rail a")).toHaveCount(RAIL_COUNT - 1);
-  // Settings stays reachable: the top bar's button, where the first site is added.
-  await expect(page.locator("header.top").getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT - 1);
+  // Settings stays reachable: under the avatar, where the first site is added.
+  await page.getByRole("button", { name: "Your account" }).click();
+  await expect(page.locator(".cap-admin-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
+  await page.keyboard.press("Escape");
   // Everything else is still there.
   await expect(page.getByRole("heading", { level: 2, name: "Needs attention" })).toBeVisible();
   await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
@@ -176,9 +178,9 @@ test.describe("on a phone, with no site configured", () => {
   test("there is no Sites tab, and Settings is under More", async ({ page }) => {
     await withoutSites(page);
     await visit(page, "overview");
-    const tabs = page.locator("nav.tabbar > a, nav.tabbar > button");
+    const tabs = page.locator("nav.cap-admin-tabs > a, nav.cap-admin-tabs > button");
     await expect(tabs).toHaveText([/^Overview/, /^Queue/, /^Incidents/, /^More$/]);
-    await page.locator("nav.tabbar").getByRole("button", { name: "More" }).tap();
-    await expect(page.getByRole("dialog").getByRole("link", { name: /^Settings/ })).toBeVisible();
+    await page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" }).tap();
+    await expect(page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ })).toBeVisible();
   });
 });

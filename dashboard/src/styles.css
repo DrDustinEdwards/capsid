@@ -1,21 +1,23 @@
 /* Colours, fonts, shadows: Capsomer's tokens, loaded before this file (main.tsx). Only the
    app's own dimensions live here. */
-:root { --rail: 208px; --top: 44px; }
+:root { --top: 44px; }
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  background: var(--ground);
-  color: var(--text);
-  font: 400 13px/1.4 var(--ui);
-  -webkit-font-smoothing: antialiased;
+@layer cap.base {
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font: 400 13px/1.4 var(--ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 /* Monospace is for identifiers only: ids, shas, fingerprints, commands, agent and
    namespace names, paths. Times, counts, percentages and hostnames are .num, the UI face
    with tabular figures. Nothing is set below 11 px. */
@@ -25,22 +27,12 @@ a:hover { text-decoration: underline; }
 .faint { color: var(--dim); }
 .label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
 
-/* shell. The top bar and the side menu sit on the ground tone with no rule; the view's
-   panels are the lit surface (design D4, D5). */
-.app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--top) minmax(0, 1fr); height: 100%; }
-.top {
-  grid-column: 1 / -1; display: flex; align-items: center; gap: 12px;
-  padding-inline: 16px; background: var(--ground);
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
-}
-.brand { display: flex; align-items: center; gap: 10px; min-width: calc(var(--rail) - 16px); font-weight: 800; letter-spacing: -0.02em; font-size: 15px; }
-.brand svg { flex: none; }
-.brand small { font-family: var(--mono); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+/* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); only the freshness line and the
+   page's own controls are styled here. */
 .sample {
   font-family: var(--mono); font-size: 11px; padding: 3px 7px; border-radius: 3px;
   border: 1px dashed var(--warn); color: var(--warn); white-space: nowrap;
 }
-.spacer { flex: 1; }
 .fresh { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .fresh .ring { width: 16px; height: 16px; }
 .fresh.stale { color: var(--warn); }
@@ -57,61 +49,14 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted);
 }
 .iconbtn { width: 32px; padding: 0; justify-content: center; }
-/* The top bar's Settings link: a button to look at, current on the Settings view. */
-.topset { color: var(--text); text-decoration: none; }
-.topset:hover { text-decoration: none; }
-.topset[aria-current="page"] { background: var(--accent-soft); border-color: var(--accent); }
-.topset[aria-current="page"] svg { color: var(--accent); }
 .btn.spin svg { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* Items 30 px with 14 px icons, centred in a 16 px column under the header logo. The
-   active item is on the lit surface; the red and amber counts keep full strength, since
-   they are the alert channel. */
-.rail {
-  background: var(--ground); padding: 10px;
-  display: flex; flex-direction: column; gap: 1px; overflow-y: auto;
-}
-.rail a {
-  display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 10px;
-  height: 30px; padding: 0 10px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none;
-}
-.rail a > svg { width: 14px; height: 14px; justify-self: center; }
-.rail a:hover { background: var(--sunken); color: var(--text); }
-.rail a[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
-.rail a[aria-current="page"] svg { color: var(--accent); }
-.rail .count { font-size: 11px; color: var(--dim); }
-.rail .count.hot { color: var(--crit); font-weight: 600; }
-.rail .count.warm { color: var(--warn); font-weight: 600; }
-.rail .sep { height: 1px; background: var(--line); margin: 10px 6px; }
-.rail .hint { margin-top: auto; padding: 10px; font-size: 12px; color: var(--dim); display: grid; gap: 6px; }
-.rail .hint .linkish { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-align: left; }
-.rail .hint .linkish:hover { color: var(--text); }
-/* Buttons laid out like the rail links, so their icons sit in the same column. */
-.rail .railbtn {
-  display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 12px; width: 100%;
-  padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 12px; text-align: left;
-}
-.rail .railbtn:hover { background: var(--sunken); color: var(--text); }
-.rail .railbtn svg { justify-self: center; }
-
-/* The collapsed side menu: icons only, in the column they hold when expanded (20 px from
-   the left, under the header logo). Labels stay in the accessibility tree; each link has
-   a tooltip, and a count becomes a dot with the number in the tooltip and the name. */
-.app.rail-collapsed { --rail: 56px; }
-.rail-collapsed .rail a, .rail-collapsed .rail .railbtn { position: relative; grid-template-columns: 16px; padding-right: 0; }
-.rail-collapsed .rail .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.rail-collapsed .rail .count { position: absolute; top: 4px; left: 25px; width: 7px; height: 7px; border-radius: 50%; overflow: hidden; font-size: 0; color: transparent; }
-.rail-collapsed .rail .count.hot { background: var(--crit); box-shadow: 0 0 0 2px var(--ground); }
-.rail-collapsed .rail .count.warm { background: var(--warn); box-shadow: 0 0 0 2px var(--ground); }
-.rail-collapsed .rail .hint { padding: 10px 0 0; gap: 2px; }
-.rail-collapsed .rail .railtoggle .railicon { transform: scaleX(-1); }
 
 /* main is the containing block for anything absolutely positioned inside it (.sr-only
    text in a table header, say). Without it such an element is placed against the whole
    document, past the scrolling table, and a mobile browser widens its layout viewport to
    reach it: at 390 px the document was 1189 px wide and a centred dialog sat off screen. */
-main { overflow-y: auto; min-width: 0; position: relative; }
+main { min-width: 0; position: relative; }
 .page { padding: 16px 24px 48px; display: grid; gap: 14px; max-width: 1480px; }
 /* The heading alone: what a view is for is in the shortcut sheet (design D13). */
 .pagehead { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
@@ -224,7 +169,7 @@ table.brief { width: 100%; border-collapse: collapse; }
 .anchors a { border-bottom: 2px solid transparent; color: var(--muted); font-size: 12px; font-weight: 500; padding: 4px 8px; white-space: nowrap; text-decoration: none; }
 .anchors a:hover { color: var(--text); }
 .anchors a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
-main:has(.anchors) { scroll-padding-top: 48px; }
+:root:has(.anchors) { scroll-padding-top: 48px; }
 
 /* fleet table */
 table.fleet { width: 100%; border-collapse: collapse; }
@@ -453,27 +398,14 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
 .signedout h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; }
 .signedout p { margin: 0; color: var(--muted); }
 
-.tabbar { display: none; }
-
 @media (max-width: 1180px) {
   .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 820px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--top) minmax(0, 1fr) auto; }
-  .rail { display: none; }
-  .brand { min-width: 0; }
-  .brand small, .top .hide-sm, .fresh .long { display: none; }
-  .page { padding: 16px 16px calc(84px + env(safe-area-inset-bottom, 0px)); gap: 16px; }
+  .fresh .long { display: none; }
+  .page { padding: 16px; gap: 16px; }
   .anchors { margin: -16px -16px 0; padding: 6px 16px; }
   .att-child, .grouplink, .att-more { padding-left: 16px; }
-  .tabbar {
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
-  }
-  .tabbar a, .tabbar button { display: grid; justify-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; text-decoration: none; position: relative; }
-  .tabbar button { border: 0; background: none; }
-  .tabbar a[aria-current="page"], .tabbar button.cur { color: var(--accent); }
-  .tabbar a .badge { position: absolute; top: 0; left: calc(50% + 6px); font-size: 11px; background: var(--crit); color: var(--surface); border-radius: 8px; padding: 0 4px; }
   /* The kind's word goes, its glyph stays; titles wrap instead of being cut. */
   .att-row { grid-template-columns: 14px minmax(0, 1fr) auto; }
   .att-row .kind .st { font-size: 0; gap: 0; }
@@ -541,10 +473,6 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 .msg.warn { border-color: var(--warn); }
 .msg .err { display: block; }
 
-/* The phone tab bar's More sheet. */
-.morelist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.morelist a { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 6px; color: var(--text); text-decoration: none; }
-.morelist a:hover, .morelist a[aria-current="page"] { background: var(--accent-soft); }
 @media (max-width: 820px) {
   .msg-region { left: 16px; right: 16px; max-width: none; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .auto-row { grid-template-columns: minmax(0, 1fr); }

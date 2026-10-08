@@ -118,7 +118,7 @@ describe("a pull request named only in result_ref is verified", () => {
     await completeJob(jobsEnv(), DRIVER, LATER, id, { result_summary: "landed", result_ref: PR, evidence: { prs: [PR] } });
     const row = await outcome(id);
     expect(row?.prs_opened).toBe(1);
-    expect(calls.filter((u) => u.includes("/pulls/3")).length).toBe(1);
+    expect(calls.filter((u) => new URL(u).pathname.endsWith("/pulls/3")).length).toBe(1);
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs WHERE job_id = ?1").bind(id).first<{ n: number }>())?.n).toBe(1);
   });
 

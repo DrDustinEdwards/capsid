@@ -37,10 +37,12 @@ import {
   type ClaimRaw,
   type JobClaim,
 } from "./job-claims";
-import { jobAudit, latestResumeNote, mirrorStatements } from "./jobs-mirror";
+import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
+import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
+import { externalFence } from "./provenance";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -120,6 +122,9 @@ async function holderTransition(
     // and so the outcome row, which copies claimed_by, credits the driver that did the
     // work. The caller is only the actor on the audit, mirror and claim rows.
     seatCloses?: boolean;
+    // The overlap report for the pull request this call named, recorded on the audit row
+    // and returned. Its line is already in result_summary.
+    overlaps?: OverlapReport | null;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -191,6 +196,7 @@ async function holderTransition(
       ...(patch.seatCloses ? { held_by: read.claimed_by } : {}),
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
+      ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
     }),
   ];
   // complete, fail and block all end the run that held the job, so a runner key bound
@@ -225,7 +231,7 @@ async function holderTransition(
     // Cost, tokens and active time from the job's sessions' telemetry, NULL when none
     // reached Capsid (src/ops-otlp.ts). Points exported after this read stay in
     // session_usage and are not added to the row, which is written once.
-    const row = outcomeFrom(job, verdict, now, patch.skills, await readJobUsage(env.DB, job.id));
+    const row = outcomeFrom(job, verdict, now, patch.skills, await readJobUsage(env.DB, job.id), claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, in the same batch as the outcome.
@@ -263,8 +269,18 @@ async function holderTransition(
   }
   // The driver a resume returned the job to is already holding it and learns of the
   // resume by its next call, which is usually a heartbeat.
-  const heartbeatNote = action === "heartbeat" ? await latestResumeNote(env, job) : null;
-  return { ok: true, action, job, ...(outcome ? { outcome } : {}), ...(heartbeatNote ? { resume_note: heartbeatNote } : {}) };
+  const heartbeatNotes = action === "heartbeat" ? await resumeNotes(env, job) : null;
+  const heartbeatNote = heartbeatNotes?.notes[0] ?? null;
+  return {
+    ok: true,
+    action,
+    job,
+    ...(outcome ? { outcome } : {}),
+    ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
+    ...(heartbeatNote ? { resume_note: heartbeatNote } : {}),
+    ...(heartbeatNotes && heartbeatNotes.notes.length > 0 ? { resume_notes: heartbeatNotes.notes } : {}),
+    ...(heartbeatNotes && heartbeatNotes.dropped > 0 ? { resume_notes_dropped: heartbeatNotes.dropped } : {}),
+  };
 }
 
 export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {
@@ -354,7 +370,9 @@ async function reviewRefusal(
   // record what the reviewer said, or the next reader sees a job that stalled for no
   // stated reason.
   const { review } = outcome;
-  const said = review.said ? ` ${review.said}` : "";
+  // The reviewer's words come from a pull request comment, outside Capsid, and the driver reads them
+  // in the refusal and the block reason: fenced as external, and cut to fit the reason cap.
+  const said = review.said ? ` ${externalFence("review", review.by, review.said, 300)}` : "";
   if (outcome.kind === "rework") {
     // The cap is checked before the correction is spent, so the loop it bounds is
     // bounded. If the rework path only incremented and left the job claimed, a third
@@ -558,9 +576,17 @@ async function completeWith(env: Env, agent: Agent, now: Date, id: string, args:
   if (unknown) return refuse("complete", unknown);
   const credited = await creditedSkills(env, id, args.skills);
   if ("refusal" in credited) return refuse("complete", credited.refusal);
+  // Overlap warning (Track A D1): the pull requests this complete names, against every other
+  // open one. The line rides in the summary the seat reads; the check cannot fail the call.
+  const held = await readJob(env.DB, id);
+  const overlaps = held ? await checkOverlaps(env, held.namespace, namedPrUrls(args.evidence, args.result_ref ?? held.result_ref)) : null;
+  const overlap = overlaps ? overlapLine(overlaps) : null;
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
-    result_summary: args.result_summary,
+    result_summary: overlap ? `${args.result_summary}
+
+${overlap}` : args.result_summary,
+    overlaps,
     result_ref: args.result_ref ?? null,
     lease_expires: null,
     evidence: args.evidence,
@@ -625,6 +651,19 @@ export async function failJob(
 // and commandFromSummary reads it back, so the format cannot drift between the two.
 export const RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
 
+// A question block (Track A D4): a session that needs an answer rather than a command run
+// blocks with question: true. The reason is the question, the Worker fixes the command, and
+// the summary starts with this prefix, which is how every reader tells it from a gate. No new
+// status and no column: the seat answers with resume and a note, which claim, heartbeat and
+// list then hand to the driver permanently (resume_notes).
+const QUESTION_PREFIX = "QUESTION: ";
+const QUESTION_COMMAND = "Answer in a resume note";
+
+/** Whether a blocked job's summary is a question block. */
+export function isQuestionSummary(summary: string | null): boolean {
+  return summary !== null && summary.startsWith(QUESTION_PREFIX);
+}
+
 /** The exact command a blocked job is waiting on, or null when it recorded none. */
 export function commandFromSummary(summary: string | null): string | null {
   if (!summary) return null;
@@ -642,9 +681,14 @@ export async function blockJob(
   // review: the verdict that produced this block, when the gate blocked it, recorded
   // as the reviewer's touch beside the gate. said: the agent's claim on the call the
   // gate turned into this block, recorded under the action the agent called.
-  args: { reason: string; command?: string; fromReview?: boolean; review?: Review; claim?: ClaimInput; raw?: ClaimRaw; said?: Said }
+  args: { reason: string; command?: string; question?: boolean; fromReview?: boolean; review?: Review; claim?: ClaimInput; raw?: ClaimRaw; said?: Said }
 ): Promise<JobResult> {
-  if (!args.reason?.trim()) return refuse("block", "block needs a reason: what gate was hit.");
+  if (!args.reason?.trim()) return refuse("block", args.question ? "a question block needs the question as its reason." : "block needs a reason: what gate was hit.");
+  // The command of a question is the Worker's, never the session's: a question that carried a
+  // command would be a gate in disguise, and the seat answers by resuming with a note.
+  if (args.question && args.command?.trim()) {
+    return refuse("block", `a question block takes no command: the Worker fixes it as '${QUESTION_COMMAND}'. Send the question as the reason, or drop question: true and block with the command.`);
+  }
   const blockClaim = parseClaim(args.claim);
   if ("error" in blockClaim) return refuse("block", blockClaim.error);
   // The review gate (see reviewRefusal). `fromReview` is set when the gate itself
@@ -654,7 +698,18 @@ export async function blockJob(
     const review = await reviewRefusal(env, agent, now, "block", id, null, { said: { claim: blockClaim.claim, raw: blockRaw, as: "block" } });
     if (review) return review;
   }
-  const summary = args.command ? `${args.reason}\n\n${RESUME_MARKER}\n\n    ${args.command}` : args.reason;
+  const command = args.question ? QUESTION_COMMAND : args.command;
+  const base = args.question ? `${QUESTION_PREFIX}${args.reason}` : args.reason;
+  // Overlap warning (Track A D1): the pull requests this block names, in the job's result_ref
+  // or as URLs in the command, against every other open one. The line sits before the resume
+  // marker, so commandFromSummary still reads the command and nothing after it.
+  const named = await readJob(env.DB, id);
+  const overlaps = named ? await checkOverlaps(env, named.namespace, [...(named.result_ref ? [named.result_ref.trim()] : []), ...prUrlsIn(command)]) : null;
+  const overlap = overlaps ? overlapLine(overlaps) : null;
+  const text = overlap ? `${base}
+
+${overlap}` : base;
+  const summary = command ? `${text}\n\n${RESUME_MARKER}\n\n    ${command}` : text;
   // The cap is applied where the block is written, so a capped job says so in the one
   // field every reader already looks at: the Portal prints result_summary, the driver
   // reads it to continue, and a human deciding reads it there too. The budget is read
@@ -664,6 +719,7 @@ export async function blockJob(
   return holderTransition(env, agent, now, "block", id, {
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
+    overlaps,
     lease_expires: null,
     bumpBlocked: true,
     // The gate is the start of a wait for someone else, which the resume that ends it
@@ -677,7 +733,7 @@ export async function blockJob(
         kind: "gate",
         actor: agent.actor,
         actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
-        detail: { reason: args.reason, command: args.command ?? null },
+        detail: { reason: args.reason, command: command ?? null, ...(args.question ? { question: true } : {}) },
         sinceGate: false,
         at: now.toISOString(),
       }),

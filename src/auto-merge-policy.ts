@@ -129,8 +129,7 @@ export interface RequiredStep {
 const ciStep = (job: string) => (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
 
 export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
-  // One typecheck step runs all four configs. Version 5 of the policy does not cover
-  // capsid, so this list is held for the load-time agreement check only.
+  // One typecheck step runs all four configs.
   capsid: [
     "Typecheck src, tests, integration tests and the copied scorer script",
     "Lint dead exports and doc drift",
@@ -147,6 +146,38 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Slop",
     "Gates",
   ].map(ciStep("Gates, clean checkout")),
+  // Every step of Carrel's two jobs, read off its ci.yml on main on 2026-10-07. Carrel's
+  // steps that run a command carry no name, so GitHub names them "Run <command>"; that
+  // is the name the jobs API reports, and a script rename in package.json that changes
+  // the command text refuses until this list is updated. Both jobs judge: `check` runs
+  // the types, tests and accessibility scan, `gates` the conformance suite and the plants.
+  carrel: [
+    ...[
+      "Run npm ci",
+      "Run npm run typecheck",
+      "Run npm test",
+      "Run npm run check:postinstall",
+      "Run npm run check:mcp-roles",
+      "Install Chromium for the accessibility scan",
+      "Run npm run check:a11y",
+    ].map(ciStep("check")),
+    ...["Run npm ci", "Run npm run check:conformance", "Run npm run check:plants"].map(ciStep("gates")),
+  ],
+  // Every blocking step of Capsomer's `check` job, read off its ci.yml on main on
+  // 2026-10-07. The steps its own file marks warn-only (forced-colours screenshots, size,
+  // token check, the site summary and the artifact upload) are left out: they run with
+  // continue-on-error or always(), so a pass proves nothing about the change. The
+  // `results` job runs on a push to main only and is skipped on a pull request. The
+  // separate No bloat workflow is warn-only by its own ruling and is not required.
+  capsomer: [
+    "Install",
+    "Palette, scales, unit tests, types",
+    "Every family's contrast pairs, both themes (blocking, rule 18)",
+    "Build the behaviour modules and wrappers",
+    "Build the site and every states page",
+    "Install Chromium",
+    "Keyboard and accessibility tests, both themes",
+  ].map(ciStep("check")),
 };
 
 /** The steps that namespace's pull requests must have run, or null when none are written down. */
