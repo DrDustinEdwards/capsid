@@ -22,6 +22,7 @@ import type { PortalAction, PortalActivity, PortalNamespaces, PortalPerformed, P
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
+import { logEvent } from "./log";
 
 // The Portal's controls: the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
@@ -372,7 +373,7 @@ async function performAction(env: Env, email: string, source: string | null, now
     if (committed) {
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
-      console.error(warning);
+      logEvent("error", "PORTAL_ACTION_AUDIT_FAILED", { message: warning });
       return { ok: true, summary, warning };
     }
     // improveControl throws on a bad value, with a message that says so.
@@ -903,7 +904,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
     // The action happened; only the read after it failed. Said as a failure of the
     // read, never as a failure of the action.
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`PORTAL_PERFORM_FEED_FAILED ${action}: ${message}`);
+    logEvent("error", "PORTAL_PERFORM_FEED_FAILED", { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` });
     return textResponse(`${result.summary} It completed, but reading the feed afterwards failed (${message}). Reload Capsid Portal.`, 500);
   }
   const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf } };

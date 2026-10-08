@@ -51,6 +51,7 @@ import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX 
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalPackageHistory, PORTAL_PACKAGE_HISTORY_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
+import { logEvent } from "./log";
 
 const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
@@ -321,7 +322,7 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
   if (!rate.allowed) {
     // The unavailable refusal has already logged itself.
     if (rate.window !== "unavailable") {
-      console.error(`CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})`);
+      logEvent("error", "CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` });
     }
     return rateLimitedResponse(rate);
   }
@@ -363,15 +364,14 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
   const key = `${REPORT_PREFIX}${now.toISOString().slice(0, 10)}/${ray}.json`;
   const summary = summarizeReport(parsed);
 
-  console.log(
-    JSON.stringify({
-      kind: "csp-violation",
-      key,
-      directive: summary.directive,
-      blocked: summary.blocked,
-      document: summary.document,
-    })
-  );
+  logEvent("log", "CSP_VIOLATION_STORED", {
+    message: `csp-violation stored at ${key}`,
+    kind: "csp-violation",
+    key,
+    directive: summary.directive,
+    blocked: summary.blocked,
+    document: summary.document,
+  });
 
   await env.MEDIA.put(
     key,
@@ -441,7 +441,7 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
 
   const verdict = await verifyBackupCredentialRequest(env, { timestamp, signature, body }, new Date());
   if (!verdict.ok) {
-    console.error(`BACKUP_CREDENTIAL_REJECTED ${verdict.refusal}`);
+    logEvent("error", "BACKUP_CREDENTIAL_REJECTED", { message: `BACKUP_CREDENTIAL_REJECTED ${verdict.refusal}` });
     return textResponse(verdict.refusal, verdict.status);
   }
 
@@ -453,10 +453,10 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
 
   const minted = await mintBackupCredential(env);
   if (!minted.ok) {
-    console.error(`BACKUP_CREDENTIAL_FAILED ${minted.refusal}`);
+    logEvent("error", "BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED ${minted.refusal}` });
     return textResponse(minted.refusal, minted.status);
   }
-  console.log(`BACKUP_CREDENTIAL_MINTED ttl=${minted.credential.expires_in}s`);
+  logEvent("log", "BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
@@ -469,10 +469,10 @@ async function handleRunnerKey(request: Request, env: Env): Promise<Response> {
   const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
   const result = await exchangeRunnerKey(env, token, bounded.body, new Date());
   if (!result.ok) {
-    console.error(`RUNNER_KEY_REFUSED ${result.status}: ${result.refusal}`);
+    logEvent("error", "RUNNER_KEY_REFUSED", { message: `RUNNER_KEY_REFUSED ${result.status}: ${result.refusal}` });
     return textResponse(result.refusal, result.status);
   }
-  console.log(`RUNNER_KEY_MINTED ${result.agent} for ${result.job_id}`);
+  logEvent("log", "RUNNER_KEY_MINTED", { message: `RUNNER_KEY_MINTED ${result.agent} for ${result.job_id}` });
   return new Response(JSON.stringify(result), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
@@ -488,7 +488,7 @@ async function handleHoldoutCredential(request: Request, env: Env): Promise<Resp
 
   const verdict = await verifySignedReport(env, { namespace, timestamp, signature, body }, new Date());
   if (!verdict.ok) {
-    console.error(`IMPROVE_CREDENTIAL_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}`);
+    logEvent("error", "IMPROVE_CREDENTIAL_REJECTED", { message: `IMPROVE_CREDENTIAL_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}` });
     return textResponse(verdict.refusal, verdict.status);
   }
 
@@ -506,10 +506,10 @@ async function handleHoldoutCredential(request: Request, env: Env): Promise<Resp
 
   const minted = await mintHoldoutCredential(env, verdict.namespace);
   if (!minted.ok) {
-    console.error(`IMPROVE_CREDENTIAL_FAILED ${verdict.namespace}: ${minted.refusal}`);
+    logEvent("error", "IMPROVE_CREDENTIAL_FAILED", { message: `IMPROVE_CREDENTIAL_FAILED ${verdict.namespace}: ${minted.refusal}` });
     return textResponse(minted.refusal, minted.status);
   }
-  console.log(`IMPROVE_CREDENTIAL_MINTED ns=${verdict.namespace} ttl=${minted.credential.expires_in}s`);
+  logEvent("log", "IMPROVE_CREDENTIAL_MINTED", { message: `IMPROVE_CREDENTIAL_MINTED ns=${verdict.namespace} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -543,7 +543,7 @@ async function handleImproveScore(request: Request, env: Env): Promise<Response>
 
   const verdict = await verifySignedReport(env, { namespace, timestamp, signature, body }, new Date());
   if (!verdict.ok) {
-    console.error(`IMPROVE_SCORE_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}`);
+    logEvent("error", "IMPROVE_SCORE_REJECTED", { message: `IMPROVE_SCORE_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}` });
     return textResponse(verdict.refusal, verdict.status);
   }
 
@@ -563,7 +563,7 @@ async function handleImproveScore(request: Request, env: Env): Promise<Response>
   // namespace is refused. claimJti fails closed on a store error.
   const claim = await claimJti(env.DB, verdict.namespace, parsed.report.jti);
   if (!claim.ok) {
-    if (claim.status === 503) console.error(`IMPROVE_SCORE_REPLAY_KV_ERROR ${verdict.namespace}: ${claim.refusal}`);
+    if (claim.status === 503) logEvent("error", "IMPROVE_SCORE_REPLAY_KV_ERROR", { message: `IMPROVE_SCORE_REPLAY_KV_ERROR ${verdict.namespace}: ${claim.refusal}` });
     return textResponse(claim.refusal, claim.status);
   }
 

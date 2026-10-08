@@ -14,6 +14,7 @@ import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
+import { logEvent } from "./log";
 
 // Spelled once. wrangler.jsonc declares them; test/improve-cron.test.ts derives
 // one list from the other and fails in both directions.
@@ -129,11 +130,11 @@ export default {
           () => runBackup(env),
           (result): TaskResult => {
             if (!result.ran) {
-              console.error(`BACKUP_CRON_SKIPPED ${result.skipped}`);
+              logEvent("error", "BACKUP_CRON_SKIPPED", { message: `BACKUP_CRON_SKIPPED ${result.skipped}` });
               return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
             }
             if (result.prune_refused !== null) {
-              console.error(`BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}`);
+              logEvent("error", "BACKUP_CRON_REFUSED_PRUNE", { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` });
               return { outcome: "refused", reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}` };
             }
             return {
@@ -151,7 +152,7 @@ export default {
       const hour = chicagoHour(now);
       if (hour !== IMPROVE_OPEN_HOUR_CT) {
         // The other of the two UTC hours: not a run, so not recorded.
-        console.log(`IMPROVE_OPEN_SKIPPED local hour is ${hour}, not ${IMPROVE_OPEN_HOUR_CT}`);
+        logEvent("log", "IMPROVE_OPEN_SKIPPED", { message: `IMPROVE_OPEN_SKIPPED local hour is ${hour}, not ${IMPROVE_OPEN_HOUR_CT}` });
       } else {
         ctx.waitUntil(
           runTask(
@@ -160,7 +161,7 @@ export default {
             () => openRuns(env, now),
             (summary): TaskResult => {
               const line = `mode=${summary.mode} ${summary.outcomes.map((o) => `${o.namespace}:${o.opened ? "opened" : "skipped"}`).join(" ")}`;
-              console.log(`IMPROVE_OPENED ${line}`);
+              logEvent("log", "IMPROVE_OPENED", { message: `IMPROVE_OPENED ${line}` });
               return { outcome: "ok", reason: line };
             },
             { tag: "IMPROVE_OPEN_THREW", rethrow: true }
@@ -177,7 +178,7 @@ export default {
           () => tickRuns(env, new Date()),
           (outcomes): TaskResult => {
             for (const o of outcomes) {
-              console.log(`IMPROVE_TICK ${o.runId} ${o.from} -> ${o.to}: ${o.note}`);
+              logEvent("log", "IMPROVE_TICK", { message: `IMPROVE_TICK ${o.runId} ${o.from} -> ${o.to}: ${o.note}` });
             }
             const moved = outcomes.filter((o) => o.from !== o.to).length;
             return { outcome: "ok", reason: outcomes.length === 0 ? "no improve run to advance" : `${outcomes.length} improve run(s) looked at, ${moved} moved` };
@@ -195,13 +196,13 @@ export default {
           () => runSkillsRefresh(env, new Date()),
           (outcome): TaskResult => {
             if (!outcome.ran) {
-              console.log(`SKILLS_REFRESH_SKIPPED ${outcome.skipped}`);
+              logEvent("log", "SKILLS_REFRESH_SKIPPED", { message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}` });
               // Not its day of the week is not a run; switched off is a skip worth showing.
               return outcome.skipped?.startsWith(NOT_ITS_DAY) ? null : { outcome: "skipped", reason: `skipped: ${outcome.skipped ?? "no reason given"}` };
             }
             const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`;
-            console.log(`SKILLS_REFRESH ${line}`);
-            for (const r of outcome.refused) console.error(`SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}`);
+            logEvent("log", "SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
+            for (const r of outcome.refused) logEvent("error", "SKILLS_REFRESH_REFUSED", { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` });
             return outcome.refused.length > 0
               ? { outcome: "refused", reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}` }
               : { outcome: "ok", reason: line };
