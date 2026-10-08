@@ -234,3 +234,21 @@ test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in caps
   assert.equal(JSON.parse(mine.text).body, "carrel's own");
   await carrel.close();
 });
+
+test("brief for any namespace names the portfolio documents to read first", async () => {
+  const { call, close } = await connect(driver("carrel"));
+  const r = await call("brief", { namespace: "carrel" });
+  assert.ok(!r.isError, r.text);
+  const out = JSON.parse(r.text) as { portfolio_documents: { namespace: string; read_first: string[]; allowlist: string[]; note: string } };
+  assert.equal(out.portfolio_documents.namespace, "capsid");
+  assert.deepEqual(out.portfolio_documents.read_first, [...ALLOWED].sort());
+  assert.deepEqual(out.portfolio_documents.allowlist, [
+    "conventions.md",
+    "core.md",
+    "decisions.md",
+    "decisions-vol-<n>.md",
+    "archive/decisions-vol-<n>.md",
+    "rulings/<name>.md",
+  ]);
+  await close();
+});
