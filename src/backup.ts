@@ -132,6 +132,9 @@ export const TABLES = [
   // The run ledger (migrations/0029_task_runs.sql): each scheduled task's runs,
   // pruned at 14 days in code (src/task-runs.ts).
   "task_runs",
+  // Each job's earlier versions, kept by jobs action "edit" (migrations/0033_job_versions.sql).
+  // Nothing prunes it, and the job's row holds only the newest version.
+  "job_versions",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;
