@@ -120,3 +120,28 @@ test("timingSafeEqual agrees with === on the answer", () => {
   assert.equal(timingSafeEqual("zzz", "azz"), false);
   assert.equal(timingSafeEqual("azz", "azy"), false);
 });
+
+test("timingSafeEqual hands the compare to the platform's crypto.subtle.timingSafeEqual when it exists", () => {
+  const subtle = crypto.subtle as unknown as { timingSafeEqual?: (a: Uint8Array, b: Uint8Array) => boolean };
+  const had = Object.getOwnPropertyDescriptor(subtle, "timingSafeEqual");
+  let calls = 0;
+  subtle.timingSafeEqual = (a, b) => {
+    calls++;
+    return Buffer.compare(a, b) === 0;
+  };
+  try {
+    assert.equal(timingSafeEqual("abcd", "abcd"), true);
+    assert.equal(calls, 1, "the platform compare was not used");
+    // A near miss of equal length must fail, and reach the platform compare to do so.
+    assert.equal(timingSafeEqual("abcd", "abce"), false);
+    assert.equal(calls, 2);
+    // A different length fails before any compare is attempted.
+    assert.equal(timingSafeEqual("abcd", "abc"), false);
+    assert.equal(calls, 2, "a length mismatch reached the platform compare");
+    // Equal string length, different UTF-8 length: refused, not passed to the platform.
+    assert.equal(timingSafeEqual("aé", "ab"), false);
+  } finally {
+    if (had) Object.defineProperty(subtle, "timingSafeEqual", had);
+    else delete subtle.timingSafeEqual;
+  }
+});
