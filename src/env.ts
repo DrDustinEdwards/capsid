@@ -1,10 +1,14 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 
-export interface Env {
-  DB: D1Database;
-  APP_KV: KVNamespace;
-  MEDIA: R2Bucket;
-  OAUTH_KV: KVNamespace;
+// The bindings and vars wrangler.jsonc.example declares (DB, APP_KV, OAUTH_KV, MEDIA,
+// HOLDOUT, GITHUB_APP_CLIENT_ID) come from worker-configuration.d.ts, which
+// `npm run types` generates with `wrangler types` and test/env-types.test.ts holds to
+// the example in both directions. What is written here is what the config cannot say:
+// secrets, the OAuth provider the library injects, the optional assets binding, and the
+// build stamps. HOLDOUT is generated, not declared here; AttemptEnv still omits it.
+// GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
+// here so tests and the deploy check can hold other values.
+export interface Env extends Omit<Cloudflare.Env, "GITHUB_APP_CLIENT_ID"> {
   OAUTH_PROVIDER: OAuthHelpers;
   OPERATOR_KEY_HASH: string;
   COOKIE_ENCRYPTION_KEY: string;
@@ -29,10 +33,9 @@ export interface Env {
   BUILD_SHA?: string;
   BUILD_DIRTY?: string;
   BUILT_AT?: string;
-  // Second R2 bucket, withheld from AttemptEnv. Only this file (declaration) and
-  // src/improve-scorer.ts may name it; test/improve-holdout.test.ts refuses it in every
-  // other module.
-  HOLDOUT: R2Bucket;
+  // HOLDOUT (the second R2 bucket) is withheld from AttemptEnv below. Only the
+  // generated declaration and src/improve-scorer.ts may name it;
+  // test/improve-holdout.test.ts refuses it in every other module.
   // Used only in improve_mode "api".
   ANTHROPIC_API_KEY?: string;
   // Root secret the per-namespace score-report HMAC keys are derived from.

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "node scripts/deploy.mjs",
+    "types": "node scripts/dry-run-config.mjs && wrangler types worker-configuration.d.ts --config wrangler.dryrun.jsonc --include-runtime=false",
     "check": "tsc --noEmit",
     "check:test": "tsc --noEmit -p tsconfig.test.json",
     "test": "node scripts/test-budget.mjs \"test/*.test.ts\"",

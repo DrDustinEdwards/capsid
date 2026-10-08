@@ -28,5 +28,5 @@
     // creeps into src/, which a single widened config would have silently allowed.
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "worker-configuration.d.ts"]
 }
