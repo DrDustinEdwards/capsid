@@ -8,7 +8,7 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 // build stamps. HOLDOUT is generated, not declared here; AttemptEnv still omits it.
 // GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
 // here so tests and the deploy check can hold other values.
-export interface Env extends Omit<Cloudflare.Env, "GITHUB_APP_CLIENT_ID"> {
+export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   OAUTH_PROVIDER: OAuthHelpers;
   OPERATOR_KEY_HASH: string;
   COOKIE_ENCRYPTION_KEY: string;
