@@ -19,6 +19,7 @@ import {
 } from "../src/auto-merge-policy.ts";
 import { FILES_LIMIT } from "../src/github/pr-files.ts";
 import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import { LOOP_ROSTER, ROSTER, onLoopRoster, onRoster, scheduledFor } from "../src/improve-schema.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
@@ -571,6 +572,22 @@ test("parseMergePolicy refuses a namespace that is not on the improve roster", (
   const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, julieedwards"));
   assert.ok("error" in parsed);
   assert.match(parsed.error, /julieedwards/);
+});
+
+test("parseMergePolicy accepts carrel and capsomer, which are on the roster for auto-merge only", () => {
+  const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, carrel, capsomer"));
+  assert.ok("policy" in parsed, "error" in parsed ? parsed.error : "");
+  assert.deepEqual(parsed.policy.namespaces, ["capsid", "carrel", "capsomer"]);
+});
+
+test("carrel and capsomer are on the roster but not in the improve loop's", () => {
+  for (const ns of ["carrel", "capsomer"]) {
+    assert.ok(onRoster(ns), `${ns} must be on the roster`);
+    assert.ok(!onLoopRoster(ns), `${ns} must not be on the loop roster`);
+    assert.ok(!(LOOP_ROSTER as readonly string[]).includes(ns), `${ns} must not be iterated by the loop`);
+    assert.ok(!scheduledFor(new Date()).includes(ns as never), `${ns} must never be scheduled to open a run`);
+  }
+  assert.ok(ROSTER.length > LOOP_ROSTER.length, "the roster counts what it names");
 });
 
 async function envWithPolicy(body: string | null) {

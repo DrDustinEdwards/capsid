@@ -1,6 +1,6 @@
 import { hmacHex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
-import { HOLDOUT_PREFIX, holdoutManifestKey, ROSTER, type HoldoutManifest } from "./improve-schema";
+import { HOLDOUT_PREFIX, holdoutManifestKey, LOOP_ROSTER, type HoldoutManifest } from "./improve-schema";
 import type { MetricMap } from "./improve-scores";
 
 // HMAC, not operator key: an /ops/ path would invite adding the operator-key check.
@@ -303,7 +303,7 @@ export async function readHoldoutManifest(env: Env, namespace: string): Promise<
 // (test/improve-holdout.test.ts).
 export async function readHoldoutManifests(env: Env): Promise<Record<string, HoldoutManifest | null>> {
   const manifests: Record<string, HoldoutManifest | null> = {};
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     try {
       manifests[namespace] = await readHoldoutManifest(env, namespace);
     } catch {

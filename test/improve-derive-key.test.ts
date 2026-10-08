@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { deriveScoreKey } from "../src/improve-scorer.ts";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 
 // The script and the Worker must derive the same key.
 //
@@ -27,7 +27,7 @@ function run(namespace: string, env: Record<string, string | undefined> = {}): {
 }
 
 test("THE SCRIPT DERIVES EXACTLY WHAT THE WORKER VERIFIES, for every roster namespace", async () => {
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const result = run(namespace);
     assert.equal(result.status, 0, `the script failed for ${namespace}: ${result.stderr}`);
     assert.equal(
@@ -75,12 +75,12 @@ test("a whitespace-only root secret is refused like a missing one", () => {
   assert.match(result.stderr, /IMPROVE_SCORE_SECRET is not set/);
 });
 
-test("THE ROSTER IN THE SCRIPT MATCHES THE ROSTER IN SOURCE", () => {
+test("THE LOOP_ROSTER IN THE SCRIPT MATCHES THE LOOP_ROSTER IN SOURCE", () => {
   // The script cannot import the TypeScript module, so it restates the list. Drift
   // would refuse a legitimate namespace.
   const script = readFileSync(SCRIPT, "utf8");
-  const declared = /const ROSTER = \[([^\]]+)\]/.exec(script);
-  assert.ok(declared, "scripts/improve-derive-key.mjs no longer declares a ROSTER");
+  const declared = /const LOOP_ROSTER = \[([^\]]+)\]/.exec(script);
+  assert.ok(declared, "scripts/improve-derive-key.mjs no longer declares a LOOP_ROSTER");
   const inScript = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(inScript, [...ROSTER].sort());
+  assert.deepEqual(inScript, [...LOOP_ROSTER].sort());
 });

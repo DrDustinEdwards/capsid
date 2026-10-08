@@ -4,7 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { AGENTS, attachRepos, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 
 // scripts/mint-agents.mjs: the six credentials of docs/bootstrap.md.
 //
@@ -13,15 +13,15 @@ import { ROSTER } from "../src/improve-schema.ts";
 // file.
 
 test("every roster namespace has exactly one driver agent, named <ns>-driver", () => {
-  for (const ns of ROSTER) {
+  for (const ns of LOOP_ROSTER) {
     const drivers = AGENTS.filter((a) => a.kind === "driver" && a.namespaces.includes(ns));
     assert.equal(drivers.length, 1, `${ns} has ${drivers.length} driver agents`);
     assert.equal(drivers[0].name, `${ns}-driver`, `${ns}'s driver is named ${drivers[0].name}`);
   }
   // The other direction: no driver for a namespace that is not on the roster.
-  const orphans = AGENTS.filter((a) => a.kind === "driver" && !a.namespaces.every((n) => (ROSTER as readonly string[]).includes(n)));
+  const orphans = AGENTS.filter((a) => a.kind === "driver" && !a.namespaces.every((n) => (LOOP_ROSTER as readonly string[]).includes(n)));
   assert.deepEqual(orphans.map((a) => a.name), [], "a driver is scoped to a namespace that is not on the roster");
-  assert.equal(AGENTS.length, ROSTER.length + 1, "the set is one driver per roster namespace plus the seat");
+  assert.equal(AGENTS.length, LOOP_ROSTER.length + 1, "the set is one driver per roster namespace plus the seat");
 });
 
 test("a driver carries no flags, and only the seat may merge", () => {
@@ -57,7 +57,7 @@ test("--namespace selects one project without touching the rest", () => {
 
 const REGISTERED = ["bsw", "capsid", "claude-skills", "dustinedwards", "foxhound", "foxing", "germomics", "julieedwards", "txasm"];
 
-test("A REGISTERED NON-ROSTER NAMESPACE MINTS, with a driver of the roster shape", () => {
+test("A REGISTERED NON-LOOP_ROSTER NAMESPACE MINTS, with a driver of the roster shape", () => {
   const picked = selectAgents("claude-skills", REGISTERED);
   assert.equal(picked.length, 1, "one driver, not zero and not the whole set");
   const driver = picked[0];
@@ -90,7 +90,7 @@ test("WITHOUT a registered list, only AGENTS matches, so a failed lookup cannot 
 test("a roster namespace resolves to its LISTED agent, never a synthesized one", () => {
   // If a listed entry gains a flag or a different scope, the listed entry must win.
   assert.deepEqual(selectAgents("foxing", REGISTERED), selectAgents("foxing"));
-  for (const ns of ROSTER) {
+  for (const ns of LOOP_ROSTER) {
     assert.deepEqual(selectAgents(ns, REGISTERED), AGENTS.filter((a) => a.namespaces.includes(ns)));
   }
 });
@@ -144,7 +144,7 @@ test("the key file path is the one docs/bootstrap.md and the driver both name", 
   // Windows and on the POSIX CI runner.
   const expected = (name: string) => join(homedir(), ".capsid", `agent-${name}.key`);
   assert.equal(keyPath("foxing-driver"), expected("foxing-driver"));
-  for (const ns of ROSTER) {
+  for (const ns of LOOP_ROSTER) {
     assert.equal(keyPath(`${ns}-driver`), expected(`${ns}-driver`));
   }
   assert.equal(keyPath("seat"), expected("seat"));

@@ -10,7 +10,7 @@ import type { Env } from "./env";
 import { improveControl, improveStatus } from "./improve-run";
 import { breakerState, resetBreaker } from "./job-breaker";
 import { addPackage, describePackage, editPackage, readPackageRow, removePackage, validatePackage } from "./ops-packages";
-import { IMPROVE_MODES, onRoster, pausedKey, ROSTER } from "./improve-schema";
+import { IMPROVE_MODES, onLoopRoster, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { IMPROVE_ACTOR, pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
 import { resumeDestination } from "./jobs-seat";
@@ -498,9 +498,9 @@ const refused = (refusal: string): Plan => ({ ok: false, refusal });
 function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
   if (namespace === "all") {
-    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${ROSTER.join(", ")} in turn.`;
+    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${LOOP_ROSTER.join(", ")} in turn.`;
   }
-  if (!onRoster(namespace)) return `'${namespace}' is not on the improve roster (${ROSTER.join(", ")}).`;
+  if (!onLoopRoster(namespace)) return `'${namespace}' is not on the improve roster (${LOOP_ROSTER.join(", ")}).`;
   return null;
 }
 
