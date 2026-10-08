@@ -29,6 +29,7 @@ interface Call {
   tool?: string;
   args?: Record<string, unknown>;
   auth: string | null;
+  raw: string;
 }
 
 /** A fake /ops/mcp. improve_status lists two claimed jobs; only `held` heartbeats. */
@@ -37,7 +38,7 @@ function fakeMcp(held: string, claimed = ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"
   const fetchImpl = (async (_url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
     const auth = new Headers(init?.headers).get("Authorization");
-    calls.push({ method: body.method, tool: body.params?.name, args: body.params?.arguments, auth });
+    calls.push({ method: body.method, tool: body.params?.name, args: body.params?.arguments, auth, raw: String(init?.body) });
     if (body.method === "notifications/initialized") return new Response("", { status: 202 });
     const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200 });
     if (body.method === "initialize") return reply({ protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake", version: "1" } });
@@ -69,7 +70,7 @@ test("a working driver heartbeats the job it holds, and the refusal for another'
   assert.deepEqual(beats.map((b) => b.args?.id), ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]);
   assert.ok(beats.every((b) => b.args?.action === "heartbeat" && b.args?.namespace === "sample"));
   assert.ok(calls.every((c) => c.auth === `Bearer ${KEY}`), "the key travels only in the Authorization header");
-  assert.equal(JSON.stringify(calls).includes(KEY), false, "the key is not in any request body");
+  assert.equal(calls.some((c) => c.raw.includes(KEY)), false, "the key is not in any request body");
 });
 
 test("a thousand tool calls send one batch: the second inside ten minutes does nothing, and one after it does", async () => {
