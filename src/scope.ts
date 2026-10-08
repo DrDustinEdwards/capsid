@@ -3,6 +3,7 @@ import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./improve-schema";
+import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 
 // The one enforcement point. Every tool call, and every repo mutation inside one, is
 // checked here and nowhere else.
@@ -218,6 +219,9 @@ export interface ScopeNeed {
   // label "primary" is refused, and omitting the argument (almost every call) skips
   // the axis while resolveRepo picks the namespace primary. Resolve first, then ask.
   repo?: string;
+  // The document path a call names, for the one exception to the namespace axis: a
+  // read of a portfolio document in capsid (portfolioReadAdmits).
+  path?: string;
   grant?: AgentGrant;
   // The caller must be the admin identity, not merely hold the write grant. Set by
   // the registrar for a tool whose TOOL_GRANTS entry is "admin".
@@ -290,8 +294,13 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: '${asked}' is admin only and ${agent.actor} is not the admin. ${adminReason(need.tool)} Ask the admin to do it.`;
   }
-  if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace)) {
-    return `unauthorized: ${agent.actor} is not scoped to the '${need.namespace}' namespace. Its namespace scope is ${describeScope(scopes.namespaces)}.`;
+  if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace) && !portfolioReadAdmits(need)) {
+    return (
+      `unauthorized: ${agent.actor} is not scoped to the '${need.namespace}' namespace. Its namespace scope is ${describeScope(scopes.namespaces)}.` +
+      (need.namespace === PORTFOLIO_DOCS.namespace
+        ? ` Outside its own namespace it may only read the portfolio documents in ${PORTFOLIO_DOCS.namespace}: ${describePortfolioDocs().join(", ")}.`
+        : "")
+    );
   }
   if (need.repo !== undefined && !allowsScope(scopes.repos, need.repo)) {
     return `unauthorized: ${agent.actor} is not scoped to the '${need.repo}' repo. Its repo scope is ${describeScope(scopes.repos)}.`;
@@ -302,6 +311,26 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     }
   }
   return null;
+}
+
+// The one exception to the namespace axis (src/portfolio-docs.ts): any caller may read
+// the portfolio documents in capsid, because every driver is told to follow them. Only a
+// read tool on the list, so a write, a job or an edge never crosses. `read` must name an
+// allowlisted path. list, find and search name none: they are admitted here and their
+// handlers drop every capsid row that is not on the list (portfolioOnly).
+function portfolioReadAdmits(need: ScopeNeed): boolean {
+  if (need.namespace !== PORTFOLIO_DOCS.namespace) return false;
+  if (!isPortfolioTool(need.tool) || requiredGrant(need.tool) !== "read") return false;
+  if (need.grant !== undefined && need.grant !== "read") return false;
+  if (need.admin || need.flags?.length) return false;
+  if (need.tool === "read") return need.path !== undefined && isPortfolioPath(need.path);
+  return true;
+}
+
+/** Whether this caller reaches `namespace` only through the portfolio exception, so a
+ *  listing handler must keep only the portfolio documents. */
+export function portfolioOnly(agent: Agent, namespace: string | undefined): boolean {
+  return namespace === PORTFOLIO_DOCS.namespace && !allowsScope(agent.scopes.namespaces, namespace);
 }
 
 // Why each admin-only thing is admin only, for the refusal. An "admin" requirement
@@ -432,6 +461,7 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         tool: name,
         namespace,
         repo,
+        path: typeof args.path === "string" ? args.path : undefined,
         action,
         jobId: name === "jobs" && typeof args.id === "string" ? args.id : undefined,
         // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
