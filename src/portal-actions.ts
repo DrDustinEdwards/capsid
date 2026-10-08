@@ -143,7 +143,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
           ? "Set the overnight run to run on the SUBSCRIPTION. The scheduler may then start the per-namespace drivers on your machine overnight, billed against your Max plan. This records your decision, its date and its reasoning where the switch is set."
           : "Set the overnight run to run on the API key. The scheduler refuses to start unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use. Billed per token to your Console account.";
     case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver already holds another claimed job, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
+      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver is at its claim limit or holds a job on the same repo, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
       return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
@@ -622,7 +622,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           return refused(`${job.id} is ${job.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`);
         }
         const holder = job.claimed_by || actor;
-        const { toQueue } = await resumeDestination(env.DB, holder, job.id, false);
+        const { toQueue } = await resumeDestination(env, holder, job, false);
         return {
           ok: true,
           changes: [
@@ -763,7 +763,8 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         .first<{ name: string; kind: string; revoked_at: string | null }>();
       if (!agent) return refused(`no agent named '${p.name}'.`);
       if (agent.revoked_at) return refused(`'${p.name}' was already revoked at ${agent.revoked_at}.`);
-      // Bounded: a live agent holds one claim by rule, so the limit is a guard, not a page.
+      // Bounded: a live agent holds at most its claim limit (4 at the most) plus its
+      // blocked jobs, so the limit is a guard, not a page.
       const { results } = await env.DB.prepare(
         `SELECT id, title, namespace, status FROM jobs WHERE claimed_by = ?1 AND status IN ('claimed', 'blocked') ORDER BY id LIMIT 50`
       )
