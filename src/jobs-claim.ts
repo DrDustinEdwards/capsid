@@ -19,6 +19,7 @@ import { signTaskBody, verifySignedBody } from "./improve-task";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { offerForClaim } from "./job-skill-offers";
 import { breakerRefusal, breakerState } from "./job-breaker";
+import { externalFenceProblem, jobOrigin } from "./provenance";
 import {
   actorShapeRefusal,
   guardedTransition,
@@ -102,6 +103,10 @@ export async function postJob(
   // driver runs whatever survived.
   const postSwallowed = swallowedParamTag(args.body);
   if (postSwallowed) return refuse("post", swallowedTagRefusal("body", postSwallowed));
+  // An external fence is how relayed text is told from instruction (src/provenance.ts), so
+  // a body whose fence is unlabelled or never closes is refused rather than signed.
+  const fenceProblem = externalFenceProblem(args.body);
+  if (fenceProblem) return refuse("post", `the body has a malformed external fence: ${fenceProblem}. Nothing was written.`);
   // A registered namespace, as write requires for a document. Otherwise a caller
   // scoped to * could post into a namespace that does not exist, and the mirror
   // document would land where write refuses the same path.
@@ -162,6 +167,7 @@ export async function postJob(
     ),
     ...(await mirrorStatements(env, job, "job-posted", actor)),
     jobAudit(env.DB, actor, "job-posted", job, {
+      origin: jobOrigin(actor),
       title: job.title,
       priority: job.priority,
       gate_required: job.gate_required,
