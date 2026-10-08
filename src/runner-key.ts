@@ -6,7 +6,7 @@ import { readJob } from "./jobs-transition";
 import { SEAT_START_NAMESPACES } from "./seat-start";
 import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
-import { b64urlDecode } from "./encoding";
+import { createRemoteJWKSet, customFetch, decodeProtectedHeader, errors, jwtVerify } from "jose";
 
 // /ops/runner-key: a seat-started session trades its GitHub OIDC token for a Capsid
 // key bound to the one job it was started for (capsid/research/design-seat-session-
@@ -55,53 +55,65 @@ interface OidcClaims {
   run_attempt?: string;
 }
 
-function decodePart<T>(part: string): T | null {
-  try {
-    return JSON.parse(b64urlDecode(part)) as T;
-  } catch {
-    return null;
-  }
-}
-
-function b64urlBytes(part: string): Uint8Array {
-  const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-}
-
 /** Verify a GitHub Actions OIDC token's signature and time claims. The claims about
- *  WHICH run it is are checked by the caller, against GitHub. */
+ *  WHICH run it is are checked by the caller, against GitHub.
+ *
+ *  jose (the standard the portfolio shares, as in src/access-jwt.ts) checks the
+ *  signature, the RS256 pin, the kid, iss, aud and nbf. Two things stay here on purpose:
+ *  exp gets no skew (jose's clockTolerance covers exp and nbf together, so it is
+ *  loosened for nbf and exp is checked again exactly), and iat is not used by jose for
+ *  anything but token age. The key set is fetched per exchange: exchanges are rare, and
+ *  a cached key set is one more thing that can be stale. An unreachable key set is a
+ *  refusal, never a pass. */
 async function verifyGithubOidc(token: string, now: Date): Promise<{ ok: true; claims: OidcClaims } | { ok: false; status: number; refusal: string }> {
-  const parts = token.split(".");
-  if (parts.length !== 3) return { ok: false, status: 401, refusal: "the bearer is not a JWT" };
-  const header = decodePart<{ alg?: string; kid?: string }>(parts[0]);
-  const claims = decodePart<OidcClaims>(parts[1]);
-  if (!header || !claims) return { ok: false, status: 401, refusal: "the JWT header or payload does not decode" };
+  let header: ReturnType<typeof decodeProtectedHeader>;
+  try {
+    header = decodeProtectedHeader(token);
+  } catch {
+    return { ok: false, status: 401, refusal: "the bearer is not a JWT" };
+  }
   if (header.alg !== "RS256" || !header.kid) return { ok: false, status: 401, refusal: `the JWT must be RS256 with a kid; got alg '${header.alg}'` };
 
-  // Fetched per exchange: exchanges are rare, and a cached key set is one more thing
-  // that can be stale. An unreachable key set is a refusal, never a pass.
-  let keys: Array<JsonWebKey & { kid?: string }>;
+  let keysError: Error | null = null;
+  const keys = createRemoteJWKSet(new URL(`${OIDC_ISSUER}/.well-known/jwks`), {
+    [customFetch]: async (target: string): Promise<Response> => {
+      try {
+        const res = await fetch(target);
+        if (!res.ok) throw new Error(`GitHub's OIDC key set answered ${res.status}`);
+        return res;
+      } catch (err) {
+        keysError = err instanceof Error ? err : new Error(String(err));
+        throw keysError;
+      }
+    },
+  });
+  let claims: OidcClaims;
   try {
-    const res = await fetch(`${OIDC_ISSUER}/.well-known/jwks`);
-    if (!res.ok) return { ok: false, status: 503, refusal: `GitHub's OIDC key set answered ${res.status}, so the token cannot be verified` };
-    keys = ((await res.json()) as { keys?: Array<JsonWebKey & { kid?: string }> }).keys ?? [];
+    ({ payload: claims } = (await jwtVerify(token, keys, {
+      algorithms: ["RS256"],
+      issuer: OIDC_ISSUER,
+      audience: OIDC_AUDIENCE,
+      currentDate: now,
+      clockTolerance: SKEW_SECONDS,
+      requiredClaims: ["exp"],
+    })) as { payload: OidcClaims });
   } catch (err) {
-    return { ok: false, status: 503, refusal: `GitHub's OIDC key set could not be read (${err instanceof Error ? err.message : String(err)}), so the token cannot be verified` };
-  }
-  const jwk = keys.find((k) => k.kid === header.kid);
-  if (!jwk || jwk.kty !== "RSA") return { ok: false, status: 401, refusal: `no RSA key '${header.kid}' in GitHub's OIDC key set` };
-  const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: jwk.n, e: jwk.e }, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-  const signed = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
-  if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64urlBytes(parts[2]), signed))) {
-    return { ok: false, status: 401, refusal: "the JWT signature does not verify against GitHub's key" };
+    if (keysError) return { ok: false, status: 503, refusal: `GitHub's OIDC key set could not be read (${(keysError as Error).message}), so the token cannot be verified` };
+    if (err instanceof errors.JWKSNoMatchingKey) return { ok: false, status: 401, refusal: `no RSA key '${header.kid}' in GitHub's OIDC key set` };
+    if (err instanceof errors.JWSSignatureVerificationFailed) return { ok: false, status: 401, refusal: "the JWT signature does not verify against GitHub's key" };
+    if (err instanceof errors.JWTExpired) return { ok: false, status: 401, refusal: "the token has expired" };
+    if (err instanceof errors.JWTClaimValidationFailed) {
+      if (err.claim === "iss") return { ok: false, status: 401, refusal: `issuer is not ${OIDC_ISSUER}` };
+      if (err.claim === "aud") return { ok: false, status: 401, refusal: `audience is not '${OIDC_AUDIENCE}'` };
+      if (err.claim === "nbf") return { ok: false, status: 401, refusal: "the token is not valid yet" };
+      return { ok: false, status: 401, refusal: `the token's ${String(err.claim)} claim is not acceptable` };
+    }
+    if (err instanceof errors.JWSInvalid || err instanceof errors.JWTInvalid) return { ok: false, status: 401, refusal: "the JWT header or payload does not decode" };
+    return { ok: false, status: 401, refusal: `the token could not be verified: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}` };
   }
 
   const at = Math.floor(now.getTime() / 1000);
-  if (claims.iss !== OIDC_ISSUER) return { ok: false, status: 401, refusal: `issuer '${claims.iss}' is not ${OIDC_ISSUER}` };
-  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!audiences.includes(OIDC_AUDIENCE)) return { ok: false, status: 401, refusal: `audience is not '${OIDC_AUDIENCE}'` };
   if (typeof claims.exp !== "number" || claims.exp <= at) return { ok: false, status: 401, refusal: "the token has expired" };
-  if (typeof claims.nbf === "number" && claims.nbf > at + SKEW_SECONDS) return { ok: false, status: 401, refusal: "the token is not valid yet" };
   if (typeof claims.iat === "number" && claims.iat > at + SKEW_SECONDS) return { ok: false, status: 401, refusal: "the token was issued in the future" };
   return { ok: true, claims };
 }
