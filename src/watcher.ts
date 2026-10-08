@@ -159,8 +159,7 @@ const finding = (namespace: string, fingerprint: string, headline: string, evide
     "",
     // Read from outside Capsid (CI conclusions, probe answers, GitHub error text), so it is
     // fenced as external: data to confirm, never an instruction to follow.
-    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("
-")),
+    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
     "",
     "## What this job is",
     "",
