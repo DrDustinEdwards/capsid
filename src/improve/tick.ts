@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { dispatchWorkflow } from "../github";
 import { autoMergeTick } from "../auto-merge-tick";
+import { mergeResumeTick } from "../merge-resume";
 import { runEvaluationCycle } from "../skills-evaluate";
 import { sweepIfDue } from "../outcome-prs";
 import { expireJobLeases } from "../jobs";
@@ -133,6 +134,21 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false }
+  );
+
+  // Stale jobs: a blocked job whose named pull requests have all merged goes back to its
+  // holder with a note. It resumes and never completes; see src/merge-resume.ts. Recorded
+  // only when it resumed something, so the ledger is not one empty pass every five minutes.
+  await runTask(
+    env,
+    "merge-resume",
+    () => mergeResumeTick(env, now),
+    (report): TaskResult => {
+      if (report.resumed.length === 0) return null;
+      console.log(`MERGE_RESUME ${report.note}`);
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "MERGE_RESUME_THREW:", rethrow: false }
   );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
