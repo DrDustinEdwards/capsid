@@ -21,6 +21,7 @@ import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
+import { logEvent } from "./log";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
 // /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
@@ -206,7 +207,7 @@ function paramsOf(row: SeatAuditRow): Record<string, unknown> {
   } catch (err) {
     // This Worker wrote the row, so a params that does not parse is a defect to see,
     // not a start to hide: it is logged, and the start is listed with no run.
-    console.error(`OPS_FEED_AUDIT_PARAMS_UNREADABLE audit_log ${row.id}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "OPS_FEED_AUDIT_PARAMS_UNREADABLE", { message: `OPS_FEED_AUDIT_PARAMS_UNREADABLE audit_log ${row.id}: ${err instanceof Error ? err.message : String(err)}` });
     return {};
   }
 }
@@ -251,7 +252,7 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
     if (!Array.isArray(parsed)) throw new Error("not an array");
     return parsed as OpsAwaitingSeat[];
   } catch (err) {
-    console.error(`OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "OPS_FEED_AWAITING_UNREADABLE", { message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}` });
     return [];
   }
 }
@@ -450,7 +451,7 @@ async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof re
     return { read: await readTaskRuns(env.DB) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`OPS_FEED_TASK_RUNS_UNREADABLE ${message}`);
+    logEvent("error", "OPS_FEED_TASK_RUNS_UNREADABLE", { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` });
     return { error: message };
   }
 }
@@ -510,7 +511,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     last = await env.APP_KV.get(OPS_REFRESH_KEY);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`OPS_REFRESH_LIMIT_UNREADABLE ${message}`);
+    logEvent("error", "OPS_REFRESH_LIMIT_UNREADABLE", { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` });
     return textResponse(`the refresh rate limit could not be read (${message}), so no pass was run. Try again shortly.`, 503);
   }
   const allowedAt = refreshAllowedAt(last, now);
@@ -524,7 +525,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     await env.APP_KV.put(OPS_REFRESH_KEY, now.toISOString());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`OPS_REFRESH_LIMIT_UNWRITABLE ${message}`);
+    logEvent("error", "OPS_REFRESH_LIMIT_UNWRITABLE", { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` });
     return textResponse(`the refresh rate limit could not be written (${message}), so no pass was run. Try again shortly.`, 503);
   }
 
@@ -535,7 +536,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     report = await watcherTick(env, now, () => gather(env, now), { force: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`OPS_REFRESH_PASS_FAILED ${message}`);
+    logEvent("error", "OPS_REFRESH_PASS_FAILED", { message: `OPS_REFRESH_PASS_FAILED ${message}` });
     await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message, source_address: sourceAddress(request) })]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
@@ -550,7 +551,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     // The pass happened; only its audit row failed. Said in a header and the log, not
     // turned into a failure of a pass that ran.
     warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
-    console.error(warning);
+    logEvent("error", "OPS_REFRESH_AUDIT_FAILED", { message: warning });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
   return feedResponse(request, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});

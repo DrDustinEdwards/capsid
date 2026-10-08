@@ -3,6 +3,7 @@ import type { HealthReport } from "./health";
 import { parseHealth } from "./health-format";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
+import { logEvent } from "./log";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -231,7 +232,7 @@ export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapsho
     if (parsed?.version !== 1 || !Array.isArray(parsed.sites)) throw new Error(`unexpected shape (version ${String(parsed?.version)})`);
     return parsed;
   } catch (err) {
-    console.error(`OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again`);
+    logEvent("error", "OPS_SNAPSHOT_UNREADABLE", { message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again` });
     return null;
   }
 }
