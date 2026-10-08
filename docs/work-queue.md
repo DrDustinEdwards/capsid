@@ -29,7 +29,7 @@ An unreadable GitHub holds the job rather than reading as an approval.
 
 The driver is the `/improve work` command in Claude Code: it resumes a cleared gate, claims one job, does it in that namespace's clone under that repo's rules, and reports back.
 
-**One driver session per project folder.** The bearer token is fixed when the MCP server is configured, so a session holds one credential and works one namespace. Each repo folder configures its own from `~/.capsid/agent-<ns>-driver.key`. `/improve work all` therefore does not walk the portfolio on one credential: it names the repo folders and stops, and each is launched separately. It could not do more if it wanted to, because a namespace-scoped agent that names no namespace on `jobs` is refused.
+**One driver session per project folder.** The bearer token is fixed when the MCP server is configured, so a session holds one credential and works one namespace. Each repo folder configures its own from `~/.capsid/agent-<ns>-driver.key`. `/improve work all` therefore does not walk the portfolio on one credential: it names the repo folders and stops, and each is launched separately. It could not do more if it wanted to, because a namespace-scoped agent that names no namespace on `jobs` is refused. Outside its namespace a driver may read only the portfolio documents in capsid (the conventions, the decisions log and its volumes, the rulings and capsid's core; docs/auth.md), which `brief` lists under `portfolio_documents`; it cannot see capsid's jobs, research or policy.
 
 ## Claims
 
