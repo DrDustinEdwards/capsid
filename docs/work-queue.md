@@ -32,6 +32,18 @@ The driver is the `/improve work` command in Claude Code: it resumes a cleared g
 
 **One driver session per project folder.** The bearer token is fixed when the MCP server is configured, so a session holds one credential and works one namespace. Each repo folder configures its own from `~/.capsid/agent-<ns>-driver.key`. `/improve work all` therefore does not walk the portfolio on one credential: it names the repo folders and stops, and each is launched separately. It could not do more if it wanted to, because a namespace-scoped agent that names no namespace on `jobs` is refused.
 
+**Keeping a working lease alive** (job_3637b6291785, 2026-10-08). A driver that hands a build to a background subagent can go hours without a turn of its own, so it cannot heartbeat on a timer, and the four-hour lease would return a job that is being worked. Claude Code has no timer hook, but its `PostToolUse` hook fires for every tool call a subagent makes too (the hook input then carries `agent_id`, per the hooks documentation read 2026-10-08), so `scripts/lease-keepalive.mjs` runs as an async `PostToolUse` hook and heartbeats the claimed jobs of its namespace, at most once every ten minutes per session. A session that died makes no tool calls, so nothing fires and its lease still expires; a lease is never extended on a guess. The script reads the driver key from the project's `.mcp.json`, does nothing when there is none (so it is safe to install for every session), refuses a non-https url, and exits 0 whatever happens. It needs one thing from Dustin, once, in his user-level Claude Code settings (an agent cannot edit them), with the path to this repo's clone:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      { "hooks": [{ "type": "command", "command": "node C:\\Users\\<you>\\dev\\capsid-mcp\\scripts\\lease-keepalive.mjs", "async": true }] }
+    ]
+  }
+}
+```
+
 ## Claims
 
 `complete`, `fail` and `block` take an optional `claim`, an object or its JSON string, that states what the driver says it did: `prs_opened` and `prs_merged` (up to 10 URLs each), `tests` (`run`, `passed`, `failed`, `result` of `pass`, `fail`, `partial` or `not_run`), `deploy_state` (`none`, `pending`, `deployed`, `verified` or `failed`), `files_touched` (up to 500 paths), `usage` (`cost_usd`, `active_seconds` and `tokens` of `input`, `output`, `cache_read`, `cache_creation`; non-negative, finite, tokens whole numbers; this session's own total, not a running one), and `versions` (`model_id`, `client_name`, `client_version`, `permission_mode`). A string that does not parse, or a key the claim does not know, is refused rather than dropped. `usage` and `versions` are self-reported and recorded only; nothing authorizes on them.
