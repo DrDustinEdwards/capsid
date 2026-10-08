@@ -11,7 +11,7 @@ import {
   DEFAULT_CONDITION,
   maxAttemptsFor,
   scheduledFor,
-  ROSTER,
+  LOOP_ROSTER,
   SCORES_PATH,
   chicagoDay,
   loopPauseReason,
@@ -137,7 +137,7 @@ export async function enforceBudget(env: Env, now: Date): Promise<string | null>
   console.error(
     `IMPROVE_BUDGET_EXCEEDED month=${budget.month} actions_minutes=${budget.spend.ci_minutes.toFixed(1)}/${budget.caps.actions_minutes_month} model_usd=${budget.spend.cost_usd.toFixed(2)}/${budget.caps.model_usd_month}`
   );
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     if (!(await pausedReason(env.APP_KV, namespace))) {
       await pauseNamespace(env.APP_KV, namespace, loopPauseReason("budget"));
     }

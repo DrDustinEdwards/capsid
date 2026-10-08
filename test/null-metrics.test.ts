@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { REPORTED_SECONDARY } from "../scripts/improve-report.mjs";
 import { parseScoresDoc, seedScoresDoc } from "../src/improve-scores";
-import { ROSTER } from "../src/improve-schema";
+import { LOOP_ROSTER } from "../src/improve-schema";
 
 // A declared metric that nothing reports is a false claim in the scores document.
 // The scores canon and the scorer are checked against each other in both directions,
@@ -48,7 +48,7 @@ test("PLANT: the signed report carries no metric that nothing measures", () => {
 });
 
 test("PLANT: the seed document declares no metric the scorer does not report", () => {
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const doc = parseScoresDoc(namespace, seedScoresDoc(namespace));
     assert.deepEqual(doc.problems, [], `${namespace}'s seed document must parse cleanly`);
     const declared = doc.secondary.map((s) => s.metric);
@@ -63,7 +63,7 @@ test("PLANT: the seed document declares no metric the scorer does not report", (
 test("PLANT: no namespace parks an intention as a stub", () => {
   // The `stub` marker is for a metric that is genuinely half-wired, not for planned
   // work (that lives in capsid/improve/TASK-wire-the-metrics.md).
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const doc = parseScoresDoc(namespace, seedScoresDoc(namespace));
     const stubs = doc.secondary.filter((s) => s.stub).map((s) => s.metric);
     assert.deepEqual(stubs, [], `${namespace} still declares stub metrics: ${stubs.join(", ")}`);
@@ -84,7 +84,7 @@ test("the parser still understands a stub, for the day one is genuinely half-wir
 test("the anchor block is untouched by any of this, so no pin moves", () => {
   // Removing a Secondary line cannot change the anchor checksum: sectionSlice stops
   // at the next `## ` heading.
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const doc = parseScoresDoc(namespace, seedScoresDoc(namespace));
     assert.ok(doc.anchorBlock.startsWith("## Anchors"), "the block starts at the heading");
     assert.ok(!doc.anchorBlock.includes("## Secondary"), "and stops before the tunable section");

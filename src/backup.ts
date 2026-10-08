@@ -2,7 +2,7 @@ import { COMPLETE_MARKER, dumpDatabase, writeCompleteMarker, type DumpResult } f
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./headers";
-import { anchorKey, bestKey, BUDGET_KEY, META_LAST_KEY, MODE_KEY, pausedKey, ROSTER } from "./improve-schema";
+import { anchorKey, bestKey, BUDGET_KEY, META_LAST_KEY, MODE_KEY, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { readHoldoutManifests } from "./improve-scorer";
 import { probeFts } from "./store-probe";
 
@@ -215,7 +215,7 @@ export async function runBackup(env: Env): Promise<BackupResult> {
 // backup:lease is absent: it is this run's own bookkeeping.
 function kvPinKeys(): string[] {
   const keys = [MODE_KEY, BUDGET_KEY, META_LAST_KEY, BACKUP_LAST_OK_KEY];
-  for (const namespace of ROSTER) keys.push(bestKey(namespace), pausedKey(namespace), anchorKey(namespace));
+  for (const namespace of LOOP_ROSTER) keys.push(bestKey(namespace), pausedKey(namespace), anchorKey(namespace));
   return keys;
 }
 

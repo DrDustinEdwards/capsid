@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { improveControl, improveStatus } from "../src/improve-run.ts";
-import { BUDGET_KEY, MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema.ts";
+import { BUDGET_KEY, MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema.ts";
 import { pausedReason, readBudget, readMode } from "../src/improve-state.ts";
 import { audited, controlHarness as harness } from "./improve-harness.ts";
 
@@ -45,10 +45,10 @@ test("pause sets the key with a reason and reads it back; unpause clears it", as
 test('pause "all" pauses every roster namespace with the default reason', async () => {
   const { env, kv } = harness();
   const r = await improveControl(env, "pause", { namespace: "all" });
-  assert.ok(ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
-  for (const ns of ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
+  assert.ok(LOOP_ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
+  for (const ns of LOOP_ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
   if (r.action !== "pause") assert.fail(`pause answered as ${r.action}`);
-  assert.deepEqual(r.namespaces.slice().sort(), [...ROSTER].sort());
+  assert.deepEqual(r.namespaces.slice().sort(), [...LOOP_ROSTER].sort());
 });
 
 test("pause rejects a non-roster namespace and a missing target", async () => {
