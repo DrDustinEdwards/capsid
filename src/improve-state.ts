@@ -322,12 +322,15 @@ export async function priorDoc(
 
 // An audit row for a loop action that is not a document write (a run opening, a
 // namespace pausing, a scorer dispatch), under the same actor, so one query answers
-// what the loop did last night.
+// what the loop did last night. An action a person made (a pause, the mode, a budget)
+// names that person: `actor` is the caller, and only the loop's own actions take the
+// loop's name (controls design, finding 5).
 export function improveAudit(
   db: D1Database,
   action: string,
   namespace: string | null,
-  params: unknown
+  params: unknown,
+  actor: string = IMPROVE_ACTOR
 ): D1PreparedStatement {
-  return auditStatement(db, IMPROVE_ACTOR, action, namespace, null, params);
+  return auditStatement(db, actor, action, namespace, null, params);
 }

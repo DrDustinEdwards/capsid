@@ -456,8 +456,12 @@ export async function improveControl(
     actions_minutes_month?: number;
     model_usd_month?: number;
     release?: boolean;
+    // Who asked. The audit rows these actions write name the caller; absent, they name
+    // the loop, as every row did before callers were named.
+    actor?: string;
   }
 ): Promise<ImproveControlResult> {
+  const who = opts.actor ?? IMPROVE_ACTOR;
   // Mints a read-only operator key and prints the command that installs its hash. It
   // does not install it: a Worker that can widen its own authorization list does not
   // have one. The key is returned once and stored nowhere, not even the hash in the
@@ -479,7 +483,7 @@ export async function improveControl(
         // Tells two mints apart without being usable as a verifier.
         fingerprint: hash.slice(0, 8),
         grant: "read-only",
-      }),
+      }, who),
     ]);
     return {
       action: "mint_operator_key",
@@ -510,7 +514,7 @@ ${next.join(",")}`,
     const key = driverKey(target);
     if (opts.release === true) {
       await env.APP_KV.delete(key);
-      await env.DB.batch([improveAudit(env.DB, "improve-driver-released", target, {})]);
+      await env.DB.batch([improveAudit(env.DB, "improve-driver-released", target, {}, who)]);
       return { action: "claim", namespace: target, held: false, holder: null, expires_in_seconds: null, reason: "released" };
     }
     const holder = await env.APP_KV.get(key);
@@ -527,7 +531,7 @@ ${next.join(",")}`,
     }
     const claimedAt = new Date().toISOString();
     await env.APP_KV.put(key, claimedAt, { expirationTtl: DRIVER_LEASE_TTL_SECONDS });
-    await env.DB.batch([improveAudit(env.DB, "improve-driver-claimed", target, { claimed_at: claimedAt })]);
+    await env.DB.batch([improveAudit(env.DB, "improve-driver-claimed", target, { claimed_at: claimedAt }, who)]);
     return {
       action: "claim",
       namespace: target,
@@ -547,7 +551,7 @@ ${next.join(",")}`,
       throw new Error(`skill_transitions must be "hold" or "apply"; got '${opts.value ?? ""}'. Nothing was changed.`);
     }
     await env.APP_KV.put(TRANSITIONS_KEY, value);
-    await env.DB.batch([improveAudit(env.DB, "skill-transitions-set", null, { mode: value })]);
+    await env.DB.batch([improveAudit(env.DB, "skill-transitions-set", null, { mode: value }, who)]);
     return { action: "skill_transitions", requested: value, mode: await transitionMode(env) };
   }
 
@@ -557,7 +561,7 @@ ${next.join(",")}`,
       throw new Error(`mode must be one of ${IMPROVE_MODES.join(", ")}; got '${opts.value ?? ""}'. Nothing was changed.`);
     }
     await env.APP_KV.put(MODE_KEY, value);
-    await env.DB.batch([improveAudit(env.DB, "improve-mode-set", null, { mode: value })]);
+    await env.DB.batch([improveAudit(env.DB, "improve-mode-set", null, { mode: value }, who)]);
     // Read back through the resolver the loop uses, so an unexpected value surfaces here.
     const read = await readMode(env.APP_KV);
     return { action: "mode", requested: value, mode: read.mode, mode_note: read.reason };
@@ -575,7 +579,7 @@ ${next.join(",")}`,
     for (const ns of namespaces) {
       if (action === "pause") await pauseNamespace(env.APP_KV, ns, reason);
       else await env.APP_KV.delete(pausedKey(ns));
-      audits.push(improveAudit(env.DB, action === "pause" ? "improve-paused" : "improve-unpaused", ns, action === "pause" ? { reason } : {}));
+      audits.push(improveAudit(env.DB, action === "pause" ? "improve-paused" : "improve-unpaused", ns, action === "pause" ? { reason } : {}, who));
     }
     await env.DB.batch(audits);
     // Read each pause key back: pause returns the reason, unpause returns null.
@@ -591,7 +595,7 @@ ${next.join(",")}`,
     }
   }
   await env.APP_KV.put(BUDGET_KEY, JSON.stringify({ actions_minutes_month, model_usd_month }));
-  await env.DB.batch([improveAudit(env.DB, "improve-budget-set", null, { actions_minutes_month, model_usd_month })]);
+  await env.DB.batch([improveAudit(env.DB, "improve-budget-set", null, { actions_minutes_month, model_usd_month }, who)]);
   // Read back through readBudget so the caps returned are the ones the kill switch enforces.
   const caps = await readBudget(env.APP_KV);
   return { action: "budget", caps };
