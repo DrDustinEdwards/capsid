@@ -1,5 +1,6 @@
 import { verifyIdToken, type KeysFetcher } from "./access-jwt";
 import { getCookie, isAdminEmail, sha256Hex, timingSafeEqual } from "./auth";
+import { b64urlFromBytes } from "./encoding";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
@@ -53,12 +54,8 @@ function refusal(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 }
 
-function base64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
 async function s256(verifier: string): Promise<string> {
-  return base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  return b64urlFromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 }
 
 // What the KV state holds: the caller's own value, and this sign-in's PKCE verifier and
@@ -80,7 +77,7 @@ export async function startAccessLogin(
   const saas = accessSaas(env);
   if (!saas) return refusal(UNCONFIGURED, 503);
   const stateToken = crypto.randomUUID();
-  const signIn: StoredSignIn = { stored, verifier: base64Url(crypto.getRandomValues(new Uint8Array(32))), nonce: crypto.randomUUID() };
+  const signIn: StoredSignIn = { stored, verifier: b64urlFromBytes(crypto.getRandomValues(new Uint8Array(32))), nonce: crypto.randomUUID() };
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, JSON.stringify(signIn), { expirationTtl: STATE_TTL_SECONDS });
   const target = new URL(`${saas.issuer}/authorization`);
   target.searchParams.set("client_id", saas.clientId);
