@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "tap",
+  "tap": {
+    "testFiles": ["test/*.test.ts"],
+    "nodeArgs": ["--import", "./test/resolve-ts.mjs", "--test-reporter=tap"],
+    "forceBail": false
+  },
+  "coverageAnalysis": "perTest",
+  "disableBail": true,
+  "mutate": ["src/**/*.ts", "!src/**/*.d.ts"],
+  "reporters": ["json", "clear-text"],
+  "jsonReporter": { "fileName": "reports/mutation.json" },
+  "concurrency": 3,
+  "timeoutMS": 15000,
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true,
+  "ignorePatterns": ["dashboard", "test-integration", ".improve-build", ".improve-holdout", "reports"]
+}
