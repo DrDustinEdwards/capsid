@@ -48,6 +48,7 @@ import {
   type OpenOutcome,
 } from "./improve/open";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
+import { readMaintenance, type MaintenanceItem } from "./maintenance";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
 // The barrel: only what something outside src/improve/ imports.
@@ -154,6 +155,9 @@ export interface NamespaceStatus {
   // Pull requests the auto-merge policy declined, each with the refusing check. The
   // tick rewrites the whole list, so it needs no expiry. Empty when the policy is off.
   awaiting_seat: AwaitingSeat[];
+  // The daily maintenance pass's list for this namespace (src/maintenance.ts): stale or
+  // mislabelled jobs and what was resumed for the seat. Empty before the first pass.
+  maintenance: MaintenanceItem[];
   // Counts by status, plus offered versus used: a skill offered often and used rarely
   // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
@@ -300,6 +304,7 @@ export async function improveStatus(
   } catch {
     awaitingAll = [];
   }
+  const maintenanceAll = (await readMaintenance(env))?.items ?? [];
 
   for (const namespace of namespaces) {
     const { doc, refusal } = await loadScores(env, namespace);
@@ -347,6 +352,7 @@ export async function improveStatus(
         : null,
       jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
+      maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       skills: await skillsSummary(env.DB, namespace),
     });
   }
