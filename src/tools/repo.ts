@@ -391,7 +391,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("delete_branch"),
       description:
-        "Delete a branch in a namespace's GitHub repo. REFUSES, naming the refusal: the default branch, always; a branch under the improve loop's prefix; a branch with an open pull request; and a branch that does not exist. force:true lifts the prefix and open-PR refusals and needs the can_merge flag. Pass merged:true instead of branch to prune every branch whose latest pull request merged and whose tip is the commit that pull request merged from (so work pushed after the merge is kept): it PREVIEWS by default, deleting nothing, and deletes only with confirm:true, at most 40 per call (it reports how many remain). It keeps the default branch, protected branches, release/*, screenshots, results, gh-pages, improve-loop branches, branches with an open or unmerged pull request and branches with no pull request, and lists why. Give branch or merged, not both; merged does not take force. Needs the write grant; audit-logged with the list.",
+        "Delete a branch in a namespace's GitHub repo. REFUSES, naming the refusal: the default branch, always; a branch under the improve loop's prefix; a branch with an open pull request; and a branch that does not exist. force:true lifts the prefix and open-PR refusals and needs the can_merge flag. Pass merged:true instead of branch to prune every branch whose latest pull request merged and whose tip is the commit that pull request merged from (so work pushed after the merge is kept): it PREVIEWS by default, deleting nothing, and deletes only with confirm:true, at most 40 per call (it reports how many remain); keep:[names] leaves named branches alone. It keeps the default branch, protected branches, release/*, screenshots, results, gh-pages, improve-loop branches, branches with an open or unmerged pull request and branches with no pull request, and lists why. Give branch or merged, not both; merged does not take force. Needs the write grant; audit-logged with the list.",
       inputSchema: {
         namespace: nsName,
         branch: bounded(MAX_REF).optional().describe("The branch to delete. Omit when merged is true."),
@@ -401,16 +401,17 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
           .describe("Lift the improve-prefix and open-PR refusals. Requires the can_merge flag. Does NOT lift the default-branch refusal."),
         merged: z.boolean().optional().describe("Prune the merged branches instead of deleting one: a preview unless confirm is true."),
         confirm: z.boolean().optional().describe("With merged: actually delete the branches the preview lists. Without it nothing is deleted."),
+        keep: z.array(bounded(MAX_REF)).max(100).optional().describe("With merged: branch names to leave alone this call even if they would be pruned."),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
       },
     },
-    ({ namespace, branch, force, merged, confirm, repo }) => {
+    ({ namespace, branch, force, merged, confirm, keep, repo }) => {
       if (merged === true) {
         if (branch !== undefined) return Promise.resolve(fail("delete_branch takes branch or merged:true, not both."));
         if (force === true) return Promise.resolve(fail("delete_branch merged does not take force: it never lifts a refusal."));
-        return guardedWrite("delete_branch", namespace, null, () => pruneMergedBranches(env, namespace, { confirm }, repo), { repo });
+        return guardedWrite("delete_branch", namespace, null, () => pruneMergedBranches(env, namespace, { confirm, keep }, repo), { repo });
       }
-      if (confirm !== undefined) return Promise.resolve(fail("confirm applies only with merged:true."));
+      if (confirm !== undefined || keep !== undefined) return Promise.resolve(fail("confirm and keep apply only with merged:true."));
       if (branch === undefined) return Promise.resolve(fail("delete_branch needs a branch, or merged:true to prune the merged ones."));
       return guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo), { force, repo });
     }

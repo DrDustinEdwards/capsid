@@ -87,6 +87,16 @@ test("the preview lists the one merged-clean branch, keeps every other with its 
   });
 });
 
+test("keep leaves a named branch alone even though it would be pruned", async () => {
+  await withFetch(routes(), async (calls) => {
+    const out = await pruneMergedBranches(makeEnv(), "ns", { confirm: true, keep: ["feat/merged-clean"] });
+    assert.deepEqual(out.prune, []);
+    assert.deepEqual(out.deleted, []);
+    assert.match(out.kept.find((k) => k.branch === "feat/merged-clean")?.reason ?? "", /kept by request/);
+    assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
+  });
+});
+
 test("confirm deletes the listed branch only, and says nothing remains", async () => {
   await withFetch(routes(), async (calls) => {
     const out = await pruneMergedBranches(makeEnv(), "ns", { confirm: true });

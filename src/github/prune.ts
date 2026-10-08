@@ -84,7 +84,7 @@ async function paged<T>(env: Env, owner: string, repo: string, path: string): Pr
   return { rows, complete: false };
 }
 
-export async function pruneMergedBranches(env: Env, namespace: string, opts: { confirm?: boolean } = {}, repoSelector?: string) {
+export async function pruneMergedBranches(env: Env, namespace: string, opts: { confirm?: boolean; keep?: string[] } = {}, repoSelector?: string) {
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const base = `/repos/${owner}/${repo}`;
   const defaultBranch = await getDefaultBranch(env, owner, repo);
@@ -107,7 +107,13 @@ export async function pruneMergedBranches(env: Env, namespace: string, opts: { c
 
   const prune: PruneCandidate[] = [];
   const kept: PruneKept[] = [];
+  // Names the caller said to leave alone this call, whatever their pull request says.
+  const keepNames = new Set(opts.keep ?? []);
   for (const b of branches.rows) {
+    if (keepNames.has(b.name)) {
+      kept.push({ branch: b.name, reason: "kept by request (keep)" });
+      continue;
+    }
     const verdict = pruneVerdict({ name: b.name, sha: b.commit.sha, protected: b.protected === true }, defaultBranch, latest.get(b.name), listsComplete);
     if (verdict.prune) prune.push({ branch: b.name, sha: b.commit.sha, pr: verdict.pr });
     else kept.push({ branch: b.name, reason: verdict.reason });
