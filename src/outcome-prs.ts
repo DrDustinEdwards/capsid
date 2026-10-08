@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
+import { logEvent } from "./log";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
 // runs, but the seat merges afterwards, so the row would always read "opened, not
@@ -173,7 +174,7 @@ async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promis
   } catch (err) {
     // A read that could not run leaves the unpinned row as it was, never pinned to a
     // pull request nobody checked; the reason is logged, not swallowed.
-    console.warn(`outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("warn", "OUTCOME_PRS_REPO_UNREADABLE", { message: `outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}` });
     return null;
   }
 }

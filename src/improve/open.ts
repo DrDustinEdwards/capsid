@@ -36,6 +36,7 @@ import {
   readMode,
   type AttemptRow,
 } from "../improve-state";
+import { logEvent } from "../log";
 
 // A synthetic attempt id with no improve_attempts row. It measures the base and is not
 // an attempt at anything; giving it a row would make every attempt count off by one.
@@ -134,9 +135,9 @@ export async function checkBudget(env: Env, now: Date): Promise<BudgetStatus> {
 export async function enforceBudget(env: Env, now: Date): Promise<string | null> {
   const budget = await checkBudget(env, now);
   if (!budget.exceeded) return null;
-  console.error(
-    `IMPROVE_BUDGET_EXCEEDED month=${budget.month} actions_minutes=${budget.spend.ci_minutes.toFixed(1)}/${budget.caps.actions_minutes_month} model_usd=${budget.spend.cost_usd.toFixed(2)}/${budget.caps.model_usd_month}`
-  );
+  logEvent("error", "IMPROVE_BUDGET_EXCEEDED", {
+    message: `IMPROVE_BUDGET_EXCEEDED month=${budget.month} actions_minutes=${budget.spend.ci_minutes.toFixed(1)}/${budget.caps.actions_minutes_month} model_usd=${budget.spend.cost_usd.toFixed(2)}/${budget.caps.model_usd_month}`,
+  });
   for (const namespace of LOOP_ROSTER) {
     if (!(await pausedReason(env.APP_KV, namespace))) {
       await pauseNamespace(env.APP_KV, namespace, loopPauseReason("budget"));
@@ -377,7 +378,7 @@ async function resolveDefaultSha(env: Env, namespace: string): Promise<string | 
   try {
     return await defaultBranchSha(env, namespace);
   } catch (err) {
-    console.log(`IMPROVE_DEFAULT_SHA_UNRESOLVED ns=${namespace} ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("log", "IMPROVE_DEFAULT_SHA_UNRESOLVED", { message: `IMPROVE_DEFAULT_SHA_UNRESOLVED ns=${namespace} ${err instanceof Error ? err.message : String(err)}` });
     return null;
   }
 }

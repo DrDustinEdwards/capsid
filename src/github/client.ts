@@ -9,6 +9,7 @@ import { b64urlFromBytes, b64urlEncode } from "../encoding";
 import { repoPathProblem } from "../limits";
 // AttemptEnv, not Env: this module must not be able to name HOLDOUT.
 import type { AttemptEnv as Env } from "../env";
+import { logEvent } from "../log";
 
 const GH = "https://api.github.com";
 const GH_HEADERS: Record<string, string> = {
@@ -258,9 +259,9 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
     // The commit already landed. Failing the tool call because a cache sweep failed
     // would misreport the write, so this is logged by name and the stale window
     // stays bounded by the 60 second TTL.
-    console.error(
-      `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`
-    );
+    logEvent("error", "GH_CACHE_INVALIDATION_FAILED", {
+      message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
   return deleted;
 }

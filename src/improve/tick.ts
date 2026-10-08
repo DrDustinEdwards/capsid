@@ -41,6 +41,7 @@ import {
 import { finalizeRun, gatherContext, renderAttemptDoc, renderObjective } from "./finalize";
 import { unjudgedCeilingNote } from "./ingest";
 import { baselineId, enforceBudget, loadScores, readDoc, recentAttempts } from "./open";
+import { logEvent } from "../log";
 
 // How many runs one tick advances. Bounded so a tick stays within its invocation
 // budget when every namespace is mid-run; the rest are reached on the next tick, five
@@ -84,7 +85,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     (expired): TaskResult => {
       if (expired.requeued.length === 0) return null;
       const line = `returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`;
-      console.log(`JOB_LEASE_EXPIRED ${line}`);
+      logEvent("log", "JOB_LEASE_EXPIRED", { message: `JOB_LEASE_EXPIRED ${line}` });
       return { outcome: "ok", reason: line };
     },
     { tag: "JOB_LEASE_SWEEP_THREW:", rethrow: false }
@@ -100,7 +101,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => autoMergeTick(env, now),
     (merged): TaskResult => {
       if (merged.ran) {
-        console.log(`AUTO_MERGE ${merged.note}`);
+        logEvent("log", "AUTO_MERGE", { message: `AUTO_MERGE ${merged.note}` });
         return { outcome: "ok", reason: merged.note };
       }
       return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
@@ -116,7 +117,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => runEvaluationCycle(env, now),
     (cycle): TaskResult => {
       if (!cycle.ran) return null;
-      console.log(`SKILL_CYCLE ${cycle.note}`);
+      logEvent("log", "SKILL_CYCLE", { message: `SKILL_CYCLE ${cycle.note}` });
       return { outcome: "ok", reason: cycle.note };
     },
     { tag: "SKILL_CYCLE_THREW:", rethrow: false }
@@ -130,7 +131,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => watcherTick(env, now, () => gatherFindings(env, now)),
     (watched): TaskResult => {
       if (!watched.ran) return null;
-      console.log(`WATCHER ${watched.note}`);
+      logEvent("log", "WATCHER", { message: `WATCHER ${watched.note}` });
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false }
@@ -145,7 +146,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => mergeResumeTick(env, now),
     (report): TaskResult => {
       if (report.resumed.length === 0) return null;
-      console.log(`MERGE_RESUME ${report.note}`);
+      logEvent("log", "MERGE_RESUME", { message: `MERGE_RESUME ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_RESUME_THREW:", rethrow: false }
@@ -163,7 +164,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     (swept): TaskResult => {
       if (!swept) return null;
       const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}, backfilled ${swept.backfilled}`;
-      console.log(`OUTCOME_SWEEP ${line}`);
+      logEvent("log", "OUTCOME_SWEEP", { message: `OUTCOME_SWEEP ${line}` });
       return { outcome: "ok", reason: line };
     },
     { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
@@ -188,7 +189,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       outcomes.push(await advanceOne(env, run, now));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`IMPROVE_TICK_THREW ${run.id} in '${entered}': ${message}`);
+      logEvent("error", "IMPROVE_TICK_THREW", { message: `IMPROVE_TICK_THREW ${run.id} in '${entered}': ${message}` });
       // A throwing step finalizes the run with the error recorded, so it cannot hold
       // the namespace's active-run slot forever. Two CAS attempts: the steps claim the
       // run before their external calls, so the first covers a throw before the claim

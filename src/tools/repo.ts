@@ -31,6 +31,7 @@ import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
+import { logEvent } from "../log";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
 // The merge response names the repo and the caller named the number, which is all a
@@ -297,7 +298,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
                 return { ...result, outcome_rows_updated: updated.filter((u) => u.changed).length };
               }
             } catch (err) {
-              console.error(`OUTCOME_REVERIFY_FAILED pr ${number}: ${err instanceof Error ? err.message : String(err)}`);
+              logEvent("error", "OUTCOME_REVERIFY_FAILED", { message: `OUTCOME_REVERIFY_FAILED pr ${number}: ${err instanceof Error ? err.message : String(err)}` });
             }
           }
           return result;

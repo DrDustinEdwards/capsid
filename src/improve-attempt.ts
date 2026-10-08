@@ -2,6 +2,7 @@ import type { AttemptEnv } from "./env";
 import { callModelStreaming } from "./improve-anthropic";
 import { createBranchAt, writeRepoFile } from "./github";
 import { isImproveBranch } from "./improve-schema";
+import { logEvent } from "./log";
 
 // Whole files, not a patch: a unified diff that fails to apply has no recovery in a cron job.
 const CHANGE_SCHEMA = {
@@ -100,10 +101,11 @@ export async function proposeChange(env: AttemptEnv, input: ProposeInput): Promi
   // The cache is only observable through these counters, so they are logged. A
   // second attempt in a run reading 0 here means a silent invalidator got into
   // the system prompt or the repository context between attempts.
-  console.log(
-    `IMPROVE_ATTEMPT_TOKENS ns=${input.namespace} in=${result.inputTokens} out=${result.outputTokens} ` +
-      `cache_read=${result.cacheReadTokens} cache_write=${result.cacheWriteTokens}`
-  );
+  logEvent("log", "IMPROVE_ATTEMPT_TOKENS", {
+    message:
+      `IMPROVE_ATTEMPT_TOKENS ns=${input.namespace} in=${result.inputTokens} out=${result.outputTokens} ` +
+      `cache_read=${result.cacheReadTokens} cache_write=${result.cacheWriteTokens}`,
+  });
 
   if (result.refused) {
     return { summary: "", reasoning: "", files: [], changedPaths: [], costUsd: result.costUsd, refused: true };
