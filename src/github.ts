@@ -34,6 +34,7 @@ export {
   repoHistory,
   repoRefs,
 } from "./github/refs";
+export { pruneMergedBranches, pruneVerdict } from "./github/prune";
 export {
   CI_DISPATCH_POLL_INTERVAL_MS,
   CI_DISPATCH_POLL_MS,
