@@ -21,6 +21,7 @@ export type TaskId =
   | "skill-cycle"
   | "watcher"
   | "outcome-sweep"
+  | "merge-resume"
   | "maintenance";
 
 // Each task, and how long it may go without a run before the Portal says it has
@@ -44,6 +45,7 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "lease-sweep", label: "Job lease sweep", period_ms: null },
   { id: "skill-cycle", label: "Skill evaluation cycle", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
+  { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
   { id: "maintenance", label: "Daily maintenance pass", period_ms: 24 * 3_600_000 },
 ];
 

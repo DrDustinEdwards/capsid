@@ -5,7 +5,7 @@ import { test } from "node:test";
 // @ts-expect-error a plain .mjs script with no type declarations, imported for its pure helpers
 import { DRIVER_CAPSID_TOOLS, DRIVER_DENIED, LOG_BUDGET, chicagoDay, driverArgs, install, installCommand, keyPath, logPath, manage, parseArgs, postLog, renderLog, selected, taskName } from "../scripts/schedule-drivers.mjs";
 import { capsidClient } from "../scripts/capsid-rpc.mjs";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
 
 // A Windows Task Scheduler task per project folder rather than a cloud routine,
@@ -16,7 +16,7 @@ const SOURCE = readFileSync(join(import.meta.dirname, "..", "scripts", "schedule
 const RPC_SOURCE = readFileSync(join(import.meta.dirname, "..", "scripts", "capsid-rpc.mjs"), "utf8");
 
 test("every roster namespace has a repo folder, so none is silently unschedulable", () => {
-  assert.deepEqual([...selected(undefined)].sort(), [...ROSTER].sort());
+  assert.deepEqual([...selected(undefined)].sort(), [...LOOP_ROSTER].sort());
 });
 
 test("the task name and the key path are per namespace, so one task is one driver", () => {

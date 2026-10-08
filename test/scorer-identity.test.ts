@@ -16,7 +16,7 @@ const SAMPLE = [
   "  build:",
   "    steps:",
   "      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5",
-  `  # ${SCORER_MARKER} ACROSS ALL FIVE ROSTER REPOS.`,
+  `  # ${SCORER_MARKER} ACROSS ALL FIVE LOOP_ROSTER REPOS.`,
   "  score:",
   "    steps:",
   "      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5",

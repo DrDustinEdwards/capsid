@@ -31,7 +31,7 @@ import { createHmac } from "node:crypto";
 // The roster, restated here rather than imported: this script is a plain .mjs with no
 // build step and src/improve-schema.ts is TypeScript. The check catches a typo in a
 // namespace name before a secret is set on the wrong repo.
-const ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"];
+const LOOP_ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"];
 
 const namespace = process.argv[2];
 // A whitespace-only value counts as unset: it would derive a key from spaces that no
@@ -52,7 +52,7 @@ function die(message) {
 if (!namespace) {
   die(
     `no namespace given. Usage: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs <namespace>\n` +
-      `  namespaces: ${ROSTER.join(", ")}\n` +
+      `  namespaces: ${LOOP_ROSTER.join(", ")}\n` +
       `  or: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs --backup-credential`
   );
 }
@@ -77,8 +77,8 @@ if (namespace === "--backup-credential") {
   process.exit(0);
 }
 
-if (!ROSTER.includes(namespace)) {
-  die(`'${namespace}' is not on the improve roster (${ROSTER.join(", ")}). Add it to ROSTER in src/improve-schema.ts first.`);
+if (!LOOP_ROSTER.includes(namespace)) {
+  die(`'${namespace}' is not on the improve roster (${LOOP_ROSTER.join(", ")}). Add it to LOOP_ROSTER in src/improve-schema.ts first.`);
 }
 
 // Must match deriveScoreKey in src/improve-scorer.ts exactly, including the version
