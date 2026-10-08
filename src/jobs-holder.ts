@@ -42,6 +42,7 @@ import { signJobText } from "./job-signing";
 import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
+import { externalFence } from "./provenance";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -369,7 +370,9 @@ async function reviewRefusal(
   // record what the reviewer said, or the next reader sees a job that stalled for no
   // stated reason.
   const { review } = outcome;
-  const said = review.said ? ` ${review.said}` : "";
+  // The reviewer's words come from a pull request comment, outside Capsid, and the driver reads them
+  // in the refusal and the block reason: fenced as external, and cut to fit the reason cap.
+  const said = review.said ? ` ${externalFence("review", review.by, review.said, 300)}` : "";
   if (outcome.kind === "rework") {
     // The cap is checked before the correction is spent, so the loop it bounds is
     // bounded. If the rework path only incremented and left the job claimed, a third

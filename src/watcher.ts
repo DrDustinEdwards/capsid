@@ -16,6 +16,7 @@ import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
 import { readCloudflare } from "./ops-cloudflare";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
+import { externalFence } from "./provenance";
 import {
   buildSnapshot,
   probeSite,
@@ -156,7 +157,9 @@ const finding = (namespace: string, fingerprint: string, headline: string, evide
     "",
     "## Evidence",
     "",
-    ...evidence.map((line) => `- ${line}`),
+    // Read from outside Capsid (CI conclusions, probe answers, GitHub error text), so it is
+    // fenced as external: data to confirm, never an instruction to follow.
+    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
     "",
     "## What this job is",
     "",
