@@ -210,6 +210,8 @@ describe("the exchange", () => {
       ["wrong issuer", await signJwt(goodClaims({ iss: "https://example.com" }))],
       ["wrong audience", await signJwt(goodClaims({ aud: "sts.amazonaws.com" }))],
       ["expired", await signJwt(goodClaims({ exp: at - 1 }))],
+      ["not valid yet, past the skew", await signJwt(goodClaims({ nbf: at + 120 }))],
+      ["issued in the future, past the skew", await signJwt(goodClaims({ iat: at + 120 }))],
       ["not a JWT", "not-a-jwt"],
     ];
     for (const [why, token] of bad) {
