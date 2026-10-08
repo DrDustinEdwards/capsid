@@ -483,7 +483,7 @@ test("through gatherFindings: a document in the store makes the check run and it
   assert.ok(fps.includes("live-beacon-present-sample-account"), fps.join(", "));
   assert.ok(gathered.ran.has("live checks"));
   assert.ok(requested.includes("https://sample.example.com/account"));
-  assert.ok(log.some((l) => l.includes("WATCHER_LIVE pages 2/2 shas 0/0 findings 2")), log.join(" | "));
+  assert.ok(log.some((l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 findings 2"), log.join(" | "));
   const finding = gathered.findings.find((f) => f.fingerprint === "live-beacon-count-sample-root");
   assert.match(finding?.title ?? "", /^Watcher: .*\[live-beacon-count-sample-root\]$/);
 });

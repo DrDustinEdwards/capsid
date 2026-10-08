@@ -154,7 +154,7 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
   } finally {
     console.error = original;
   }
-  assert.ok(errors.some((e) => e.startsWith("OUTCOME_REVERIFY_FAILED pr 7")), "the planted failure did not reach the re-verification");
+  assert.ok(errors.some((e) => JSON.parse(e).message.startsWith("OUTCOME_REVERIFY_FAILED pr 7")), "the planted failure did not reach the re-verification");
 });
 
 // evidence as an object or a JSON string
