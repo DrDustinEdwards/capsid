@@ -7,6 +7,7 @@ import { verifySignedBody } from "./improve-task";
 import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
 import { sha256Hex } from "./auth";
+import { logEvent } from "./log";
 
 // The seat starts a Claude Code session on GitHub's runners to work one queued job
 // (capsid/research/design-seat-start.md, approved 2026-09-26). The start sends a
@@ -40,7 +41,7 @@ export async function seatStartState(env: Env): Promise<SeatStartState> {
     enabled = (await env.APP_KV.get(SEAT_START_KEY)) === "on";
     max = (await env.APP_KV.get(SEAT_START_CAP_KEY)) === "2" ? 2 : 1;
   } catch (err) {
-    console.error(`SEAT_START_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off`);
+    logEvent("error", "SEAT_START_UNREADABLE", { message: `SEAT_START_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off` });
     return { enabled: false, max_sessions: 1 };
   }
   return { enabled, max_sessions: max };

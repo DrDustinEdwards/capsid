@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { resolveRepo } from "./github/client";
+import { logEvent } from "./log";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
 // D2, ruled by Dustin 2026-10-04). Both are read-only views through `jobs` action `list`
@@ -266,7 +267,7 @@ export async function readOvernightPlan(env: Env, args: { namespace?: string }, 
       // Said in the skip reason, not swallowed: an unmapped namespace and a corrupt
       // mapping have different fixes.
       const problem = err instanceof Error ? err.message : String(err);
-      console.error(`OVERNIGHT_PLAN no repo for ${ns}: ${problem}`);
+      logEvent("error", "OVERNIGHT_PLAN", { message: `OVERNIGHT_PLAN no repo for ${ns}: ${problem}` });
       repoOf.set(ns, { problem });
     }
   }

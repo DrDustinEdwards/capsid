@@ -8,6 +8,7 @@ import type { JobOutcomeRow } from "./job-outcomes";
 import type { JobListRow } from "./jobs-claim";
 import type { OverlapReport } from "./job-overlaps";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
+import { logEvent } from "./log";
 
 // What every job transition shares: the result shape, the refusal, the row read, the
 // guarded batch every transition commits through, and the checks more than one of
@@ -193,7 +194,7 @@ export async function correctionsForWork(db: D1Database, namespace: string, titl
     const spent = row?.spent;
     return typeof spent === "number" && Number.isFinite(spent) ? spent : Number.NaN;
   } catch (err) {
-    console.error(`CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "CORRECTIONS_READ_FAILED", { message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}` });
     return Number.NaN;
   }
 }

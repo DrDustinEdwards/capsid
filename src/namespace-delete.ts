@@ -17,6 +17,7 @@ import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { D1_BATCH_STATEMENTS } from "./limits";
 import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
+import { logEvent } from "./log";
 
 // delete_namespace: the plan, the refusals, the signed confirmation and the one batch.
 // The tool is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
@@ -720,7 +721,7 @@ export async function performNamespaceDelete(
       kvFailed.push({ key, error: err instanceof Error ? err.message : String(err) });
     }
   }
-  if (kvFailed.length) console.error(`DELETE_NAMESPACE_KV_FAILED ${namespace}: ${kvFailed.map((f) => `${f.key}: ${f.error}`).join("; ")}`);
+  if (kvFailed.length) logEvent("error", "DELETE_NAMESPACE_KV_FAILED", { message: `DELETE_NAMESPACE_KV_FAILED ${namespace}: ${kvFailed.map((f) => `${f.key}: ${f.error}`).join("; ")}` });
 
   return {
     ok: true,

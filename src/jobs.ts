@@ -4,6 +4,7 @@ import type { JobRow } from "./jobs-schema";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
+import { logEvent } from "./log";
 
 // The work queue. The seat posts a job from a chat; a driver session on a machine
 // claims it, does it, and reports back.
@@ -67,7 +68,7 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
       ]);
       if (moved) requeued.push(read.id);
     } catch (err) {
-      console.error(`JOB_LEASE_REQUEUE_FAILED ${read.id}: ${err instanceof Error ? err.message : String(err)}`);
+      logEvent("error", "JOB_LEASE_REQUEUE_FAILED", { message: `JOB_LEASE_REQUEUE_FAILED ${read.id}: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
   return { requeued };
