@@ -23,6 +23,7 @@
     "build:dashboard": "npm --prefix dashboard run build && npm --prefix dashboard run size",
     "test:browser": "npm --prefix dashboard run e2e",
     "lint": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
+    "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
     "sync:scorer": "node scripts/sync-scorer.mjs",
@@ -34,6 +35,8 @@
     "@types/node": "24.13.3",
     "jscpd": "5.3.2",
     "knip": "6.38.0",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
     "typescript": "6.0.3",
     "vitest": "4.1.11",
     "wrangler": "4.107.0"
