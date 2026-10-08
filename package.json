@@ -48,6 +48,7 @@
     "zod": "4.4.3"
   },
   "overrides": {
+    "@modelcontextprotocol/sdk": "$@modelcontextprotocol/sdk",
     "undici": "7.29.1",
     "sharp": "0.35.5"
   }
