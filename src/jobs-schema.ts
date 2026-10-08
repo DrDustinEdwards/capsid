@@ -249,6 +249,7 @@ export const JOB_PARAM_NAMES = [
   "evidence",
   "claim",
   "kind",
+  "stale",
 ] as const;
 
 // Only the full `</name>` spelling, so a body that discusses this rule is not refused.
