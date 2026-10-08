@@ -3,6 +3,8 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from "../limits";
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "../overnight-plan";
+import { readModelLearning } from "../model-learning";
+import { JOB_KINDS } from "../model-routing";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_LEASE_SECONDS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { blockJob, claimJob, completeAsCaller, failAsCaller, heartbeatJob, listJobs, postJob, releaseJob, resumeJob, supersedeJob, type JobResult } from "../jobs";
@@ -60,12 +62,18 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .describe(
             "For post: the minimum merged pull requests on the claiming agent's record. The claim refuses an agent below it and leaves the job queued."
           ),
-        status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
-        view: z
-          .enum(["plan", "digest"])
+        kind: z
+          .enum(JOB_KINDS)
           .optional()
           .describe(
-            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. Both are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
+            `For post: the job's kind (${JOB_KINDS.join(", ")}). Optional: when absent Capsid reads it from the poster and the title. The kind and the job's risk decide the model Capsid recommends; nobody names a model.`
+          ),
+        status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
+        view: z
+          .enum(["plan", "digest", "models"])
+          .optional()
+          .describe(
+            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. "models" returns what the model routing has learned: per job kind and model, the share merged with green CI, corrections and cost, with the rule changes the evidence supports (never applied). All three are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
           ),
         since: bounded(40).optional().describe('For list with view "digest": the ISO time to report from. Defaults to the last 24 hours.'),
         id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for heartbeat, complete, fail, block, resume, supersede, release and start. For list, narrows to that job, with its body for a caller holding write.'),
@@ -152,6 +160,13 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           const listRefusal = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: args.namespace, jobId: args.id });
           if (listRefusal) return fail(listRefusal);
           if (args.view === "plan") return ok(await readOvernightPlan(env, { namespace: args.namespace }, now));
+          // Outcomes across every namespace, as a rate per kind and model: a caller scoped to
+          // one namespace has no business reading the whole account's record.
+          if (args.view === "models") {
+            const wide = ctx.scope({ tool: "jobs", action: "list", grant: "read", namespace: "*", jobId: args.id });
+            if (wide) return fail(`the models view reads every namespace's outcomes, which this caller may not: ${wide}`);
+            return ok({ ok: true, action: "list", models: await readModelLearning(env.DB, now) });
+          }
           if (args.view === "digest") {
             const since = digestSinceFrom(args.since, now);
             if (!since.ok) return fail(since.refusal);
@@ -187,6 +202,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
                 required_scopes: args.required_flags ? { flags: args.required_flags } : undefined,
                 min_record: args.min_record,
                 review_required: args.review_required,
+                kind: args.kind,
               })
             );
           }

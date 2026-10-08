@@ -67,6 +67,12 @@ export interface JobResult {
   overlaps?: OverlapReport;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
+  // claim: the model Capsid recommends for this job, why, and how to follow it
+  // (src/model-routing.ts), and a note when the pull request it carries could not be read.
+  routing?: Record<string, unknown>;
+  routing_note?: string;
+  // list view "models": the learning table.
+  models?: Record<string, unknown>;
 }
 
 export function refuse(action: string, refusal: string): JobResult {

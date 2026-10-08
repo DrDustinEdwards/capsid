@@ -6,6 +6,7 @@ import {
   corruptRequirement,
   missingForJob,
   mintJobId,
+  parseRequiredScopes,
   serializeMinRecord,
   swallowedParamTag,
   swallowedTagRefusal,
@@ -16,6 +17,8 @@ import {
   type RequiredScopes,
 } from "./jobs-schema";
 import { signTaskBody, verifySignedBody } from "./improve-task";
+import { JOB_KINDS, isJobKind, routeJob, type Routing } from "./model-routing";
+import { pullRequestRisk } from "./model-routing-pr";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
 import { offerForClaim } from "./job-skill-offers";
 import { breakerRefusal, breakerState } from "./job-breaker";
@@ -85,6 +88,8 @@ export async function postJob(
     required_scopes?: Partial<RequiredScopes>;
     min_record?: MinRecord;
     review_required?: boolean;
+    // Optional: when absent Capsid reads it from the title and the poster (src/model-routing.ts).
+    kind?: string;
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
@@ -113,6 +118,21 @@ export async function postJob(
     );
   }
 
+  if (args.kind !== undefined && !isJobKind(args.kind)) {
+    return refuse("post", `'${args.kind}' is not a job kind. One of: ${JOB_KINDS.join(", ")}, or leave it out and Capsid reads it from the title.`);
+  }
+  // The model is assigned here, by the Worker, from the kind and the risk the job states
+  // about itself. Nobody types it.
+  const routing = routeJob({
+    title,
+    body: args.body,
+    namespace: args.namespace,
+    posted_by: actor,
+    kind: args.kind,
+    required_flags: args.required_scopes?.flags,
+    gate_required: args.gate_required,
+  });
+
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET, args.body);
   const job: JobRow = {
     id: mintJobId(),
@@ -139,14 +159,19 @@ export async function postJob(
     resumed_count: 0,
     corrections_count: 0,
     review_required: args.review_required ? 1 : 0,
+    kind: routing.kind,
+    model_recommended: routing.model,
+    effort_recommended: routing.effort,
+    routing_reason: routing.reason,
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
   };
 
   const statements = [
     env.DB.prepare(
-      `INSERT INTO jobs (id, namespace, title, body, priority, status, posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?11, ?11)`
+      `INSERT INTO jobs (id, namespace, title, body, priority, status, posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at,
+         kind, model_recommended, effort_recommended, routing_reason)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)`
     ).bind(
       job.id,
       job.namespace,
@@ -158,7 +183,11 @@ export async function postJob(
       job.required_scopes,
       job.min_record,
       job.review_required,
-      job.created_at
+      job.created_at,
+      routing.kind,
+      routing.model,
+      routing.effort,
+      routing.reason
     ),
     ...(await mirrorStatements(env, job, "job-posted", actor)),
     jobAudit(env.DB, actor, "job-posted", job, {
@@ -168,6 +197,9 @@ export async function postJob(
       ...(job.required_scopes ? { required_scopes: job.required_scopes } : {}),
       ...(job.min_record ? { min_record: job.min_record } : {}),
       ...(job.review_required ? { review_required: true } : {}),
+      model_recommended: routing.model,
+      effort_recommended: routing.effort,
+      kind: routing.kind,
     }),
   ];
   try {
@@ -206,6 +238,9 @@ const JOB_LIST_COLUMNS = [
   "created_at",
   "updated_at",
   "result_summary",
+  "kind",
+  "model_recommended",
+  "effort_recommended",
 ] as const;
 
 export type JobListRow = Pick<JobRow, (typeof JOB_LIST_COLUMNS)[number]>;
@@ -253,6 +288,21 @@ export async function listJobs(
     ...(listNotes && listNotes.dropped > 0 ? { resume_notes_dropped: listNotes.dropped } : {}),
     jobs: truncated ? rows.slice(0, JOBS_ROWS_MAX) : rows,
     ...(truncated ? { truncated: true, note: `more than ${JOBS_ROWS_MAX} jobs match; narrow by namespace or status.` } : {}),
+  };
+}
+
+/** What a claim hands the driver about the model (capsid/conventions.md, "Model routing"): the
+ *  recommendation, why, and how to follow it. The driver never picks a model itself. */
+function deliveryOf(routing: Routing) {
+  return {
+    model: routing.model,
+    effort: routing.effort,
+    kind: routing.kind,
+    risk: routing.risk,
+    reason: routing.reason,
+    rules_version: routing.rules_version,
+    deliver:
+      `A scheduled or cloud launch starts on --model ${routing.model}. An interactive driver keeps its own session for coordination and does the job's work in a subagent on model ${routing.model} (the Agent tool's model parameter), at effort ${routing.effort}.`,
   };
 }
 
@@ -366,9 +416,29 @@ export async function claimJob(
     return refuse("claim", `${candidate.id} was not handed out and has been marked failed: ${reason}`);
   }
 
+  // The model for this job, assigned at post and settled again here: a job posted before
+  // routing existed is routed now, and a job that already carries a pull request is read
+  // on that PR's files, which can only raise the risk (src/model-routing.ts riskOf).
+  const required = parseRequiredScopes(candidate.required_scopes);
+  const prRisk = await pullRequestRisk(env, candidate.namespace, candidate.result_ref);
+  const routing = routeJob({
+    title: candidate.title,
+    body: candidate.body,
+    namespace: candidate.namespace,
+    posted_by: candidate.posted_by,
+    kind: candidate.kind,
+    required_flags: required.ok ? required.value.flags : [],
+    gate_required: candidate.gate_required === 1,
+    pr_risk: prRisk.risk,
+  });
+
   const expires = leaseUntil(now);
   const claimed: JobRow = {
     ...candidate,
+    kind: routing.kind,
+    model_recommended: routing.model,
+    effort_recommended: routing.effort,
+    routing_reason: routing.reason,
     status: "claimed",
     claimed_by: actor,
     // A job the seat released keeps its first claim time, so its duration covers its
@@ -385,9 +455,10 @@ export async function claimJob(
   // and the second batch's guard aborts before its UPDATE runs.
   const won = await guardedTransition(env, candidate, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3
+      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3,
+         kind = ?5, model_recommended = ?6, effort_recommended = ?7, routing_reason = ?8
        WHERE id = ?1 AND status = 'queued' RETURNING id`
-    ).bind(candidate.id, actor, now.toISOString(), expires),
+    ).bind(candidate.id, actor, now.toISOString(), expires, routing.kind, routing.model, routing.effort, routing.reason),
     ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
     jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
     ...(offer.record ? [offer.record] : []),
@@ -406,5 +477,7 @@ export async function claimJob(
     ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),
     ...(claimNotes.dropped > 0 ? { resume_notes_dropped: claimNotes.dropped } : {}),
     offered_skills: offer.skills,
+    routing: deliveryOf(routing),
+    ...(prRisk.note ? { routing_note: prRisk.note } : {}),
   };
 }

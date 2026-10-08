@@ -527,3 +527,43 @@ describe("a holder transition commits with every record of it, or not at all", (
     expect((await records(id)).audit).toBe(0);
   });
 });
+
+describe("model routing, against the real tables (migrations/0032)", () => {
+  it("a posted job carries its routing, a claim settles it, and the outcome records the model chosen and the model run", async () => {
+    const posted = await post({ title: "Design: the routing check", body: "think about it" });
+    expect(posted.ok).toBe(true);
+    const id = posted.job!.id;
+    const stored = await jobRow(id);
+    expect([stored?.kind, stored?.model_recommended, stored?.effort_recommended]).toEqual(["design", "opus", "high"]);
+    expect(String(stored?.routing_reason)).toMatch(/design/);
+
+    const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    expect(claim.ok).toBe(true);
+    expect(claim.routing).toMatchObject({ model: "opus", effort: "high", kind: "design" });
+
+    const failed = await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "the approach did not work", undefined, {
+      claim: { versions: { model_id: "claude-opus-5-5" } },
+    });
+    expect(failed.ok).toBe(true);
+    const outcome = await outcomeRow(id);
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["design", "opus", "claude-opus-5-5"]);
+  });
+
+  it("an outcome with no reported model keeps model_actual NULL, never the chosen one", async () => {
+    const posted = await post({ title: "Update the readme", body: "x" });
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "gave up");
+    const outcome = await outcomeRow(id);
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", "sonnet", null]);
+  });
+
+  it("a job row from before routing is routed at its claim and recorded", async () => {
+    const posted = await post({ title: "Build X: an old job", body: "x" });
+    const id = posted.job!.id;
+    await env.DB.prepare("UPDATE jobs SET kind = NULL, model_recommended = NULL, effort_recommended = NULL, routing_reason = NULL WHERE id = ?1").bind(id).run();
+    const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    expect(claim.routing).toMatchObject({ model: "opusplan", kind: "build" });
+    expect((await jobRow(id))?.model_recommended).toBe("opusplan");
+  });
+});

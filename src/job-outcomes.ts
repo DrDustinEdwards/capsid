@@ -68,6 +68,11 @@ export interface JobOutcomeRow {
   tokens_cache_read: number | null;
   tokens_cache_creation: number | null;
   active_seconds: number | null;
+  // The job's kind, the model Capsid recommended and the model the session reported it ran
+  // (migrations/0032, src/model-routing.ts). NULL where not routed or not reported.
+  job_kind?: string | null;
+  model_chosen?: string | null;
+  model_actual?: string | null;
 }
 
 // A job's telemetry totals, as the outcome row stores them.
@@ -473,7 +478,8 @@ export async function verifyEvidence(
 }
 
 // usage: the job's telemetry totals (readJobUsage). Omitted is no telemetry: NULL.
-export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills, usage: JobUsage = NO_USAGE): JobOutcomeRow {
+// actualModel: the model_id the session reported in its claim, or null when it reported none.
+export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills, usage: JobUsage = NO_USAGE, actualModel: string | null = null): JobOutcomeRow {
   return {
     job_id: job.id,
     // Copied, not joined, because a later lease expiry clears claimed_by.
@@ -500,6 +506,9 @@ export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, sk
     tokens_cache_read: usage.tokens_cache_read,
     tokens_cache_creation: usage.tokens_cache_creation,
     active_seconds: usage.active_seconds,
+    job_kind: job.kind ?? null,
+    model_chosen: job.model_recommended ?? null,
+    model_actual: actualModel,
   };
 }
 
@@ -511,8 +520,8 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed,
          tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified,
          skill_ids_offered, skill_ids_used, recorded_at, cost_usd, tokens_input, tokens_output,
-         tokens_cache_read, tokens_cache_creation, active_seconds)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
+         tokens_cache_read, tokens_cache_creation, active_seconds, job_kind, model_chosen, model_actual)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
        ON CONFLICT(job_id) DO NOTHING`
     )
     .bind(
@@ -538,6 +547,9 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.tokens_output,
       row.tokens_cache_read,
       row.tokens_cache_creation,
-      row.active_seconds
+      row.active_seconds,
+      row.job_kind ?? null,
+      row.model_chosen ?? null,
+      row.model_actual ?? null
     );
 }
