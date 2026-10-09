@@ -8,13 +8,18 @@ edited after signing, merges nothing.
 
 - version: 5
 - enabled: true
-- namespaces: dustinedwards
+- namespaces: dustinedwards, capsid, carrel, capsomer
 
-Version 5 does not cover capsid (ruled by Dustin 2026-09-25, audit item A19). A capsid
-merge deploys the control plane itself: the Worker that holds the credentials, the job
-queue and this policy. So every capsid pull request is merged by the seat. capsid keeps
-its mapping to its own repo; only unattended merging is withdrawn. The tick walks only
-the namespaces listed above, so it never evaluates a capsid pull request.
+carrel and capsomer are covered from 2026-10-08 (ruled by Dustin 2026-10-07; capsid PR
+#268 put them on the roster for auto-merge only, with the improve loop still off for them,
+and wrote their required CI steps into the code).
+
+capsid is covered again (ruled by Dustin 2026-10-07, reversing the 2026-09-25 ruling on
+audit item A19). Version 5 had left capsid out because a capsid merge deploys the control
+plane itself. Dustin ruled that unattended work stalling on the seat costs more than that
+risk, given the checks below: every refused path (the judges, the job transitions, auth,
+migrations, workflows, lockfile, package.json, wrangler config) still waits for the seat,
+and the live gate's rollback is the backstop for a bad deploy.
 
 This file ships the value that is signed, so `enabled` reads `true` here because the
 policy is on. Turning it on or off is a ruling, and the document is on the ordinary
@@ -165,8 +170,7 @@ because a green run nobody has written a step list for proves nothing.
 
 ## Required CI, capsid
 
-The signed document covers capsid again from 2026-10-07, so every step below must have run
-to success.
+capsid is covered again from 2026-10-07, so every step below must have run to success.
 
 - step `.github/workflows/ci.yml / checks / Typecheck src, tests, integration tests and the copied scorer script`
 - step `.github/workflows/ci.yml / checks / Lint dead exports and doc drift`
@@ -189,11 +193,8 @@ there, because this repo does not hold that workflow.
 
 ## Required CI, carrel
 
-Every step of both jobs of Carrel's `ci.yml`, read off `main` on 2026-10-07. Carrel's
-command steps carry no `name:`, so GitHub reports them as `Run <command>`, and the names
-below are those. A change to a command's text in Carrel's workflow refuses every Carrel
-pull request until this list is updated. No test in this repo can catch a rename there,
-because this repo does not hold that workflow.
+Every step of Carrel's two jobs, read off its ci.yml on main on 2026-10-07. Carrel's
+command steps carry no name, so GitHub names them "Run <command>".
 
 - step `.github/workflows/ci.yml / check / Run npm ci`
 - step `.github/workflows/ci.yml / check / Run npm run typecheck`
@@ -208,12 +209,8 @@ because this repo does not hold that workflow.
 
 ## Required CI, capsomer
 
-Every blocking step of the `check` job in Capsomer's `ci.yml`, read off `main` on
-2026-10-07. The steps that file marks warn-only are not listed: the forced-colours
-screenshots, the size report, the token check, the site summary and the artifact upload
-run with `continue-on-error` or `always()`, so their success proves nothing about the
-change. The `results` job runs on a push to `main` only and is skipped on a pull request.
-The separate `No bloat` workflow is warn-only by Capsomer's own ruling and is not required.
+Every blocking step of Capsomer's check job, read off its ci.yml on main on 2026-10-07.
+Its warn-only steps and the No bloat workflow are not required.
 
 - step `.github/workflows/ci.yml / check / Install`
 - step `.github/workflows/ci.yml / check / Palette, scales, unit tests, types`
@@ -226,7 +223,7 @@ The separate `No bloat` workflow is warn-only by Capsomer's own ruling and is no
 ## What a merge means
 
 A merge under this policy is also a deploy wherever the repo deploys on merge to its
-default branch. capsid does, which is why version 5 leaves it out. Under versions 1 to
+default branch. capsid does, so a capsid auto-merge is an unattended production deploy, ruled by Dustin 2026-10-07. Under versions 1 to
 4, capsid pull requests merged and deployed with no human (the first was PR #52, ruled
 2026-09-16), with the checks above as the whole condition and the live gate's rollback
 as the backstop. Extending this policy to another namespace
@@ -240,17 +237,11 @@ there lands on `main` and ships nothing, and releasing stays `npm run ship` or t
 dispatch button. Measured from that workflow on 2026-09-19. If it ever gains an
 `on: push` deploy, this paragraph is wrong and the namespace needs deciding again.
 
-**Carrel and Capsomer.** Their step lists are written above and held in the code, but this
-policy does not cover them until the `namespaces` line names them, and the parser refuses
-a namespace that is not on `ROSTER` in `src/improve-schema.ts`, which today lists neither.
-Putting them on the roster is a separate ruling: the roster also sets the improve loop's
-attempt caps and scorer rotation. When covered, a Carrel merge deploys once
-`job_391a68d912c3` lands its deploy-on-merge workflow (today it ships nothing), and a
-Capsomer merge to `main` deploys the Capsomer site, because Cloudflare's Git integration
-builds on push (its `DEPLOY.md`). Both are unattended production deploys.
-
-Because the code now holds both lists, the signed document must carry both sections too,
-or `loadMergePolicy` refuses it and nothing auto-merges anywhere until it is re-signed.
+**carrel does:** since 2026-10-08 its ci.yml deploys after check and gates pass on a push
+to main, migrations first, so a carrel auto-merge is an unattended deploy of Carrel.
+**capsomer's** showcase site deploys on a push to main, but sites take Capsomer only by a
+pinned release tag, so a capsomer auto-merge changes no site until a release is cut and
+pinned.
 
 Anything else waits for the seat. A pull request that fails any check is left open,
 audited with the check that refused it, and reported under `improve_status` as
