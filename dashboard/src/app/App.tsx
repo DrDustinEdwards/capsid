@@ -560,8 +560,9 @@ export function App() {
       onSearch={() => setPalette(true)}
       onHelp={() => setHelp(true)}
       account={{
-        name: "Owner",
-        initials: "O",
+        // From the signed-in session; neutral only until the first feed arrives.
+        name: feed?.user.name ?? "Account",
+        initials: feed?.user.initials ?? "A",
         appLinks: [
           { label: "Portal settings", href: routePath("settings"), current: route.view === "settings" },
           { label: "Keyboard shortcuts", onClick: () => setHelp(true) },

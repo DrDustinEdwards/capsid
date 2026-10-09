@@ -2006,5 +2006,6 @@
     ]
   },
   "cloudflare_configured": true,
-  "csrf": "sample-csrf-0000000000000000"
+  "csrf": "sample-csrf-0000000000000000",
+  "user": { "name": "Sample Person", "initials": "SP" }
 }

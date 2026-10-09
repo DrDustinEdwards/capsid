@@ -127,6 +127,20 @@ test("the admin completes the login: session cookie carries the email, state coo
   assert.equal(await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`), null);
 });
 
+test("the name in the ID token rides the session cookie, and a token with no name leaves the session email-only", async () => {
+  for (const [claims, expected] of [
+    [{ name: "Dustin Edwards" }, { email: "admin@example.com", name: "Dustin Edwards" }],
+    [{}, { email: "admin@example.com" }],
+  ] as const) {
+    const e = env();
+    const { state, cookie, location } = await started(e);
+    stubAccess(location, claims);
+    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+    const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
+    assert.deepEqual(session, expected);
+  }
+});
+
 test("a state cookie that is not the digest of the state is refused with the Portal's restart hint", async () => {
   const e = env();
   const { state } = await started(e);
