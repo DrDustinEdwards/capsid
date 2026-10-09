@@ -1527,6 +1527,9 @@ describe("more than one claim", () => {
     const afterSecond = new Date(afterFirst.getTime() + twoHours);
     expect((await expireJobLeases(jobsEnv(), afterSecond)).requeued).toEqual([b]);
     expect((await row(b))?.status).toBe("queued");
+  });
+});
+
 describe("edit", () => {
   // The seat correcting a job nobody is working (src/jobs-edit.ts). The legacy callers
   // above are admin, so the driver here has the admin bit and can_merge taken away, as a
