@@ -157,8 +157,13 @@ export interface NamespaceStatus {
   // tick rewrites the whole list, so it needs no expiry. Empty when the policy is off.
   awaiting_seat: AwaitingSeat[];
   // The daily maintenance pass's list for this namespace (src/maintenance.ts): stale or
-  // mislabelled jobs and what was resumed for the seat. Empty before the first pass.
+  // mislabelled jobs, what was resumed for the seat, green driver pull requests waiting
+  // and pull requests red for days. Empty before the first pass.
   maintenance: MaintenanceItem[];
+  // Open pull requests that pass read in this namespace, so an empty pull request list can
+  // be told from one that read nothing. null when the pass did not read them (never ran,
+  // not a roster namespace, or the read failed and a prs-not-checked item says why).
+  maintenance_prs_read: number | null;
   // Counts by status, plus offered versus used: a skill offered often and used rarely
   // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
@@ -313,7 +318,8 @@ export async function improveStatus(
     awaitingAll = [];
   }
   const inboxAll = await gatherInbox(env, new Date(), namespaces);
-  const maintenanceAll = (await readMaintenance(env))?.items ?? [];
+  const maintenanceList = await readMaintenance(env);
+  const maintenanceAll = maintenanceList?.items ?? [];
 
   for (const namespace of namespaces) {
     const { doc, refusal } = await loadScores(env, namespace);
@@ -362,6 +368,7 @@ export async function improveStatus(
       jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
+      maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
       skills: await skillsSummary(env.DB, namespace),
       needs_dustin: inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] },
     });

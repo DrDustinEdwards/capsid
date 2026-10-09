@@ -1,4 +1,6 @@
 import type { Env } from "./env";
+import { ROSTER } from "./improve-schema";
+import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 
 // The actor the merge-resume step records its touches under (capsid/decisions.md,
 // 2026-10-03, stale jobs D1). Spelled here, not imported, so this pass does not depend on
@@ -12,9 +14,9 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 // step) or lands in one short list, served by improve_status, that the seat reads at the
 // start of a session. This pass itself changes nothing: it lists.
 //
-// This first piece covers the job rules, which need only the database. The pull request,
-// merged-branch, disk and undeployed-merge rules follow as their own pieces, so a rule
-// that needs GitHub does not hold up the ones that do not.
+// The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
+// read GitHub for every roster namespace. The merged-branch, disk and undeployed-merge
+// rules follow as their own pieces.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
@@ -28,10 +30,12 @@ const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
 export interface MaintenanceItem {
   /** Which rule found it. */
-  rule: "later-passed" | "shipped-elsewhere" | "followups-missing" | "auto-resumed";
+  rule: "later-passed" | "shipped-elsewhere" | "followups-missing" | "auto-resumed" | "pr-awaiting-seat" | "pr-red" | "prs-not-checked";
   namespace: string;
-  /** The job the line is about. */
-  job: string;
+  /** The job the line is about, or null for a pull request that names none. */
+  job: string | null;
+  /** The pull request the line is about, for the pull request rules. */
+  pr?: string;
   /** One plain line for the seat: what is wrong and what to do. */
   line: string;
 }
@@ -39,6 +43,9 @@ export interface MaintenanceItem {
 interface MaintenanceList {
   generated: string;
   items: MaintenanceItem[];
+  /** Open pull requests read per namespace. A namespace missing here was not read, and
+   *  has a prs-not-checked item saying why. */
+  prs_read: Record<string, number>;
 }
 
 type MaintenanceReport =
@@ -74,7 +81,7 @@ export function promisesFollowUps(summary: string | null): boolean {
   return summary !== null && FOLLOWUP_PROMISE.test(summary);
 }
 
-export async function gatherMaintenance(env: Env, now: Date): Promise<MaintenanceList> {
+export async function gatherMaintenance(env: Env, now: Date, prReaders: PrReaders = githubPrReaders(env)): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
 
@@ -132,21 +139,27 @@ export async function gatherMaintenance(env: Env, now: Date): Promise<Maintenanc
     items.push({ rule: "auto-resumed", namespace: row.namespace, job: row.job_id, line: `${row.job_id} was resumed because its pull requests merged: its holder confirms the deploy and completes it.` });
   }
 
-  return { generated: now.toISOString(), items };
+  // Green driver pull requests waiting for the seat, and pull requests red for days.
+  const prs = await gatherPrItems(ROSTER, prReaders, now);
+  items.push(...prs.items);
+
+  return { generated: now.toISOString(), items, prs_read: prs.read };
 }
 
 /** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
  *  it in KV for improve_status, and stamps the day. The stamp is written after the list,
  *  so a pass that threw runs again on the next tick. */
-export async function maintenanceTick(env: Env, now: Date): Promise<MaintenanceReport> {
+export async function maintenanceTick(env: Env, now: Date, prReaders?: PrReaders): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now);
+  const list = await gatherMaintenance(env, now, prReaders);
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
-  return { ran: true, note: `${list.items.length} item(s) listed`, list };
+  const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
+  const reposRead = Object.keys(list.prs_read).length;
+  return { ran: true, note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s)`, list };
 }
 
 /** The stored list, or null when none was ever written or it cannot be read. */
@@ -155,7 +168,9 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as MaintenanceList;
-    return Array.isArray(parsed.items) && typeof parsed.generated === "string" ? parsed : null;
+    if (!Array.isArray(parsed.items) || typeof parsed.generated !== "string") return null;
+    // A list written before the pull request rules read none.
+    return { ...parsed, prs_read: parsed.prs_read && typeof parsed.prs_read === "object" ? parsed.prs_read : {} };
   } catch {
     return null;
   }
