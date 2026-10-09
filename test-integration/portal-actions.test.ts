@@ -168,6 +168,20 @@ const CASES: Record<string, Case> = {
       expect(stored?.claimed_by).toBeNull();
     },
   },
+  close_shipped: {
+    // The seat's admin complete (stale jobs D4, ruled 2026-10-09): done, credited to the
+    // driver that blocked it, with an admin_complete touch naming the seat.
+    params: async () => ({ id: await blockedJob("a job whose work shipped"), reason: "merged and live" }),
+    after: async ({ id }) => {
+      const stored = await job(id);
+      expect(stored?.status).toBe("done");
+      expect(stored?.result_summary).toMatch(/^Closed as shipped by access:admin@example\.com: merged and live/);
+      const outcome = await env.DB.prepare("SELECT agent FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ agent: string }>();
+      expect(outcome?.agent, "the outcome credits the driver that did the work").toBe("agent:capsid-driver");
+      const touch = await env.DB.prepare("SELECT actor FROM job_touches WHERE job_id = ?1 AND kind = 'admin_complete'").bind(id).first<{ actor: string }>();
+      expect(touch?.actor).toBe(ACTOR);
+    },
+  },
   fail_job: {
     params: async () => ({ id: await blockedJob("a job to fail"), reason: "superseded" }),
     after: async ({ id }) => expect((await job(id))?.status).toBe("failed"),
@@ -230,9 +244,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, sixteen actions", () => {
+  it("covers the allow-list, seventeen actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(16);
+    expect(Object.keys(CASES).length).toBe(17);
   });
 
   for (const action of PORTAL_ACTIONS) {

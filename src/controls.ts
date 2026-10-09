@@ -10,10 +10,12 @@ import { breakerState, resetBreaker } from "./job-breaker";
 import { addPackage, describePackage, editPackage, readPackageRow, removePackage, validatePackage } from "./ops-packages";
 import { IMPROVE_MODES, onLoopRoster, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
-import { adminFailJob, releaseJob, resumeJob } from "./jobs";
+import { adminFailJob, completeAsCaller, releaseJob, resumeJob } from "./jobs";
 import { MAX_RESUME_NOTE } from "./limits";
 import { resumeDestination } from "./jobs-seat";
+import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
+import { prUrlsFromJob } from "./outcome-prs";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
 import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
@@ -41,6 +43,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "resume_job",
   "fail_job",
   "release_job",
+  "close_shipped",
   "revoke_agent",
   "site_add",
   "site_edit",
@@ -126,6 +129,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
       return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
+    case "close_shipped":
+      return `Close blocked job ${id} as shipped. Its work landed, so the job moves to done, and the outcome is credited to the driver that did the work, not to you. The pull requests it names are read from GitHub for the outcome, and the close is recorded as yours.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
     case "site_add":
@@ -150,6 +155,17 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
 function required(params: ActionParams, field: string): string | null {
   const value = params[field];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+// close_shipped's complete (stale jobs D4, ruled 2026-10-09: the existing admin_complete
+// path, crediting the holder). The pull requests the job names, from result_ref and the
+// summary, become the evidence the outcome verifies, at most the 10 the jobs tool takes.
+const CLOSE_SHIPPED_MAX_PRS = 10;
+function shippedEvidence(job: JobRow): { result_ref?: string; prs: string[]; more: number } {
+  const all = prUrlsFromJob(job);
+  const prs = all.slice(0, CLOSE_SHIPPED_MAX_PRS);
+  const ref = job.result_ref && prs.includes(job.result_ref) ? job.result_ref : prs[0];
+  return { ...(ref ? { result_ref: ref } : {}), prs, more: all.length - prs.length };
 }
 
 // The click's own audit row, naming the admin and the address the click came from
@@ -290,6 +306,25 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason, ...(note ? { note } : {}) });
         break;
       }
+      case "close_shipped": {
+        const id = required(params, "id");
+        const reason = required(params, "reason");
+        if (!id) return { ok: false, refusal: "close_shipped needs a job id." };
+        if (!reason) return { ok: false, refusal: "close_shipped needs a reason: what shipped, and how you know. It is the job's result summary." };
+        const job = await readJob(env.DB, id);
+        if (!job) return { ok: false, refusal: `no job ${id}.` };
+        const shipped = shippedEvidence(job);
+        const result = await completeAsCaller(env, agent, now, id, {
+          result_summary: `Closed as shipped by ${actor}: ${reason}`,
+          ...(shipped.result_ref ? { result_ref: shipped.result_ref } : {}),
+          ...(shipped.prs.length ? { evidence: { prs: shipped.prs } } : {}),
+        });
+        if (!result.ok) return { ok: false, refusal: result.refusal ?? "close_shipped was refused." };
+        committed = true;
+        summary = `Closed ${id} as shipped; the outcome is credited to ${job.claimed_by ?? "its holder"}.`;
+        await auditClick(env, actor, source, surface, action, job.namespace, { id, reason, held_by: job.claimed_by, prs: shipped.prs.length });
+        break;
+      }
       case "revoke_agent": {
         const name = required(params, "name");
         if (!name) return { ok: false, refusal: "revoke_agent needs an agent name." };
@@ -398,6 +433,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   resume_job: ["id", "reason", "note"],
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
+  close_shipped: ["id", "reason"],
   revoke_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script"],
   site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script"],
@@ -611,6 +647,31 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             : `Nobody held it, so no outcome row is written; any key bound to ${job.id} is revoked.`,
         ],
         audit: [`job-admin-fail by ${actor}`, click],
+      };
+    }
+    case "close_shipped": {
+      if (!p.id) return refused("close_shipped needs a job id.");
+      if (!p.reason) return refused("close_shipped needs a reason: what shipped, and how you know. It is the job's result summary.");
+      const job = await readJob(env.DB, p.id);
+      if (!job) return refused(`no job ${p.id}.`);
+      if (job.status !== "blocked") {
+        return refused(`${job.id} is ${job.status}, not blocked. Close as shipped ends a blocked job whose work landed; a claimed job is completed by its holder, and a queued or finished one has nothing to close.`);
+      }
+      if (job.claimed_by === actor) {
+        return refused(`${job.id} is blocked and held by ${actor} itself. A holder resumes its own gate and completes the job; close as shipped is for a job another credential blocked.`);
+      }
+      const shipped = shippedEvidence(job);
+      return {
+        ok: true,
+        changes: [
+          `${job.id} ('${job.title}' in ${job.namespace}): blocked -> done, with the result "Closed as shipped by ${actor}: ${p.reason}".`,
+          `The outcome row credits ${job.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you; one admin_complete touch records that you closed it.`,
+          shipped.prs.length
+            ? `The outcome verifies ${shipped.prs.length} pull request${shipped.prs.length === 1 ? "" : "s"} against GitHub: ${shipped.prs.join(", ")}${shipped.more ? ` (${shipped.more} more named, left out)` : ""}.`
+            : "The job names no pull request, so the outcome verifies nothing.",
+          ...(job.review_required ? ["The job needs a review: the close is refused, and nothing written, unless the newest review on its pull request approves the head."] : []),
+        ],
+        audit: [`job-admin-complete by ${actor}`, click],
       };
     }
     case "site_add": {
