@@ -35,18 +35,22 @@ interface PullRow {
   head: { ref: string; sha: string; repo: { full_name: string } | null };
 }
 
-interface PruneKept {
+export interface PruneKept {
   branch: string;
   reason: string;
 }
 
-interface PruneCandidate {
+export interface PruneCandidate {
   branch: string;
   sha: string;
   pr: number;
 }
 
-type PruneVerdict = { prune: true; pr: number } | { prune: false; reason: string };
+// orphan: kept only because the rule cannot prove its work landed (no pull request, one
+// closed without merging, or commits after the merge), so its age is what says whether it
+// is still wanted. A branch kept for what it is (default, protected, by name, the improve
+// loop's) or for an open pull request is not an orphan.
+type PruneVerdict = { prune: true; pr: number } | { prune: false; reason: string; orphan: boolean };
 
 /** Whether a branch may be pruned, from the facts about it. Pure, so every rule is tested
  *  without GitHub. `latest` is the branch's newest pull request in this repo, or undefined. */
@@ -56,18 +60,18 @@ export function pruneVerdict(
   latest: { number: number; state: string; merged: boolean; headSha: string } | undefined,
   listsComplete: boolean
 ): PruneVerdict {
-  if (branch.name === defaultBranch) return { prune: false, reason: "default branch" };
-  if (branch.protected) return { prune: false, reason: "protected branch" };
+  if (branch.name === defaultBranch) return { prune: false, reason: "default branch", orphan: false };
+  if (branch.protected) return { prune: false, reason: "protected branch", orphan: false };
   if (NEVER_PRUNED.has(branch.name) || NEVER_PRUNED_PREFIXES.some((p) => branch.name.startsWith(p))) {
-    return { prune: false, reason: "kept by name (release, screenshots, results, gh-pages)" };
+    return { prune: false, reason: "kept by name (release, screenshots, results, gh-pages)", orphan: false };
   }
-  if (isImproveBranch(branch.name)) return { prune: false, reason: "improve loop branch" };
+  if (isImproveBranch(branch.name)) return { prune: false, reason: "improve loop branch", orphan: false };
   if (!latest) {
-    return { prune: false, reason: listsComplete ? "no pull request" : "no pull request found in the part of the list that was read" };
+    return { prune: false, reason: listsComplete ? "no pull request" : "no pull request found in the part of the list that was read", orphan: true };
   }
-  if (latest.state === "open") return { prune: false, reason: `open pull request #${latest.number}` };
-  if (!latest.merged) return { prune: false, reason: `pull request #${latest.number} was closed without merging` };
-  if (latest.headSha !== branch.sha) return { prune: false, reason: `commits after pull request #${latest.number} merged` };
+  if (latest.state === "open") return { prune: false, reason: `open pull request #${latest.number}`, orphan: false };
+  if (!latest.merged) return { prune: false, reason: `pull request #${latest.number} was closed without merging`, orphan: true };
+  if (latest.headSha !== branch.sha) return { prune: false, reason: `commits after pull request #${latest.number} merged`, orphan: true };
   return { prune: true, pr: latest.number };
 }
 
@@ -84,7 +88,30 @@ async function paged<T>(env: Env, owner: string, repo: string, path: string): Pr
   return { rows, complete: false };
 }
 
-export async function pruneMergedBranches(env: Env, namespace: string, opts: { confirm?: boolean; keep?: string[] } = {}, repoSelector?: string) {
+/** What the prune rule makes of a repo's branches: the ones it would delete, and every other
+ *  with the reason it is kept. The tool's preview and the daily maintenance pass
+ *  (src/maintenance-branches.ts) both read it, so the rule is spelled once. */
+export interface PrunePlan {
+  owner: string;
+  name: string;
+  repo: string;
+  defaultBranch: string;
+  branchesRead: number;
+  listsComplete: boolean;
+  /** Whether the open pull request list was read in full, so "no open pull request" is known. */
+  openComplete: boolean;
+  prune: PruneCandidate[];
+  kept: PruneKeptRow[];
+}
+
+/** A kept branch with its tip, and whether nothing but its age says it is still wanted:
+ *  no pull request, one closed without merging, or commits after the merge. */
+export interface PruneKeptRow extends PruneKept {
+  sha: string;
+  orphan: boolean;
+}
+
+export async function readPrunePlan(env: Env, namespace: string, keep: string[] = [], repoSelector?: string): Promise<PrunePlan> {
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const base = `/repos/${owner}/${repo}`;
   const defaultBranch = await getDefaultBranch(env, owner, repo);
@@ -106,36 +133,31 @@ export async function pruneMergedBranches(env: Env, namespace: string, opts: { c
   }
 
   const prune: PruneCandidate[] = [];
-  const kept: PruneKept[] = [];
-  // Names the caller said to leave alone this call, whatever their pull request says.
-  const keepNames = new Set(opts.keep ?? []);
+  const kept: PruneKeptRow[] = [];
+  // Names the caller said to leave alone, whatever their pull request says.
+  const keepNames = new Set(keep);
   for (const b of branches.rows) {
     if (keepNames.has(b.name)) {
-      kept.push({ branch: b.name, reason: "kept by request (keep)" });
+      kept.push({ branch: b.name, reason: "kept by request (keep)", sha: b.commit.sha, orphan: false });
       continue;
     }
     const verdict = pruneVerdict({ name: b.name, sha: b.commit.sha, protected: b.protected === true }, defaultBranch, latest.get(b.name), listsComplete);
     if (verdict.prune) prune.push({ branch: b.name, sha: b.commit.sha, pr: verdict.pr });
-    else kept.push({ branch: b.name, reason: verdict.reason });
+    else kept.push({ branch: b.name, reason: verdict.reason, sha: b.commit.sha, orphan: verdict.orphan });
   }
+  return { owner, name: repo, repo: full, defaultBranch, branchesRead: branches.rows.length, listsComplete, openComplete: open.complete, prune, kept };
+}
 
-  const result = {
-    repo: full,
-    mode: opts.confirm ? ("delete" as const) : ("preview" as const),
-    branches_read: branches.rows.length,
-    lists_complete: listsComplete,
-    would_prune: prune.length,
-    kept_count: kept.length,
-    kept: kept.slice(0, KEPT_LISTED),
-    kept_truncated: kept.length > KEPT_LISTED,
-    prune,
-    deleted: [] as string[],
-    skipped: [] as PruneKept[],
-    remaining: 0,
-  };
-  if (!opts.confirm) return result;
-
-  const batch = prune.slice(0, DELETE_CAP);
+/** Delete up to `cap` of the plan's candidates. Each tip is re-read immediately before its
+ *  delete, and a branch that moved since the plan was read is skipped, not deleted.
+ *  `onDeleted` runs after each delete and before the next, so a caller's record of one
+ *  delete is written before another happens; if it throws, nothing more is deleted. */
+export async function deletePruneCandidates(env: Env, plan: PrunePlan, cap: number, onDeleted?: (c: PruneCandidate) => Promise<void>) {
+  const { owner, name: repo } = plan;
+  const base = `/repos/${owner}/${repo}`;
+  const deleted: PruneCandidate[] = [];
+  const skipped: PruneKept[] = [];
+  const batch = plan.prune.slice(0, cap);
   for (const c of batch) {
     // The tip as it is now. A branch that moved since the list was read has new work.
     let tip: string | undefined;
@@ -146,22 +168,49 @@ export async function pruneMergedBranches(env: Env, namespace: string, opts: { c
       tip = undefined;
     }
     if (tip === undefined) {
-      result.skipped.push({ branch: c.branch, reason: "could not re-read the branch tip, so it was not deleted" });
+      skipped.push({ branch: c.branch, reason: "could not re-read the branch tip, so it was not deleted" });
       continue;
     }
     if (tip !== c.sha) {
-      result.skipped.push({ branch: c.branch, reason: "the branch moved since the preview, so it was not deleted" });
+      skipped.push({ branch: c.branch, reason: "the branch moved since the preview, so it was not deleted" });
       continue;
     }
     const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(c.branch)}`, { method: "DELETE" });
     if (resp.ok || resp.status === 404 || resp.status === 422) {
-      if (resp.ok) result.deleted.push(c.branch);
-      else result.skipped.push({ branch: c.branch, reason: `already gone (${resp.status})` });
+      if (resp.ok) {
+        deleted.push(c);
+        await onDeleted?.(c);
+      } else skipped.push({ branch: c.branch, reason: `already gone (${resp.status})` });
     } else {
-      result.skipped.push({ branch: c.branch, reason: `GitHub refused the delete (${resp.status})` });
+      skipped.push({ branch: c.branch, reason: `GitHub refused the delete (${resp.status})` });
     }
   }
-  result.remaining = prune.length - batch.length;
-  await invalidateRepoReads(env, owner, repo);
+  if (batch.length > 0) await invalidateRepoReads(env, owner, repo);
+  return { deleted, skipped, remaining: plan.prune.length - batch.length };
+}
+
+export async function pruneMergedBranches(env: Env, namespace: string, opts: { confirm?: boolean; keep?: string[] } = {}, repoSelector?: string) {
+  const plan = await readPrunePlan(env, namespace, opts.keep, repoSelector);
+  const kept = plan.kept.map(({ branch, reason }) => ({ branch, reason }));
+  const result = {
+    repo: plan.repo,
+    mode: opts.confirm ? ("delete" as const) : ("preview" as const),
+    branches_read: plan.branchesRead,
+    lists_complete: plan.listsComplete,
+    would_prune: plan.prune.length,
+    kept_count: kept.length,
+    kept: kept.slice(0, KEPT_LISTED),
+    kept_truncated: kept.length > KEPT_LISTED,
+    prune: plan.prune,
+    deleted: [] as string[],
+    skipped: [] as PruneKept[],
+    remaining: 0,
+  };
+  if (!opts.confirm) return result;
+
+  const done = await deletePruneCandidates(env, plan, DELETE_CAP);
+  result.deleted = done.deleted.map((c) => c.branch);
+  result.skipped = done.skipped;
+  result.remaining = done.remaining;
   return result;
 }
