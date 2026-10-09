@@ -7,6 +7,7 @@ import { sweepIfDue } from "../outcome-prs";
 import { expireJobLeases } from "../jobs";
 import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
+import { maintenanceTick } from "../maintenance";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -150,6 +151,21 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_RESUME_THREW:", rethrow: false }
+  );
+
+  // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists
+  // what has gone stale for the seat's morning read. It changes nothing, so a broken pass
+  // costs a missing list, not a bad write. Not due is not a run.
+  await runTask(
+    env,
+    "maintenance",
+    () => maintenanceTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      console.log(`MAINTENANCE ${report.note}`);
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "MAINTENANCE_THREW:", rethrow: false }
   );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
