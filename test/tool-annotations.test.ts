@@ -53,6 +53,9 @@ const DESTRUCTIVE = [
   // delete_namespace's perform; its batch deletes each document through pathMutation
   // in src/namespace-delete.ts.
   /\bperformNamespaceDelete\(/,
+  // The controls' perform: it can revoke an agent, fail a job or remove a site, through
+  // the mutators src/controls.ts calls.
+  /\bperformControl\(/,
 ];
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
@@ -286,6 +289,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   claims: { idempotent: true, reason: "the handler only reads" },
   ops_snapshot: { idempotent: true, reason: "the handler only reads one KV value" },
   cloudflare_config: { idempotent: true, reason: "the handler only reads Cloudflare configuration" },
+  controls: { idempotent: false, reason: "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated" },
 };
 
 // What creates something new on every call, matched in the block by what it does. An

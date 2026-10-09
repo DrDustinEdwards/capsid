@@ -15,6 +15,7 @@ import { registerAgentTools } from "./tools/agents";
 import { registerClaimsTools } from "./tools/claims";
 import { registerOpsTools } from "./tools/ops";
 import { registerCloudflareTools } from "./tools/cloudflare";
+import { registerControlTools } from "./tools/controls";
 
 export type { ToolGrant };
 
@@ -83,6 +84,7 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", obs
   registerClaimsTools(server, ctx);
   registerOpsTools(server, ctx);
   registerCloudflareTools(server, ctx);
+  registerControlTools(server, ctx);
 
   // Resources and prompts are raw request handlers, not tool registrations, so they
   // check scope themselves (src/resources.ts).

@@ -732,6 +732,17 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         path: i === 0 ? "conventions.md" : `hit-${i}.md`,
       }));
     }
+    // The portfolio documents (src/portfolio-docs.ts): exact paths from one JSON array
+    // and GLOB patterns from another, both json_each subqueries, so modelled by name.
+    if (/FROM json_each\(\?3\) AS g WHERE documents\.path GLOB g\.value/i.test(flat)) {
+      const [ns, exactJson, globsJson] = params as [string, string, string];
+      const exact = JSON.parse(exactJson) as string[];
+      const globs = JSON.parse(globsJson) as string[];
+      return rows.documents
+        .filter((d) => d.namespace === ns && (exact.includes(d.path) || globs.some((g) => globMatch(g, d.path))))
+        .sort((a, b) => a.path.localeCompare(b.path))
+        .map((r) => project(flat, r as unknown as Record<string, unknown>));
+    }
     // Multi-row document selects: list, find, the resource listing and gather's two
     // section queries. The LIMIT is honoured from its bound param, so a handler that
     // stops asking the database for a bounded page fails here instead of being rescued
