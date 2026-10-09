@@ -39,6 +39,7 @@ export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
   "no_migration_workflow_lockfile",
+  "paths_allowed_for_namespace",
   "head_in_base_repo",
   "body_names_job",
   "pr_author_allowed",
@@ -110,6 +111,31 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
   }
   return hits;
 }
+
+// The paths a namespace's pull requests may touch at all, for a namespace that carries
+// a limit. Every changed path must match one of its patterns; a namespace with no entry
+// here has no limit beyond the refused paths. capsid carries one (Dustin, D6 of
+// 2026-10-03, policy version 6): a capsid merge deploys the control plane, so only
+// docs outside docs/policy/ and the Portal's stylesheets merge unattended there, and
+// tests, the Portal's scripts and every other path wait for the seat. This is the one
+// path list that admits rather than refuses, so it is per namespace: inheriting another
+// namespace's allow list would widen, not narrow. Matched case-insensitively, like the
+// refused paths, so docs/Policy/ is still docs/policy/.
+export const AUTO_MERGE_ALLOWED_PATHS: Record<string, Array<{ pattern: RegExp; why: string }>> = {
+  capsid: [
+    { pattern: /^docs\/(?!policy\/).+$/i, why: "a document under docs/, except the policy sources in docs/policy/" },
+    { pattern: /^dashboard\/.+\.css$/i, why: "a Portal stylesheet" },
+  ],
+};
+
+/** The allowed-path rule for a namespace, or null when it has no limit. */
+function allowedPathsFor(namespace: string): Array<{ pattern: RegExp; why: string }> | null {
+  return Object.hasOwn(AUTO_MERGE_ALLOWED_PATHS, namespace) ? AUTO_MERGE_ALLOWED_PATHS[namespace] : null;
+}
+
+/** Every allowed-path pattern as the document writes it, under its namespace's heading. */
+export const namespacedAllowedPaths = (): string[] =>
+  Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => rows.map((r) => `${ns} / ${r.pattern.source}`));
 
 // The CI steps a green PR must have run, per namespace. A repo's CI runs its suites as
 // steps of one job, so check-run names cannot show that any of them ran. ci_green reads
@@ -198,6 +224,9 @@ export interface MergePolicy {
   namespaces: string[];
   checks: string[];
   refusedPaths: string[];
+  // Each entry is `<namespace> / <pattern>`, from the `## Allowed paths, <namespace>`
+  // heading it was written under, compared with the code's list like the steps are.
+  allowedPaths: string[];
   // GitHub logins whose PRs may merge without a human, from the document only.
   authors: string[];
   // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
@@ -212,10 +241,14 @@ export interface MergePolicy {
 const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
 const AUTHOR_ITEM = /^- author `([^`]+)`/;
+const ALLOW_ITEM = /^- allow `([^`]+)`/;
 // The heading a required step is filed under: `## Required CI, <namespace>`. A step
 // written before any such heading is a refusal rather than a step belonging to
 // whichever namespace came first.
 const CI_HEADING = /^##\s+Required CI,\s*([a-z0-9-]+)\s*$/i;
+// The heading an allowed path is filed under: `## Allowed paths, <namespace>`. Same rule:
+// an allowed path under no such heading is a refusal, never a limit on some namespace.
+const ALLOW_HEADING = /^##\s+Allowed paths,\s*([a-z0-9-]+)\s*$/i;
 
 /** Parse the policy body below its frontmatter. Returns the policy or a refusal. */
 export function parseMergePolicy(body: string): { policy: MergePolicy } | { error: string } {
@@ -240,7 +273,9 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   const refusedPaths: string[] = [];
   const authors: string[] = [];
   const requiredCi: string[] = [];
+  const allowedPaths: string[] = [];
   let ciNamespace: string | null = null;
+  let allowNamespace: string | null = null;
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
     // Any heading closes the section, so a step under `## What a merge means` is not
@@ -248,6 +283,8 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     if (trimmed.startsWith("##")) {
       const heading = CI_HEADING.exec(trimmed);
       ciNamespace = heading ? heading[1] : null;
+      const allowHeading = ALLOW_HEADING.exec(trimmed);
+      allowNamespace = allowHeading ? allowHeading[1] : null;
       continue;
     }
     const check = POLICY_ID_ITEM.exec(trimmed);
@@ -263,12 +300,19 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
       }
       requiredCi.push(`${ciNamespace} / ${step[1]}`);
     }
+    const allow = ALLOW_ITEM.exec(trimmed);
+    if (allow) {
+      if (!allowNamespace) {
+        return { error: `the policy lists allowed path '${allow[1]}' under no namespace heading, so which namespace it limits is unstated.` };
+      }
+      allowedPaths.push(`${allowNamespace} / ${allow[1]}`);
+    }
   }
   // Fails closed: a document with no author allowlist loads nothing.
   if (authors.length === 0) {
     return { error: "the policy document names no PR author, so it authorises no pull request. Refusing rather than merging with no author allowlist." };
   }
-  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, authors, requiredCi } };
+  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, allowedPaths, authors, requiredCi } };
 }
 
 // Both directions: what the document lists and the code does not, and the reverse.
@@ -300,6 +344,10 @@ export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy }
     AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source)
   );
   if (paths) return { error: paths };
+  // Both directions here too: a limit the document drops would widen a namespace the
+  // signer meant to hold narrow, and one it adds would be a limit nothing enforces.
+  const allowed = listDisagreement("allowed paths", parsed.policy.allowedPaths, namespacedAllowedPaths());
+  if (allowed) return { error: allowed };
   const steps = listDisagreement("required CI steps", parsed.policy.requiredCi, namespacedCiLabels());
   if (steps) return { error: steps };
   // A namespace the policy covers with no required CI steps merges nothing. Without
@@ -418,6 +466,23 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
     }
   }
   passed.push("no_migration_workflow_lockfile");
+
+  // A namespace with a limit merges only a change whose every path is inside it. A PR
+  // that changes no file shows nothing inside the limit, so it waits for the seat too.
+  const allowedRules = allowedPathsFor(facts.namespace);
+  if (allowedRules) {
+    if (facts.changedPaths.length === 0) {
+      return no("paths_allowed_for_namespace", `the PR changes no file, and ${facts.namespace} merges unattended only a change inside its allowed paths.`);
+    }
+    const outside = facts.changedPaths.filter((p) => !allowedRules.some(({ pattern }) => pattern.test(p)));
+    if (outside.length > 0) {
+      return no(
+        "paths_allowed_for_namespace",
+        `${facts.namespace} merges unattended only ${allowedRules.map((r) => r.why).join(" or ")}, and the change also touches ${outside.join(", ")}.`
+      );
+    }
+  }
+  passed.push("paths_allowed_for_namespace");
 
   // A fork's head is code nobody holding a credential here pushed. GitHub reports no
   // head repo when the fork was deleted, which is refused the same way.

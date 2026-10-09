@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { improveStatus } from "../src/improve-run.ts";
 import { GATE_POLICY_PATH } from "../src/gate-policy.ts";
 import {
+  AUTO_MERGE_ALLOWED_PATHS,
   AUTO_MERGE_POLICY_PATH,
   AUTO_MERGE_REFUSED_PATHS,
   AUTO_MERGE_REQUIRED_CI,
@@ -55,6 +56,12 @@ const AUTO_MERGE = [
   "## Refused paths",
   "",
   ...AUTO_MERGE_REFUSED_PATHS.map(({ pattern, why }) => `- path \`${pattern.source}\` ${why}.`),
+  "",
+  ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
+    `## Allowed paths, ${ns}`,
+    "",
+    ...rows.map(({ pattern, why }) => `- allow \`${pattern.source}\` ${why}.`),
+  ]),
   "",
   ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
     `## Required CI, ${ns}`,
