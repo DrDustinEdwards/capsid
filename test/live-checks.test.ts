@@ -3,8 +3,10 @@ import { test } from "node:test";
 import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/security-headers/headers";
 import {
   DEPLOY_GRACE_MINUTES,
+  analyticsFinding,
   MAX_PAGE_BYTES,
   MAX_PAGE_RULES,
+  MAX_ANALYTICS_RULES,
   MAX_SHA_RULES,
   beaconCount,
   cspAllowsBeaconReport,
@@ -20,7 +22,7 @@ import {
   type LiveRule,
 } from "../src/live-checks.ts";
 import type { OpsSite } from "../src/ops-sites.ts";
-import type { SiteProbe } from "../src/ops-types.ts";
+import type { SiteProbe, WebAnalyticsSite } from "../src/ops-types.ts";
 import { gatherFindings, owningCheck, WATCHER_CHECKS } from "../src/watcher.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
@@ -100,6 +102,9 @@ test("the document is bounded in page rules and in sha rules", () => {
   assert.ok("error" in parseLiveConfig(pages));
   const shas = Array.from({ length: MAX_SHA_RULES + 1 }, (_, i) => `- site s${i} sha`).join("\n");
   assert.ok("error" in parseLiveConfig(shas));
+  const analytics = (n: number) => Array.from({ length: n }, (_, i) => `- site s${i} analytics`).join("\n");
+  assert.ok("error" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES + 1)));
+  assert.ok("rules" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES)));
   assert.ok("rules" in parseLiveConfig(Array.from({ length: MAX_PAGE_RULES }, (_, i) => `- site sample beacon /p${i}`).join("\n")));
 });
 
@@ -198,16 +203,18 @@ test("a public page with one beacon and a CSP that allows it is clean", () => {
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON))), [], "no CSP at all blocks nothing");
 });
 
-test("PLANT: no beacon, two beacons, a blocked script and a blocked report each file their own finding", () => {
-  assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page("")))), ["live-beacon-count-sample-root"]);
-  assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(BEACON + BEACON)))), ["live-beacon-count-sample-root"]);
+test("a beacon rule no longer counts beacons: a Worker cannot see the one the edge injects, so none or two is not a finding", () => {
+  assert.deepEqual(pageFindings(SITE, beaconRule, read(page(""))), []);
+  assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON + BEACON))), []);
+});
+
+test("PLANT: a blocked script and a blocked report each file their own finding", () => {
   assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(BEACON), "script-src 'self'; connect-src 'self'"))), ["live-csp-script-sample-root"]);
   assert.deepEqual(
     prints(pageFindings(SITE, beaconRule, read(page(BEACON), "script-src https://static.cloudflareinsights.com; connect-src 'none'"))),
     ["live-csp-report-sample-root"]
   );
   assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(""), "default-src 'none'"))), [
-    "live-beacon-count-sample-root",
     "live-csp-script-sample-root",
     "live-csp-report-sample-root",
   ]);
@@ -254,12 +261,53 @@ test("the headers rule counts a page read, and a page it cannot read is unread, 
   const body = "- site sample headers /";
   const ok = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response(page(""), { headers: { "content-type": "text/html", ...Object.fromEntries(goodHeaders()) } }) }), NOW);
   assert.deepEqual(ok.findings, []);
-  assert.deepEqual(ok.summary, { pages_expected: 1, pages_read: 1, shas_expected: 0, shas_read: 0 });
+  assert.deepEqual(ok.summary, { pages_expected: 1, pages_read: 1, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 });
   const bare = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => html(page("")) }), NOW);
   assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
   const unread = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response("no", { status: 500 }) }), NOW);
   assert.deepEqual(prints(unread.findings), ["live-page-unread-sample-root"]);
   assert.equal(unread.ran, false);
+});
+
+// the Web Analytics setting
+
+const ANALYTICS_SITE = { namespace: "sample", name: "Sample", origin: "https://sample.example.com" };
+const wa = (over: Partial<WebAnalyticsSite> = {}): WebAnalyticsSite => ({ host: "sample.example.com", auto_install: true, enabled: true, ...over });
+
+test("analyticsFinding: automatic setup on is clean; a missing host, auto_install off and a switched-off ruleset each file their own finding", () => {
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa()]), null);
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]), null, "a ruleset switch Cloudflare does not report is not a finding");
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ host: "other.example.com", auto_install: false })])?.fingerprint, "live-analytics-missing-sample");
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [])?.fingerprint, "live-analytics-missing-sample");
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: false })])?.fingerprint, "live-analytics-off-sample");
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: null })])?.fingerprint, "live-analytics-off-sample", "an unreported setting is not read as on");
+  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: false })])?.fingerprint, "live-analytics-off-sample");
+});
+
+test("the analytics rule takes no path, and reads the account's list once for any number of sites", async () => {
+  assert.ok("error" in parseLiveConfig("- site sample analytics /"));
+  const other: OpsSite = { ...SITE, namespace: "other", name: "Other", origin: "https://other.example.com" };
+  let reads = 0;
+  const counting = { ...deps({}), analytics: async () => (reads++, [wa(), wa({ host: "other.example.com", auto_install: false })]) };
+  const out = await liveChecks({ body: "- site sample analytics\n- site other analytics" }, [SITE, other], [probe(), probe({ namespace: "other", name: "Other", origin: other.origin })], counting, NOW);
+  assert.equal(reads, 1);
+  assert.deepEqual(prints(out.findings), ["live-analytics-off-other"]);
+  assert.equal(out.ran, true);
+  assert.equal(out.summary.analytics_read, 2);
+});
+
+test("PLANT: an analytics read that fails is an unread finding for the site and leaves the check un-run, never clean", async () => {
+  const failing = {
+    ...deps({}),
+    analytics: async (): Promise<WebAnalyticsSite[]> => {
+      throw new Error("the Web Analytics sites list was refused with 403: CF_OPS_TOKEN lacks Account / Account Settings / Read");
+    },
+  };
+  const out = await liveChecks({ body: "- site sample analytics" }, [SITE], [probe()], failing, NOW);
+  assert.deepEqual(prints(out.findings), ["live-analytics-unread-sample"]);
+  assert.match(out.findings[0]?.evidence[0] ?? "", /Account Settings \/ Read/);
+  assert.equal(out.ran, false);
+  assert.deepEqual(out.summary, { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 1, analytics_read: 0 });
 });
 
 // the sha
@@ -323,20 +371,23 @@ test("PLANT: a page that cannot be judged says why: an error, a 404, a login red
 
 // a whole pass
 
-const deps = (pages: Record<string, () => Response>, head = HEAD) => ({
+const ANALYTICS_ON: WebAnalyticsSite[] = [{ host: "sample.example.com", auto_install: true, enabled: true }];
+const deps = (pages: Record<string, () => Response>, head = HEAD, analytics: WebAnalyticsSite[] = ANALYTICS_ON) => ({
   fetchImpl: (async (url: string) => (pages[new URL(url).pathname] ?? (() => html("missing", { status: 404 })))()) as FetchLike,
   head: async () => head,
+  analytics: async () => analytics,
 });
 const CONFIG = [
   "- site sample beacon /",
   "- site sample beacon /pricing",
   "- site sample nobeacon /account",
   "- site sample sha",
+  "- site sample analytics",
 ].join("\n");
 
 test("no document: nothing is read and the check does not run", async () => {
   const out = await liveChecks(null, [SITE], [probe()], deps({}), NOW);
-  assert.deepEqual(out, { findings: [], ran: false, summary: { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0 } });
+  assert.deepEqual(out, { findings: [], ran: false, summary: { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 } });
 });
 
 test("an invalid document is one finding, and the check does not run", async () => {
@@ -355,7 +406,7 @@ test("a clean pass reads every page and sha, files nothing, and counts what it r
   );
   assert.deepEqual(out.findings, []);
   assert.equal(out.ran, true);
-  assert.deepEqual(out.summary, { pages_expected: 3, pages_read: 3, shas_expected: 1, shas_read: 1 });
+  assert.deepEqual(out.summary, { pages_expected: 3, pages_read: 3, shas_expected: 1, shas_read: 1, analytics_expected: 1, analytics_read: 1 });
 });
 
 test("a pass over a dirty site files each finding and still counts every page read", async () => {
@@ -363,11 +414,11 @@ test("a pass over a dirty site files each finding and still counts every page re
     { body: CONFIG },
     [SITE],
     [probe()],
-    deps({ "/": () => html(page("")), "/pricing": () => html(page(BEACON)), "/account": () => html(page(BEACON)) }),
+    deps({ "/": () => html(page("")), "/pricing": () => html(page(BEACON)), "/account": () => html(page(BEACON)) }, HEAD, [{ host: "sample.example.com", auto_install: false, enabled: true }]),
     NOW
   );
   assert.deepEqual(prints(out.findings).sort(), [
-    "live-beacon-count-sample-root",
+    "live-analytics-off-sample",
     "live-beacon-present-sample-account",
     `live-sha-drift-sample-${HEAD.sha.slice(0, 7)}`,
   ]);
@@ -379,7 +430,7 @@ test("an unread public page is its own finding and leaves the check un-run, so n
   const out = await liveChecks({ body: "- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html("oops", { status: 502 }) }), NOW);
   assert.deepEqual(prints(out.findings), ["live-page-unread-sample-root"]);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, { pages_expected: 1, pages_read: 0, shas_expected: 0, shas_read: 0 });
+  assert.deepEqual(out.summary, { pages_expected: 1, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 });
 });
 
 test("a page that must carry no beacon and answers with a login redirect or 403 passes as read", async () => {
@@ -402,7 +453,7 @@ test("a site that is down is the site-down check's finding: its pages are not re
     { body: CONFIG },
     [SITE],
     [probe({ state: "down", sha: null })],
-    { fetchImpl: (async (url: string) => { calls.push(url); return html(page("")); }) as FetchLike, head: async () => { calls.push("head"); return HEAD; } },
+    { fetchImpl: (async (url: string) => { calls.push(url); return html(page("")); }) as FetchLike, head: async () => { calls.push("head"); return HEAD; }, analytics: async () => { calls.push("analytics"); return ANALYTICS_ON; } },
     NOW
   );
   assert.deepEqual(calls, []);
@@ -418,8 +469,8 @@ test("a rule for a site that is not configured is a finding, since it can never 
 test("PLANT: two rules for one unknown site, or one page named twice, file one finding, not two", async () => {
   const unknown = await liveChecks({ body: "- site elsewhere beacon /\n- site elsewhere nobeacon /account" }, [SITE], [probe()], deps({}), NOW);
   assert.deepEqual(prints(unknown.findings), ["live-config-unknown-site-elsewhere"]);
-  const twice = await liveChecks({ body: "- site sample beacon /\n- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html(page("")) }), NOW);
-  assert.deepEqual(prints(twice.findings), ["live-beacon-count-sample-root"]);
+  const twice = await liveChecks({ body: "- site sample beacon /\n- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "script-src 'self'; connect-src 'self'" } }) }), NOW);
+  assert.deepEqual(prints(twice.findings), ["live-csp-script-sample-root"]);
   assert.equal(twice.summary.pages_read, 2, "both rules were read; only their finding is one");
 });
 
@@ -427,7 +478,7 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
 
 test("the live checks are a watcher check, and every live-* fingerprint belongs to it", () => {
   assert.ok((WATCHER_CHECKS as readonly string[]).includes("live checks"));
-  for (const fingerprint of ["live-beacon-count-a-root", "live-headers-a-root", "live-csp-script-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
+  for (const fingerprint of ["live-analytics-off-a", "live-headers-a-root", "live-csp-script-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
     assert.equal(owningCheck(fingerprint), "live checks", fingerprint);
   }
 });
@@ -475,17 +526,17 @@ async function gather(doc: string | null, pages: Record<string, () => Response>)
 
 test("through gatherFindings: a document in the store makes the check run and its findings reach the queue, with the count logged", async () => {
   const { gathered, requested, log } = await gather("- site sample beacon /\n- site sample nobeacon /account", {
-    "/": () => html(page("")),
+    "/": () => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "script-src 'self'; connect-src 'self'" } }),
     "/account": () => html(page(BEACON)),
   });
   const fps = gathered.findings.map((f) => f.fingerprint);
-  assert.ok(fps.includes("live-beacon-count-sample-root"), fps.join(", "));
+  assert.ok(fps.includes("live-csp-script-sample-root"), fps.join(", "));
   assert.ok(fps.includes("live-beacon-present-sample-account"), fps.join(", "));
   assert.ok(gathered.ran.has("live checks"));
   assert.ok(requested.includes("https://sample.example.com/account"));
-  assert.ok(log.some((l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 findings 2"), log.join(" | "));
-  const finding = gathered.findings.find((f) => f.fingerprint === "live-beacon-count-sample-root");
-  assert.match(finding?.title ?? "", /^Watcher: .*\[live-beacon-count-sample-root\]$/);
+  assert.ok(log.some((l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 analytics 0/0 findings 2"), log.join(" | "));
+  const finding = gathered.findings.find((f) => f.fingerprint === "live-csp-script-sample-root");
+  assert.match(finding?.title ?? "", /^Watcher: .*\[live-csp-script-sample-root\]$/);
 });
 
 test("PLANT: with no live-checks document the pass fetches no page and the check does not run", async () => {
