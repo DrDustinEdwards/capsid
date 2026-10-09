@@ -143,6 +143,9 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
 - **Account Analytics Read**, for requests and errors per Worker per hour;
 - **Workers Scripts Read**, for deployments and the custom-domain list.
 
+The watcher's live checks need one more for the `analytics` rule (docs/live-checks.md):
+- **Account / Account Settings / Read**, for the Web Analytics sites list (`GET /accounts/{id}/rum/site_info/list`). Add it to the same token the same way; until it is there the rule files `live-analytics-unread-<site>`.
+
 The admin-only `cloudflare_config` MCP tool (`src/tools/cloudflare.ts`, reading through `src/ops-cloudflare-config.ts`) needs four more:
 - **Account / Access: Apps and Policies / Read**, for `access_apps` and `access_policies`;
 - **Account / Email Routing Addresses / Read**, for `email_addresses`;

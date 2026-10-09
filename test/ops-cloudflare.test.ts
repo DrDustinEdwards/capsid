@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CF_GRAPHQL, DEPLOYS_KEPT, cloudflareCredentials, errorWindow, readCloudflare } from "../src/ops-cloudflare.ts";
+import { CF_GRAPHQL, DEPLOYS_KEPT, WEB_ANALYTICS_PERMISSION, cloudflareCredentials, errorWindow, readCloudflare, readWebAnalyticsSites } from "../src/ops-cloudflare.ts";
 import type { OpsSite } from "../src/ops-sites.ts";
 import { buildSnapshot, OPS_SNAPSHOT_KEY, readSnapshot, ringSlot, type OpsSnapshot, type SiteProbe } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types.ts";
@@ -503,4 +503,35 @@ test("only the watcher and the admin cloudflare_config reads import the Cloudfla
   // The config reads run per call of an admin-only MCP tool and nowhere else: not from
   // a Portal route, whose every page load would then call Cloudflare.
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
+});
+
+// The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).
+
+const rumPage = (result: unknown[], page: number, totalPages: number): Response =>
+  Response.json({ success: true, errors: [], result, result_info: { page, per_page: 2, total_pages: totalPages, total_count: 3 } });
+
+test("readWebAnalyticsSites follows the pages, lower-cases hosts, keeps no site token, and reads what it cannot judge as null", async () => {
+  const urls: string[] = [];
+  const fetchImpl = (async (input: string) => {
+    urls.push(input);
+    const page = Number(new URL(input).searchParams.get("page"));
+    return page === 1
+      ? rumPage([{ host: "A.example.com", auto_install: true, site_token: "secret-token", ruleset: { enabled: true } }, { host: "" }], 1, 2)
+      : rumPage([{ host: "b.example.com", auto_install: "yes" }], 2, 2);
+  }) as unknown as Parameters<typeof readWebAnalyticsSites>[0];
+  const got = await readWebAnalyticsSites(fetchImpl, TOKEN, ACCOUNT);
+  assert.deepEqual(got, [
+    { host: "a.example.com", auto_install: true, enabled: true },
+    { host: "b.example.com", auto_install: null, enabled: null },
+  ]);
+  assert.equal(urls.length, 2, "both pages were read");
+  assert.ok(urls.every((u) => u.startsWith(`${API}/rum/site_info/list?`)), urls.join(", "));
+  assert.doesNotMatch(JSON.stringify(got), /secret-token/);
+});
+
+test("PLANT: a 403 on the Web Analytics list names the permission the token lacks, and no other failure is turned into a list", async () => {
+  const refused = (async () => Response.json({ success: false, errors: [{ code: 10000, message: "Authentication error" }] }, { status: 403 })) as unknown as Parameters<typeof readWebAnalyticsSites>[0];
+  await assert.rejects(readWebAnalyticsSites(refused, TOKEN, ACCOUNT), (err: Error) => err.message.includes(`CF_OPS_TOKEN lacks ${WEB_ANALYTICS_PERMISSION}`));
+  const broken = (async () => new Response("<html>bad gateway</html>", { status: 502 })) as unknown as Parameters<typeof readWebAnalyticsSites>[0];
+  await assert.rejects(readWebAnalyticsSites(broken, TOKEN, ACCOUNT), /not JSON|502/);
 });
