@@ -208,8 +208,11 @@ test("revoking or re-scoping an agent that is not there is a refusal, not a sile
 
 test("update_scopes replaces the scopes and records both sides in the audit row", async () => {
   const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
-  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_direct_write: true } });
+  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_direct_write: true }, max_claims: 2 });
+  // Past the ceiling is refused at the schema, before anything is written.
+  const tooMany = await call({ action: "update_scopes", name: "capsid-driver", max_claims: 5 });
   await close();
+  assert.equal(tooMany.isError, true, "a claim limit past the ceiling was accepted");
   assert.notEqual(result.isError, true, result.content[0].text);
   const body = parse(result);
   assert.equal(body.ok, true, refusalOf(result));
@@ -217,6 +220,7 @@ test("update_scopes replaces the scopes and records both sides in the audit row"
   assert.deepEqual(scopes.grants, ["read", "write"]);
   assert.equal(scopes.flags.can_direct_write, true);
   assert.equal(scopes.flags.can_merge, false, "an unnamed flag must not be turned on by a call that did not name it");
+  assert.equal((scopes as { max_claims?: number }).max_claims, 2, "the claim limit was not set");
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "update_scopes was not audit-logged");
   assert.match(JSON.stringify(audit.params), /before/, "the audit row does not record what the scopes were before");

@@ -27,7 +27,21 @@ const DEV = join(import.meta.dirname, "..", "..");
 // local clone's folder name differs from the repository name, and a hardcoded name
 // breaks on any rename.
 export const SOURCE_ROOT = join(import.meta.dirname, "..");
-const SOURCE = { dir: SOURCE_ROOT, ref: "master", label: basename(SOURCE_ROOT) };
+// The default branch is master until the move to main (job_bf05bc756c5e, plan step 1), so
+// the source reads whichever of the two exists locally and the copier works on either side
+// of the rename. Step 4 drops master.
+function defaultBranch(dir) {
+  for (const name of ["main", "master"]) {
+    try {
+      execFileSync("git", ["-C", dir, "rev-parse", "--verify", "--quiet", `refs/heads/${name}`], { stdio: "ignore" });
+      return name;
+    } catch {
+      // not this one
+    }
+  }
+  return "master";
+}
+const SOURCE = { dir: SOURCE_ROOT, ref: defaultBranch(SOURCE_ROOT), label: basename(SOURCE_ROOT) };
 
 // Every target is an absolute path. dustinedwards-info is written in
 // dev/worktrees/capsid on branch improve/capsid, never in its own clone, because

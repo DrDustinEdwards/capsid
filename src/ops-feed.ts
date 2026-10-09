@@ -1,7 +1,7 @@
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
-import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, portalGate, sourceAddress } from "./portal-auth";
+import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
@@ -442,7 +442,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
 
 // The feed without its csrf, which comes off the request (portalCsrf) and is added by
 // the handler, so opsFeed reads storage only.
-export type OpsFeedData = Omit<OpsFeed, "csrf">;
+export type OpsFeedData = Omit<OpsFeed, "csrf" | "user">;
 
 /** The run ledger as the feed shows it. A failed read is said in the panel, not
  *  turned into a failure of the whole feed. */
@@ -470,9 +470,9 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
   };
 }
 
-function feedResponse(request: Request, data: OpsFeedData, extra: Record<string, string> = {}): Response {
+function feedResponse(request: Request, user: PortalUser, data: OpsFeedData, extra: Record<string, string> = {}): Response {
   const csrf = portalCsrf(request);
-  const feed: OpsFeed = { ...data, csrf: csrf.value };
+  const feed: OpsFeed = { ...data, csrf: csrf.value, user: portalDisplay(user) };
   const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store", ...extra });
   if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
   return new Response(JSON.stringify(feed), { status: 200, headers });
@@ -493,7 +493,7 @@ export interface OpsDeps {
 export async function handleOpsFeed(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return feedResponse(request, await (deps.feed ?? opsFeed)(env, now));
+  return feedResponse(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
 }
 
 export async function handleOpsRefresh(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
@@ -554,5 +554,5 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     logEvent("error", "OPS_REFRESH_AUDIT_FAILED", { message: warning });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return feedResponse(request, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
+  return feedResponse(request, gate.user, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }

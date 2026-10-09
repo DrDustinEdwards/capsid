@@ -1,0 +1,95 @@
+name: Mutation baseline
+
+# THE TEST-SUITE AUDIT'S MEASUREMENT (job_bbf8db13c57b, Dustin 2026-10-03, capsid/decisions.md
+# "tests are part of no-bloat, and heavy suites run in CI"). StrykerJS mutates src/ and
+# reports, per mutant, which test files killed it. A test file is a candidate for deletion
+# only when every mutant it kills is also killed by a file that stays, so the report this
+# produces is the evidence, and nothing is deleted from it automatically.
+#
+# Manual only. It is not a gate and runs on no schedule: a full run is hours of runner time,
+# which the public repo's free minutes cover but a push trigger would spend on every commit.
+#
+# STRYKER IS NOT A DEPENDENCY OF THIS REPO. It is installed here with --no-save after
+# `npm ci`, so package.json and package-lock.json stay as reviewed (adding it to the lockfile
+# moved about a hundred transitive entries). --ignore-scripts because nothing it needs runs
+# an install script. The unit suite only: the integration suite runs in workerd, which
+# Stryker's runners cannot drive, so integration tests are outside this measurement and
+# are kept (the ruling keeps the real-runtime tests regardless).
+#
+# Sharded by source file so one job stays far under GitHub's six hour limit. Each shard
+# runs the whole unit suite once as its dry run, then only its own mutants.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-baseline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutate:
+    name: shard ${{ matrix.shard }} of 8
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Stryker without touching the lockfile
+        run: npm install --no-save --no-package-lock --ignore-scripts @stryker-mutator/core@10.0.0 @stryker-mutator/tap-runner@10.0.0
+
+      - name: Mutate this shard's source files
+        run: |
+          set -euo pipefail
+          # Every non-declaration source file, sorted, dealt out round-robin so each shard
+          # gets a mix of large and small files. The count is printed so a glob that
+          # matched nothing cannot pass as an empty run.
+          find src -name '*.ts' ! -name '*.d.ts' | sort > all-files.txt
+          total=$(wc -l < all-files.txt)
+          awk -v s="${{ matrix.shard }}" 'NR % 8 == s' all-files.txt > shard-files.txt
+          mine=$(wc -l < shard-files.txt)
+          echo "shard ${{ matrix.shard }}: $mine of $total source files"
+          test "$mine" -gt 0
+          args=()
+          while IFS= read -r f; do args+=(--mutate "$f"); done < shard-files.txt
+          npx stryker run "${args[@]}"
+
+      - name: Summarise the shard
+        if: always()
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            if (!fs.existsSync("reports/mutation.json")) { console.log("no report written"); process.exit(0); }
+            const r = JSON.parse(fs.readFileSync("reports/mutation.json", "utf8"));
+            const counts = {};
+            for (const f of Object.values(r.files)) for (const m of f.mutants) counts[m.status] = (counts[m.status] ?? 0) + 1;
+            const killed = (counts.Killed ?? 0) + (counts.Timeout ?? 0);
+            const valid = killed + (counts.Survived ?? 0) + (counts.NoCoverage ?? 0);
+            const line = "shard ${{ matrix.shard }}: " + JSON.stringify(counts) + " score " + (valid ? (100 * killed / valid).toFixed(1) : "n/a") + "%";
+            console.log(line);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line + "\n");
+          '
+
+      - name: Upload the shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-shard-${{ matrix.shard }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            reports/mutation.json
+            shard-files.txt

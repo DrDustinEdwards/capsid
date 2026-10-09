@@ -10,6 +10,8 @@ import type { OverlapReport } from "./job-overlaps";
 import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { logEvent } from "./log";
+import { DEFAULT_MAX_CLAIMS, MAX_CLAIMS_CEILING, claimLimit, parseScopes } from "./agents-schema";
+import { resolveRepo } from "./github/client";
 
 // What every job transition shares: the result shape, the refusal, the row read, the
 // guarded batch every transition commits through, and the checks more than one of
@@ -31,9 +33,88 @@ export function actorShapeRefusal(action: string, actor: string): JobResult | nu
   );
 }
 
-// The job a caller holds, if any. A caller holds at most one (claimJob).
-export async function heldClaim(db: D1Database, actor: string): Promise<JobRow | null> {
-  return db.prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 LIMIT 1").bind(actor).first<JobRow>();
+// The jobs a caller holds claimed, oldest claim first. A caller holds at most its claim
+// limit (claimLimit, src/agents-schema.ts), one unless the admin raised it. Read up to
+// one past the ceiling, so a table holding more than any limit allows still reads as
+// full rather than as a short page.
+export async function heldClaims(db: D1Database, actor: string): Promise<JobRow[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 ORDER BY claimed_at, id LIMIT ?2")
+    .bind(actor, MAX_CLAIMS_CEILING + 1)
+    .all<JobRow>();
+  return results ?? [];
+}
+
+// The claim limit of the credential behind an actor that is not the caller (a resume
+// returning a job to the driver that blocked it): a minted agent's from its row, the
+// default for anything else. The caller's own limit is read from its resolved scopes.
+export async function claimLimitOf(db: D1Database, actor: string): Promise<number> {
+  if (!actor.startsWith("agent:")) return DEFAULT_MAX_CLAIMS;
+  const row = await db.prepare("SELECT scopes FROM agents WHERE name = ?1").bind(actor.slice("agent:".length)).first<{ scopes: string }>();
+  return row ? claimLimit(parseScopes(row.scopes)) : DEFAULT_MAX_CLAIMS;
+}
+
+// A design job writes Capsid documents and changes no repo, so it cannot collide with a
+// job on a repo branch. The job's kind is the one field that says so (src/model-routing.ts:
+// given at post, or read from a title starting "Design"). A job with no kind yet is not
+// design-only: unknown is treated as a repo change.
+function isDesignOnly(job: Pick<JobRow, "kind">): boolean {
+  return job.kind === "design";
+}
+
+// Why a caller cannot take one more job, or null when it can.
+//   full:       it already holds as many as its limit allows.
+//   repo:       it holds a job on the repo this one would change. One session owns one
+//               repo's branch at a time (capsid/conventions.md 2.4), and two jobs on one
+//               repo under one credential are two sessions on that repo's branches.
+//   unreadable: a repo could not be resolved, so the collision cannot be ruled out.
+// A design job on either side is not a collision.
+export type ClaimRoom =
+  | { kind: "full"; held: JobRow[]; limit: number }
+  | { kind: "repo"; held: JobRow; repo: string }
+  | { kind: "unreadable"; held: JobRow; problem: string };
+
+async function repoOfNamespace(env: Env, namespace: string): Promise<{ repo: string } | { problem: string }> {
+  try {
+    return { repo: (await resolveRepo(env, namespace)).full };
+  } catch (err) {
+    return { problem: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function claimRoom(env: Env, limit: number, held: JobRow[], job: JobRow): Promise<ClaimRoom | null> {
+  const others = held.filter((h) => h.id !== job.id);
+  if (others.length >= limit) return { kind: "full", held: others, limit };
+  if (isDesignOnly(job)) return null;
+  const wanted = await repoOfNamespace(env, job.namespace);
+  for (const h of others) {
+    if (isDesignOnly(h)) continue;
+    const theirs = await repoOfNamespace(env, h.namespace);
+    if ("problem" in theirs) return { kind: "unreadable", held: h, problem: theirs.problem };
+    if ("problem" in wanted) return { kind: "unreadable", held: h, problem: wanted.problem };
+    if (theirs.repo.toLowerCase() === wanted.repo.toLowerCase()) return { kind: "repo", held: h, repo: theirs.repo };
+  }
+  return null;
+}
+
+const heldName = (h: JobRow) => `${h.id} ('${h.title}' in ${h.namespace})`;
+
+/** What a ClaimRoom says about `actor` and `id`, as one clause: "<actor> holds ...". The
+ *  claim and resume refusals and the resume's return to the queue all start from it. */
+export function claimRoomClause(actor: string, room: ClaimRoom, id: string, opts: { lease?: boolean } = {}): string {
+  switch (room.kind) {
+    case "full": {
+      const names = room.held.map((h) => `${heldName(h)}${opts.lease ? `, leased until ${h.lease_expires}` : ""}`).join("; ");
+      return room.limit === DEFAULT_MAX_CLAIMS ? `${actor} holds ${names}` : `${actor} holds ${names}, its limit of ${room.limit} concurrent claims`;
+    }
+    case "repo":
+      return (
+        `${actor} holds ${heldName(room.held)} on ${room.repo}, the repo ${id} would change too. One session owns one repo's branch at a time ` +
+        `(capsid/conventions.md 2.4), so a second claim must be on another repo or a design job (kind design), which changes no repo`
+      );
+    case "unreadable":
+      return `${actor} holds ${heldName(room.held)}, and whether ${id} would change the same repo cannot be read (${room.problem}), so it is treated as the same repo`;
+  }
 }
 
 // The seat is identified by admin or can_merge, for supersede and for resume. An

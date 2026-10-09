@@ -1,7 +1,7 @@
 import { getCookie, timingSafeEqual } from "./auth";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
-import { portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
+import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { improveStatus } from "./improve-run";
@@ -60,7 +60,7 @@ function jsonResponse(body: unknown, extra: Record<string, string> = {}, status 
 }
 
 
-type Gated = { ok: true; email: string; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
+type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
 
 /** The checks both POSTs run, in order: the session, the fetch metadata, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
@@ -96,7 +96,7 @@ async function gateActionRequest(request: Request, env: Env, now: Date): Promise
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, response: textResponse("the body must be a JSON object.", 400) };
   }
-  return { ok: true, email: gate.user.email, csrf: cookie, body: body as Record<string, unknown> };
+  return { ok: true, email: gate.user.email, user: gate.user, csrf: cookie, body: body as Record<string, unknown> };
 }
 
 
@@ -141,7 +141,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
     logEvent("error", "PORTAL_PERFORM_FEED_FAILED", { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` });
     return textResponse(`${result.summary} It completed, but reading the feed afterwards failed (${message}). Reload Capsid Portal.`, 500);
   }
-  const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf } };
+  const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf, user: portalDisplay(gated.user) } };
   // A header value must be printable Latin-1; the error text is not guaranteed to be.
   return jsonResponse(performed, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }

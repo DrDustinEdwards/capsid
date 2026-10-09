@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent, type Agent } from "../src/agents";
-import { defaultScopes } from "../src/agents-schema";
+import { defaultScopes, serializeScopes } from "../src/agents-schema";
 
 // Resume when the job cannot go back to the credential that blocked it: that driver
 // holds another claim, or the credential is shared (the admin identity every chat tab
@@ -120,5 +120,47 @@ describe("resume to the queue", () => {
     const refused = await resumeJob(jobsEnv(), driver, LATER, blocked, "I approve myself");
     expect(refused.ok).toBe(false);
     expect((await row(blocked))?.status).toBe("blocked");
+  });
+});
+
+// A driver whose limit the admin raised (max_claims 2) can take its job back while it
+// holds another, unless that other job is on the same repo.
+describe("resume to a driver with room", () => {
+  const ACTOR = "agent:roomy-driver";
+
+  beforeEach(async () => {
+    await env.DB.prepare("DELETE FROM agents WHERE name = 'roomy-driver'").run();
+    const scopes = { ...defaultScopes(["capsid", "germomics"]), grants: ["read", "write"] as ("read" | "write")[], max_claims: 2 };
+    await env.DB.prepare("INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at) VALUES (?1, ?2, 'driver', ?3, ?4, 'test', ?5)")
+      .bind("agent_r00my0000000", "roomy-driver", "f".repeat(64), serializeScopes(scopes), NOW.toISOString())
+      .run();
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }]))
+      .run();
+  });
+
+  function roomy(): Agent {
+    const agent = driverAgent(ACTOR);
+    return { ...agent, scopes: { ...agent.scopes, namespaces: ["capsid", "germomics"], max_claims: 2 } };
+  }
+
+  it("holding a job on another repo, the driver gets its blocked job back", async () => {
+    const blocked = await blockedBy(roomy(), "back to a driver with room");
+    const other = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "germomics", title: "elsewhere", body: "do the thing" });
+    expect((await claimJob(jobsEnv(), roomy(), NOW, { id: other.job!.id })).ok).toBe(true);
+    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved");
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect((await row(blocked))?.status).toBe("claimed");
+    expect((await row(blocked))?.claimed_by).toBe(ACTOR);
+  });
+
+  it("holding a job on the same repo, the blocked job goes back to the queue, naming the repo", async () => {
+    const blocked = await blockedBy(roomy(), "same repo as the held one");
+    const held = await post("held on capsid");
+    expect((await claimJob(jobsEnv(), roomy(), NOW, { id: held })).ok).toBe(true);
+    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved");
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect(resumed.note).toContain(`${ACTOR} holds ${held} ('held on capsid' in capsid) on example/capsid`);
+    expect((await row(blocked))?.status).toBe("queued");
   });
 });

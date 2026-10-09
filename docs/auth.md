@@ -14,6 +14,8 @@ Scopes are five axes. `namespaces` and `repos` are a list or `*`. `tools` is an 
 | `money_paths` | a path naming a billing or payment surface |
 | `can_comment_pr` | commenting on a pull request, the smallest write `manage_pr` makes. It is not `can_merge`. |
 
+Beside the axes, the scopes JSON carries `max_claims`, how many jobs the agent may hold claimed at once (docs/work-queue.md, "More than one claim"). It authorizes no tool, `checkScope` does not read it, and absent it reads as 1.
+
 A new agent gets read on its named namespaces and no flags. Scopes are stored as JSON and the parse fails closed: a null, truncated or wrong-shaped column resolves to no namespaces, no tools, no grants and no flags.
 
 **The `repos` axis is set per driver, and editing the mapping is admin work.** Both halves were added 2026-09-13 and either alone leaves a hole. Until then every agent carried `repos: "*"`, because `scripts/mint-agents.mjs` named no repos for a driver and an omitted axis mints wide, and `allowsScope("*", v)` can never refuse. That made the namespace-to-repo mapping the only thing standing between a driver and every repo the App reaches, and `update_namespace` took a plain write grant, which every driver holds. A driver could therefore remap its own namespace onto any repo and then read and write it.

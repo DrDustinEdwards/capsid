@@ -19,6 +19,7 @@ import { createRemoteJWKSet, customFetch, decodeProtectedHeader, errors, jwtVeri
 
 const KEYS_TTL_MS = 60 * 60 * 1000;
 const ALLOWED_ALGORITHMS = ["RS256"];
+const MAX_NAME = 80;
 
 export interface Jwk {
   kid?: string;
@@ -37,7 +38,7 @@ export interface IdTokenCheck {
   nonce: string;
 }
 
-export type IdTokenVerdict = { ok: true; email: string } | { ok: false; reason: string };
+export type IdTokenVerdict = { ok: true; email: string; name?: string } | { ok: false; reason: string };
 
 type KeyResolver = ReturnType<typeof createRemoteJWKSet>;
 
@@ -139,5 +140,7 @@ export async function verifyIdToken(token: string, check: IdTokenCheck, now: Dat
   if (payload.email_verified === false) return { ok: false, reason: "the ID token says the email is not verified" };
   const email = typeof payload.email === "string" ? payload.email.trim() : "";
   if (!email) return { ok: false, reason: "the ID token carries no email" };
-  return { ok: true, email };
+  // name is the profile scope's standard claim, present when the identity provider has one.
+  const name = typeof payload.name === "string" ? payload.name.trim().slice(0, MAX_NAME) : "";
+  return name ? { ok: true, email, name } : { ok: true, email };
 }

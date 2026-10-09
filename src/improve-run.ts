@@ -35,7 +35,7 @@ import {
 } from "./improve-state";
 import { breakerState, type BreakerState } from "./job-breaker";
 import { verifyTaskDoc } from "./improve-task";
-import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
+import { SCOPE_FLAGS, claimLimit, parseScopes } from "./agents-schema";
 import { loadAgentRecords, type AgentRecord } from "./agent-record";
 import { jobsSummary, type JobsSummary } from "./jobs";
 import { integrityOf, REPORTS_PREFIX } from "./truth-report";
@@ -48,6 +48,7 @@ import {
   type OpenOutcome,
 } from "./improve/open";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
+import { gatherInbox, type InboxApp } from "./inbox";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
@@ -161,6 +162,10 @@ export interface NamespaceStatus {
   // Counts by status, plus offered versus used: a skill offered often and used rarely
   // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
+  // What needs Dustin in this namespace's app (src/inbox.ts): blocked jobs and questions,
+  // pull requests auto-merge declined, a failing CI run, a site that is down. The same
+  // answer GET /ops/inbox serves the admin shell, narrowed to this namespace.
+  needs_dustin: InboxApp;
 }
 
 export interface SkillsSummary {
@@ -217,6 +222,8 @@ export interface AgentSummary {
   namespaces: "*" | string[];
   grants: string[];
   flags: string[];
+  // How many jobs it may hold claimed at once (claimLimit, src/agents-schema.ts).
+  max_claims: number;
   last_seen: string | null;
   revoked_at: string | null;
   // What this credential has done, from job_outcomes. Counts and rates, never a
@@ -238,6 +245,7 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       namespaces: scopes.namespaces,
       grants: scopes.grants,
       flags: SCOPE_FLAGS.filter((flag) => scopes.flags[flag]),
+      max_claims: claimLimit(scopes),
       last_seen: row.last_seen,
       revoked_at: row.revoked_at,
     };
@@ -304,6 +312,7 @@ export async function improveStatus(
   } catch {
     awaitingAll = [];
   }
+  const inboxAll = await gatherInbox(env, new Date(), namespaces);
   const maintenanceAll = (await readMaintenance(env))?.items ?? [];
 
   for (const namespace of namespaces) {
@@ -354,6 +363,7 @@ export async function improveStatus(
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       skills: await skillsSummary(env.DB, namespace),
+      needs_dustin: inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] },
     });
   }
 
