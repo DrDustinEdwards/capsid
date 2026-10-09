@@ -493,7 +493,7 @@ for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") 
     const body = (await res.json()) as PortalPerformed;
     assert.equal(body.action, action);
     assert.equal(body.warning, null);
-    assert.deepEqual(body.feed, { ...FEED, csrf: CSRF }, "the feed does not carry the session's csrf");
+    assert.deepEqual(body.feed, { ...FEED, csrf: CSRF, user: { name: "admin", initials: "A" } }, "the feed does not carry the session's csrf");
     assert.deepEqual(auditRows(w.d1).sort(), [...audit].sort(), "the rows written are not the rows the preview listed");
   });
 }

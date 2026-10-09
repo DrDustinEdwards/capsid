@@ -388,6 +388,8 @@ export interface OpsFeed {
   // capsid_portal_csrf, and the app sends it back as X-Capsid-CSRF on every action. A
   // cross-site page cannot read this body, so it cannot learn the value.
   csrf: string;
+  // Who is signed in, for the top bar: from the session, never from configuration.
+  user: { name: string; initials: string };
 }
 
 // ---------------------------------------------------------------------------

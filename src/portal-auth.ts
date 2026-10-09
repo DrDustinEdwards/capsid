@@ -50,6 +50,8 @@ function portalLogin(url: URL): LoginFlow {
 
 export interface PortalUser {
   email: string;
+  // From the Access ID token's name claim, when the identity provider sent one.
+  name?: string;
 }
 
 interface SessionPayload extends PortalUser {
@@ -59,6 +61,7 @@ interface SessionPayload extends PortalUser {
 export async function portalSessionCookie(user: PortalUser, secret: string, now: Date, cookiePath: string = PORTAL_PATH): Promise<string> {
   const payload: SessionPayload = {
     email: user.email,
+    ...(user.name ? { name: user.name } : {}),
     exp: Math.floor(now.getTime() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const encoded = b64urlEncode(JSON.stringify(payload));
@@ -94,7 +97,18 @@ export async function readPortalSession(request: Request, env: Env, now: Date): 
   if (typeof payload?.email !== "string" || typeof payload.exp !== "number") return null;
   if (payload.exp * 1000 <= now.getTime()) return null;
   if (!isAdminEmail(env, payload.email)) return null;
-  return { email: payload.email };
+  return typeof payload.name === "string" && payload.name ? { email: payload.email, name: payload.name } : { email: payload.email };
+}
+
+/** What the top bar shows for the signed-in person: the name from their Access identity,
+ *  else the local part of their email, never a fixed label. Initials are the first letters
+ *  of the first and last word. */
+export function portalDisplay(user: PortalUser): { name: string; initials: string } {
+  const name = user.name?.trim() || user.email.split("@")[0] || user.email;
+  const words = name.split(/[\s._-]+/).filter(Boolean);
+  const first = Array.from(words[0] ?? name)[0] ?? "?";
+  const last = words.length > 1 ? (Array.from(words[words.length - 1] ?? "")[0] ?? "") : "";
+  return { name, initials: (first + last).toUpperCase() };
 }
 
 export function startPortalLogin(request: Request, env: Env, returnTo: string): Promise<Response> {
@@ -112,14 +126,14 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
   const flow = portalLogin(url);
   const login = await completeAccessLogin(request, env, flow, (stored) => stored, now);
   if (!login.ok) return login.response;
-  const { email, state: returnTo } = login;
+  const { email, name, state: returnTo } = login;
 
   // A relative Portal path only, checked rather than trusted from KV, so a bad write
   // cannot become an open redirect.
   // The stored path is internal (/portal/x); the browser on the Portal host goes to /x.
   const safeReturn = isPortalPath(returnTo) ? returnTo : PORTAL_PREFIX;
   const headers = new Headers({ Location: publicPortalPath(url, safeReturn) });
-  headers.append("Set-Cookie", await portalSessionCookie({ email }, env.COOKIE_ENCRYPTION_KEY, now, portalCookiePath(url)));
+  headers.append("Set-Cookie", await portalSessionCookie(name ? { email, name } : { email }, env.COOKIE_ENCRYPTION_KEY, now, portalCookiePath(url)));
   headers.append("Set-Cookie", clearStateCookie(flow));
   return new Response(null, { status: 302, headers });
 }

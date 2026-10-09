@@ -1,6 +1,6 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { test } from "node:test";
-import { portalSessionCookie } from "../src/portal-auth.ts";
+import { portalDisplay, portalSessionCookie } from "../src/portal-auth.ts";
 import { RESUME_MARKER } from "../src/jobs.ts";
 import {
   awaitingFrom,
@@ -260,7 +260,27 @@ test("the feed answers a signed-in administrator with the feed, uncached", async
   assert.equal(res.headers.get("Cache-Control"), "no-store");
   assert.match(res.headers.get("Content-Type") ?? "", /application\/json/);
   const body = (await res.json()) as { csrf: string };
-  assert.deepEqual(body, { ...FEED, csrf: body.csrf });
+  assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
+});
+
+// Who is signed in (the top bar's avatar)
+
+test("the feed names the signed-in person from the session: the token's name, else the email's local part", async () => {
+  for (const [user, expected] of [
+    [{ email: "admin@example.com", name: "Dustin Edwards" }, { name: "Dustin Edwards", initials: "DE" }],
+    [{ email: "admin@example.com" }, { name: "admin", initials: "A" }],
+  ] as const) {
+    const cookie = (await portalSessionCookie(user, SECRET, NOW)).split(";")[0];
+    const req = new Request(`https://capsid.example${OPS_FEED_PATH}`, { headers: { Cookie: cookie } });
+    const body = (await (await handleOpsFeed(req, env(), NOW, { feed })).json()) as { user: unknown };
+    assert.deepEqual(body.user, expected);
+  }
+});
+
+test("portalDisplay: another person gets their own name and initials, never a fixed label", () => {
+  assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), { name: "jane.q.public", initials: "JP" });
+  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Mary-Jane O'Neil" }), { name: "Mary-Jane O'Neil", initials: "MO" });
+  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Cher" }), { name: "Cher", initials: "C" });
 });
 
 // The Portal's CSRF value
@@ -358,7 +378,7 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
   const res = await handleOpsRefresh(await refreshRequest(), env(kv, db), NOW, { feed, gather: gathered });
   assert.equal(res.status, 200, await res.clone().text());
   const body = (await res.json()) as { csrf: string };
-  assert.deepEqual(body, { ...FEED, csrf: body.csrf });
+  assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
   assert.equal(kv.store.get(WATCHER_LAST_KEY), NOW.toISOString(), "no pass ran");
   assert.ok(kv.store.has(OPS_SNAPSHOT_KEY), "the pass wrote no snapshot");
   assert.equal(kv.store.get(OPS_REFRESH_KEY), NOW.toISOString(), "the rate-limit stamp was not written");
