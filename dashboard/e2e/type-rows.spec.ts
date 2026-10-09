@@ -9,12 +9,12 @@ const LIST_ROWS = "main .att-row, main .qrow, main .frow";
 // The Overview no longer carries the Queue and Incidents panels (the UI audit's ruling
 // 2), so their rows are measured on their own views. Rows of a closed group are not
 // drawn. With the sample feed: 9 attention rows (8 problems, two of them session
-// incidents, and the notices row), 13
-// queue rows (Stale jobs 2, Blocked 2, Stale 1, Running 1, Queued 4, live sessions 3)
-// and 7 incident rows. The Stale jobs panel reads its own route, so the Queue is
-// measured once its rows have arrived.
+// incidents, and the notices row), 11
+// queue rows (Stale jobs 2, Blocked 1, Running 1, Queued 4, live sessions 3: the two
+// stale jobs are in the panel only) and 7 incident rows. The Stale jobs panel reads its
+// own route, so the Queue is measured once its rows have arrived.
 const LIST_VIEWS = ["overview", "queue", "incidents"] as const;
-const LIST_COUNT = 29;
+const LIST_COUNT = 27;
 
 // fn's results on each list view, in turn.
 async function acrossLists<T>(page: Page, fn: () => Promise<T[]>): Promise<T[]> {

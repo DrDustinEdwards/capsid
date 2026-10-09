@@ -200,16 +200,16 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
 // ---- queue -------------------------------------------------------------------------------
 
 // The Queue's groups, in order. Blocked jobs are ordered by priority, then the newest
-// update first, and a job blocked for over 7 days waits in Stale, after them (audit
-// ruling 10, lib/derive.ts blockedOrder). Done and Failed start collapsed: nothing in
+// update first, with those blocked over 7 days after them (audit ruling 10, lib/derive.ts
+// blockedOrder). Stale jobs have no group here: the Queue's Stale jobs panel holds them
+// and the list leaves them out (2026-10-09). Done and Failed start collapsed: nothing in
 // them needs a person.
 type QueueGroup = { id: string; label: string; pick: (jobs: OpsJob[], now: number) => OpsJob[]; collapsed?: boolean; hideEmpty?: boolean };
 
 const byStatus = (st: OpsJob["status"][]) => (jobs: OpsJob[]) => jobs.filter((j) => st.includes(j.status)).sort((a, b) => ms(a.updated_at) - ms(b.updated_at));
 
 const GROUPS: QueueGroup[] = [
-  { id: "blocked", label: "Blocked, waiting on you", pick: (jobs, now) => blockedOrder(jobs, now).blocked },
-  { id: "stale", label: "Stale, blocked over 7 days", pick: (jobs, now) => blockedOrder(jobs, now).stale, hideEmpty: true },
+  { id: "blocked", label: "Blocked, waiting on you", pick: (jobs, now) => blockedOrder(jobs, now).all },
   { id: "running", label: "Running", pick: byStatus(["claimed"]) },
   { id: "queued", label: "Queued", pick: (jobs) => jobs.filter((j) => j.status === "queued").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)) },
   { id: "done", label: "Done in the last 24h", pick: byStatus(["done"]), collapsed: true },

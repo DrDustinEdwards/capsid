@@ -102,14 +102,11 @@ type StaleLoad = { data: PortalStale | null; loading: boolean; error: string | n
 
 // The stale view (capsid/research/design-stale-jobs.md): GET /portal/api/stale, the same
 // rows `jobs` list with stale: true returns. Read when the Queue opens and again with
-// each feed, so a resume or a fail performed from the drawer drops its row. A row opens
-// the job's drawer, which holds the controls; nothing here closes a job.
-export function StaleJobs() {
-  const { feed, now, signOut } = useApp();
+// each feed, so a resume or a close performed from the drawer drops its row.
+function useStale(): { load: StaleLoad; reread: () => void } {
+  const { feed, signOut } = useApp();
   const [load, setLoad] = useState<StaleLoad>({ data: null, loading: true, error: null });
   const [tick, setTick] = useState(0);
-  // The Queue's namespace chips narrow these rows too.
-  const [ns] = useNsFilter();
   const generated = feed.live.generated;
   useEffect(() => {
     let alive = true;
@@ -125,6 +122,15 @@ export function StaleJobs() {
       alive = false;
     };
   }, [generated, tick, signOut]);
+  return { load, reread: () => setTick((t) => t + 1) };
+}
+
+// The panel. A row opens the job's drawer, which holds the controls (Resume, Close as
+// shipped and the rest); nothing here changes a job.
+export function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
+  const { now } = useApp();
+  // The Queue's namespace chips narrow these rows too.
+  const [ns] = useNsFilter();
   const data = load.data;
   const rows = data ? data.rows.filter((j) => ns === "all" || j.namespace === ns) : [];
   return (
@@ -137,7 +143,7 @@ export function StaleJobs() {
       src={
         <>
           {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={() => setTick((t) => t + 1)}>
+          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>
@@ -188,6 +194,11 @@ export function Queue() {
   const q = filters.q.trim().toLowerCase();
   const jobs = all.filter((j) => (ns === "all" || j.namespace === ns) && (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)));
   const nss = [...new Set(all.map((j) => j.namespace))];
+  // Stale jobs show in one place: the panel (Dustin, 2026-10-09, folding the list's old
+  // "Stale, blocked over 7 days" group into it). The list leaves out every job the panel
+  // holds; until the panel has read, or when its read fails, the list shows every job.
+  const stale = useStale();
+  const inPanel = new Set(stale.load.data?.rows.map((r) => r.id) ?? []);
   return (
     <div className="page">
       <Anchors />
@@ -196,7 +207,7 @@ export function Queue() {
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
       </div>
-      <StaleJobs />
+      <StaleJobs load={stale.load} reread={stale.reread} />
       <div className="grid2">
         <Panel flush title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
           {!jobs.length && all.length ? (
@@ -205,7 +216,7 @@ export function Queue() {
               {ns !== "all" ? ` in the namespace ${ns}` : ""}.
             </FilterEmpty>
           ) : (
-            <QueueRows jobs={jobs} />
+            <QueueRows jobs={jobs.filter((j) => !inPanel.has(j.id))} />
           )}
         </Panel>
         <Panel flush title="By namespace" id="by-namespace" section="By namespace">

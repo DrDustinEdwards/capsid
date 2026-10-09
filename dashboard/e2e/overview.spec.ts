@@ -157,9 +157,11 @@ test("with no problems it says all clear, and the notices row stays under it", a
   await expect(attention(page).locator(".notices").getByRole("button", { name: /^\d+ notices?$/ })).toHaveAttribute("aria-expanded", "false");
 });
 
-// ---- ruling 10: blocked order, Stale, and closed finished groups ----------------------------
+// ---- ruling 10: blocked order and closed finished groups ----------------------------------
+// The list's old Stale group is folded into the Stale jobs panel (2026-10-09): these
+// reshaped jobs are not among the panel's rows, so all six stay in Blocked.
 
-test("the Queue orders blocked jobs by priority then newest, puts the stale ones after, and starts Done and Failed closed", async ({ page }) => {
+test("the Queue orders blocked jobs by priority then newest, the ones blocked over 7 days after, and starts Done and Failed closed", async ({ page }) => {
   await reshape(page, (f) => {
     const now = Date.parse(f.live.generated);
     const base = f.live.jobs.find((j) => j.status === "blocked")!;
@@ -176,11 +178,8 @@ test("the Queue orders blocked jobs by priority then newest, puts the stale ones
   });
   await visit(page, "queue");
   const group = (id: string) => page.locator(`main .qgroup[data-group="${id}"]`);
-  await expect(group("blocked").locator(".qrow b")).toHaveText(["High, two days", "High, three days", "Low, half a day", "Low, one day"]);
-  await expect(group("stale").locator("h3")).toContainText("Stale, blocked over 7 days");
-  await expect(group("stale").locator(".qrow b")).toHaveText(["Top, nine days", "Low, twelve days"]);
-  // Stale comes right after Blocked.
-  expect(await page.locator("main .qgroup").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.group))).toEqual(["blocked", "stale", "running", "queued", "done", "failed"]);
+  await expect(group("blocked").locator(".qrow b")).toHaveText(["High, two days", "High, three days", "Low, half a day", "Low, one day", "Top, nine days", "Low, twelve days"]);
+  expect(await page.locator("main .qgroup").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.group))).toEqual(["blocked", "running", "queued", "done", "failed"]);
   for (const id of ["done", "failed"]) {
     const toggle = group(id).getByRole("button");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
