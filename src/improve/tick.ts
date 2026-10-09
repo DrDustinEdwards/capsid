@@ -160,8 +160,9 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   );
 
   // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists
-  // what has gone stale for the seat's morning read. It changes nothing, so a broken pass
-  // costs a missing list, not a bad write. Not due is not a run.
+  // what has gone stale for the seat's morning read. Its one write is pruning merged
+  // branches, off until the seat turns it on, and each delete is audit-logged before the
+  // next, so a broken pass costs a missing list, not an unrecorded write. Not due is not a run.
   await runTask(
     env,
     "maintenance",

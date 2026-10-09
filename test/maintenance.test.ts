@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { laterPassed, namesPullRequest, promisesFollowUps } from "../src/maintenance.ts";
 import { gatherPrItems, greenAwaitingSeat, redTooLong, type OpenPr, type PrCheck, type PrReaders } from "../src/maintenance-prs.ts";
+import { BRANCH_KEEP_KEY, gatherBranchItems, githubBranchReaders, PRUNE_AUDIT_ACTION, PRUNE_CAP, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches.ts";
+import type { Env } from "../src/env.ts";
+import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The daily maintenance pass's pure rules (job_549550d73d4e). Each rule is seen firing on a
 // planted case and staying quiet on a clean one. The queries that feed them run against a
@@ -107,4 +110,147 @@ test("a GitHub read that fails is listed as not checked, never read as clean", a
   const part = await gatherPrItems(["sample"], partial, NOW);
   assert.deepEqual(part.items.map((i) => i.rule), ["prs-not-checked"]);
   assert.match(part.items[0].line, /#3 check runs/);
+});
+
+// The branch rules (piece 3). GitHub is faked at fetch, so delete_branch merged's own plan
+// and delete step (src/github/prune.ts) run unchanged: what the tool refuses, the pass
+// refuses.
+
+const ONE_REPO = [{ repo: "o/r", label: "primary" }];
+const SAME_REPO = { full_name: "o/r" };
+const ghPr = (number: number, ref: string, sha: string, state = "closed", merged = true) => ({
+  number, state, merged_at: state === "closed" && merged ? "2026-09-01T00:00:00Z" : null, head: { ref, sha, repo: SAME_REPO },
+});
+const BRANCHES = [
+  { name: "main", commit: { sha: "m1" } },
+  { name: "feat/merged-clean", commit: { sha: "a1" } },
+  { name: "review/grok", commit: { sha: "k1" } },
+  { name: "review/colour-audit", commit: { sha: "k2" } },
+  { name: "feat/reopened", commit: { sha: "z1" } },
+  { name: "feat/open-old", commit: { sha: "o1" } },
+  { name: "feat/old-orphan", commit: { sha: "n1" } },
+  { name: "feat/new-orphan", commit: { sha: "n2" } },
+];
+// feat/reopened merged as #3 and was opened again as #4 from the same tip: its newest pull
+// request is open, so it is not pruned even though a merged one names its tip.
+const OPEN = [ghPr(4, "feat/reopened", "z1", "open"), ghPr(5, "feat/open-old", "o1", "open")];
+const CLOSED = [ghPr(1, "feat/merged-clean", "a1"), ghPr(2, "review/grok", "k1"), ghPr(3, "feat/reopened", "z1")];
+const COMMITTED: Record<string, string> = {
+  m1: "2026-10-08T00:00:00Z", a1: "2026-08-01T00:00:00Z", k1: "2026-08-01T00:00:00Z", k2: "2026-08-01T00:00:00Z",
+  z1: "2026-08-01T00:00:00Z", o1: "2026-08-01T00:00:00Z", n1: "2026-08-30T12:00:00Z", n2: "2026-10-01T00:00:00Z",
+};
+const KEEP = JSON.stringify({ sample: ["review/grok", "review/colour-audit"] });
+
+function branchRoutes(branches = BRANCHES) {
+  const r: Record<string, unknown> = {
+    "GET /repos/o/r": { body: { default_branch: "main" } },
+    "GET /repos/o/r/branches": { body: branches },
+    "GET /repos/o/r/pulls": (_b: unknown, p: URLSearchParams) => ({ body: p.get("state") === "open" ? OPEN : CLOSED }),
+  };
+  for (const b of branches) {
+    r[`GET /repos/o/r/git/ref/heads/${b.name}`] = { body: { object: { sha: b.commit.sha } } };
+    r[`DELETE /repos/o/r/git/refs/heads/${b.name}`] = { status: 204, text: "" };
+    r[`GET /repos/o/r/commits/${b.commit.sha}`] = { body: { commit: { committer: { date: COMMITTED[b.commit.sha] } } } };
+  }
+  return r as never;
+}
+
+function branchEnv(seed: Record<string, string>) {
+  const audits: unknown[][] = [];
+  const DB = {
+    prepare: (sql: string) => ({
+      bind: (...args: unknown[]) => ({
+        first: async () => ({ repos: JSON.stringify(ONE_REPO) }),
+        run: async () => {
+          if (sql.includes("audit_log")) audits.push(args);
+          return { meta: { changes: 1 } };
+        },
+      }),
+    }),
+  };
+  return { env: fakeEnv({ DB, APP_KV: fakeKv({ seedToken: true, seed }).kv }) as Env, audits };
+}
+
+const deletes = (calls: Array<{ method: string; path: string }>) =>
+  calls.filter((c) => c.method === "DELETE").map((c) => c.path.replace("/repos/o/r/git/refs/heads/", ""));
+const lines = (items: Array<{ rule: string; line: string }>, rule: string) => items.filter((i) => i.rule === rule).map((i) => i.line);
+
+test("with the auto-prune off, a merged branch is listed with a count and nothing is deleted", async () => {
+  await withFetch(branchRoutes(), async (calls) => {
+    const { env, audits } = branchEnv({ [BRANCH_KEEP_KEY]: KEEP });
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(deletes(calls), [], "the switch is off: nothing is deleted");
+    assert.equal(audits.length, 0);
+    const merged = lines(got.items, "branch-merged");
+    assert.equal(merged.length, 2);
+    assert.match(merged[0], /branch feat\/merged-clean is merged \(pull request #1, tip a1\)/);
+    assert.match(merged[1], /^1 merged branch\(es\) in o\/r would be pruned; the auto-prune is off/);
+    // Old, with no open pull request, not merged by the rule: listed with its age. A
+    // keep-listed, open, merged or recent branch is not.
+    const stale = lines(got.items, "branch-stale");
+    assert.equal(stale.length, 1);
+    assert.match(stale[0], /branch feat\/old-orphan has had no commit for 39 days \(no pull request\)/);
+    assert.deepEqual(got.read, { sample: 8 });
+    assert.equal(got.items.length, 3);
+  });
+});
+
+test("with the auto-prune on, the merged branch is deleted and audit-logged, and a keep-listed or open one is not", async () => {
+  await withFetch(branchRoutes(), async (calls) => {
+    const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on", [BRANCH_KEEP_KEY]: KEEP });
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(deletes(calls), ["feat/merged-clean"], "never the default, a keep-listed branch, or one whose newest pull request is open");
+    assert.equal(got.pruned, 1);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0][1], PRUNE_AUDIT_ACTION);
+    assert.deepEqual(JSON.parse(audits[0][4] as string), { repo: "o/r", branch: "feat/merged-clean", sha: "a1", pr: 1 });
+    assert.match(lines(got.items, "branch-pruned")[0], /git push origin a1:refs\/heads\/feat\/merged-clean/);
+    assert.deepEqual(lines(got.items, "branch-merged"), []);
+  });
+});
+
+test("the pass deletes at most 25 merged branches per repo per run and says how many wait", async () => {
+  const caps: number[] = [];
+  const many = Array.from({ length: 30 }, (_, i) => ({ branch: `feat/m${i}`, sha: `s${i}`, pr: i + 1 }));
+  const plan = { owner: "o", name: "r", repo: "o/r", defaultBranch: "main", branchesRead: 31, listsComplete: true, openComplete: true, prune: many, kept: [] };
+  const fake: BranchReaders = {
+    plan: async () => plan,
+    committedAt: async () => "2026-10-08T00:00:00Z",
+    prune: async (p, cap, onDeleted) => {
+      caps.push(cap);
+      for (const c of p.prune.slice(0, cap)) await onDeleted(c);
+      return { deleted: p.prune.slice(0, cap), skipped: [], remaining: p.prune.length - cap };
+    },
+  };
+  const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on" });
+  const got = await gatherBranchItems(env, ["sample"], fake, NOW);
+  assert.deepEqual(caps, [PRUNE_CAP]);
+  assert.equal(PRUNE_CAP, 25);
+  assert.equal(audits.length, 25, "one audit row per delete");
+  assert.match(lines(got.items, "branch-merged")[0], /^5 more merged branch\(es\) in o\/r wait for the next run/);
+});
+
+test("a failed branch read or an unreadable keep list is listed as not checked, and a clean repo stays quiet", async () => {
+  await withFetch({ "GET /repos/o/r": { status: 502, text: "bad gateway" } } as never, async (calls) => {
+    const { env } = branchEnv({ [PRUNE_SWITCH_KEY]: "on" });
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(got.items.map((i) => i.rule), ["branches-not-checked"]);
+    assert.deepEqual(got.read, {}, "a namespace not read has no count");
+    assert.deepEqual(deletes(calls), []);
+  });
+
+  await withFetch(branchRoutes(), async (calls) => {
+    const { env } = branchEnv({ [PRUNE_SWITCH_KEY]: "on", [BRANCH_KEEP_KEY]: '["review/grok"]' });
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(got.items.map((i) => i.rule), ["branches-not-checked"]);
+    assert.match(got.items[0].line, /keep list could not be read/);
+    assert.deepEqual(deletes(calls), [], "no prune without a keep list that was read");
+  });
+
+  await withFetch(branchRoutes([BRANCHES[0], BRANCHES[7]]), async () => {
+    const { env } = branchEnv({});
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(got.items, []);
+    assert.deepEqual(got.read, { sample: 2 }, "quiet with two branches read, not quiet on nothing read");
+  });
 });

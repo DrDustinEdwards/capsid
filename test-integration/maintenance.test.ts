@@ -4,6 +4,7 @@ import { postJob } from "../src/jobs";
 import { gatherMaintenance, maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
 import { legacyAgent } from "../src/agents";
 import type { PrReaders } from "../src/maintenance-prs";
+import { PRUNE_AUDIT_ACTION, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches";
 
 // The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
 // one at a time beside a clean job each must leave alone.
@@ -17,6 +18,13 @@ const PR = "https://github.com/example-org/sample/pull/7";
 const NO_PRS: PrReaders = {
   openPrs: async () => ({ repo: "example-org/sample", prs: [], problem: null }),
   failingStep: async () => ({ step: null, problem: "not called" }),
+};
+// The branch rules read GitHub too; here every repo has only its default branch. They are
+// tested in test/maintenance.test.ts.
+const NO_BRANCHES: BranchReaders = {
+  plan: async () => ({ owner: "example-org", name: "sample", repo: "example-org/sample", defaultBranch: "main", branchesRead: 1, listsComplete: true, openComplete: true, prune: [], kept: [] }),
+  committedAt: async () => NOW.toISOString(),
+  prune: async () => ({ deleted: [], skipped: [], remaining: 0 }),
 };
 
 function jobsEnv() {
@@ -45,7 +53,7 @@ describe("gatherMaintenance", () => {
   it("lists a queued LATER job whose date has passed, and leaves a future one alone", async () => {
     const past = await post("LATER 2026-10-01: move the cron");
     await post("LATER 2026-12-01: rename the tool");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES);
     expect(list.items.filter((i) => i.rule === "later-passed").map((i) => i.job)).toEqual([past]);
   });
 
@@ -54,7 +62,7 @@ describe("gatherMaintenance", () => {
     const other = await post("Unrelated work", "See https://github.com/example-org/sample/pull/70 for context.");
     const done = await post("The job that shipped it");
     await env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, ?2, 1)").bind(done, PR).run();
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES);
     const found = list.items.filter((i) => i.rule === "shipped-elsewhere");
     expect(found.map((i) => i.job)).toEqual([shipped]);
     expect(found[0].line).toContain(done);
@@ -66,13 +74,13 @@ describe("gatherMaintenance", () => {
     await env.DB.prepare("UPDATE jobs SET status = 'done', result_summary = ?2, created_at = ?3, updated_at = ?4 WHERE id = ?1")
       .bind(promised, "Design done. The build will follow as separate jobs.", "2026-10-06T00:00:00.000Z", "2026-10-07T00:00:00.000Z")
       .run();
-    let list = await gatherMaintenance(env as never, NOW, NO_PRS);
+    let list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES);
     expect(list.items.filter((i) => i.rule === "followups-missing").map((i) => i.job)).toEqual([promised]);
 
     // A job posted after it moved is the follow-up. (postJob stamps created_at from `now`.)
     const later = await postJob(jobsEnv(), ADMIN, new Date("2026-10-07T06:00:00.000Z"), { namespace: "sample", title: "Build the thing", body: "go" });
     expect(later.ok, later.refusal).toBe(true);
-    list = await gatherMaintenance(env as never, NOW, NO_PRS);
+    list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES);
     expect(list.items.filter((i) => i.rule === "followups-missing")).toEqual([]);
   });
 
@@ -83,32 +91,58 @@ describe("gatherMaintenance", () => {
       env.DB.prepare("INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES (?1, 'sample', 'resume', 'system:merge-resume', 'system', ?2)").bind(id, at).run();
     await touch(recent, "2026-10-08T06:00:00.000Z");
     await touch(old, "2026-10-01T06:00:00.000Z");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES);
     expect(list.items.filter((i) => i.rule === "auto-resumed").map((i) => i.job)).toEqual([recent]);
   });
 
   it("stays quiet on a clean queue", async () => {
     await post("An ordinary queued job");
-    expect((await gatherMaintenance(env as never, NOW, NO_PRS)).items).toEqual([]);
+    expect((await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES)).items).toEqual([]);
   });
 });
 
 describe("maintenanceTick", () => {
   it("does not run before 11:00 UTC, runs once a day after, and stores the list", async () => {
     await post("LATER 2026-10-01: stale");
-    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS);
+    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS, NO_BRANCHES);
     expect(early.ran).toBe(false);
     expect(await readMaintenance(env as never)).toBeNull();
 
-    const first = await maintenanceTick(env as never, NOW, NO_PRS);
+    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES);
     expect(first.ran).toBe(true);
     expect((await readMaintenance(env as never))?.items.map((i) => i.rule)).toEqual(["later-passed"]);
     // Every roster repo was read, and the count says so: zero open pull requests, not none read.
     expect(Object.values((await readMaintenance(env as never))?.prs_read ?? {})).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(Object.values((await readMaintenance(env as never))?.branches_read ?? {})).toEqual([1, 1, 1, 1, 1, 1, 1]);
 
-    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS);
+    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS, NO_BRANCHES);
     expect(second.ran).toBe(false);
-    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS);
+    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS, NO_BRANCHES);
     expect(nextDay.ran).toBe(true);
+  });
+
+  it("writes one audit_log row per branch the switched-on prune deleted, with the sha to put it back", async () => {
+    await env.APP_KV.put(PRUNE_SWITCH_KEY, "on");
+    const ONE_MERGED: BranchReaders = {
+      ...NO_BRANCHES,
+      plan: async (namespace) => ({
+        ...(await NO_BRANCHES.plan(namespace, [])),
+        prune: namespace === "capsid" ? [{ branch: "feat/done", sha: "a1", pr: 3 }] : [],
+      }),
+      prune: async (plan, cap, onDeleted) => {
+        for (const c of plan.prune.slice(0, cap)) await onDeleted(c);
+        return { deleted: plan.prune.slice(0, cap), skipped: [], remaining: 0 };
+      },
+    };
+    try {
+      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED);
+      expect(ran.ran && ran.note).toContain("1 pruned");
+      const rows = await env.DB.prepare("SELECT actor, namespace, params FROM audit_log WHERE action = ?1").bind(PRUNE_AUDIT_ACTION).all<{ actor: string; namespace: string; params: string }>();
+      expect(rows.results.map((r) => [r.actor, r.namespace, JSON.parse(r.params)])).toEqual([
+        ["system:maintenance", "capsid", { repo: "example-org/sample", branch: "feat/done", sha: "a1", pr: 3 }],
+      ]);
+    } finally {
+      await env.APP_KV.delete(PRUNE_SWITCH_KEY);
+    }
   });
 });
