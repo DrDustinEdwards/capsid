@@ -9,6 +9,7 @@ import type { JobListRow } from "./jobs-claim";
 import type { OverlapReport } from "./job-overlaps";
 import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
+import { logEvent } from "./log";
 import { DEFAULT_MAX_CLAIMS, MAX_CLAIMS_CEILING, claimLimit, parseScopes } from "./agents-schema";
 import { resolveRepo } from "./github/client";
 
@@ -278,7 +279,7 @@ export async function correctionsForWork(db: D1Database, namespace: string, titl
     const spent = row?.spent;
     return typeof spent === "number" && Number.isFinite(spent) ? spent : Number.NaN;
   } catch (err) {
-    console.error(`CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "CORRECTIONS_READ_FAILED", { message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}` });
     return Number.NaN;
   }
 }

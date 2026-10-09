@@ -6,6 +6,7 @@ import { runMetaLoop } from "../improve-meta";
 import { archivePath, chicagoDay, loopPauseReason } from "../improve-schema";
 import { postJob } from "../jobs";
 import { watcherAgent } from "../watcher";
+import { logEvent } from "../log";
 
 // How long a run stays in finalizing retrying a pull request that failed to open:
 // fifteen minutes, three five-minute ticks. Past it the run posts a job for a driver
@@ -60,7 +61,7 @@ export async function finalizeRun(
       prUrl = pr.url;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`IMPROVE_PR_FAILED ${run.id}: ${message}`);
+      logEvent("error", "IMPROVE_PR_FAILED", { message: `IMPROVE_PR_FAILED ${run.id}: ${message}` });
       prFailure = `the pull request for branch ${head.branch ?? "(none)"} could not be opened: ${message.slice(0, 300)}`;
       // Retried on later ticks inside the window, measured from entering finalizing
       // (the row is not touched, so advanced_at keeps that time). Past it a job is
@@ -132,7 +133,7 @@ export async function finalizeRun(
   try {
     await runMetaLoop(env, now);
   } catch (err) {
-    console.error(`IMPROVE_META_FAILED: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "IMPROVE_META_FAILED", { message: `IMPROVE_META_FAILED: ${err instanceof Error ? err.message : String(err)}` });
   }
 
   return {
@@ -173,7 +174,7 @@ async function postPrJob(env: Env, run: RunRow, branch: string, failure: string,
     return `no job posted to open it: ${result.refusal ?? "no reason given"}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`IMPROVE_PR_JOB_FAILED ${run.id}: ${message}`);
+    logEvent("error", "IMPROVE_PR_JOB_FAILED", { message: `IMPROVE_PR_JOB_FAILED ${run.id}: ${message}` });
     return `no job posted to open it: ${message.slice(0, 300)}`;
   }
 }

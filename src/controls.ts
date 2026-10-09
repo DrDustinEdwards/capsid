@@ -18,6 +18,7 @@ import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
+import { logEvent } from "./log";
 
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
 // admin control is, what it will do, the one dispatch to the shared mutators, and the
@@ -365,7 +366,7 @@ async function performAction(
     if (committed) {
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
-      console.error(warning);
+      logEvent("error", "PORTAL_ACTION_AUDIT_FAILED", { message: warning });
       return { ok: true, summary, warning };
     }
     // improveControl throws on a bad value, with a message that says so.

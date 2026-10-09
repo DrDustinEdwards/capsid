@@ -12,6 +12,7 @@ import { signalForRow, type JobOutcomeRow } from "./job-outcomes";
 import { IMPROVE_ACTOR } from "./improve-state";
 import { auditStatement } from "./store-guards";
 import { OFFER_ACTION } from "./job-skill-offers";
+import { logEvent } from "./log";
 
 // The evaluation cycle writes evaluations from verified job outcomes, then applies
 // the transitions ./skills-lifecycle decides from them, unless transitions are held.
@@ -67,7 +68,7 @@ export async function transitionMode(env: Env): Promise<TransitionMode> {
   try {
     return (await env.APP_KV.get(TRANSITIONS_KEY)) === "apply" ? "apply" : "hold";
   } catch (err) {
-    console.error(`SKILL_TRANSITIONS_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; holding`);
+    logEvent("error", "SKILL_TRANSITIONS_UNREADABLE", { message: `SKILL_TRANSITIONS_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; holding` });
     return "hold";
   }
 }

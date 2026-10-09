@@ -12,6 +12,7 @@ import {
   evaluatePolicy,
   ciVerdict,
 } from "./auto-merge-policy";
+import { logEvent } from "./log";
 
 // The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
 // them with evaluatePolicy (src/auto-merge-policy.ts), and merge or record the refusal.
@@ -208,7 +209,7 @@ async function auditDeclineOnChange(
   try {
     if ((await env.APP_KV.get(key)) === decision) return;
   } catch (err) {
-    console.error(`AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` });
   }
   // The row first, so a failed KV write repeats a row on the next tick rather than
   // losing one.
@@ -216,7 +217,7 @@ async function auditDeclineOnChange(
   try {
     await env.APP_KV.put(key, decision, { expirationTtl: LAST_DECLINE_TTL_SECONDS });
   } catch (err) {
-    console.error(`AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }
 
@@ -278,12 +279,12 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       defaultBranch = await getDefaultBranch(env, owner, repo);
       const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100`);
       if (!listed.ok) {
-        console.error(`AUTO_MERGE could not list PRs on ${owner}/${repo} (${listed.status})`);
+        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listed.status})` });
         continue;
       }
       prs = (await listed.json()) as OpenPr[];
     } catch (err) {
-      console.error(`AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}`);
+      logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
       continue;
     }
 
@@ -306,7 +307,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
           );
         } catch (err) {
-          console.error(`AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`);
+          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}` });
         }
         continue;
       }
@@ -319,7 +320,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
-        console.error(`AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}`);
+        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
         // An outcome already pushed is the true one; only its audit row failed.
         if (outcomes.length > before) continue;
         outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
@@ -335,7 +336,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             }),
           ]);
         } catch (auditErr) {
-          console.error(`AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` });
         }
       }
     }
@@ -356,7 +357,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));
   } catch (err) {
-    console.error(`AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}` });
   }
 
   const merged = outcomes.filter((o) => o.merged).length;

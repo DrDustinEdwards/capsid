@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { logEvent } from "./log";
 
 // THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept
 // across jobs (migrations/0024_watcher_findings.sql says why it exists).
@@ -81,7 +82,7 @@ export function appendEvidence(fingerprint: string, existing: string | null, f: 
       if (!Array.isArray(parsed)) throw new Error("not an array");
       list = parsed as EvidenceEntry[];
     } catch (err) {
-      console.error(`WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${err instanceof Error ? err.message : String(err)}; starting it again`);
+      logEvent("error", "WATCHER_EVIDENCE_UNREADABLE", { message: `WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${err instanceof Error ? err.message : String(err)}; starting it again` });
     }
   }
   const lines = (f.evidence ?? []).slice(0, MAX_EVIDENCE_LINES).map((line) => line.slice(0, MAX_EVIDENCE_LINE));
@@ -139,7 +140,7 @@ export function onSighting(row: FindingRow | null, openJobId: string | null, row
   // A cleared row with no usable reopen_after is filed rather than muted: a watcher
   // that goes quiet on a corrupt stamp reads as health.
   if (Number.isNaN(reopen)) {
-    console.error(`WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; filing it`);
+    logEvent("error", "WATCHER_REOPEN_UNREADABLE", { message: `WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; filing it` });
     return { do: "post" };
   }
   if (now.getTime() < reopen) return { do: "quiet", why: `cleared at ${row.cleared_at}, quiet until ${row.reopen_after}` };

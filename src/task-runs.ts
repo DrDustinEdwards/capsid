@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types";
+import { logEvent } from "./log";
 
 // The run ledger (migrations/0029_task_runs.sql; capsid/decisions.md 2026-09-30,
 // "admin panels review adopted", item 1). Every scheduled task goes through runTask,
@@ -91,7 +92,7 @@ async function record(env: Env, task: TaskId, started: Date, outcome: OpsTaskRun
   try {
     await env.DB.batch(taskRunStatements(env.DB, task, started, new Date(), outcome, reason));
   } catch (err) {
-    console.error(`TASK_RUN_UNRECORDED ${task} ${outcome}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "TASK_RUN_UNRECORDED", { message: `TASK_RUN_UNRECORDED ${task} ${outcome}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }
 
@@ -115,7 +116,9 @@ export async function runTask<T>(
     value = await body();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`${opts.tag} ${err instanceof Error && err.stack ? `${message}\n${err.stack}` : message}`);
+    logEvent("error", opts.tag, {
+      message: `${opts.tag} ${err instanceof Error && err.stack ? `${message}\n${err.stack}` : message}`,
+    });
     await record(env, task, started, "threw", message);
     if (opts.rethrow) throw err;
     return null;

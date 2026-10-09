@@ -10,6 +10,7 @@ import {
   ghFetch,
   resolveRepo,
 } from "./client";
+import { logEvent } from "../log";
 
 // Recent CI workflow runs for a namespace's repo, via the GitHub App. Read-only.
 // For the most recent failed run it also returns the failing jobs and steps and a
@@ -595,7 +596,7 @@ async function refuseScorerByContent(
       if (err instanceof Error && err.message.startsWith("ci_dispatch refuses")) throw err;
       // A lookup problem, not a verdict. Named, not swallowed, and fail-open as
       // stated above: checks 1 and 2 hold without a lookup.
-      console.log(`CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${workflow}${at ? ` @${at}` : ""}: ${err instanceof Error ? err.message : String(err)}`);
+      logEvent("log", "CI_DISPATCH_CONTENT_CHECK_SKIPPED", { message: `CI_DISPATCH_CONTENT_CHECK_SKIPPED ${full} ${workflow}${at ? ` @${at}` : ""}: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 }

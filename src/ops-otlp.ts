@@ -1,5 +1,6 @@
 import { readBoundedText } from "./improve-scorer";
 import { resolveSessionCaller, type SessionCaller } from "./ops-session-auth";
+import { logEvent } from "./log";
 
 // Claude Code's OpenTelemetry, received as OTLP/HTTP JSON (docs/telemetry.md).
 //
@@ -446,7 +447,7 @@ export async function recordExport(
       // Not swallowed (CLAUDE.md, no swallowed error rule): logged, and answered 503 so
       // the exporter retries rather than losing the points.
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`OTLP_WRITE_FAILED ${caller.agent.actor}: ${message}`);
+      logEvent("error", "OTLP_WRITE_FAILED", { message: `OTLP_WRITE_FAILED ${caller.agent.actor}: ${message}` });
       return plain(`service unavailable: the usage could not be written (${message})`, 503);
     }
   }

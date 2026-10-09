@@ -11,6 +11,7 @@ import {
   type ScopeFlag,
 } from "./agents-schema";
 import { PENDING_START_MINUTES } from "./jobs-schema";
+import { logEvent } from "./log";
 
 // A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
 // fingerprint cannot say whose credential did something, and cannot give a queue
@@ -194,6 +195,6 @@ async function touchLastSeen(db: D1Database, agent: Agent): Promise<void> {
   try {
     await db.prepare("UPDATE agents SET last_seen = datetime('now') WHERE id = ?1").bind(agent.id).run();
   } catch (err) {
-    console.error(`AGENT_LAST_SEEN_FAILED ${agent.id}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "AGENT_LAST_SEEN_FAILED", { message: `AGENT_LAST_SEEN_FAILED ${agent.id}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }

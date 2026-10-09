@@ -2,6 +2,7 @@ import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
 import { resolveRepo } from "../github/client";
 import { auditStatement } from "../store-guards";
+import { logEvent } from "../log";
 
 // The wrappers every repo tool runs through. guardedRead resolves the repo and asks
 // the repos axis before a read; guardedWrite does the same for a mutation, computes
@@ -86,7 +87,7 @@ export function repoGuards(ctx: ToolCtx) {
     try {
       await auditStatement(db, actor, action, namespace, path, result).run();
     } catch (err) {
-      console.error(`AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}`);
+      logEvent("error", "AUDIT_INSERT_FAILED", { message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}` });
       return ok({
         ...result,
         audit_warning:

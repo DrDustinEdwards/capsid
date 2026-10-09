@@ -62,7 +62,7 @@ test("PLANT: a throw is recorded as threw with its message and logged with the t
     errors.restore();
   }
   assert.deepEqual(inserts(), [{ task: "backup", outcome: "threw", reason: "R2 said no" }]);
-  assert.ok(errors.lines.some((l) => l.startsWith("BACKUP_CRON_THREW R2 said no")), errors.lines.join("\n"));
+  assert.ok(errors.lines.some((l) => JSON.parse(l).message.startsWith("BACKUP_CRON_THREW R2 said no")), errors.lines.join("\n"));
 });
 
 test("PLANT: a tick step's throw is recorded and does not stop the steps after it", async () => {
@@ -81,7 +81,7 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
     { task: "auto-merge", outcome: "threw", reason: "GitHub 502" },
     { task: "watcher", outcome: "ok", reason: "pass" },
   ]);
-  assert.ok(errors.lines.some((l) => l.startsWith("AUTO_MERGE_THREW: GitHub 502")));
+  assert.ok(errors.lines.some((l) => JSON.parse(l).message.startsWith("AUTO_MERGE_THREW: GitHub 502")));
 });
 
 test("PLANT: a ledger that cannot be written never stops the task, and says so in the log", async () => {
@@ -94,7 +94,9 @@ test("PLANT: a ledger that cannot be written never stops the task, and says so i
     errors.restore();
   }
   assert.equal(value, 1);
-  assert.deepEqual(errors.lines, ["TASK_RUN_UNRECORDED tick ok: no such table: task_runs"]);
+  assert.deepEqual(errors.lines.map((l) => JSON.parse(l)), [
+    { event: "TASK_RUN_UNRECORDED", message: "TASK_RUN_UNRECORDED tick ok: no such table: task_runs" },
+  ]);
 });
 
 test("a reason is kept to one line of at most REASON_MAX characters", async () => {

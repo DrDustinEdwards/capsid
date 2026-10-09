@@ -1,3 +1,4 @@
+import { logEvent } from "./log";
 export interface RateLimitPolicy {
   // Distinct per endpoint so one path cannot spend another's budget.
   prefix: string;
@@ -40,7 +41,10 @@ function windowKeys(prefix: string, ip: string, now: Date): { hour: string; day:
 // Every path that cannot read or advance a counter ends here, and the policy's
 // `onUnavailable` decides. The log line is the only output on the allow side.
 function unavailable(policy: RateLimitPolicy, ip: string, detail: string): RateVerdict {
-  console.error(`${policy.label}_RATE_LIMIT_UNAVAILABLE ${detail} for ${ip}, ${policy.onUnavailable === "allow" ? "allowing" : "refusing"}`);
+  const event = `${policy.label}_RATE_LIMIT_UNAVAILABLE`;
+  logEvent("error", event, {
+    message: `${event} ${detail} for ${ip}, ${policy.onUnavailable === "allow" ? "allowing" : "refusing"}`,
+  });
   return policy.onUnavailable === "allow" ? { allowed: true } : { allowed: false, window: "unavailable", detail };
 }
 

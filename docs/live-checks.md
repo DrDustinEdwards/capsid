@@ -50,4 +50,4 @@ The `headers` rule runs `checkSecurityHeaders` from `@dustinedwards/security-hea
 
 ## Each pass logs what it read
 
-`WATCHER_LIVE pages <read>/<expected> shas <read>/<expected> analytics <read>/<expected> findings <n>`. No findings over zero pages read is not a clean bill: the count is the other half of the check.
+A JSON log line with `event` `WATCHER_LIVE` and a `message` of `WATCHER_LIVE pages <read>/<expected> shas <read>/<expected> analytics <read>/<expected> findings <n>`. No findings over zero pages read is not a clean bill: the count is the other half of the check.

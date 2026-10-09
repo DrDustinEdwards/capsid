@@ -120,9 +120,9 @@ test("the cache counters are surfaced, so a dead cache is observable", async () 
   } finally {
     console.log = log;
   }
-  const line = logged.find((l) => l.startsWith("IMPROVE_ATTEMPT_TOKENS"));
+  const line = logged.map((l) => JSON.parse(l) as { event: string; message: string }).find((l) => l.event === "IMPROVE_ATTEMPT_TOKENS");
   assert.ok(line, "the attempt did not log its token counts");
-  assert.match(line, /cache_read=700 cache_write=4000/);
+  assert.match(line.message, /cache_read=700 cache_write=4000/);
 });
 
 test("cache read and write are priced differently from plain input", () => {

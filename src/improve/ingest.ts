@@ -29,6 +29,7 @@ import {
 } from "../improve-state";
 import { changedPathsFrom, renderOutcome } from "./finalize";
 import { baselineId, checkBudget, loadScores, metricsFor, readDoc, scoreStatements } from "./open";
+import { logEvent } from "../log";
 
 export interface IngestResult {
   ok: boolean;
@@ -479,6 +480,6 @@ async function maybeAbstract(env: Env, run: RunRow, attempt: AttemptRow, change:
     });
   } catch (err) {
     // Abstraction is not a gate; a failure must not undo a kept change.
-    console.error(`IMPROVE_ABSTRACT_FAILED ${attempt.id}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "IMPROVE_ABSTRACT_FAILED", { message: `IMPROVE_ABSTRACT_FAILED ${attempt.id}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }

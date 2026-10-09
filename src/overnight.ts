@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { IMPROVE_MODES } from "./improve-schema";
 import { auditStatement } from "./store-guards";
+import { logEvent } from "./log";
 
 // THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3, ruled
 // by Dustin 2026-10-04). A scheduled run of the per-namespace drivers on Dustin's own
@@ -70,11 +71,13 @@ function parseDecision(raw: string | null): OvernightDecision | null {
       return value as OvernightDecision;
     }
   } catch (err) {
-    console.error(`OVERNIGHT_DECISION_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the record as absent`);
+    logEvent("error", "OVERNIGHT_DECISION_UNREADABLE", { message: `OVERNIGHT_DECISION_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the record as absent` });
     return null;
   }
   // Valid JSON of another shape: reported and read as absent, never as a decision.
-  console.error("OVERNIGHT_DECISION_UNREADABLE: the stored decision record is not the shape setOvernight writes; treating it as absent");
+  logEvent("error", "OVERNIGHT_DECISION_UNREADABLE", {
+    message: "OVERNIGHT_DECISION_UNREADABLE: the stored decision record is not the shape setOvernight writes; treating it as absent",
+  });
   return null;
 }
 
@@ -91,7 +94,7 @@ export async function overnightState(env: Env): Promise<OvernightState> {
     const decision = parseDecision(await env.APP_KV.get(OVERNIGHT_DECISION_KEY));
     return decision ? { mode, decision } : { mode: "off", decision: null };
   } catch (err) {
-    console.error(`OVERNIGHT_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off`);
+    logEvent("error", "OVERNIGHT_UNREADABLE", { message: `OVERNIGHT_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off` });
     return { mode: "off", decision: null };
   }
 }

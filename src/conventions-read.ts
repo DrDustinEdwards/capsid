@@ -9,6 +9,7 @@
 // with no path, and params say how the document was reached.
 
 import { HEALTH_PROBE_NS, HEALTH_PROBE_PATH } from "./store-probe";
+import { logEvent } from "./log";
 
 const CONVENTIONS_READ_ACTION = "conventions-read";
 const WINDOW = "-1 hour";
@@ -40,6 +41,6 @@ export async function recordConventionsRead(
       .bind(actor, CONVENTIONS_READ_ACTION, HEALTH_PROBE_NS, JSON.stringify({ via, for_namespace: forNamespace }), WINDOW)
       .run();
   } catch (err) {
-    console.error(`CONVENTIONS_READ could not record the read by ${actor}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "CONVENTIONS_READ", { message: `CONVENTIONS_READ could not record the read by ${actor}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }

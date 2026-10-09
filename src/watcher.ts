@@ -27,6 +27,7 @@ import {
   type OpsSnapshot,
   type SiteProbe,
 } from "./ops-snapshot";
+import { logEvent } from "./log";
 
 // The watcher looks at the surface every half hour and, when something is wrong,
 // posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
@@ -647,7 +648,7 @@ export interface PassResult {
 // A keyed write that moved nothing lost a race with another pass (the tick and the
 // Portal's Refresh). Said, not swallowed; the next pass reads the row again.
 function moved(ok: boolean, fingerprint: string, what: string): void {
-  if (!ok) console.error(`WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass`);
+  if (!ok) logEvent("error", "WATCHER_FINDING_MOVED", { message: `WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass` });
 }
 
 export async function runPass(readers: PassReaders, now: Date): Promise<PassResult> {
@@ -714,7 +715,7 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
           "record of its new job"
         );
       } else {
-        console.error(`WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}`);
+        logEvent("error", "WATCHER_POST_REFUSED", { message: `WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}` });
         if (row) moved(await readers.memory.sight(row, f, now), f.fingerprint, "sighting");
       }
     }
@@ -782,7 +783,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
     try {
       await env.DB.batch(weekly);
     } catch (err) {
-      console.error(`WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}`);
+      logEvent("error", "WATCHER_PACKAGE_WEEKS_FAILED", { message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 
@@ -805,7 +806,7 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
   try {
     return await fn();
   } catch (err) {
-    console.error(`WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}`);
+    logEvent("error", "WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` });
     return null;
   }
 }
@@ -1032,7 +1033,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...unmappedRepoFindings(repoMap));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    console.error(`WATCHER_READ_FAILED repo map: ${reason}`);
+    logEvent("error", "WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED repo map: ${reason}` });
     out.push(repoMapUnreadableFinding(reason));
   }
 
@@ -1077,7 +1078,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       if (live.ran) ran.add("live checks");
       out.push(...live.findings.map(liveFinding));
       // The count beside the verdict: no findings over zero pages read is not a clean bill.
-      console.log(`WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}`);
+      logEvent("log", "WATCHER_LIVE", { message: `WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}` });
     }
   }
 
