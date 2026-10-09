@@ -15,10 +15,12 @@ name: CI
 # and it already existed with nothing invoking it.
 
 on:
+  # Both names while master moves to main (job_bf05bc756c5e, plan step 1), so a push is
+  # checked on either side of the rename. Step 4 drops master.
   push:
-    branches: [master]
+    branches: [master, main]
   pull_request:
-    branches: [master]
+    branches: [master, main]
   # Every six hours. The outage ran 26 days; a six hour ceiling on time-to-detect is
   # the point of the schedule, not the offline checks.
   schedule:
@@ -193,7 +195,7 @@ jobs:
     name: deploy
     needs: checks
     timeout-minutes: 15
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     # Which attempt of the run did the deploying. A rerun of the live job alone keeps
     # this job's outputs from the earlier attempt, so the rollback step can tell a rerun

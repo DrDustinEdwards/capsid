@@ -61,7 +61,7 @@ test("a present, non-expiring canary passes", async () => {
   const stub = fakeKvApi({ value: RECORD });
   const result = await check(stub);
   assert.equal(result.outcome, "present");
-  const report = canaryReport(result, CLIENT_ID, "capsid-app-kv");
+  const report = canaryReport(result, CLIENT_ID, "capsid-oauth");
   assert.equal(report.passed, true);
   assert.match(report.detail, /non-expiring/);
 });
@@ -70,9 +70,9 @@ test("a MISSING canary fails, and is named as the 2026-08-17 anomaly recurring",
   const stub = fakeKvApi({ value: null });
   const result = await check(stub);
   assert.equal(result.outcome, "missing");
-  const report = canaryReport(result, CLIENT_ID, "capsid-app-kv");
+  const report = canaryReport(result, CLIENT_ID, "capsid-oauth");
   assert.equal(report.passed, false);
-  assert.match(report.detail, /is GONE from capsid-app-kv/);
+  assert.match(report.detail, /is GONE from capsid-oauth/);
   assert.match(report.detail, /vanished-client-record anomaly of 2026-08-17/);
   // It must tell the reader what to check before restoring it destroys the evidence.
   assert.match(report.detail, /check whether live grants survived before restoring it/);
@@ -83,7 +83,7 @@ test("an UNREACHABLE store is NOT reported as data loss", async () => {
   for (const stub of [fakeKvApi({ valueStatus: 500, value: RECORD }), fakeKvApi({ throwOnValue: "ECONNRESET" })]) {
     const result = await check(stub);
     assert.equal(result.outcome, "unreachable");
-    const report = canaryReport(result, CLIENT_ID, "capsid-app-kv");
+    const report = canaryReport(result, CLIENT_ID, "capsid-oauth");
     assert.equal(report.passed, false);
     assert.match(report.detail, /NOT evidence the record is gone/);
     assert.doesNotMatch(report.detail, /GONE from/);
@@ -102,7 +102,7 @@ test("a canary that has acquired a TTL fails BEFORE it can expire", async () => 
   const stub = fakeKvApi({ value: RECORD, expiration: 1794583009 });
   const result = await check(stub);
   assert.equal(result.outcome, "has-ttl");
-  const report = canaryReport(result, CLIENT_ID, "capsid-app-kv");
+  const report = canaryReport(result, CLIENT_ID, "capsid-oauth");
   assert.equal(report.passed, false);
   assert.match(report.detail, /must not expire/);
   assert.match(report.detail, /2026-11-13/, "the report does not say WHEN it would expire");
