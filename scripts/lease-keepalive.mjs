@@ -13,10 +13,11 @@
 //   2. Throttles on a stamp file per session, so a thousand tool calls send a handful of requests.
 //   3. Finds the driver key in the project's .mcp.json (the capsid server). No file, no
 //      key, a non-https url: does nothing, so it is safe to install for every session.
-//   4. Calls improve_status, which a scoped driver can call without naming a namespace and
-//      which lists each claimed job, then heartbeats every claimed job in its namespaces.
-//      The Worker refuses a heartbeat from anyone who is not the holder, and those
-//      refusals are expected and ignored.
+//   4. Lists the namespaces the key can see (the one call a scoped driver may make without
+//      naming a namespace), asks improve_status for each, which lists each claimed job, then
+//      heartbeats every claimed job. The Worker refuses a heartbeat from anyone who is not
+//      the holder, and those refusals are expected and ignored. A refusal of the listing
+//      itself comes back in `skipped`, so a test sees it, though the CLI stays silent.
 //   5. Always exits 0 and prints nothing. The key goes only in the Authorization header.
 //
 // Installed once, by Dustin, in the user-level Claude Code settings (an agent cannot edit
@@ -58,6 +59,22 @@ export function findCredentials(start) {
     if (up === dir || dir === parse(dir).root) return null;
     dir = up;
   }
+}
+
+/**
+ * The namespace names in a `namespaces` answer, an array of rows each holding a `namespace`.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function namespaceNames(text) {
+  /** @type {any} */
+  let rows;
+  try {
+    rows = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  return Array.isArray(rows) ? rows.map((r) => r?.namespace).filter((n) => typeof n === "string") : [];
 }
 
 /**
@@ -119,7 +136,13 @@ export async function keepAlive({ input, env, fetchImpl = fetch, now = Date.now(
 
   try {
     const client = capsidClient(creds.origin, creds.key, "lease-keepalive", fetchImpl);
-    const jobs = claimedJobs(await client.tool("improve_status", {}));
+    // A namespace-scoped driver is refused improve_status unless it names a namespace, so the
+    // namespaces come first (live run, 2026-10-09: the unscoped call was refused and nothing was sent).
+    /** @type {Array<{ id: string, namespace: string }>} */
+    const jobs = [];
+    for (const namespace of namespaceNames(await client.tool("namespaces", {}))) {
+      jobs.push(...claimedJobs(await client.tool("improve_status", { namespace })));
+    }
     let sent = 0;
     for (const job of jobs) {
       try {
@@ -130,8 +153,8 @@ export async function keepAlive({ input, env, fetchImpl = fetch, now = Date.now(
       }
     }
     return { sent, skipped: null };
-  } catch {
-    return { sent: 0, skipped: "the Worker could not be reached" };
+  } catch (err) {
+    return { sent: 0, skipped: `the Worker could not be reached or refused the listing: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}` };
   }
 }
 

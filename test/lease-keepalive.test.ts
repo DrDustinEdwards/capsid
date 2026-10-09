@@ -42,7 +42,13 @@ function fakeMcp(held: string, claimed = ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"
     if (body.method === "notifications/initialized") return new Response("", { status: 202 });
     const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200 });
     if (body.method === "initialize") return reply({ protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake", version: "1" } });
+    // A namespace-scoped driver lists its own namespaces without naming one, and the Worker
+    // refuses improve_status and jobs from it unless they name one (src/scope.ts).
+    if (body.params?.name === "namespaces") return reply({ content: [{ type: "text", text: JSON.stringify([{ namespace: "sample" }]) }] });
     if (body.params?.name === "improve_status") {
+      if (body.params.arguments?.namespace !== "sample") {
+        return reply({ isError: true, content: [{ type: "text", text: "unauthorized: this caller is scoped to sample, so it must name a namespace on 'improve_status'." }] });
+      }
       const status = { namespaces: [{ namespace: "sample", jobs: { claimed_jobs: claimed.map((id) => ({ id })) } }] };
       return reply({ content: [{ type: "text", text: JSON.stringify(status) }] });
     }
@@ -112,7 +118,10 @@ test("a Worker that cannot be reached is not an error and sends nothing further"
     throw new Error("network down");
   }) as typeof fetch;
   const out = await keepAlive({ input: hookInput({ session_id: "s-down" }), env: { CLAUDE_PROJECT_DIR: dir }, fetchImpl: down, stampDir });
-  assert.deepEqual(out, { sent: 0, skipped: "the Worker could not be reached" });
+  // The reason travels in `skipped`, so a refusal is not read as "unreachable" (the live run of
+  // 2026-10-09 was refused for naming no namespace and nothing showed it).
+  assert.equal(out.sent, 0);
+  assert.match(out.skipped ?? "", /^the Worker could not be reached or refused the listing: .*network down/);
 });
 
 test("the key is found by walking up from a worktree, and the working directory is used when no project dir is set", async () => {
