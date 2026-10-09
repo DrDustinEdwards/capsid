@@ -73,7 +73,7 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
     }
   }
   // Count stated so a derivation that matched nothing does not pass: 11 write tools,
-  // 7 admin tools (claims the fourth, ops_snapshot the fifth, cloudflare_config the sixth,
-  // delete_namespace the seventh) and improve_run.
-  assert.equal(stated, 19, `expected 19 tools with a grant sentence, found ${stated}`);
+  // 8 admin tools (claims the fourth, ops_snapshot the fifth, cloudflare_config the sixth,
+  // delete_namespace the seventh, controls the eighth) and improve_run.
+  assert.equal(stated, 20, `expected 20 tools with a grant sentence, found ${stated}`);
 });

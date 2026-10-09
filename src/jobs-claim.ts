@@ -76,6 +76,30 @@ async function duplicateRefusal(env: Env, namespace: string, title: string): Pro
   return `${namespace} already has an open job titled '${title}'${named}. Finish or fail that one first, or post this under a different title. Open means ${openMeans()}.${waiting}`;
 }
 
+/** The body checks and the signature, shared by post and edit so an edited body is
+ *  refused for what post refuses and signed exactly as post signs it. Returns the
+ *  stored (signed) text, or the problem to refuse with. */
+export async function signedJobBody(env: Env, body: string): Promise<{ ok: true; signed: string } | { ok: false; problem: string }> {
+  if (!env.IMPROVE_SCORE_SECRET) {
+    return {
+      ok: false,
+      problem:
+        "job signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so this job could not be signed and no driver would execute it. Refusing rather than queueing work nothing can verify.",
+    };
+  }
+  if (!body.trim()) return { ok: false, problem: "a job needs a body. The body is the prompt the driver executes." };
+  // A body is the prompt a driver executes, so a malformed post is worse here than
+  // anywhere else: the swallowed text is signed along with everything else and the
+  // driver runs whatever survived.
+  const swallowed = swallowedParamTag(body);
+  if (swallowed) return { ok: false, problem: swallowedTagRefusal("body", swallowed) };
+  // An external fence is how relayed text is told from instruction (src/provenance.ts), so
+  // a body whose fence is unlabelled or never closes is refused rather than signed.
+  const fenceProblem = externalFenceProblem(body);
+  if (fenceProblem) return { ok: false, problem: `the body has a malformed external fence: ${fenceProblem}. Nothing was written.` };
+  return { ok: true, signed: await signTaskBody(env.IMPROVE_SCORE_SECRET, body) };
+}
+
 export async function postJob(
   env: Env,
   agent: Agent,
@@ -94,24 +118,10 @@ export async function postJob(
   }
 ): Promise<JobResult> {
   const actor = agent.actor;
-  if (!env.IMPROVE_SCORE_SECRET) {
-    return refuse(
-      "post",
-      "job signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so this job could not be signed and no driver would execute it. Refusing rather than queueing work nothing can verify."
-    );
-  }
   const title = args.title.trim();
   if (!title) return refuse("post", "a job needs a title: it is how the queue refuses a duplicate while one is still open.");
-  if (!args.body.trim()) return refuse("post", "a job needs a body. The body is the prompt the driver executes.");
-  // A body is the prompt a driver executes, so a malformed post is worse here than
-  // anywhere else: the swallowed text is signed along with everything else and the
-  // driver runs whatever survived.
-  const postSwallowed = swallowedParamTag(args.body);
-  if (postSwallowed) return refuse("post", swallowedTagRefusal("body", postSwallowed));
-  // An external fence is how relayed text is told from instruction (src/provenance.ts), so
-  // a body whose fence is unlabelled or never closes is refused rather than signed.
-  const fenceProblem = externalFenceProblem(args.body);
-  if (fenceProblem) return refuse("post", `the body has a malformed external fence: ${fenceProblem}. Nothing was written.`);
+  const signedBody = await signedJobBody(env, args.body);
+  if (!signedBody.ok) return refuse("post", signedBody.problem);
   // A registered namespace, as write requires for a document. Otherwise a caller
   // scoped to * could post into a namespace that does not exist, and the mirror
   // document would land where write refuses the same path.
@@ -138,12 +148,11 @@ export async function postJob(
     gate_required: args.gate_required,
   });
 
-  const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET, args.body);
   const job: JobRow = {
     id: mintJobId(),
     namespace: args.namespace,
     title,
-    body: signed,
+    body: signedBody.signed,
     priority: args.priority ?? 0,
     status: "queued",
     posted_by: actor,

@@ -12,7 +12,6 @@ import {
   handlePortalPerform,
   handlePortalPreview,
   handlePortalSignOut,
-  PORTAL_ACTIONS,
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,
   PORTAL_NAMESPACES_PATH,
@@ -20,6 +19,7 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
+import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
@@ -197,6 +197,13 @@ function wroteNothing(w: { d1: FakeD1; kv: FakeKv }, label: string) {
   assert.deepEqual(w.kv.deleted, [], `${label} deleted from KV`);
 }
 
+// A perform that the control itself refuses has spent its confirmation (the nonce) and changed nothing else.
+function spentOnly(w: { d1: FakeD1; kv: FakeKv }, label: string) {
+  assert.deepEqual(w.d1.recorded, [], `${label} wrote to D1`);
+  assert.ok(w.kv.puts.length > 0 && w.kv.puts.every((p) => p.key.startsWith("control-nonce:")), `${label} put something to KV besides its spent confirmation`);
+  assert.deepEqual(w.kv.deleted, [], `${label} deleted from KV`);
+}
+
 async function previewOk(w: { env: never }, action: string, params: Record<string, string>): Promise<PortalPreview> {
   const res = await handlePortalPreview(await preview({ action, params }), w.env, NOW);
   assert.equal(res.status, 200, `${action} preview: ${await res.clone().text()}`);
@@ -214,7 +221,7 @@ function tamper(token: string, edit: (claims: Record<string, unknown>) => void):
 // A token signed the way the Worker signs one, for claims no preview would issue.
 async function forge(claims: Record<string, unknown>): Promise<string> {
   const payload = b64urlEncode(JSON.stringify(claims));
-  return `${payload}.${await hmacHex(await hmacHex(SECRET, "capsid-portal-confirm:v1"), payload)}`;
+  return `${payload}.${await hmacHex(await hmacHex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
 }
 
 // The absences
@@ -228,7 +235,7 @@ test("PLANT: a merge or a mint is refused at preview and at perform, even fully 
     assert.match(await res.text(), /deliberately not among them/);
     wroteNothing(w, `${action} preview`);
 
-    const token = await forge({ v: 1, action, params: {}, email: EMAIL, exp: NOW.getTime() / 1000 + 60 });
+    const token = await forge({ v: 2, jti: "a".repeat(32), action, params: {}, email: EMAIL, exp: NOW.getTime() / 1000 + 60 });
     const performed = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(performed.status, 400, `a signed ${action} token was performed`);
     wroteNothing(w, `${action} perform`);
@@ -395,11 +402,11 @@ test("PLANT: unpause, mode and seat_start REFUSE a missing or blank reason at pr
 test("PLANT: a signed switch token with no reason (issued before the rule) is refused at perform and changes nothing", async () => {
   for (const [action, params] of SWITCH_CASES) {
     const w = world();
-    const token = await forge({ v: 1, action, params, email: EMAIL, exp: NOW.getTime() / 1000 + 60 });
+    const token = await forge({ v: 2, jti: "b".repeat(32), action, params, email: EMAIL, exp: NOW.getTime() / 1000 + 60 });
     const res = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
     assert.equal(res.status, 400, `${action} with no reason was performed`);
     assert.match(await res.text(), /needs a reason/);
-    wroteNothing(w, `${action} perform with no reason`);
+    spentOnly(w, `${action} perform with no reason`);
   }
 });
 
@@ -501,14 +508,20 @@ test("the click row names the administrator, and the mutator's row says what hap
   assert.equal(click?.params[2], "foxing");
 });
 
-test("a replay inside five minutes is allowed: the transitions are guarded, not the token", async () => {
+// A confirmation is used once (controls design, D2). It was allowed to replay inside its
+// five minutes until 2026-10-06, on the reasoning that every transition is guarded on the
+// state it moves from; the nonce makes the second perform a refusal of its own.
+test("PLANT: a confirmation is spent by its first perform, and a replay is refused with 409 and writes nothing", async () => {
   const w = world();
   const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
-  for (const at of [NOW, LATER(4 * 60_000)]) {
-    const res = await handlePortalPerform(await perform({ token }), w.env, at, deps);
-    assert.equal(res.status, 200, await res.clone().text());
-  }
-  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-mode")).length, 2);
+  const first = await handlePortalPerform(await perform({ token }), w.env, NOW, deps);
+  assert.equal(first.status, 200, await first.clone().text());
+  const before = w.d1.recorded.length;
+  const second = await handlePortalPerform(await perform({ token }), w.env, LATER(4 * 60_000), deps);
+  assert.equal(second.status, 409);
+  assert.match(await second.text(), /already used/);
+  assert.equal(w.d1.recorded.length, before, "a replayed confirmation wrote a row");
+  assert.equal(auditRows(w.d1).filter((r) => r.startsWith("portal-mode")).length, 1);
 });
 
 test("PLANT: an expired token is refused with 410 and nothing is performed", async () => {

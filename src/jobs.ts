@@ -24,6 +24,7 @@ import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 // The queue is split by who acts. jobs-claim.ts posts, lists and claims;
 // jobs-holder.ts holds the transitions the claiming driver makes; jobs-seat.ts holds
 // the ones made on a job the caller does not hold (admin fail, supersede, resume);
+// jobs-edit.ts holds the seat's edit of a queued or blocked job;
 // jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
 // what they share. This module is the one other modules import from, and it keeps the
 // lease sweep and the improve_status summary.
@@ -31,6 +32,7 @@ import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
 export { adminFailJob, completeAsCaller, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
+export { editJob, jobVersions } from "./jobs-edit";
 export type { JobResult } from "./jobs-transition";
 
 // The lease sweep, run by the five-minute improve tick. A claim whose lease has

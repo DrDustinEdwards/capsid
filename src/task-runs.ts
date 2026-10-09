@@ -21,7 +21,8 @@ export type TaskId =
   | "skill-cycle"
   | "watcher"
   | "outcome-sweep"
-  | "merge-resume";
+  | "merge-resume"
+  | "maintenance";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -45,6 +46,7 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "skill-cycle", label: "Skill evaluation cycle", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
+  { id: "maintenance", label: "Daily maintenance pass", period_ms: 24 * 3_600_000 },
 ];
 
 const STALE_PERIODS = 2;
