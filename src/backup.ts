@@ -1,4 +1,4 @@
-import { COMPLETE_MARKER, dumpDatabase, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
+import { COMPLETE_MARKER, dumpDatabase, pruneDumps, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./headers";
@@ -10,7 +10,7 @@ const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
-// KV lease is best-effort (no CAS). Export before prune. Dump TTL 90 days by age.
+// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy.
 //
 // The lease value carries a per-run token and a run releases only its own, so a run
 // that outlived its TTL cannot delete the lease of the run that started after it. The
@@ -20,10 +20,6 @@ const PUT_CONCURRENCY = 20;
 const LEASE_KEY = "backup:lease";
 const LEASE_TTL_SECONDS = 3600;
 
-const JSON_RETENTION_DAYS = 90;
-// A floor under the age rule. If the cron stops for months every dump ages out,
-// so the newest N survive regardless of age.
-const JSON_MIN_KEPT = 14;
 // Retention for the history tables. Both are covered by the dump shelf life above.
 const VERSION_RETENTION_DAYS = 90;
 const AUDIT_RETENTION_DAYS = 180;
@@ -38,21 +34,6 @@ function isOlderThan(key: string, prefix: string, cutoffDay: string): boolean {
   const day = key.slice(prefix.length, prefix.length + 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
   return day < cutoffDay;
-}
-
-// Retention operates on the dump, never the object. A dump is a key prefix holding
-// one object per table, so keys are grouped by run id (the segment after
-// backups/json/), the newest JSON_MIN_KEPT complete runs are the floor, and an
-// aged-out run is deleted whole. Counting objects instead of runs would shrink the
-// floor to a fraction of the dumps it is meant to keep.
-//
-// A run id begins with its own ISO day, which is why the age test passes an empty
-// prefix. A flat key with no slash is its own single-object run and ages out on the
-// same rule.
-function runIdOf(key: string): string {
-  const rest = key.slice(JSON_PREFIX.length);
-  const slash = rest.indexOf("/");
-  return slash === -1 ? rest : rest.slice(0, slash);
 }
 
 function cutoffDay(now: Date, days: number): string {
@@ -321,38 +302,20 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
   return staleMarkdown.length;
 }
 
-// Deletes JSON dump runs past retention and above the floor, and CSP reports past
-// retention.
+// Deletes JSON dump runs outside the graduated retention (14 daily, 8 weekly and 6
+// monthly copies, capsid/rulings/shared-homes-2026-10-06.md), which is d1-dump's default
+// policy and is pruneDumps's job, and CSP reports past retention. pruneDumps counts runs
+// and not objects, deletes a run whole, never prunes the newest complete run, and
+// deletes nothing while no complete run exists.
 async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; reports: number }> {
-  // Group objects into runs, newest run first, so the floor is runs and not objects.
-  const runs = new Map<string, string[]>();
-  for (const key of await listAllKeys(env.MEDIA, JSON_PREFIX)) {
-    const id = runIdOf(key);
-    const existing = runs.get(id);
-    if (existing) existing.push(key);
-    else runs.set(id, [key]);
-  }
-  const runIds = [...runs.keys()].sort().reverse();
-  const dumpCutoff = cutoffDay(new Date(now), JSON_RETENTION_DAYS);
-  // The floor is the newest JSON_MIN_KEPT counted runs. A marked run counts, and so
-  // does an unmarked run older than the oldest marked one: it was written before
-  // markers existed and the old rule counted it, so adding the marker prunes nothing
-  // the old rule kept. A newer unmarked run is partial or refused; it holds no floor
-  // slot and ages out on the 90-day rule like any run.
-  const isMarked = (id: string) => (runs.get(id) ?? []).includes(`${JSON_PREFIX}${id}/${COMPLETE_MARKER}`);
-  const oldestMarked = runIds.filter(isMarked).at(-1);
-  const counted = runIds.filter((id) => isMarked(id) || oldestMarked === undefined || id < oldestMarked);
-  const floor = new Set(counted.slice(0, JSON_MIN_KEPT));
-  const staleRunIds = runIds.filter((id) => !floor.has(id) && isOlderThan(id, "", dumpCutoff));
-  const staleDumpKeys = staleRunIds.flatMap((id) => runs.get(id) ?? []);
-  if (staleDumpKeys.length > 0) await deleteInChunks(env.MEDIA, staleDumpKeys);
+  const dumps = await pruneDumps(env.MEDIA, { prefix: JSON_PREFIX, now: new Date(now) });
 
   const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
   const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
     isOlderThan(key, REPORT_PREFIX, reportCutoff)
   );
   if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
-  return { kept: runIds.length - staleRunIds.length, pruned: staleRunIds.length, reports: staleReports.length };
+  return { kept: dumps.kept, pruned: dumps.pruned, reports: staleReports.length };
 }
 
 // Prunes history after the export, so the rows leaving D1 are in today's dump.
