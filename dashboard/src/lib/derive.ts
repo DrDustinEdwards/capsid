@@ -257,6 +257,21 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}`, group: { key: "lease", facet: j.namespace } });
     }
   }
+  // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
+  // lines read as instructions to agents is a warning like the rest: it is never
+  // rejected automatically, so a person reads it.
+  if (live.canon_proposals.length) {
+    const flagged = live.canon_proposals.filter((c) => c.directive_lines.length).length;
+    const n = live.canon_proposals.length;
+    out.push({
+      sev: "warn",
+      kind: "Canon",
+      title: `${n} canon ${n === 1 ? "proposal awaits" : "proposals await"} your approval`,
+      sub: `${[...new Set(live.canon_proposals.map((c) => `${c.namespace}/${c.path}`))].join(", ")}${flagged ? ` · ${flagged} with lines that read as instructions to agents` : ""}`,
+      at: Math.max(...live.canon_proposals.map((c) => ms(c.created_at))),
+      open: "view:queue",
+    });
+  }
   for (const a of live.awaiting_seat) {
     out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:ci", group: { key: "pr-seat", facet: a.repo } });
   }

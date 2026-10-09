@@ -117,6 +117,10 @@ export const TABLES = [
   // Each job's earlier versions, kept by jobs action "edit" (migrations/0033_job_versions.sql).
   // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
+  // Drivers' proposed changes to canon documents, pending or decided
+  // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
+  // record of who proposed and who approved a canon change.
+  "canon_proposals",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

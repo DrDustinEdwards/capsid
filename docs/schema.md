@@ -92,6 +92,16 @@ Four invariants, each enforced in code rather than by discipline:
    whole transaction and returns the current hash to rebase against. Racing
    creates resolve to one winner and one refusal.
 
+## Canon is written by proposal
+
+Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its volumes, live or archived. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `improve_status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
+
+- **A driver's `write` to canon is not applied.** The caller is anyone who is not the admin and holds no `can_merge` (the seat test every seat-only job transition uses). The write is assembled as usual (mode, dash normalization, `if_match`), then stored in `canon_proposals` (migration 0034) with the sha256 of the body it was written against, and the response is `action: "pending_review"` with the proposal id. The document does not change. A `canon-proposed` audit row records it. `links` are refused on such a write, because a proposal does not carry them.
+- **`restore`, `delete` and `move` on canon are refused** for the same caller, and so is a `move` onto a canon path. A proposal carries a body; those three do not.
+- **The admin decides** with the `canon_approve` and `canon_reject` controls, in the Portal's Queue view or through `controls`, preview then perform. An approval is an ordinary write: the live row is snapshotted, the document is upserted, and a `write` audit row names the approver, the proposal and the proposer. It is guarded inside the batch on the body the proposal was written against and on the proposal still pending, so a proposal whose document moved is refused (reject it, and the proposer writes it again) and a proposal is decided once. A rejection needs a reason, which the proposal row keeps for the proposer.
+- **Instruction-shaped lines are flagged, never rejected.** An added line that opens (after its list marker, quote, heading or bold) with "you must", "you should", "you will", "you are to", "always", "never", "ignore", "disregard", "forget", "do not", "don't", "from now on", "agents must", "agents should", "the agent must", "drivers must", "a driver must", "every session must" or "sessions must", or with "call", "run", "use" or "invoke" followed by a served tool's name, is stored on the proposal and shown first in the approval preview. Rulings are themselves instructions to agents, so an automatic reject would refuse the seat's own canon.
+- **The admin's and the seat's own writes are not queued.**
+
 ## Deleting a namespace
 
 `delete_namespace` is admin only and takes two calls. `action: "preview"` writes

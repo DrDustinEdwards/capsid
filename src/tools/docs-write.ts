@@ -11,6 +11,7 @@ import { bounded, MAX_BODY, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_LINKS_JSON, MAX_SH
 import { assembleBody } from "../write-modes";
 import { improveWriteRefusal } from "../improve-scores";
 import { concurrentEditWarning } from "../server";
+import { canonGuarded, canonRefusal, proposeCanon } from "../canon";
 import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouching } from "./docs";
 
 // The document tools that change the store: write, restore, delete and move.
@@ -59,7 +60,7 @@ export function registerWriteTool(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("write"),
       description:
-        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"decisions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. Needs the write grant.",
+        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"decisions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, capsid/repo-structure.md, any namespace's core.md, or decisions.md and its volumes, by a caller that is not the seat or the admin, is NOT applied: it is stored as a proposal for the seat or Dustin to approve and returns action 'pending_review' with the proposal id (links are refused on such a write). Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -170,6 +171,41 @@ export function registerWriteTool(server: McpServer, ctx: ToolCtx): void {
         { path, before: prior?.body ?? null, after: body as string },
       ]);
       if (improveRefusal) return fail(improveRefusal);
+
+      // Canon write-protection (src/canon.ts). A driver's write to a canon document is
+      // stored as a proposal for the seat or Dustin to approve, never applied here. It
+      // needs no overwrite confirmation, because it overwrites nothing. links are not
+      // carried by a proposal, so a canon write that sets them is refused rather than
+      // having them dropped without a word.
+      if (canonGuarded(ctx.agent, namespace, path)) {
+        if (parsedLinks) {
+          return fail(`${namespace}/${path} is canon, so this write becomes a proposal, and a proposal carries no links. Nothing was written. Write it again without links.`);
+        }
+        const proposed = await proposeCanon(db, actor, new Date(), {
+          namespace,
+          path,
+          title: title ?? null,
+          body: body as string,
+          type: type ?? null,
+          tags: tags ?? null,
+          status: status ?? null,
+          mode: writeMode,
+          priorBody: prior?.body ?? null,
+          priorExists: Boolean(prior),
+        });
+        return ok({
+          namespace,
+          path,
+          action: "pending_review",
+          proposal: proposed.id,
+          base_sha256: proposed.base_sha,
+          directive_lines: proposed.directive_lines,
+          note:
+            `${namespace}/${path} is canon (capsid/repo-structure.md). Nothing was written to it: proposal ${proposed.id} waits for the seat or Dustin to approve it in Capsid Portal. ` +
+            `It is applied only if the document is still the one you read; if it changes first, the proposal is rejected and you write it again.` +
+            (proposed.directive_lines.length ? ` ${proposed.directive_lines.length} added line(s) read as instructions to agents and are highlighted for the reviewer.` : ""),
+        });
+      }
 
       // append and meta are exempt from confirmation. Confirmation exists to stop an
       // accidental clobber of existing text, and an append destroys none: the prior
@@ -316,7 +352,7 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("restore"),
       description:
-        "Restore a document's title and body from one of its retained versions (see history). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
+        "Restore a document's title and body from one of its retained versions (see history). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a caller that is not the seat or the admin (see write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -329,6 +365,7 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
     async ({ namespace, path, version_id, confirm, if_match, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
+      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("restore", namespace, path));
       const version = await db
         .prepare("SELECT id, title, body, snapshot_at FROM document_versions WHERE id = ?1 AND namespace = ?2 AND path = ?3")
         .bind(version_id, namespace, path)
@@ -433,12 +470,13 @@ export function registerDeleteTool(server: McpServer, ctx: ToolCtx): void {
     "delete",
     {
       annotations: hintsFor("delete"),
-      description: "Delete a document. Snapshots it first and writes an audit log entry. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a caller that is not the seat or the admin (see write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, confirm, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
+      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("delete", namespace, path));
       const prior = await db
         .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
@@ -517,12 +555,17 @@ export function registerMoveTool(server: McpServer, ctx: ToolCtx): void {
     "move",
     {
       annotations: hintsFor("move"),
-      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a caller that is not the seat or the admin (see write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, new_path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
+      // Both ends: moving canon away empties it, and moving a document onto a canon path
+      // that does not exist yet creates canon without review.
+      for (const end of [path, new_path]) {
+        if (canonGuarded(ctx.agent, namespace, end)) return fail(canonRefusal("move", namespace, end));
+      }
       // Existence and the edge count are both read BEFORE the batch. D1's meta.changes
       // cannot be used for either: documents carries FTS5 sync triggers, so an UPDATE
       // reports the trigger's row changes too, and in a batch those accumulate across

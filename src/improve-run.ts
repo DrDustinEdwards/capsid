@@ -22,6 +22,7 @@ import {
   type ServedProtectedPath,
 } from "./improve-schema";
 import { verifyAnchors } from "./improve-scores";
+import { pendingProposals, servedCanonPaths, type PendingProposal } from "./canon";
 import { loadGatePolicy } from "./gate-policy";
 import { loadMergePolicy } from "./auto-merge-policy";
 import {
@@ -202,6 +203,11 @@ export interface StatusReport {
   // these patterns to each attempt's changed paths before any push
   // (scripts/path-guard.mjs). Served rather than copied so a new pattern reaches it.
   protected_paths: ServedProtectedPath[];
+  // The canon documents a driver's write turns into a proposal (src/canon.ts), served
+  // beside protected_paths so a driver knows before it writes.
+  canon_paths: ReturnType<typeof servedCanonPaths>;
+  // Admin only: the proposals waiting for approval.
+  canon_proposals?: PendingProposal[];
   // The version a driver passes as approved_by_policy, served here because a
   // namespace-scoped driver cannot read the capsid namespace. Only the version and
   // whether it is on, never the body. Reported only when the policy loads (signature
@@ -390,11 +396,12 @@ export async function improveStatus(
       "cost_usd is an ESTIMATE computed from token counts and published rates, including cache read and write multipliers. It is for sanity-checking, not accounting.",
     budget,
     protected_paths: servedProtectedPaths(),
+    canon_paths: servedCanonPaths(),
     policies: await servedPolicies(env),
     seat_start: await seatStartStatus(env),
     overnight: await overnightState(env),
     // Admin only: the inventory is the map an agent looking to widen itself would want.
-    ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
+    ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB), canon_proposals: await pendingProposals(env.DB) }),
     namespaces: out,
   };
 }
