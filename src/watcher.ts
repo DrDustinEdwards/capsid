@@ -13,7 +13,7 @@ import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type 
 import { readRepoMap, unmappedRepos, type RepoMapRead } from "./unmapped-repos";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
-import { readCloudflare } from "./ops-cloudflare";
+import { cloudflareCredentials, readCloudflare, readWebAnalyticsSites } from "./ops-cloudflare";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
@@ -1066,13 +1066,18 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   if (sites && probes) {
     const live = await attempt("live checks", async () => {
       const config = await readLiveConfig(env.DB);
-      return liveChecks(config, sites, probes, { fetchImpl, head: (namespace) => defaultBranchHead(env, namespace) }, now);
+      const analytics = async () => {
+        const credentials = cloudflareCredentials(env);
+        if (!credentials.ok) throw new Error(credentials.reason);
+        return readWebAnalyticsSites(fetchImpl, credentials.token, credentials.account);
+      };
+      return liveChecks(config, sites, probes, { fetchImpl, head: (namespace) => defaultBranchHead(env, namespace), analytics }, now);
     });
     if (live) {
       if (live.ran) ran.add("live checks");
       out.push(...live.findings.map(liveFinding));
       // The count beside the verdict: no findings over zero pages read is not a clean bill.
-      console.log(`WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} findings ${live.findings.length}`);
+      console.log(`WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}`);
     }
   }
 

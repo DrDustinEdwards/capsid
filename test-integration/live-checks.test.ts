@@ -30,7 +30,7 @@ describe("readLiveConfig", () => {
         { namespace: "sample", kind: "nobeacon", path: "/account" },
       ],
     });
-    const out = await liveChecks(config, [], [], { fetchImpl: async () => { throw new Error("fetched"); }, head: async () => { throw new Error("read"); } }, new Date());
+    const out = await liveChecks(config, [], [], { fetchImpl: async () => { throw new Error("fetched"); }, head: async () => { throw new Error("read"); }, analytics: async () => { throw new Error("analytics"); } }, new Date());
     expect(out.findings.map((f) => f.fingerprint)).toEqual(["live-config-unknown-site-sample"]);
   });
 });

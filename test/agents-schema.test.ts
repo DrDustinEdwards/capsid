@@ -9,6 +9,7 @@ import {
   isAgentKind,
   mintAgentId,
   mintAgentKey,
+  claimLimit,
   parseScopes,
   serializeScopes,
   type AgentScopes,
@@ -70,6 +71,7 @@ test("an unrecognised grant, flag or list entry is dropped rather than carried",
       tools: "*",
       grants: ["read", "admin", "write"],
       flags: { can_merge: true, can_fly: true, can_dispatch: "yes" },
+      max_claims: 99,
     })
   );
   assert.deepEqual(scopes.namespaces, ["capsid"], "non-string entries are not namespaces");
@@ -77,11 +79,14 @@ test("an unrecognised grant, flag or list entry is dropped rather than carried",
   assert.equal(scopes.flags.can_merge, true);
   assert.equal(scopes.flags.can_dispatch, false, "a flag is true only when it is the boolean true");
   assert.ok(!Object.hasOwn(scopes.flags, "can_fly"), "an invented flag must not survive the parse");
+  assert.ok(!Object.hasOwn(scopes, "max_claims"), "a claim limit past the ceiling must not survive the parse");
+  assert.equal(claimLimit(scopes), 1, "a dropped claim limit reads as the default of one");
 });
 
 test("serialize and parse round-trip without widening", () => {
   const scopes = defaultScopes(["capsid", "foxing"]);
   scopes.flags.can_merge = true;
+  scopes.max_claims = 2;
   const back = parseScopes(serializeScopes(scopes));
   assert.deepEqual(back, scopes);
 });

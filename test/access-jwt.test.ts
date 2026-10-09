@@ -51,6 +51,14 @@ test("an ID token Access signed for this application and this sign-in passes, an
   assert.deepEqual(fetches, [`${ISSUER}/jwks`]);
 });
 
+test("the profile scope's name claim is returned, trimmed; a missing or blank name is left out", async () => {
+  const named = await verifyIdToken(await token({ name: "  Dustin Edwards " }), check, NOW, keys([SIGNER.jwk]));
+  assert.deepEqual(named, { ok: true, email: "admin@example.com", name: "Dustin Edwards" });
+  for (const claims of [{}, { name: "   " }, { name: 7 }]) {
+    assert.deepEqual(await verifyIdToken(await token(claims), check, NOW, keys([SIGNER.jwk])), { ok: true, email: "admin@example.com" });
+  }
+});
+
 test("aud may be an array holding the client id", async () => {
   assert.equal((await verifyIdToken(await token({ aud: ["other", CLIENT] }), check, NOW, keys([SIGNER.jwk]))).ok, true);
 });

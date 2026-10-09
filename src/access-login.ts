@@ -98,7 +98,7 @@ export async function startAccessLogin(
   return new Response(null, { status: 302, headers });
 }
 
-export type AccessLoginResult<T> = { ok: true; email: string; state: T } | { ok: false; response: Response };
+export type AccessLoginResult<T> = { ok: true; email: string; name?: string; state: T } | { ok: false; response: Response };
 
 // Verifies the callback's state against the cookie and KV, exchanges the code with
 // PKCE, verifies the ID token and runs the admin check. `parse` turns the caller's
@@ -170,5 +170,5 @@ export async function completeAccessLogin<T>(
   if (!isAdminEmail(env, verdict.email)) {
     return fail("access denied: capsid is a single-user server and this email is not its administrator", 403);
   }
-  return { ok: true, email: verdict.email, state };
+  return verdict.name ? { ok: true, email: verdict.email, name: verdict.name, state } : { ok: true, email: verdict.email, state };
 }

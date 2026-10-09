@@ -76,7 +76,7 @@ function racingEnv(between: () => Promise<void>) {
   } as unknown as Parameters<typeof postJob>[0];
 }
 
-async function post(over: Partial<{ namespace: string; title: string; body: string; priority: number; gate_required: boolean }> = {}) {
+async function post(over: Partial<{ namespace: string; title: string; body: string; priority: number; gate_required: boolean; kind: string }> = {}) {
   return postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, {
     namespace: "capsid",
     title: "a job",
@@ -1435,6 +1435,98 @@ describe("every transition is one guarded batch", () => {
     expect((await expireJobLeases(jobsEnv(), later)).requeued).toEqual([id]);
     expect((await row(id))?.status).toBe("queued");
     expect(await auditActions(id)).toContain("job-lease-expired");
+  });
+});
+
+// More than one claim per credential (docs/work-queue.md, "More than one claim"). The
+// limit is the agent's max_claims, 1 unless the admin raised it; a second claim on the
+// repo of a job already held is refused unless one of the two is a design job.
+describe("more than one claim", () => {
+  const withLimit = (agent: Agent, max_claims: number): Agent => ({ ...agent, scopes: { ...agent.scopes, max_claims } });
+  const TWO = withLimit(DRIVER, 2);
+
+  beforeEach(async () => {
+    for (const [ns, repo] of [
+      ["prose", "example/prose"],
+      // A second namespace mapped to capsid's repo, spelled with other capitals: the
+      // guard compares repos, not namespaces.
+      ["capsid-twin", "Example/Capsid"],
+    ]) {
+      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, JSON.stringify([{ repo, label: "primary" }])).run();
+    }
+  });
+
+  it("at a limit of two, a second claim on a different repo succeeds, and each job keeps its own lease", async () => {
+    const a = (await post({ title: "on capsid" })).job!.id;
+    const b = (await post({ namespace: "germomics", title: "on germomics" })).job!.id;
+    const later = new Date(NOW.getTime() + 60 * 60 * 1000);
+    expect((await claimJob(jobsEnv(), TWO, NOW, { id: a })).ok).toBe(true);
+    const second = await claimJob(jobsEnv(), TWO, later, { id: b });
+    expect(second.ok, second.refusal).toBe(true);
+    expect((await row(a))?.claimed_by).toBe(DRIVER_ACTOR);
+    expect((await row(b))?.claimed_by).toBe(DRIVER_ACTOR);
+    expect((await row(a))?.lease_expires).toBe(new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000).toISOString());
+    expect((await row(b))?.lease_expires).toBe(new Date(later.getTime() + JOB_LEASE_SECONDS * 1000).toISOString());
+  });
+
+  it("a second claim on the repo of a held job is refused, naming that job and the repo, unless one of them is a design job", async () => {
+    const a = (await post({ title: "held on capsid" })).job!.id;
+    const b = (await post({ title: "also capsid" })).job!.id;
+    const twin = (await post({ namespace: "capsid-twin", title: "capsid by another name" })).job!.id;
+    const design = (await post({ title: "Design the next step", kind: "design" })).job!.id;
+    expect((await claimJob(jobsEnv(), TWO, NOW, { id: a })).ok).toBe(true);
+    for (const id of [b, twin]) {
+      const refused = await claimJob(jobsEnv(), TWO, NOW, { id });
+      expect(refused.ok).toBe(false);
+      expect(refused.refusal).toContain(`${DRIVER_ACTOR} holds ${a} ('held on capsid' in capsid) on example/capsid, the repo ${id} would change too`);
+      expect((await row(id))?.status).toBe("queued");
+    }
+    // A design job writes Capsid documents and changes no repo.
+    const ok = await claimJob(jobsEnv(), TWO, NOW, { id: design });
+    expect(ok.ok, ok.refusal).toBe(true);
+  });
+
+  it("a third claim at a limit of two is refused and names both held jobs", async () => {
+    const a = (await post({ title: "first of three" })).job!.id;
+    const b = (await post({ namespace: "germomics", title: "second of three" })).job!.id;
+    const c = (await post({ namespace: "prose", title: "third of three" })).job!.id;
+    expect((await claimJob(jobsEnv(), TWO, NOW, { id: a })).ok).toBe(true);
+    expect((await claimJob(jobsEnv(), TWO, NOW, { id: b })).ok).toBe(true);
+    const third = await claimJob(jobsEnv(), TWO, NOW, { id: c });
+    expect(third.ok).toBe(false);
+    expect(third.refusal).toMatch(/already holds .*its limit of 2 concurrent claims/);
+    expect(third.refusal).toContain(`${a} ('first of three' in capsid)`);
+    expect(third.refusal).toContain(`${b} ('second of three' in germomics)`);
+    expect((await row(c))?.status).toBe("queued");
+  });
+
+  it("at the default limit of one, a second claim is refused as before, on another repo too", async () => {
+    const a = (await post({ title: "the one claim" })).job!.id;
+    const b = (await post({ namespace: "germomics", title: "another repo" })).job!.id;
+    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: a });
+    expect(claimed.ok).toBe(true);
+    const again = await claimJob(jobsEnv(), DRIVER, NOW, { id: b });
+    expect(again.ok).toBe(false);
+    expect(again.refusal).toBe(
+      `${DRIVER_ACTOR} already holds ${a} ('the one claim' in capsid), leased until ${claimed.job!.lease_expires}. Complete it, fail it, or block it before claiming another.`
+    );
+    expect((await row(b))?.status).toBe("queued");
+  });
+
+  it("the lease sweep releases each held job on its own lease", async () => {
+    const a = (await post({ title: "leased first" })).job!.id;
+    const b = (await post({ namespace: "germomics", title: "leased later" })).job!.id;
+    const twoHours = 2 * 60 * 60 * 1000;
+    expect((await claimJob(jobsEnv(), TWO, NOW, { id: a })).ok).toBe(true);
+    expect((await claimJob(jobsEnv(), TWO, new Date(NOW.getTime() + twoHours), { id: b })).ok).toBe(true);
+    const afterFirst = new Date(NOW.getTime() + JOB_LEASE_SECONDS * 1000 + 60_000);
+    expect((await expireJobLeases(jobsEnv(), afterFirst)).requeued).toEqual([a]);
+    expect((await row(a))?.status).toBe("queued");
+    expect((await row(b))?.status).toBe("claimed");
+    expect((await row(b))?.claimed_by).toBe(DRIVER_ACTOR);
+    const afterSecond = new Date(afterFirst.getTime() + twoHours);
+    expect((await expireJobLeases(jobsEnv(), afterSecond)).requeued).toEqual([b]);
+    expect((await row(b))?.status).toBe("queued");
   });
 });
 

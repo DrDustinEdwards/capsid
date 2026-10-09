@@ -388,6 +388,8 @@ export interface OpsFeed {
   // capsid_portal_csrf, and the app sends it back as X-Capsid-CSRF on every action. A
   // cross-site page cannot read this body, so it cannot learn the value.
   csrf: string;
+  // Who is signed in, for the top bar: from the session, never from configuration.
+  user: { name: string; initials: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -721,4 +723,13 @@ export interface PortalClaimsAggregate extends ClaimsAggregate {
 
 export interface PortalClaimsJob extends ClaimsJob {
   generated: string;
+}
+
+/** One Web Analytics site as the live checks read it. The site token is never kept. */
+export interface WebAnalyticsSite {
+  host: string;
+  // Whether the snippet is injected automatically for the host's orange-clouded traffic.
+  auto_install: boolean | null;
+  // The site's ruleset switch, where Cloudflare reports one.
+  enabled: boolean | null;
 }

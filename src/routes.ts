@@ -5,7 +5,8 @@ import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
 import { runBackup } from "./backup";
 import { RUNNER_KEY_PATH, exchangeRunnerKey } from "./runner-key";
-import { routeRefusal } from "./scope";
+import { checkScope, routeRefusal } from "./scope";
+import { gatherInbox, restrictInbox } from "./inbox";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
@@ -269,6 +270,25 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
   const result = await runBackup(env);
   // 409 when another run holds the lease, so "did nothing" is visible without the body.
   return Response.json(result, { status: result.ran ? 200 : 409 });
+}
+
+// What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip. It is read
+// by each app's SERVER with a key, never by a browser: a browser on another admin host
+// would need either a Portal session it does not hold or a secret in the page, and
+// Cloudflare Access would stop the CORS preflight anyway. A key scoped to one namespace
+// sees that app alone. The shell renders without badges when this fails, so a failure
+// here is a plain error and never retried into a block.
+async function handleInbox(request: Request, env: Env): Promise<Response> {
+  const caller = await resolveAgent(request, env);
+  if (!caller) {
+    return new Response("unauthorized: an agent key or the operator key is required", {
+      status: 401,
+      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
+    });
+  }
+  const everything = await gatherInbox(env, new Date(), null);
+  const readable = (namespace: string) => checkScope(caller.agent, { tool: "improve_status", namespace, grant: "read" }) === null;
+  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff" } });
 }
 
 const CSP_REPORT_MAX_BYTES = 16384;
@@ -581,6 +601,7 @@ export const defaultHandler = {
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
+    if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
   if (url.pathname === RUNNER_KEY_PATH && request.method === "POST") return handleRunnerKey(request, env);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);

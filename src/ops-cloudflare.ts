@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { OpsSite } from "./ops-sites";
-import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types";
+import type { CfDeploy, HourBucket, SiteCloudflare, WebAnalyticsSite } from "./ops-types";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
@@ -16,7 +16,9 @@ import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types";
 //   Email Routing Addresses Read      GET /accounts/{id}/email/routing/addresses
 //   Zone Read                         GET /zones
 //   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
-// The last four are the cloudflare_config tool's. To add them to the existing token:
+//   Account Settings Read             GET /accounts/{id}/rum/site_info/list (the live checks'
+//                                     Web Analytics setting; developers.cloudflare.com/api/resources/rum/subresources/site_info/methods/list/)
+// The Access, Email Routing and Zone permissions are the cloudflare_config tool's. To add them to the existing token:
 // dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add
 // Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read,
 // Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones
@@ -139,6 +141,33 @@ async function readCustomDomains(fetchImpl: FetchLike, token: string, account: s
   const out = new Map<string, string>();
   for (const d of result as Array<{ hostname?: unknown; service?: unknown }>) {
     if (typeof d?.hostname === "string" && typeof d.service === "string" && d.service) out.set(d.hostname.toLowerCase(), d.service);
+  }
+  return out;
+}
+
+export const WEB_ANALYTICS_PERMISSION = "Account / Account Settings / Read";
+
+/** GET /accounts/{id}/rum/site_info/list: every Web Analytics site in the account. A 403
+ *  is turned into the permission the token lacks. */
+export async function readWebAnalyticsSites(fetchImpl: FetchLike, token: string, account: string): Promise<WebAnalyticsSite[]> {
+  const what = "the Web Analytics sites list";
+  let rows: unknown[];
+  try {
+    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`, what, 50);
+  } catch (err) {
+    if (err instanceof CfReadError && err.status === 403) {
+      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${WEB_ANALYTICS_PERMISSION}. Add it at dash.cloudflare.com/profile/api-tokens, token capsid-portal-read, Edit (docs/portal.md, "The Cloudflare token"). Cloudflare said: ${err.message}`);
+    }
+    throw err;
+  }
+  const out: WebAnalyticsSite[] = [];
+  for (const row of rows as Array<{ host?: unknown; auto_install?: unknown; ruleset?: { enabled?: unknown } | null }>) {
+    if (typeof row?.host !== "string" || row.host === "") continue;
+    out.push({
+      host: row.host.toLowerCase(),
+      auto_install: typeof row.auto_install === "boolean" ? row.auto_install : null,
+      enabled: typeof row.ruleset?.enabled === "boolean" ? row.ruleset.enabled : null,
+    });
   }
   return out;
 }
