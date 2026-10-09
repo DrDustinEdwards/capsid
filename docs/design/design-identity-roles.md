@@ -1,266 +1,264 @@
-# Lab login and lab people: one identity and roles model
+# People and roles across the family
 
-Job `job_4acb6ae89b9f` (capsid, kind design), posted by Dustin on 2026-10-09 while answering the Knowledge Base
-design (dustinedwards-info `docs/KNOWLEDGE-BASE.md`, DECIDE 3). The job named `capsid/research/design-identity-roles.md`
-as its home; this session may not write to Capsid, so the design sits here and the seat can move it.
-
-**Scope (Dustin's narrowing):** how lab people log in, and how lab managers manage members and levels. Names and
-URLs for later functions are reserved, not designed. Design only: nothing built, no account setting changed.
+Job `job_c9f130f528bb`, revising the lab-only design from job_4acb6ae89b9f (capsid PR #304). The ruling this follows
+is `capsid/decisions.md`, "2026-10-09: people and roles across the family"; where this document and the ruling
+differ, the ruling wins. Design only: nothing built, no account setting changed.
 
 ## In brief
 
-1. **Login stays Cloudflare Access**, verified in the Worker with jose. The lab gets **its own Access application** on
-   `/lab`, never a policy on `dustinedwards-login`, where every admitted person is the site admin.
-2. **Email code first.** Microsoft sign-in for Tarleton needs Tarleton IT; Google is optional.
-3. **Owner, Lab manager, Lab worker.** Access decides who reaches the sign-in; a `lab_members` table decides what each
-   may do. No row, no access. Managers manage workers; the Owner manages managers. `/admin` stays the Owner's.
-4. **Small shared code.** The Access check moves to site-runtime; roles stay a per-app table; Capsomer gains
-   `people-roles`.
-5. **Seats bind on people.** Any Access sign-in holds a seat until removed or expired, even when the app refuses.
+- One shared way of managing people, used by every app that has staff. Each app names its own titles: the lab (Lab
+  manager, Lab worker), txasm (President, Treasurer, Program chair and so on), Foxing and Foxing Edu (their staff
+  roles). Each app keeps its own member list, and being in one grants nothing in another.
+- Each app's **members page is the only list**. Adding a person there puts their email on that app's Cloudflare
+  Access allow list; removing them takes it off and frees their seat. Nobody edits Cloudflare by hand after setup.
+- Sign-in is Cloudflare's **emailed one-time code**, typed in, with a one-month session. No Microsoft or Google.
+- **Layers decide who manages whom; permissions decide what a person can do.** Code checks permissions, never titles.
+- **Dustin is the Primary Owner**, set in deployment configuration. His wife is an Owner who can do everything but
+  remove or demote him.
+- **Access expires by default** (end of semester, end of term), leads renew with one click, every lead gets a
+  "still on your team?" review each semester, and every change is audited.
+- App users (Foxing readers and teachers, Foxhound merchants, txasm authors) are not part of this. They sign in
+  through each app's own login and take no Cloudflare seat.
 
-## What exists (read for this design)
+## What already exists
 
-Commits read: capsid `e2762d8`, carrel `2295d38`, dustinedwards-info `d3aefbe`, site-runtime `d5a7676`, capsomer
-`7612bd5`. germomics is private and this session could not attach it; its Access facts come from the germomics job
-mirror in Capsid (`germomics/jobs/job_bc516ba762a7.md`: "Cloudflare Access (application germomics-login) in front of
-/admin, verified with jose", after PR #41).
+Read for PR #304 (carrel `2295d38`, dustinedwards-info `d3aefbe`, site-runtime `d5a7676`, capsomer `7612bd5`):
 
-| Where | What it does today |
-| --- | --- |
-| carrel `app/lib/access.server.ts` | jose against the team's certs, issuer and AUD, RS256. Its `catch` returns `invalid-token` for every error, so a certs outage reads as a bad token. |
-| carrel `workers/gate.ts`, `app/lib/people.server.ts` | Access token, then the active `people` row by email; anyone else gets a bare 403. |
-| carrel `app/lib/roles.ts` | `reader` (read, comment), `editor` (+ edit), `owner` (+ publish, manage, deletes). `can(role, action)`; no role can do nothing. |
-| carrel README, "People and flags" | `/people` is the Owner's alone (404 otherwise). It refuses a second Owner, as does the database. Adding a person does not get them past Access; the page says where to allow the email. |
-| dustinedwards-info `app/lib/access-verify.mjs` | jose, RS256, 60 s clock tolerance, named refusal reasons; a key-set fault is thrown, not read as a refusal. |
-| dustinedwards-info `app/routes/admin.tsx`, `app/lib/access.server.ts` | Any `human` identity under `ACCESS_AUD` is the admin. No role table. The `CF_Authorization` cookie shows drafts to that person on public pages. |
-| dustinedwards-info `docs/RUNBOOK.md` 5b | Application `dustinedwards-login` on `/admin`, policy `dustinedwards-admin` (Include: Emails), team domain `dustinedwards.cloudflareaccess.com`. Machines use a service token. |
-| dustinedwards-info `app/routes.ts` | The public registry is at `/research/lab`; top-level `/lab` is unused and held free by the KB design. |
-| dustinedwards-info `docs/KNOWLEDGE-BASE.md` | Lots, locations, runs, members in D1 with `kb_audit`; lot and run pages planned under `/admin/kb`; Carrel's procedure and registry handlers removed once the admin editor is live. |
-| site-runtime `README.md` | Security headers today, no dependencies; "the Access check ... to move in later, each as its own subpath." |
-| capsomer `components/` | Has `permission-matrix`, `confirm-dialog`, `switch-reason`, `table`, `approval-sheet`. No people-management component. |
-| capsid `docs/auth.md` | Every caller is an agent with scopes; audit rows as `agent:<name>`, the form Carrel also uses. |
-| Capsid search | The co-owner appears only as a planning note ("Dustin's wife becomes co-owner later", `capsid/jobs/job_1b187d1b44e5.md`); no design for it exists. |
+- **Access checks.** Carrel (`app/lib/access.server.ts`) and dustinedwards.info (`app/lib/access-verify.mjs`) each
+  verify the Access token with jose, RS256. The site's version names each refusal and treats a certs outage as an
+  outage; Carrel's reads every error as a bad token. site-runtime's README already plans "the Access check" as a
+  subpath.
+- **The site admin.** dustinedwards.info's `app/routes/admin.tsx` makes every person the `dustinedwards-login`
+  application admits the admin. So a members-managed app must never share an Access application with an admin
+  surface: each gets its own application and audience tag.
+- **Carrel's people.** `app/lib/roles.ts` maps roles to actions with `can(role, action)`; `/people` is the Owner's
+  alone and refuses a second Owner. Today adding a person there does not reach Access; the page tells the Owner
+  where to add the email by hand. This design removes that hand step.
+- **Capsomer** has `permission-matrix`, `table`, `switch-reason`, `confirm-dialog` and `approval-sheet`, and no
+  people-management component.
+- **Access names** follow `<site>-login` for the application and `<site>-admin` for its policy
+  (`dustinedwards-login`, `germomics-login`).
 
-## The starting proposal, tested
+## How a person signs in
 
-**1. Login through Access, Microsoft and Google plus email code, one shared check.** Access holds. Three corrections:
+1. They open the app's staff area (for the lab, `https://dustinedwards.info/lab`). Cloudflare Access stops them.
+2. The app's Access policy allows one Access group, that app's allow list (for the lab, `lab-people`). Only emails
+   on it get a code: "By design, blocked users will not receive an email" (Cloudflare, One-time PIN).
+3. They type their email, then type the code from the email (valid 10 minutes). The email also carries a link,
+   but people type the code: email scanners sometimes open the link first and use the code up (Cloudflare,
+   One-time PIN, "This One-Time PIN has already been used").
+4. Signing in takes a seat. The session lasts one month (below).
+5. The app's server checks the token with the shared site-runtime check against that app's own audience tag. A bad
+   token gets a 401 with its reason; a certs outage shows as an outage.
+6. It reads the person's row in `members` on every request, uncached, so a removal or an expiry takes effect on the
+   next click. No row, or an expired one, gets a private page: "You don't have access. Ask the person who manages
+   your team to add `<the email you used>`." It names nobody.
+7. Each handler asks whether the person holds the permission it needs. A page they cannot use is a 404.
 
-- *A separate application, or every lab person is the site admin.* A lab person admitted by a second policy on
-  `dustinedwards-login` would hold a token for `ACCESS_AUD`, so `admin.tsx` would make them the admin and public
-  pages would show them drafts. The lab gets its own application, `dustinedwards-lab-login`, with its AUD in a new
-  var `LAB_ACCESS_AUD`. Each gate refuses the other's token, with a plant test for each.
-- *Microsoft needs Tarleton IT.* Cloudflare's Entra ID setup takes one Directory (tenant) ID and an app registered in
-  that directory, and its tested permissions end with "Grant admin consent" (Cloudflare docs, Entra ID). Tarleton
-  accounts live in Tarleton's tenant, so that is Tarleton IT's to give. Researcher's own knowledge, unchecked against
-  Tarleton: university tenants commonly block users from consenting to outside apps. Until then email code serves
-  Tarleton people at the same address, so adding Microsoft later changes nothing in the app.
-- *Google is optional.* Email code serves outside collaborators too; Google needs its own OAuth client. Add it when
-  someone asks.
+**One-month sessions.** An application's session can be set from immediate to one month, and so can each policy's.
+Separately, the account-wide global session (15 minutes to one month, default 24 hours) decides how often anyone
+must sign in again across all applications (Cloudflare, Session management). For people to sign in once a month,
+the global session must be one month too, which also lengthens it for Dustin's admin applications. Those keep
+shorter policy sessions and a second factor (DECIDE 3, 4).
 
-New Zero Trust organizations now start with the Cloudflare identity provider; existing ones keep their methods
-(Cloudflare changelog, 2026-06-18). This team's methods were not read (an account setting); the lab application
-should allow only email code until Microsoft is added.
+**Dustin's own sign-in** does not rest on emailed codes alone. Access can require a second factor (an authenticator
+app or a security key) per application or per policy (Cloudflare, MFA requirements). The admin applications
+require one; the members-managed ones do not.
 
-**2. Owner, Lab manager, Lab worker; Carrel's roles extracted to a shared package; a Capsomer component; each app
-keeps its own memberships.** The levels and per-app memberships hold. The shared package does not:
+## Layers and permissions
 
-- Carrel's roles are per-project content rights; lab levels are workspace rights over inventory, runs and members.
-  The tables share a shape and no rows. The shape (`ALLOWED` plus `can()`) is ten lines each app holds itself.
-- What is truly shared is verifying the Access token, which goes to site-runtime as planned, and the UI, one
-  Capsomer component for Carrel's `/people` and the lab's members page.
+Every member holds one title. A title is a named bundle of permissions, defined once per app in code, and sits on a
+layer. Code asks "does this person hold `edit_inventory`?", never "is this a Lab manager?", so a title can be renamed
+or split without touching a check.
 
-**3. A separate `/lab` workspace; `/admin` owner-only; lab writing in Carrel.** The workspace and `/admin` hold. Lab
-writing in Carrel conflicts with what is decided: Dustin ruled on 2026-10-07 that "procedures are structured, not
-writing" (recorded when dustinedwards job_2cbe6e8e6c60 was superseded), and the KB plan removes Carrel's procedure
-handler. The recommendation is the KB editor mounted in `/lab` for Lab managers with a draft-only save through the
-same save path, publishing left in `/admin/kb` for the Owner: one editor, one validator, and Carrel's rule that only
-the Owner publishes (decision 2a) kept. The seat's version is the alternative in DECIDE 6. The KB plan's lot and run
-pages move from `/admin/kb` to `/lab`, since workers record runs.
+| Layer | Who | How they are set |
+| --- | --- | --- |
+| 0 | Primary Owner: Dustin, and only Dustin | Deployment configuration, never a members page |
+| 1 | Owner: Dustin's wife, for continuity | Members page, by the Primary Owner only |
+| 2 | Leads: Lab manager; txasm President; Foxing staff leads | Members page, by layer 0 or 1 |
+| 3 | Members: Lab worker; other txasm officers; Foxing staff | Members page, by layers 0 to 2 |
 
-**4. Zero Trust free plan seat limit.** See "Seats" below.
+Two rules, enforced in one shared function:
 
-## The login flow
+1. **You manage only people below your own layer.** A Lab manager adds, renews and removes Lab workers, not another
+   Lab manager. The Owner manages leads and members but cannot remove or demote the Primary Owner (who has no row to
+   remove). Only the Primary Owner adds or removes an Owner.
+2. **You grant nothing you do not hold.** The bundle you give must be a subset of your own permissions.
 
-1. A person opens `https://dustinedwards.info/lab`. Access intercepts (application `dustinedwards-lab-login`,
-   destinations `/lab` and `/lab/*`).
-2. Policy `dustinedwards-lab-members` (Allow) includes the Access group `lab-people`: emails ending in `@tarleton.edu`
-   plus named outside emails (DECIDE 2). Anyone else never receives a code ("By design, blocked users will not
-   receive an email", Cloudflare docs, One-time PIN).
-3. The person enters their email, receives a code that expires in 10 minutes, and signs in. This is the moment a seat
-   is taken.
-4. The Worker's `/lab` layout middleware verifies the token with site-runtime's check against `LAB_ACCESS_AUD`
-   (signature, RS256, issuer, audience, expiry). A failed token is a 401 with its reason, as the admin does. A
-   certs-endpoint outage is thrown and shows as an outage.
-5. It lowercases the email and looks up `lab_members` where `removed_at IS NULL`, on every request, uncached, so a
-   removal takes effect on the next click.
-   - Owner: the email is in `LAB_OWNERS` (DECIDE 5). Owners need no row.
-   - A row: its level.
-   - Neither: a 403 page, private and `noindex`: "No access yet. Ask your lab manager to add you as
-     `<the email you signed in with>`." It names no managers, since anyone at Tarleton can reach it.
-6. Every handler asks `can(level, action)`. A page a level cannot use is a 404 (Carrel's pattern), so a worker
-   cannot learn the members page exists.
+Each app chooses how many of layers 2 and 3 it uses. The lab's bundles, as an example:
 
-workers.dev and preview hosts have no Access application, so the lab refuses everyone there, as the admin does.
-Local development admits `dev@localhost` as Owner under `access.server.ts`'s existing conditions.
+| Permission | Lab worker | Lab manager |
+| --- | --- | --- |
+| `read` inventory, lots, protocols (private fields included) | yes | yes |
+| `use_lot` (mark opened, used, empty) | yes | yes |
+| `record_run`, see own runs | yes | yes |
+| `read_all_runs` | | yes |
+| `edit_inventory` (items, lots, locations) | | yes |
+| `draft_procedure` (draft only) | | yes |
+| `manage_members` (layer 3 only, by rule 1) | | yes |
 
-**To verify while building (not settled by docs this session):** whether two path-scoped Access applications on one
-host keep separate sessions in one browser. The lab gate PR checks that signing in to `/lab` does not sign Dustin out
-of `/admin` or hide drafts from him. If it does, the workspace moves to the reserved `lab.dustinedwards.info`.
+Publishing stays with the Owners in `/admin`. txasm and Foxing define their bundles when they adopt.
 
-## Levels and what each may do
+## The members page
 
-Stored values `owner`, `manager`, `worker`; shown as Owner, Lab manager, Lab worker.
+One Capsomer component, `people-roles`, used by every app. A lead sees only the people they may manage, plus
+themselves.
 
-| Action | Worker | Manager | Owner |
-| --- | --- | --- | --- |
-| See inventory, lots and locations, including private fields | yes | yes | yes |
-| Mark a lot opened, used or empty | yes | yes | yes |
-| Record a run and see their own runs | yes | yes | yes |
-| See every member's runs | | yes | yes |
-| Add or edit lots, locations and items | | yes | yes |
-| Draft a procedure change (draft-only save) | | yes | yes |
-| Publish a procedure or item | | | yes, in `/admin/kb` |
-| Add, re-level or remove a Lab worker | | yes | yes |
-| Add or remove a Lab manager; promote a worker to manager | | | yes |
-| Anything in `/admin` | | | yes |
+- **Add.** Email, name, title (only titles below the lead's layer, within their permissions). The end date fills
+  in from the title's default and can be shortened. Saving writes the row and an audit row, then updates the
+  allow list. The page shows "Ready: they can sign in" once Cloudflare confirms, or "Waiting for Cloudflare" with
+  a retry while it has not.
+- **Change title.** A select with a required one-line reason, under both rules above.
+- **Renew.** One click sets the end date to the end of the next semester or term.
+- **Remove.** Behind a confirmation. The person is refused on their next request, taken off the allow list and
+  removed from Zero Trust so the seat frees. The row stays, marked removed, so their runs and edits keep their name.
+- **History.** Every change for a person: who, when, what, the before and after, and whether Cloudflare accepted it.
+- **Review.** Each semester or term, a lead's page opens as a checklist: keep or remove, per person. What is not
+  answered by the end date lapses.
 
-The action names in code: `read`, `use_lot`, `record_run`, `read_all_runs`, `edit_inventory`, `draft_procedure`,
-`manage_workers`, `manage_managers`. Publishing is not a lab action: it stays in `/admin`.
+What a Lab worker sees in the lab: inventory, their own runs and the protocols. No Members entry.
 
-## The manager workflow
+## Expiry and review
 
-**Add.** Managers and the Owner see **Members** in the `/lab` rail: active members (name, email, level, added by,
-added on, last seen) and a form (email, name, level). A manager's form offers only Lab worker. Saving writes a
-`lab_members` row and a `kb_audit` row (who, when, before, after) and says "Added. They sign in at
-dustinedwards.info/lab with this email." For an address outside `@tarleton.edu` it adds "ask Dustin to add this
-email to the lab sign-in list", an Access group edit, as Carrel's People page does.
+- Every row has an end date. The title sets the default: Lab worker, the end of the semester; txasm officer, the
+  end of their term. Owners and the Primary Owner do not expire.
+- The Owner enters each app's semester or term end dates once a year on a settings line.
+- Three weeks before an end date, each lead gets an email (Cloudflare Email Service, the family's email path) with
+  a link to their review.
+- On the end date a daily job in each app marks the row expired, takes the email off the allow list and frees the
+  seat, all audited. Renewing later puts it back.
+- Cloudflare's own seat expiration (one month to a year of inactivity, checked daily) stays on as a backstop for
+  anyone the sync missed (Cloudflare, Seat management).
 
-**Change level.** A level select with a required reason (`switch-reason`). Anything touching Lab manager is the
-Owner's. Audited.
+## The Cloudflare sync
 
-**Remove.** Behind `confirm-dialog`, sets `removed_at`; the row is never deleted, so runs keep their author. The next
-request gets "No access yet"; the Access session and the seat outlive it. Re-adding clears `removed_at`.
+Each app with staff has one Access group holding its allow list. The sync makes that group's email list equal the
+app's current members, all of it at once, so the group cannot drift from the page. Every call is audited with
+Cloudflare's answer, and a failure is shown and retried, never ignored.
 
-**What a worker sees.** Inventory, their own Runs, Protocols (read, private fields included). No Members entry;
-`/lab/members` is a 404. The Owner sees what a manager sees, the Owner-only choices, and `/admin`.
+**The calls** (Cloudflare API reference, read 2026-10-09):
 
-## Seats
+| Step | Call | Permission it needs |
+| --- | --- | --- |
+| Set the allow list | `PUT /accounts/{account}/access/groups/{group}`, a full definition: name and `include` rules, one email rule per person (up to 1,000 rules per group; Cloudflare One account limits) | Access: Organizations, Identity Providers, and Groups Write |
+| Find the removed person's seat | List the Zero Trust users and match the email to get its `seat_uid` | Access: Users Read |
+| Free the seat | `PATCH /accounts/{account}/access/seats` with `[{seat_uid, access_seat: false, gateway_seat: false}]`; "Removes a user from a Zero Trust seat when both access_seat and gateway_seat are set to false" | Zero Trust: Seats Write |
 
-What Cloudflare's seat documentation says (read from the docs source on 2026-10-09):
+That is the minimum: those three permissions, on this one account, nothing else. Whether the users list filters by
+email was not confirmed from the docs; the build checks and falls back to paging.
 
-- A seat is taken by "any Cloudflare Access authentication event", once per person across all applications.
-- When seats run out, "additional users who attempt to log in are blocked."
-- Removing a user in Zero Trust frees the seat; revoking only ends sessions.
-- Seat expiration removes inactive users after a set period ("between one month and one year" in the source; a
-  summary of the published page said two months, so use the shortest the dashboard offers).
-- Service tokens reach applications "without consuming seats".
+**What that token can do beyond the job.** Cloudflare has no permission scoped to one group. "Groups Write" also
+"grants write access to Zero Trust Organization settings" and identity providers, and "Seats Write" is described as
+write access to "the number of Zero Trust seats your organization can use (and be billed for)" (Cloudflare, API
+token permissions). The alternative, editing each app's policy instead of a group, needs "Access: Policies Write",
+which could also rewrite Dustin's own admin policies. So the token is powerful, and the design limits where it
+lives and what calls it makes:
 
-**The free plan's number.** Third-party pages in 2026 give 50 users free and about $7 per user per month beyond.
-Cloudflare's plans page was unreachable from this session and the docs read do not state it, so it is unconfirmed;
-the Cloudflare One overview shows seats used and left.
+- One holder only (DECIDE 1). Apps never hold it; they ask the holder to sync their own group.
+- The holder knows each app's group by a pinned id, checks the group's name before writing, and refuses any other.
+- Admin policies list Dustin's emails directly, never a group, so no sync can add anyone to an admin surface.
+- Removing a seat never blocks access by itself (Cloudflare: removing a user "does not prevent" access), so a
+  wrong seat call costs one seat until next sign-in, nothing more. The allow list and the app's own check are what
+  keep people out.
 
-**When it binds.** Seats are shared by every Access application on the account (the site admin, Carrel's two doors,
-germomics, the Portal, the lab). It binds when distinct people signed in within the expiration window pass the limit.
-A research lab of 5 to 15 plus a few Carrel collaborators stays well under 50. A teaching cohort is what binds: if
-Phage Discovery Program students get `/lab` accounts each year, seats pile up unless they expire. With the
-`@tarleton.edu` rule, any Tarleton person who finds `/lab` and signs in takes a seat although the app refuses them;
-`/lab` is not linked publicly, which makes that unlikely, not impossible. So turn on seat expiration at the shortest
-setting (an expired person who returns just takes a seat again), and past about 40 seats switch `lab-people` to
-named emails (DECIDE 2).
+## Primary Owner and continuity
 
-## What moves where
+The Primary Owner's email is a deployment value in each app, `PRIMARY_OWNER_EMAIL`, set with `wrangler secret put`
+so it stays out of public repositories. No page can change it, and changing it needs the Cloudflare account.
 
-| Home | Change |
-| --- | --- |
-| site-runtime | Subpath `./access`: the site's `verifyAccessToken` plus the identity read (email, or a service token's `common_name`). jose as a peer dependency (the package has none; both apps ship jose). |
-| dustinedwards-info | Admin adopts `./access`. New `/lab` gate, `lab_members`, `LAB_ACCESS_AUD`, `LAB_OWNERS`, refusal page, `/lab/members`; KB lot and run screens in `/lab`; KB DECIDE 3 recorded. |
-| Carrel | Adopts `./access` (a certs outage then reads as an outage). Later, `people-roles` for `/people`. The single-Owner rule changes with the co-owner, not here. |
-| Capsomer | `people-roles`: member table, add form, level select with reason, remove confirmation, `permission-matrix` as the read view. |
-| Cloudflare account (Dustin) | Group `lab-people`, application `dustinedwards-lab-login`, policy `dustinedwards-lab-members`, email code, seat expiration. |
-| Capsid, Portal | Nothing now. |
+If Dustin cannot act: his wife, using her own Cloudflare and GitHub access (set up as a separate step, not part of
+this build), sets `PRIMARY_OWNER_EMAIL` to her email in each app, adds herself to each admin policy, and from then
+on is the Primary Owner everywhere. Until then she manages every app as an Owner. The list of apps and where each
+value lives belongs in a continuity runbook written when the second app adopts.
+
+## Shared code
+
+| Piece | Home | What it holds |
+| --- | --- | --- |
+| Access check | site-runtime `./access` | The site's `verifyAccessToken`: RS256, issuer, audience, named refusals, outage thrown; jose as a peer dependency (site-runtime has none today, and every app ships jose). |
+| Layers and permissions | site-runtime `./members` | The two management rules, the end-date rules, the audit row shape. Each app passes its own titles and bundles. Tested once there. |
+| Sync helper | site-runtime `./access-sync` | The three Cloudflare calls above, the desired-state compare, and the name check. Small, and used only by the token holder. |
+| Members page | Capsomer `people-roles` | Table, add form, title select with reason, renew, remove confirmation, history, review checklist; `permission-matrix` as its read-only view. |
+
+Each app keeps its own `members` and `member_audit` tables in its own database and its own title list.
 
 ## Pull request order
 
-Each repo runs one after another. Visual PRs carry the label and wait for Dustin.
+The lab goes first and proves the whole path; the other apps follow one at a time.
 
-1. **site-runtime:** `./access` with tests (a planted wrong-audience token goes red), tagged.
-2. **dustinedwards-info:** admin adopts `./access`, no behaviour change.
-3. **Carrel:** adopts `./access`. Independent of 2.
-4. **Dustin, account step:** the group, application and policy, email code, seat expiration; AUD into
-   `LAB_ACCESS_AUD`.
-5. **dustinedwards-info:** `lab_members` migration (with `kb_audit` if KB step 4 has not landed), the `/lab` gate,
-   refusal page, role table, empty home. Plants: admin token refused at `/lab`; lab token refused at `/admin` and no
-   admin on public pages; removed member refused; worker 404 at `/lab/members`; manager cannot make a manager. Plus
-   the two-session check.
-6. **Capsomer:** `people-roles`, visual.
-7. **dustinedwards-info:** `/lab/members` on it, visual.
-8. **dustinedwards-info:** KB steps 4 and 7 build lots and runs under `/lab`; managers' draft view follows KB step 3.
-9. **Carrel:** `/people` on `people-roles`, visual, optional.
+1. **site-runtime:** `./access`, with a planted wrong-audience token going red.
+2. **site-runtime:** `./members` and `./access-sync`, with plants: a lead granting their own layer, a bundle wider
+   than the granter's, an Owner demoting the Primary Owner, a sync to a group whose name does not match.
+3. **Capsomer:** `people-roles`, visual.
+4. **Dustin, account step:** the lab's Access application, group and policy; one-time code only; session lengths;
+   a second factor on admin applications; the sync token with the three permissions, stored with its holder.
+5. **The token holder** (Capsid, if DECIDE 1 is accepted): the sync endpoint, each app's key scoped to its own
+   group.
+6. **dustinedwards-info:** `members` and `member_audit`, the `/lab` gate, `PRIMARY_OWNER_EMAIL`, the lab's titles,
+   `/lab/members`, the daily expiry job. Plants: an admin token refused at `/lab` and a lab token refused at
+   `/admin`; a removed or expired member refused; a worker 404 at `/lab/members`.
+7. **dustinedwards-info and Carrel:** adopt `./access` for their admin checks, no behaviour change.
+8. **txasm, then Foxing, then Foxing Edu:** each defines its titles and adopts the page, one PR per app.
+9. **Carrel:** `/people` on `people-roles` when it suits.
 
 ## Reserved names
 
-Kept free now so later work slots in without renames. Designed: none of the later functions.
+Kept free so later work slots in without renames. None of the later functions is designed here.
 
-| Name | Reserved for | Why this name |
+| Name | For | Why this name |
 | --- | --- | --- |
-| `/lab` | The workspace (built here) | Held free by the KB design. |
-| `/lab/members` | Members page (built here) | Says what it holds. |
+| `/lab`, `/lab/members` | Lab staff area, members page (built first) | Held free by the KB design. |
 | `/lab/inventory`, `/lab/runs` | KB lot, location and run screens | The KB plan's nouns. |
-| `/lab/studies` | The research lab function | Carrel already uses "projects". |
-| `/lab/ai` | The virtual or AI lab | Same gate, short. |
-| `/lab/instruments` | Instruments and robots | Covers both. |
-| `/lab/stop` | Stop control for physical actions | Fixed address for an emergency. |
-| `lab.dustinedwards.info` | Fallback host for the workspace | Same word as the path. |
+| `/lab/studies` | Research lab function | Carrel already uses "projects". |
+| `/lab/ai` | Virtual or AI lab | Same gate, short. |
+| `/lab/instruments`, `/lab/stop` | Instruments and robots; a stop control | A fixed address for an emergency. |
+| `lab.dustinedwards.info` | Fallback host if two Access apps on one host conflict | Same word as the path. |
 | `lab-mcp.dustinedwards.info` | AI door for lab agents | Follows `carrel-mcp`. |
-| Access group `lab-people` | Who may reach any lab sign-in | One list for every lab app. |
-| Access app `dustinedwards-lab-login` | `/lab` sign-in (built here) | Follows `germomics-login`. |
-| Access policy `dustinedwards-lab-members` | Allow `lab-people` (built here) | Follows `dustinedwards-admin`. |
-| Access policy `dustinedwards-lab-service` | Service Auth for instruments, robots, CI | Service tokens take no seat. |
-| Access app `dustinedwards-lab-ai` | The AI door's application | Pairs with `/lab/ai`. |
-| Vars `LAB_ACCESS_AUD`, `LAB_OWNERS` | Lab audience; the Owners | Beside `ACCESS_AUD`. |
-| Table `lab_members` | People and levels (built here) | `lab_` for people and actors. |
-| Table `kb_audit` | One audit for lab and KB writes | KB plan's name; one history. |
-| Tables `kb_lots`, `kb_locations`, `kb_runs` | Inventory and runs | `kb_` for KB data. |
-| Tables `lab_actors`, `lab_instruments`, `lab_approvals`, `lab_studies` | Non-human actors, instruments, approvals for physical runs (biosafety sign-off attaches here), studies | One noun each. |
-| Levels `owner`, `manager`, `worker` | Stored values (built here) | Distinct from Carrel's. |
-| Level `observer` | Read-only people (collaborator, safety officer) | A fourth level, no renames. |
+| Access app `dustinedwards-lab-login` | The lab sign-in | Follows `germomics-login`. |
+| Access policy `dustinedwards-lab-members` | Allows `lab-people` | Site, then who. |
+| Access group `lab-people` | The lab allow list, owned by the sync | One group per app. |
+| Access groups `txasm-people`, `foxing-staff`, `foxing-edu-staff` | The other allow lists | Same pattern; checked against existing names at adoption. |
+| Access policy `dustinedwards-lab-service` | Service tokens for instruments and CI | Service tokens take no seat. |
+| Var `PRIMARY_OWNER_EMAIL` | The Primary Owner, per app | Says what it is. |
+| Tables `members`, `member_audit` | Each app's list and history | Same in every app, so the shared code fits all. |
+| Tables `kb_lots`, `kb_locations`, `kb_runs` | Inventory and runs | The KB plan's names. |
+| Tables `lab_actors`, `lab_instruments`, `lab_approvals`, `lab_studies` | Non-human actors, instruments, approvals for physical runs, studies | One noun each. |
+| Titles `primary_owner`, `owner` | Layers 0 and 1 in every app | The ruling's words. |
 | Actor ids `agent:<name>`, `instrument:<name>`, `robot:<name>` | Non-human actors in audit rows | Capsid's and Carrel's form. |
-| Capsomer `people-roles` | Member management (built here) | The seat's "People and roles". |
+| Capsomer `people-roles` | The members page | The ruling's name. |
 | Capsomer `run-record`, `stop-control`, `actor-badge` | Run provenance, stop control, actor mark | Approvals reuse `approval-sheet`. |
-| Capsid namespace `lab` | Lab automation agents and jobs | Per-area namespaces. |
+| Capsid namespace `lab` | Lab automation agents | Per-area namespaces. |
 
-## Not designed here
-
-Physical-action gating, instrument provenance, the AI lab's actor model, the biosafety (IBC) approval flow, linking
-one person's two emails, and a Portal who-can-do-what view (dropped when Dustin narrowed the job on 2026-10-09).
+Later, per the ruling and not designed here: passkeys before anything in the lab can trigger a physical action, and
+a second approver for payments in txasm.
 
 ## Sources
 
-Read on 2026-10-09, under https://developers.cloudflare.com: `/cloudflare-one/integrations/identity-providers/entra-id/`,
-`/cloudflare-one/integrations/identity-providers/one-time-pin/`, `/changelog/post/2026-06-18-cloudflare-idp-default/`,
-and `/cloudflare-one/team-and-resources/users/seat-management/` (read from its source in the `cloudflare-docs`
-repository). Free plan size and price, third-party and unconfirmed:
-https://costbench.com/software/business-vpn/cloudflare-zero-trust/
+Cloudflare, read 2026-10-09, under https://developers.cloudflare.com:
+`/cloudflare-one/integrations/identity-providers/one-time-pin/`,
+`/cloudflare-one/access-controls/access-settings/session-management/`,
+`/cloudflare-one/access-controls/policies/mfa-requirements/`,
+`/cloudflare-one/team-and-resources/users/seat-management/` (and its included "remove user" section, read from the
+`cloudflare-docs` repository), `/cloudflare-one/account-limits/`, `/fundamentals/api/reference/permissions/`,
+`/api/resources/zero_trust/subresources/access/subresources/groups/methods/update/`,
+`/api/resources/zero_trust/subresources/seats/methods/edit/`.
 
 ## DECIDE
 
-1. Lab sign-in is its own Access application, `dustinedwards-lab-login` on `/lab`, never a policy on
-   `dustinedwards-login`. **Recommend yes:** otherwise every lab person is the site admin.
-2. Who Access lets reach the lab: every `@tarleton.edu` address plus named outside emails, or named emails only.
-   **Recommend the domain plus named emails:** managers add Tarleton people with no step for Dustin; switch to named
-   emails if seats pass about 40.
-3. Login methods: email code at launch; Microsoft when Tarleton IT registers or approves the app; Google only if an
-   outside collaborator asks. **Recommend this order.**
-4. Lab managers add, re-level and remove Lab workers; only the Owner adds, promotes or removes Lab managers.
+The ruling settled sign-in, layers, owners, expiry and the members page. Still open:
+
+1. **Who holds the sync token.** One holder that apps call with their own key, or a copy in each app.
+   **Recommend Capsid as the one holder:** it is already the family's credential boundary, and one copy of a
+   powerful token is safer than four.
+2. **Groups or policies.** Sync an Access group per app (token needs "Groups Write", which also reaches
+   organization settings and identity providers) or edit each app's policy ("Policies Write", which also reaches
+   the admin policies). **Recommend groups**, with the limits above.
+3. **Global session of one month.** Needed for one-month sessions; admin applications keep shorter policy sessions.
    **Recommend yes.**
-5. Owners are the people in `dustinedwards-admin`, mirrored in the `LAB_OWNERS` var (Dustin now, the co-owner later),
-   and the app can never grant Owner. **Recommend yes.**
-6. Where managers edit protocols: the KB editor in `/lab` with a draft-only save, publishing in `/admin/kb`; or the
-   seat's version, Carrel with its procedure handler kept. **Recommend the KB editor in `/lab`:** it follows your
-   2026-10-07 ruling that procedures are structured, and the KB plan already removes Carrel's handler.
-7. The KB plan's lot, location and run screens move from `/admin/kb` to `/lab`. **Recommend yes.**
-8. Shared code: the Access check moves to site-runtime `./access` with jose as a peer dependency; no shared roles
-   package; one new Capsomer component, `people-roles`. **Recommend yes.**
-9. Turn on seat expiration at the shortest setting, and confirm the free seat count on the Cloudflare One overview.
-   **Recommend yes** (an account setting, so yours).
-10. Keep the reserved names above free. **Recommend yes.**
+4. **Dustin's second factor.** **Recommend a security key, with an authenticator app as backup**, on every admin
+   application.
+5. **Term dates.** The Owner enters each app's semester or term end dates yearly, and reviews open three weeks
+   before. **Recommend yes.**
+6. **Where lab managers edit protocols** (open since PR #304). The KB editor in `/lab` with draft-only saves and
+   publishing in `/admin/kb`, or Carrel with its procedure handler kept. **Recommend the KB editor in `/lab`**, per
+   the 2026-10-07 ruling that procedures are structured, not writing.
