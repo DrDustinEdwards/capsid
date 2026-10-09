@@ -2,7 +2,7 @@ import { COMPLETE_MARKER, dumpDatabase, writeCompleteMarker, type DumpResult } f
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./headers";
-import { anchorKey, bestKey, BUDGET_KEY, META_LAST_KEY, MODE_KEY, pausedKey, ROSTER } from "./improve-schema";
+import { anchorKey, bestKey, BUDGET_KEY, META_LAST_KEY, MODE_KEY, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { readHoldoutManifests } from "./improve-scorer";
 import { probeFts } from "./store-probe";
 
@@ -132,6 +132,9 @@ export const TABLES = [
   // The run ledger (migrations/0029_task_runs.sql): each scheduled task's runs,
   // pruned at 14 days in code (src/task-runs.ts).
   "task_runs",
+  // Each job's earlier versions, kept by jobs action "edit" (migrations/0033_job_versions.sql).
+  // Nothing prunes it, and the job's row holds only the newest version.
+  "job_versions",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;
@@ -215,7 +218,7 @@ export async function runBackup(env: Env): Promise<BackupResult> {
 // backup:lease is absent: it is this run's own bookkeeping.
 function kvPinKeys(): string[] {
   const keys = [MODE_KEY, BUDGET_KEY, META_LAST_KEY, BACKUP_LAST_OK_KEY];
-  for (const namespace of ROSTER) keys.push(bestKey(namespace), pausedKey(namespace), anchorKey(namespace));
+  for (const namespace of LOOP_ROSTER) keys.push(bestKey(namespace), pausedKey(namespace), anchorKey(namespace));
   return keys;
 }
 

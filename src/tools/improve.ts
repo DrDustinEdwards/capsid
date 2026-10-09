@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, docPath, MAX_BODY, MAX_DOC_STATUS, MAX_TITLE, nsName } from "../limits";
-import { ROSTER as IMPROVE_ROSTER, onRoster, RUN_CONDITIONS } from "../improve-schema";
+import { LOOP_ROSTER as IMPROVE_ROSTER, onLoopRoster, RUN_CONDITIONS } from "../improve-schema";
 import { improveControl, improveRunManual, improveStatus } from "../improve-run";
 import { signPolicyDocument } from "../policy-sign";
 import { registerSkill } from "../skills-register";
@@ -99,11 +99,11 @@ export function registerImproveTools(server: McpServer, ctx: ToolCtx): void {
           return registered.ok ? ok(registered) : fail(registered.error);
         }
         if (action && action !== "run") {
-          return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release }));
+          return ok(await improveControl(env, action, { value, namespace, reason, actions_minutes_month, model_usd_month, release, actor: ctx.actor }));
         }
-        if (namespace && !onRoster(namespace)) {
+        if (namespace && !onLoopRoster(namespace)) {
           return fail(
-            `namespace '${namespace}' is not on the improve roster (${IMPROVE_ROSTER.join(", ")}). A namespace joins by being added to ROSTER in src/improve-schema.ts and by having its anchor block pinned.`
+            `namespace '${namespace}' is not on the improve roster (${IMPROVE_ROSTER.join(", ")}). A namespace joins by being added to LOOP_ROSTER in src/improve-schema.ts and by having its anchor block pinned.`
           );
         }
         return ok(await improveRunManual(env, new Date(), { namespace, dryRun: dry_run === true, condition }));

@@ -30,8 +30,22 @@ export function getCookie(request: Request, name: string): string | null {
 }
 
 // Constant-time compare of equal-length strings. The length check leaks length only.
+// Where the runtime has crypto.subtle.timingSafeEqual (workerd, which Cloudflare's
+// Workers best-practices guide names for secret compares) it does the comparison; the
+// xor loop below is the same compare for runtimes without it (the Node unit tests).
+// The callers compare hex digests and MACs of one fixed length, so the early return
+// reveals nothing the caller has not already published.
 export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
+  const native = (crypto.subtle as { timingSafeEqual?: (x: BufferSource, y: BufferSource) => boolean }).timingSafeEqual;
+  if (typeof native === "function") {
+    const encoder = new TextEncoder();
+    const left = encoder.encode(a);
+    const right = encoder.encode(b);
+    // Equal-length strings can differ in UTF-8 length; the native call needs equal bytes.
+    if (left.byteLength !== right.byteLength) return false;
+    return native.call(crypto.subtle, left, right);
+  }
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;

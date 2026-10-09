@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hmacHex } from "../src/auth.ts";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import {
   checkHoldout,
   claimJti,
@@ -46,9 +46,9 @@ async function sign(namespace: string, body: string, at: Date = NOW): Promise<{ 
 // key derivation
 
 test("each namespace gets a DIFFERENT key, and none of them is the root secret", async () => {
-  // Derived from ROSTER rather than restated, so a renamed namespace cannot leave
+  // Derived from LOOP_ROSTER rather than restated, so a renamed namespace cannot leave
   // this list stale.
-  const keys = await Promise.all(ROSTER.map((ns) => deriveScoreKey(ROOT, ns)));
+  const keys = await Promise.all(LOOP_ROSTER.map((ns) => deriveScoreKey(ROOT, ns)));
   assert.ok(keys.length > 1, "fewer than two namespaces, so distinctness is not tested");
   assert.equal(new Set(keys).size, keys.length, "two namespaces derived the same key");
   for (const key of keys) {

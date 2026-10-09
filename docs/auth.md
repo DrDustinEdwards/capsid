@@ -25,6 +25,13 @@ A new agent gets read on its named namespaces and no flags. Scopes are stored as
 
 After all three, a remap gains a driver nothing: the repos axis refuses independently of what the mapping says.
 
+**Every caller may read the portfolio documents in capsid, and nothing else there** (added 2026-10-08). Every repo's CLAUDE.md tells a session to follow the conventions, the rulings and the decisions log, and a driver scoped to its own namespace was refused all of them. This is the one exception to the namespaces axis, stated once in `PORTFOLIO_DOCS` (`src/portfolio-docs.ts`) and checked in `checkScope`:
+
+- The paths: `conventions.md`, `core.md`, `decisions.md`, `decisions-vol-<n>.md`, `archive/decisions-vol-<n>.md` (n a number from 1), and `rulings/<name>.md` one level deep. A path must be lowercase letters, digits, `.`, `-`, `_` and `/` with no `..` and no empty segment, so `rulings/../policy/gates.md`, `Rulings/x.md`, `rulings/%2e%2e/x.md`, `rulings-secret/x.md` and `rulings/a/b.md` are all refused.
+- The tools: `read`, which must name one of those paths, and `list`, `find` and `search` with `namespace: "capsid"`, whose handlers keep only those paths for such a caller. Omitting the namespace is still refused to a narrowed caller.
+- Not covered: every other capsid path (research, policy, jobs, reports, episodics, `repo-structure.md`), `brief`, `history`, `backlinks`, every write tool and `jobs`. History and backlinks stay out because a version list or an edge can name a capsid path that is not on the list. The `capsid://` resources stay scoped as before.
+- `brief` for any namespace returns `portfolio_documents`: the paths above that exist, so a session reads them first.
+
 ### Roles
 
 Roles are few and separated. Each one is a single capability, not a bundle. `scripts/mint-agents.mjs` holds them in two lists: `ROLES`, asked for by name, and `AGENTS`, the per-namespace bootstrap that holds the drivers and the seat. `node scripts/mint-agents.mjs --roles` prints a mint command for each entry in `ROLES`, which is the four below that are not a driver or the seat; the driver rows and the seat are minted by the same script's namespace path (`docs/bootstrap.md`). A test fails the build if any role names a second blast-radius flag.

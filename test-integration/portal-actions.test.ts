@@ -5,11 +5,11 @@ import { legacyAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { improveStatus } from "../src/improve-run";
-import { MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema";
+import { MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types";
+import { PORTAL_ACTIONS } from "../src/controls";
 import {
-  PORTAL_ACTIONS,
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,
   PORTAL_NAMESPACES_PATH,
@@ -88,7 +88,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...ROSTER.map(pausedKey), ...ROSTER.map(breakerResetKey)];
+const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...LOOP_ROSTER.map(pausedKey), ...LOOP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -252,7 +252,7 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(body.action).toBe(action);
       expect(body.warning).toBeNull();
       expect(body.feed.csrf).toBe(CSRF);
-      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...ROSTER]);
+      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...LOOP_ROSTER]);
       await CASES[action].after(params);
 
       // The rows written are the rows the preview said would be. A job transition
@@ -317,14 +317,17 @@ describe("the job actions against real D1", () => {
     expect((await job(id))?.status).toBe("queued");
   });
 
-  it("a second perform of the same token is refused by the transition, not the token, and writes no click row", async () => {
+  it("a second perform of the same token is refused as already used, and writes no click row; a fresh preview is refused by the transition", async () => {
     const id = await blockedJob("resumed twice");
     const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
     expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status).toBe(200);
     const clicks = (await auditRows()).filter((r) => r.action === "portal-resume_job").length;
     const again = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
-    expect(again.status).toBe(400);
-    expect(await again.text()).toMatch(/not blocked/);
+    expect(again.status).toBe(409);
+    expect(await again.text()).toMatch(/already used/);
+    const fresh = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
+    expect(fresh.status).toBe(400);
+    expect(await fresh.text()).toMatch(/not blocked/);
     expect((await auditRows()).filter((r) => r.action === "portal-resume_job").length).toBe(clicks);
   });
 
@@ -414,7 +417,7 @@ describe("the Portal's reads", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const body = (await response.json()) as PortalNamespaces;
-    expect(body.namespaces.map((n) => n.namespace)).toEqual([...ROSTER]);
+    expect(body.namespaces.map((n) => n.namespace)).toEqual([...LOOP_ROSTER]);
     expect(body.namespaces.find((n) => n.namespace === "foxing")?.paused).toBe("looking at a regression");
     const status = await improveStatus(workerEnv());
     for (const ns of status.namespaces) {

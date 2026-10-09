@@ -7,6 +7,7 @@ import { loadRecordRows, recordFor } from "./agent-record";
 import type { JobOutcomeRow } from "./job-outcomes";
 import type { JobListRow } from "./jobs-claim";
 import type { OverlapReport } from "./job-overlaps";
+import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 
 // What every job transition shares: the result shape, the refusal, the row read, the
@@ -67,6 +68,15 @@ export interface JobResult {
   overlaps?: OverlapReport;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
+  // claim: the model Capsid recommends for this job, why, and how to follow it
+  // (src/model-routing.ts), and a note when the pull request it carries could not be read.
+  routing?: Record<string, unknown>;
+  routing_note?: string;
+  // list view "models": the learning table.
+  models?: Record<string, unknown>;
+  // edit, and list for one named id to a caller holding write: the versions earlier
+  // edits replaced, newest first (src/jobs-edit.ts, migrations/0033).
+  versions?: JobVersion[];
 }
 
 export function refuse(action: string, refusal: string): JobResult {

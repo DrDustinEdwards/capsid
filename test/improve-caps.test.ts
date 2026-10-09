@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { settledMinutes } from "../src/improve/ingest.ts";
-import { ROSTER, estimatedScorerMinutes, isFreeOfCharge, maxAttemptsFor, meteredMinutes, scheduledFor } from "../src/improve-schema.ts";
+import { LOOP_ROSTER, estimatedScorerMinutes, isFreeOfCharge, maxAttemptsFor, meteredMinutes, scheduledFor } from "../src/improve-schema.ts";
 
 // Per-namespace attempt caps and the nightly rotation.
 //
@@ -10,7 +10,7 @@ import { ROSTER, estimatedScorerMinutes, isFreeOfCharge, maxAttemptsFor, metered
 // billed namespaces may open on one night.
 
 test("every roster namespace has its own attempt cap, and capsid's is the largest because its runs are free", () => {
-  const largest = Math.max(...ROSTER.map((ns) => maxAttemptsFor(ns)));
+  const largest = Math.max(...LOOP_ROSTER.map((ns) => maxAttemptsFor(ns)));
   assert.equal(maxAttemptsFor("capsid"), largest, "capsid does not have the largest cap");
 
   // The ordering is asserted, not the literals: a cheaper namespace may attempt at
@@ -21,7 +21,7 @@ test("every roster namespace has its own attempt cap, and capsid's is the larges
 });
 
 test("an off-roster namespace gets the SMALLEST cap, never a default", () => {
-  const smallest = Math.min(...ROSTER.map((ns) => maxAttemptsFor(ns)));
+  const smallest = Math.min(...LOOP_ROSTER.map((ns) => maxAttemptsFor(ns)));
   assert.equal(maxAttemptsFor("not-a-namespace"), smallest);
   assert.equal(maxAttemptsFor(""), smallest);
   // Fail closed: a namespace nobody costed must not inherit the free repo's 10.
@@ -62,7 +62,7 @@ test("a free repo contributes NOTHING to the meter, however long its scorer took
 });
 
 test("every BILLED namespace does contribute, and carries a non-zero estimate", () => {
-  const billed = ROSTER.filter((n) => !isFreeOfCharge(n));
+  const billed = LOOP_ROSTER.filter((n) => !isFreeOfCharge(n));
   assert.ok(billed.length > 0, "no roster namespace is billed, so this checks nothing");
   for (const ns of billed) {
     assert.ok(estimatedScorerMinutes(ns) > 0, `${ns} has no dispatch estimate`);
@@ -71,7 +71,7 @@ test("every BILLED namespace does contribute, and carries a non-zero estimate", 
 });
 
 test("an off-roster namespace is charged the LARGEST estimate, never the free repo's zero", () => {
-  const largest = Math.max(...ROSTER.map((ns) => estimatedScorerMinutes(ns)));
+  const largest = Math.max(...LOOP_ROSTER.map((ns) => estimatedScorerMinutes(ns)));
   assert.equal(estimatedScorerMinutes("not-a-namespace"), largest);
   assert.ok(estimatedScorerMinutes("not-a-namespace") > 0, "an unknown namespace must not be free");
 });

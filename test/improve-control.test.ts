@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { improveControl, improveStatus } from "../src/improve-run.ts";
-import { BUDGET_KEY, MODE_KEY, pausedKey, ROSTER } from "../src/improve-schema.ts";
+import { BUDGET_KEY, MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema.ts";
 import { pausedReason, readBudget, readMode } from "../src/improve-state.ts";
 import { audited, controlHarness as harness } from "./improve-harness.ts";
 
@@ -45,10 +45,10 @@ test("pause sets the key with a reason and reads it back; unpause clears it", as
 test('pause "all" pauses every roster namespace with the default reason', async () => {
   const { env, kv } = harness();
   const r = await improveControl(env, "pause", { namespace: "all" });
-  assert.ok(ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
-  for (const ns of ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
+  assert.ok(LOOP_ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
+  for (const ns of LOOP_ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
   if (r.action !== "pause") assert.fail(`pause answered as ${r.action}`);
-  assert.deepEqual(r.namespaces.slice().sort(), [...ROSTER].sort());
+  assert.deepEqual(r.namespaces.slice().sort(), [...LOOP_ROSTER].sort());
 });
 
 test("pause rejects a non-roster namespace and a missing target", async () => {
@@ -87,4 +87,26 @@ test("improve_status reflects a mode change and a pause set through the control 
   assert.equal(status.mode, "api");
   const capsid = status.namespaces.find((n) => n.namespace === "capsid");
   assert.equal(capsid?.paused, "held");
+});
+
+// The audit row says who asked (controls design, finding 5). Before this, every one of
+// these was recorded as the loop, so an MCP call never named the administrator.
+test("PLANT: a caller-made action names the caller in its audit row, and with no caller the loop's name stays", async () => {
+  const who = "access:admin@example.com";
+  const auditActors = (d1: ReturnType<typeof harness>["d1"]) =>
+    d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[0]);
+
+  const named = harness();
+  await improveControl(named.env, "mode", { value: "subscription", actor: who });
+  await improveControl(named.env, "pause", { namespace: "capsid", reason: "hold", actor: who });
+  await improveControl(named.env, "unpause", { namespace: "capsid", actor: who });
+  await improveControl(named.env, "budget", { actions_minutes_month: 100, model_usd_month: 10, actor: who });
+  await improveControl(named.env, "skill_transitions", { value: "hold", actor: who });
+  const actors = auditActors(named.d1);
+  assert.equal(actors.length, 5, "an action wrote no audit row, so this read nothing");
+  assert.ok(actors.every((a) => a === who), `an action was audited as ${actors.find((a) => a !== who)}`);
+
+  const anonymous = harness();
+  await improveControl(anonymous.env, "mode", { value: "subscription" });
+  assert.deepEqual(auditActors(anonymous.d1), ["improve-loop"]);
 });

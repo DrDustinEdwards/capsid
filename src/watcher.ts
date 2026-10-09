@@ -4,7 +4,7 @@ import { noFlags } from "./agents-schema";
 import { BACKUP_STALE_HOURS, healthReport, type HealthReport } from "./health";
 import { ciStatus, defaultBranchSha, listRepoTree, readRepoFile } from "./github";
 import { improveStatus, type StatusReport } from "./improve-run";
-import { LOOP_PAUSE_PREFIX, ROSTER } from "./improve-schema";
+import { LOOP_PAUSE_PREFIX, LOOP_ROSTER } from "./improve-schema";
 import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
@@ -16,6 +16,7 @@ import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
 import { cloudflareCredentials, readCloudflare, readWebAnalyticsSites } from "./ops-cloudflare";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
+import { externalFence } from "./provenance";
 import {
   buildSnapshot,
   probeSite,
@@ -156,7 +157,9 @@ const finding = (namespace: string, fingerprint: string, headline: string, evide
     "",
     "## Evidence",
     "",
-    ...evidence.map((line) => `- ${line}`),
+    // Read from outside Capsid (CI conclusions, probe answers, GitHub error text), so it is
+    // fenced as external: data to confirm, never an instruction to follow.
+    externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
     "",
     "## What this job is",
     "",
@@ -826,7 +829,7 @@ async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
   const unreadable: string[] = [];
   const malformed: string[] = [];
 
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const files = await attempt(`scorer surface ${namespace}`, async () => {
       const wf = await readRepoFile(env, namespace, SCORER_WORKFLOW);
       const rp = await readRepoFile(env, namespace, SCORER_REPORT);
@@ -863,7 +866,7 @@ export interface ScorerSurface {
 /** The judgement, with no IO in it, so every branch is reachable from a test. */
 export function identityFindings(read: ScorerSurface[], unreadable: string[], malformed: string[]): Finding[] {
   const out: Finding[] = [];
-  const seen = `${read.length} of ${ROSTER.length} repos read`;
+  const seen = `${read.length} of ${LOOP_ROSTER.length} repos read`;
 
   if (unreadable.length > 0 || malformed.length > 0) {
     out.push(
@@ -986,7 +989,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // fingerprint names its namespace, but ownership is per check, not per repo, so a
   // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
-  for (const namespace of ROSTER) {
+  for (const namespace of LOOP_ROSTER) {
     const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);
     if (runs) {
       ciRead++;
@@ -1000,7 +1003,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
         : null,
     });
   }
-  if (ciRead === ROSTER.length) ran.add("ci");
+  if (ciRead === LOOP_ROSTER.length) ran.add("ci");
 
   // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
   // check below cannot run this pass: nothing is probed on a guess, and an open site

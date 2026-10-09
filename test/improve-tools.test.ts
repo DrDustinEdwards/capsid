@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
-import { ROSTER } from "../src/improve-schema.ts";
+import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
 // improve_run and improve_status, over a real MCP connection. A read-only key must
@@ -80,15 +80,15 @@ test("improve_status NEVER WRITES, whatever grant it is called with", async () =
   }
 });
 
-test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE ROSTER, and names the roster", async () => {
+test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE LOOP_ROSTER, and names the roster", async () => {
   await withFetch({}, async () => {
     const { client, d1, close } = await connect("write");
     const result = (await client.callTool({ name: "improve_run", arguments: { namespace: "julieedwards" } })) as ToolResult;
     await close();
     assert.equal(result.isError, true, "an off-roster namespace was accepted");
     assert.match(result.content[0].text, /not on the improve roster/);
-    assert.ok(ROSTER.length > 0, "the roster is empty, so the refusal was not checked for any name");
-    for (const namespace of ROSTER) {
+    assert.ok(LOOP_ROSTER.length > 0, "the roster is empty, so the refusal was not checked for any name");
+    for (const namespace of LOOP_ROSTER) {
       assert.match(result.content[0].text, new RegExp(namespace), `the refusal does not name ${namespace}`);
     }
     assert.deepEqual(d1.recorded, [], "an off-roster refusal still wrote statements");

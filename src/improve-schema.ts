@@ -1,9 +1,22 @@
-export const ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"] as const;
+// The namespaces the improve loop runs on: it opens runs, scores, holds out tests and
+// backs up manifests for these and no others.
+export const LOOP_ROSTER = ["capsid", "dustinedwards", "foxhound", "foxing", "germomics"] as const;
 
-export type RosterNamespace = (typeof ROSTER)[number];
+// Namespaces that are on the roster for auto-merge only (Dustin, 2026-10-07). Being
+// here lets the auto-merge policy name them; nothing in the improve loop reads this
+// list, so no run, score, holdout or backup manifest starts for them.
+const MERGE_ONLY_ROSTER = ["carrel", "capsomer"] as const;
 
-export function onRoster(namespace: string): namespace is RosterNamespace {
+export const ROSTER = [...LOOP_ROSTER, ...MERGE_ONLY_ROSTER] as const;
+
+export type LoopNamespace = (typeof LOOP_ROSTER)[number];
+
+export function onRoster(namespace: string): boolean {
   return (ROSTER as readonly string[]).includes(namespace);
+}
+
+export function onLoopRoster(namespace: string): namespace is LoopNamespace {
+  return (LOOP_ROSTER as readonly string[]).includes(namespace);
 }
 
 export const IMPROVE_MODES = ["api", "subscription", "off"] as const;
@@ -139,7 +152,7 @@ export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 // stop rather than a bill, and at the measured rates one attempt across the four billed
 // namespaces costs 19.2 minutes. Raising one without re-measuring spends an allowance
 // nobody is watching.
-const ATTEMPT_CAPS: Record<RosterNamespace, number> = {
+const ATTEMPT_CAPS: Record<LoopNamespace, number> = {
   capsid: 10,
   dustinedwards: 2,
   foxhound: 2,
@@ -149,7 +162,7 @@ const ATTEMPT_CAPS: Record<RosterNamespace, number> = {
 
 // An off-roster namespace gets the smallest cap, because nobody costed it.
 export function maxAttemptsFor(namespace: string): number {
-  return onRoster(namespace) ? ATTEMPT_CAPS[namespace] : Math.min(...Object.values(ATTEMPT_CAPS));
+  return onLoopRoster(namespace) ? ATTEMPT_CAPS[namespace] : Math.min(...Object.values(ATTEMPT_CAPS));
 }
 
 // A repo GitHub bills nothing for adds nothing to the minutes meter, which counts
@@ -163,7 +176,7 @@ export function isFreeOfCharge(namespace: string): boolean {
 // Billed minutes per scorer run, in the unit GitHub bills in (per job, rounded up,
 // summed), measured over the 78 runs of one monthly cycle. Held against the cap at
 // dispatch, so a scorer in flight counts, and replaced by the reported figure later.
-const SCORER_BILLED_MINUTES: Record<RosterNamespace, number> = {
+const SCORER_BILLED_MINUTES: Record<LoopNamespace, number> = {
   capsid: 0,
   dustinedwards: 4.9,
   foxhound: 7.6,
@@ -174,7 +187,7 @@ const SCORER_BILLED_MINUTES: Record<RosterNamespace, number> = {
 // An off-roster namespace is charged the largest figure, because nobody costed it.
 export function estimatedScorerMinutes(namespace: string): number {
   if (isFreeOfCharge(namespace)) return 0;
-  return onRoster(namespace) ? SCORER_BILLED_MINUTES[namespace] : Math.max(...Object.values(SCORER_BILLED_MINUTES));
+  return onLoopRoster(namespace) ? SCORER_BILLED_MINUTES[namespace] : Math.max(...Object.values(SCORER_BILLED_MINUTES));
 }
 
 // What a reported scorer duration adds to the monthly meter; free repos add nothing.
@@ -194,7 +207,7 @@ const BILLED_ROTATION = ["foxhound", "dustinedwards", "foxing", "germomics"] as 
 // Keyed on the UTC day number so the answer is a pure function of the date: two
 // openers on one night agree, and a night the loop was off does not shift the order
 // for every night after it.
-export function scheduledFor(now: Date): RosterNamespace[] {
+export function scheduledFor(now: Date): LoopNamespace[] {
   const day = Math.floor(now.getTime() / 86_400_000);
   return [...FREE_ROSTER, BILLED_ROTATION[day % BILLED_ROTATION.length]];
 }

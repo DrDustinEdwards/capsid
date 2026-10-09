@@ -27,7 +27,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start", "edit"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // Four hours. Long enough for a driver to do a real job without heartbeating on a
@@ -79,6 +79,13 @@ export interface JobRow {
   // 1 when a reviewer must speak before the work reaches the seat (migrations/0017).
   // On the row, so the party being reviewed does not decide whether it is reviewed.
   review_required: number;
+  // The kind Capsid read or was given, and the model and effort it recommends, with the
+  // one-line reason (migrations/0032, src/model-routing.ts). NULL: not routed yet, which
+  // the next claim fixes.
+  kind?: string | null;
+  model_recommended?: string | null;
+  effort_recommended?: string | null;
+  routing_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -241,6 +248,7 @@ export const JOB_PARAM_NAMES = [
   "command",
   "evidence",
   "claim",
+  "kind",
 ] as const;
 
 // Only the full `</name>` spelling, so a body that discusses this rule is not refused.
