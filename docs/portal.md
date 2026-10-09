@@ -5,7 +5,7 @@ Capsid Portal is the administrator's view of Capsid, one app at https://portal.d
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
 **Its controls are the registry in `src/controls.ts`**, each on the row it changes:
-- the job drawer: resume a blocked job, release a claimed one, mark a job failed;
+- the job drawer: resume a blocked job (with an optional note, the full approval the driver reads as `resume_note.note`), release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
 - the Namespaces view: the Automation panel, with the seat-start switch, the improve loop's switch and its "Runs on" choice (Subscription or API), and the overnight run's switch with its own "Runs on" choice (choosing Subscription records Dustin's decision, its date and its reasoning, docs/overnight.md); one switch per roster namespace, On while it runs and Off while it is paused (pause and unpause); and reset the queue's circuit breaker when it is open;
 - the Settings view: add, edit and remove a site, and add, edit and remove a package.
@@ -69,7 +69,8 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 
 **The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
 
-Four views read more when they open, and not on every poll:
+Five views read more when they open, and not on every poll:
+- **Queue** reads `GET /portal/api/stale` for its Stale jobs panel: the rows `jobs` list with `stale: true` returns, over every namespace, each with the rule it met and why (docs/work-queue.md). It reads again with each feed, so a job resumed or failed from its drawer leaves the panel, and the Queue's namespace chips narrow it. A row opens the job's drawer, which holds the controls. This is apart from the Queue list's own "Stale, blocked over 7 days" group, which orders blocked jobs by age (UI audit ruling 10).
 - **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`. A row opens a drawer that reads that one row (`?id=`) and shows what it recorded: the reason typed with the change, a field-by-field before and after where the row carries both (the old value struck through above the new), and the row's other fields by name. The Worker turns the params into named fields (`src/audit-detail.ts`) and never sends them raw: a hash, a signature, a token or a nested value is counted as not shown and stays in the audit log.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
@@ -193,6 +194,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
   - the phone layout;
   - the collapsible sidebar;
   - the Claims view: the aggregate, its filter, and a job's claims beside their checks;
+  - the stale view: a stale row opens its job, and Resume sends the typed note with the reason (`e2e/stale.spec.ts`);
   - contrast as painted, in both themes: each text tone, the status words and pills, and a button's border, against what is behind them;
   - the keyboard: `j` and `k` move focus, Enter opens the row and Esc closes it, and the selected row can be seen (a changed background and a ring at 3:1);
   - the audit's eight defects (`e2e/defects.spec.ts`): the panel keeps Tab inside, Enter opens a held job, a namespace filter stays with its view, session incidents reach Needs attention, the confirm dialog's named button and focus, and each view's page title.
@@ -225,6 +227,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
   - Refusals: 400 refused, 403 CSRF or cross-site, 409 already used (preview again), 410 expired (preview again), 413 too large.
   - A perform writes the shared mutator's audit row, then `portal-<action>` under `access:<email>`, with `surface: "portal"` in its params (`control-<action>` and `"chat"` from the `controls` tool). Since 2026-10-06 the improve switches' own rows (`improve-mode-set`, `improve-paused`, `improve-unpaused`, budget and the others `improve_run` writes for a caller) name that caller too, not `improve-loop`; only the loop's own actions keep the loop's name. Rows from before the move say `console-<action>` ([schema.md](schema.md)).
 - **`GET /portal/api/namespaces`** returns each roster namespace as `improve_status` reports it, from the same function. **`GET /portal/api/activity?namespace=&actor=`** returns the last 50 audit rows, filtered, each with its named detail; **`?id=`** returns that one row, and an id that is not a positive whole number is refused with 400.
+- **`GET /portal/api/stale`** (`src/portal-stale.ts`) returns `PortalStale`, uncached: up to 200 stale jobs from every namespace with their rule and reason, `truncated`, and a `note` when rows may be missing. It calls `staleJobs` (`src/stale-jobs.ts`), the reader behind `jobs` list with `stale: true`, so it makes one D1 read and one KV read and no GitHub read, and writes nothing.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
 - **`POST /portal/api/sign-out`**, above.

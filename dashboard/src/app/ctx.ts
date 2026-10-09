@@ -84,6 +84,10 @@ export interface UndoRequest {
 
 export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job"]);
 
+// The actions whose dialog also offers an optional note under the reason: resume_job's
+// is the full approval, which the driver reads as resume_note.note.
+export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
+
 // The confirm dialog's perform button, named for what it does (audit DECIDE 11).
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
   pause: "Pause",

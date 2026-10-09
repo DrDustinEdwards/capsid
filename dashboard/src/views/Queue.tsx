@@ -1,6 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Spinner } from "capsomer/react/empty";
 import { routePath, useApp } from "../app/ctx";
+import { fetchStale } from "../lib/api";
+import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
+import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
@@ -85,6 +90,97 @@ export function LiveSessions() {
   );
 }
 
+// What each stale rule is called in a row, the most actionable first, as the Worker
+// orders them (src/stale-jobs.ts).
+const STALE_RULE: Record<StaleRule, string> = {
+  "prs-settled": "Pull requests settled",
+  "resumed-not-completed": "Resumed, not finished",
+  unchanged: "Unchanged 3 days",
+};
+
+type StaleLoad = { data: PortalStale | null; loading: boolean; error: string | null };
+
+// The stale view (capsid/research/design-stale-jobs.md): GET /portal/api/stale, the same
+// rows `jobs` list with stale: true returns. Read when the Queue opens and again with
+// each feed, so a resume or a fail performed from the drawer drops its row. A row opens
+// the job's drawer, which holds the controls; nothing here closes a job.
+export function StaleJobs() {
+  const { feed, now, signOut } = useApp();
+  const [load, setLoad] = useState<StaleLoad>({ data: null, loading: true, error: null });
+  const [tick, setTick] = useState(0);
+  // The Queue's namespace chips narrow these rows too.
+  const [ns] = useNsFilter();
+  const generated = feed.live.generated;
+  useEffect(() => {
+    let alive = true;
+    setLoad((l) => ({ ...l, loading: true }));
+    void fetchStale().then((r) => {
+      if (!alive) return;
+      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
+      if (r.kind === "signed-out") return signOut();
+      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
+      setLoad((l) => ({ ...l, loading: false, error: message }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [generated, tick, signOut]);
+  const data = load.data;
+  const rows = data ? data.rows.filter((j) => ns === "all" || j.namespace === ns) : [];
+  return (
+    <Panel
+      flush
+      title="Stale jobs"
+      id="stale-jobs"
+      section="Stale jobs"
+      count={data ? rows.length : undefined}
+      src={
+        <>
+          {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
+          <button type="button" className="btn" disabled={load.loading} onClick={() => setTick((t) => t + 1)}>
+            {load.loading ? "Reading..." : "Read again"}
+          </button>
+        </>
+      }
+    >
+      {load.error && (
+        <div className="callout crit" role="alert">
+          Could not read the stale jobs: {load.error}
+          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
+        </div>
+      )}
+      {data?.note && <div className="callout warn">{data.note}</div>}
+      {!data && load.loading ? (
+        <div className="loading" role="status">
+          <Spinner label="Reading the stale jobs..." />
+        </div>
+      ) : rows.length ? (
+        rows.map((j) => {
+          const k = JOB[j.status as OpsJob["status"]] ?? { kind: "nodata" as const, label: j.status };
+          return (
+            <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} data-rule={j.rule} tabIndex={0}>
+              <St kind={k.kind}>{k.label}</St>
+              <div className="t">
+                <b>{j.title}</b>
+                <div className="why">{j.reason}</div>
+              </div>
+              <div className="m">
+                <span className="ns">{j.namespace}</span>
+                <br />
+                {STALE_RULE[j.rule]}
+              </div>
+            </div>
+          );
+        })
+      ) : data ? (
+        <Empty kind="all-clear" title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`} />
+      ) : (
+        <div className="body faint">No read yet.</div>
+      )}
+    </Panel>
+  );
+}
+
 export function Queue() {
   const { feed, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
@@ -100,6 +196,7 @@ export function Queue() {
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
       </div>
+      <StaleJobs />
       <div className="grid2">
         <Panel flush title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
           {!jobs.length && all.length ? (

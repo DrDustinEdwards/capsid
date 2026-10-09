@@ -6,7 +6,8 @@
 // ring_slot so live.generated is "now", which keeps the relative times readable.
 //
 // It also mocks the Portal's controls (preview and perform), GET
-// /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims and POST
+// /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
+// /portal/api/stale and POST
 // /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -33,6 +34,8 @@ import type {
   PortalAction,
   PortalActivity,
   PortalPackageHistory,
+  PortalStale,
+  OpsStaleJob,
   PortalActivityRow,
   PortalClaimsAggregate,
   PortalClaimsJob,
@@ -375,7 +378,11 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       return {
         summary: `Resume ${j.id} (${j.title}).`,
         done: `Resumed ${j.id}; it is queued.`,
-        changes: [`jobs.${j.id}.status: blocked -> queued`, `jobs.${j.id}.resumed_count: ${j.resumed_count} -> ${j.resumed_count + 1}`],
+        changes: [
+          `jobs.${j.id}.status: blocked -> queued`,
+          `jobs.${j.id}.resumed_count: ${j.resumed_count} -> ${j.resumed_count + 1}`,
+          ...(params.note ? [`The resume note carries your note of ${params.note.length} characters in full.`] : []),
+        ],
         apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, lease_expires: null, resumed_count: j.resumed_count + 1, updated_at: now }),
       };
     }
@@ -504,6 +511,23 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       };
     }
   }
+}
+
+// GET /portal/api/stale, from the feed's own jobs so each row opens a drawer: the first
+// blocked job as if its pull requests had all merged, and every blocked or claimed job
+// unchanged for 3 days by the Worker's rule (src/stale-jobs.ts).
+function stale(f: OpsFeed): PortalStale {
+  const now = mockNow();
+  const rows: OpsStaleJob[] = [];
+  const open = f.live.jobs.filter((j) => j.status === "blocked" || j.status === "claimed").sort((a, b) => Date.parse(a.updated_at) - Date.parse(b.updated_at));
+  const settled = open.find((j) => j.status === "blocked");
+  for (const j of open) {
+    const days = Math.floor((now - Date.parse(j.updated_at)) / 86_400_000);
+    const base = { id: j.id, namespace: j.namespace, title: j.title, status: j.status, updated_at: j.updated_at };
+    if (j === settled) rows.push({ ...base, rule: "prs-settled", reason: `blocked, and every pull request it names is settled (1 merged, 0 closed without merging, read ${new Date(now - 240_000).toISOString()})` });
+    else if (days >= 3) rows.push({ ...base, rule: "unchanged", reason: `${j.status} and unchanged since ${j.updated_at} (${days} day${days === 1 ? "" : "s"})` });
+  }
+  return { generated: new Date(now).toISOString(), rows, truncated: false, note: null };
 }
 
 function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
@@ -841,7 +865,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -854,6 +878,10 @@ export function mockOpsApi(): Plugin {
           return;
         }
         if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st), st));
+        if (path === "/portal/api/stale") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, stale(feed(nextRefresh, st)));
+        }
         if (path === "/portal/api/sign-out") {
           if (req.method !== "POST") return send(res, 405, { error: "method" });
           if (req.headers["x-capsid-csrf"] !== csrf()) return refuse(res, 403, "csrf validation failed: reload Capsid Portal and try again.");
