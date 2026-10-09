@@ -48,6 +48,7 @@ import {
   type OpenOutcome,
 } from "./improve/open";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
+import { gatherInbox, type InboxApp } from "./inbox";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
@@ -161,6 +162,10 @@ export interface NamespaceStatus {
   // Counts by status, plus offered versus used: a skill offered often and used rarely
   // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
+  // What needs Dustin in this namespace's app (src/inbox.ts): blocked jobs and questions,
+  // pull requests auto-merge declined, a failing CI run, a site that is down. The same
+  // answer GET /ops/inbox serves the admin shell, narrowed to this namespace.
+  needs_dustin: InboxApp;
 }
 
 export interface SkillsSummary {
@@ -307,6 +312,7 @@ export async function improveStatus(
   } catch {
     awaitingAll = [];
   }
+  const inboxAll = await gatherInbox(env, new Date(), namespaces);
   const maintenanceAll = (await readMaintenance(env))?.items ?? [];
 
   for (const namespace of namespaces) {
@@ -357,6 +363,7 @@ export async function improveStatus(
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       skills: await skillsSummary(env.DB, namespace),
+      needs_dustin: inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] },
     });
   }
 
