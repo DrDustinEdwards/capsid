@@ -5,6 +5,7 @@ import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/improve-
 import {
   loadMergePolicy,
   AUTO_MERGE_POLICY_PATH,
+  AUTO_MERGE_ALLOWED_PATHS,
   AUTO_MERGE_REFUSED_PATHS,
   AUTO_MERGE_REQUIRED_CI,
   POLICY_CHECKS,
@@ -33,6 +34,10 @@ const POLICY_BODY = [
   "- author `DrDustinEdwards`",
   "",
   ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
+  ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
+    `## Allowed paths, ${ns}`,
+    ...rows.map((p) => `- allow \`${p.pattern.source}\` ${p.why}`),
+  ]),
   ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
     `## Required CI, ${ns}`,
     "",

@@ -6,15 +6,26 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 5
+- version: 6
 - enabled: true
-- namespaces: dustinedwards
+- namespaces: dustinedwards, carrel, capsomer, capsid
 
-Version 5 does not cover capsid (ruled by Dustin 2026-09-25, audit item A19). A capsid
-merge deploys the control plane itself: the Worker that holds the credentials, the job
-queue and this policy. So every capsid pull request is merged by the seat. capsid keeps
-its mapping to its own repo; only unattended merging is withdrawn. The tick walks only
-the namespaces listed above, so it never evaluates a capsid pull request.
+Version 6 covers capsid again, for docs and the Portal's stylesheets only (ruled by
+Dustin as D6 of 2026-10-03 on job_c2b1c3b07573, confirmed 2026-10-09). A capsid merge
+deploys the control plane itself: the Worker that holds the credentials, the job queue
+and this policy. So a capsid pull request merges unattended only when every path it
+touches is under Allowed paths, capsid below: a document under `docs/` outside
+`docs/policy/`, or a stylesheet under `dashboard/`. Tests, the Portal's scripts and
+every other path are merged by the seat. The `paths_allowed_for_namespace` check is
+what holds that line; every other check still applies to the PRs it admits.
+
+dustinedwards, carrel and capsomer are covered as in version 5, with no allowed-path
+limit: carrel and capsomer from 2026-10-08 (ruled by Dustin 2026-10-07; capsid PR #268
+put them on the roster for auto-merge only, with the improve loop still off for them).
+
+Version 5 as first signed left capsid out (ruled by Dustin 2026-09-25, audit item A19).
+The store copy of version 5 named capsid again with no limit (ruled 2026-10-07). Version
+6 replaces both: capsid is in, and limited.
 
 This file ships the value that is signed, so `enabled` reads `true` here because the
 policy is on. Turning it on or off is a ruling, and the document is on the ordinary
@@ -74,7 +85,7 @@ governs what the loop may edit; it no longer governs this policy.
 Every one of these must pass before a pull request is merged without a human. They are
 evaluated in this order, each refuses on its own, and the audit row names every check
 that passed before the one that refused. The three path checks come first because they
-are the never-list.
+are the never-list, and the per-namespace limit follows them.
 
 - `paths_not_refused` No changed path matches a pattern under Refused paths below. A
   changed-file list that could not be read whole is refused here, before any path is
@@ -83,6 +94,10 @@ are the never-list.
 - `no_migration_workflow_lockfile` No changed path is a migration, a workflow, or a
   lockfile. The refused list also covers migrations and the scorer workflow. Stating
   them again means removing a pattern from one list does not open the other.
+- `paths_allowed_for_namespace` For a namespace with a section under Allowed paths,
+  every changed path, and every old name of a renamed file, matches one of its
+  patterns. A PR that changes no file there is refused too. A namespace with no such
+  section has no limit beyond the refused paths.
 - `head_in_base_repo` The PR's head branch is on the same repo as its base. A PR from
   a fork, or one whose fork GitHub no longer reports, is left for the seat.
 - `body_names_job` The PR body carries the id of the job the work came from, so a
@@ -155,6 +170,22 @@ list differs from it in either direction.
 - path `^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
 - path `^src\/outcome-prs\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
 
+## Allowed paths
+
+The one path list that admits rather than refuses, so it is written per namespace:
+inheriting another namespace's allowed paths would widen it. Each pattern is a regular
+expression matched case-insensitively against the repo-relative path, so
+`docs/Policy/` is still `docs/policy/`. The Worker holds the same patterns and refuses
+to load a document whose list differs from it in either direction, so dropping a
+namespace's section here does not lift its limit; it stops every auto-merge.
+
+## Allowed paths, capsid
+
+D6 of 2026-10-03: docs-only PRs, except the policy sources, and dashboard CSS-only PRs.
+
+- allow `^docs\/(?!policy\/).+$` a document under docs/, except the policy sources in docs/policy/
+- allow `^dashboard\/.+\.css$` a Portal stylesheet
+
 ## Required CI
 
 Each entry is `<workflow path> / <job name> / <step name>`, under the namespace whose
@@ -165,8 +196,8 @@ because a green run nobody has written a step list for proves nothing.
 
 ## Required CI, capsid
 
-The signed document covers capsid again from 2026-10-07, so every step below must have run
-to success.
+Version 6 covers capsid for its allowed paths, so every step below must have run to
+success.
 
 - step `.github/workflows/ci.yml / checks / Typecheck src, tests, integration tests and the copied scorer script`
 - step `.github/workflows/ci.yml / checks / Lint dead exports and doc drift`
@@ -226,12 +257,12 @@ The separate `No bloat` workflow is warn-only by Capsomer's own ruling and is no
 ## What a merge means
 
 A merge under this policy is also a deploy wherever the repo deploys on merge to its
-default branch. capsid does, which is why version 5 leaves it out. Under versions 1 to
-4, capsid pull requests merged and deployed with no human (the first was PR #52, ruled
-2026-09-16), with the checks above as the whole condition and the live gate's rollback
-as the backstop. Extending this policy to another namespace
-authorises unattended production deploys there too, and is decided one namespace at a
-time.
+default branch. capsid does, so a capsid auto-merge is an unattended production deploy
+of a docs or stylesheet change, and of nothing else. Under versions 1 to 4, capsid pull
+requests of any unrefused path merged and deployed with no human (the first was PR #52,
+ruled 2026-09-16), with the checks above as the whole condition and the live gate's
+rollback as the backstop. Extending this policy to another namespace authorises
+unattended production deploys there too, and is decided one namespace at a time.
 
 **dustinedwards-info does not.** Its `deploy.yml` is `workflow_dispatch` only, and that
 is a ruling of 2026-08-25 rather than an omission: push-to-deploy was considered in the
@@ -240,17 +271,11 @@ there lands on `main` and ships nothing, and releasing stays `npm run ship` or t
 dispatch button. Measured from that workflow on 2026-09-19. If it ever gains an
 `on: push` deploy, this paragraph is wrong and the namespace needs deciding again.
 
-**Carrel and Capsomer.** Their step lists are written above and held in the code, but this
-policy does not cover them until the `namespaces` line names them, and the parser refuses
-a namespace that is not on `ROSTER` in `src/improve-schema.ts`, which today lists neither.
-Putting them on the roster is a separate ruling: the roster also sets the improve loop's
-attempt caps and scorer rotation. When covered, a Carrel merge deploys once
-`job_391a68d912c3` lands its deploy-on-merge workflow (today it ships nothing), and a
-Capsomer merge to `main` deploys the Capsomer site, because Cloudflare's Git integration
-builds on push (its `DEPLOY.md`). Both are unattended production deploys.
-
-Because the code now holds both lists, the signed document must carry both sections too,
-or `loadMergePolicy` refuses it and nothing auto-merges anywhere until it is re-signed.
+**carrel does:** since 2026-10-08 its ci.yml deploys after check and gates pass on a push
+to main, migrations first, so a carrel auto-merge is an unattended deploy of Carrel.
+**capsomer's** showcase site deploys on a push to main, but sites take Capsomer only by a
+pinned release tag, so a capsomer auto-merge changes no site until a release is cut and
+pinned.
 
 Anything else waits for the seat. A pull request that fails any check is left open,
 audited with the check that refused it, and reported under `improve_status` as
@@ -260,13 +285,15 @@ awaiting the seat.
 
 It cannot widen the set of repos the Worker reaches: a namespace it names that is not
 on the improve roster is refused when the policy is parsed. It cannot describe less or
-more than the code enforces: a check, refused path or required step on which the two
+more than the code enforces: a check, refused path, allowed path or required step on which the two
 disagree is refused at load time. That is also what closes the window on every version
 bump: a version 2 document lists five fewer refused paths than this code enforces, so
 it loads nothing here, and between this code deploying and version 3 being signed
 nothing is auto-merged. The same was true of version 1 against the version 2 code, and
 of version 4 against the version 5 code, whose document does not name the four checks
-version 5 added and carries no author allowlist.
+version 5 added and carries no author allowlist. A version 5 document does not name
+`paths_allowed_for_namespace` or carry capsid's allowed paths, so between the version 6
+code deploying and version 6 being signed nothing is auto-merged in any namespace.
 
 It can change who may author an unattended merge without a code change. The author
 allowlist is the one list the code does not also hold, so a signed document that adds
