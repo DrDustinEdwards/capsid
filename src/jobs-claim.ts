@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
+import { DEFAULT_MAX_CLAIMS, claimLimit } from "./agents-schema";
 import {
   JOBS_ROWS_MAX,
   OPEN_JOB_STATUSES,
@@ -25,8 +26,11 @@ import { breakerRefusal, breakerState } from "./job-breaker";
 import { externalFenceProblem, jobOrigin } from "./provenance";
 import {
   actorShapeRefusal,
+  claimRoom,
+  claimRoomClause,
   guardedTransition,
-  heldClaim,
+  heldClaims,
+  type ClaimRoom,
   leaseUntil,
   markJobFailed,
   movedBeforeFailing,
@@ -306,6 +310,18 @@ export async function listJobs(
   };
 }
 
+/** The claim's refusal for a ClaimRoom. At the default limit of one it reads as it always
+ *  has: "<actor> already holds <job>, leased until <time>". */
+function claimRefusal(actor: string, room: ClaimRoom, id: string): string {
+  if (room.kind === "full") {
+    const clause = claimRoomClause(actor, room, id, { lease: true }).replace(`${actor} holds `, `${actor} already holds `);
+    return room.limit === DEFAULT_MAX_CLAIMS
+      ? `${clause}. Complete it, fail it, or block it before claiming another.`
+      : `${clause}. Complete, fail or block one before claiming another.`;
+  }
+  return `${claimRoomClause(actor, room, id)}. ${id} stays queued.`;
+}
+
 /** What a claim hands the driver about the model (capsid/conventions.md, "Model routing"): the
  *  recommendation, why, and how to follow it. The driver never picks a model itself. */
 function deliveryOf(routing: Routing) {
@@ -321,10 +337,12 @@ function deliveryOf(routing: Routing) {
   };
 }
 
-// One claim per caller, across every namespace. A driver does one job at a time, and
-// a second claim means the first is either finished or abandoned; letting a caller
-// hold two would make the lease meaningless. Checked before the CAS, so the refusal
-// names the job already held rather than reporting a lost race.
+// Claims per caller, across every namespace, up to the caller's claim limit (one unless
+// the admin raised it with the agents tool's max_claims). Each held job keeps its own
+// lease, and every holder action names the job it acts on. A claim past the limit, or a
+// second claim on the repo of a job already held (unless one of the two is a design
+// job), is refused before the CAS, so the refusal names the job already held rather
+// than reporting a lost race.
 export async function claimJob(
   env: Env,
   agent: Agent,
@@ -334,13 +352,9 @@ export async function claimJob(
   const actor = agent.actor;
   const badActor = actorShapeRefusal("claim", actor);
   if (badActor) return badActor;
-  const held = await heldClaim(env.DB, actor);
-  if (held) {
-    return refuse(
-      "claim",
-      `${actor} already holds ${held.id} ('${held.title}' in ${held.namespace}), leased until ${held.lease_expires}. Complete it, fail it, or block it before claiming another.`
-    );
-  }
+  const limit = claimLimit(agent.scopes);
+  const held = await heldClaims(env.DB, actor);
+  if (held.length >= limit) return refuse("claim", claimRefusal(actor, { kind: "full", held, limit }, args.id ?? "another job"));
 
   // Either a named job or the highest-priority queued one in a namespace. The SELECT
   // only picks a candidate; the guarded UPDATE below is what claims it, so two drivers
@@ -362,6 +376,11 @@ export async function claimJob(
     if (!candidate) return refuse("claim", `no queued jobs in ${args.namespace}.`);
   }
 
+  // The repo question, now that the job is known: a second claim on the repo of a job
+  // already held is refused and leaves the queue as it was.
+  const room = await claimRoom(env, limit, held, candidate);
+  if (room) return refuse("claim", claimRefusal(actor, room, candidate.id));
+
   // A namespace whose drivers keep failing stops handing out work until a person looks
   // (src/job-breaker.ts). Checked before anything else touches the candidate, so an
   // open breaker leaves the queue exactly as it was.
@@ -370,8 +389,8 @@ export async function claimJob(
 
   // What the job needs of the driver is checked before the lease is taken. A claim
   // that took the lease and then refused would park the job on a driver that cannot do
-  // it, and since a caller holds one claim at a time it would also stop that driver
-  // taking anything else for four hours. The check runs through checkScope, so a job
+  // it, and since a caller holds a limited number of claims it would also take one of
+  // that driver's places for four hours. The check runs through checkScope, so a job
   // requirement and an agent scope are compared by the same function that decides
   // every tool call.
   //

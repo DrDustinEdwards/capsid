@@ -5,6 +5,7 @@ import {
   SCOPE_FLAGS,
   defaultScopes,
   isAgentKind,
+  isClaimLimit,
   mintAgentId,
   mintAgentKey,
   parseScopes,
@@ -83,6 +84,9 @@ export interface ScopeArgs {
   tools?: string[];
   grants?: string[];
   flags?: Record<string, unknown>;
+  // How many jobs the agent may hold claimed at once. Stored beside the axes in the
+  // scopes JSON (src/agents-schema.ts, claimLimit); absent keeps the current value.
+  max_claims?: number;
 }
 
 // A list of exactly ["*"] is the wildcard; anything else is a list of names. Shared
@@ -106,6 +110,7 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
       if (Object.hasOwn(args.flags, flag)) scopes.flags[flag] = args.flags[flag] === true;
     }
   }
+  if (isClaimLimit(args.max_claims)) scopes.max_claims = args.max_claims;
   return scopes;
 }
 
