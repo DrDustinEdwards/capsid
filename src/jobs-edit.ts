@@ -49,7 +49,7 @@ export async function jobVersions(db: D1Database, jobId: string): Promise<JobVer
 }
 
 /** The other open job holding a (namespace, title), if any. */
-async function openTitleHolder(db: D1Database, namespace: string, title: string, id: string): Promise<{ id: string; status: string } | null> {
+export async function openTitleHolder(db: D1Database, namespace: string, title: string, id: string): Promise<{ id: string; status: string } | null> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 4}`).join(", ");
   return db
     .prepare(`SELECT id, status FROM jobs WHERE namespace = ?1 AND title = ?2 AND id != ?3 AND status IN (${placeholders}) LIMIT 1`)

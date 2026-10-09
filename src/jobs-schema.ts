@@ -6,7 +6,9 @@ import { checkScope } from "./scope";
 // The work queue's vocabulary, in one place so the table, the tool and the driver
 // cannot disagree about it.
 
-export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked", "superseded"] as const;
+// parked: wanted but not now (src/jobs-park.ts). Not open, not terminal: it holds no title slot
+// and its mirror stays active.
+export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked", "superseded", "parked"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // The states a job still holds a title slot in. The partial unique index names the
@@ -27,7 +29,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start", "edit"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start", "edit", "park", "unpark"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // Four hours. Long enough for a driver to do a real job without heartbeating on a

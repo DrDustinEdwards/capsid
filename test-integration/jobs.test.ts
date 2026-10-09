@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { adminFailJob, blockJob, claimJob, completeJob, editJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob, supersedeJob } from "../src/jobs";
+import { adminFailJob, blockJob, claimJob, completeJob, editJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, parkJob, postJob, resumeJob, supersedeJob, unparkJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
@@ -1637,5 +1637,106 @@ describe("edit", () => {
     expect(out.refusal).toContain(holder.job!.id);
     expect((await row(other.job!.id))?.title).toBe("free title");
     expect(await versionCount(other.job!.id)).toBe(0);
+  });
+});
+
+describe("park", () => {
+  // The seat setting a queued job aside: wanted, but not now (src/jobs-park.ts). The driver
+  // has the admin bit and can_merge taken away, as a minted driver does.
+  const PLAIN_DRIVER: Agent = {
+    ...DRIVER,
+    admin: false,
+    scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
+  };
+  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const LATER = at("2026-09-10T12:05:00.000Z");
+  const WHY = "comes back when the keys question is answered";
+
+  it("a driver is refused, for park and for unpark, and the job is left as it was", async () => {
+    const id = (await post({ title: "driver park" })).job!.id;
+    const parkOut = await parkJob(jobsEnv(), PLAIN_DRIVER, LATER, id, WHY);
+    expect(parkOut.ok).toBe(false);
+    expect(parkOut.refusal).toMatch(/cannot park a job/);
+    expect((await row(id))?.status).toBe("queued");
+    expect(await auditActions(id)).not.toContain("job-parked");
+
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, id, WHY)).ok).toBe(true);
+    const unparkOut = await unparkJob(jobsEnv(), PLAIN_DRIVER, LATER, id);
+    expect(unparkOut.ok).toBe(false);
+    expect(unparkOut.refusal).toMatch(/cannot unpark a job/);
+    expect((await row(id))?.status).toBe("parked");
+  });
+
+  it("a reason is required, in one line", async () => {
+    const id = (await post({ title: "reason park" })).job!.id;
+    for (const bad of [undefined, "", "   ", "two\nlines", "x".repeat(301)]) {
+      const out = await parkJob(jobsEnv(), SEAT_AGENT, LATER, id, bad);
+      expect(out.ok, JSON.stringify(bad)).toBe(false);
+      expect(out.refusal).toMatch(/needs a reason in one line/);
+    }
+    expect((await row(id))?.status).toBe("queued");
+  });
+
+  it("only a queued job is parked: a claimed job and a blocked job are refused, even for the seat", async () => {
+    const claimedId = (await post({ title: "claimed park" })).job!.id;
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id: claimedId })).ok).toBe(true);
+    const claimedOut = await parkJob(jobsEnv(), SEAT_AGENT, LATER, claimedId, WHY);
+    expect(claimedOut.ok).toBe(false);
+    expect(claimedOut.refusal).toMatch(/is claimed/);
+    expect((await row(claimedId))?.status).toBe("claimed");
+
+    expect((await blockJob(jobsEnv(), DRIVER, NOW, claimedId, { reason: "needs a push", command: "git push" })).ok).toBe(true);
+    const blockedOut = await parkJob(jobsEnv(), SEAT_AGENT, LATER, claimedId, WHY);
+    expect(blockedOut.ok).toBe(false);
+    expect(blockedOut.refusal).toMatch(/is blocked/);
+    expect((await row(claimedId))?.status).toBe("blocked");
+  });
+
+  it("a parked job is never claimed, stays listed with its reason, and its mirror and audit row are written", async () => {
+    const parkedId = (await post({ title: "parked job", priority: 50 })).job!.id;
+    const otherId = (await post({ title: "other job", priority: 1 })).job!.id;
+    const out = await parkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId, WHY);
+    expect(out.ok).toBe(true);
+    expect(out.job?.status).toBe("parked");
+
+    // The higher-priority job is parked, so the next claim in the namespace takes the other.
+    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
+    expect(claimed.job?.id).toBe(otherId);
+    // And a claim that names the parked job is refused.
+    const named = await claimJob(jobsEnv(), OTHER, NOW, { id: parkedId });
+    expect(named.ok).toBe(false);
+    expect((await row(parkedId))?.status).toBe("parked");
+
+    const listed = await listJobs(jobsEnv(), { namespace: "capsid", status: "parked" });
+    expect(listed.jobs?.map((j) => j.id)).toEqual([parkedId]);
+    expect(listed.jobs?.[0]?.result_summary).toBe(WHY);
+    const mirror = await env.DB.prepare("SELECT status FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(parkedId)).first<{ status: string }>();
+    expect(mirror?.status).toBe("active");
+    expect(await auditActions(parkedId)).toContain("job-parked");
+  });
+
+  it("unpark returns the job to queued and clears the reason", async () => {
+    const id = (await post({ title: "back again" })).job!.id;
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, id, WHY)).ok).toBe(true);
+    const out = await unparkJob(jobsEnv(), SEAT_AGENT, LATER, id);
+    expect(out.ok).toBe(true);
+    const stored = await row(id);
+    expect(stored?.status).toBe("queued");
+    expect(stored?.result_summary).toBeNull();
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+    expect(await auditActions(id)).toEqual(expect.arrayContaining(["job-parked", "job-unparked"]));
+    // A job that is not parked is not unparked.
+    expect((await unparkJob(jobsEnv(), SEAT_AGENT, LATER, id)).refusal).toMatch(/not parked/);
+  });
+
+  it("a parked job holds no title slot, so unpark is refused, naming the job, when the title was reposted", async () => {
+    const parkedId = (await post({ title: "same title" })).job!.id;
+    expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId, WHY)).ok).toBe(true);
+    const repost = await post({ title: "same title" });
+    expect(repost.ok).toBe(true);
+    const out = await unparkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId);
+    expect(out.ok).toBe(false);
+    expect(out.refusal).toContain(repost.job!.id);
+    expect((await row(parkedId))?.status).toBe("parked");
   });
 });

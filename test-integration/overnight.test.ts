@@ -55,6 +55,17 @@ describe("the overnight plan on a real D1", () => {
     expect(plan.queued_read).toBeGreaterThanOrEqual(4);
   });
 
+  it("a parked job is neither planned nor listed as skipped: parking takes it out of the queue the plan reads", async () => {
+    const { ns, id } = fresh("parked");
+    await mapNamespace(ns, "example/parked");
+    await queue(id(1), ns, { priority: 10 });
+    await queue(id(2), ns, { priority: 90 });
+    await env.DB.prepare("UPDATE jobs SET status = 'parked' WHERE id = ?1").bind(id(2)).run();
+    const plan = await readOvernightPlan(env as never, { namespace: ns }, NOW);
+    expect(plan.lanes[0].jobs.map((j) => j.id)).toEqual([id(1)]);
+    expect(plan.skipped.map((s) => s.id)).not.toContain(id(2));
+  });
+
   it("a namespace with no mapping has its jobs skipped, naming why", async () => {
     const { ns, id } = fresh("nomap");
     await queue(id(1), ns);
