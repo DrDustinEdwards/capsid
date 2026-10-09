@@ -119,6 +119,67 @@ export function riskOf(files: readonly ChangedFile[]): Risk {
   return { level: reasons.size ? "high" : "routine", reasons: [...reasons].slice(0, 12), files_read: files.length };
 }
 
+// WORTH A REVIEWER (D5, Dustin 2026-10-09, option b). riskOf stays as it is: it routes
+// models, and for that a dependency bump or a backup document is reason enough for the
+// stronger model. It is too broad to decide where a second reader of the diff earns
+// its cost: over the last 100 merged capsid PRs it flagged about 7 in 10, mostly
+// lockfile and package.json bumps, backup docs and a deleted screenshot. This narrower
+// test asks one question: does the change edit code that enforces something, where a
+// subtle mistake ships quietly? Nothing calls it yet. The advisory reviewer that would
+// is the seat's decision, after this measurement.
+//
+// Only code is judged. A document, an image, a test, a lockfile or a JSON manifest is
+// never the reason on its own: a reviewer reading a version bump or a prose edit adds
+// little that CI and the seat do not already see.
+const CODE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs|sql|sh)$/i;
+const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
+const TEST_FILE = /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
+
+// The sources that hold this repo's invariants and credentials but are not on auto-merge's
+// refused list, because a green PR there may still merge (CLAUDE.md, rules 3 to 5, and the
+// login and key paths). The refused list covers the judges; this covers what they guard.
+const GUARD_SOURCES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
+  { pattern: /^src\/store-guards\.ts$/i, why: "the snapshot and audit guard every overwrite and delete runs through" },
+  { pattern: /^src\/tools\/repo\.ts$/i, why: "guardedWrite, the one gate on repo mutations" },
+  { pattern: /^src\/tools\/docs\.ts$/i, why: "pathMutation, the only way a path changes" },
+  { pattern: /^src\/(access-jwt|access-login|ops-session-auth|portal-auth)\.ts$/i, why: "a login or session check" },
+  { pattern: /^src\/(runner-key|job-signing)\.ts$/i, why: "a key or a signature" },
+  { pattern: /^src\/agents(-admin)?\.ts$/i, why: "the minting and grants of agent credentials" },
+];
+
+export interface ReviewWorthiness {
+  level: "worth" | "skip" | "unread";
+  reasons: string[];
+  files_read: number;
+}
+
+/** Whether a pull request's diff is worth a second reader: code that is money, a judge
+ *  on auto-merge's refused list, a guard or credential source, a migration, a workflow,
+ *  or backup and restore code. A rename is judged under both names. No files is
+ *  "unread", never "skip". Narrower than riskOf by design; see above. */
+export function worthReviewer(files: readonly ChangedFile[]): ReviewWorthiness {
+  if (files.length === 0) return { level: "unread", reasons: ["no changed files were read"], files_read: 0 };
+  const reasons = new Set<string>();
+  for (const file of files) {
+    for (const path of file.previous_filename ? [file.previous_filename, file.filename] : [file.filename]) {
+      const workflow = WORKFLOW_FILE.test(path);
+      if (!workflow && (!CODE_FILE.test(path) || TEST_FILE.test(path))) continue;
+      if (workflow) {
+        reasons.add(`${path} is a workflow, which holds CI's permissions and secrets`);
+        continue;
+      }
+      if (isMoneyPath(path)) reasons.add(`${path} is billing or payment code`);
+      const refused = AUTO_MERGE_REFUSED_PATHS.find(({ pattern }) => pattern.test(path));
+      if (refused) reasons.add(`${path} is ${refused.why}`);
+      const guard = GUARD_SOURCES.find(({ pattern }) => pattern.test(path));
+      if (guard) reasons.add(`${path} is ${guard.why}`);
+      // The Worker's and the scripts' backup code, not the Portal's Backups view.
+      if (BACKUP_PATH.test(path) && /^(src|scripts)\//i.test(path)) reasons.add(`${path} is backup or restore code`);
+    }
+  }
+  return { level: reasons.size ? "worth" : "skip", reasons: [...reasons].slice(0, 12), files_read: files.length };
+}
+
 // THE RULES, as data. First match wins; a high risk comes first, so a routine kind with a
 // risky shape is upgraded rather than left on the cheap model.
 export interface RoutingRule {

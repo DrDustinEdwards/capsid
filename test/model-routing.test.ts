@@ -18,6 +18,7 @@ import {
   proposeRuleChanges,
   riskFromJob,
   riskOf,
+  worthReviewer,
   routeJob,
   type OutcomeFact,
 } from "../src/model-routing.ts";
@@ -123,6 +124,82 @@ test("riskOf: money paths, refused paths, backups, deletions and renames each ra
   const none = riskOf([]);
   assert.deepEqual([none.level, none.files_read], ["unread", 0], "no files read is not routine");
   assert.equal(riskOf([{ filename: "a.md" }, { filename: "b.md" }]).files_read, 2, "the count of files read is carried");
+});
+
+// WORTH A REVIEWER
+
+const worth = (files: Parameters<typeof worthReviewer>[0]) => worthReviewer(files).level;
+
+test("worthReviewer: what riskOf flags for routing but a reviewer would not read is skipped", () => {
+  // Each of these is high for riskOf (the measured noise): a dependency bump, a backup
+  // document, a deleted screenshot, a large prose deletion, a tsconfig edit.
+  for (const files of [
+    [{ filename: "package-lock.json" }, { filename: "package.json" }],
+    [{ filename: "docs/backups.md" }],
+    [{ filename: "docs/img/portal.png", status: "removed" }],
+    [{ filename: "docs/old-plan.md", deletions: DELETION_LINES_HIGH + 50 }],
+    [{ filename: "tsconfig.test.json" }],
+    [{ filename: "test/restore-drill.test.ts" }, { filename: "test-integration/backup.test.ts" }],
+    [{ filename: "dashboard/src/views/Backups.tsx" }],
+  ]) {
+    const names = files.map((f) => f.filename).join(", ");
+    assert.equal(riskOf(files).level, "high", `riskOf no longer flags ${names}, so this case shows nothing`);
+    assert.equal(worth(files), "skip", names);
+  }
+  // Ordinary code that enforces nothing is skipped by both.
+  assert.equal(worth([{ filename: "dashboard/src/styles.css" }, { filename: "src/limits.ts" }]), "skip");
+});
+
+test("worthReviewer: money, judges, guards, migrations, workflows and backup code are each worth a reviewer", () => {
+  const cases: Array<[string, RegExp]> = [
+    ["app/payments/charge.ts", /billing or payment code/],
+    ["src/scope.ts", /isMoneyPath/],
+    ["src/auto-merge-policy.ts", /auto-merge source/],
+    ["src/jobs-transition.ts", /job transitions/],
+    ["scripts/check-commit-trailers.mjs", /check script/],
+    ["migrations/0040_x.sql", /migration/],
+    [".github/workflows/ci.yml", /workflow, which holds CI's permissions/],
+    ["src/store-guards.ts", /snapshot and audit guard/],
+    ["src/tools/repo.ts", /guardedWrite/],
+    ["src/tools/docs.ts", /pathMutation/],
+    ["src/portal-auth.ts", /login or session check/],
+    ["src/runner-key.ts", /key or a signature/],
+    ["src/agents-admin.ts", /agent credentials/],
+    ["src/backup.ts", /backup or restore code/],
+    ["scripts/restore-table.mjs", /backup or restore code/],
+  ];
+  for (const [filename, why] of cases) {
+    const verdict = worthReviewer([{ filename: "docs/notes.md" }, { filename }]);
+    assert.equal(verdict.level, "worth", filename);
+    assert.match(verdict.reasons.join(" "), why, filename);
+  }
+});
+
+test("worthReviewer: a rename is judged under both names, and no files is unread, never skip", () => {
+  assert.equal(worth([{ filename: "src/old-scope.ts", previous_filename: "src/scope.ts" }]), "worth");
+  const none = worthReviewer([]);
+  assert.deepEqual([none.level, none.files_read], ["unread", 0]);
+  assert.equal(worthReviewer([{ filename: "a.md" }, { filename: "b.md" }]).files_read, 2);
+});
+
+test("worthReviewer: a test or a document named like a guard is not the guard", () => {
+  for (const filename of ["test/scope.test.ts", "docs/store-guards.md", "test/fixtures/migrations/0001.sql", "src/agents-schema.ts", "src/tools/docs-index.ts"]) {
+    assert.equal(worth([{ filename }]), "skip", filename);
+  }
+});
+
+test("worthReviewer reaches past riskOf only through the guard sources", () => {
+  // Every other reason is one riskOf also gives. The guard sources are not on auto-merge's
+  // refused list, so riskOf routes them as routine; a reviewer reading them is the point.
+  for (const filename of [
+    "app/payments/charge.ts", "src/scope.ts", "migrations/0040_x.sql", ".github/workflows/ci.yml", "src/backup.ts",
+    "scripts/check-commit-trailers.mjs", "src/jobs-transition.ts",
+  ]) {
+    assert.equal(riskOf([{ filename }]).level, "high", filename);
+  }
+  for (const filename of ["src/store-guards.ts", "src/tools/repo.ts", "src/portal-auth.ts", "src/runner-key.ts"]) {
+    assert.deepEqual([riskOf([{ filename }]).level, worth([{ filename }])], ["routine", "worth"], filename);
+  }
 });
 
 test("riskFromJob: only blast-radius flags, a gate, or a payments namespace make a job high", () => {
