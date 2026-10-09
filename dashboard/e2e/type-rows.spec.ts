@@ -9,17 +9,19 @@ const LIST_ROWS = "main .att-row, main .qrow, main .frow";
 // The Overview no longer carries the Queue and Incidents panels (the UI audit's ruling
 // 2), so their rows are measured on their own views. Rows of a closed group are not
 // drawn. With the sample feed: 9 attention rows (8 problems, two of them session
-// incidents, and the notices row), 11
-// queue rows (Blocked 2, Stale 1, Running 1, Queued 4, live sessions 3) and 7 incident
-// rows.
+// incidents, and the notices row), 13
+// queue rows (Stale jobs 2, Blocked 2, Stale 1, Running 1, Queued 4, live sessions 3)
+// and 7 incident rows. The Stale jobs panel reads its own route, so the Queue is
+// measured once its rows have arrived.
 const LIST_VIEWS = ["overview", "queue", "incidents"] as const;
-const LIST_COUNT = 27;
+const LIST_COUNT = 29;
 
 // fn's results on each list view, in turn.
 async function acrossLists<T>(page: Page, fn: () => Promise<T[]>): Promise<T[]> {
   const out: T[] = [];
   for (const v of LIST_VIEWS) {
     await visit(page, v);
+    if (v === "queue") await page.locator("main [data-rule]").first().waitFor();
     out.push(...(await fn()));
   }
   return out;
@@ -180,6 +182,7 @@ test("D11: list rows carry no job id or fingerprint; the drawer does", async ({ 
   let rows = 0;
   for (const view of ["overview", "queue", "incidents"] as const) {
     await visit(page, view);
+    if (view === "queue") await page.locator("main [data-rule]").first().waitFor();
     const res = await page.evaluate((sel) => {
       const out: string[] = [];
       const all = [...document.querySelectorAll<HTMLElement>(sel)];

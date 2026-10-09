@@ -21,6 +21,7 @@ import {
 } from "../src/portal-actions.ts";
 import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
+import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
 // The Portal's controls (src/portal-actions.ts): a preview that writes nothing and
@@ -356,6 +357,7 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["overnight", { value: "on", reason: "x" }, /overnight must be one of api, subscription, off/],
     ["resume_job", { id: "job_queued000001", reason: "x" }, /not blocked/],
     ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
+    ["resume_job", { id: "job_blocked00001", reason: "x", note: "n".repeat(16_385) }, /at most 16384 characters/],
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
     ["fail_job", { id: "job_missing00001", reason: "x" }, /no job job_missing00001/],
     ["revoke_agent", { name: "ghost" }, /no agent named 'ghost'/],
@@ -662,12 +664,13 @@ const ROUTES = [
   [PORTAL_NAMESPACES_PATH, "GET", (r: Request, e: never) => handlePortalNamespaces(r, e, NOW)],
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
   [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
+  [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all seven routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 7);
+test("all eight routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 8);
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };

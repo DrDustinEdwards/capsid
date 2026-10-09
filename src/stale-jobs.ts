@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
+import type { OpsStaleJob, StaleRule } from "./ops-types";
 
 // The stale view (capsid/research/design-stale-jobs.md, D5): `jobs` action list with
 // stale: true. Three rules, each a fact the Worker already holds, so reading the view
@@ -32,17 +33,10 @@ export interface StalePrEntry {
 
 export type StalePrCache = Record<string, StalePrEntry>;
 
-export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled";
-
-export interface StaleRow {
-  id: string;
-  namespace: string;
-  title: string;
-  status: string;
-  updated_at: string;
-  rule: StaleRule;
-  reason: string;
-}
+// The row and its rules are the Portal's contract too (GET /portal/api/stale), so they
+// live in src/ops-types.ts.
+export type { StaleRule };
+export type StaleRow = OpsStaleJob;
 
 /** The counts one job's pull request reads add up to. */
 export function tallyPrStates(states: readonly PrState[], at: string): StalePrEntry {

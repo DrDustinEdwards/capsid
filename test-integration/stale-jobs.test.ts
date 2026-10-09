@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -6,6 +6,11 @@ import type { Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { MERGE_RESUME_ACTOR } from "../src/jobs-seat";
 import { mergeResumeTick } from "../src/merge-resume";
+import worker from "../src/index";
+import type { Env } from "../src/env";
+import type { PortalStale } from "../src/ops-types";
+import { portalSessionCookie } from "../src/portal-auth";
+import { PORTAL_STALE_PATH } from "../src/portal-stale";
 import { buildServer } from "../src/server";
 import { STALE_PRS_KEY, staleJobs, type StalePrCache } from "../src/stale-jobs";
 
@@ -190,5 +195,28 @@ describe("jobs list stale: true, through the tool", () => {
     const claim = await callJobs(reader, { action: "claim", stale: true, namespace: "sample" });
     expect(claim.isError).toBe(true);
     expect(claim.text).toMatch(/stale is for action list only/);
+  });
+});
+
+describe("GET /portal/api/stale, through the Worker", () => {
+  // The gate itself (a bearer's 403, an anonymous caller's sign-in) is driven for every
+  // Portal route in test-integration/route-gates.test.ts.
+  it("answers the stale rows of every namespace to the admin's session, uncached", async () => {
+    const SECRET = "integration-portal-stale-key";
+    const mine = await plant("blocked", 4 * DAY);
+    const theirs = await plant("claimed", 4 * DAY, { namespace: "other" });
+    await plant("blocked", HOUR);
+    const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+    const ctx = createExecutionContext();
+    const request = new Request(`https://capsid.test${PORTAL_STALE_PATH}`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
+    const response = (await worker.fetch!(request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const body = (await response.json()) as PortalStale;
+    expect(body.rows.map((r) => r.id).sort()).toEqual([mine, theirs].sort());
+    expect(body.rows.every((r) => r.rule === "unchanged")).toBe(true);
+    expect(body.truncated).toBe(false);
+    expect(body.note).toBeNull();
   });
 });

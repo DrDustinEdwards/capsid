@@ -11,6 +11,7 @@ import { addPackage, describePackage, editPackage, readPackageRow, removePackage
 import { IMPROVE_MODES, onLoopRoster, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
 import { adminFailJob, releaseJob, resumeJob } from "./jobs";
+import { MAX_RESUME_NOTE } from "./limits";
 import { resumeDestination } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
@@ -267,9 +268,12 @@ async function performAction(
                   : "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
           };
         }
+        // resume_job's note is the full approval when it is longer than a line (stale jobs
+        // D6): the driver reads it as resume_note.note on its next claim, heartbeat or list.
+        const note = action === "resume_job" ? (required(params, "note") ?? undefined) : undefined;
         const result =
           action === "resume_job"
-            ? await resumeJob(env, agent, now, id, reason)
+            ? await resumeJob(env, agent, now, id, reason, { note })
             : action === "release_job"
               ? await releaseJob(env, agent, now, id, reason)
               : await adminFailJob(env, agent, now, id, reason);
@@ -283,7 +287,7 @@ async function performAction(
             : action === "release_job"
               ? `Released ${id} back to the queue.`
               : `Marked ${id} failed.`;
-        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason });
+        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason, ...(note ? { note } : {}) });
         break;
       }
       case "revoke_agent": {
@@ -391,7 +395,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   mode: ["value", "reason", "undo"],
   seat_start: ["value", "reason", "undo"],
   overnight: ["value", "reason", "undo"],
-  resume_job: ["id", "reason"],
+  resume_job: ["id", "reason", "note"],
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
   revoke_agent: ["name"],
@@ -561,6 +565,9 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
       if (!job) return refused(`no job ${p.id}.`);
       const label = `${job.id} ('${job.title}' in ${job.namespace})`;
       if (action === "resume_job") {
+        if (p.note && p.note.length > MAX_RESUME_NOTE) {
+          return refused(`resume_job's note is at most ${MAX_RESUME_NOTE} characters, as for the jobs tool; this one is ${p.note.length}.`);
+        }
         if (job.status !== "blocked") {
           return refused(`${job.id} is ${job.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`);
         }
@@ -573,7 +580,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
               ? `${label}: blocked -> queued, claimed by nobody. The resume records why: ${toQueue}`
               : `${label}: blocked -> claimed by ${holder}, with a fresh lease. ${holder} continues it; it does not move to you.`,
             `resumed_count: ${job.resumed_count} -> ${job.resumed_count + 1}.`,
-            `Your approval "${p.reason}" is recorded in the resume note the next holder reads.`,
+            `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${p.note.length} character${p.note.length === 1 ? "" : "s"} in full` : ""}.`,
           ],
           audit: [`job-resumed by ${actor}`, click],
         };

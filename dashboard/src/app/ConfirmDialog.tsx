@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
-import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, performLabel, type ConfirmRequest } from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type ConfirmRequest } from "./ctx";
 
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
@@ -25,12 +25,15 @@ export function ConfirmDialog({
   const doIt = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const opener = useRef<Element | null>(null);
   const started = useRef(false);
   const finished = useRef(false);
   const alive = useRef(true);
   const needsReason = NEEDS_REASON.has(req.action);
   const [reason, setReason] = useState("");
+  const takesNote = TAKES_NOTE.has(req.action);
+  const [note, setNote] = useState("");
   const [preview, setPreview] = useState<PortalPreview | null>(null);
   const [pending, setPending] = useState<null | "preview" | "perform">(null);
   // field: the error is about the reason field itself, so the field is marked invalid.
@@ -75,7 +78,8 @@ export function ConfirmDialog({
       reasonRef.current?.focus();
       return;
     }
-    const params = needsReason ? { ...req.params, reason: typed } : req.params;
+    const typedNote = takesNote ? (noteRef.current?.value ?? note).trim() : "";
+    const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}) };
     setPending("preview");
     setError(null);
     setPreview(null);
@@ -202,6 +206,26 @@ export function ConfirmDialog({
               }}
             />
             <p className="faint note">Recorded with the change. Preview shows what will change before anything is written.</p>
+            {takesNote && (
+              <>
+                <label htmlFor="confirmNote" className="section-title">
+                  Note for the driver (optional)
+                </label>
+                <textarea
+                  ref={noteRef}
+                  id="confirmNote"
+                  rows={4}
+                  maxLength={16384}
+                  value={note}
+                  disabled={busy}
+                  aria-describedby="confirmNoteHelp"
+                  onChange={(e) => setNote(e.target.value)}
+                />
+                <p className="faint note" id="confirmNoteHelp">
+                  The full approval, when a line is not enough. The driver reads it with the job on its next claim.
+                </p>
+              </>
+            )}
           </form>
         )}
         {pending === "preview" && (

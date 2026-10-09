@@ -212,6 +212,8 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .qrow .t { min-width: 0; }
 .qrow .t b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qrow .t div { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A stale job's reason is the row's point, so it wraps rather than being cut. */
+.qrow .t div.why { white-space: normal; overflow-wrap: anywhere; }
 .qrow .m { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
 .empty-group { padding: 6px 16px; font-size: 12px; color: var(--dim); }
 
