@@ -149,7 +149,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       // A stale:prs cache that could not be written is recorded even on a pass that
       // resumed nothing, so the stale view's missing rows have a cause on the ledger.
       if (report.cache_error) {
-        console.error(`MERGE_RESUME_CACHE ${report.note}`);
+        logEvent("error", "MERGE_RESUME_CACHE", { message: `MERGE_RESUME_CACHE ${report.note}` });
         return { outcome: "refused", reason: report.note };
       }
       if (report.resumed.length === 0) return null;
