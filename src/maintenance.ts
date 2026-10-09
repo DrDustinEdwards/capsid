@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { ROSTER } from "./improve-schema";
+import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 
 // The actor the merge-resume step records its touches under (capsid/decisions.md,
@@ -12,11 +13,12 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 // on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
 // Every finding either was acted on by a step that already audit-logs (the merge-resume
 // step) or lands in one short list, served by improve_status, that the seat reads at the
-// start of a session. This pass itself changes nothing: it lists.
+// start of a session. This pass lists; its one act is pruning merged branches, which is
+// off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts).
 //
 // The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
-// read GitHub for every roster namespace. The merged-branch, disk and undeployed-merge
-// rules follow as their own pieces.
+// and the branch rules (src/maintenance-branches.ts) read GitHub for every roster
+// namespace. The disk and undeployed-merge rules follow as their own pieces.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
@@ -30,7 +32,18 @@ const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
 export interface MaintenanceItem {
   /** Which rule found it. */
-  rule: "later-passed" | "shipped-elsewhere" | "followups-missing" | "auto-resumed" | "pr-awaiting-seat" | "pr-red" | "prs-not-checked";
+  rule:
+    | "later-passed"
+    | "shipped-elsewhere"
+    | "followups-missing"
+    | "auto-resumed"
+    | "pr-awaiting-seat"
+    | "pr-red"
+    | "prs-not-checked"
+    | "branch-merged"
+    | "branch-pruned"
+    | "branch-stale"
+    | "branches-not-checked";
   namespace: string;
   /** The job the line is about, or null for a pull request that names none. */
   job: string | null;
@@ -46,6 +59,9 @@ interface MaintenanceList {
   /** Open pull requests read per namespace. A namespace missing here was not read, and
    *  has a prs-not-checked item saying why. */
   prs_read: Record<string, number>;
+  /** Branches read per namespace, the same way: missing means not read, and a
+   *  branches-not-checked item says why. */
+  branches_read: Record<string, number>;
 }
 
 type MaintenanceReport =
@@ -81,7 +97,12 @@ export function promisesFollowUps(summary: string | null): boolean {
   return summary !== null && FOLLOWUP_PROMISE.test(summary);
 }
 
-export async function gatherMaintenance(env: Env, now: Date, prReaders: PrReaders = githubPrReaders(env)): Promise<MaintenanceList> {
+export async function gatherMaintenance(
+  env: Env,
+  now: Date,
+  prReaders: PrReaders = githubPrReaders(env),
+  branchReaders: BranchReaders = githubBranchReaders(env)
+): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
 
@@ -143,23 +164,34 @@ export async function gatherMaintenance(env: Env, now: Date, prReaders: PrReader
   const prs = await gatherPrItems(ROSTER, prReaders, now);
   items.push(...prs.items);
 
-  return { generated: now.toISOString(), items, prs_read: prs.read };
+  // Merged branches (listed, or pruned when the seat has turned that on), and old ones.
+  const branches = await gatherBranchItems(env, ROSTER, branchReaders, now);
+  items.push(...branches.items);
+
+  return { generated: now.toISOString(), items, prs_read: prs.read, branches_read: branches.read };
 }
 
 /** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
  *  it in KV for improve_status, and stamps the day. The stamp is written after the list,
  *  so a pass that threw runs again on the next tick. */
-export async function maintenanceTick(env: Env, now: Date, prReaders?: PrReaders): Promise<MaintenanceReport> {
+export async function maintenanceTick(env: Env, now: Date, prReaders?: PrReaders, branchReaders?: BranchReaders): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now, prReaders);
+  const list = await gatherMaintenance(env, now, prReaders, branchReaders);
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
   const reposRead = Object.keys(list.prs_read).length;
-  return { ran: true, note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s)`, list };
+  const branchesRead = Object.values(list.branches_read).reduce((a, b) => a + b, 0);
+  const branchRepos = Object.keys(list.branches_read).length;
+  const pruned = list.items.filter((i) => i.rule === "branch-pruned").length;
+  return {
+    ran: true,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned`,
+    list,
+  };
 }
 
 /** The stored list, or null when none was ever written or it cannot be read. */
@@ -169,8 +201,9 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
   try {
     const parsed = JSON.parse(raw) as MaintenanceList;
     if (!Array.isArray(parsed.items) || typeof parsed.generated !== "string") return null;
-    // A list written before the pull request rules read none.
-    return { ...parsed, prs_read: parsed.prs_read && typeof parsed.prs_read === "object" ? parsed.prs_read : {} };
+    // A list written before the pull request or branch rules read none.
+    const counts = (v: unknown): Record<string, number> => (v && typeof v === "object" ? (v as Record<string, number>) : {});
+    return { ...parsed, prs_read: counts(parsed.prs_read), branches_read: counts(parsed.branches_read) };
   } catch {
     return null;
   }

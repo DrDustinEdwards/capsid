@@ -157,13 +157,15 @@ export interface NamespaceStatus {
   // tick rewrites the whole list, so it needs no expiry. Empty when the policy is off.
   awaiting_seat: AwaitingSeat[];
   // The daily maintenance pass's list for this namespace (src/maintenance.ts): stale or
-  // mislabelled jobs, what was resumed for the seat, green driver pull requests waiting
-  // and pull requests red for days. Empty before the first pass.
+  // mislabelled jobs, what was resumed for the seat, green driver pull requests waiting,
+  // pull requests red for days, and merged or old branches. Empty before the first pass.
   maintenance: MaintenanceItem[];
   // Open pull requests that pass read in this namespace, so an empty pull request list can
   // be told from one that read nothing. null when the pass did not read them (never ran,
   // not a roster namespace, or the read failed and a prs-not-checked item says why).
   maintenance_prs_read: number | null;
+  // Branches that pass read in this namespace, the same way: null when it read none.
+  maintenance_branches_read: number | null;
   // Counts by status, plus offered versus used: a skill offered often and used rarely
   // has a trigger condition that does not describe the work.
   skills: SkillsSummary;
@@ -369,6 +371,7 @@ export async function improveStatus(
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
+      maintenance_branches_read: maintenanceList?.branches_read[namespace] ?? null,
       skills: await skillsSummary(env.DB, namespace),
       needs_dustin: inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] },
     });
