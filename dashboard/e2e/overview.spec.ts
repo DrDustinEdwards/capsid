@@ -22,6 +22,9 @@ async function reshape(page: Page, fn: (f: OpsFeed) => void): Promise<void> {
 function fourPrs(f: OpsFeed): void {
   const a0 = f.live.awaiting_seat[0]!;
   f.live.awaiting_seat = [29, 30, 31, 32].map((n) => ({ ...a0, repo: "example-org/sample-info", namespace: "sample-info", number: n }));
+  // The canon proposals' row is newer than the PRs' and would push their row behind
+  // "N more warnings".
+  f.live.canon_proposals = [];
 }
 
 const attention = (page: Page) => page.locator("main section.attention");
@@ -145,6 +148,7 @@ test("with no problems it says all clear, and the notices row stays under it", a
     snap.ci = snap.ci.map((c) => (c.latest ? { ...c, latest: { ...c.latest, conclusion: "success" } } : c));
     f.live.jobs = f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "claimed");
     f.live.awaiting_seat = [];
+    f.live.canon_proposals = [];
     // Session incidents are problems too (Needs attention lists them).
     f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
     f.live.loop.budget.exceeded = false;

@@ -21,6 +21,7 @@ import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
+import { approveProposal, checkProposal, lineChanges, rejectProposal } from "./canon";
 import { logEvent } from "./log";
 
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
@@ -52,6 +53,8 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_add",
   "package_edit",
   "package_remove",
+  "canon_approve",
+  "canon_reject",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -149,6 +152,10 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Change how Capsid Portal watches the package ${params.name ?? ""}. The watcher reads the new row on its next pass.`;
     case "package_remove":
       return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
+    case "canon_approve":
+      return `Approve canon proposal ${params.id ?? ""}. The document is written as proposed, with the current version snapshotted first, and only if it is still the body the proposal was written against.`;
+    case "canon_reject":
+      return `Reject canon proposal ${params.id ?? ""}. The document is not touched, and the proposer reads your reason.`;
   }
 }
 
@@ -399,6 +406,24 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, null, params);
         break;
       }
+      case "canon_approve":
+      case "canon_reject": {
+        // Checked again here, as the site controls are: the token binds the params, and
+        // the proposal or its document can move between the preview and this click.
+        const id = revisionOf(params.id);
+        if (id === null) return { ok: false, refusal: `${action} needs the proposal id, a positive integer.` };
+        const reason = required(params, "reason");
+        if (action === "canon_reject" && !reason) return { ok: false, refusal: CANON_REJECT_REASON };
+        const result = action === "canon_approve" ? await approveProposal(env.DB, actor, now, id) : await rejectProposal(env.DB, actor, now, id, reason as string);
+        if (!result.ok) return { ok: false, refusal: result.refusal };
+        committed = true;
+        summary =
+          action === "canon_approve"
+            ? `Approved proposal ${id}: ${result.row.namespace}/${result.row.path} is written as ${result.row.proposer} proposed.`
+            : `Rejected proposal ${id} for ${result.row.namespace}/${result.row.path}.`;
+        await auditClick(env, actor, source, surface, action, result.row.namespace, { id, ...(reason ? { reason } : {}), path: result.row.path });
+        break;
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -442,6 +467,8 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_add: ["name", "repo", "formerly"],
   package_edit: ["name", "revision", "repo", "formerly"],
   package_remove: ["name", "revision"],
+  canon_approve: ["id"],
+  canon_reject: ["id", "reason"],
 };
 
 
@@ -477,6 +504,11 @@ function shown(value: string | null): string {
 }
 
 const refused = (refusal: string): Plan => ({ ok: false, refusal });
+
+// How many added and removed lines a canon_approve preview lists before it says how many
+// more there are. The whole body is in the proposal row.
+const CANON_PREVIEW_LINES = 40;
+const CANON_REJECT_REASON = "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.";
 
 function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
@@ -765,6 +797,46 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [`ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and its weekly GitHub rows stay.`],
         audit: [`ops-package-removed by ${actor}`, click],
+      };
+    }
+    case "canon_approve":
+    case "canon_reject": {
+      const id = revisionOf(p.id);
+      if (id === null) return refused(`${action} needs the proposal id, a positive integer.`);
+      if (action === "canon_reject" && !p.reason) return refused(CANON_REJECT_REASON);
+      const checked = await checkProposal(env.DB, id, action === "canon_approve");
+      if (!checked.ok) return refused(checked.refusal);
+      const { row, current, directive } = checked;
+      const target = `${row.namespace}/${row.path}`;
+      if (action === "canon_reject") {
+        return {
+          ok: true,
+          changes: [`canon proposal ${id} (${target}, from ${row.proposer} at ${row.created_at}): pending -> rejected, with the reason "${p.reason}". ${target} is not touched.`],
+          audit: [`canon-rejected by ${actor}`, click],
+        };
+      }
+      const { added, removed } = lineChanges(current, row.body);
+      const shownLines = (label: string, lines: string[]) => [
+        ...lines.slice(0, CANON_PREVIEW_LINES).map((l) => `${label}: ${l}`),
+        ...(lines.length > CANON_PREVIEW_LINES ? [`${label}: and ${lines.length - CANON_PREVIEW_LINES} more line(s), in the proposal row`] : []),
+      ];
+      return {
+        ok: true,
+        changes: [
+          current === null
+            ? `${target} does not exist; it is created as ${row.proposer} proposed at ${row.created_at} (${row.mode}).`
+            : `${target} is overwritten as ${row.proposer} proposed at ${row.created_at} (${row.mode}). The current version is snapshotted first, so it can be restored.`,
+          `${added.length} line(s) added, ${removed.length} removed.`,
+          ...(directive.length
+            ? [`${directive.length} added line(s) read as instructions addressed to agents. Read them before approving:`, ...directive.map((l) => `instruction: ${l}`)]
+            : ["No added line reads as an instruction addressed to agents."]),
+          ...shownLines("added", added),
+          ...shownLines("removed", removed),
+          ...(row.title !== null || row.type !== null || row.tags !== null || row.status !== null
+            ? [`metadata set by the proposal: ${[["title", row.title], ["type", row.type], ["tags", row.tags], ["status", row.status]].filter(([, v]) => v !== null).map(([k, v]) => `${k} "${v}"`).join(", ")}.`]
+            : []),
+        ],
+        audit: [`write by ${actor}`, click],
       };
     }
     case "revoke_agent": {

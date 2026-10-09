@@ -48,12 +48,50 @@ const SITE_ROWS: OpsSiteConfig[] = [
 // The package configuration, answered the same way (ops_packages).
 const PACKAGE_ROWS = [{ name: "sample-pkg", registry: "npm", repo: "example-org/sample-pkg", formerly: null, revision: 1, updated_at: "2026-09-28 00:00:00" }];
 
+// One pending canon proposal, answered the same way (canon_proposals). It creates a
+// document the fake does not hold, so its base is null and it can be approved. The
+// approve and reject themselves run against real D1 in test-integration/canon.test.ts.
+const CANON_ROWS = [
+  {
+    id: 7,
+    namespace: "capsid",
+    path: "core.md",
+    title: "sample - core",
+    body: "# sample\n\nThe sample service answers on port 8080.\n- Agents must call write after every job.",
+    type: null,
+    tags: null,
+    status: null,
+    mode: "replace",
+    base_sha: null,
+    proposer: "agent:capsid-driver",
+    created_at: "2026-09-28T11:00:00.000Z",
+    directive_lines: JSON.stringify(["- Agents must call write after every job."]),
+    state: "pending",
+    decided_by: null,
+    decided_at: null,
+    decided_reason: null,
+  },
+];
+
 function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
   const toRow = (s: OpsSiteConfig) => ({ ...s, self_probe: s.self_probe ? 1 : 0 });
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop !== "prepare") return Reflect.get(target, prop, receiver);
       return (sql: string) => {
+        if (/FROM canon_proposals/i.test(sql)) {
+          const statement = {
+            params: [] as unknown[],
+            bind(...params: unknown[]) {
+              statement.params = params;
+              return statement;
+            },
+            async first() {
+              return CANON_ROWS.find((p) => p.id === statement.params[0]) ?? null;
+            },
+          };
+          return statement;
+        }
         if (/FROM ops_packages/i.test(sql)) {
           const statement = {
             params: [] as unknown[],
@@ -175,6 +213,7 @@ const FEED: OpsFeedData = {
   live: {
     generated: NOW.toISOString(),
     store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
+    canon_proposals: [],
     jobs: [],
     agents: [],
     prs: [],
@@ -261,12 +300,16 @@ const EVERY_ACTION = [
   ["package_add", { name: "sample-new", repo: "example-org/sample-new" }],
   ["package_edit", { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" }],
   ["package_remove", { name: "sample-pkg", revision: "1" }],
+  ["canon_approve", { id: "7" }],
+  ["canon_reject", { id: "7", reason: "the rule belongs in a typed doc" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits and close as shipped, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped and the two canon decisions, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
+    "canon_approve",
+    "canon_reject",
     "close_shipped",
     "fail_job",
     "mode",
@@ -286,7 +329,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 17);
+  assert.equal(PORTAL_ACTIONS.length, 19);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -488,9 +531,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions (close_shipped among them), the site edits and the package edits are
-// performed against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && !a.startsWith("site_") && !a.startsWith("package_"))) {
+// transitions (close_shipped among them), the site edits, the package edits and the
+// canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("canon_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);

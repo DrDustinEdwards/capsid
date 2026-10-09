@@ -230,6 +230,7 @@ const FEED: OpsFeedData = {
   live: {
     generated: NOW.toISOString(),
     store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
+    canon_proposals: [],
     jobs: [],
     agents: [],
     prs: [],

@@ -12,6 +12,7 @@ export type {
   JobEvaluationRow,
   OpsAgent,
   OpsAwaitingSeat,
+  OpsCanonProposal,
   OpsFeed,
   OpsJob,
   OpsJobStatus,
