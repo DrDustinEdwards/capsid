@@ -31,7 +31,8 @@ The mock's clock and the browser's are both pinned to the fixture's own time
 | `overview-dark.png` | Overview, dark theme |
 | `sites-light.png` | Sites |
 | `queue-drawer-light.png` | Queue with a job's drawer open |
-| `namespaces-preview-light.png` | Namespaces with a Pause control's preview open (never performed) |
+| `control-preview-light.png` | A job's Mark failed control with its preview open (never performed) |
 | `activity-light.png` | Activity |
 | `claims-light.png` | Claims |
 | `phone-overview-light.png` | Overview on a phone, 390 x 844 |
+| `phone-overview-dark.png` | Overview on a phone, dark theme |

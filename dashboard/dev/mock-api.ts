@@ -242,10 +242,10 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
       decision:
         st.overnight === "subscription"
           ? {
-              decided_by: "Dustin Edwards",
+              decided_by: "Sample Person",
               decided_on: "2026-10-04",
-              ruling: "capsid/decisions.md, 2026-10-04: overnight runs may use the subscription, by Dustin's choice",
-              reasoning: "The use is personal, on Dustin's own repositories, and not shared.",
+              ruling: "capsid/decisions.md, 2026-10-04: overnight runs may use the subscription, by the owner's choice",
+              reasoning: "The use is personal, on the owner's own repositories, and not shared.",
               set_by: `access:${ACTOR}`,
               set_at: new Date(mockNow()).toISOString(),
               reason: st.overnightReason,
@@ -354,7 +354,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       return {
         summary: `Set the overnight run to ${value}.`,
         done: `The overnight run is now ${value}.`,
-        changes: [`overnight:mode: ${f.live.overnight.mode} -> ${value}`, ...(value === "subscription" ? ["Recorded with the switch: Dustin's decision of 2026-10-04 and its reasoning."] : [])],
+        changes: [`overnight:mode: ${f.live.overnight.mode} -> ${value}`, ...(value === "subscription" ? ["Recorded with the switch: the owner's decision of 2026-10-04 and its reasoning."] : [])],
         apply: (st) => {
           st.overnight = value as "api" | "subscription" | "off";
           st.overnightReason = params.reason?.trim() ?? "";
