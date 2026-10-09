@@ -7,6 +7,16 @@ import { expect, test } from "@playwright/test";
 
 const PREVIEW_URL = "**/portal/api/actions/preview";
 
+test("a job in the Stale jobs panel is not listed again in the Jobs list", async ({ page }) => {
+  await page.goto("queue");
+  await page.locator("main [data-rule]").first().waitFor();
+  const ids = await page.locator("main [data-rule]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.open));
+  expect(ids.length).toBe(2);
+  const listed = await page.locator("main .qgroup .qrow").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.open));
+  expect(listed.length).toBeGreaterThan(3);
+  expect(listed.filter((id) => ids.includes(id))).toEqual([]);
+});
+
 test("a stale row opens its job, and Resume sends the typed note with the reason", async ({ page }) => {
   await page.goto("queue");
   const row = page.locator('[data-rule="prs-settled"]').first();

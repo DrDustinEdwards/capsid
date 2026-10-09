@@ -82,7 +82,7 @@ export interface UndoRequest {
   focus?: string;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job", "close_shipped"]);
 
 // The actions whose dialog also offers an optional note under the reason: resume_job's
 // is the full approval, which the driver reads as resume_note.note.
@@ -98,6 +98,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   resume_job: "Resume job",
   release_job: "Release job",
   fail_job: "Mark failed",
+  close_shipped: "Close as shipped",
   revoke_agent: "Revoke agent",
   site_add: "Add site",
   site_edit: "Save changes",
@@ -114,7 +115,7 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped"]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
 export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove"]);

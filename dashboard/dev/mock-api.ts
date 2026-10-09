@@ -52,7 +52,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
@@ -384,6 +384,17 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           ...(params.note ? [`The resume note carries your note of ${params.note.length} characters in full.`] : []),
         ],
         apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, lease_expires: null, resumed_count: j.resumed_count + 1, updated_at: now }),
+      };
+    }
+    case "close_shipped": {
+      const j = job();
+      need(params, "reason", "A reason");
+      if (j.status !== "blocked") throw new Refusal(400, `Job ${j.id} is ${j.status}, not blocked. Close as shipped ends a blocked job whose work landed.`);
+      return {
+        summary: `Close ${j.id} (${j.title}) as shipped.`,
+        done: `Closed ${j.id} as shipped; the outcome is credited to ${j.claimed_by ?? "its holder"}.`,
+        changes: [`jobs.${j.id}.status: blocked -> done`, `The outcome row credits ${j.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you.`],
+        apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, lease_expires: null, updated_at: now }),
       };
     }
     case "release_job": {

@@ -419,6 +419,7 @@ export type PortalAction =
   | "resume_job"
   | "release_job"
   | "fail_job"
+  | "close_shipped"
   | "revoke_agent"
   | "site_add"
   | "site_edit"
@@ -443,6 +444,8 @@ export type PortalAction =
 //                 which the driver reads as resume_note.note
 //   release_job   { id, reason }          reason required
 //   fail_job      { id, reason }          reason required
+//   close_shipped { id, reason }          reason required; the seat's complete of a
+//                 blocked job another credential holds, credited to that holder
 //   revoke_agent  { name }
 //   site_add      { namespace, name?, origin?, health_path?, platform?, script? }
 //                 no origin: the namespace serves no site, and takes no other field

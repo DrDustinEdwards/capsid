@@ -161,6 +161,11 @@ function JobControls({ j }: { j: OpsJob }) {
             Resume
           </button>
         )}
+        {blocked && (
+          <button type="button" className="btn" onClick={() => confirm({ action: "close_shipped", params, title: `Close as shipped: ${j.title}` })}>
+            Close as shipped
+          </button>
+        )}
         {claimed && (
           <button type="button" className="btn" onClick={() => confirm({ action: "release_job", params, title: `Release job: ${j.title}` })}>
             Release
@@ -171,7 +176,7 @@ function JobControls({ j }: { j: OpsJob }) {
         </button>
       </div>
       <p className="faint small">
-        {blocked ? "Resume puts it back in the queue. " : claimed ? "Release takes it from its holder and puts it back in the queue. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
+        {blocked ? "Resume sends it back to its driver. Close as shipped ends it as done when its work already landed, credited to the driver. " : claimed ? "Release takes it from its holder and puts it back in the queue. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
       </p>
     </div>
   );

@@ -252,6 +252,7 @@ const EVERY_ACTION = [
   ["resume_job", { id: "job_blocked00001", reason: "ran the push" }],
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
   ["fail_job", { id: "job_queued000001", reason: "superseded" }],
+  ["close_shipped", { id: "job_blocked00001", reason: "merged and live" }],
   ["revoke_agent", { name: "capsid-driver" }],
   ["site_add", { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" }],
   ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
@@ -262,10 +263,11 @@ const EVERY_ACTION = [
   ["package_remove", { name: "sample-pkg", revision: "1" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset and the three package edits, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits and close as shipped, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
+    "close_shipped",
     "fail_job",
     "mode",
     "overnight",
@@ -284,7 +286,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 16);
+  assert.equal(PORTAL_ACTIONS.length, 17);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -359,6 +361,8 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
     ["resume_job", { id: "job_blocked00001", reason: "x", note: "n".repeat(16_385) }, /at most 16384 characters/],
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
+    ["close_shipped", { id: "job_claimed00001", reason: "x" }, /not blocked/],
+    ["close_shipped", { id: "job_blocked00001" }, /needs a reason/],
     ["fail_job", { id: "job_missing00001", reason: "x" }, /no job job_missing00001/],
     ["revoke_agent", { name: "ghost" }, /no agent named 'ghost'/],
     ["pause", { namespace: "capsid", reason: "x", extra: "y" }, /'extra' is not one of them/],
@@ -484,9 +488,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions, the site edits and the package edits are performed against real D1 in
-// test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && !a.startsWith("site_") && !a.startsWith("package_"))) {
+// transitions (close_shipped among them), the site edits and the package edits are
+// performed against real D1 in test-integration/portal-actions.test.ts.
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && !a.startsWith("site_") && !a.startsWith("package_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);

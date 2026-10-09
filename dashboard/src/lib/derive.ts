@@ -351,8 +351,7 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
     const g = GROUPS[key];
     const first = list[0]!;
     if (key === "blocked") {
-      const { blocked, stale } = blockedOrder(feed.live.jobs, now);
-      const jobs = [...blocked, ...stale];
+      const jobs = blockedOrder(feed.live.jobs, now).all;
       // One blocked job opens that job; more open in place.
       if (jobs.length < 2) {
         out.push({ ...first, key: "group:blocked" });
@@ -404,16 +403,15 @@ export function attentionGroups(feed: OpsFeed, now: number): AttentionGroups {
 // ---- blocked jobs (audit ruling 10) ---------------------------------------------------
 //
 // Priority first (high first), then the newest update first. A job blocked for more than
-// 7 days goes to its own Stale group, after the rest.
+// 7 days goes after the rest. all is the two in that order.
 
 export const STALE_BLOCKED_MS = 7 * DAY;
 
-export function blockedOrder(jobs: OpsJob[], now: number): { blocked: OpsJob[]; stale: OpsJob[] } {
+export function blockedOrder(jobs: OpsJob[], now: number): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
   const list = jobs.filter((j) => j.status === "blocked").sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
-  return {
-    blocked: list.filter((j) => now - ms(j.updated_at) <= STALE_BLOCKED_MS),
-    stale: list.filter((j) => now - ms(j.updated_at) > STALE_BLOCKED_MS),
-  };
+  const blocked = list.filter((j) => now - ms(j.updated_at) <= STALE_BLOCKED_MS);
+  const stale = list.filter((j) => now - ms(j.updated_at) > STALE_BLOCKED_MS);
+  return { blocked, stale, all: [...blocked, ...stale] };
 }
 
 // ---- incidents ------------------------------------------------------------------
