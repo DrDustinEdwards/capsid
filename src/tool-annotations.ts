@@ -122,6 +122,12 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // Cloudflare Access and Email Routing, read. Admin, so not read-only under the same
   // rule as claims, and it overwrites and removes nothing. Open world: Cloudflare's API.
   cloudflare_config: additive({ idempotent: true, openWorld: true }),
+
+  // The administrator's controls. perform can revoke an agent, fail a job or remove a site,
+  // each of which overwrites or removes existing state, and a confirmed token is spent, so
+  // a repeat of the same call is refused rather than repeated. Not open world: it reaches
+  // only this Worker's own stores.
+  controls: destructive({ idempotent: false, openWorld: false }),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.

@@ -16,7 +16,7 @@ In `mode: "pr"` a caller may name the work branch with `branch`. Two cases are r
 
 The open-pull-request check is one uncached GitHub call. If it fails, the write is refused rather than treated as "no open pull request".
 
-`manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too.
+`manage_pr` merges (squash by default) or closes a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too. `delete_branch` with `merged: true` (in place of `branch`) prunes the branches whose latest pull request merged and whose tip is the commit it merged from, so work pushed after a merge is kept: it previews by default and deletes only with `confirm: true`, at most 40 a call, and it never lifts a refusal.
 
 ## CI status and logs
 

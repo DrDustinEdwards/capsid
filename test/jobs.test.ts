@@ -21,7 +21,7 @@ const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
 // The queue's transitions: src/jobs.ts and the modules it re-exports. sourceFile
 // throws on a missing name, so a renamed module fails here rather than going unscanned.
-const JOB_MODULES = ["jobs.ts", "jobs-claim.ts", "jobs-holder.ts", "jobs-seat.ts", "jobs-mirror.ts", "jobs-transition.ts"];
+const JOB_MODULES = ["jobs.ts", "jobs-claim.ts", "jobs-holder.ts", "jobs-seat.ts", "jobs-mirror.ts", "jobs-transition.ts", "jobs-edit.ts"];
 const jobModulesSource = () => JOB_MODULES.map((name) => sourceFile(name)).join("\n");
 
 /** Every definition of the jobs_open_title index across migrations/, in the order

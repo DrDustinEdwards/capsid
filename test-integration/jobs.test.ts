@@ -1,12 +1,15 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { adminFailJob, blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob, supersedeJob } from "../src/jobs";
+import { adminFailJob, blockJob, claimJob, completeJob, editJob, expireJobLeases, failJob, heartbeatJob, jobsSummary, listJobs, postJob, resumeJob, supersedeJob } from "../src/jobs";
 import { improveStatus } from "../src/improve-run";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { loadRecordRows } from "../src/agent-record";
 import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
-import { splitSignedTask, verifyTaskDoc } from "../src/improve-task";
+import { splitSignedTask, verifySignedBody, verifyTaskDoc } from "../src/improve-task";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { buildServer } from "../src/server";
 import { MAX_TITLE } from "../src/limits";
 
 // The work queue against a real D1. Every property under test is a property of the
@@ -1524,5 +1527,112 @@ describe("more than one claim", () => {
     const afterSecond = new Date(afterFirst.getTime() + twoHours);
     expect((await expireJobLeases(jobsEnv(), afterSecond)).requeued).toEqual([b]);
     expect((await row(b))?.status).toBe("queued");
+describe("edit", () => {
+  // The seat correcting a job nobody is working (src/jobs-edit.ts). The legacy callers
+  // above are admin, so the driver here has the admin bit and can_merge taken away, as a
+  // minted driver does.
+  const PLAIN_DRIVER: Agent = {
+    ...DRIVER,
+    admin: false,
+    scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
+  };
+  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const LATER = at("2026-09-10T12:05:00.000Z");
+
+  async function versionCount(id: string): Promise<number> {
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_versions WHERE job_id = ?1").bind(id).first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+
+  beforeEach(async () => {
+    await env.DB.prepare("DELETE FROM job_versions").run();
+  });
+
+  it("a driver is refused, and the job is left as it was", async () => {
+    const posted = await post({ title: "driver edit", body: "do the safe thing" });
+    const id = posted.job!.id;
+    const out = await editJob(jobsEnv(), PLAIN_DRIVER, LATER, id, { body: "do the other thing" });
+    expect(out.ok).toBe(false);
+    expect(out.refusal).toMatch(/cannot edit a job/);
+    expect((await row(id))?.body).toBe(posted.job!.body);
+    expect(await versionCount(id)).toBe(0);
+    expect(await auditActions(id)).not.toContain("job-edited");
+  });
+
+  it("a claimed job is refused, even for the seat", async () => {
+    const posted = await post({ title: "claimed edit", body: "do the safe thing" });
+    const id = posted.job!.id;
+    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the other thing", priority: 9 });
+    expect(out.ok).toBe(false);
+    expect(out.refusal).toMatch(/is claimed/);
+    const stored = await row(id);
+    expect(stored?.body).toBe(posted.job!.body);
+    expect(stored?.priority).toBe(0);
+    expect(await versionCount(id)).toBe(0);
+  });
+
+  it("the edited body is signed as at post: it verifies, and claim hands it out", async () => {
+    const posted = await post({ title: "signed edit", body: "do the first thing" });
+    const id = posted.job!.id;
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the corrected thing" });
+    expect(out.ok, out.refusal).toBe(true);
+    const stored = String((await row(id))?.body);
+    expect(stored).not.toBe(posted.job!.body);
+    const verdict = await verifySignedBody(SECRET, stored, "job body");
+    expect(verdict.ok).toBe(true);
+    expect(verdict.ok && verdict.body).toBe("do the corrected thing");
+    const claimed = await claimJob(jobsEnv(), DRIVER, LATER, { id });
+    expect(claimed.ok, claimed.refusal).toBe(true);
+    expect(claimed.job!.body).toContain("do the corrected thing");
+  });
+
+  it("a blocked job may be edited, and resume verifies the new body", async () => {
+    const posted = await post({ title: "blocked edit", body: "do the first thing" });
+    const id = posted.job!.id;
+    await claimJob(jobsEnv(), DRIVER, NOW, { id });
+    expect((await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "gate", command: "git push origin x" })).ok).toBe(true);
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the corrected thing", gate_required: true });
+    expect(out.ok, out.refusal).toBe(true);
+    expect(out.job!.status).toBe("blocked");
+    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, LATER, id, "seat approved the push");
+    expect(resumed.ok, resumed.refusal).toBe(true);
+    expect((await row(id))?.gate_required).toBe(1);
+  });
+
+  it("each edit keeps the version it replaced, readable newest first through jobs list for the id", async () => {
+    const posted = await post({ title: "first title", body: "do the first thing", priority: 1 });
+    const id = posted.job!.id;
+    expect((await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { title: "second title", priority: 5 })).ok).toBe(true);
+    const second = await editJob(jobsEnv(), SEAT_AGENT, at("2026-09-10T12:10:00.000Z"), id, { body: "do the second thing" });
+    expect(second.ok, second.refusal).toBe(true);
+
+    const server = buildServer(jobsEnv(), SEAT_AGENT);
+    const client = new Client({ name: "jobs-edit", version: "1.0.0" });
+    const [c, s] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(s), client.connect(c)]);
+    const result = (await client.callTool({ name: "jobs", arguments: { action: "list", id } })) as { content: Array<{ text: string }> };
+    await client.close();
+    const listed = JSON.parse(result.content[0].text) as { versions?: Array<Record<string, unknown>>; jobs: Array<Record<string, unknown>> };
+    expect(listed.jobs[0].title).toBe("second title");
+    expect(listed.versions).toHaveLength(2);
+    expect(listed.versions![0]).toMatchObject({ title: "second title", priority: 5, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: "2026-09-10T12:10:00.000Z" });
+    expect(listed.versions![1]).toMatchObject({ title: "first title", priority: 1, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: LATER.toISOString() });
+
+    // The mirror is rewritten with the row, and the edit is audited.
+    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(id)).first<{ body: string }>();
+    expect(doc!.body).toContain("second title");
+    expect(doc!.body).toContain("do the second thing");
+    expect(await auditActions(id)).toContain("job-edited");
+  });
+
+  it("a title another open job holds is refused, naming that job", async () => {
+    const holder = await post({ title: "taken title" });
+    const other = await post({ title: "free title" });
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, other.job!.id, { title: "taken title" });
+    expect(out.ok).toBe(false);
+    expect(out.refusal).toContain(holder.job!.id);
+    expect((await row(other.job!.id))?.title).toBe("free title");
+    expect(await versionCount(other.job!.id)).toBe(0);
   });
 });

@@ -7,6 +7,7 @@ import { loadRecordRows, recordFor } from "./agent-record";
 import type { JobOutcomeRow } from "./job-outcomes";
 import type { JobListRow } from "./jobs-claim";
 import type { OverlapReport } from "./job-overlaps";
+import type { JobVersion } from "./jobs-edit";
 import { jobAudit, mirrorStatements, type ResumeNote } from "./jobs-mirror";
 import { DEFAULT_MAX_CLAIMS, MAX_CLAIMS_CEILING, claimLimit, parseScopes } from "./agents-schema";
 import { resolveRepo } from "./github/client";
@@ -154,6 +155,9 @@ export interface JobResult {
   routing_note?: string;
   // list view "models": the learning table.
   models?: Record<string, unknown>;
+  // edit, and list for one named id to a caller holding write: the versions earlier
+  // edits replaced, newest first (src/jobs-edit.ts, migrations/0033).
+  versions?: JobVersion[];
 }
 
 export function refuse(action: string, refusal: string): JobResult {

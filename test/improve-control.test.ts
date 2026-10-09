@@ -88,3 +88,25 @@ test("improve_status reflects a mode change and a pause set through the control 
   const capsid = status.namespaces.find((n) => n.namespace === "capsid");
   assert.equal(capsid?.paused, "held");
 });
+
+// The audit row says who asked (controls design, finding 5). Before this, every one of
+// these was recorded as the loop, so an MCP call never named the administrator.
+test("PLANT: a caller-made action names the caller in its audit row, and with no caller the loop's name stays", async () => {
+  const who = "access:admin@example.com";
+  const auditActors = (d1: ReturnType<typeof harness>["d1"]) =>
+    d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[0]);
+
+  const named = harness();
+  await improveControl(named.env, "mode", { value: "subscription", actor: who });
+  await improveControl(named.env, "pause", { namespace: "capsid", reason: "hold", actor: who });
+  await improveControl(named.env, "unpause", { namespace: "capsid", actor: who });
+  await improveControl(named.env, "budget", { actions_minutes_month: 100, model_usd_month: 10, actor: who });
+  await improveControl(named.env, "skill_transitions", { value: "hold", actor: who });
+  const actors = auditActors(named.d1);
+  assert.equal(actors.length, 5, "an action wrote no audit row, so this read nothing");
+  assert.ok(actors.every((a) => a === who), `an action was audited as ${actors.find((a) => a !== who)}`);
+
+  const anonymous = harness();
+  await improveControl(anonymous.env, "mode", { value: "subscription" });
+  assert.deepEqual(auditActors(anonymous.d1), ["improve-loop"]);
+});

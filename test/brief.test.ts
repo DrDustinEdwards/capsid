@@ -106,7 +106,7 @@ test("provenance costs ONE audit_log query however many documents the brief carr
   // drops core_links silently.
   assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
-  assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 3 documents, 4 section reads and 1 provenance`);
+  assert.ok(reads.length <= 9, `brief issued ${reads.length} queries, more than 3 documents, the portfolio list, 4 section reads and 1 provenance`);
   // And the answer is still right per document: the newest actor wins, and a
   // document with no audit row reads null rather than borrowing a neighbour's.
   assert.equal(out.core.last_actor, "agent:capsid-driver");

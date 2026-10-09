@@ -4,6 +4,8 @@ import { z } from "zod";
 import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
+import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocuments } from "../portfolio-docs";
+import { portfolioOnly } from "../scope";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. registerDocTools in ./docs registers them in the published order.
@@ -22,7 +24,7 @@ function boundedRows<T>(rows: T[], limit: number, advice: string) {
 }
 
 export function registerListTool(server: McpServer, ctx: ToolCtx): void {
-  const { db } = ctx;
+  const { db, agent } = ctx;
 
   server.registerTool(
     "list",
@@ -36,6 +38,12 @@ export function registerListTool(server: McpServer, ctx: ToolCtx): void {
       },
     },
     async ({ namespace, type, status }) => {
+      // A caller outside capsid sees the portfolio documents there and nothing else
+      // (src/portfolio-docs.ts). The set is small, so it is read whole and filtered here.
+      if (portfolioOnly(agent, namespace)) {
+        const rows = (await portfolioDocuments(db)).filter((r) => (type == null || r.type === type) && (status == null || r.status === status));
+        return ok(boundedRows(rows, MAX_ROWS, "Narrow with type or status."));
+      }
       const { results } = await db
         .prepare(
           // frontmatter and publish_at are not selected: nothing in this server reads
@@ -105,7 +113,7 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("brief"),
       description:
-        `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions, repo-structure and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+        `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions, repo-structure and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: { namespace: nsName },
     },
     async ({ namespace }) => {
@@ -114,10 +122,11 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
           .prepare("SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
           .bind(ns, path)
           .first<{ namespace: string; path: string; title: string | null; type: string | null; body: string | null; updated_at: string }>();
-      const [conventions, repoStructure, core] = await Promise.all([
+      const [conventions, repoStructure, core, portfolio] = await Promise.all([
         doc("capsid", "conventions.md"),
         doc("capsid", "repo-structure.md"),
         doc(namespace, "core.md"),
+        portfolioDocuments(db),
       ]);
       // Not filtered on status (beyond 'closed' below): status records editorial
       // state and does not mark a task done, so filtering on 'published' would hide
@@ -238,6 +247,14 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
         open_tasks: tasksOut,
         recent_episodics: episodicsOut,
         core_links: { outgoing: coreOut, incoming: coreIn },
+        // The portfolio rules, by path, for every namespace: a session reads these first.
+        // Every namespace driver may read them in capsid and nothing else there.
+        portfolio_documents: {
+          namespace: PORTFOLIO_DOCS.namespace,
+          read_first: portfolio.map((r) => r.path),
+          allowlist: describePortfolioDocs(),
+          note: `Read each with read(namespace: "${PORTFOLIO_DOCS.namespace}", path). Any namespace driver may read these, and nothing else in ${PORTFOLIO_DOCS.namespace}.`,
+        },
         approx_chars: total,
         ...(coreA ? {} : { warning: `no core.md for namespace ${namespace}` }),
         ...(trimmed.length ? { trimmed } : {}),
@@ -328,7 +345,7 @@ export function registerBacklinksTool(server: McpServer, ctx: ToolCtx): void {
 }
 
 export function registerFindTool(server: McpServer, ctx: ToolCtx): void {
-  const { db } = ctx;
+  const { db, agent } = ctx;
 
   server.registerTool(
     "find",
@@ -347,14 +364,16 @@ export function registerFindTool(server: McpServer, ctx: ToolCtx): void {
            LIMIT ?3`
         )
         .bind(glob, namespace ?? null, MAX_ROWS + 1)
-        .all();
-      return ok(boundedRows(results, MAX_ROWS, "Tighten the glob, or add a namespace filter."));
+        .all<{ path: string }>();
+      // A caller outside capsid keeps only the portfolio documents (src/portfolio-docs.ts).
+      const kept = portfolioOnly(agent, namespace) ? results.filter((r) => isPortfolioPath(r.path)) : results;
+      return ok(boundedRows(kept, MAX_ROWS, "Tighten the glob, or add a namespace filter."));
     }
   );
 }
 
 export function registerSearchTool(server: McpServer, ctx: ToolCtx): void {
-  const { db } = ctx;
+  const { db, agent } = ctx;
 
   server.registerTool(
     "search",
@@ -368,6 +387,12 @@ export function registerSearchTool(server: McpServer, ctx: ToolCtx): void {
       },
     },
     async ({ query, namespace, type }) => {
+      // A caller outside capsid searches the portfolio documents there and nothing else
+      // (src/portfolio-docs.ts): the query is narrowed to the paths that exist, so the
+      // page is not spent on rows that would be dropped, and every row is checked again
+      // below, so the narrowing is never what keeps another document out.
+      const restricted = portfolioOnly(agent, namespace);
+      const allowed = restricted ? JSON.stringify((await portfolioDocuments(db)).map((r) => r.path)) : null;
       const run = (match: string) =>
         db
           .prepare(
@@ -378,13 +403,18 @@ export function registerSearchTool(server: McpServer, ctx: ToolCtx): void {
              WHERE documents_fts MATCH ?1
                AND (?2 IS NULL OR d.namespace = ?2)
                AND (?3 IS NULL OR d.type = ?3)
+               AND (?4 IS NULL OR d.path IN (SELECT value FROM json_each(?4)))
              ORDER BY bm25(documents_fts)
-             LIMIT ?4`
+             LIMIT ?5`
           )
-          .bind(match, namespace ?? null, type ?? null, SEARCH_ROWS + 1)
-          .all();
-      const bound = (rows: unknown[]) =>
-        boundedRows(rows, SEARCH_ROWS, "Add a namespace or type filter, or make the query more specific.");
+          .bind(match, namespace ?? null, type ?? null, allowed, SEARCH_ROWS + 1)
+          .all<{ path: string }>();
+      const bound = (rows: Array<{ path: string }>) =>
+        boundedRows(
+          restricted ? rows.filter((r) => isPortfolioPath(r.path)) : rows,
+          SEARCH_ROWS,
+          "Add a namespace or type filter, or make the query more specific."
+        );
       try {
         return ok(bound((await run(query)).results));
       } catch {
