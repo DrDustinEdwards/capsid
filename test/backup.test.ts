@@ -236,51 +236,6 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   assert.equal(deleteAudit.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countAudit);
 });
 
-test("dump retention keeps the newest runs whole, counting runs and not objects", async () => {
-  // 20 aged-out runs of five objects each. If the floor counted OBJECTS it would
-  // keep 14 of 100, which is under three runs; it must keep 14 RUNS.
-  const seed: Record<string, string> = { ...MIRROR };
-  const runIds: string[] = [];
-  for (let day = 1; day <= 20; day++) {
-    const id = `2020-01-${String(day).padStart(2, "0")}T00-00-00-000Z`;
-    runIds.push(id);
-    for (const table of TABLES) seed[`backups/json/${id}/${table}.json`] = "{}";
-  }
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  // 21 runs exist once this run writes its own, the floor keeps the newest 14, and
-  // the 7 left over are all past the cutoff, so they age out whole.
-  assert.equal(result.json_backups_pruned, 7);
-  assert.equal(result.json_backups_kept, 14);
-  const deletedDumps = r2.deleted.flat().filter((k) => k.startsWith("backups/json/"));
-  assert.equal(deletedDumps.length, 7 * TABLES.length);
-  const survivors = runIds.filter((id) => [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)));
-  assert.deepEqual(survivors, runIds.slice(7), "a run was half-deleted or the wrong runs aged out");
-  // And a surviving run keeps every one of its objects, not just some.
-  for (const id of survivors) {
-    for (const table of TABLES) assert.ok(r2.objects.has(`backups/json/${id}/${table}.json`));
-  }
-});
-
-test("a pre-change flat dump key ages as its own single-object run", async () => {
-  // Objects written before the per-table split have no slash after the prefix. They
-  // must still age out rather than sit forever or drag a whole day down with them.
-  const seed: Record<string, string> = { ...MIRROR };
-  for (let day = 1; day <= 20; day++) {
-    seed[`backups/json/2020-01-${String(day).padStart(2, "0")}T00-00-00-000Z.json`] = "{}";
-  }
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  assert.equal(result.json_backups_pruned, 7);
-  assert.equal(r2.deleted.flat().filter((k) => k.startsWith("backups/json/")).length, 7);
-});
-
 test("a clean run stamps backup:last-ok with the run timestamp", async () => {
   const { env, kv } = makeEnv({ documents: DOCS }, MIRROR);
   const result = await runBackup(env);
@@ -621,61 +576,30 @@ function survivingRuns(r2: { objects: Map<string, string> }, ids: string[]): str
 
 const day = (month: number, d: number) => `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-test("partial and refused runs take no slot in the 14-run floor", async () => {
-  // 20 complete, marked runs, then 14 newer runs that never finished. All are past
-  // the 90-day cutoff. Counting the partial runs, the floor would be 13 of them plus
-  // today's run, and every complete dump would age out.
+// The policy itself (14 daily, 8 weekly, 6 monthly, the newest complete run never pruned,
+// nothing pruned while no run is complete) is tested in d1-dump, where pruneDumps lives.
+// This holds the wiring: the dump prefix is the one pruned, a run goes whole, the counts
+// come back in the result, and an old run is pruned whatever its shape (a marker-less
+// run no longer counts as complete just because it is older than the first marked one).
+test("dump retention is d1-dump's graduated policy over the backups/json prefix, deleting runs whole", async () => {
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");
   const seed: Record<string, string> = { ...MIRROR };
-  const marked = Array.from({ length: 20 }, (_, i) => day(1, i + 1));
-  const partial = Array.from({ length: 14 }, (_, i) => day(2, i + 1));
-  for (const id of marked) seedRun(seed, id, "marked");
-  for (const id of partial) seedRun(seed, id, "partial");
+  seedRun(seed, day(1, 1), "marked");
+  seedRun(seed, day(1, 2), "partial");
+  seedRun(seed, monthAgo, "legacy");
+  seedRun(seed, yesterday, "marked");
   const { env, r2 } = makeEnv({ documents: DOCS }, seed);
   const result = await runBackup(env);
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  assert.deepEqual(survivingRuns(r2, marked), marked.slice(7), "the floor did not keep the 13 newest complete runs");
-  assert.deepEqual(survivingRuns(r2, partial), [], "an aged partial run survived by holding a floor slot");
-  assert.ok(r2.objects.has(`${result.json_prefix}_complete.json`), "today's run was not marked");
-});
-
-test("MIGRATION: runs written before the marker existed keep the floor they had", async () => {
-  // Unmarked runs that sort before the oldest marked run count toward the floor, so
-  // the prune takes the 7 oldest of 20.
-  const seed: Record<string, string> = { ...MIRROR };
-  const legacy = Array.from({ length: 20 }, (_, i) => day(1, i + 1));
-  for (const id of legacy) seedRun(seed, id, "legacy");
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  assert.equal(result.json_backups_pruned, 7);
-  assert.deepEqual(survivingRuns(r2, legacy), legacy.slice(7));
-});
-
-test("MIGRATION: legacy runs count, unmarked runs after the first marked one do not", async () => {
-  // Ten legacy runs, then five marked runs from after the deploy, then five partial
-  // runs. The floor is today's run, the five marked runs and the eight newest legacy
-  // runs. The partial runs are aged and hold no slot, so they go.
-  const seed: Record<string, string> = { ...MIRROR };
-  const legacy = Array.from({ length: 10 }, (_, i) => day(1, i + 1));
-  const marked = Array.from({ length: 5 }, (_, i) => day(1, i + 11));
-  const partial = Array.from({ length: 5 }, (_, i) => day(1, i + 16));
-  for (const id of legacy) seedRun(seed, id, "legacy");
-  for (const id of marked) seedRun(seed, id, "marked");
-  for (const id of partial) seedRun(seed, id, "partial");
-  const { env, r2 } = makeEnv({ documents: DOCS }, seed);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  assert.deepEqual(survivingRuns(r2, marked), marked);
-  assert.deepEqual(survivingRuns(r2, legacy), legacy.slice(2));
-  assert.deepEqual(survivingRuns(r2, partial), []);
-  assert.equal(result.json_backups_pruned, 7);
-  assert.equal(result.json_backups_kept, 14);
+  // Today's run and yesterday's are inside the daily window; the other three are outside
+  // every window, so they go, each with all of its objects.
+  assert.equal(result.json_backups_kept, 2);
+  assert.equal(result.json_backups_pruned, 3);
+  assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2), monthAgo, yesterday]), [yesterday]);
+  for (const table of TABLES) assert.ok(r2.objects.has(`backups/json/${yesterday}/${table}.json`));
 });
 
 test("a run whose lease was taken over does not release the new holder's lease", async () => {
