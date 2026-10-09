@@ -22,7 +22,7 @@ Capsid serves MCP over Streamable HTTP on two endpoints. Every caller resolves t
 - **`/ops/mcp`, bearer keys, for agents and cron.** A key is matched by its sha256. Scopes have five axes (namespaces, repos, tools, grants, blast-radius flags), and a new agent gets read on its named namespaces and no flags.
 - **Per-namespace driver keys.** `scripts/mint-agents.mjs` mints one driver agent per namespace and writes its key to a local file without printing it. A driver's `repos` axis is set from its namespace's live repo mapping.
 - **Per-job runner keys.** A session that the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job (`src/runner-key.ts`). The token's claims are checked against the repo's own seat-session workflow, the `seat` environment and a GitHub-hosted runner. The key reaches a short list of tools, works only its own job, stops resolving when that job leaves its live states, and is issued once per start.
-- **Protocol version.** The installed `@modelcontextprotocol/sdk` is 1.29.0, whose `LATEST_PROTOCOL_VERSION` is `2025-11-25`, so that is what Capsid negotiates. List results already carry the `ttlMs` and `cacheScope` cache fields from MCP 2026-07-28 (`src/cache-hints.ts`). Under 2025-11-25 they are extra fields that a client may ignore.
+- **Protocol version.** `@modelcontextprotocol/sdk` is pinned to 1.31.0 in `package.json`, and an override makes the Agents SDK use that one copy. Its `LATEST_PROTOCOL_VERSION` is `2025-11-25` (read from the 1.31.0 package), so that is what Capsid negotiates. List results already carry the `ttlMs` and `cacheScope` cache fields from MCP 2026-07-28 (`src/cache-hints.ts`). Under 2025-11-25 they are extra fields that a client may ignore.
 - **Tools.** 37 tools. The count is not written down anywhere: `src/counts.ts` derives it from the keys of `TOOL_GRANTS` in `src/scope.ts`, and tests hold that table to the tools actually registered. Every tool in `tools/list` carries all four annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) from `src/tool-annotations.ts`. They are hints to the client and enforce nothing.
 
 ## The work queue and its gates
@@ -30,10 +30,11 @@ Capsid serves MCP over Streamable HTTP on two endpoints. Every caller resolves t
 A job is a title and a signed body; the body is the prompt a driver runs. The table is the source of truth for status, and every job is mirrored to `<namespace>/jobs/<id>.md` in the same batch as each transition, so `brief` and `search` see the queue. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md).
 
 - **post.** The body is signed. `claim` verifies it first, and a job edited after signing is marked failed. `post` can require blast-radius flags (`required_flags`), a track record (`min_record`) and a reviewer (`review_required`).
-- **claim and heartbeat.** A claim is a four-hour lease, one claim per caller. `heartbeat` extends it, and a five-minute tick returns an expired lease to the queue.
-- **block.** A job that reaches a push, a deploy, a secret, a live migration or a merge stops with the exact command a person must run.
+- **claim and heartbeat.** A claim is a four-hour lease, and each held job keeps its own. A caller holds one claimed job unless the admin raised its `max_claims` on the `agents` tool, and never two jobs on the same repo (a design job is the exception). `claim` also returns the model Capsid picked for the job. `heartbeat` extends the lease, and a five-minute tick returns an expired lease to the queue.
+- **block.** A job that reaches a push, a deploy, a secret, a live migration or a merge stops with the exact command a person must run. With `question: true` it stops with a question instead, marked in `improve_status` and the Portal, and the seat answers in a resume note. A `block` or `complete` that names a pull request also reports any other open pull request in the repo that changes the same files.
 - **resume and the gate policy.** `resume` returns a blocked job with a fresh lease. A driver cannot approve its own gate with a plain resume. The signed gate policy defines three classes (`push_branch`, `open_pr`, `additive_migration`). A driver may resume its own job under the policy only when every class matched is a branch push or a pull request. An additive migration stays the seat's to approve, a list of never-approvable commands is checked first, and everything else waits on a person. Two corrections per job, then the admin must decide.
 - **review_required.** The driver cannot complete, block or fail a job carrying a pull request until a `REVIEW:` comment posted through Capsid by a `can_comment_pr` holder ends in `APPROVE`, `CHANGES` or `BLOCK`. An `APPROVE` counts only if it quotes the pull request's current head sha.
+- **edit and stale.** `edit` (the admin or a `can_merge` caller, never a driver) changes the title, body, priority or gate of a queued or blocked job. The body is signed again, the replaced version is kept and shown by `list` for that job, and an audit row is written. `list` with `stale: true` returns blocked or claimed jobs that look stuck: unchanged for three days, resumed by the merge-resume step and not finished in 24 hours, or blocked on pull requests that have all settled.
 - **supersede, release and admin fail.** `supersede` ends a job replaced before any work was done and writes no outcome row. `release` returns another credential's claimed job to the queue. The admin or a `can_merge` caller may `fail` a job someone else holds, which writes the holder's outcome row.
 
 ## Claims and verified outcomes
@@ -61,36 +62,43 @@ The Portal is the administrator's view of Capsid, one app served at `/portal/`, 
 
 ![Overview, dark](docs/images/overview-dark.png)
 
-The views, in menu order:
+The menu groups the views (`GROUPS` in `dashboard/src/app/App.tsx`):
 
-- **Overview**: what needs attention, the fleet of sites, deploys and downtime over seven days, the queue and open incidents.
-- **Sites**: each configured site, its probe results and a 7-day uptime ring. Shown only while at least one site is configured.
-- **Incidents**: the watcher's findings and its last pass.
-- **Queue**: every open job and every job that ended in the last day, by namespace, with seat-started sessions and live Claude Code sessions.
-- **Deploys**: a deploy timeline per site, read from Cloudflare.
-- **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job).
-- **Backups**: Capsid's own D1 backup and the off-account mirror.
-- **CI and merges**: default-branch CI, pull requests from the last seven days, and what auto-merge left for the seat.
-- **Namespaces**: each namespace as `improve_status` reports it.
-- **Activity**: the last 50 audit rows, filtered by namespace and actor.
-- **Claims**: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
-- **Settings**: the site configuration.
+- **Watch**
+  - **Overview**: what needs attention, the fleet of sites, deploys and downtime over seven days, the queue and open incidents.
+  - **Sites**: each configured site, its probe results and a 7-day uptime ring. Shown only while at least one site is configured.
+  - **Incidents**: the watcher's findings and its last pass.
+  - **Deploys**: a deploy timeline per site, read from Cloudflare.
+  - **Backups**: Capsid's own D1 backup and the off-account mirror.
+- **Work**
+  - **Queue**: every open job and every job that ended in the last day, by namespace, with seat-started sessions and live Claude Code sessions.
+  - **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job).
+  - **CI and merges**: default-branch CI, pull requests from the last seven days, and what auto-merge left for the seat.
+  - **Claims**: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
+- **Records**
+  - **Namespaces**: each namespace as `improve_status` reports it, with the automation switches.
+  - **Packages**: each configured npm package's versions, downloads, dependents and repository. Shown only while at least one package is configured.
+  - **Activity**: the last 50 audit rows, filtered by namespace and actor.
+
+Settings (the site and package configuration) is not in the menu: it is under the avatar's account panel as "Portal settings".
 
 ![Sites](docs/images/sites-light.png)
 
 ![Queue with a job drawer open](docs/images/queue-drawer-light.png)
 
-![Namespaces](docs/images/namespaces-preview-light.png)
+![A control's preview](docs/images/control-preview-light.png)
 
 ![Activity](docs/images/activity-light.png)
 
 ![Claims](docs/images/claims-light.png)
 
-The Portal has fifteen controls (`PORTAL_ACTIONS` in `src/portal-actions.ts`): `pause` and `unpause` a namespace, `reset_breaker` for a namespace's queue, set the improve loop's `mode`, turn the `seat_start` switch on or off, `resume_job`, `fail_job`, `release_job`, `revoke_agent`, `site_add`, `site_edit` and `site_remove`, and `package_add`, `package_edit` and `package_remove`. Each one is two requests. The preview reads current state, writes nothing, and returns what will change, the audit rows the perform will write, and a token signed with a key derived from `COOKIE_ENCRYPTION_KEY`. The token carries the action, its parameters and the admin's email, and expires after five minutes. The perform takes only that token, so what runs is what the dialog showed. A replay inside the five minutes is accepted by the token check; every transition is guarded on the state it moves from, so a second perform is refused or changes nothing. Both requests need the `X-Capsid-CSRF` header to match the `capsid_portal_csrf` cookie and refuse a cross-site `Sec-Fetch-Site`. The Portal cannot merge a pull request or mint a credential, and `test/portal-actions.test.ts` asserts that both are refused.
+The Portal's controls are the registry in `src/controls.ts` (`PORTAL_ACTIONS`); the same controls are available in chat through the admin-only `controls` tool, and the audit row says which door a change came through. They are the automation switches (pause and unpause a namespace, the improve loop's mode, seat start, the overnight run), resetting a namespace's circuit breaker, resuming, failing or releasing a job, revoking an agent, and adding, editing or removing a site or a package. Each one is two requests. The preview reads current state, writes nothing, and returns what will change, the audit rows the perform will write, and a token signed with a key derived from `COOKIE_ENCRYPTION_KEY` (token version 2). The token carries the action, its parameters and the admin's email, and expires after five minutes. The perform takes only that token, so what runs is what the dialog showed. A confirmation is single-use: the perform spends the token's id in KV before the control runs, and a second perform of the same token is refused with a 409. A token is spent even when the control then refuses, because the refusal is about state and the next preview shows it again. Every transition is also guarded on the state it moves from. Both requests need the `X-Capsid-CSRF` header to match the `capsid_portal_csrf` cookie and refuse a cross-site `Sec-Fetch-Site`. The Portal cannot merge a pull request or mint a credential, and `test/portal-actions.test.ts` asserts that both are refused.
 
 Optional panels stay hidden until they are configured. Which sites the watcher probes is configuration in the D1 table `ops_sites`, edited in Settings. With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides the Sites view and every site item on the Overview. Deploy and error columns need `CF_OPS_TOKEN`; until it is set they read "Cloudflare read not configured" rather than zero. A value the feed does not have is shown as "No data" with its reason. The Portal works at phone width.
 
 ![Phone overview](docs/images/phone-overview-light.png)
+
+![Phone overview, dark](docs/images/phone-overview-dark.png)
 
 ## Security model
 
@@ -254,10 +262,12 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - `POST /mcp` MCP over Streamable HTTP, requires an OAuth access token (admin only)
 - `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
 - `POST /ops/otlp/v1/metrics`, `POST /ops/otlp/v1/logs` Claude Code's OpenTelemetry as OTLP/HTTP JSON, gzip or plain, at most 1MB. A driver key, a runner key or the admin key as `Authorization: Bearer <key>` (401 without one, 403 for a read-only key). Keeps usage totals per session and a count of api_error events; never a prompt, a response or tool content (docs/telemetry.md)
+- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, the admin sees every app, and the response carries no CORS headers (docs/portal.md)
+- `POST /ops/runner-key` a seat-started session trades its GitHub OIDC token for a key bound to one job (docs/seat-start.md)
 - `POST /ops/hooks` Claude Code HTTP hook events, requires a driver or runner key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, response or tool content (docs/hooks.md)
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
-- `GET /portal/`, `GET /portal/callback`, `GET /portal/api/ops`, `POST /portal/api/ops/refresh`, `POST /portal/api/actions/preview`, `POST /portal/api/actions/perform`, `GET /portal/api/namespaces`, `GET /portal/api/activity`, `GET /portal/api/claims`, `GET /portal/api/packages/history`, `POST /portal/api/sign-out` Capsid Portal: the app's files, its sign-in return, its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the fifteen controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces, activity, claims and package history reads, and sign out. Admin session only; a bearer token is refused with 403 (docs/portal.md). Nothing answers under `/console`
+- `GET /portal/`, `GET /portal/callback`, `GET /portal/api/ops`, `POST /portal/api/ops/refresh`, `POST /portal/api/actions/preview`, `POST /portal/api/actions/perform`, `GET /portal/api/namespaces`, `GET /portal/api/activity`, `GET /portal/api/claims`, `GET /portal/api/packages/history`, `POST /portal/api/sign-out` Capsid Portal: the app's files, its sign-in return, its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces, activity, claims and package history reads, and sign out. Admin session only; a bearer token is refused with 403 (docs/portal.md). Nothing answers under `/console`
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
@@ -292,7 +302,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - **Not multi-user.** It admits one identity, `ADMIN_EMAIL`, for both logins. Agents are credentials that person mints, not other users.
 - **Not a hosted service.** Each install is its own Worker on its own Cloudflare account. The deployment this repo runs is for its author.
 - **Not a general agent framework.** It stores memory, issues scoped keys, runs a job queue and relays GitHub operations through a GitHub App. It does not run models itself except in the optional loop's api mode.
-- **Not a replacement for code review.** Drivers open pull requests and never merge them. Merges are made by the seat, or, for namespaces a signed auto-merge policy lists, by the Worker when that policy's checks pass. capsid's own pull requests are never auto-merged. CI and the hidden holdout tests measure changes; they do not review intent.
+- **Not a replacement for code review.** Drivers open pull requests and never merge them. Merges are made by the seat, or, for namespaces a signed auto-merge policy lists, by the Worker when that policy's checks pass. The signed policy (version 5) lists dustinedwards, capsid, carrel and capsomer. A pull request merges itself only when every check passes: an allowed author, a driver's job that handed the pull request on, the job's own recorded pull request, green CI with the repo's required steps run, and no changed path on the refused list. What always waits for the seat: the judges and policy sources, job transitions, auth, migrations, workflows, lockfiles, `package.json`, wrangler configuration and the live gate ([docs/autonomy.md](docs/autonomy.md)). A capsid merge is a production deploy. CI and the hidden holdout tests measure changes; they do not review intent.
 - **The improve loop does not merge,** does not edit tests, CI or its own scoring, and does not touch a project that is not on the roster ([docs/improve.md](docs/improve.md)).
 - **The Portal does not merge or mint.**
 - **Not listed in an MCP directory.** It has not been submitted to any MCP directory or registry.

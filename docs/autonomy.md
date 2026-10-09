@@ -8,9 +8,11 @@ Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13
 The five-minute tick walks every open pull request on the namespaces the policy names
 and merges only those that pass all eleven checks, evaluated in order, each refusing on
 its own. **A merge is a deploy on any repo that deploys on merge to its default branch**,
-so passing these checks there ships to production with no human. That is why version 5
-names dustinedwards only: a capsid merge deploys the control plane, so capsid pull
-requests are merged by the seat (ruled 2026-09-25).
+so passing these checks there ships to production with no human. Version 5 names
+dustinedwards, capsid, carrel and capsomer: capsid was taken out on 2026-09-25 because a
+capsid merge deploys the control plane, and put back on 2026-10-07 (ruled by Dustin), with
+every refused path still waiting for the seat and the live gate's rollback as the backstop.
+carrel and capsomer joined for auto-merge only on 2026-10-08.
 
 | check | what it requires |
 | --- | --- |

@@ -9,7 +9,7 @@ import { SHOTS_NOW } from "./clock.ts";
 // dev/mock-api.ts seeds; scripts/shots-privacy.mjs has checked both before this runs).
 // Run: npm run build, then npm run shots. Each PNG lands in the repo's docs/images.
 //
-// Nothing here performs a control: the Namespaces shot stops at the preview, and the
+// Nothing here performs a control: the control shot stops at the preview, and the
 // mock's state is never changed.
 
 const OUT = fileURLToPath(new URL("../../docs/images/", import.meta.url));
@@ -67,25 +67,26 @@ test("sites, light", async ({ page }) => {
 test("queue with a job drawer open, light", async ({ page }) => {
   await open(page, "queue");
   await page.locator('main [data-open^="job:"]').first().click();
-  const drawer = page.locator("aside.drawer.on");
+  const drawer = page.locator("dialog.drawer[open]");
   await expect(drawer).toBeVisible();
-  await expect(drawer).toHaveAttribute("aria-hidden", "false");
   await expect.poll(() => drawer.evaluate((el) => getComputedStyle(el).transform)).toBe("none");
   await shoot(page, "queue-drawer-light");
 });
 
-test("namespaces with a control's preview open, light", async ({ page }) => {
-  await open(page, "namespaces");
-  const row = page.locator("tr[data-row]").filter({ hasText: "sample-b" });
-  await row.getByRole("button", { name: "Pause", exact: true }).click();
-  const dialog = page.getByRole("dialog");
+// Pause is a switch now (e2e/switches.spec.ts), so the dialog shot uses Mark failed on a
+// queued job: the same preview, with the reason asked for first (as e2e/confirm.spec.ts).
+test("a control's preview open, light", async ({ page }) => {
+  await open(page, "queue");
+  await page.goto("queue/job/job_0cdf2803f0ba");
+  await page.getByRole("button", { name: "Mark failed", exact: true }).click();
+  const dialog = page.locator("dialog.confirm");
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Reason (required)").pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
-  // Stops at the preview: "Do it" is on screen and never pressed.
-  await expect(dialog.getByRole("button", { name: "Do it" })).toBeVisible();
-  await shoot(page, "namespaces-preview-light");
+  // Stops at the preview: the perform button is on screen and never pressed.
+  await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();
+  await shoot(page, "control-preview-light");
 });
 
 test("activity, light", async ({ page }) => {
@@ -104,5 +105,10 @@ test.describe("on a phone", () => {
   test("overview, light", async ({ page }) => {
     await open(page, "overview");
     await shoot(page, "phone-overview-light");
+  });
+
+  test("overview, dark", async ({ page }) => {
+    await open(page, "overview", "dark");
+    await shoot(page, "phone-overview-dark");
   });
 });

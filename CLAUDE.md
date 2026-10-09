@@ -12,7 +12,7 @@ Read `capsid/conventions.md` (the portfolio rules) and `capsid/core.md` in Capsi
 - `npm ci --prefix dashboard` once before the dashboard checks. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
 - Deploy: `npm run deploy` (builds the dashboard first and stops if the build or its size budget fails), then `EXPECT_SHA=<sha> npm run verify:live`.
 - Secrets: `npx wrangler secret put KEY`.
-- capsid pull requests are merged by the seat, never auto-merged (docs/policy/auto-merge.md). A merge to master is a production deploy, docs included.
+- capsid pull requests merge on green under the signed auto-merge policy unless they touch a refused path, and those wait for the seat (docs/autonomy.md). A merge to master is a production deploy, docs included.
 
 ## Rules
 

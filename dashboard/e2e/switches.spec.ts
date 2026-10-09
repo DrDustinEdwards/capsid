@@ -188,8 +188,8 @@ test("PLANT: choosing the subscription records Dustin's decision, its date and i
   await expect(overnight(page)).toHaveAttribute("aria-checked", "true");
   await expect(message(page)).toContainText("The overnight run is now subscription.");
   const decision = page.locator("#overnight-decision");
-  await expect(decision).toContainText("Decision recorded: Dustin Edwards, 2026-10-04.");
-  await expect(decision).toContainText("overnight runs may use the subscription, by Dustin's choice");
+  await expect(decision).toContainText("Decision recorded: Sample Person, 2026-10-04.");
+  await expect(decision).toContainText("overnight runs may use the subscription, by the owner's choice");
   await expect(decision).toContainText("first supervised night");
   expect(await newestActivity(page)).toBe("portal.overnight");
 

@@ -4,7 +4,7 @@ Capsid Portal is the administrator's view of Capsid, one app at https://portal.d
 
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
-**It carries fifteen controls**, each on the row it changes:
+**Its controls are the registry in `src/controls.ts`**, each on the row it changes:
 - the job drawer: resume a blocked job, release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
 - the Namespaces view: the Automation panel, with the seat-start switch, the improve loop's switch and its "Runs on" choice (Subscription or API), and the overnight run's switch with its own "Runs on" choice (choosing Subscription records Dustin's decision, its date and its reasoning, docs/overnight.md); one switch per roster namespace, On while it runs and Off while it is paused (pause and unpause); and reset the queue's circuit breaker when it is open;
