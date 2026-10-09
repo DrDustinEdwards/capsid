@@ -520,7 +520,9 @@ functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is t
 feed, `OpsFeed` in `src/ops-types.ts`. `GET /portal/api/namespaces` returns each
 roster namespace from `improveStatus()`, the function behind `improve_status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
-filtered, with ISO times. All three are admin session only.
+filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
+`staleJobs()`, the function behind `jobs` list with `stale: true`. All four are admin
+session only.
 
 **A click in the Portal writes two audit rows:** the shared mutator's own row (for
 example `improve-paused` by `improve-loop`, or `job-resumed`), then the click's row,

@@ -150,11 +150,14 @@ const CASES: Record<string, Case> = {
     },
   },
   resume_job: {
-    params: async () => ({ id: await blockedJob("a blocked job"), reason: "I ran the push myself" }),
+    // With a note (stale jobs D6): the control hands it to the resume, which records it.
+    params: async () => ({ id: await blockedJob("a blocked job"), reason: "I ran the push myself", note: "Pushed at abc1234.\nConfirm the deploy, then complete." }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("claimed");
       expect(stored?.claimed_by, "the lease goes back to the driver that blocked it").toBe("agent:capsid-driver");
+      const resumed = (await auditRows()).filter((r) => r.action === "job-resumed").map((r) => JSON.parse(r.params));
+      expect(resumed.some((p) => p.note === "Pushed at abc1234.\nConfirm the deploy, then complete."), "the note did not reach the resume").toBe(true);
     },
   },
   release_job: {

@@ -405,6 +405,7 @@ export interface OpsFeed {
 //   GET  /portal/api/activity?namespace=&actor= | ?id=           -> PortalActivity
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
+//   GET  /portal/api/stale                                        -> PortalStale
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -438,7 +439,8 @@ export type PortalAction =
 //                 undo: "true" marks the reverse of a change just made, from the
 //                 Portal's Undo; the click row is then portal-undo-<action>
 //                 instead of portal-<action>.
-//   resume_job    { id, reason }          reason required
+//   resume_job    { id, reason, note? }   reason required; note is the full approval,
+//                 which the driver reads as resume_note.note
 //   release_job   { id, reason }          reason required
 //   fail_job      { id, reason }          reason required
 //   revoke_agent  { name }
@@ -732,4 +734,31 @@ export interface WebAnalyticsSite {
   auto_install: boolean | null;
   // The site's ruleset switch, where Cloudflare reports one.
   enabled: boolean | null;
+}
+
+// GET /portal/api/stale -> PortalStale. The jobs that look stuck, from the reader behind
+// `jobs` action list with stale: true (src/stale-jobs.ts), over every namespace. rule is
+// which test the job met, the most actionable first: prs-settled (blocked, and every pull
+// request it names is merged or closed), resumed-not-completed (the merge-resume step
+// resumed it 24 hours or more ago and it is not done), unchanged (blocked or claimed, and
+// its row has not changed in 3 days).
+export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled";
+
+export interface OpsStaleJob {
+  id: string;
+  namespace: string;
+  title: string;
+  status: string;
+  updated_at: string;
+  rule: StaleRule;
+  reason: string;
+}
+
+export interface PortalStale {
+  generated: string;
+  // Oldest change first, at most 200.
+  rows: OpsStaleJob[];
+  truncated: boolean;
+  // Set when rows may be missing: more than 200, or the pull request cache unreadable.
+  note: string | null;
 }
