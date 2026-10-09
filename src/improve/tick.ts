@@ -162,7 +162,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => maintenanceTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      console.log(`MAINTENANCE ${report.note}`);
+      logEvent("log", "MAINTENANCE", { message: `MAINTENANCE ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MAINTENANCE_THREW:", rethrow: false }
