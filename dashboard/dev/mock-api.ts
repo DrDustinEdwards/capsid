@@ -154,6 +154,59 @@ function seedPackages(): OpsPackageConfig[] {
 
 // A made-up daily history for a configured package: the former name from 2025-06-01
 // to 2026-06-30, then the current name, a few downloads a day with a weekly rhythm.
+// The Shared code view's answer (src/shared-code.ts), in sample names: one app two
+// releases behind, one current through the repo's old name, a renovate preset, and a
+// local copy still in one app.
+function sharedCode() {
+  const generated = new Date(mockNow() - 20 * 60_000).toISOString();
+  return {
+    generated,
+    configured: true,
+    error: null,
+    apps_read: 7,
+    apps_failed: [{ namespace: "sample-h", error: "its file tree could not be read (missing, or too large)" }],
+    packages: [
+      {
+        name: "sample-kit",
+        repo: "example-org/sample-kit",
+        latest: "v0.5.0",
+        tags_error: null,
+        users: [
+          { namespace: "sample", name: "Sample A", where: "dashboard/package.json", pinned: "v0.5.0", behind: 0, via_old_name: false },
+          { namespace: "sample-b", name: "Sample B", where: "package.json", pinned: "v0.3.0", behind: 2, via_old_name: false },
+          { namespace: "sample-c", name: "Sample C", where: "package.json", pinned: "v0.5.0", behind: 0, via_old_name: true },
+        ],
+        behind: 1,
+        local_copies: [
+          { namespace: "sample-b", path: "packages/sample-kit", present: true },
+          { namespace: "sample-c", path: "src/kit", present: false },
+        ],
+        local_left: 1,
+      },
+      {
+        name: "sample-devkit",
+        repo: "example-org/sample-devkit",
+        latest: "v1.2.0",
+        tags_error: null,
+        users: [{ namespace: "sample", name: "Sample A", where: "renovate", pinned: null, behind: null, via_old_name: false }],
+        behind: 0,
+        local_copies: [],
+        local_left: 0,
+      },
+      {
+        name: "sample-dump",
+        repo: "example-org/sample-dump",
+        latest: null,
+        tags_error: "GitHub answered 404 for example-org/sample-dump's tags",
+        users: [],
+        behind: 0,
+        local_copies: [],
+        local_left: 0,
+      },
+    ],
+  };
+}
+
 function mockHistory(p: OpsPackageConfig): PortalPackageHistory {
   const now = mockNow();
   const days: PortalPackageHistory["days"] = [];
@@ -1019,7 +1072,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1059,6 +1112,10 @@ export function mockOpsApi(): Plugin {
           const rows = (id !== null ? st.activity.filter((r) => r.id === id) : st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor))).slice(0, ACTIVITY_LIMIT);
           const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor, id }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
+        }
+        if (path === "/portal/api/shared-code") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, sharedCode());
         }
         if (path === "/portal/api/packages/history") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

@@ -70,10 +70,10 @@ test("a filter picked on Incidents does not change Sites, lives in the address, 
   await expect(page.locator("main table.fleet tbody tr[data-row]")).toHaveCount(8);
 });
 
-// Defect 4: a live session stopped on a failure is critical under Needs attention, and
-// the rail's Overview count includes it.
+// Defect 4: a live session stopped on a failure is critical under Needs attention (on
+// Needs you), and the rail's Overview count includes it.
 test("a critical session incident appears in Needs attention", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "needs");
   const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Needs attention" }) });
   const row = attention.locator("[data-row]").filter({ hasText: "Session for agent:sample-b-driver stopped: rate_limit" });
   await expect(row).toHaveCount(1);

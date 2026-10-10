@@ -12,15 +12,17 @@ import { FreshRing } from "../ui/charts";
 import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
-import { Overview } from "../views/Overview";
+import { NeedsYou } from "../views/NeedsYou";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
 
-// The overview ships in the initial chunk; every other view loads on first visit.
+// Needs you, the home, ships in the initial chunk; every other view loads on first visit.
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
-  overview: Overview,
+  needs: NeedsYou,
+  overview: lazy(() => import("../views/Overview").then((m) => ({ default: m.Overview }))),
   sites: lazy(() => import("../views/Sites").then((m) => ({ default: m.Sites }))),
   packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
+  shared: lazy(() => import("../views/SharedCode").then((m) => ({ default: m.SharedCode }))),
   incidents: lazy(() => import("../views/Incidents").then((m) => ({ default: m.Incidents }))),
   queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
   deploys: lazy(() => import("../views/Deploys").then((m) => ({ default: m.Deploys }))),
@@ -41,20 +43,21 @@ const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.Hel
 // The phone tab bar (DECIDE 12): four views, then More, which lists every other view.
 // With no site configured there is no Sites tab. Settings is under More: on a wide
 // screen it is the top bar's Settings button, not a view in the left menu.
-const TABS: ViewId[] = ["overview", "queue", "incidents", "sites"];
+const TABS: ViewId[] = ["needs", "queue", "incidents", "sites"];
 
 // The menu's groups, in order (design: Watch, Work, Records). Settings is not a menu entry: it is
 // under the avatar's account panel, with its g then e shortcut and its command-menu entry.
 const GROUPS: Array<{ label: string; views: ViewId[] }> = [
-  { label: "Watch", views: ["overview", "sites", "incidents", "deploys", "backups"] },
+  { label: "Watch", views: ["needs", "overview", "sites", "incidents", "deploys", "backups"] },
   { label: "Work", views: ["queue", "agents", "ci", "claims"] },
-  { label: "Records", views: ["namespaces", "packages", "activity"] },
+  { label: "Records", views: ["namespaces", "packages", "shared", "activity"] },
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
 // status). Down, critical or a red CI run is red (a failure is never violet); paused is amber; what
 // waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
+  needs: "need",
   overview: "crit",
   sites: "crit",
   incidents: "need",
@@ -66,6 +69,7 @@ const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
+  needs: "waiting on you",
   overview: "critical",
   sites: "down or degraded",
   incidents: "open findings",
@@ -122,9 +126,9 @@ export function App() {
   // With no site configured, /sites is not a view, and with no package, /packages is
   // not: either shows the overview, and the address is replaced below.
   const hidden = (parsed.view === "sites" && !sitesOn) || (parsed.view === "packages" && !packagesOn);
-  const route = hidden ? { view: "overview" as const, drawer: null } : parsed;
+  const route = hidden ? { view: "needs" as const, drawer: null } : parsed;
   useEffect(() => {
-    if (hidden) navigate(routePath("overview"), { replace: true });
+    if (hidden) navigate(routePath("needs"), { replace: true });
   }, [hidden, navigate]);
   // Relative times are measured on the server's clock (portalNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
@@ -452,10 +456,13 @@ export function App() {
   };
 
   const c = feed ? counts(feed) : null;
-  // Every critical row of Needs attention, session incidents included (derive.ts).
+  // Needs you counts what the inbox counts, the same number the admin strip's badge shows
+  // (design-portal-evaluation.md section 2, "Badges"). The Overview keeps its count of
+  // critical problems, session incidents included (derive.ts), until Health takes it.
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
-  const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c
+  const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
     ? {
+        needs: { n: feed.live.inbox.count, cls: "warm" },
         overview: { n: critCount, cls: "hot" },
         sites: { n: c.down + c.degraded, cls: "hot" },
         incidents: { n: c.findings, cls: "warm" },

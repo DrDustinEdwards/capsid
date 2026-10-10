@@ -7,6 +7,7 @@ import { runBackup } from "./backup";
 import { RUNNER_KEY_PATH, exchangeRunnerKey } from "./runner-key";
 import { checkScope, routeRefusal } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
+import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { b64urlDecode, b64urlEncode } from "./encoding";
@@ -55,7 +56,7 @@ import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
-import { handlePortalPackageHistory, PORTAL_PACKAGE_HISTORY_PATH } from "./portal-packages";
+import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 import { logEvent } from "./log";
 
@@ -635,6 +636,7 @@ export const defaultHandler = {
     const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
+    if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
@@ -666,6 +668,7 @@ export const defaultHandler = {
     if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
     if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
     if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
+    if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
     if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
     if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
     // The app and everything under it, every method: the handler gates first.

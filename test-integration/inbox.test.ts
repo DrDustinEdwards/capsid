@@ -67,7 +67,7 @@ beforeEach(async () => {
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
     .run();
   await env.APP_KV.put("ops:snapshot", JSON.stringify(snapshot));
-  await env.APP_KV.put("improve:awaiting-seat", JSON.stringify([{ namespace: "capsid", repo: "example-org/sample", number: 7, failed: "paths_not_refused", why: "touches a protected path", at: "2026-10-08T09:00:00.000Z" }]));
+  await env.APP_KV.put("improve:awaiting-seat", JSON.stringify([{ namespace: "capsid", repo: "example-org/sample", number: 7, failed: "paths_not_refused", why: "touches a protected path", at: "2026-10-08T09:00:00.000Z", class: "approve", path_class: "src-worth", class_reasons: ["the policy stops at paths_not_refused"] }]));
 });
 
 describe("GET /ops/inbox", () => {
@@ -90,6 +90,7 @@ describe("GET /ops/inbox", () => {
     expect(app.severity).toBe("needs-you");
     expect(app.items.find((i) => i.kind === "blocked-job")?.link).toBe(PR);
     expect(app.items.find((i) => i.kind === "pr")?.link).toBe("https://github.com/example-org/sample/pull/7");
+    expect(app.items.find((i) => i.kind === "pr")?.title, "the merge class says what kind of answer the PR needs").toContain("(approve: the policy stops at paths_not_refused)");
     expect(JSON.stringify(body), "another namespace's job title leaked to a scoped caller").not.toContain("Not for this driver");
     expect(body.count).toBe(3);
   });

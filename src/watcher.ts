@@ -18,6 +18,7 @@ import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
+import { anomalyFindings, readActionHours } from "./anomaly";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
 import {
   buildSnapshot,
@@ -486,6 +487,7 @@ export const WATCHER_CHECKS = [
   "cloudflare",
   "live checks",
   "site repairs",
+  "agent anomalies",
   "domains",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
@@ -506,6 +508,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^site-errors-/, "cloudflare"],
   [/^live-/, "live checks"],
   [/^site-(health|weekly)-/, "site repairs"],
+  [/^anomaly-/, "agent anomalies"],
   [/^domain-expiry-/, "domains"],
 ];
 
@@ -1140,6 +1143,14 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
             (err: unknown) => ({ state: "error" as const, script, rows: [], reason: (err instanceof Error ? err.message : String(err)).slice(0, 300), read_at })
           );
     await attempt(`secret names ${site.namespace}`, () => storeSecrets(env, site.namespace, stored));
+  }
+
+  // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
+  // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
+  const actionHours = await attempt("agent anomalies", () => readActionHours(env.DB, now, WATCHER_ACTOR));
+  if (actionHours) {
+    ran.add("agent anomalies");
+    out.push(...anomalyFindings(actionHours, now));
   }
 
   // Each configured site's domain registration, by RDAP (src/domain-expiry.ts): a

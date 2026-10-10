@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
 import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
 import { portalGate } from "./portal-auth";
+import { readSharedCode } from "./shared-code";
 
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
 // daily downloads come from npm's range API when the view asks, not pass by pass
@@ -30,5 +31,17 @@ export async function handlePortalPackageHistory(
   const cfg = await readPackageRow(env.DB, name);
   if (!cfg) return textResponse(`${name} is not a configured package.`, 404);
   const body = await packageHistory(env, cfg, fetchImpl, now);
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
+// The Shared code view's read: GET /portal/api/shared-code (src/shared-code.ts). Like the
+// history above it answers to portalGate and nothing else, writes only its own hour-long
+// cache, and reads GitHub only for the configured packages and the configured sites' repos.
+export const PORTAL_SHARED_CODE_PATH = "/portal/api/shared-code";
+
+export async function handlePortalSharedCode(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
+  if (!gate.ok) return gate.response;
+  const body = await readSharedCode(env, now);
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }

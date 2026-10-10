@@ -271,6 +271,10 @@ export interface OpsAwaitingSeat {
   failed: string;
   why: string;
   at: string;
+  // The merge pipeline's class, report-only (src/merge-class.ts); absent on older sets.
+  class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
+  path_class?: string | null;
+  class_reasons?: string[];
 }
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is
@@ -338,6 +342,74 @@ export interface OpsLoop {
   };
 }
 
+// Shared code (src/shared-code.ts): GET /portal/api/shared-code.
+export interface SharedCodeApp {
+  namespace: string;
+  name: string;
+  // The manifest it was read from ("package.json", "dashboard/package.json") or "renovate".
+  where: string;
+  // The tag the app pins, or the lockfile's version for a spec with no tag; null when
+  // neither says (a branch).
+  pinned: string | null;
+  // Release tags newer than the pin, or null when the pin is not a release.
+  behind: number | null;
+  // Pinned through a repo's earlier name (GitHub redirects it).
+  via_old_name: boolean;
+}
+
+export interface SharedCodePackage {
+  name: string;
+  repo: string;
+  latest: string | null;
+  tags_error: string | null;
+  users: SharedCodeApp[];
+  // Users at least one release behind.
+  behind: number;
+  // Known local copies the package replaces; present is null when that app's tree could not be read.
+  local_copies: Array<{ namespace: string; path: string; present: boolean | null }>;
+  local_left: number;
+}
+
+export interface SharedCodeView {
+  generated: string;
+  configured: boolean;
+  error: string | null;
+  // How many apps were read, so "nobody is behind" is never "nothing was read".
+  apps_read: number;
+  apps_failed: Array<{ namespace: string; error: string }>;
+  packages: SharedCodePackage[];
+}
+
+// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, improve_status's
+// needs_dustin, and the Portal's Needs you page all carry this one shape.
+export type InboxSeverity = "needs-you" | "failing" | "none";
+export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
+
+export interface InboxItem {
+  title: string;
+  kind: InboxKind;
+  /** Where to act on it, or null when there is no page for it. */
+  link: string | null;
+  /** When it started waiting, ISO. The shell shows the age. */
+  since: string;
+}
+
+export interface InboxApp {
+  namespace: string;
+  name: string;
+  count: number;
+  severity: InboxSeverity;
+  items: InboxItem[];
+}
+
+export interface Inbox {
+  generated: string;
+  /** Items across the apps this caller may read. */
+  count: number;
+  severity: InboxSeverity;
+  apps: InboxApp[];
+}
+
 export interface OpsLive {
   generated: string;
   // Every open job, and every job that ended in the last 24 hours.
@@ -367,6 +439,9 @@ export interface OpsLive {
   // Drivers' writes to canon documents waiting for approval (src/canon.ts), oldest
   // first, at most 50.
   canon_proposals: OpsCanonProposal[];
+  // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
+  // (src/inbox.ts), unrestricted: the Portal is the admin's.
+  inbox: Inbox;
 }
 
 // One pending canon proposal, measured against the document as it is now. stale: the

@@ -121,6 +121,9 @@ export const TABLES = [
   // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
   // record of who proposed and who approved a canon change.
   "canon_proposals",
+  // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
+  // configuration, seeded by its migration, so a restore empties it before importing.
+  "shared_packages",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

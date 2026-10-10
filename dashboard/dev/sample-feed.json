@@ -1764,7 +1764,23 @@
         "self_probe": false,
         "revision": 1,
         "updated_at": "2026-09-21 12:00:00",
-        "operator": {"path": "/api/operator", "auth_var": "SAMPLE_B_OPERATOR_TOKEN", "repairs": {"content-drift": "sync_posts", "pages-drift": "sync_pages", "ask-index-drift": "sync_ask"}, "weekly": ["refresh_citations"], "secrets": ["GITHUB_TOKEN", "OPERATOR_TOKEN", "SMOKE_TOKEN"]},
+        "operator": {
+          "path": "/api/operator",
+          "auth_var": "SAMPLE_B_OPERATOR_TOKEN",
+          "repairs": {
+            "content-drift": "sync_posts",
+            "pages-drift": "sync_pages",
+            "ask-index-drift": "sync_ask"
+          },
+          "weekly": [
+            "refresh_citations"
+          ],
+          "secrets": [
+            "GITHUB_TOKEN",
+            "OPERATOR_TOKEN",
+            "SMOKE_TOKEN"
+          ]
+        },
         "operator_problem": null
       },
       {
@@ -1896,9 +1912,121 @@
         "stale": false,
         "added": 2,
         "removed": 0,
-        "directive_lines": ["- Agents must call write on core.md after every job."]
+        "directive_lines": [
+          "- Agents must call write on core.md after every job."
+        ]
       }
-    ]
+    ],
+    "inbox": {
+      "generated": "2026-09-28T12:00:00.000Z",
+      "count": 6,
+      "severity": "needs-you",
+      "apps": [
+        {
+          "namespace": "sample",
+          "name": "Sample A",
+          "count": 2,
+          "severity": "needs-you",
+          "items": [
+            {
+              "title": "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]",
+              "kind": "blocked-job",
+              "link": null,
+              "since": "2026-09-18T19:12:00.000Z"
+            },
+            {
+              "title": "Design only: paired comparison for the methods note",
+              "kind": "blocked-job",
+              "link": null,
+              "since": "2026-09-26T09:36:00.000Z"
+            }
+          ]
+        },
+        {
+          "namespace": "sample-b",
+          "name": "Sample B",
+          "count": 2,
+          "severity": "needs-you",
+          "items": [
+            {
+              "title": "Sync the score block onto the open scorer PR",
+              "kind": "blocked-job",
+              "link": null,
+              "since": "2026-09-23T00:00:00.000Z"
+            },
+            {
+              "title": "CI is failing on 1a2b3c4",
+              "kind": "ci",
+              "link": "https://github.com/example-org/sample-b/actions/runs/1",
+              "since": "2026-09-28T10:30:00.000Z"
+            }
+          ]
+        },
+        {
+          "namespace": "sample-c",
+          "name": "Sample C",
+          "count": 1,
+          "severity": "needs-you",
+          "items": [
+            {
+              "title": "PR #32 waits for the seat: auto-merge",
+              "kind": "pr",
+              "link": "https://github.com/example-org/sample-c/pull/32",
+              "since": "2026-09-23T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "namespace": "sample-d",
+          "name": "Sample D",
+          "count": 0,
+          "severity": "none",
+          "items": []
+        },
+        {
+          "namespace": "sample-docs",
+          "name": "sample-docs",
+          "count": 0,
+          "severity": "none",
+          "items": []
+        },
+        {
+          "namespace": "sample-e",
+          "name": "Sample E",
+          "count": 0,
+          "severity": "none",
+          "items": []
+        },
+        {
+          "namespace": "sample-f",
+          "name": "Sample F",
+          "count": 1,
+          "severity": "failing",
+          "items": [
+            {
+              "title": "Sample F is down (Root answered 522 on the last 3 passes)",
+              "kind": "site-down",
+              "link": "https://sample-f.example.com",
+              "since": "2026-09-28T11:47:04.021Z"
+            }
+          ]
+        },
+        {
+          "namespace": "sample-g",
+          "name": "Sample G",
+          "count": 0,
+          "severity": "none",
+          "items": []
+        },
+        {
+          "namespace": "sample-h",
+          "name": "Sample H",
+          "count": 0,
+          "severity": "none",
+          "items": []
+        }
+      ]
+    }
   },
   "refresh_allowed_at": null,
   "scheduled": {
@@ -2051,5 +2179,8 @@
   },
   "cloudflare_configured": true,
   "csrf": "sample-csrf-0000000000000000",
-  "user": { "name": "Sample Person", "initials": "SP" }
+  "user": {
+    "name": "Sample Person",
+    "initials": "SP"
+  }
 }

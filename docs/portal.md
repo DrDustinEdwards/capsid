@@ -19,16 +19,24 @@ Every other control opens a dialog that previews what will change and the audit 
 
 **Warnings and failures stay until dismissed** (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 3). The message region at the foot of the screen holds a stack, newest first. A plain result is replaced by the next one. A result carrying a warning (an audit row naming you was not written, from a control, an Undo or a Refresh's `X-Capsid-Warning` header), an Undo that failed, and a failure (a Refresh, with the Worker's own reason; a copy; a sign out) each stay, whatever happens after them, until their own Dismiss. The missing audit row is the one fact Activity cannot show later, because the missing row is the failure. Only plain confirmations (Copied, the theme, a Refresh that worked or is rate limited) go to the toast that clears itself. For a blocked job the drawer also shows the command and the resume call, with Copy buttons. The command is shown only when its signature matches what the holder's block wrote; a changed one is withheld with a warning, and one written before blocks were signed is shown with an "Unsigned" note under it (`command_signature` in the feed, `src/job-signing.ts`).
 
+## Needs you, the home
+
+**Needs you** is the home page (`/portal/`), the answer to "what do I have to decide" (docs/design/design-portal-evaluation.md, DECIDE 1, ruled 2026-10-09). It holds, in order:
+- **By app**, what needs Dustin per app, from the same gatherer `GET /ops/inbox` answers with (src/inbox.ts, carried in the feed as `live.inbox`): one block per app with something waiting, the apps that need a person first, then the ones with only a machine fault (failing CI, a site down). Each item shows its kind, its title (a link when it has one), and how long it has waited. One line under them names the quiet apps. Empty is "Nothing needs you." The rail's Needs you count is the inbox's count, the number the admin strip's badge shows;
+- **Needs attention**, the problems only, critical then warnings. Rows of one kind and cause fold into one row that opens in place to its first five, then a link to the full view: "4 pull requests await the seat", "30 jobs are waiting on you". A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings";
+- one **Notices** row at the foot of that list, closed, for facts with nothing to do now: a site with no Cloudflare data, the Cloudflare read not configured, a check that could not run, CI that could not be read, site map drift, drivers silent for over 7 days. "Health not read" and "mirror not read" stay warnings, because an unknown backup is not a quiet fact.
+
+Browser tests: dashboard/e2e/needs.spec.ts, and the attention list's in dashboard/e2e/overview.spec.ts.
+
 ## The Overview
 
-The Overview answers one question: does anything need me? It holds, in order:
+The Overview (`/portal/overview`) is the glance at the system. It holds, in order:
 - six summary tiles, each a link to its view;
-- **Needs attention**, the problems only, critical then warnings. Rows of one kind and cause fold into one row that opens in place to its first five, then a link to the full view: "4 pull requests await the seat", "30 jobs are waiting on you". A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings";
-- one **Notices** row at the foot of that list, closed, for facts with nothing to do now: a site with no Cloudflare data, the Cloudflare read not configured, a check that could not run, CI that could not be read, site map drift, drivers silent for over 7 days. "Health not read" and "mirror not read" stay warnings, because an unknown backup is not a quiet fact;
+- the daily maintenance pass's list;
 - **Sites**, one row per site (status, 7-day uptime, live deploy, errors); every column is in the Sites view;
 - **Deploys and downtime, 7 days**.
 
-It has no Queue or Incidents panel: their counts are tiles and their problems are rows. With no site configured there is no site tile, Sites table or timeline. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. Stale jobs appear in one place, the Stale jobs panel: the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
+Its rail count is the number of critical problems on Needs you, until the Health page takes it (design-portal-evaluation.md section 2). It has no Queue or Incidents panel: their counts are tiles and their problems are rows. With no site configured there is no site tile, Sites table or timeline. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. Stale jobs appear in one place, the Stale jobs panel: the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
 
 A view with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Deploys in a short window, the Queue with a long list). The Overview is short enough to do without it.
 
@@ -77,6 +85,7 @@ Five views read more when they open, and not on every poll:
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`. A row opens a drawer that reads that one row (`?id=`) and shows what it recorded: the reason typed with the change, a field-by-field before and after where the row carries both (the old value struck through above the new), and the row's other fields by name. The Worker turns the params into named fields (`src/audit-detail.ts`) and never sends them raw: a hash, a signature, a token or a nested value is counted as not shown and stays in the audit log.
 - **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
+- **Shared code** reads `GET /portal/api/shared-code` when it opens (below).
 
 ## Scheduled tasks
 
@@ -104,6 +113,12 @@ A pass costs up to nine requests per package. No rate limit is published for npm
 **Exact times** in a panel or a detail field are shown in the viewer's own time zone with UTC beside it, in a `<time>` element, and need no hover. Rows keep relative times.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
+
+## Shared code
+
+How far the centralization has got (job_584b4e7f2824; ruling capsid/rulings/shared-homes-2026-10-06.md). One panel per shared package in configuration, the `shared_packages` table (`migrations/0036_shared_packages.sql`, seeded with Capsomer, site-api, d1-dump, Prelum, site-runtime and devkit, each with its repo's earlier names and the known local copies it replaces). Each panel shows the package's newest release tag, every app that pins it with the tag and how many releases behind it is ("Current", "2 releases behind", "Unpinned" for a branch or a bare preset), whether it is pinned through the repo's old name, and each known local copy as still there or removed.
+
+`src/shared-code.ts` reads it through the GitHub App the watcher uses. The apps are the configured sites' namespaces (ops_sites), each on its default branch: one recursive tree, every `package.json` outside `node_modules` (at most eight), the lockfile only for a git dependency with no tag, and the Renovate config for presets (devkit). Every shared package is a git dependency, so the tag is in the manifest. The tags come from each package repo's `/tags`. The answer is cached in KV for an hour (`portal:shared-code:v1`), and the page says how many apps it read and which it could not. With no table yet it says the migration is the seat's to apply; with no row it says none is configured. Nothing on the page changes anything. The Packages view (npm statistics) is unchanged. Tests: test/shared-code.test.ts, test-integration/shared-code.test.ts, dashboard/e2e/shared.spec.ts.
 
 ## Claims
 
@@ -181,10 +196,10 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 ## Using it
 
-- **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Overview, Queue, Incidents, Sites (none when no site is configured) and More, which lists every other view with its count, Settings among them.
+- **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Incidents, Sites (none when no site is configured) and More, which lists every other view with its count, Settings among them.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Namespaces and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
-  - `g` then a letter goes to a view: `o` overview, `s` sites, `p` packages, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
+  - `g` then a letter goes to a view: `y` Needs you, `o` overview, `s` sites, `p` packages, `x` shared code, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
   - `f` goes to the Queue's text filter. A namespace filter belongs to its view and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
   - `r` refreshes and `t` switches light and dark. The top bar's theme button is named "Dark theme" and is pressed while dark is in effect. **Settings, Display** chooses System, Light or Dark: System removes the saved choice (localStorage `wf-theme`), so the device's setting applies.

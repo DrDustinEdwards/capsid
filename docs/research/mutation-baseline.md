@@ -22,7 +22,7 @@ Run: mutation-baseline run 38015797140, dispatched from the #313 branch (merged 
 - **The unit between tests is the test file.** Stryker's tap runner runs each `test/*.test.ts` file as one unit and records which files killed a mutant. It does not separate the cases inside a file, so the kill matrix below is per file. A file that is a candidate may still hold cases that matter; a file that is needed may hold cases that do not.
 - **Timeouts have no killer.** 901 mutants ended as timeouts. Stryker records them as detected but names no test, so they are in the score and not in the matrix.
 - **Ten test files are outside the run.** They read source text, which Stryker's instrumentation rewrites. They still run in CI on every PR. They are listed below as always kept. Any mutant that only they would kill shows here as survived or uncovered, so the score is a floor for the suite and the matrix understates those files' share.
-- **Four source files have no mutants.** `src/access-jwt.ts` is left out because Stryker 10's Babel parser rejects it (line 68, a typed async arrow as a computed object key). `src/env.ts`, `src/github.ts` and `src/ops-types.ts` hold only type declarations and re-exports, so there is nothing to mutate. The score says nothing about `access-jwt.ts`, which is security code.
+- **Four source files have no mutants in the 10.0.0 baseline.** `src/access-jwt.ts` is left out because Stryker 10's Babel parser rejects it; it is measured separately under Stryker 9.6.1 in the last section of this report. `src/env.ts`, `src/github.ts` and `src/ops-types.ts` hold only type declarations and re-exports, so there is nothing to mutate.
 - **Integration and browser suites are not measured.** The integration suite runs in workerd, which Stryker's runners cannot drive. Those tests are kept under the ruling.
 - **No type checker ran.** Mutants that do not type-check were not filtered out ahead of time, so some survivors may be mutants no valid program could contain.
 
@@ -378,6 +378,108 @@ These ten files read source text, were left out of the mutation run, and are kep
 - test/source-conventions.test.ts
 - test/tool-annotations.test.ts
 
+## scripts/ and dashboard/ (step 2)
+
+The baseline above mutates `src/` only. Step 2 measures the other code the unit suite tests, so the 25 test files that the baseline could not judge (the 22 in group A plus `freshness`, `schedule-drivers` and `job-touches-migration`) can be sorted on evidence.
+
+**How it was run.** The workflow gained a `scope` input (`scripts-dashboard` mutates `scripts/*.mjs` and `dashboard/src/lib`), `only` and `tests` inputs for targeted passes, and a `runner` input. A final `merge` job merges the shard reports and pushes them to a branch, `results/mutation-<run id>`, with the repo's own token, so results are read with git and need no artifact download. Each branch holds `mutation.json`, `summary.json`, `kill-matrix.csv` and `per-test.csv`. Ten test files read a script as text and fail the dry run once scripts are instrumented; they are left out of this scope in `stryker-excluded-tests-scripts.txt` and stay in CI.
+
+| Pass | Run | Results branch | What it measures |
+|---|---|---|---|
+| scripts-dashboard, tap runner | 38030697681 | `results/mutation-38030697681` | 7,091 mutants, complete |
+| canary, tap runner (canary-lib, bindings) | 38031386578 | `results/mutation-38031386578` | 141 mutants, complete |
+| dry-run-config, command runner | 38031583380 | `results/mutation-38031583380` | 50 mutants, complete |
+| improve-environment-signal, command runner | 38031584976 | `results/mutation-38031584976` | 732 mutants, complete |
+| secondary-recompute, command runner | 38031586247 | `results/mutation-38031586247` | 732 mutants, complete |
+| verify-live-no-answer, command runner | 38031587570 | `results/mutation-38031587570` | 743 mutants, complete |
+
+**Why a second runner.** Stryker's tap runner always reports coverage, and Stryker then runs only the mutants a test was seen to cover. A test that runs a script as a child process is never seen to cover it, so those mutants stay "no coverage" and are never run, whatever `coverageAnalysis` says. A first coverage-off pass (run 38030699202) showed this: 1,295 of 1,525 mutants uncovered. Its results are not used. The `command` runner runs one test file for every mutant with no coverage planning, and a non-zero exit kills the mutant. It is used for the four tests that spawn a script, one pass per (test, script) pair, and a kill from such a pass is credited to that one test.
+
+### Score
+
+Over the 35 files of `scripts/*.mjs` and `dashboard/src/lib`, with the passes combined mutant by mutant: 7,091 mutants, 3,026 killed, 18 timed out, 1,857 survived, 2,155 with no covering test, 35 runtime errors (left out). Score **43.1%**, or 62.1% on covered code. Same Stryker (10.0.0) as the baseline, and not comparable to the 56.5% for `src/`: 769 of the mutants are in eight files that no included unit test runs in-process (`api.ts`, `apps.ts`, `base.ts`, `prefs.ts`, `ci-config.mjs`, `deploy.mjs`, `test-budget.mjs`, `improve-derive-key.mjs`), and several scripts are mostly uncovered because their own test is one of the ten left out for reading the script as text (`schedule-drivers.mjs`, `admin-exposure-check.mjs`, `improve-derive-key.mjs`, `deploy.mjs`). For those files the low score is a limit of this measurement, not evidence that they are untested.
+
+| Source file | Mutants | Killed | Timeout | Survived | No coverage | Error | Score |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dashboard/src/lib/api.ts | 315 | 0 | 0 | 0 | 315 | 0 | 0.0% |
+| dashboard/src/lib/apps.ts | 16 | 0 | 0 | 0 | 16 | 0 | 0.0% |
+| dashboard/src/lib/base.ts | 14 | 0 | 0 | 0 | 14 | 0 | 0.0% |
+| dashboard/src/lib/derive.ts | 967 | 252 | 0 | 375 | 340 | 0 | 26.1% |
+| dashboard/src/lib/format.ts | 163 | 69 | 0 | 33 | 55 | 6 | 43.9% |
+| dashboard/src/lib/messages.ts | 13 | 13 | 0 | 0 | 0 | 0 | 100.0% |
+| dashboard/src/lib/prefs.ts | 99 | 0 | 0 | 0 | 99 | 0 | 0.0% |
+| dashboard/src/lib/stops.ts | 57 | 41 | 0 | 10 | 6 | 0 | 71.9% |
+| dashboard/src/lib/store.ts | 22 | 21 | 0 | 1 | 0 | 0 | 95.5% |
+| scripts/access-redirect-lib.mjs | 69 | 58 | 0 | 11 | 0 | 0 | 84.1% |
+| scripts/admin-exposure-check.mjs | 83 | 0 | 0 | 9 | 71 | 3 | 0.0% |
+| scripts/bindings.mjs | 28 | 5 | 0 | 23 | 0 | 0 | 17.9% |
+| scripts/canary-lib.mjs | 113 | 79 | 0 | 19 | 15 | 0 | 69.9% |
+| scripts/capsid-rpc.mjs | 78 | 58 | 0 | 17 | 3 | 0 | 74.4% |
+| scripts/check-commit-trailers.mjs | 220 | 124 | 0 | 39 | 57 | 0 | 56.4% |
+| scripts/ci-config.mjs | 170 | 0 | 0 | 0 | 170 | 0 | 0.0% |
+| scripts/cimd-probe-lib.mjs | 72 | 63 | 0 | 8 | 1 | 0 | 87.5% |
+| scripts/deploy.mjs | 86 | 0 | 0 | 0 | 86 | 0 | 0.0% |
+| scripts/dry-run-config.mjs | 50 | 35 | 0 | 15 | 0 | 0 | 70.0% |
+| scripts/dump-invariants.mjs | 309 | 192 | 0 | 74 | 39 | 4 | 63.0% |
+| scripts/export-claims.mjs | 354 | 262 | 4 | 65 | 20 | 3 | 75.8% |
+| scripts/freshness-lib.mjs | 92 | 73 | 0 | 19 | 0 | 0 | 79.3% |
+| scripts/improve-derive-key.mjs | 56 | 0 | 0 | 0 | 56 | 0 | 0.0% |
+| scripts/improve-report.mjs | 732 | 412 | 0 | 320 | 0 | 0 | 56.3% |
+| scripts/lease-keepalive.mjs | 166 | 97 | 6 | 46 | 17 | 0 | 62.0% |
+| scripts/mint-agents.mjs | 401 | 263 | 0 | 69 | 66 | 3 | 66.1% |
+| scripts/no-bloat-report.mjs | 139 | 6 | 0 | 10 | 122 | 1 | 4.3% |
+| scripts/overnight-guard.mjs | 261 | 212 | 3 | 40 | 6 | 0 | 82.4% |
+| scripts/path-guard.mjs | 139 | 22 | 0 | 7 | 105 | 5 | 16.4% |
+| scripts/rollback-guard.mjs | 121 | 66 | 0 | 19 | 32 | 4 | 56.4% |
+| scripts/schedule-drivers.mjs | 467 | 3 | 0 | 74 | 387 | 3 | 0.6% |
+| scripts/sql-statements.mjs | 122 | 57 | 0 | 57 | 8 | 0 | 46.7% |
+| scripts/sync-scorer.mjs | 341 | 197 | 0 | 105 | 36 | 3 | 58.3% |
+| scripts/test-budget.mjs | 13 | 0 | 0 | 0 | 13 | 0 | 0.0% |
+| scripts/verify-live.mjs | 743 | 346 | 5 | 392 | 0 | 0 | 47.2% |
+
+### The 25 tests, sorted
+
+**(a)** tests of code in `scripts/` or `dashboard/` (17). **(b)** tests that check files: workflows, docs, config, migration SQL, source text, or a manifest (8). **Every (b) test is kept.** An (a) test is judged on the mutants it kills in this scope. Kills are distinct mutants; "only" counts those no other test kills. "Covers" is the tap runner's coverage, so it is 0 for tests measured by the command runner.
+
+| Class | Test file | Measured by | Killed | Only | Covers | Verdict |
+|---|---|---|---:|---:|---:|---|
+| (a) scripts | test/canary.test.ts | tap, canary pass | 79 | 79 | 120 | needed (+79 mutants no kept test kills) |
+| (a) scripts | test/capsid-rpc.test.ts | tap pass | 52 | 20 | 73 | needed (+20 mutants no kept test kills) |
+| (a) scripts | test/cimd-probe.test.ts | tap pass | 63 | 63 | 71 | needed (+63 mutants no kept test kills) |
+| (a) scripts | test/dry-run-config.test.ts | command pass | 35 | 35 | 0 | needed (+35 mutants no kept test kills) |
+| (a) scripts | test/dump-invariants.test.ts | tap pass | 192 | 192 | 270 | needed (+192 mutants no kept test kills) |
+| (a) scripts | test/export-claims.test.ts | tap pass | 298 | 265 | 399 | needed (+298 mutants no kept test kills) |
+| (a) scripts | test/freshness.test.ts | tap pass | 73 | 73 | 92 | needed (+73 mutants no kept test kills) |
+| (a) scripts | test/improve-environment-signal.test.ts | tap and command pass | 76 | 30 | 145 | needed (+30 mutants no kept test kills) |
+| (a) scripts | test/lease-keepalive.test.ts | tap pass | 130 | 97 | 214 | needed (+99 mutants no kept test kills) |
+| (a) scripts | test/no-bloat-report.test.ts | tap pass | 6 | 6 | 17 | needed (+6 mutants no kept test kills) |
+| (a) scripts | test/schedule-drivers.test.ts | not measurable | 0 | 0 | 0 | not measurable, kept |
+| (a) scripts | test/secondary-recompute.test.ts | tap and command pass | 206 | 157 | 201 | needed (+170 mutants no kept test kills) |
+| (a) scripts | test/verify-live-no-answer.test.ts | command pass | 346 | 346 | 24 | needed (+346 mutants no kept test kills) |
+| (a) dashboard | test/portal-attention.test.ts | tap pass | 261 | 237 | 708 | needed (+241 mutants no kept test kills) |
+| (a) dashboard | test/portal-messages.test.ts | tap pass | 13 | 13 | 13 | needed (+13 mutants no kept test kills) |
+| (a) dashboard | test/portal-stops.test.ts | tap pass | 41 | 41 | 51 | needed (+41 mutants no kept test kills) |
+| (a) dashboard | test/portal-time.test.ts | tap pass | 36 | 32 | 50 | needed (+32 mutants no kept test kills) |
+| (b) files | test/dead-exports.test.ts | not a mutation target (asserts that src/ exports what the holdout import manifest names; its 17 mutant kills are the manifest parser's, all shared with other tests) | | | | kept (file check) |
+| (b) files | test/code-cleanup.test.ts | not a mutation target (tests the source-walk helper in test/ against a fixture tree) | | | | kept (file check) |
+| (b) files | test/env-types.test.ts | not a mutation target (worker-configuration.d.ts against wrangler.jsonc.example) | | | | kept (file check) |
+| (b) files | test/integration-layer.test.ts | not a mutation target (the integration suite is typed and in ci.yml) | | | | kept (file check) |
+| (b) files | test/job-touches-migration.test.ts | not a mutation target (runs migration SQL over planted rows in SQLite) | | | | kept (file check) |
+| (b) files | test/log-events.test.ts | not a mutation target (scans src/ text for bare console calls) | | | | kept (file check) |
+| (b) files | test/prose.test.ts | not a mutation target (README and docs/ for writing rules) | | | | kept (file check) |
+| (b) files | test/public-docs.test.ts | not a mutation target (docs/ for secrets and infrastructure identifiers) | | | | kept (file check) |
+
+**Not measurable:** `schedule-drivers` reads scripts/schedule-drivers.mjs and scripts/capsid-rpc.mjs, the code it tests, as text, so instrumenting them fails it; it cannot be run against its own subject.
+
+
+### Proposals for the seat
+
+Nothing is deleted by this report or its PR. The (a) tests that the evidence marks as candidates, under the same keep rules as the baseline (file-name pattern for security, permission and scope; text and commit signals for fixed bugs) and a joint cover so that removing all of them together still leaves every killed mutant with a kept killer:
+
+**None.** Every (a) test that could be measured kills at least one mutant that no other test kills, so the evidence does not support deleting any of them. Together with the (b) tests, which are file checks and all kept, step 2 proposes no deletion.
+
+Two caveats apply to any proposal: the unit is the test file, and a test that guards a script's behavior can matter even when another test also kills its mutants, so each candidate needs a look before a PR.
+
 ## Removal candidates
 
 Rule from the plan: a file is a candidate when every mutant it kills is also killed by a file that stays, or when it kills no mutant. Redundancy is computed jointly, so removing all candidates together still leaves every killed mutant killed. Method: the files protected by a keep rule form the starting set; the rest are added greedily, most new kills first, until every killed mutant has a killer; files never added are the candidates.
@@ -392,7 +494,7 @@ Files with a keep rule: 77 of 179. Added by the cover step because they are the 
 
 ### A. Kill no mutant and run no mutated code (22)
 
-These guard scripts, workflows, docs or config rather than `src/`, so a src mutation run cannot judge them. The plan's rule lists them as candidates; the seat should read them as not measured by this run.
+These test scripts, workflows, docs, config or the Portal's `dashboard/` code rather than `src/`, and only `src/` was mutated, so the baseline run cannot judge them. The plan's rule lists them as candidates because they kill nothing in `src/`; read them as not measured, not as dead. Step 2 above sorted them and measured the ones that test `scripts/` or `dashboard/` code: none is a deletion candidate on that evidence, and the rest are file checks, all kept.
 
 - test/canary.test.ts
 - test/capsid-rpc.test.ts
@@ -417,15 +519,17 @@ These guard scripts, workflows, docs or config rather than `src/`, so a src muta
 - test/secondary-recompute.test.ts
 - test/verify-live-no-answer.test.ts
 
-### B. Kill no mutant but run mutated code (3)
+### B. Kill no mutant in `src/` but import from it (3)
 
-Their assertions did not catch any mutation in the code they run. These are the clearest weak-oracle candidates.
+This group was first labelled the clearest weak-oracle candidates. That label was wrong. The three files import constants from `src/`, which is why they "run mutated code", but what they test is elsewhere: `freshness` and `schedule-drivers` test code in `scripts/`, and `job-touches-migration` runs migration SQL. A run that mutates `src/` cannot judge any of them. All three are kept; the reasons are in the section after the candidate groups.
 
 - test/freshness.test.ts (covers 4 mutants)
 - test/job-touches-migration.test.ts (covers 7 mutants)
 - test/schedule-drivers.test.ts (covers 355 mutants)
 
 ### C. Kill mutants, all of which a kept file also kills (1)
+
+`skills-credit` is redundant by the numbers and is kept because it is a fixed-bug test, which the job's keep rules always protect. The file-text signal used above looks for the words bug and regression and missed it; the reason is in the section after the candidate groups.
 
 | Test file | Killed | Covers | Source files hit |
 |---|---:|---:|---:|
@@ -435,10 +539,52 @@ Their assertions did not catch any mutation in the code they run. These are the 
 
 Not protected by a keep rule, but the only or best killer of mutants no other kept file kills, so not candidates: live-checks (+630), auto-merge (+555), maintenance (+466), model-routing (+413), overnight (+411), ops-cloudflare (+405), job-outcomes (+389), ops-otlp (+364), improve-run (+363), job-claims-read (+264), repo-tools (+263), skills-evaluate (+240), ops-feed (+236), job-claims (+225), ops-packages (+203), namespace-delete (+189), ops-hooks (+170), ops-cloudflare-config (+159), agents-tool (+157), stale-jobs (+154), unmapped-repos (+144), improve-scorer (+141), ops-sites (+138), improve-loop-records (+133), jobs (+133), ops-snapshot-tool (+126), search-code (+124), ci-status-jobs (+122), portfolio-docs (+115), skills-lifecycle (+100), skills-register (+98), ops-snapshot (+94), task-runs (+77), provenance (+74), watcher-mirror (+73), portal-app (+71), links (+67), health (+65), improve-control (+54), improve-select (+53), improve-unjudged (+52), prune-branches (+52), brief (+51), portal-activity (+51), watcher-gather (+48), bounded-reads (+47), job-overlaps (+45), limits (+44), skills-records (+43), improve-budget (+38), controls (+35), improve-meta (+35), agents-schema (+32), inbox (+30), improve-caching (+26), normalize (+24), improve-state (+23), jobs-list (+20), improve-driver-lock (+18), job-touches (+17), retry-cap (+16), cache-hints (+14), health-format (+14), manage-pr-sha (+14), portal-store (+12), store-write-edges (+11), agents-status (+8), self-repo-attempt (+7), improve-tools (+6), portal-source (+4), fake-fidelity (+2), log (+2), skills-probe (+2), encoding (+1), lint-description (+1), null-metrics (+1).
 
+## Why none of the four measured candidates is deleted
+
+Dustin decided on 2026-10-10 to delete none of `freshness`, `job-touches-migration`, `schedule-drivers` and `skills-credit`. What reading the files and the step 2 measurements show:
+
+- **`skills-credit`** documents the 2026-09-12 credit ruling and a bug it fixed: a skill the model was offered and declined to use earns neither a win nor a loss, but the loop had charged it a loss through `recordSkillOutcome`. Its test, "A SKILL THE MODEL DECLINED TO USE IS NOT CHARGED A LOSS", exists for that bug, and a test written for a fixed bug is always kept. Its mutant kills are all shared with kept tests, so by the numbers it is redundant; the keep rule decides. The file-text signal missed it because it looks for the words bug and regression, which this file does not use.
+- **`freshness`** tests `scripts/freshness-lib.mjs`, the backup freshness gate of `verify-live`, and not `src/`. In step 2 it kills 73 mutants of that file, and no other test kills any of them.
+- **`schedule-drivers`** (19 tests) tests `scripts/schedule-drivers.mjs`. It reads that script as text, so Stryker cannot run it against its own subject and no mutation number exists for it either way.
+- **`job-touches-migration`** runs migration 0031 over planted rows in SQLite and checks that the rebuild keeps rows, indexes and the append-only triggers. Stryker does not mutate SQL, so this run cannot judge it. It is a file check and is kept under the (b) rule.
+
+The lesson for the grouping above: "kills nothing in `src/`" is a statement about where the mutants were, not about the test.
+
 ## Reading this for step 2
 
-- Only 4 of the 26 candidates are measured candidates (groups B and C). The other 22 are group A, which this run cannot judge. At file level, most files are the only killer of at least one mutant, which is why so few are redundant.
+- None of the 26 candidates in this baseline is proposed for deletion. Group A is not measured by a `src/` run, and step 2 measured it and found no candidate. Group B was mislabelled. Group C is a fixed-bug test that Dustin decided to keep.
 - Candidates are a list for the seat. No file is removed by this report, and step 2 starts only on the seat's say.
 - Because the unit is the file, a pruning plan that wants to drop single cases needs a runner that reports per case. The tap runner does not.
 - Any pruning PR should show this score before and after, as the plan says. The score above is the baseline to beat, 56.5%.
 - The ten excluded files and `access-jwt.ts` are a blind spot of this baseline, not evidence about them.
+
+## src/access-jwt.ts, measured with Stryker 9.6.1
+
+This file is the one that verifies the Access ID token at sign-in. The baseline above leaves it out. This section says why, how it is now measured, and what the score is.
+
+**Why Stryker 10 rejects it.** Stryker 10.0.0 parses TypeScript with Babel 8. Every Babel 8 release tested (8.0.0, 8.0.4, 8.0.6 and the latest, 8.0.7) fails on an `async` arrow function with a return type annotation when it sits in a ternary branch, with "Did not expect a type annotation here". Line 68 of the file has exactly that shape, inside `fetchKeys ? { [customFetch]: async (target: string): Promise<Response> => ... } : {}`. The computed key is not the cause: `c ? async (t: string): R => x : null` fails on its own, and `c ? (t: string): R => x : null` without `async` parses. Babel 7.29.9 parses all of these. One rejected file stops the whole Stryker run before any test, which is why the file had to be left out.
+
+**What was tried.** Stryker 10.0.0 is the latest release, so there is no upstream fix to pick up. Replacing Babel under Stryker 10 with the 7.29 packages parses the file but is not drop-in: Stryker's own code then fails with `traverse is not a function`. Stryker 9.6.1 is built on Babel 7.29 and parses the file, so the workflow takes a `stryker` input (default 10.0.0). With 9.6.1 selected, `src/access-jwt.ts` is mutated. No source file was changed.
+
+**Not comparable to the baseline score.** On the other 155 files of `src/`, Stryker 9.6.1 generates 31,754 mutants and Stryker 10.0.0 generates 31,983, so the two versions do not make the same mutant set (0.7% fewer). This file's score is therefore reported on its own and is not merged into the 56.5% above.
+
+**Result.** 151 mutants: 124 killed, 10 survived, 17 with no covering test. Score **82.1%** (92.5% on covered code). Run with the same unit test selection as the baseline (180 test files, the ten source-reading files left out). `test/access-jwt.test.ts` kills all 124, and `test/portal-login.test.ts` also kills 38 of them.
+
+**Where the gaps are.** Most of the 27 uncovered or surviving mutants are in refusal-reason messages. The rest are a cache constant, an error holder, a message cut and two normalizations of an accepted token (the email and the name). In each refusal branch below the token is refused whether or not the mutant is applied; only the reason text differs.
+
+| Lines | What no test observes |
+|---|---|
+| 71 | A JWKS endpoint that returns no `keys` array: the thrown message is never reached, and removing the check survives. |
+| 100 | The reason text when the token has a bad or missing `kid` and also a wrong `alg`. The wrong `alg` itself is covered by `JOSEAlgNotAllowed` (line 124) and by the test "only RS256 passes", so the token is refused either way. |
+| 131 to 132 | The `default` branch of the claim switch: the message for a claim other than iss, aud, exp or nbf. |
+| 135 | The branch for `JWSInvalid` and `JWTInvalid` errors from the verifier. |
+| 136 | The last fallthrough, `the signature could not be checked`. |
+| 20 | The key cache lifetime (`60 * 60 * 1000`): changing the arithmetic to `60 / 60 * 1000` or `60 * 60 / 1000` goes unnoticed, because no test reads the cache age. |
+| 61 | The initial value of the holder that records a key-fetch error (`{ current: null }` replaced by `{}`). |
+| 86 | The 120-character cut on error text inside `brief`: removing `.slice(0, 120)` survives. |
+| 121 | Forcing the `JWTClaimValidationFailed` check to always be true survives. |
+| 141 | Removing `.trim()` on the email: a token whose email has surrounding spaces is not tested. |
+| 144 | The 80-character cap on the name (`.slice(0, MAX_NAME)`): a longer name is not tested. |
+
+These are measurements for the seat. They are not a request to add tests; the keep rules and the tests themselves are unchanged.
+

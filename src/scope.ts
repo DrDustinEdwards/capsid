@@ -170,6 +170,7 @@ export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
 // instead, because "public" and "authorized some other way" are different claims.
 export const UNGATED_ROUTES: Record<string, string> = {
   "/health": "a liveness probe that returns provenance and store health, never a document",
+  "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
   "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
@@ -204,6 +205,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that improve_status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
+  "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
   "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
   "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",

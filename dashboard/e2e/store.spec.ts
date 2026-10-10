@@ -20,7 +20,7 @@ test("PLANT: from half the cap Backups flags it and Needs attention lists it", a
   await visit(page, "backups");
   await expect(page.locator("[data-store-size]")).toContainText("6 GB of 10 GB (60%)");
   await expect(page.locator("[data-store-size]")).toContainText("over half the cap");
-  await visit(page, "overview");
+  await visit(page, "needs");
   await expect(page.locator("main section.attention").getByText("The D1 store is at 60% of its 10 GB cap")).toBeVisible();
 });
 
