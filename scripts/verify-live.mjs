@@ -26,6 +26,7 @@ import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
 import { PROBE_CLIENT_ID, PROBE_REDIRECT, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
+import { probeMcp } from "./mcp-probe-lib.mjs";
 
 const ORIGIN = (process.argv[2] ?? "https://mcp.dustinedwards.info").replace(/\/$/, "");
 // Overridable because CI's sha gate waits on a rollout that has only just started and
@@ -477,6 +478,54 @@ async function gatePortalHost() {
   record("7 Portal host sends to Access", problems.length === 0, problems.length === 0 ? `${PORTAL_ORIGIN} / and /mcp redirect to Access (not followed)` : problems.join("; "));
 }
 
+// Gate 8: a real MCP call through /ops/mcp, in both protocol eras, with the live-probe
+// agent's read-only key (scripts/mcp-probe-lib.mjs says what is sent and checked). The
+// only gate that reaches the tools, so the only one that sees a deploy whose sign-in
+// works and whose connection does not. A refusal exits 1, and ci.yml rolls the deploy
+// back. Polls, like gate 6, because the first reads after a deploy can still reach the
+// previous version.
+//
+// No key: the gate asserts nothing and says so, as gate 2b does without its token. CI
+// passes CAPSID_LIVE_PROBE_KEY from the repo secret the seat sets (docs/rollback.md).
+async function gateMcpCall() {
+  const key = process.env.CAPSID_LIVE_PROBE_KEY;
+  if (!key) {
+    record("8 MCP call through /ops/mcp", true, "SKIPPED: no CAPSID_LIVE_PROBE_KEY, so no MCP call was made. This run asserts nothing about the connection.");
+    if (process.env.GITHUB_ACTIONS) console.log("::warning::live gate 8 skipped: the CAPSID_LIVE_PROBE_KEY secret is not set, so this deploy's MCP connection was not checked.");
+    return;
+  }
+  const post = async (body, headers) => {
+    const resp = await request(`${ORIGIN}/ops/mcp`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream", "Cache-Control": "no-cache", ...headers },
+      body,
+    });
+    return { status: resp.status, text: resp.text };
+  };
+  let problems = [];
+  let attempt = 0;
+  let lost = null;
+  for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
+    lost = null;
+    try {
+      problems = await probeMcp(post);
+    } catch (err) {
+      lost = noAnswer(err);
+    }
+    if (!lost && problems.length === 0) break;
+    if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
+  }
+  if (lost) {
+    record("8 MCP call through /ops/mcp", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    return;
+  }
+  record(
+    "8 MCP call through /ops/mcp",
+    problems.length === 0,
+    problems.length === 0 ? `polls=${attempt} 2025-11-25 and 2026-07-28: handshake, tools/list, read` : `polls=${attempt} ${problems.join("; ")}`
+  );
+}
+
 const clientId = await (async () => {
   await gateHealth();
   await gateBackupFreshness();
@@ -498,6 +547,7 @@ if (clientId && clientId !== COULD_NOT_RUN) {
 }
 // Independent of the MCP client gates above, so it runs whatever they found.
 await gatePortalHost();
+await gateMcpCall();
 
 // process.exitCode rather than process.exit(): exiting with fetch sockets still closing
 // trips a libuv assertion on Windows and replaces the exit code with 3221226505.

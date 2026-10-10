@@ -168,6 +168,15 @@ test("the site seat is one namespace and one repo, and merges nothing else", () 
   }
 });
 
+test("the live probe reads capsid with the read tool and holds nothing else", () => {
+  const probe = byName("live-probe");
+  assert.deepEqual(probe.namespaces, ["capsid"]);
+  assert.deepEqual(probe.grants, ["read"], "the live gate's key is a CI secret, so it must not write");
+  assert.deepEqual(probe.tools, ["read"]);
+  assert.deepEqual(probe.repos, [], "the probe reads documents, never a repo");
+  assert.equal(probe.flags, undefined);
+});
+
 test("DERIVED: every role names only flags this system has", () => {
   // A flag invented in a mint command does not survive parseScopes, so it would mint
   // an agent that silently holds nothing.
