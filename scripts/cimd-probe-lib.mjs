@@ -2,11 +2,14 @@
 // same reason scripts/canary-lib.mjs and scripts/freshness-lib.mjs exist. verify-live
 // is a program that runs on import.
 //
-// Since design PR 4 of capsid/research/design-capsid-access-login.md the Worker takes
-// clients by Client ID Metadata Document only. The probe client is therefore a fixed
-// document in this public repo, served by GitHub at PROBE_CLIENT_ID, and the gate
-// asserts two things: registration is gone, and the probe document is one the Worker
-// can accept. No client record is written by a run, so nothing is reaped afterwards.
+// The Worker takes Claude, Claude Code and ChatGPT by Client ID Metadata Document, and
+// Grok and Gemini by a tightened Dynamic Client Registration that admits only the
+// connector callbacks it allowlists exactly (src/dcr.ts, capsid/rulings/mcp-2026-10-10.md
+// rule 13). The probe client is therefore a fixed document in this public repo, served
+// by GitHub at PROBE_CLIENT_ID, and the gate asserts three things: CIMD is on, a
+// registration naming the probe's unlisted redirect is refused, and the probe document
+// is one the Worker can accept. The refused registration writes no client record, so
+// nothing is reaped afterwards.
 
 // The probe's client id is the URL of its metadata document, and the document's own
 // client_id must equal it exactly. The file is scripts/verify-live-client.json on
@@ -14,17 +17,21 @@
 export const PROBE_CLIENT_ID = "https://raw.githubusercontent.com/DrDustinEdwards/capsid/master/scripts/verify-live-client.json";
 export const PROBE_REDIRECT = "https://example.com/verify-live-callback";
 
-// The authorization-server metadata and the answer to POST /register. Returns the
-// problem, or null. A registration_endpoint, or a /register that answers 2xx, means DCR
-// is back; a missing CIMD flag means no client can sign in at all.
-export function registrationProblem(metadata, registerStatus) {
+// The authorization-server metadata and the answer to a POST /register naming the
+// probe's redirect, which is on no allowlist. Returns the problem, or null. A 2xx means
+// the allowlist is open; a missing CIMD flag means no Claude client can sign in.
+export function registrationProblem(metadata, origin, registerStatus, registerBody) {
   if (!metadata || typeof metadata !== "object") return "the authorization-server metadata is not a JSON object";
-  if ("registration_endpoint" in metadata) return `the metadata advertises registration_endpoint ${metadata.registration_endpoint}; DCR is meant to be off`;
   if (metadata.client_id_metadata_document_supported !== true) {
     return "the metadata does not advertise client_id_metadata_document_supported, so no client can sign in (is global_fetch_strictly_public set?)";
   }
-  if (registerStatus >= 200 && registerStatus < 300) return `POST /register answered ${registerStatus}; DCR is meant to be off`;
-  if (registerStatus !== 404) return `POST /register answered ${registerStatus}, expected 404`;
+  if (metadata.registration_endpoint !== `${origin}/register`) {
+    return `the metadata advertises registration_endpoint ${JSON.stringify(metadata.registration_endpoint)}, expected ${origin}/register (Grok and Gemini register there)`;
+  }
+  if (registerStatus >= 200 && registerStatus < 300) return `POST /register answered ${registerStatus} for an unlisted redirect; the DCR allowlist is open`;
+  if (registerStatus !== 400) return `POST /register answered ${registerStatus}, expected 400 invalid_redirect_uri`;
+  const error = registerBody && typeof registerBody === "object" ? registerBody.error : undefined;
+  if (error !== "invalid_redirect_uri") return `POST /register refused with ${JSON.stringify(error)}, expected invalid_redirect_uri`;
   return null;
 }
 

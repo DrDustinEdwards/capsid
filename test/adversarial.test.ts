@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { ciStatus } from "../src/github.ts";
 import { verifyTaskDoc } from "../src/improve-task.ts";
 import { buildServer, type ToolGrant } from "../src/server.ts";

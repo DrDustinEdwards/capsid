@@ -1,6 +1,6 @@
 import { setOvernight } from "../overnight";
 import { setSeatStart } from "../seat-start";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, docPath, MAX_BODY, MAX_DOC_STATUS, MAX_TITLE, nsName } from "../limits";

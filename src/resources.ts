@@ -1,10 +1,8 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ErrorCode, ListResourcesRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, ProtocolError, ProtocolErrorCode, ResourceTemplate } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import { checkScope } from "./scope";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { MAX_ROWS } from "./limits";
-import { PRIVATE_LIST } from "./cache-hints";
 
 // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
 // a raw request handler is not a registration, so these handlers check scope here.
@@ -45,12 +43,12 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
       const namespace = String(variables.namespace);
       const path = String(variables.path);
       const refusal = resourceRefusal(agent, namespace);
-      if (refusal) throw new McpError(ErrorCode.InvalidParams, refusal);
+      if (refusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, refusal);
       const row = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ body: string | null }>();
-      if (!row) throw new McpError(ErrorCode.InvalidParams, `not found: ${uri.href}`);
+      if (!row) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `not found: ${uri.href}`);
       return { contents: [{ uri: uri.href, mimeType: "text/markdown", text: row.body ?? "" }] };
     }
   );
@@ -63,12 +61,13 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
   //
   // This overrides McpServer's handler, which is safe only while every resource is
   // served by the one template above. test/bounded-reads.test.ts pins that.
-  server.server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+  server.server.setRequestHandler("resources/list", async (request) => {
     // The grant, before the query.
-    // Every result is filtered to the caller's namespaces, so private (src/cache-hints.ts).
-    if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [], ...PRIVATE_LIST };
+    // Every result is filtered to the caller's namespaces, so its cache hint is private
+    // (src/cache-hints.ts).
+    if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
     if (!agent.scopes.grants.includes("read")) {
-      throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
     }
     const cursor = request.params?.cursor;
     let afterNs = "";
@@ -79,7 +78,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         afterNs = String(parsed.n ?? "");
         afterPath = String(parsed.p ?? "");
       } catch {
-        throw new McpError(ErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
       }
     }
     // Filtered in the query, so the LIMIT bounds what this caller can see rather than
@@ -116,7 +115,6 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         mimeType: "text/markdown",
       })),
       ...(more && last ? { nextCursor: b64urlEncode(JSON.stringify({ n: last.namespace, p: last.path })) } : {}),
-      ...PRIVATE_LIST,
     };
   });
 }

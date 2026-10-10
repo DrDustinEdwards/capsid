@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server";
 import { integrityOf } from "../src/truth-report";
 import { improveStatus } from "../src/improve-run";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // test/truth-report.test.ts proves which statements the handler issues; this proves
 // the document lands in a real D1 and improve_status reads its number back. A fake

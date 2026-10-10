@@ -45,10 +45,12 @@ function healthy(req: IncomingMessage, res: ServerResponse) {
     res.end(JSON.stringify(body));
   };
   if (url.pathname === "/health") return json(200, { status: "ok", sha: SHA, dirty: false, store: { d1: "ok", fts: "ok" } });
-  // CIMD only: no registration, and the probe document served here, at the URL the
-  // script is pointed at through VERIFY_PROBE_CLIENT_ID.
-  if (url.pathname === "/register") return json(404, { error: "not found" });
-  if (url.pathname === "/.well-known/oauth-authorization-server") return json(200, { client_id_metadata_document_supported: true });
+  // CIMD, and tightened DCR that refuses the probe's unlisted redirect, and the probe
+  // document served here, at the URL the script is pointed at through VERIFY_PROBE_CLIENT_ID.
+  if (url.pathname === "/register") return json(400, { error: "invalid_redirect_uri", error_description: "not an allowed redirect URI" });
+  if (url.pathname === "/.well-known/oauth-authorization-server") {
+    return json(200, { client_id_metadata_document_supported: true, registration_endpoint: `http://${req.headers.host}/register` });
+  }
   if (url.pathname === "/probe-client.json") {
     return json(200, { client_id: `http://${req.headers.host}/probe-client.json`, client_name: "probe", redirect_uris: [PROBE_REDIRECT], token_endpoint_auth_method: "none" });
   }
@@ -148,7 +150,7 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
   const { code, out } = await run(healthy, () => true);
   assert.equal(code, 3, out);
   assert.match(out, /NORUN {2}1 health \+ provenance/);
-  assert.match(out, /NORUN {2}2 CIMD only, no registration/);
+  assert.match(out, /NORUN {2}2 CIMD, DCR allowlisted/);
   // The gates that depend on a client id inherit could-not-run rather than failing.
   assert.match(out, /NORUN {2}3 consent form renders/);
   assert.doesNotMatch(out, /FAIL {2}/);
@@ -249,9 +251,9 @@ test("an enforced COOP or a non-html CSP no longer fails gate 6: those arms pinn
   assert.equal(code, 0, out);
 });
 
-// Gate 2 since registration was removed: the script wiring, beside the decisions in
+// Gate 2 with tightened DCR: the script wiring, beside the decisions in
 // test/cimd-probe.test.ts.
-test("gate 2 refuses a Worker that still registers clients", async () => {
+test("gate 2 refuses a Worker that registers an unlisted redirect", async () => {
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.url !== "/register") return false;
@@ -262,7 +264,7 @@ test("gate 2 refuses a Worker that still registers clients", async () => {
     () => false
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}2 CIMD only, no registration\n.*answered 201; DCR is meant to be off/);
+  assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*answered 201 for an unlisted redirect; the DCR allowlist is open/);
 });
 
 test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 5 do not run on it", async () => {
@@ -276,7 +278,7 @@ test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 
     () => false
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}2 CIMD only, no registration\n.*not its own URL/);
+  assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*not its own URL/);
   assert.match(out, /FAIL {2}3 consent form renders\n.*skipped: no probe client from gate 2/);
 });
 
@@ -291,7 +293,7 @@ test("a probe document GitHub does not serve is could-not-run, not a refusal", a
     () => false
   );
   assert.equal(code, 3, out);
-  assert.match(out, /NORUN {2}2 CIMD only, no registration\n.*answered 404/);
+  assert.match(out, /NORUN {2}2 CIMD, DCR allowlisted\n.*answered 404/);
   assert.match(out, /NORUN {2}3 consent form renders/);
 });
 

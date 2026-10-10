@@ -1,7 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type { Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { MERGE_RESUME_ACTOR } from "../src/jobs-seat";

@@ -34,8 +34,7 @@ import {
 } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { buildServer } from "../src/server.ts";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // Every route goes through the one enforcement point, or says why it does not. A
 // route that checks only the write grant lets a driver minted for one namespace act

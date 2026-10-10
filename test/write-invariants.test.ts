@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
 
@@ -625,7 +623,7 @@ async function connectEliciting(opts: FakeOptions = {}, answer: "accept" | "decl
   // Counted, because a test that silently fell back to the unsupported path would assert
   // nothing: it would be refused with "confirmation required" and never reach the guard.
   const prompts: string[] = [];
-  client.setRequestHandler(ElicitRequestSchema, async (request) => {
+  client.setRequestHandler("elicitation/create", async (request) => {
     prompts.push(String(request.params.message));
     return answer === "accept" ? { action: "accept", content: { confirm: true } } : { action: "decline" };
   });

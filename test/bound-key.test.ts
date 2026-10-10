@@ -5,8 +5,7 @@ import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { resolveAgent, type Agent } from "../src/agents.ts";
 import { checkScope, guardRegistrations } from "../src/scope.ts";
 import { buildServer } from "../src/server.ts";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // capsid/research/design-seat-session-hardening.md, section 2b. A runner key is bound

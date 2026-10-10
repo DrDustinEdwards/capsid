@@ -4,8 +4,7 @@ import { LINT_DESCRIPTION } from "../src/tools/lint.ts";
 import { buildTruthReport } from "../src/truth-report.ts";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The lint tool description is checked against the report, not a retyped list: the

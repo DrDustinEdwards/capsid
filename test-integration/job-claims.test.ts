@@ -3,8 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failAsCaller, failJob, postJob } from "../src/jobs";
 import { legacyAgent } from "../src/agents";
 import { buildServer } from "../src/server";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // Claims apart from verified outcomes, against a real D1 (migrations/0023). What the
 // agent said lands in job_claims in the transition's own batch, before GitHub is read,

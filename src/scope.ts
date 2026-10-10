@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
@@ -190,6 +190,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
+  "/register":
+    "tightened Dynamic Client Registration for Grok and Gemini (src/dcr.ts): rate limited per caller and failing closed, a 16KB body cap, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
   "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
   "/portal/api/ops": "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
   "/portal/api/ops/refresh":

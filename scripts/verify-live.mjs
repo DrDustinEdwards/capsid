@@ -15,7 +15,7 @@
 //      rendering a form. This script sends no capsid_approved cookie, and gate 3
 //      asserts the consent FORM renders. A 302 at gate 3 means the fast path was hit
 //      and the run is VOID. The probe client is a fixed metadata document
-//      (scripts/cimd-probe-lib.mjs) since registration was removed; the fast path is
+//      (scripts/cimd-probe-lib.mjs), never a registered one; the fast path is
 //      keyed on the cookie, not on the client being new.
 //
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
@@ -142,45 +142,46 @@ async function gateHealth() {
 // can serve the document from its stub; CI never sets it.
 const PROBE_CLIENT = process.env.VERIFY_PROBE_CLIENT_ID ?? PROBE_CLIENT_ID;
 
-// Gate 2: CIMD only, no registration (scripts/cimd-probe-lib.mjs says what is checked).
+// Gate 2: CIMD, and tightened DCR refusing an unlisted redirect (scripts/cimd-probe-lib.mjs
+// says what is checked).
 // Returns the probe client id when gates 3 to 5 can use it, or null.
 //
 // The probe document is fetched from GitHub, not from the Worker. If GitHub does not
 // serve it, the Worker cannot resolve the client either, and that says nothing about
 // this deploy, so it is could-not-run. A document that is served and wrong is a fail.
-async function gateCimdOnly() {
+async function gateCimdAndDcr() {
   let metadata;
   let register;
   try {
     metadata = await request(`${ORIGIN}/.well-known/oauth-authorization-server`, { headers: { "Cache-Control": "no-cache" } });
-    // Safe to retry: with registration off, nothing is written.
+    // Safe to retry: the probe's redirect is on no allowlist, so nothing is written.
     register = await request(`${ORIGIN}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_name: "capsid verify-live probe", redirect_uris: [PROBE_REDIRECT], token_endpoint_auth_method: "none" }),
     });
   } catch (err) {
-    record("2 CIMD only, no registration", COULD_NOT_RUN, noAnswer(err).message);
+    record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, noAnswer(err).message);
     return null;
   }
-  const refused = registrationProblem(parseJson(metadata.text), register.status);
+  const refused = registrationProblem(parseJson(metadata.text), ORIGIN, register.status, parseJson(register.text));
   if (refused) {
-    record("2 CIMD only, no registration", false, `register=${register.status}: ${refused}`);
+    record("2 CIMD, DCR allowlisted", false, `register=${register.status}: ${refused}`);
     return null;
   }
   let doc;
   try {
     doc = await request(PROBE_CLIENT, { headers: { Accept: "application/json" } });
   } catch (err) {
-    record("2 CIMD only, no registration", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
+    record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
     return COULD_NOT_RUN;
   }
   if (!doc.ok) {
-    record("2 CIMD only, no registration", COULD_NOT_RUN, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
+    record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
     return COULD_NOT_RUN;
   }
   const bad = probeDocumentProblem(parseJson(doc.text), PROBE_CLIENT, PROBE_REDIRECT);
-  record("2 CIMD only, no registration", bad === null, `register=${register.status} probe=${PROBE_CLIENT}${bad ? `: ${bad}` : ""}`);
+  record("2 CIMD, DCR allowlisted", bad === null, `register=${register.status} probe=${PROBE_CLIENT}${bad ? `: ${bad}` : ""}`);
   return bad === null ? PROBE_CLIENT : null;
 }
 
@@ -480,7 +481,7 @@ const clientId = await (async () => {
   await gateHealth();
   await gateBackupFreshness();
   await gateCanary();
-  return gateCimdOnly();
+  return gateCimdAndDcr();
 })();
 
 // Whether a skipped gate is a refusal or could-not-run follows the gate it depends on.
@@ -493,7 +494,7 @@ if (clientId && clientId !== COULD_NOT_RUN) {
   if (form && form !== COULD_NOT_RUN) await gateAccessRedirect(clientId, form);
   else record("5 approve redirects to Access", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
 } else {
-  record("3 consent form renders", upstream("2 CIMD only, no registration"), "skipped: no probe client from gate 2");
+  record("3 consent form renders", upstream("2 CIMD, DCR allowlisted"), "skipped: no probe client from gate 2");
 }
 // Independent of the MCP client gates above, so it runs whatever they found.
 await gatePortalHost();

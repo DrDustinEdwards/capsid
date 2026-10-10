@@ -222,8 +222,8 @@ test("without the new arguments the output is unchanged: no jobs, job or step fi
 // Through the tool, not ciStatus: the log gate is the registration's own scope check
 // (src/tools/repo.ts), and a test that passes logTail itself cannot see it move.
 async function callCiStatus(grants: Array<"read" | "write">, args: Record<string, unknown>) {
-  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { Client } = await import("@modelcontextprotocol/client");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/client");
   const { buildServer } = await import("../src/server.ts");
   const { defaultScopes } = await import("../src/agents-schema.ts");
   const scopes = defaultScopes(["ns"]);

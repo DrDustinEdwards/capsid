@@ -8,8 +8,7 @@ import { OIDC_ISSUER, exchangeRunnerKey } from "../src/runner-key";
 import { opsLive } from "../src/ops-feed";
 import { SEAT_START_CAP_KEY, SEAT_START_KEY, setSeatStart, startSeatSession } from "../src/seat-start";
 import { buildServer } from "../src/server";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // /ops/runner-key against real D1, with GitHub's OIDC key set and REST API stubbed at
 // fetch and a real RSA key signing the token (capsid/research/design-seat-session-

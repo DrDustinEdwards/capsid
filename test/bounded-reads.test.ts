@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { GATHER_BUDGET, MAX_ROWS, SEARCH_ROWS } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options, type Recorded } from "./fakes.ts";
@@ -216,7 +215,8 @@ test("a gather that fits is not trimmed at all", async () => {
 
 test("resources/list is bounded, and hands back a cursor to the rest", async () => {
   const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 7) });
-  const first = await client.listResources();
+  // An explicit cursor asks the v2 client for one page; without one it walks every page.
+  const first = await client.listResources({ cursor: "" });
   assert.equal(first.resources.length, MAX_ROWS, "the resource listing is unbounded");
   assert.ok(first.nextCursor, "the listing was capped with no way to reach the rest");
   assert.equal(limitBoundTo(reads, /SELECT namespace, path, title FROM documents/), MAX_ROWS + 1);
@@ -241,7 +241,8 @@ test("resources/list paginates across namespaces without skipping a boundary", a
   const { client, close } = await connect({
     documents: [...docs(MAX_ROWS - 1, "ns"), ...docs(4, "ns-a")],
   });
-  const first = await client.listResources();
+  // An explicit cursor asks the v2 client for one page; without one it walks every page.
+  const first = await client.listResources({ cursor: "" });
   const second = await client.listResources({ cursor: first.nextCursor });
   await close();
   const all = [...first.resources, ...second.resources].map((r) => r.uri);
@@ -250,7 +251,8 @@ test("resources/list paginates across namespaces without skipping a boundary", a
 
 test("a small resource listing carries no cursor", async () => {
   const { client, close } = await connect({ documents: docs(5) });
-  const listed = await client.listResources();
+  // An explicit cursor asks the v2 client for one page; without one it walks every page.
+  const listed = await client.listResources({ cursor: "" });
   await close();
   assert.equal(listed.resources.length, 5);
   assert.equal(listed.nextCursor, undefined, "a complete listing advertised another page");
@@ -268,7 +270,7 @@ test("the resources/list override cannot silently drop a statically registered r
   );
   const text = sourceFile("resources.ts");
   assert.equal(text.split("server.registerResource(").length - 1, 1, "the document template is no longer registered in src/resources.ts");
-  assert.match(text, /setRequestHandler\(ListResourcesRequestSchema/, "the paginating list handler is gone");
+  assert.match(text, /setRequestHandler\("resources\/list"/, "the paginating list handler is gone");
 });
 
 // What the read tools return: a column list the code enforces must agree with the

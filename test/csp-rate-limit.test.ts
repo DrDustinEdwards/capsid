@@ -10,8 +10,8 @@ import {
 } from "../src/rate-limit.ts";
 
 const checkCspReportRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, CSP_REPORT_LIMIT);
-// No served endpoint fails open since /register went (design PR 4). The policy keeps the
-// choice per endpoint, so the allow side is driven with a policy made here.
+// No served endpoint fails open (/register, back as tightened DCR, refuses too). The
+// policy keeps the choice per endpoint, so the allow side is driven with a policy made here.
 const FAIL_OPEN: RateLimitPolicy = { prefix: "open:rate:", perHour: 30, perDay: 100, label: "FAIL_OPEN_TEST", onUnavailable: "allow" };
 const checkOpenRate = (kv: KVNamespace | undefined, ip: string, now: Date) => checkRate(kv, ip, now, FAIL_OPEN);
 import { fakeKv } from "./fakes.ts";

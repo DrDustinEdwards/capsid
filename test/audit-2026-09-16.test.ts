@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { MAX_ROWS } from "../src/limits.ts";
 import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
@@ -287,7 +286,8 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
   // returning two rows for the wrong reason.
   const { client, close } = await connect(adminAgentForEmail("admin@example.com"), CROWDED);
   try {
-    const first = await client.listResources();
+    // An explicit cursor asks the v2 client for one page; without one it walks every page.
+    const first = await client.listResources({ cursor: "" });
     assert.equal(first.resources.length, MAX_ROWS, "the admin listing is not bounded");
     assert.ok(first.nextCursor, "the admin listing was capped with no way to reach the rest");
     const second = await client.listResources({ cursor: first.nextCursor });

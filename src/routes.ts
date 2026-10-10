@@ -1,5 +1,4 @@
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
-import { createMcpHandler } from "agents/mcp";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
@@ -15,6 +14,7 @@ import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
 import type { Env, Props } from "./env";
 import { buildServer } from "./server";
+import { serveMcp } from "./mcp-handler";
 import { ingestScore } from "./improve-run";
 import {
   BACKUP_CREDENTIAL_PATH,
@@ -256,7 +256,7 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
   // last_seen is not part of authorizing, so a slow or failing write rides on
   // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
-  return createMcpHandler(buildServer(env, resolved.agent), { route: "/ops/mcp" })(request, env, ctx);
+  return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
 }
 
 async function handleBackup(request: Request, env: Env): Promise<Response> {

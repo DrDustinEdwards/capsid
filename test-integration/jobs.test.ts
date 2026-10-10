@@ -7,8 +7,7 @@ import { defaultScopes } from "../src/agents-schema";
 import { loadRecordRows } from "../src/agent-record";
 import { CORRECTION_CAP, JOB_LEASE_SECONDS, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
 import { splitSignedTask, verifySignedBody, verifyTaskDoc } from "../src/improve-task";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { MAX_TITLE } from "../src/limits";
 

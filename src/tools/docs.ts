@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "../env";
 import type { Agent } from "../agents";
 import { type ScopeNeed } from "../scope";
