@@ -341,7 +341,7 @@ export interface OpsLoop {
 // What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, improve_status's
 // needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";
-export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down";
+export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
 
 export interface InboxItem {
   title: string;

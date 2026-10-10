@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkSecurityHeaders, failures } from "@dustinedwards/security-headers/check";
-import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/security-headers/headers";
+import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
+import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
 import {
   CAPSID_STANDARD_HEADERS,
   classifySurface,

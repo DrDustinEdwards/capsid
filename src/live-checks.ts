@@ -1,4 +1,4 @@
-import { checkSecurityHeaders, failures } from "@dustinedwards/security-headers/check";
+import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";

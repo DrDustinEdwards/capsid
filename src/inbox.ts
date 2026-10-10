@@ -3,6 +3,7 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
 import { prUrlsFromJob } from "./outcome-prs";
+import { readReports } from "./inbox-report";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -19,8 +20,10 @@ import { prUrlsFromJob } from "./outcome-prs";
 // fault is open (the latest CI run on the repo failed, the site's health probe is down),
 // none otherwise. "Needs you" wins, because it is the thing only Dustin can clear.
 //
-// What an app reports about itself (Carrel's drafts waiting) is DESIGNED, not built:
-// capsid/research/design-inbox-report.md.
+// What an app reports about itself (Carrel's drafts waiting) arrives through
+// POST /ops/inbox/report (src/inbox-report.ts) and is read here as kind "report". A
+// reported item is always needs-you: an app may say a person must act, never that its
+// badge should be quieter.
 
 // The shapes are in the feed contract (src/ops-types.ts), which the Portal also reads.
 export type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
@@ -28,7 +31,7 @@ import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;
-const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set(["blocked-job", "question", "pr"]);
+const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set(["blocked-job", "question", "pr", "report"]);
 
 /** The worst severity of a set of items. */
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
@@ -91,6 +94,11 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     if (site.state === "down") {
       add(site.namespace, { title: `${site.name} is down${site.error ? ` (${site.error})` : ""}`, kind: "site-down", link: site.origin, since: site.checked_at });
     }
+  }
+
+  // What each app last reported about itself, while it is under 6 hours old.
+  for (const [namespace, items] of await readReports(env.APP_KV, now)) {
+    for (const item of items) add(namespace, item);
   }
 
   // Every configured app appears, with a count of zero when nothing waits, so the shell

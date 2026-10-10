@@ -50,6 +50,7 @@ import {
 } from "./improve/open";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { gatherInbox, type InboxApp } from "./inbox";
+import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 import { tickRuns, type TickOutcome } from "./improve/tick";
 
@@ -296,6 +297,13 @@ async function seatStartStatus(env: Env): Promise<StatusReport["seat_start"]> {
   return { ...state, in_flight: state.enabled ? (await sessionsInFlight(env, new Date())).length : null };
 }
 
+// An item an app reported about itself is the app's words, and an agent reads
+// improve_status, so its title is relayed inside an external fence (src/provenance.ts,
+// OWASP item 1; capsid/research/design-inbox-report.md, "Trust").
+function fenceReported(app: InboxApp): InboxApp {
+  return { ...app, items: app.items.map((item) => (item.kind === "report" ? { ...item, title: externalFence("inbox-report", app.namespace, item.title) } : item)) };
+}
+
 export async function improveStatus(
   env: Env,
   only?: string,
@@ -379,7 +387,7 @@ export async function improveStatus(
       maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
       maintenance_branches_read: maintenanceList?.branches_read[namespace] ?? null,
       skills: await skillsSummary(env.DB, namespace),
-      needs_dustin: inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] },
+      needs_dustin: fenceReported(inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] }),
     });
   }
 

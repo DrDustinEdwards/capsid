@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/security-headers/headers";
+import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
 import {
   DEPLOY_GRACE_MINUTES,
   analyticsFinding,
