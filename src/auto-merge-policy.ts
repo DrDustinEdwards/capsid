@@ -541,26 +541,35 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
   }
   passed.push("base_is_default_branch");
 
+  const ci = ciGreenOn(facts);
+  if (ci.state !== "green") return no("ci_green", ci.why);
+  passed.push("ci_green");
+
+  return { merge: true, passed };
+}
+
+/** The ci_green check on the facts' head sha, with the same required steps the policy
+ *  reads, shared by the policy and the approval executor (docs/design/design-merge-pipeline.md
+ *  section 4: "through the same function and the same required steps as the policy").
+ *  green: every check and every required step succeeded. wait: CI has not finished, or its
+ *  steps could not be read. red: CI failed, or a required step did not run to success.
+ *  never: no required steps are written down for the namespace, so no run shows anything. */
+export function ciGreenOn(facts: Pick<PrFacts, "headSha" | "ciConclusion" | "ciNote" | "ciStepsProblem" | "ciSteps" | "namespace">): { state: "green" | "wait" | "red" | "never"; why: string } {
   const sha = facts.headSha.slice(0, 7);
-  if (facts.ciConclusion !== "success") {
-    return no("ci_green", `CI on ${sha} is ${facts.ciConclusion ?? "not reported"}: ${facts.ciNote}`);
-  }
+  if (facts.ciConclusion === null || facts.ciConclusion === "pending") return { state: "wait", why: `CI on ${sha} is ${facts.ciConclusion ?? "not reported"}: ${facts.ciNote}` };
+  if (facts.ciConclusion !== "success") return { state: "red", why: `CI on ${sha} is ${facts.ciConclusion}: ${facts.ciNote}` };
   if (facts.ciStepsProblem) {
-    return no("ci_green", `the CI steps on ${sha} could not be read (${facts.ciStepsProblem}), so the required suites are not shown to have run.`);
+    return { state: "wait", why: `the CI steps on ${sha} could not be read (${facts.ciStepsProblem}), so the required suites are not shown to have run.` };
   }
   const required = requiredCiFor(facts.namespace);
   if (!required) {
-    return no("ci_green", `no required CI steps are written down for namespace '${facts.namespace}', so a green run there shows nothing. It waits for the seat.`);
+    return { state: "never", why: `no required CI steps are written down for namespace '${facts.namespace}', so a green run there shows nothing. It waits for the seat.` };
   }
   const notRun = required.filter(
     (r) => !facts.ciSteps.some((s) => s.workflow === r.workflow && s.job === r.job && s.step === r.step && s.conclusion === "success")
   );
-  if (notRun.length > 0) {
-    return no("ci_green", `CI on ${sha} did not run ${notRun.map(requiredCiLabel).join(", ")} to success.`);
-  }
-  passed.push("ci_green");
-
-  return { merge: true, passed };
+  if (notRun.length > 0) return { state: "red", why: `CI on ${sha} did not run ${notRun.map(requiredCiLabel).join(", ")} to success.` };
+  return { state: "green", why: `CI on ${sha} is green, with every required step` };
 }
 
 // Every completed check run must have concluded success, skipped or neutral, and at

@@ -1567,3 +1567,147 @@ test("a KV read that fails still logs the decline", async () => {
   await tickAt(env, tickRoutes(PROTECTED), 0);
   assert.equal(declineRows(d1).length, 1, "a KV outage lost the decline row");
 });
+
+// the executor: an approved PR the policy leaves open (docs/design/design-merge-pipeline.md
+// section 4, PR 4)
+//
+// The approvals live in pr_approvals (migrations/0037), which the fake D1 does not model:
+// they are answered here, and each state move the executor batches is applied to them.
+
+type ApprovalRow = { id: number; repo: string; pr: number; head_sha: string; class: string; status: string; approved_by: string; surface: string; batch_id: string | null; approved_at: string };
+
+function withApprovals(env: Awaited<ReturnType<typeof enabledEnv>>, rows: ApprovalRow[], opts: { missingTable?: boolean } = {}) {
+  const db = (env as unknown as { DB: D1Database }).DB;
+  const moves: Array<{ id: unknown; status: unknown; reason: unknown; merge_sha: unknown }> = [];
+  const own = (sql: string) => /pr_approvals/.test(sql);
+  const stmt = (sql: string) => {
+    if (opts.missingTable) throw new Error("D1_ERROR: no such table: pr_approvals");
+    const s = {
+      sql,
+      params: [] as unknown[],
+      bind(...p: unknown[]) {
+        s.params = p;
+        return s;
+      },
+      async all() {
+        if (/^\s*SELECT/i.test(sql)) return { results: rows.filter((r) => r.status === "approved" && r.repo === s.params[0]), meta: {} };
+        return { results: [], meta: {} };
+      },
+    };
+    return s;
+  };
+  const proxy = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === "prepare") return (sql: string) => (own(sql) ? stmt(sql) : target.prepare(sql));
+      if (prop === "batch") {
+        return async (statements: Array<{ sql: string; params: unknown[] }>) => {
+          const out: unknown[] = [];
+          for (const s of statements) {
+            if (!own(s.sql)) {
+              out.push((await target.batch([s as never]))[0]);
+              continue;
+            }
+            const row = rows.find((r) => r.id === s.params[0] && r.status === "approved");
+            if (row) {
+              row.status = String(s.params[1]);
+              moves.push({ id: row.id, status: s.params[1], reason: s.params[3], merge_sha: s.params[4] });
+            }
+            out.push({ results: row ? [{ id: row.id }] : [], meta: { changes: row ? 1 : 0 } });
+          }
+          return out;
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+  return { env: { ...(env as object), DB: proxy } as typeof env, moves };
+}
+
+const APPROVED_AT = "2026-09-24T12:00:00.000Z";
+const approval = (over: Partial<ApprovalRow> = {}): ApprovalRow => ({
+  id: 1,
+  repo: "DrDustinEdwards/capsid",
+  pr: 23,
+  head_sha: HEAD_SHA,
+  class: "approve",
+  status: "approved",
+  approved_by: "access:admin@example.com",
+  surface: "portal",
+  batch_id: null,
+  approved_at: APPROVED_AT,
+  ...over,
+});
+
+// A src change: v6 does not merge it on capsid, so only an approval can.
+const SRC = ["src/merge-class.ts"];
+
+test("PLANT: an approved PR the policy leaves open merges on the approval, pinned to the approved sha, and the row moves to merged", async () => {
+  const { env, moves } = withApprovals(await enabledEnv(), [approval()]);
+  await withFetch(tickRoutes(SRC), async (calls) => {
+    const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+    assert.match(report.outcomes[0].why ?? "", /merged on the approval of access:admin@example\.com \(portal\)/);
+    const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
+    assert.equal(merges.length, 1);
+    assert.deepEqual(merges[0].body, { merge_method: "merge", sha: HEAD_SHA });
+  });
+  assert.deepEqual(moves, [{ id: 1, status: "merged", reason: `merged on the approval of access:admin@example.com (portal) at ${HEAD_SHA.slice(0, 7)}`, merge_sha: "merged00000000000000000000000000000000000" }]);
+});
+
+test("the same PR with no approval is declined by the policy and not merged", async () => {
+  const { env } = withApprovals(await enabledEnv(), []);
+  const { outcome, merges } = await tickWith(env, tickRoutes(SRC));
+  assert.equal(outcome.merged, false);
+  assert.equal(merges, 0);
+});
+
+test("a new push voids the approval and nothing merges", async () => {
+  const { env, moves } = withApprovals(await enabledEnv(), [approval({ head_sha: "f".repeat(40) })]);
+  const { outcome, merges } = await tickWith(env, tickRoutes(SRC));
+  assert.equal(merges, 0);
+  assert.equal(outcome.merged, false);
+  assert.equal(moves[0]?.status, "voided");
+  assert.match(String(moves[0]?.reason), /^new push: approved at fffffff/);
+});
+
+test("an approval 7 days old expires and nothing merges", async () => {
+  const { env, moves } = withApprovals(await enabledEnv(), [approval({ approved_at: "2026-09-18T11:00:00.000Z" })]);
+  const { merges } = await tickWith(env, tickRoutes(SRC));
+  assert.equal(merges, 0);
+  assert.equal(moves[0]?.status, "expired");
+});
+
+test("red CI voids the approval; CI still running waits and leaves it open", async () => {
+  const red = { ...tickRoutes(SRC), [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: { body: { check_runs: [{ name: "test", status: "completed", conclusion: "failure" }] } } };
+  const a = withApprovals(await enabledEnv(), [approval()]);
+  assert.equal((await tickWith(a.env, red)).merges, 0);
+  assert.equal(a.moves[0]?.status, "voided");
+  assert.match(String(a.moves[0]?.reason), /^CI red: /);
+  const running = { ...tickRoutes(SRC), [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: { body: { check_runs: [{ name: "test", status: "in_progress", conclusion: null }] } } };
+  const b = withApprovals(await enabledEnv(), [approval()]);
+  assert.equal((await tickWith(b.env, running)).merges, 0);
+  assert.deepEqual(b.moves, [], "an approval was moved while CI was still running");
+});
+
+test("a 409 from GitHub voids the approval as head moved", async () => {
+  const routes = { ...tickRoutes(SRC), [`PUT ${OWNER}/pulls/23/merge`]: { status: 409, body: { message: "Head branch was modified." } } };
+  const { env, moves } = withApprovals(await enabledEnv(), [approval()]);
+  const { outcome } = await tickWith(env, routes);
+  assert.equal(outcome.merged, false);
+  assert.equal(moves[0]?.status, "voided");
+  assert.match(String(moves[0]?.reason), /^head moved: /);
+});
+
+test("a money path approved without its typed confirmation is refused, not merged", async () => {
+  const { env, moves } = withApprovals(await enabledEnv(), [approval()]);
+  const { merges } = await tickWith(env, tickRoutes(["src/billing/charge.ts"]));
+  assert.equal(merges, 0);
+  assert.equal(moves[0]?.status, "refused");
+});
+
+test("with the approvals table missing the tick runs as the policy alone", async () => {
+  const { env } = withApprovals(await enabledEnv(), [approval()], { missingTable: true });
+  const { outcome, merges } = await tickWith(env, tickRoutes(SRC));
+  assert.equal(outcome.merged, false);
+  assert.equal(merges, 0);
+});
