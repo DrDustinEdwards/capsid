@@ -90,15 +90,15 @@ export function callerIp(request: Request): string {
 }
 
 // 429, not 204: a dropped report must not look stored. 503 when the rate could not
-// be measured, which is a server problem.
-export function rateLimitedResponse(verdict: RateRefusal): Response {
+// be measured, which is a server problem. `noun` names what the endpoint counts.
+export function rateLimitedResponse(verdict: RateRefusal, noun = "reports"): Response {
   if (verdict.window === "unavailable") {
-    return new Response(`rate limiting is unavailable, so reports are refused: ${verdict.detail}`, {
+    return new Response(`rate limiting is unavailable, so ${noun} are refused: ${verdict.detail}`, {
       status: 503,
       headers: { "Content-Type": "text/plain;charset=utf-8", "Retry-After": "60" },
     });
   }
-  return new Response(`too many reports: ${verdict.count} in the last ${verdict.window}, limit ${verdict.limit}`, {
+  return new Response(`too many ${noun}: ${verdict.count} in the last ${verdict.window}, limit ${verdict.limit}`, {
     status: 429,
     headers: {
       "Content-Type": "text/plain;charset=utf-8",

@@ -276,6 +276,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - `POST /token` token exchange (served by the library). There is no `/register`: a client's id is the URL of its metadata document (CIMD)
 - `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
 - `GET /health` no auth. Reports deploy provenance (git sha, whether the tree was dirty, build time) and probes the store: `SELECT 1` against D1 plus an FTS5 MATCH pinned to one known document. Either probe failing returns 503 with `status: "degraded"` and a `store` object naming which one. A Worker whose bindings resolved to nothing starts normally and would otherwise answer `ok` while every read tool errors.
+- `GET /public/model/v1.json` no auth. The public system model the explorer and the dustinedwards.info map are built from: what the daily build stored after the privacy filter, never computed per request. Private systems appear as a name and domain only. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
 
 ## Documentation
 

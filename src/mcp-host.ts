@@ -30,6 +30,7 @@ const MCP_HOST_PATHS = new Set([
   "/improve/score",
   "/improve/holdout-credential",
   "/backup/credential",
+  "/public/model/v1.json",
 ]);
 const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-"];
 
