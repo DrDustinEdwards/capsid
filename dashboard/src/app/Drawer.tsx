@@ -541,6 +541,14 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
               </dd>
             </>
           )}
+          {a.archived_at && (
+            <>
+              <dt>Archived</dt>
+              <dd>
+                <When t={ms(a.archived_at)} />
+              </dd>
+            </>
+          )}
           <dt>Jobs</dt>
           <dd className="num">
             {a.jobs_done} done · {a.jobs_failed} failed · {a.jobs_blocked} blocked
