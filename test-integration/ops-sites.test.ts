@@ -35,7 +35,10 @@ function input(over: Partial<SiteInput> = {}): SiteInput {
 describe("the seed", () => {
   it("is exactly the list the code held before the move: eight sites and one namespace with none", async () => {
     const rows = await readSiteConfig(env.DB);
-    expect(rows.map(({ revision: _r, updated_at: _u, ...rest }) => rest)).toEqual(BEFORE_THE_MOVE);
+    expect(rows.map(({ revision: _r, updated_at: _u, operator: _o, operator_problem: _p, ...rest }) => rest)).toEqual(BEFORE_THE_MOVE);
+    // migrations/0035 opts dustinedwards alone into Capsid calling its operator API.
+    expect(rows.filter((r) => r.operator).map((r) => [r.namespace, r.operator?.auth_var])).toEqual([["dustinedwards", "DUSTINEDWARDS_OPERATOR_TOKEN"]]);
+    expect(rows.every((r) => r.operator_problem === null)).toBe(true);
     expect(rows.every((r) => r.revision === 1)).toBe(true);
     expect(sitesFrom(rows)).toHaveLength(8);
   });

@@ -98,6 +98,23 @@ export interface OpsSiteConfig {
   // Counts edits. site_edit and site_remove name the revision they previewed.
   revision: number;
   updated_at: string;
+  // The site's operator API, where it opted in (migrations/0035, src/site-operator.ts);
+  // null where it has none. operator_problem says why a stored value was not usable.
+  operator: SiteOperator | null;
+  operator_problem: string | null;
+}
+
+// A site's operator API as Capsid may use it: where it is, which Capsid Worker secret
+// holds its token (the name only), which repair each failing health check maps to (in
+// repair order), the tools run once a week, and the names of the site Worker's secrets
+// to report set or not.
+export interface SiteOperator {
+  path: string;
+  // The name of the Capsid Worker secret holding the site's operator token.
+  auth_var: string;
+  repairs: Record<string, string>;
+  weekly: string[];
+  secrets: string[];
 }
 
 export interface HealthSnapshot {
@@ -426,6 +443,7 @@ export interface OpsFeed {
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   GET  /portal/api/stale                                        -> PortalStale
 //   GET  /portal/api/maintenance                                  -> PortalMaintenance
+//   GET  /portal/api/convergence                                  -> PortalConvergence
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -449,7 +467,8 @@ export type PortalAction =
   | "package_edit"
   | "package_remove"
   | "canon_approve"
-  | "canon_reject";
+  | "canon_reject"
+  | "site_repair";
 
 // params by action:
 //   pause         { namespace, reason, undo? }   reason required
@@ -481,6 +500,9 @@ export type PortalAction =
 //   canon_approve { id }                  a pending canon proposal (src/canon.ts); refused
 //                 when the document moved past the body it was written against
 //   canon_reject  { id, reason }          reason required; the proposer reads it
+//   site_repair   { namespace, tool }     one allowlisted tool on a site's operator API
+//                 (src/site-repair.ts); refused for a tool outside the site's list or the
+//                 Worker's ceiling, and while the rate limit holds
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;
@@ -832,4 +854,49 @@ export interface PortalMaintenance {
    *  pull requests, branches and compared site deploys summed over the repos read, the
    *  repos read of the roster, and the current driver disk readings. */
   read: { prs: number; branches: number; repos: number; roster: number; deploys: number; disk: number };
+}
+
+// GET /portal/api/convergence -> PortalConvergence (src/site-convergence.ts). Per site
+// that opted into Capsid calling its operator API: what that API's sync_status says, what
+// its health route says per check with the repair each maps to, the site Worker's secrets
+// by name (never a value), and the last repairs Capsid ran. Read live on each request.
+export interface SecretPresence {
+  name: string;
+  set: boolean;
+  // false: the Worker has it, and the site's configuration does not name it.
+  expected: boolean;
+}
+
+export interface ConvergenceCheck {
+  name: string;
+  ok: boolean;
+  detail: string | null;
+  expected: number | null;
+  present: number | null;
+  // The repair the site's configuration maps this check to, and why Capsid may not run
+  // it, where it may not (null: it may).
+  repair: string | null;
+  repair_refusal: string | null;
+}
+
+export interface ConvergenceSite {
+  namespace: string;
+  name: string;
+  origin: string;
+  read_at: string;
+  // Null with `problem` set when the site has no usable operator configuration.
+  operator: { path: string; auth_var: string; secret_set: boolean; repairs: Record<string, string>; weekly: string[] } | null;
+  problem: string | null;
+  // sync_status, as label and text; error says why it was not read.
+  status: { ok: boolean; fields: Array<{ key: string; value: string }>; error: string | null } | null;
+  health: { ok: boolean; http_status: number | null; checks: ConvergenceCheck[]; error: string | null } | null;
+  // The watcher's last read of the names (read_at), or why there is none.
+  secrets: { state: "ok" | "none" | "error"; script: string | null; rows: SecretPresence[]; reason: string | null; read_at?: string } | null;
+  // Newest first.
+  recent: Array<{ at: string; actor: string; tool: string; via: string | null; converged: boolean | null; error: string | null }>;
+}
+
+export interface PortalConvergence {
+  generated: string;
+  sites: ConvergenceSite[];
 }

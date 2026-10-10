@@ -398,3 +398,28 @@ export async function readCloudflare(
   }
   return { bySite, ran };
 }
+
+// THE SECRET-PRESENCE READ (job_09e5f6cbf782, shared with job_5ac1139641e0's credentials
+// inventory): which secrets a Worker has, by NAME. Cloudflare's secrets list returns each
+// secret's name and type and has no way to return a value, so none can reach Capsid. Read
+// on the watcher's pass only, like every Cloudflare read here; the Portal shows what the
+// last pass stored (src/secret-presence.ts).
+const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
+
+/** GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the
+ *  permission the token lacks. */
+export async function readSecretNames(fetchImpl: FetchLike, token: string, account: string, script: string): Promise<string[]> {
+  if (!SCRIPT_NAME.test(script)) throw new Error(`'${script}' is not a Worker script name`);
+  const what = `the secrets list of ${script}`;
+  let rows: unknown[];
+  try {
+    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/secrets`, what, 100);
+  } catch (err) {
+    if (err instanceof CfReadError && err.status === 403) {
+      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${SECRETS_PERMISSION}. Cloudflare said: ${err.message}`);
+    }
+    throw err;
+  }
+  // The name only: whatever else a row carries is dropped here, unread.
+  return rows.map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null)).filter((n): n is string => typeof n === "string" && n.length > 0);
+}

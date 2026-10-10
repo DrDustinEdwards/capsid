@@ -23,7 +23,8 @@ export type TaskId =
   | "watcher"
   | "outcome-sweep"
   | "merge-resume"
-  | "maintenance";
+  | "maintenance"
+  | "site-repair";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -48,6 +49,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
   { id: "maintenance", label: "Daily maintenance pass", period_ms: 24 * 3_600_000 },
+  // One row per call to a site's operator API (src/site-repair.ts), from the watcher or a
+  // person, so its runs come and go with the drift.
+  { id: "site-repair", label: "Site repairs", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

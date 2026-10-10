@@ -1,5 +1,6 @@
 import type { OpsSiteConfig, SiteMapDrift } from "./ops-types";
 import { auditStatement } from "./store-guards";
+import { parseOperator } from "./site-operator";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
 // read from configuration, not code. Ruling: capsid/decisions.md, 2026-09-29, "Portal
@@ -57,9 +58,10 @@ interface SiteRow {
   self_probe: number;
   revision: number;
   updated_at: string;
+  operator: string | null;
 }
 
-const SITE_COLUMNS = "namespace, name, origin, health_path, platform, script, self_probe, revision, updated_at";
+const SITE_COLUMNS = "namespace, name, origin, health_path, platform, script, self_probe, revision, updated_at, operator";
 
 function configFrom(row: SiteRow): OpsSiteConfig {
   return {
@@ -72,7 +74,16 @@ function configFrom(row: SiteRow): OpsSiteConfig {
     self_probe: row.self_probe === 1,
     revision: row.revision,
     updated_at: row.updated_at,
+    ...operatorFrom(row.operator),
   };
+}
+
+/** The stored operator JSON, parsed by the same rules an edit passes. A stored value that
+ *  no longer passes (a ceiling tightened since) is not used, and the reason is shown. */
+function operatorFrom(raw: string | null | undefined): Pick<OpsSiteConfig, "operator" | "operator_problem"> {
+  if (raw === null || raw === undefined) return { operator: null, operator_problem: null };
+  const parsed = parseOperator(raw);
+  return parsed.ok ? { operator: parsed.operator, operator_problem: null } : { operator: null, operator_problem: parsed.refusal };
 }
 
 /** Every configured row, sites and no-site declarations, by namespace. */
@@ -119,6 +130,9 @@ export interface SiteInput {
   health_path: string | null;
   platform: SitePlatform | null;
   script: string | null;
+  // The operator JSON as it will be stored, null to clear it, or undefined to leave an
+  // edited row's value as it is (an edit from a form that does not show it).
+  operator?: string | null;
 }
 
 export type Validated = { ok: true; site: SiteInput } | { ok: false; refusal: string };
@@ -188,11 +202,22 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   const name = p.name ?? namespace;
   if (name.length > NAME_MAX || /[\u0000-\u001f\u007f]/.test(name)) return refuse(`the name must be at most ${NAME_MAX} characters with no control characters.`);
 
+  // operator: absent leaves an edit's stored value alone, "none" clears it, anything else
+  // is the JSON, checked whole and stored in its normalized form.
+  let operator: string | null | undefined;
+  if (p.operator === "none") operator = null;
+  else if (p.operator !== undefined) {
+    const parsed = parseOperator(p.operator);
+    if (!parsed.ok) return refuse(parsed.refusal);
+    operator = JSON.stringify(parsed.operator);
+  }
+
   if (!p.origin) {
+    if (operator) return refuse("a namespace that serves no site has no operator API.");
     if (p.health_path || p.platform || p.script) {
       return refuse("a namespace that serves no site takes no health path, platform or script. Give an origin to make it a site.");
     }
-    return { ok: true, site: { namespace, name, origin: null, health_path: null, platform: null, script: null } };
+    return { ok: true, site: { namespace, name, origin: null, health_path: null, platform: null, script: null, operator: null } };
   }
   const origin = originFrom(p.origin);
   if (!origin.ok) return refuse(origin.refusal);
@@ -210,7 +235,7 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   }
   return {
     ok: true,
-    site: { namespace, name, origin: origin.origin, health_path: p.health_path ?? null, platform, script: p.script ?? null },
+    site: { namespace, name, origin: origin.origin, health_path: p.health_path ?? null, platform, script: p.script ?? null, ...(operator !== undefined ? { operator } : {}) },
   };
 }
 
@@ -235,10 +260,10 @@ export async function readSiteRow(db: D1Database, namespace: string): Promise<Op
 export async function addSite(db: D1Database, actor: string, site: SiteInput): Promise<SiteResult> {
   const won = await db
     .prepare(
-      `INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(namespace) DO NOTHING RETURNING namespace`
+      `INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script, operator)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(namespace) DO NOTHING RETURNING namespace`
     )
-    .bind(site.namespace, site.name, site.origin, site.health_path, site.platform, site.script)
+    .bind(site.namespace, site.name, site.origin, site.health_path, site.platform, site.script, site.operator ?? null)
     .first<{ namespace: string }>();
   if (!won) return { ok: false, refusal: `${site.namespace} already has a row. Edit it instead.` };
   const after = await readSiteRow(db, site.namespace);
@@ -256,10 +281,11 @@ export async function editSite(db: D1Database, actor: string, site: SiteInput, r
   const won = await db
     .prepare(
       `UPDATE ops_sites SET name = ?3, origin = ?4, health_path = ?5, platform = ?6, script = ?7, self_probe = ?8,
+         operator = CASE WHEN ?9 = 1 THEN ?10 ELSE operator END,
          revision = revision + 1, updated_at = datetime('now')
        WHERE namespace = ?1 AND revision = ?2 RETURNING revision`
     )
-    .bind(site.namespace, revision, site.name, site.origin, site.health_path, site.platform, site.script, selfProbe)
+    .bind(site.namespace, revision, site.name, site.origin, site.health_path, site.platform, site.script, selfProbe, site.operator === undefined ? 0 : 1, site.operator ?? null)
     .first<{ revision: number }>();
   if (!won) {
     return { ok: false, refusal: `${site.namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.` };

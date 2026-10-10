@@ -13,7 +13,8 @@ import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type 
 import { readRepoMap, unmappedRepos, type RepoMapRead } from "./unmapped-repos";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
 import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
-import { cloudflareCredentials, readCloudflare, readWebAnalyticsSites } from "./ops-cloudflare";
+import { cloudflareCredentials, readCloudflare, readSecretNames, readWebAnalyticsSites } from "./ops-cloudflare";
+import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
@@ -28,6 +29,7 @@ import {
   type SiteProbe,
 } from "./ops-snapshot";
 import { logEvent } from "./log";
+import { watchSites } from "./site-watch";
 
 // The watcher looks at the surface every half hour and, when something is wrong,
 // posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
@@ -482,6 +484,7 @@ export const WATCHER_CHECKS = [
   "site probes",
   "cloudflare",
   "live checks",
+  "site repairs",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -500,6 +503,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^site-down-/, "site probes"],
   [/^site-errors-/, "cloudflare"],
   [/^live-/, "live checks"],
+  [/^site-(health|weekly)-/, "site repairs"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -1082,6 +1086,22 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     }
   }
 
+  // The sites that opted into Capsid calling their operator API (src/site-watch.ts): the
+  // repair each failing health check maps to, the weekly tools, and the red and green
+  // mail. A site whose health could not be read leaves the check un-run, so its open
+  // finding is not cleared on no evidence.
+  if (config && config.some((c) => c.origin && c.operator)) {
+    const repairs = await attempt("site repairs", () => watchSites(env, config, WATCHER_ACTOR, fetchImpl, now));
+    if (repairs) {
+      if (repairs.complete) ran.add("site repairs");
+      out.push(...repairs.findings.map((f) => finding(f.namespace, f.fingerprint, f.headline, f.evidence)));
+      if (repairs.lines.length) logEvent("log", "WATCHER_SITE_REPAIRS", { message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}` });
+    }
+  } else if (config) {
+    // No site opted in: nothing to judge, so nothing open can be stale.
+    ran.add("site repairs");
+  }
+
   // Cloudflare's view of each site: deploys and hourly errors (src/ops-cloudflare.ts).
   // With no token nothing is fetched, each site says why, and the check is not run.
   // With no site configured there is nothing to read, and nothing is fetched.
@@ -1096,6 +1116,27 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
         sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
       );
     }
+  }
+
+  // The secret names of each opted-in site's Worker (src/secret-presence.ts), for the
+  // Portal's convergence view: names only, set or not, read here because no Portal request
+  // calls Cloudflare. Each site's read stands alone and stores its own reason on failure.
+  for (const site of config ?? []) {
+    if (!site.origin || !site.operator || site.operator.secrets.length === 0 || site.platform !== "cloudflare") continue;
+    const read_at = now.toISOString();
+    const expected = site.operator.secrets;
+    const cfState = observed.cloudflare?.[site.namespace];
+    const script = site.script ?? (cfState?.state === "ok" ? cfState.script : null);
+    const credentials = cloudflareCredentials(env);
+    const stored = !credentials.ok
+      ? { state: "error" as const, script, rows: [], reason: credentials.reason, read_at }
+      : !script
+        ? { state: "error" as const, script: null, rows: [], reason: "the Worker script is not known: name it on the site's row, or let the Cloudflare read resolve it", read_at }
+        : await readSecretNames(fetchImpl, credentials.token, credentials.account, script).then(
+            (names) => ({ state: "ok" as const, script, rows: secretPresence(expected, names), reason: null, read_at }),
+            (err: unknown) => ({ state: "error" as const, script, rows: [], reason: (err instanceof Error ? err.message : String(err)).slice(0, 300), read_at })
+          );
+    await attempt(`secret names ${site.namespace}`, () => storeSecrets(env, site.namespace, stored));
   }
 
   // The configured packages, for the Portal's Packages view (src/ops-packages.ts).

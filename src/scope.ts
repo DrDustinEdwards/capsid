@@ -199,6 +199,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
   "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the claims tool's readers, gated by portalGate",
   "/portal/api/stale": "the Portal's stale jobs, through the reader behind jobs list stale: true, gated by portalGate",
+  "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that improve_status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",

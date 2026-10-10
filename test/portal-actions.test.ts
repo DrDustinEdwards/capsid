@@ -23,6 +23,7 @@ import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
+import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
 // The Portal's controls (src/portal-actions.ts): a preview that writes nothing and
@@ -43,7 +44,21 @@ const DRIVER_SCOPES = JSON.stringify({ namespaces: ["capsid"], repos: "*", tools
 // its reads are answered here; the writes are performed against real D1 in
 // test-integration/portal-actions.test.ts and test-integration/ops-sites.test.ts.
 const SITE_ROWS: OpsSiteConfig[] = [
-  { namespace: "capsid", name: "Capsid", origin: "https://capsid.example.com", health_path: "/health", platform: "cloudflare", script: "capsid", self_probe: true, revision: 3, updated_at: "2026-09-28 00:00:00" },
+  { namespace: "capsid", name: "Capsid", origin: "https://capsid.example.com", health_path: "/health", platform: "cloudflare", script: "capsid", self_probe: true, revision: 3, updated_at: "2026-09-28 00:00:00", operator: null, operator_problem: null },
+  // A site that opted into Capsid calling its operator API (migrations/0035).
+  {
+    namespace: "sample",
+    name: "Sample",
+    origin: "https://sample.example.com",
+    health_path: "/api/health",
+    platform: "cloudflare",
+    script: null,
+    self_probe: false,
+    revision: 1,
+    updated_at: "2026-09-28 00:00:00",
+    operator: { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN", repairs: { "content-drift": "sync_posts" }, weekly: ["refresh_citations"], secrets: [] },
+    operator_problem: null,
+  },
 ];
 
 // The package configuration, answered the same way (ops_packages).
@@ -75,7 +90,7 @@ const CANON_ROWS = [
 ];
 
 function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
-  const toRow = (s: OpsSiteConfig) => ({ ...s, self_probe: s.self_probe ? 1 : 0 });
+  const toRow = (s: OpsSiteConfig) => ({ ...s, self_probe: s.self_probe ? 1 : 0, operator: s.operator ? JSON.stringify(s.operator) : null });
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (prop !== "prepare") return Reflect.get(target, prop, receiver);
@@ -176,6 +191,7 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
     ACCESS_SAAS_CLIENT_ID: "sample-client",
     ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
+    SAMPLE_OPERATOR_TOKEN: "sample-operator-token-for-tests-only-0000",
   } as never;
   return { d1, kv, env };
 }
@@ -303,9 +319,10 @@ const EVERY_ACTION = [
   ["package_remove", { name: "sample-pkg", revision: "1" }],
   ["canon_approve", { id: "7" }],
   ["canon_reject", { id: "7", reason: "the rule belongs in a typed doc" }],
+  ["site_repair", { namespace: "sample", tool: "sync_posts" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped and the two canon decisions, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions and the site repair, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
@@ -327,10 +344,11 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "site_add",
     "site_edit",
     "site_remove",
+    "site_repair",
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 19);
+  assert.equal(PORTAL_ACTIONS.length, 20);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -714,12 +732,13 @@ const ROUTES = [
   [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
   [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
   [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
+  [PORTAL_CONVERGENCE_PATH, "GET", (r: Request, e: never) => handlePortalConvergence(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all nine routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 9);
+test("all ten routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 10);
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };

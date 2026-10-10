@@ -569,7 +569,10 @@ GROUP BY actor ORDER BY hours_with_a_read DESC;
 `ops-site-added`, `ops-site-edited` and `ops-site-removed` under `access:<email>`,
 each carrying the row before and after as `params`, then the click row
 `portal-site_add`, `portal-site_edit` or `portal-site_remove`. A removed row survives
-only in that audit row and the nightly dump.
+only in that audit row and the nightly dump. Its `operator` column (migrations/0035) is
+a site's opt-in to Capsid calling its operator API (docs/portal.md, "Site repairs");
+each call is audited as `site-repair` under the caller (`agent:watcher` or
+`access:<email>`) with the tool and the site's verdict, never the token.
 
 `attempts_kept` and `attempts_reverted` on an agent are `null` for every kind
 except `driver`, because an attempt belongs to a namespace's runs and crediting a

@@ -33,9 +33,23 @@ const NOW = new Date();
 const ACTOR = "access:admin@example.com";
 const DRIVER = legacyAgent("write", "agent:capsid-driver");
 
+// The operator token migrations/0035 names for dustinedwards: set, so site_repair may call.
+const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
+
 function workerEnv(): Env {
-  return { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET };
+  return { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET, DUSTINEDWARDS_OPERATOR_TOKEN: OPERATOR_TOKEN } as Env;
 }
+
+// site_repair reaches the site's operator API through the global fetch. Only that route is
+// answered here; everything else goes on as before.
+const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
+const passThrough = globalThis.fetch;
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (url !== "https://dustinedwards.info/api/operator") return passThrough(input, init);
+  operatorCalls.push({ url, auth: new Headers(init?.headers).get("authorization"), body: String(init?.body) });
+  return Response.json({ ok: true, data: { repaired: 1, expected: 14, present: 14, converged: true } });
+}) as typeof fetch;
 
 async function call(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
   const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
@@ -279,6 +293,20 @@ const CASES: Record<string, Case> = {
       expect(version?.body, "the approval did not snapshot the body it replaced").toBe("The sample service answers on port 80.");
     },
   },
+  site_repair: {
+    params: async () => {
+      operatorCalls.length = 0;
+      return { namespace: "dustinedwards", tool: "sync_pages" };
+    },
+    after: async () => {
+      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool: "sync_pages", args: {} }]]);
+      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'site-repair' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ tool: "sync_pages", via: "portal", converged: true, present: 14, expected: 14 });
+      expect(row?.params, "the token reached the audit row").not.toContain(OPERATOR_TOKEN);
+      const run = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = 'site-repair' ORDER BY id DESC LIMIT 1").first<{ outcome: string; reason: string }>();
+      expect(run).toEqual({ outcome: "ok", reason: "dustinedwards: sync_pages converged (14 of 14 present) (portal)" });
+    },
+  },
   canon_reject: {
     params: async () => ({ id: await proposal(), reason: "the port belongs in the typed doc" }),
     after: async ({ id }) => {
@@ -289,9 +317,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, nineteen actions", () => {
+  it("covers the allow-list, twenty actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(19);
+    expect(Object.keys(CASES).length).toBe(20);
   });
 
   for (const action of PORTAL_ACTIONS) {

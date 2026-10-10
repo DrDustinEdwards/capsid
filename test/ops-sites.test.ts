@@ -18,6 +18,8 @@ function row(namespace: string, over: Partial<OpsSiteConfig> = {}): OpsSiteConfi
     script: null,
     self_probe: false,
     revision: 1,
+    operator: null,
+    operator_problem: null,
     updated_at: "2026-09-29 00:00:00",
     ...over,
   };
@@ -116,7 +118,7 @@ test("a site edit is normalized: a name defaults to the namespace, blank optiona
 test("a namespace with no origin serves no site, and then takes no other field", () => {
   assert.deepEqual(validateSite({ namespace: "claude-skills" }), {
     ok: true,
-    site: { namespace: "claude-skills", name: "claude-skills", origin: null, health_path: null, platform: null, script: null },
+    site: { namespace: "claude-skills", name: "claude-skills", origin: null, health_path: null, platform: null, script: null, operator: null },
   });
   for (const extra of [{ platform: "cloudflare" }, { health_path: "/health" }, { script: "x" }]) {
     const got = validateSite({ namespace: "claude-skills", ...extra });

@@ -23,6 +23,8 @@ import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { approveProposal, checkProposal, lineChanges, rejectProposal } from "./canon";
 import { logEvent } from "./log";
+import { limitRefusalFor, runSiteRepair } from "./site-repair";
+import { tokenSet, toolRefusal } from "./site-operator";
 
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
 // admin control is, what it will do, the one dispatch to the shared mutators, and the
@@ -55,6 +57,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_remove",
   "canon_approve",
   "canon_reject",
+  "site_repair",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -156,6 +159,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Approve canon proposal ${params.id ?? ""}. The document is written as proposed, with the current version snapshotted first, and only if it is still the body the proposal was written against.`;
     case "canon_reject":
       return `Reject canon proposal ${params.id ?? ""}. The document is not touched, and the proposer reads your reason.`;
+    case "site_repair":
+      return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
   }
 }
 
@@ -424,6 +429,19 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, result.row.namespace, { id, ...(reason ? { reason } : {}), path: result.row.path });
         break;
       }
+      case "site_repair": {
+        // Every check runs again inside runSiteRepair: the allowlist, the token and the
+        // rate limit can all change between the preview and this click.
+        const namespace = required(params, "namespace");
+        const tool = required(params, "tool");
+        if (!namespace || !tool) return { ok: false, refusal: "site_repair needs a namespace and a tool." };
+        const outcome = await runSiteRepair(env, { namespace, tool, actor, auto: false, via: surface }, now);
+        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
+        committed = true;
+        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_REPAIR_NOT_RECORDED in the log)."}`;
+        await auditClick(env, actor, source, surface, action, namespace, { tool, ok: outcome.call.ok, converged: outcome.call.converged });
+        break;
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -460,8 +478,8 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   fail_job: ["id", "reason"],
   close_shipped: ["id", "reason"],
   revoke_agent: ["name"],
-  site_add: ["namespace", "name", "origin", "health_path", "platform", "script"],
-  site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script"],
+  site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
+  site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script", "operator"],
   site_remove: ["namespace", "revision"],
   reset_breaker: ["namespace"],
   package_add: ["name", "repo", "formerly"],
@@ -469,6 +487,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_remove: ["name", "revision"],
   canon_approve: ["id"],
   canon_reject: ["id", "reason"],
+  site_repair: ["namespace", "tool"],
 };
 
 
@@ -735,6 +754,9 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
       if (!before) return refused(`${site.namespace} has no row to edit. Add it instead.`);
       if (before.revision !== revision) return refused(`${site.namespace} changed since you opened it (revision ${before.revision}, not ${revision}). Reload and edit again.`);
       const diffs = SITE_FIELDS.filter((f) => before[f] !== site[f]).map((f) => `${f}: ${shown(before[f])} -> ${shown(site[f])}`);
+      // The operator API, only when the edit names it: a form that does not show it leaves it.
+      const beforeOperator = before.operator ? JSON.stringify(before.operator) : null;
+      if (site.operator !== undefined && site.operator !== beforeOperator) diffs.push(`operator: ${shown(beforeOperator)} -> ${shown(site.operator)}`);
       if (diffs.length === 0) return refused(`the edit changes nothing in ${site.namespace}.`);
       const changes = [`ops_sites ${site.namespace}, revision ${revision} -> ${revision + 1}:`, ...diffs.map((d) => `  ${d}`)];
       if (before.self_probe && before.origin !== site.origin) changes.push("The origin changes, so the in-process self-probe is cleared and the site is probed over HTTP.");
@@ -797,6 +819,25 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [`ops_packages: remove ${describePackage(before)}. The row is kept in the audit row, and its weekly GitHub rows stay.`],
         audit: [`ops-package-removed by ${actor}`, click],
+      };
+    }
+    case "site_repair": {
+      if (!p.namespace || !p.tool) return refused("site_repair needs a namespace and a tool.");
+      const row = await readSiteRow(env.DB, p.namespace);
+      if (!row?.origin) return refused(`${p.namespace} is not a configured site.`);
+      if (!row.operator) return refused(row.operator_problem ?? `${p.namespace} has no operator API configured, so Capsid may call nothing on it.`);
+      const bad = toolRefusal(row.operator, p.tool);
+      if (bad) return refused(bad);
+      if (!tokenSet(env, row.operator)) return refused(`the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${p.namespace}.`);
+      const wait = await limitRefusalFor(env, p.namespace, p.tool, new Date());
+      if (wait) return refused(`${p.tool} on ${p.namespace} waits: ${wait}`);
+      return {
+        ok: true,
+        changes: [
+          `POST ${row.origin}${row.operator.path} with tool ${p.tool}, authorized by the Capsid Worker secret ${row.operator.auth_var} (the token is never shown or recorded).`,
+          `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to a minute. One task_runs row (site-repair) records it.`,
+        ],
+        audit: [`site-repair by ${actor}`, click],
       };
     }
     case "canon_approve":

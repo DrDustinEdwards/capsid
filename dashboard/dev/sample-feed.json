@@ -1750,7 +1750,9 @@
         "script": "sample-a",
         "self_probe": true,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-b",
@@ -1761,7 +1763,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": {"path": "/api/operator", "auth_var": "SAMPLE_B_OPERATOR_TOKEN", "repairs": {"content-drift": "sync_posts", "pages-drift": "sync_pages", "ask-index-drift": "sync_ask"}, "weekly": ["refresh_citations"], "secrets": ["GITHUB_TOKEN", "OPERATOR_TOKEN", "SMOKE_TOKEN"]},
+        "operator_problem": null
       },
       {
         "namespace": "sample-c",
@@ -1772,7 +1776,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-d",
@@ -1783,7 +1789,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-docs",
@@ -1794,7 +1802,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-e",
@@ -1805,7 +1815,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-f",
@@ -1816,7 +1828,9 @@
         "script": "sample-f",
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-g",
@@ -1827,7 +1841,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       },
       {
         "namespace": "sample-h",
@@ -1838,7 +1854,9 @@
         "script": null,
         "self_probe": false,
         "revision": 1,
-        "updated_at": "2026-09-21 12:00:00"
+        "updated_at": "2026-09-21 12:00:00",
+        "operator": null,
+        "operator_problem": null
       }
     ],
     "packages": [

@@ -46,6 +46,15 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   R2_ACCOUNT_ID?: string;
   // Backup mint parent, separate from the holdout parent. Omitted from AttemptEnv.
   R2_BACKUP_PARENT_ACCESS_KEY_ID?: string;
+  // The watcher's red and green mail about a site's health (src/site-watch.ts): a
+  // send_email binding, the address it sends to and the one it sends from, all optional and set by the seat
+  // in wrangler.jsonc (docs/portal.md, "Site repairs"). Unset, nothing is mailed, the
+  // finding still opens in Incidents, and each pass says the mail was not sent.
+  // Each site's operator token is a secret named by that site's configuration
+  // (<NAME>_OPERATOR_TOKEN, src/site-operator.ts), read by name and never declared here.
+  EMAIL?: SendEmail;
+  ALERT_EMAIL?: string;
+  ALERT_FROM?: string;
 }
 
 // Everything except the holdout bucket, the credentials that could mint read access to it,
