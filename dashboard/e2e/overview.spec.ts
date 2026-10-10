@@ -78,15 +78,18 @@ test("the Overview has no Queue panel and no Incidents panel", async ({ page }) 
   await visit(page, "overview");
   const h2 = await page.locator("main h2").allTextContents();
   // Its sections are there, so the absence below is not an empty page.
-  expect(h2).toEqual(["Needs attention", "Sites", "Deploys and downtime, 7 days"]);
-  await expect(page.locator("main .qrow, main .frow")).toHaveCount(0);
+  // The Maintenance list loads on its own after first paint, so whether it is in yet is
+  // timing; the attention list is not here at all (it is on Needs you).
+  expect(h2.filter((h) => h !== "Maintenance")).toEqual(["Sites", "Deploys and downtime, 7 days"]);
+  // The Maintenance list's own rows (.mrow) are the daily pass's, not the Queue's.
+  await expect(page.locator("main .qrow:not(.mrow), main .frow")).toHaveCount(0);
 });
 
 // ---- ruling 3: grouping and notices -------------------------------------------------------
 
 test("four pull requests of one repo are one row that opens in place to four", async ({ page }) => {
   await reshape(page, fourPrs);
-  await visit(page, "overview");
+  await visit(page, "needs");
   const rows = attention(page).locator(".att-row").filter({ hasText: /awaits? the seat/ });
   await expect(rows).toHaveCount(1);
   const toggle = rows.getByRole("button", { name: "4 pull requests await the seat" });
@@ -110,7 +113,7 @@ test("four pull requests of one repo are one row that opens in place to four", a
 });
 
 test("the blocked jobs are one row whose children are the jobs, then a link to the Queue", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "needs");
   const toggle = attention(page).getByRole("button", { name: "3 jobs are waiting on you" });
   await toggle.click();
   const kids = page.locator(`#${await toggle.getAttribute("aria-controls")}`);
@@ -123,7 +126,7 @@ test("the blocked jobs are one row whose children are the jobs, then a link to t
 const NOTICE_TITLES = [/no Cloudflare data/, /could not run/, /could not be read/, /Site map drift/, /silent/];
 
 test("notices are one row, closed, at the foot; the problems hold none of them", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "needs");
   const problems = attention(page).locator(".att-list");
   const titles = await problems.locator(".att-row b, .att-row .rowlink").allInnerTexts();
   expect(titles.length).toBeGreaterThanOrEqual(5);
@@ -155,7 +158,7 @@ test("with no problems it says all clear, and the notices row stays under it", a
     // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
     for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
   });
-  await visit(page, "overview");
+  await visit(page, "needs");
   await expect(attention(page).getByText("All clear. Nothing needs you.")).toBeVisible();
   await expect(attention(page).locator(".att-list")).toHaveCount(0);
   await expect(attention(page).locator(".notices").getByRole("button", { name: /^\d+ notices?$/ })).toHaveAttribute("aria-expanded", "false");

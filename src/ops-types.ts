@@ -338,6 +338,36 @@ export interface OpsLoop {
   };
 }
 
+// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, improve_status's
+// needs_dustin, and the Portal's Needs you page all carry this one shape.
+export type InboxSeverity = "needs-you" | "failing" | "none";
+export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
+
+export interface InboxItem {
+  title: string;
+  kind: InboxKind;
+  /** Where to act on it, or null when there is no page for it. */
+  link: string | null;
+  /** When it started waiting, ISO. The shell shows the age. */
+  since: string;
+}
+
+export interface InboxApp {
+  namespace: string;
+  name: string;
+  count: number;
+  severity: InboxSeverity;
+  items: InboxItem[];
+}
+
+export interface Inbox {
+  generated: string;
+  /** Items across the apps this caller may read. */
+  count: number;
+  severity: InboxSeverity;
+  apps: InboxApp[];
+}
+
 export interface OpsLive {
   generated: string;
   // Every open job, and every job that ended in the last 24 hours.
@@ -367,6 +397,9 @@ export interface OpsLive {
   // Drivers' writes to canon documents waiting for approval (src/canon.ts), oldest
   // first, at most 50.
   canon_proposals: OpsCanonProposal[];
+  // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
+  // (src/inbox.ts), unrestricted: the Portal is the admin's.
+  inbox: Inbox;
 }
 
 // One pending canon proposal, measured against the document as it is now. stale: the

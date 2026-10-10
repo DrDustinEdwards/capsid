@@ -42,6 +42,6 @@ test("Incidents lists every scheduled task with its state, its last run and what
 
 test("a failing scheduled task is in Needs attention", async ({ page }) => {
   await refusedMerge(page);
-  await visit(page, "overview");
+  await visit(page, "needs");
   await expect(page.locator("main section.attention").getByText("Auto-merge step: its last run refused")).toBeVisible();
 });

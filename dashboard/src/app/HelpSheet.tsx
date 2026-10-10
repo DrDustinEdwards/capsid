@@ -5,7 +5,8 @@ import type { ViewDef, ViewId } from "./ctx";
 // heading (design D13 moved them here). CI and merges has none: its intro only restated
 // its name.
 const ABOUT: Partial<Record<ViewId, string>> = {
-  overview: "Problems first, worst first; then the sites and the week of deploys.",
+  needs: "The home: what waits on you, per app, then every problem worst first.",
+  overview: "The summary tiles, the maintenance list, the sites and the week of deploys.",
   sites: "Health comes from each site's own route; a root 200 is liveness, not health.",
   incidents: "Watcher findings, open first. Each is posted once and clears on its own.",
   queue: "A blocked job shows what it waits on; open it for the command and the resume call.",

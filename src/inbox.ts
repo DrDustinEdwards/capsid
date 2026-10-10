@@ -25,33 +25,9 @@ import { readReports } from "./inbox-report";
 // reported item is always needs-you: an app may say a person must act, never that its
 // badge should be quieter.
 
-export type InboxSeverity = "needs-you" | "failing" | "none";
-export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
-
-export interface InboxItem {
-  title: string;
-  kind: InboxKind;
-  /** Where to act on it, or null when there is no page for it. */
-  link: string | null;
-  /** When it started waiting, ISO. The shell shows the age. */
-  since: string;
-}
-
-export interface InboxApp {
-  namespace: string;
-  name: string;
-  count: number;
-  severity: InboxSeverity;
-  items: InboxItem[];
-}
-
-export interface Inbox {
-  generated: string;
-  /** Items across the apps this caller may read. */
-  count: number;
-  severity: InboxSeverity;
-  apps: InboxApp[];
-}
+// The shapes are in the feed contract (src/ops-types.ts), which the Portal also reads.
+export type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
+import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;

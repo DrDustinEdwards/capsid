@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
 export const VIEWS = [
+  { id: "needs", label: "Needs you", key: "y" },
   { id: "overview", label: "Overview", key: "o" },
   { id: "sites", label: "Sites", key: "s" },
   { id: "packages", label: "Packages", key: "p" },
@@ -132,7 +133,7 @@ export function useApp(): Ctx {
 }
 
 // Routes, relative to the /portal base:
-//   /                      overview
+//   /                      needs you, the home (design-portal-evaluation.md, DECIDE 1)
 //   /<view>                a view
 //   /<view>/<type>/<id>    a view with a drawer open over it (site, job, agent, audit row)
 export interface Route {
@@ -151,7 +152,7 @@ export function parseRoute(path: string): Route {
       return s;
     }
   });
-  let view: ViewId = "overview";
+  let view: ViewId = "needs";
   let i = 0;
   if (isView(segs[0])) (view = segs[0]), (i = 1);
   const type = segs[i] as DrawerType | undefined;
@@ -161,5 +162,5 @@ export function parseRoute(path: string): Route {
 
 export function routePath(view: ViewId, drawer?: { type: DrawerType; id: string } | null): string {
   if (drawer) return `/${view}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
-  return view === "overview" ? "/" : `/${view}`;
+  return view === "needs" ? "/" : `/${view}`;
 }
