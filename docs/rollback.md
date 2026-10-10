@@ -19,6 +19,8 @@ Most rollbacks never need the command above: CI does it. Every push to `master` 
 - **Read back, not assumed.** After `wrangler rollback --name capsid`, the step polls `/health` up to 20 times, 3 seconds apart, until a readable sha other than this run's is live (`rollback-guard.mjs --after`). On success the summary carries `rollback_from=<sha> rollback_to=<sha>`; if the sha never moves it carries `rollback_did_not_take_effect` and the job fails, because production may still serve the refused deploy and a human decides.
 - **master is not changed.** The bad commit stays on `master`. Land a fix or revert it; the next push deploys again through the same gate.
 
+Capsid remembers each one. The watcher reads the live gate job of each new push run and records it in `deploy_outcomes` (`verified`, `rolled_back`, `rollback_failed`, `rollback_skipped` or `unverified`). A rollback, or one that did not take effect, opens a watcher finding. GitHub does not serve the step summary through its API, so the watcher reads the step's `::error::` annotations instead: their wording ("rolled back: was ...", "not rolling back", "the rollback did not take effect") is what `src/deploy-outcomes.ts` matches, and changing it here means changing it there (docs/autonomy.md, "Deploys").
+
 ## The MCP call (gate 8)
 
 Every other gate stops before the MCP connection: OAuth metadata, `/register`, the consent page, the Access redirect, headers, and a 401 from `/ops/mcp` with no key. A deploy whose sign-in works and whose tool calls are broken passed all of them (job_bb06c9be24c4). Gate 8 makes the calls a client makes, through `/ops/mcp` with the `live-probe` agent's key, in both protocol eras Capsid serves (`scripts/mcp-probe-lib.mjs`):

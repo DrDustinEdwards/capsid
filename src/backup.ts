@@ -130,6 +130,9 @@ export const TABLES = [
   // Revoked agents moved out of agents by the watcher pass (migrations/0038_agents_archive.sql).
   // Nothing prunes it: an archived row keeps a name reserved and a revoked key refused.
   "agents_archive",
+  // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
+  // the evidence the promotion and demotion proposals read. Nothing prunes it.
+  "deploy_outcomes",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

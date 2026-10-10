@@ -21,6 +21,7 @@ import { externalFence } from "./provenance";
 import { anomalyFindings, readActionHours } from "./anomaly";
 import { archiveRevokedAgents } from "./agents-archive";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
+import { deployFindings, readDeployOutcomes } from "./deploy-outcomes";
 import {
   buildSnapshot,
   probeSite,
@@ -532,6 +533,7 @@ export const WATCHER_CHECKS = [
   "site repairs",
   "agent anomalies",
   "domains",
+  "deploys",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -553,6 +555,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^site-(health|weekly)-/, "site repairs"],
   [/^anomaly-/, "agent anomalies"],
   [/^domain-expiry-/, "domains"],
+  [/^deploy-(rolled-back|rollback-failed)-/, "deploys"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -1079,6 +1082,19 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     });
   }
   if (ciRead === LOOP_ROSTER.length) ran.add("ci");
+
+  // What became of each roster repo's newest deploys (src/deploy-outcomes.ts, the merge
+  // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
+  // counts as run only when every repo was read, so a failed read never clears one.
+  let deploysRead = 0;
+  for (const namespace of LOOP_ROSTER) {
+    // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
+    const read = await attempt(`deploys ${namespace}`, async () => ({ newest: await readDeployOutcomes(env, namespace) }));
+    if (!read) continue;
+    deploysRead++;
+    if (read.newest) out.push(...deployFindings(namespace, read.newest));
+  }
+  if (deploysRead === LOOP_ROSTER.length) ran.add("deploys");
 
   // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
   // check below cannot run this pass: nothing is probed on a guess, and an open site
