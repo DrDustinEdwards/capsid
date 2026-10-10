@@ -13,12 +13,17 @@
 // takes, and then the deploy config turns workers.dev off. Its /portal is retired now:
 // capsid-login no longer lists its sign-in callback, so it is the plain 404, as /console was.
 
+import { VERIFY_LIVE_CLIENT_PATH } from "./oauth-client-docs";
+
 export const MCP_HOST = "mcp.dustinedwards.info";
 export const MCP_URL = `https://${MCP_HOST}/mcp`;
 export const LEGACY_HOST = "capsid.dustin-edwards.workers.dev";
 export const LEGACY_MCP_URL = `https://${LEGACY_HOST}/mcp`;
 
 // Exact paths the MCP host serves, and the prefixes under which it serves everything.
+// The verify-live probe's client document is here because live gate 2 fetches it from
+// the host under test (scripts/cimd-probe-lib.mjs); left out, the host answered 404 and
+// the gate rolled back the deploy of 4730307.
 const MCP_HOST_PATHS = new Set([
   "/mcp",
   "/authorize",
@@ -32,6 +37,7 @@ const MCP_HOST_PATHS = new Set([
   "/backup/credential",
   "/public/model/v1.json",
   "/public/stats/v1.json",
+  VERIFY_LIVE_CLIENT_PATH,
 ]);
 const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-"];
 
