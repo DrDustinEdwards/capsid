@@ -96,7 +96,7 @@ describe("the feed against real D1", () => {
     // One pause key per roster namespace, and those are the only per-namespace reads.
     const pauseKeys = reads.kv.filter((key) => key.startsWith("improve:paused:"));
     expect(pauseKeys.sort()).toEqual(LOOP_ROSTER.map(pausedKey).sort());
-    expect(OPS_FEED_READS.kv).toBe(8 + LOOP_ROSTER.length);
+    expect(OPS_FEED_READS.kv).toBe(10 + LOOP_ROSTER.length);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
     const again = counted();
@@ -118,6 +118,9 @@ describe("the feed against real D1", () => {
     const blocked = feed.live.jobs.find((j) => j.id === "job_00000000000b")!;
     expect(blocked.waits_on).toBe("waiting on the push");
     expect(blocked.command).toBe("git push -u origin feat/x");
+    // Needs you reads the same inbox GET /ops/inbox answers with: the blocked job is in it.
+    expect(feed.live.inbox.apps.flatMap((a) => a.items).map((i) => i.title)).toContain(blocked.title);
+    expect(feed.live.inbox.count).toBe(feed.live.inbox.apps.reduce((n, a) => n + a.count, 0));
     const finding = feed.live.jobs.find((j) => j.id === "job_00000000000d")!;
     expect(finding.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: null, last_seen: null });
     expect(finding.updated_at, "a datetime('now') value is handed over as ISO").toMatch(/T.*Z$/);

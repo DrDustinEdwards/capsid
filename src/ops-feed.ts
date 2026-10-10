@@ -1,3 +1,4 @@
+import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
@@ -36,7 +37,7 @@ import { pendingProposals } from "./canon";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 23 statements plus N:
+//   D1, 25 statements plus N:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -50,7 +51,10 @@ import { pendingProposals } from "./canon";
 //     1  canon_proposals: the pending proposals joined to their documents, at most 50
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
-//   KV, 8 gets plus one per LOOP_ROSTER namespace (5 today, so 13): ops:snapshot, the
+//     2  gatherInbox (src/inbox.ts): the blocked jobs and the site configuration again,
+//        so Needs you counts exactly what GET /ops/inbox answers with
+//   KV, 10 gets plus one per LOOP_ROSTER namespace (5 today, so 15): gatherInbox's own
+//     reads of ops:snapshot and the awaiting-seat set, then ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, the overnight switch's mode (its decision record is
 //     read only while the mode is subscription), and each namespace's pause key.
@@ -61,7 +65,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 8 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 10 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -408,7 +412,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight, canonProposals] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -425,6 +429,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     readPackageConfig(env.DB),
     overnightState(env),
     pendingProposals(env.DB),
+    gatherInbox(env, now, null),
   ]);
   return {
     generated: now.toISOString(),
@@ -441,6 +446,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     packages,
     store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
     canon_proposals: canonProposals,
+    inbox,
   };
 }
 
