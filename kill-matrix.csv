@@ -1,0 +1,2 @@
+test_file,source_file,mutants_killed,mutants_killed_only_by_this_test
+,scripts/verify-live.mjs,346,346
