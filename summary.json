@@ -1,0 +1,131 @@
+{
+  "run_id": "38030699202",
+  "sha": "f94bd4ae04bfb11e097880b0ee6023cc8d84ea63",
+  "ref": "refs/heads/mutation-scripts-dashboard",
+  "complete": true,
+  "problems": [],
+  "stryker": {
+    "name": "StrykerJS",
+    "version": "10.0.0"
+  },
+  "shards": [
+    {
+      "shard": 0,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 1,
+      "files": 1,
+      "report": true
+    },
+    {
+      "shard": 2,
+      "files": 1,
+      "report": true
+    },
+    {
+      "shard": 3,
+      "files": 1,
+      "report": true
+    },
+    {
+      "shard": 4,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 5,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 6,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 7,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 8,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 9,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 10,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 11,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 12,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 13,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 14,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 15,
+      "files": 0,
+      "report": false
+    }
+  ],
+  "mutants": 1525,
+  "counts": {
+    "Killed": 134,
+    "Timeout": 0,
+    "Survived": 95,
+    "NoCoverage": 1295,
+    "RuntimeError": 1,
+    "CompileError": 0,
+    "Ignored": 0,
+    "Pending": 0
+  },
+  "score": 8.79,
+  "score_covered_only": 58.52,
+  "source_files": 3,
+  "test_files": 4,
+  "per_source": [
+    {
+      "file": "scripts/dry-run-config.mjs",
+      "mutants": 50,
+      "NoCoverage": 50,
+      "score": 0
+    },
+    {
+      "file": "scripts/improve-report.mjs",
+      "mutants": 732,
+      "NoCoverage": 502,
+      "RuntimeError": 1,
+      "Killed": 134,
+      "Survived": 95,
+      "score": 18.3
+    },
+    {
+      "file": "scripts/verify-live.mjs",
+      "mutants": 743,
+      "NoCoverage": 743,
+      "score": 0
+    }
+  ]
+}

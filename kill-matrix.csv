@@ -1,0 +1,3 @@
+test_file,source_file,mutants_killed,mutants_killed_only_by_this_test
+test/improve-environment-signal.test.ts,scripts/improve-report.mjs,34,8
+test/secondary-recompute.test.ts,scripts/improve-report.mjs,126,100
