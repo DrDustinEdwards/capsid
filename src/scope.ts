@@ -170,6 +170,7 @@ export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
 // instead, because "public" and "authorized some other way" are different claims.
 export const UNGATED_ROUTES: Record<string, string> = {
   "/health": "a liveness probe that returns provenance and store health, never a document",
+  "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
   "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",

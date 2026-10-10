@@ -7,6 +7,7 @@ import { runBackup } from "./backup";
 import { RUNNER_KEY_PATH, exchangeRunnerKey } from "./runner-key";
 import { checkScope, routeRefusal } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
+import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { b64urlDecode, b64urlEncode } from "./encoding";
@@ -635,6 +636,7 @@ export const defaultHandler = {
     const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
+    if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
