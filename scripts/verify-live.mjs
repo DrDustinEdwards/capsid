@@ -24,7 +24,7 @@
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
 import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
-import { PROBE_CLIENT_ID, PROBE_REDIRECT, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
+import { PROBE_REDIRECT, probeClientId, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 import { probeMcp } from "./mcp-probe-lib.mjs";
 
@@ -141,15 +141,15 @@ async function gateHealth() {
 
 // The probe client for gates 3 to 5. Overridable only so test/verify-live-no-answer.test.ts
 // can serve the document from its stub; CI never sets it.
-const PROBE_CLIENT = process.env.VERIFY_PROBE_CLIENT_ID ?? PROBE_CLIENT_ID;
+const PROBE_CLIENT = process.env.VERIFY_PROBE_CLIENT_ID ?? probeClientId(ORIGIN);
 
 // Gate 2: CIMD, and tightened DCR refusing an unlisted redirect (scripts/cimd-probe-lib.mjs
 // says what is checked).
 // Returns the probe client id when gates 3 to 5 can use it, or null.
 //
-// The probe document is fetched from GitHub, not from the Worker. If GitHub does not
-// serve it, the Worker cannot resolve the client either, and that says nothing about
-// this deploy, so it is could-not-run. A document that is served and wrong is a fail.
+// The probe document is served by the Worker under test (src/oauth-client-docs.ts). No
+// answer at all is could-not-run, as for every gate; an answer that is not a 200, or a
+// document that is wrong, is this deploy's fault and a fail.
 async function gateCimdAndDcr() {
   let metadata;
   let register;
@@ -178,8 +178,8 @@ async function gateCimdAndDcr() {
     return COULD_NOT_RUN;
   }
   if (!doc.ok) {
-    record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
-    return COULD_NOT_RUN;
+    record("2 CIMD, DCR allowlisted", false, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
+    return null;
   }
   const bad = probeDocumentProblem(parseJson(doc.text), PROBE_CLIENT, PROBE_REDIRECT);
   record("2 CIMD, DCR allowlisted", bad === null, `register=${register.status} probe=${PROBE_CLIENT}${bad ? `: ${bad}` : ""}`);

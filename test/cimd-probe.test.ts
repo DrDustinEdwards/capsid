@@ -1,24 +1,25 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
-import { PROBE_CLIENT_ID, PROBE_REDIRECT, probeDocumentProblem, registrationProblem } from "../scripts/cimd-probe-lib.mjs";
+import { PROBE_CLIENT_PATH, PROBE_REDIRECT, probeClientId, probeDocumentProblem, registrationProblem } from "../scripts/cimd-probe-lib.mjs";
+import { VERIFY_LIVE_CLIENT_PATH, clientDocument } from "../src/oauth-client-docs.ts";
 
 // verify-live gate 2 (scripts/cimd-probe-lib.mjs): CIMD is on, tightened DCR refuses a
 // registration naming the probe's unlisted redirect (src/dcr.ts), and the probe client's
 // metadata document is one the Worker accepts. The live half is the gate; these pin its
-// decisions and the committed document.
+// decisions and the document the Worker serves.
 
-const DOC = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "verify-live-client.json"), "utf8"));
 const ORIGIN = "https://capsid.example";
+const DOC = clientDocument(new URL(probeClientId(ORIGIN)))!;
 const METADATA = { issuer: ORIGIN, client_id_metadata_document_supported: true, registration_endpoint: `${ORIGIN}/register` };
 const REFUSED = { error: "invalid_redirect_uri" };
 
-test("the committed probe document passes, at the URL GitHub serves it from", () => {
-  assert.equal(PROBE_CLIENT_ID, "https://raw.githubusercontent.com/DrDustinEdwards/capsid/master/scripts/verify-live-client.json");
-  assert.equal(probeDocumentProblem(DOC, PROBE_CLIENT_ID, PROBE_REDIRECT), null);
+test("PLANT: the probe's client id is the document the Worker serves, at a path that names no branch", () => {
+  assert.equal(PROBE_CLIENT_PATH, VERIFY_LIVE_CLIENT_PATH, "the probe asks for a path the Worker does not serve");
+  assert.doesNotMatch(probeClientId(ORIGIN), /master|main|githubusercontent/);
+  const url = new URL(probeClientId(ORIGIN));
+  assert.equal(probeDocumentProblem(clientDocument(url), probeClientId(ORIGIN), PROBE_REDIRECT), null);
 });
 
 test("CIMD advertised, the registration endpoint on this origin, and the probe's redirect refused passes", () => {
@@ -49,6 +50,6 @@ for (const [name, change, pattern] of [
   ["a confidential auth method", { token_endpoint_auth_method: "client_secret_basic" }, /token_endpoint_auth_method/],
 ] as const) {
   test(`the probe document fails on ${name}`, () => {
-    assert.match(String(probeDocumentProblem({ ...DOC, ...change }, PROBE_CLIENT_ID, PROBE_REDIRECT)), pattern);
+    assert.match(String(probeDocumentProblem({ ...DOC, ...change }, probeClientId(ORIGIN), PROBE_REDIRECT)), pattern);
   });
 }

@@ -5,16 +5,21 @@
 // The Worker takes Claude, Claude Code and ChatGPT by Client ID Metadata Document, and
 // Grok and Gemini by a tightened Dynamic Client Registration that admits only the
 // connector callbacks it allowlists exactly (src/dcr.ts, capsid/rulings/mcp-2026-10-10.md
-// rule 13). The probe client is therefore a fixed document in this public repo, served
-// by GitHub at PROBE_CLIENT_ID, and the gate asserts three things: CIMD is on, a
+// rule 13). The probe client is therefore a fixed document the Worker serves itself at
+// PROBE_CLIENT_PATH (src/oauth-client-docs.ts), and the gate asserts three things: CIMD is on, a
 // registration naming the probe's unlisted redirect is refused, and the probe document
 // is one the Worker can accept. The refused registration writes no client record, so
 // nothing is reaped afterwards.
 
 // The probe's client id is the URL of its metadata document, and the document's own
-// client_id must equal it exactly. The file is scripts/verify-live-client.json on
-// master; test/cimd-probe.test.ts reads that file and checks it against these values.
-export const PROBE_CLIENT_ID = "https://raw.githubusercontent.com/DrDustinEdwards/capsid/master/scripts/verify-live-client.json";
+// client_id must equal it exactly. It is served by the Worker under test at a path that
+// names no branch (job_bf05bc756c5e, the master to main plan), so the rename cannot change
+// the probe's identity. test/cimd-probe.test.ts checks this path against the Worker's.
+// Until 2026-10-10 it was scripts/verify-live-client.json on GitHub's master branch; that
+// file stays until plan step 4, so a rollback to older code still finds it.
+export const PROBE_CLIENT_PATH = "/oauth/clients/verify-live.json";
+/** @param {string} origin */
+export const probeClientId = (origin) => `${origin}${PROBE_CLIENT_PATH}`;
 export const PROBE_REDIRECT = "https://example.com/verify-live-callback";
 
 // The authorization-server metadata and the answer to a POST /register naming the
