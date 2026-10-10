@@ -14,6 +14,7 @@ import {
   ciVerdict,
 } from "./auto-merge-policy";
 import { logEvent } from "./log";
+import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
 
 // The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
 // them with evaluatePolicy (src/auto-merge-policy.ts), and merge or record the refusal.
@@ -281,6 +282,10 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     let repo: string;
     let defaultBranch: string;
     let prs: OpenPr[];
+    // The open approvals on this repo (src/pr-approvals.ts), for the executor below. A
+    // read that fails (the table not migrated yet) leaves none, so the tick goes on as
+    // the policy alone and merges nothing on an approval it could not read.
+    let approvals = new Map<number, OpenApproval>();
     // A namespace that cannot be read is skipped, not the whole tick. The default-branch
     // read and the list parse throw on a GitHub failure, and a throw here would stop
     // every later namespace and the awaiting-seat write.
@@ -293,6 +298,11 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         continue;
       }
       prs = (await listed.json()) as OpenPr[];
+      try {
+        approvals = await readOpenApprovals(env.DB, `${owner}/${repo}`);
+      } catch (err) {
+        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}` });
+      }
     } catch (err) {
       logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
       continue;
@@ -327,7 +337,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
-        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now);
+        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
         logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
@@ -350,6 +360,14 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         }
       }
     }
+  }
+
+  // An approval on a pull request the tick no longer sees (closed or merged by hand) is
+  // expired at 7 days here, since the executor sees only open pull requests.
+  try {
+    await expireStaleApprovals(env, now);
+  } catch (err) {
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}` });
   }
 
   // The full awaiting-seat set, written whole, and written even when it is empty, so a
@@ -395,11 +413,23 @@ async function judgeOnePr(
   defaultBranch: string,
   pr: OpenPr,
   outcomes: AutoMergeOutcome[],
-  now: Date
+  now: Date,
+  // The pull request's open approval (src/pr-approvals.ts), or null.
+  approval: OpenApproval | null = null
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   const verdict = evaluatePolicy(facts, allowedAuthors);
   const merge_class = mergeClass(facts, verdict, pr.draft === true);
+  // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
+  // policy leaves open but Dustin approved merges here once CI is green on the approved
+  // sha, or its approval is voided, expired or refused, and the PR is judged as before.
+  if (!verdict.merge && approval) {
+    const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
+    if (done.done === "merged") {
+      outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: done.why, passed: verdict.passed, merge_class });
+      return;
+    }
+  }
   if (!verdict.merge) {
     outcomes.push({
       namespace,
@@ -442,6 +472,8 @@ async function judgeOnePr(
     return;
   }
   outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed, merge_class });
+  // Merged by the policy on its own: an approval it held has nothing left to do.
+  if (approval) await closeAsAutoMerged(env, namespace, facts, approval, (result as { sha?: string }).sha ?? null, now);
   await env.DB.batch([
     improveAudit(
       env.DB,
