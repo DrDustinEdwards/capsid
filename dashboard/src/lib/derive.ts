@@ -257,6 +257,15 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}`, group: { key: "lease", facet: j.namespace } });
     }
   }
+  // An agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6): the watcher's
+  // finding, raised here as well, since Dustin ruled a hit is a finding plus an attention
+  // item and nothing more (D4, 2026-10-03). A warning, never critical: no rule has been
+  // measured yet.
+  for (const j of live.jobs) {
+    if (j.finding?.fingerprint.startsWith("anomaly-") && isOpen(j)) {
+      out.push({ sev: "warn", kind: "Agent", title: j.title.replace(/^Watcher: /, "").replace(/\s*\[[^\]]+\]$/, ""), sub: "Out of its usual pattern · a finding only, nothing suspended", at: ms(j.updated_at), open: `job:${j.id}` });
+    }
+  }
   // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
   // lines read as instructions to agents is a warning like the rest: it is never
   // rejected automatically, so a person reads it.
