@@ -554,7 +554,9 @@ describe("model routing, against the real tables (migrations/0032)", () => {
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "gave up");
     const outcome = await outcomeRow(id);
-    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", "sonnet", null]);
+    // A docs job is on sonnet or, for a share of ids, on the haiku trial arm (src/model-routing.ts TRIAL_ARMS).
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", posted.job!.model_recommended, null]);
+    expect(["sonnet", "haiku"]).toContain(outcome?.model_chosen);
   });
 
   it("a job row from before routing is routed at its claim and recorded", async () => {

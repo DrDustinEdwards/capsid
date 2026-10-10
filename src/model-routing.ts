@@ -25,9 +25,9 @@ export type RoutedModel = (typeof MODELS)[number];
 const EFFORTS = ["low", "medium", "high"] as const;
 export type Effort = (typeof EFFORTS)[number];
 
-// Bumped when ROUTING_RULES or KIND_RULES change, and stored with each recommendation's
+// Bumped when ROUTING_RULES, TRIAL_ARMS or KIND_RULES change, and stored with each recommendation's
 // reason, so an outcome can be read against the rules that chose its model.
-export const ROUTING_RULES_VERSION = 1;
+export const ROUTING_RULES_VERSION = 2;
 
 // THE WATCHER'S ACTOR, as src/watcher.ts defines it. A literal here so this module does
 // not import the watcher; test/model-routing.test.ts holds the two together.
@@ -201,12 +201,51 @@ export const ROUTING_RULES: readonly RoutingRule[] = [
   { when: {}, model: "opusplan", effort: "medium", why: "no rule names this kind, so the repo default" },
 ];
 
+// TRIAL ARMS (job_aef34f6835cd, 2026-10-10). A trial arm sends a fixed share of a kind's
+// routine jobs to another model, so the learning table has outcomes on both models to
+// compare. It switches no kind: the kind's rule above still names its model, and moving
+// a kind is a seat-approved edit to that rule, made when trialStatus says the evidence
+// supports it. Claude Haiku 5.5 (claude-haiku-5-5, released 2026-10-07; the "haiku" alias
+// since Claude Code 2.1.293) costs $0.10 in and $0.50 out per million tokens for prompts
+// up to 100K tokens, against Sonnet 5.5's $2 and $10 (platform.claude.com models overview
+// and claude.com/pricing, read 2026-10-10). Mechanical edits already route to haiku, so
+// they have no arm.
+//
+// An arm keeps the rule's effort, so the comparison is of the model alone. A risky job,
+// or one whose body names its model, never takes an arm. Which jobs take it is a stable
+// hash of the job id, so post and claim agree, and a job's arm never changes.
+export interface TrialArm {
+  kind: JobKind;
+  model: RoutedModel;
+  // The share of the kind's routine jobs the arm takes, in whole percent.
+  percent: number;
+}
+
+export const TRIAL_ARMS: readonly TrialArm[] = [
+  { kind: "watcher", model: "haiku", percent: 25 },
+  { kind: "maintenance", model: "haiku", percent: 25 },
+  { kind: "docs", model: "haiku", percent: 25 },
+];
+
+/** The job's place, 0 to 99, in every trial: FNV-1a over the id. Deterministic and
+ *  synchronous, so the post and every later claim of the job read the same number. */
+export function trialBucket(id: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % 100;
+}
+
 export interface Routing {
   kind: JobKind;
   kind_source: KindVerdict["source"];
   model: RoutedModel;
   effort: Effort;
   risk: Risk["level"];
+  // The trial arm's model this job was sent to, or null when the rule's model holds.
+  trial: RoutedModel | null;
   // One line, stored with the job: why this model, under which rules.
   reason: string;
   rules_version: number;
@@ -217,6 +256,8 @@ export interface Routing {
 const NAMED_MODEL = /^\s*model\s*[:=]\s*(haiku|sonnet|opusplan|opus)\s*$/im;
 
 export function routeJob(job: {
+  // The job id, which places the job in a trial arm. Absent, no arm is taken.
+  id?: string | null;
   title: string;
   body?: string | null;
   namespace: string;
@@ -232,18 +273,24 @@ export function routeJob(job: {
   const risk: Risk = job.pr_risk && job.pr_risk.level === "high" ? job.pr_risk : fromJob;
   const named = job.body ? NAMED_MODEL.exec(job.body)?.[1]?.toLowerCase() : undefined;
   const rule = ROUTING_RULES.find((r) => (r.when.risk ? risk.level === r.when.risk : r.when.kind ? r.when.kind === k.kind : true))!;
-  const model = (named as RoutedModel | undefined) ?? rule.model;
+  // The risk rule comes first, so a rule matched by kind means the job is routine.
+  const arm = !named && rule.when.kind && job.id ? TRIAL_ARMS.find((a) => a.kind === k.kind && a.model !== rule.model) : undefined;
+  const trial = arm && job.id && trialBucket(job.id) < arm.percent ? arm.model : null;
+  const model = (named as RoutedModel | undefined) ?? trial ?? rule.model;
   const why = named
     ? `the job names ${named}`
     : risk.level === "high" && rule.when.risk
       ? `${rule.why}: ${risk.reasons.join("; ")}`
-      : `${rule.why} (kind ${k.kind}, ${k.source})`;
+      : trial
+        ? `trial arm: ${trial} on ${arm!.percent} percent of routine ${k.kind} jobs, measured against ${rule.model} (kind ${k.kind}, ${k.source})`
+        : `${rule.why} (kind ${k.kind}, ${k.source})`;
   return {
     kind: k.kind,
     kind_source: k.source,
     model,
     effort: rule.effort,
     risk: risk.level,
+    trial,
     reason: why.slice(0, 300),
     rules_version: ROUTING_RULES_VERSION,
   };
@@ -356,4 +403,41 @@ export function proposeRuleChanges(cells: readonly Cell[]): Proposal[] {
     }
   }
   return out;
+}
+
+export interface TrialStatus {
+  kind: string;
+  model: string;
+  // The model the kind's rule names, which the arm is measured against.
+  against: string;
+  percent: number;
+  n: number;
+  against_n: number;
+  // "collecting" until both cells hold MIN_SAMPLE outcomes; then whether the evidence
+  // supports moving the kind's rule to the arm's model. Never applied here.
+  verdict: "collecting" | "supports" | "does not support";
+  why: string;
+}
+
+const money = (usd: number | null): string => (usd === null ? "no cost recorded" : `$${usd.toFixed(2)} a job`);
+
+/** Each trial arm read against its kind's rule: what it has collected and whether the
+ *  evidence supports the rule change. "supports" holds exactly when proposeRuleChanges
+ *  proposes that change; the seat makes the edit. */
+export function trialStatus(cells: readonly Cell[]): TrialStatus[] {
+  const proposals = proposeRuleChanges(cells);
+  return TRIAL_ARMS.map((arm) => {
+    const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
+    const mine = cells.find((c) => c.kind === arm.kind && c.model === arm.model);
+    const theirs = cells.find((c) => c.kind === arm.kind && c.model === rule.model);
+    const base = { kind: arm.kind, model: arm.model, against: rule.model, percent: arm.percent, n: mine?.n ?? 0, against_n: theirs?.n ?? 0 };
+    if (!mine?.enough || !theirs?.enough) {
+      return { ...base, verdict: "collecting" as const, why: `${base.n} of ${MIN_SAMPLE} outcomes on ${arm.model} and ${base.against_n} of ${MIN_SAMPLE} on ${rule.model}; nothing is read from fewer` };
+    }
+    const scores = `${arm.model} merged green ${mine.merged_green}/${mine.n} at ${money(mine.cost_mean_usd)}, ${rule.model} ${theirs.merged_green}/${theirs.n} at ${money(theirs.cost_mean_usd)}`;
+    const proposed = proposals.some((p) => p.kind === arm.kind && p.to === arm.model);
+    return proposed
+      ? { ...base, verdict: "supports" as const, why: `${scores}: the evidence supports moving ${arm.kind} to ${arm.model}, for the seat to approve` }
+      : { ...base, verdict: "does not support" as const, why: `${scores}: ${arm.kind} stays on ${rule.model}` };
+  });
 }

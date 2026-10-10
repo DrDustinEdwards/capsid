@@ -1,4 +1,4 @@
-import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, cellsOf, proposeRuleChanges, type Cell, type OutcomeFact, type Proposal } from "./model-routing";
+import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS, cellsOf, proposeRuleChanges, trialStatus, type Cell, type OutcomeFact, type Proposal, type TrialStatus } from "./model-routing";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
 // the share of jobs merged with green CI, the corrections spent, and the cost where
@@ -21,8 +21,11 @@ export interface ModelLearning {
   rate_gain: number;
   rules_version: number;
   rules: ReadonlyArray<{ when: Record<string, string>; model: string; effort: string }>;
+  trial_arms: ReadonlyArray<{ kind: string; model: string; percent: number }>;
   cells: Cell[];
   proposals: Proposal[];
+  // Each trial arm against its kind's rule (src/model-routing.ts TRIAL_ARMS).
+  trials: TrialStatus[];
   note: string;
 }
 
@@ -65,8 +68,10 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     rate_gain: RATE_GAIN,
     rules_version: ROUTING_RULES_VERSION,
     rules: ROUTING_RULES.map((r) => ({ when: Object.fromEntries(Object.entries(r.when)) as Record<string, string>, model: r.model, effort: r.effort })),
+    trial_arms: TRIAL_ARMS.map((a) => ({ kind: a.kind, model: a.model, percent: a.percent })),
     cells,
     proposals,
+    trials: trialStatus(cells),
     note:
       facts.length === 0
         ? "No routed outcome in the window yet: outcomes written before migration 0032 carry no kind or model. Nothing is proposed from no evidence."
