@@ -1,0 +1,376 @@
+{
+  "run_id": "38030697681",
+  "sha": "f94bd4ae04bfb11e097880b0ee6023cc8d84ea63",
+  "ref": "refs/heads/mutation-scripts-dashboard",
+  "complete": true,
+  "problems": [],
+  "stryker": {
+    "name": "StrykerJS",
+    "version": "10.0.0"
+  },
+  "shards": [
+    {
+      "shard": 0,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 1,
+      "files": 3,
+      "report": true
+    },
+    {
+      "shard": 2,
+      "files": 3,
+      "report": true
+    },
+    {
+      "shard": 3,
+      "files": 3,
+      "report": true
+    },
+    {
+      "shard": 4,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 5,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 6,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 7,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 8,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 9,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 10,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 11,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 12,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 13,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 14,
+      "files": 2,
+      "report": true
+    },
+    {
+      "shard": 15,
+      "files": 2,
+      "report": true
+    }
+  ],
+  "mutants": 7091,
+  "counts": {
+    "Killed": 2456,
+    "Timeout": 13,
+    "Survived": 1247,
+    "NoCoverage": 3337,
+    "RuntimeError": 38,
+    "CompileError": 0,
+    "Ignored": 0,
+    "Pending": 0
+  },
+  "score": 35.01,
+  "score_covered_only": 66.44,
+  "source_files": 35,
+  "test_files": 180,
+  "per_source": [
+    {
+      "file": "dashboard/src/lib/api.ts",
+      "mutants": 315,
+      "NoCoverage": 315,
+      "score": 0
+    },
+    {
+      "file": "dashboard/src/lib/apps.ts",
+      "mutants": 16,
+      "NoCoverage": 16,
+      "score": 0
+    },
+    {
+      "file": "dashboard/src/lib/base.ts",
+      "mutants": 14,
+      "NoCoverage": 14,
+      "score": 0
+    },
+    {
+      "file": "dashboard/src/lib/derive.ts",
+      "mutants": 967,
+      "NoCoverage": 340,
+      "Survived": 375,
+      "Killed": 252,
+      "score": 26.1
+    },
+    {
+      "file": "dashboard/src/lib/format.ts",
+      "mutants": 163,
+      "NoCoverage": 55,
+      "Survived": 33,
+      "Killed": 69,
+      "RuntimeError": 6,
+      "score": 43.9
+    },
+    {
+      "file": "dashboard/src/lib/messages.ts",
+      "mutants": 13,
+      "Killed": 13,
+      "score": 100
+    },
+    {
+      "file": "dashboard/src/lib/prefs.ts",
+      "mutants": 99,
+      "NoCoverage": 99,
+      "score": 0
+    },
+    {
+      "file": "dashboard/src/lib/stops.ts",
+      "mutants": 57,
+      "NoCoverage": 6,
+      "Killed": 41,
+      "Survived": 10,
+      "score": 71.9
+    },
+    {
+      "file": "dashboard/src/lib/store.ts",
+      "mutants": 22,
+      "Killed": 21,
+      "Survived": 1,
+      "score": 95.5
+    },
+    {
+      "file": "scripts/access-redirect-lib.mjs",
+      "mutants": 69,
+      "Killed": 58,
+      "Survived": 11,
+      "score": 84.1
+    },
+    {
+      "file": "scripts/admin-exposure-check.mjs",
+      "mutants": 83,
+      "NoCoverage": 71,
+      "Survived": 9,
+      "RuntimeError": 3,
+      "score": 0
+    },
+    {
+      "file": "scripts/bindings.mjs",
+      "mutants": 28,
+      "Survived": 21,
+      "RuntimeError": 2,
+      "Killed": 5,
+      "score": 19.2
+    },
+    {
+      "file": "scripts/canary-lib.mjs",
+      "mutants": 113,
+      "NoCoverage": 113,
+      "score": 0
+    },
+    {
+      "file": "scripts/capsid-rpc.mjs",
+      "mutants": 78,
+      "NoCoverage": 3,
+      "Killed": 58,
+      "Survived": 17,
+      "score": 74.4
+    },
+    {
+      "file": "scripts/check-commit-trailers.mjs",
+      "mutants": 220,
+      "NoCoverage": 57,
+      "Killed": 124,
+      "Survived": 39,
+      "score": 56.4
+    },
+    {
+      "file": "scripts/ci-config.mjs",
+      "mutants": 170,
+      "NoCoverage": 170,
+      "score": 0
+    },
+    {
+      "file": "scripts/cimd-probe-lib.mjs",
+      "mutants": 72,
+      "NoCoverage": 1,
+      "Killed": 63,
+      "Survived": 8,
+      "score": 87.5
+    },
+    {
+      "file": "scripts/deploy.mjs",
+      "mutants": 86,
+      "NoCoverage": 86,
+      "score": 0
+    },
+    {
+      "file": "scripts/dry-run-config.mjs",
+      "mutants": 50,
+      "NoCoverage": 50,
+      "score": 0
+    },
+    {
+      "file": "scripts/dump-invariants.mjs",
+      "mutants": 309,
+      "NoCoverage": 39,
+      "Killed": 192,
+      "Survived": 74,
+      "RuntimeError": 4,
+      "score": 63
+    },
+    {
+      "file": "scripts/export-claims.mjs",
+      "mutants": 354,
+      "NoCoverage": 20,
+      "Killed": 262,
+      "Survived": 65,
+      "Timeout": 4,
+      "RuntimeError": 3,
+      "score": 75.8
+    },
+    {
+      "file": "scripts/freshness-lib.mjs",
+      "mutants": 92,
+      "Killed": 73,
+      "Survived": 19,
+      "score": 79.3
+    },
+    {
+      "file": "scripts/improve-derive-key.mjs",
+      "mutants": 56,
+      "NoCoverage": 56,
+      "score": 0
+    },
+    {
+      "file": "scripts/improve-report.mjs",
+      "mutants": 732,
+      "NoCoverage": 291,
+      "RuntimeError": 1,
+      "Killed": 302,
+      "Survived": 138,
+      "score": 41.3
+    },
+    {
+      "file": "scripts/lease-keepalive.mjs",
+      "mutants": 166,
+      "NoCoverage": 17,
+      "Killed": 97,
+      "Timeout": 6,
+      "Survived": 46,
+      "score": 62
+    },
+    {
+      "file": "scripts/mint-agents.mjs",
+      "mutants": 401,
+      "NoCoverage": 66,
+      "Survived": 69,
+      "Killed": 263,
+      "RuntimeError": 3,
+      "score": 66.1
+    },
+    {
+      "file": "scripts/no-bloat-report.mjs",
+      "mutants": 139,
+      "NoCoverage": 122,
+      "RuntimeError": 1,
+      "Survived": 10,
+      "Killed": 6,
+      "score": 4.3
+    },
+    {
+      "file": "scripts/overnight-guard.mjs",
+      "mutants": 261,
+      "NoCoverage": 6,
+      "Killed": 212,
+      "Survived": 40,
+      "Timeout": 3,
+      "score": 82.4
+    },
+    {
+      "file": "scripts/path-guard.mjs",
+      "mutants": 139,
+      "NoCoverage": 105,
+      "Killed": 22,
+      "Survived": 7,
+      "RuntimeError": 5,
+      "score": 16.4
+    },
+    {
+      "file": "scripts/rollback-guard.mjs",
+      "mutants": 121,
+      "NoCoverage": 32,
+      "Survived": 19,
+      "Killed": 66,
+      "RuntimeError": 4,
+      "score": 56.4
+    },
+    {
+      "file": "scripts/schedule-drivers.mjs",
+      "mutants": 467,
+      "NoCoverage": 387,
+      "Survived": 74,
+      "Killed": 3,
+      "RuntimeError": 3,
+      "score": 0.6
+    },
+    {
+      "file": "scripts/sql-statements.mjs",
+      "mutants": 122,
+      "NoCoverage": 8,
+      "Killed": 57,
+      "Survived": 57,
+      "score": 46.7
+    },
+    {
+      "file": "scripts/sync-scorer.mjs",
+      "mutants": 341,
+      "NoCoverage": 36,
+      "Killed": 197,
+      "Survived": 105,
+      "RuntimeError": 3,
+      "score": 58.3
+    },
+    {
+      "file": "scripts/test-budget.mjs",
+      "mutants": 13,
+      "NoCoverage": 13,
+      "score": 0
+    },
+    {
+      "file": "scripts/verify-live.mjs",
+      "mutants": 743,
+      "NoCoverage": 743,
+      "score": 0
+    }
+  ]
+}
