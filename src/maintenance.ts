@@ -5,6 +5,8 @@ import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./ma
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 import { gatherDiskItems } from "./maintenance-disk";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
+import { gatherModelDriftItems } from "./model-drift";
+import { bundledModel } from "./public-data";
 
 // The actor the merge-resume step records its touches under (capsid/decisions.md,
 // 2026-10-03, stale jobs D1). Spelled here, not imported, so this pass does not depend on
@@ -37,6 +39,9 @@ const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
 // The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the
 // other Portal types in src/ops-types.ts.
+/** The model drift check, injected so a test can run the pass without GitHub. */
+export type DriftReader = (env: Env) => Promise<{ items: MaintenanceItem[]; read: number }>;
+
 export type MaintenanceItem = OpsMaintenanceItem;
 
 interface MaintenanceList {
@@ -52,6 +57,8 @@ interface MaintenanceList {
   disk_read: number;
   /** Sites whose live deploy was compared with their default branch, per namespace. */
   deploys_read: Record<string, number>;
+  /** Facts compared with system/model.json: mapped repos, App repos and watched sites. */
+  model_read: number;
 }
 
 type MaintenanceReport =
@@ -92,7 +99,8 @@ export async function gatherMaintenance(
   now: Date,
   prReaders: PrReaders = githubPrReaders(env),
   branchReaders: BranchReaders = githubBranchReaders(env),
-  deployReaders: DeployReaders = githubDeployReaders(env)
+  deployReaders: DeployReaders = githubDeployReaders(env),
+  driftReader: DriftReader = (e) => gatherModelDriftItems(e, bundledModel())
 ): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
@@ -167,6 +175,10 @@ export async function gatherMaintenance(
   const deploys = await gatherDeployItems(deployReaders, now);
   items.push(...deploys.items);
 
+  // system/model.json against what Capsid and GitHub know (src/model-drift.ts).
+  const drift = await driftReader(env);
+  items.push(...drift.items);
+
   return {
     generated: now.toISOString(),
     items,
@@ -174,6 +186,7 @@ export async function gatherMaintenance(
     branches_read: branches.read,
     disk_read: disk.read,
     deploys_read: deploys.read,
+    model_read: drift.read,
   };
 }
 
@@ -185,13 +198,14 @@ export async function maintenanceTick(
   now: Date,
   prReaders?: PrReaders,
   branchReaders?: BranchReaders,
-  deployReaders?: DeployReaders
+  deployReaders?: DeployReaders,
+  driftReader?: DriftReader
 ): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders);
+  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders, driftReader);
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
@@ -202,7 +216,7 @@ export async function maintenanceTick(
   const deploySites = Object.keys(list.deploys_read).length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model`,
     list,
   };
 }
@@ -222,6 +236,7 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
       branches_read: counts(parsed.branches_read),
       disk_read: typeof parsed.disk_read === "number" ? parsed.disk_read : 0,
       deploys_read: counts(parsed.deploys_read),
+      model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
     };
   } catch {
     return null;
