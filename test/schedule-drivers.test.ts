@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error a plain .mjs script with no type declarations, imported for its pure helpers
-import { DRIVER_CAPSID_TOOLS, DRIVER_DENIED, LOG_BUDGET, chicagoDay, driverArgs, install, installCommand, keyPath, logPath, manage, parseArgs, postLog, renderLog, selected, taskName } from "../scripts/schedule-drivers.mjs";
+import { DRIVER_CAPSID_TOOLS, DRIVER_DENIED, LOG_BUDGET, chicagoDay, claimForSession, driverArgs, sessionMcpConfig, install, installCommand, keyPath, logPath, manage, parseArgs, postLog, renderLog, selected, taskName } from "../scripts/schedule-drivers.mjs";
 import { capsidClient } from "../scripts/capsid-rpc.mjs";
 import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
@@ -315,4 +315,33 @@ test("a log the write tool REFUSED is not reported as posted", async () => {
   }) as unknown as typeof fetch;
   const client = capsidClient("https://capsid.example.com", "k", "test", impl);
   await assert.rejects(postLog("capsid", client, "body", "2026-09-25"), /write refused: no write grant/);
+});
+
+// Per-job keys (OWASP item 5): the scheduler claims each job with the driver's key and
+// session_key: true, and the session is launched with that job's key alone.
+
+test("PLANT: a session launched with a job key loads only that config, never the folder's .mcp.json and its long-lived key", () => {
+  const args: string[] = driverArgs("p", "/tmp/x/mcp.json");
+  assert.equal(flag(args, "--mcp-config"), "/tmp/x/mcp.json");
+  assert.ok(args.includes("--strict-mcp-config"), "without --strict-mcp-config the folder's own server, holding the driver key, loads too");
+  const config = JSON.parse(sessionMcpConfig("https://capsid.example.com", "capsid_agent_secret"));
+  assert.deepEqual(Object.keys(config.mcpServers), ["capsid"], "the allowedTools entries name mcp__capsid__, so the server must be capsid");
+  assert.deepEqual(config.mcpServers.capsid, { type: "http", url: "https://capsid.example.com/ops/mcp", headers: { Authorization: "Bearer capsid_agent_secret" } });
+});
+
+test("claimForSession asks for a session key by id, returns it, and turns a refusal or a missing key into a skip", async () => {
+  const calls: Array<{ name: string; args: object }> = [];
+  const answering = (answer: unknown) => ({
+    tool: async (name: string, args: object) => {
+      calls.push({ name, args });
+      return JSON.stringify(answer);
+    },
+  });
+  const got = await claimForSession(answering({ ok: true, session_key: { name: "d@job_aaaaaaaaaaaa.abcdef", key: "k", note: "n" } }), "job_aaaaaaaaaaaa");
+  assert.deepEqual(got, { ok: true, key: "k", name: "d@job_aaaaaaaaaaaa.abcdef" });
+  assert.deepEqual(calls[0], { name: "jobs", args: { action: "claim", id: "job_aaaaaaaaaaaa", session_key: true } });
+  assert.deepEqual(await claimForSession(answering({ ok: false, refusal: "job_aaaaaaaaaaaa is blocked" }), "job_aaaaaaaaaaaa"), { ok: false, why: "job_aaaaaaaaaaaa is blocked" });
+  assert.equal((await claimForSession(answering({ ok: true }), "job_aaaaaaaaaaaa")).ok, false, "a claim with no key must not launch a session on the driver's key");
+  const thrown = await claimForSession({ tool: async () => { throw new Error("offline"); } }, "job_aaaaaaaaaaaa");
+  assert.deepEqual(thrown, { ok: false, why: "offline" });
 });

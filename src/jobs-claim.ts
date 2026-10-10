@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
-import { DEFAULT_MAX_CLAIMS, claimLimit } from "./agents-schema";
+import { DEFAULT_MAX_CLAIMS, agentActor, claimLimit } from "./agents-schema";
+import { mintSessionKey, sessionKeyRefusal, type SessionKey } from "./job-session-key";
 import {
   JOBS_ROWS_MAX,
   OPEN_JOB_STATUSES,
@@ -350,11 +351,17 @@ export async function claimJob(
   env: Env,
   agent: Agent,
   now: Date,
-  args: { namespace?: string; id?: string }
+  args: { namespace?: string; id?: string; sessionKey?: boolean }
 ): Promise<JobResult> {
   const actor = agent.actor;
   const badActor = actorShapeRefusal("claim", actor);
   if (badActor) return badActor;
+  // A claim that hands the job to a key minted for it (src/job-session-key.ts) is a
+  // driver's alone, refused before anything is read.
+  if (args.sessionKey) {
+    const notDriver = sessionKeyRefusal(agent);
+    if (notDriver) return refuse("claim", notDriver);
+  }
   const limit = claimLimit(agent.scopes);
   const held = await heldClaims(env.DB, actor);
   if (held.length >= limit) return refuse("claim", claimRefusal(actor, { kind: "full", held, limit }, args.id ?? "another job"));
@@ -471,6 +478,10 @@ export async function claimJob(
   });
 
   const expires = leaseUntil(now);
+  // With session_key, the job is held by a key minted for it in the same batch, and the
+  // checks above were the driver's: its limit, its repo, its flags, its record.
+  const session: SessionKey | null = args.sessionKey ? await mintSessionKey(env.DB, agent, candidate.id, now) : null;
+  const holder = session ? agentActor(session.name) : actor;
   const claimed: JobRow = {
     ...candidate,
     kind: routing.kind,
@@ -478,7 +489,7 @@ export async function claimJob(
     effort_recommended: routing.effort,
     routing_reason: routing.reason,
     status: "claimed",
-    claimed_by: actor,
+    claimed_by: holder,
     // A job the seat released keeps its first claim time, so its duration covers its
     // whole working life. The lease sweep clears claimed_at, so a swept job starts over.
     claimed_at: candidate.claimed_at ?? now.toISOString(),
@@ -487,7 +498,7 @@ export async function claimJob(
   };
   // The skills this job is offered: decided at its first claim and recorded in the
   // same batch, or read back from that record on a later claim.
-  const offer = await offerForClaim(env, claimed, actor);
+  const offer = await offerForClaim(env, claimed, holder);
   // One batch with its records, behind the guard. Two drivers reading the same
   // candidate still resolve to one winner, because the first commit moves updated_at
   // and the second batch's guard aborts before its UPDATE runs.
@@ -496,9 +507,10 @@ export async function claimJob(
       `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3,
          kind = ?5, model_recommended = ?6, effort_recommended = ?7, routing_reason = ?8
        WHERE id = ?1 AND status = 'queued' RETURNING id`
-    ).bind(candidate.id, actor, now.toISOString(), expires, routing.kind, routing.model, routing.effort, routing.reason),
+    ).bind(candidate.id, holder, now.toISOString(), expires, routing.kind, routing.model, routing.effort, routing.reason),
+    ...(session ? session.statements : []),
     ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
-    jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires }),
+    jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires, ...(session ? { session_key: session.name, key_fingerprint: session.fingerprint } : {}) }),
     ...(offer.record ? [offer.record] : []),
   ]);
   if (!won) {
@@ -517,5 +529,6 @@ export async function claimJob(
     offered_skills: offer.skills,
     routing: deliveryOf(routing),
     ...(prRisk.note ? { routing_note: prRisk.note } : {}),
+    ...(session ? { session_key: { name: session.name, key: session.key, note: session.note } } : {}),
   };
 }
