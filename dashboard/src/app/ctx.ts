@@ -6,6 +6,7 @@ export const VIEWS = [
   { id: "overview", label: "Overview", key: "o" },
   { id: "sites", label: "Sites", key: "s" },
   { id: "packages", label: "Packages", key: "p" },
+  { id: "shared", label: "Shared code", key: "x" },
   { id: "incidents", label: "Incidents", key: "i" },
   { id: "queue", label: "Queue", key: "q" },
   { id: "deploys", label: "Deploys", key: "d" },

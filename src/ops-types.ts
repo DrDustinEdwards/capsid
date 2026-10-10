@@ -338,6 +338,44 @@ export interface OpsLoop {
   };
 }
 
+// Shared code (src/shared-code.ts): GET /portal/api/shared-code.
+export interface SharedCodeApp {
+  namespace: string;
+  name: string;
+  // The manifest it was read from ("package.json", "dashboard/package.json") or "renovate".
+  where: string;
+  // The tag the app pins, or the lockfile's version for a spec with no tag; null when
+  // neither says (a branch).
+  pinned: string | null;
+  // Release tags newer than the pin, or null when the pin is not a release.
+  behind: number | null;
+  // Pinned through a repo's earlier name (GitHub redirects it).
+  via_old_name: boolean;
+}
+
+export interface SharedCodePackage {
+  name: string;
+  repo: string;
+  latest: string | null;
+  tags_error: string | null;
+  users: SharedCodeApp[];
+  // Users at least one release behind.
+  behind: number;
+  // Known local copies the package replaces; present is null when that app's tree could not be read.
+  local_copies: Array<{ namespace: string; path: string; present: boolean | null }>;
+  local_left: number;
+}
+
+export interface SharedCodeView {
+  generated: string;
+  configured: boolean;
+  error: string | null;
+  // How many apps were read, so "nobody is behind" is never "nothing was read".
+  apps_read: number;
+  apps_failed: Array<{ namespace: string; error: string }>;
+  packages: SharedCodePackage[];
+}
+
 // What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, improve_status's
 // needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";

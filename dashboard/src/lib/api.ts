@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMaintenance, PortalConvergence } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -12,6 +12,7 @@ export const NAMESPACES_URL = `${BASE}/api/namespaces`;
 export const ACTIVITY_URL = `${BASE}/api/activity`;
 export const CLAIMS_URL = `${BASE}/api/claims`;
 export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
+export const SHARED_CODE_URL = `${BASE}/api/shared-code`;
 export const STALE_URL = `${BASE}/api/stale`;
 export const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 export const CONVERGENCE_URL = `${BASE}/api/convergence`;
@@ -226,6 +227,12 @@ export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<Portal
 // joined to its former name's, and its weekly GitHub numbers. Fetched when asked for.
 export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
   return get<PortalPackageHistory>(`${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`);
+}
+
+// GET /portal/api/shared-code: each shared package's newest tag, what each app pins, and
+// the local copies left (src/shared-code.ts), cached by the Worker for an hour.
+export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
+  return get<SharedCodeView>(SHARED_CODE_URL);
 }
 
 // GET /portal/api/stale: the jobs that look stuck, each with the rule it met and why,

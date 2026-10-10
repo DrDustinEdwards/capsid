@@ -204,6 +204,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that improve_status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
+  "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
   "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
   "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",

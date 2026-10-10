@@ -22,6 +22,7 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   overview: lazy(() => import("../views/Overview").then((m) => ({ default: m.Overview }))),
   sites: lazy(() => import("../views/Sites").then((m) => ({ default: m.Sites }))),
   packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
+  shared: lazy(() => import("../views/SharedCode").then((m) => ({ default: m.SharedCode }))),
   incidents: lazy(() => import("../views/Incidents").then((m) => ({ default: m.Incidents }))),
   queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
   deploys: lazy(() => import("../views/Deploys").then((m) => ({ default: m.Deploys }))),
@@ -49,7 +50,7 @@ const TABS: ViewId[] = ["needs", "queue", "incidents", "sites"];
 const GROUPS: Array<{ label: string; views: ViewId[] }> = [
   { label: "Watch", views: ["needs", "overview", "sites", "incidents", "deploys", "backups"] },
   { label: "Work", views: ["queue", "agents", "ci", "claims"] },
-  { label: "Records", views: ["namespaces", "packages", "activity"] },
+  { label: "Records", views: ["namespaces", "packages", "shared", "activity"] },
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are

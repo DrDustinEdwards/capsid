@@ -20,7 +20,7 @@ import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import { PORTAL_PACKAGE_HISTORY_PATH } from "../src/portal-packages.ts";
+import { PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
@@ -127,6 +127,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_MAINTENANCE_PATH,
   PORTAL_CONVERGENCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
+  PORTAL_SHARED_CODE_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,
   PORTAL_PATH,

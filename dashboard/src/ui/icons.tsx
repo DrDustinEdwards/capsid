@@ -104,6 +104,7 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
 
 const NAV_ICONS: Record<string, ReactNode> = {
   needs: <path d="M2 4.5h12v7.5H2zM2 4.5l2.5-2.5h7L14 4.5M2 8h3.5l1 1.5h3l1-1.5H14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  shared: <path d="M5 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM5 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM14 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM3.5 5v6M5 4l6 3.3M5 12l6-3.3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   overview: <path d="M2 2h5v6H2zM9 2h5v3H9zM9 7h5v7H9zM2 10h5v4H2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   sites: (
     <>

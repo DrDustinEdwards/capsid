@@ -55,7 +55,7 @@ import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
-import { handlePortalPackageHistory, PORTAL_PACKAGE_HISTORY_PATH } from "./portal-packages";
+import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 import { logEvent } from "./log";
 
@@ -666,6 +666,7 @@ export const defaultHandler = {
     if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
     if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
     if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
+    if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
     if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
     if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
     // The app and everything under it, every method: the handler gates first.
