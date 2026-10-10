@@ -19,6 +19,10 @@ export const LEGACY_HOST = "capsid.dustin-edwards.workers.dev";
 export const LEGACY_MCP_URL = `https://${LEGACY_HOST}/mcp`;
 
 // Exact paths the MCP host serves, and the prefixes under which it serves everything.
+// "/oauth/clients/verify-live.json" is the verify-live probe's client document
+// (src/oauth-client-docs.ts VERIFY_LIVE_CLIENT_PATH). Live gate 2 fetches it from the
+// host under test (scripts/cimd-probe-lib.mjs); left out, the host answered 404 and the
+// gate rolled back the deploy of 4730307. test/mcp-host.test.ts checks the two agree.
 const MCP_HOST_PATHS = new Set([
   "/mcp",
   "/authorize",
@@ -32,6 +36,7 @@ const MCP_HOST_PATHS = new Set([
   "/backup/credential",
   "/public/model/v1.json",
   "/public/stats/v1.json",
+  "/oauth/clients/verify-live.json",
 ]);
 const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-"];
 
