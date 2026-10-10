@@ -22,6 +22,7 @@ import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { PORTAL_PACKAGE_HISTORY_PATH } from "../src/portal-packages.ts";
 import { REPORT_PATH } from "../src/headers.ts";
+import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
@@ -108,6 +109,7 @@ test("a path in neither table is refused to everyone but the admin", async () =>
 
 const PATH_CONSTANTS: Record<string, string> = {
   REPORT_PATH,
+  VERIFY_LIVE_CLIENT_PATH,
   SCORE_PATH,
   CREDENTIAL_PATH,
   BACKUP_CREDENTIAL_PATH,
