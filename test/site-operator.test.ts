@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { allowedTools, callOperator, parseOperator, repairToolRefusal, toolRefusal } from "../src/site-operator.ts";
 import { failingChecks, repairPlan } from "../src/site-watch.ts";
@@ -36,7 +37,7 @@ function recorder(answer: (url: string, init: RequestInit) => Response) {
 }
 
 test("the migration's dustinedwards configuration passes the same rules an edit passes, and names no backup_media", () => {
-  const sql = readFileSync(new URL("../migrations/0035_ops_sites_operator.sql", import.meta.url), "utf8");
+  const sql = readFileSync(join(import.meta.dirname, "..", "migrations", "0035_ops_sites_operator.sql"), "utf8");
   const json = /SET operator = '([^']+)'/.exec(sql)?.[1];
   assert.ok(json, "the migration seeds no configuration");
   const parsed = parseOperator(json);
