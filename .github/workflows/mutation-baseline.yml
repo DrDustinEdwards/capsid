@@ -62,7 +62,34 @@ jobs:
           # test/invariants, test/blast-radius and test/mutation-guard-coverage read the tool
           # modules' source text, and Stryker's instrumentation rewrites it, so the dry run
           # fails whenever one of them is instrumented. No test is excluded.
-          find src -name '*.ts' ! -name '*.d.ts' | sort | xargs grep -LF 'server.registerTool(' > all-files.txt
+          #
+          # The same holds for every file below. Each is read as text by the test named
+          # beside it (found by running every test file in an instrumented sandbox, which
+          # is the dry run's own condition), so instrumenting it fails that test. They are
+          # left out of the mutate list; the tests still run and still count.
+          #   src/index.ts            test/admin-client-audit, test/deploy-pipeline, test/improve-cron
+          #   src/server.ts           test/admin-client-audit
+          #   src/routes.ts           test/route-gates, test/source-conventions
+          #   src/auth.ts             test/source-conventions (timingSafeEqual compare)
+          #   src/access-login.ts     test/source-conventions (timingSafeEqual compare)
+          #   src/skills-refresh.ts   test/skills-refresh (MODEL_ID pattern)
+          #   src/tool-annotations.ts test/tool-annotations (TOOL_HINTS table)
+          # src/access-jwt.ts is a different case: Stryker's Babel parser rejects a typed
+          # arrow function under a computed key there ("Did not expect a type annotation"),
+          # so the whole run stops before any test. It is left out until that is fixed.
+          # A file listed here that no longer exists is harmless; one removed from the list
+          # fails the dry run loudly if a test still reads it.
+          cat > excluded-files.txt <<'EXCLUDED'
+          src/access-jwt.ts
+          src/access-login.ts
+          src/auth.ts
+          src/index.ts
+          src/routes.ts
+          src/server.ts
+          src/skills-refresh.ts
+          src/tool-annotations.ts
+          EXCLUDED
+          find src -name '*.ts' ! -name '*.d.ts' | sort | xargs grep -LF 'server.registerTool(' | grep -vxF -f excluded-files.txt > all-files.txt
           total=$(wc -l < all-files.txt)
           awk -v s="${{ matrix.shard }}" 'NR % 8 == s' all-files.txt > shard-files.txt
           mine=$(wc -l < shard-files.txt)
