@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hostRefusal, LEGACY_HOST, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
+import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
+import { PROBE_CLIENT_PATH } from "../scripts/cimd-probe-lib.mjs";
 
 // The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves, and the
 // old address's retired /portal. test-integration/mcp-host.test.ts runs them through the
@@ -9,14 +11,23 @@ import { hostRefusal, LEGACY_HOST, MCP_HOST, servedOnMcpHost } from "../src/mcp-
 const at = (host: string, path: string) => hostRefusal(new Request(`https://${host}${path}`));
 
 test("PLANT: the MCP host serves every machine route and nothing else", () => {
-  for (const path of ["/mcp", "/mcp/sse", "/authorize", "/token", "/callback", "/health", "/csp-report", "/ops/mcp", "/ops/hooks", "/ops/otlp/v1/metrics", "/ops/runner-key", "/ops/backup", "/improve/score", "/improve/holdout-credential", "/backup/credential", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp"]) {
+  for (const path of ["/mcp", "/mcp/sse", "/authorize", "/token", "/callback", "/health", "/csp-report", "/ops/mcp", "/ops/hooks", "/ops/otlp/v1/metrics", "/ops/runner-key", "/ops/backup", "/improve/score", "/improve/holdout-credential", "/backup/credential", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp", "/oauth/clients/verify-live.json"]) {
     assert.equal(servedOnMcpHost(path), true, path);
     assert.equal(at(MCP_HOST, path), null, path);
   }
-  for (const path of ["/", "/portal", "/portal/", "/portal/api/ops", "/console", "/mcpx", "/opsx", "/.well-known/security.txt"]) {
+  for (const path of ["/", "/portal", "/portal/", "/portal/api/ops", "/console", "/mcpx", "/opsx", "/.well-known/security.txt", "/oauth/clients/other.json"]) {
     assert.equal(servedOnMcpHost(path), false, path);
     assert.equal(at(MCP_HOST, path)?.status, 404, path);
   }
+});
+
+// Live gate 2 fetches the probe document from the host under test. On 2026-10-10 the
+// Worker served it and the gate asked for it, but the MCP host's path list did not
+// include it, so the host answered 404 and the gate rolled back the deploy of 4730307.
+test("PLANT: the MCP host serves the probe document at the path the Worker and gate 2 use", () => {
+  assert.equal(VERIFY_LIVE_CLIENT_PATH, PROBE_CLIENT_PATH);
+  assert.equal(servedOnMcpHost(VERIFY_LIVE_CLIENT_PATH), true);
+  assert.equal(at(MCP_HOST, PROBE_CLIENT_PATH), null);
 });
 
 test("PLANT: the old address's /portal is the plain 404, and its machine routes still go on", () => {
