@@ -365,6 +365,8 @@ dialog { color: var(--text); }
 /* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
 .body { padding: 14px 16px; }
 .stack-gap { display: grid; gap: 12px; }
+.row-gap { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.conv-h { margin: 0; font-size: 13px; font-weight: 600; }
 .tl-pad { padding: 6px 8px 0; }
 .src.hot, .mono.hot, .num.hot { color: var(--crit); }
 .spark { overflow: visible; display: block; }

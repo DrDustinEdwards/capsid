@@ -109,6 +109,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   package_remove: "Remove package",
   canon_approve: "Approve and write",
   canon_reject: "Reject proposal",
+  site_repair: (p) => `Run ${p.tool ?? "repair"}`,
 };
 
 export function performLabel(action: PortalAction, params: Record<string, string>): string {

@@ -4,6 +4,7 @@ import { ago, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
+import { Convergence } from "./Convergence";
 
 export function Sites() {
   const { feed, now } = useApp();
@@ -68,6 +69,7 @@ export function Sites() {
           </table>
         </div>
       </Panel>
+      <Convergence ns={ns} />
     </div>
   );
 }

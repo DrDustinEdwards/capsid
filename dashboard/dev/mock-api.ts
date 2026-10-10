@@ -36,6 +36,8 @@ import type {
   PortalPackageHistory,
   PortalStale,
   PortalMaintenance,
+  PortalConvergence,
+  ConvergenceSite,
   OpsStaleJob,
   PortalActivityRow,
   PortalClaimsAggregate,
@@ -53,7 +55,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
@@ -117,6 +119,8 @@ interface MockState {
   activity: PortalActivityRow[];
   // Canon proposals approved or rejected since the mock started.
   canonDecided: Set<number>;
+  // Repairs run since the mock started, newest first (GET /portal/api/convergence).
+  repairs: Array<{ namespace: string; tool: string; at: string }>;
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
 
@@ -441,7 +445,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         done: `Added ${site.namespace}: ${describeSite(site)}.`,
         changes: [`ops_sites: add ${site.namespace}, ${describeSite(site)}.`, site.origin ? "The watcher probes it from its next pass, and the Sites view lists it." : `Nothing is probed for ${site.namespace}; the site-map check counts it as decided.`],
         apply: (st) => {
-          st.sites.push({ ...site, self_probe: false, revision: 1, updated_at: sqlNow() });
+          st.sites.push({ ...site, self_probe: false, revision: 1, updated_at: sqlNow(), operator: null, operator_problem: null });
           st.sites.sort((a, b) => (a.namespace < b.namespace ? -1 : a.namespace > b.namespace ? 1 : 0));
         },
       };
@@ -553,6 +557,24 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.canonDecided.add(id),
       };
     }
+    case "site_repair": {
+      const ns = need(params, "namespace", "The namespace");
+      const tool = need(params, "tool", "The tool");
+      const site = f.live.sites.find((s) => s.namespace === ns);
+      if (!site?.origin || !site.operator) throw new Refusal(400, `${ns} has no operator API configured, so Capsid may call nothing on it.`);
+      if (tool === "backup_media") throw new Refusal(400, "backup_media is not a repair Capsid may call: it copies the media bucket, and it stays with the site's own watchdog.");
+      const allowed = [...new Set([...Object.values(site.operator.repairs), ...site.operator.weekly])];
+      if (!allowed.includes(tool)) throw new Refusal(400, `${tool} is not in this site's allowlist (${allowed.join(", ")}).`);
+      return {
+        summary: `Run ${tool} on ${ns} through its operator API.`,
+        done: `${ns}: ${tool} converged (14 of 14 present).`,
+        changes: [
+          `POST ${site.origin}${site.operator.path} with tool ${tool}, authorized by the Capsid Worker secret ${site.operator.auth_var} (the token is never shown or recorded).`,
+          "The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to a minute.",
+        ],
+        apply: (st) => void st.repairs.unshift({ namespace: ns, tool, at: now }),
+      };
+    }
   }
 }
 
@@ -571,6 +593,69 @@ function stale(f: OpsFeed): PortalStale {
     else if (days >= 3) rows.push({ ...base, rule: "unchanged", reason: `${j.status} and unchanged since ${j.updated_at} (${days} day${days === 1 ? "" : "s"})` });
   }
   return { generated: new Date(now).toISOString(), rows, truncated: false, note: null };
+}
+
+// GET /portal/api/convergence: each site with an operator configuration, as the Worker
+// would read it live. pages-drift fails until a sync_pages repair is performed here, so the
+// Run repair journey can be seen to settle it.
+function convergence(st: MockState): PortalConvergence {
+  const now = mockNow();
+  const iso = (agoMs: number) => new Date(now - agoMs).toISOString();
+  const sites: ConvergenceSite[] = st.sites
+    .filter((s) => s.origin && s.operator)
+    .map((s) => {
+      const op = s.operator!;
+      const repaired = st.repairs.some((r) => r.namespace === s.namespace && r.tool === "sync_pages");
+      const recent = [
+        ...st.repairs.filter((r) => r.namespace === s.namespace).map((r) => ({ at: r.at, actor: "access:admin@example.com", tool: r.tool, via: "portal", converged: true, error: null })),
+        { at: iso(26 * 3_600_000), actor: "agent:watcher", tool: "sync_ask", via: "watcher", converged: true, error: null },
+      ];
+      return {
+        namespace: s.namespace,
+        name: s.name,
+        origin: s.origin!,
+        read_at: new Date(now).toISOString(),
+        operator: { path: op.path, auth_var: op.auth_var, secret_set: true, repairs: op.repairs, weekly: op.weekly },
+        problem: null,
+        status: {
+          ok: true,
+          error: null,
+          fields: [
+            { key: "headSha", value: "9c1e2f0a7b3d" },
+            { key: "artifactPosts", value: "42" },
+            { key: "d1Posts", value: "42" },
+            { key: "d1PubliclyVisible", value: "40" },
+            { key: "searchIndexDocs", value: "42" },
+            { key: "askConfigured", value: "true" },
+            { key: "divergences", value: "none" },
+          ],
+        },
+        health: {
+          ok: repaired,
+          http_status: repaired ? 200 : 503,
+          error: null,
+          checks: [
+            { name: "content-drift", ok: true, detail: null, expected: 42, present: 42, repair: "sync_posts", repair_refusal: null },
+            { name: "pages-drift", ok: repaired, detail: repaired ? null : "2 pages differ from their files", expected: 14, present: repaired ? 14 : 12, repair: "sync_pages", repair_refusal: null },
+            { name: "ask-index-drift", ok: true, detail: null, expected: 61, present: 61, repair: "sync_ask", repair_refusal: null },
+            { name: "media-backup-drift", ok: true, detail: null, expected: 120, present: 120, repair: null, repair_refusal: null },
+          ],
+        },
+        secrets: {
+          state: "ok",
+          script: s.script ?? s.namespace,
+          reason: null,
+          rows: [
+            { name: "GITHUB_TOKEN", set: true, expected: true },
+            { name: "OPERATOR_TOKEN", set: true, expected: true },
+            { name: "SMOKE_TOKEN", set: false, expected: true },
+            { name: "LEGACY_KEY", set: true, expected: false },
+          ],
+        },
+        recent,
+      };
+    });
+  return { generated: new Date(now).toISOString(), sites };
 }
 
 // GET /portal/api/maintenance: one row per kind of finding the daily pass makes, the job
@@ -870,7 +955,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -934,7 +1019,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -950,6 +1035,10 @@ export function mockOpsApi(): Plugin {
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/convergence") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, convergence(st));
         }
         if (path === "/portal/api/maintenance") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
