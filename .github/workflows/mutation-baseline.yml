@@ -31,13 +31,13 @@ concurrency:
 
 jobs:
   mutate:
-    name: shard ${{ matrix.shard }} of 8
+    name: shard ${{ matrix.shard }} of 16
     runs-on: ubuntu-latest
     timeout-minutes: 340
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -58,19 +58,31 @@ jobs:
           # gets a mix of large and small files. The count is printed so a glob that
           # matched nothing cannot pass as an empty run.
           #
-          # Files that call server.registerTool( are left out of the run. test/tool-annotations,
-          # test/invariants, test/blast-radius and test/mutation-guard-coverage read the tool
-          # modules' source text, and Stryker's instrumentation rewrites it, so the dry run
-          # fails whenever one of them is instrumented. No test is excluded.
-          find src -name '*.ts' ! -name '*.d.ts' | sort | xargs grep -LF 'server.registerTool(' > all-files.txt
+          # Every source file is mutated except src/access-jwt.ts, which Stryker 10's Babel
+          # parser rejects (a typed async arrow as a computed object key, line 68), so the
+          # whole run stops before the dry run. Instead of leaving source files out, the
+          # unit test files that read source text are left out of the run: they are listed,
+          # with the reason, in stryker-excluded-tests.txt, and they are always kept.
+          find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' | sort > all-files.txt
           total=$(wc -l < all-files.txt)
-          awk -v s="${{ matrix.shard }}" 'NR % 8 == s' all-files.txt > shard-files.txt
+          awk -v s="${{ matrix.shard }}" -v n=16 'NR % n == s' all-files.txt > shard-files.txt
           mine=$(wc -l < shard-files.txt)
           echo "shard ${{ matrix.shard }}: $mine of $total source files"
           test "$mine" -gt 0
+          # The run's config is stryker.config.json with the excluded test files removed.
+          node -e '
+            const fs = require("node:fs");
+            const excluded = new Set(fs.readFileSync("stryker-excluded-tests.txt", "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")));
+            const tests = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts")).sort();
+            for (const name of excluded) if (!tests.includes(name)) throw new Error("stryker-excluded-tests.txt names a missing test file: " + name);
+            const config = JSON.parse(fs.readFileSync("stryker.config.json", "utf8"));
+            config.tap.testFiles = tests.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
+            fs.writeFileSync("stryker.run.json", JSON.stringify(config, null, 2));
+            console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
+          '
           # One comma-joined --mutate value: a repeated --mutate flag keeps only the last
           # one, so a shard would have mutated a single file.
-          npx stryker run --mutate "$(paste -sd, shard-files.txt)"
+          npx stryker run stryker.run.json --mutate "$(paste -sd, shard-files.txt)"
 
       - name: Summarise the shard
         if: always()

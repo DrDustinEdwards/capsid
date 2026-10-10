@@ -1,0 +1,16 @@
+# Unit test files left out of the mutation run (job_bbf8db13c57b), found by running
+# Stryker's dry run with every source file instrumented and adding each file that failed.
+# Each one reads source text under src/ (a convention, guard or wiring check), and
+# Stryker's instrumentation rewrites that text. They still run in CI on every PR, and
+# under the audit's keep rules they are always kept, so none is a removal candidate.
+# Mutants only they would kill show as survivors in the report.
+admin-client-audit.test.ts
+blast-radius.test.ts
+deploy-pipeline.test.ts
+improve-cron.test.ts
+invariants.test.ts
+mutation-guard-coverage.test.ts
+route-gates.test.ts
+skills-refresh.test.ts
+source-conventions.test.ts
+tool-annotations.test.ts
