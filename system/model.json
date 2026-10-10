@@ -1,0 +1,254 @@
+{
+  "$schema": "./model.schema.json",
+  "version": 1,
+  "systems": [
+    {
+      "id": "capsid",
+      "name": "Capsid",
+      "short": "Capsid",
+      "family": "system",
+      "ring": "core",
+      "public": true,
+      "description": "The knowledge store, work queue and credential boundary that every other project is run through.",
+      "domain": "mcp.dustinedwards.info",
+      "repos": ["DrDustinEdwards/capsid"]
+    },
+    {
+      "id": "capsomer",
+      "name": "Capsomer",
+      "short": "Capsomer",
+      "family": "system",
+      "ring": "shared",
+      "public": true,
+      "description": "The design system every app is drawn in: tokens, the shell and shared controls in plain CSS.",
+      "domain": "capsomer.dustinedwards.info",
+      "repos": ["DrDustinEdwards/capsomer"]
+    },
+    {
+      "id": "site-runtime",
+      "name": "site-runtime",
+      "short": "Runtime",
+      "family": "plumbing",
+      "ring": "shared",
+      "public": true,
+      "description": "Request-time behaviour every site imports: security headers, the rate limiter and the health format.",
+      "repos": ["DrDustinEdwards/site-runtime"]
+    },
+    {
+      "id": "d1-dump",
+      "name": "d1-dump",
+      "short": "d1-dump",
+      "family": "plumbing",
+      "ring": "shared",
+      "public": true,
+      "description": "Per-table backups of a D1 database, with graduated retention and a restore drill.",
+      "repos": ["DrDustinEdwards/d1-dump"]
+    },
+    {
+      "id": "devkit",
+      "name": "devkit",
+      "short": "devkit",
+      "family": "plumbing",
+      "ring": "shared",
+      "public": true,
+      "description": "The shared CI workflow, Renovate rules and test helpers.",
+      "repos": ["DrDustinEdwards/devkit"]
+    },
+    {
+      "id": "site-api",
+      "name": "site-api",
+      "short": "site-api",
+      "family": "plumbing",
+      "ring": "shared",
+      "public": true,
+      "description": "The contract Carrel publishes through.",
+      "repos": ["DrDustinEdwards/site-api"]
+    },
+    {
+      "id": "prelum",
+      "name": "Prelum",
+      "short": "Prelum",
+      "family": "writing",
+      "ring": "shared",
+      "public": true,
+      "description": "Turns finished writing into pages, feeds and sitemaps.",
+      "repos": ["DrDustinEdwards/prelum"]
+    },
+    {
+      "id": "carrel",
+      "name": "Carrel",
+      "short": "Carrel",
+      "family": "writing",
+      "ring": "used",
+      "public": true,
+      "description": "The writing desk, where drafts are written, checked and published.",
+      "domain": "carrel.dustinedwards.info",
+      "repos": ["DrDustinEdwards/carrel"]
+    },
+    {
+      "id": "enarratio",
+      "name": "Enarratio",
+      "short": "Enarratio",
+      "family": "writing",
+      "ring": "used",
+      "public": true,
+      "description": "Charts, as an npm package, with a gallery.",
+      "domain": "enarratio.dustinedwards.info",
+      "repos": ["DrDustinEdwards/enarratio"]
+    },
+    {
+      "id": "dustinedwards-info",
+      "name": "dustinedwards.info",
+      "short": "Website",
+      "family": "site",
+      "ring": "used",
+      "public": true,
+      "description": "Dustin's personal site.",
+      "domain": "dustinedwards.info",
+      "repos": ["DrDustinEdwards/dustinedwards-info"]
+    },
+    {
+      "id": "dustinedwards-mcp",
+      "name": "dustinedwards-mcp",
+      "short": "Site MCP",
+      "family": "plumbing",
+      "ring": "used",
+      "public": true,
+      "description": "Publishes posts to dustinedwards.info from a chat.",
+      "repos": ["DrDustinEdwards/dustinedwards-mcp"]
+    },
+    {
+      "id": "skills",
+      "name": "Skills",
+      "short": "Skills",
+      "family": "plumbing",
+      "ring": "used",
+      "public": true,
+      "description": "Instructions the AI sessions follow.",
+      "repos": ["DrDustinEdwards/claude-skills"],
+      "hide_repo_link": true
+    },
+    {
+      "id": "germomics",
+      "name": "Germomics",
+      "short": "Germomics",
+      "family": "site",
+      "ring": "used",
+      "public": false,
+      "domain": "germomics.com",
+      "repos": ["DrDustinEdwards/germomics"]
+    },
+    {
+      "id": "foxing",
+      "name": "Foxing",
+      "short": "Foxing",
+      "family": "product",
+      "ring": "used",
+      "public": false,
+      "domain": "foxing.app",
+      "repos": ["DrDustinEdwards/foxing"]
+    },
+    {
+      "id": "foxhound",
+      "name": "Foxhound",
+      "short": "Foxhound",
+      "family": "product",
+      "ring": "used",
+      "public": false,
+      "domain": "foxhoundapp.com",
+      "repos": ["DrDustinEdwards/foxhound"]
+    },
+    {
+      "id": "txasm",
+      "name": "TXASM",
+      "short": "TXASM",
+      "family": "site",
+      "ring": "used",
+      "public": false,
+      "domain": "txasm.org",
+      "repos": ["DrDustinEdwards/txasm"]
+    },
+    {
+      "id": "julieedwards-info",
+      "name": "julieedwards.info",
+      "short": "Julie's site",
+      "family": "site",
+      "ring": "used",
+      "public": false,
+      "domain": "julieedwards.info",
+      "repos": ["DrDustinEdwards/julieedwards-info"]
+    }
+  ],
+  "containers": [
+    {
+      "id": "capsid-worker",
+      "system": "capsid",
+      "name": "MCP Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "Serves MCP, the operator routes, /health and the Portal's API."
+    },
+    {
+      "id": "capsid-portal",
+      "system": "capsid",
+      "name": "Portal",
+      "kind": "site",
+      "technology": "React, served by the Worker",
+      "description": "The admin view, behind Cloudflare Access."
+    },
+    {
+      "id": "capsid-tick",
+      "system": "capsid",
+      "name": "Five-minute tick",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Lease sweep, auto-merge, the watcher and the daily passes."
+    },
+    {
+      "id": "capsid-db",
+      "system": "capsid",
+      "name": "capsid",
+      "kind": "database",
+      "technology": "D1 with FTS5",
+      "description": "Documents, jobs, agents and the audit log."
+    },
+    {
+      "id": "capsid-media",
+      "system": "capsid",
+      "name": "capsid-media",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Media and the daily backups."
+    },
+    {
+      "id": "capsid-kv",
+      "system": "capsid",
+      "name": "app KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Caches, rate-limit counters and computed documents."
+    }
+  ],
+  "relationships": [
+    { "from": "capsid-worker", "to": "capsid-db", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-media", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-kv", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-portal", "kind": "serves" },
+    { "from": "capsid-tick", "to": "capsid-db", "kind": "writes" },
+    { "from": "capsid-tick", "to": "capsid-kv", "kind": "writes" },
+    { "from": "capsid", "to": "d1-dump", "kind": "installs" },
+    { "from": "capsid", "to": "site-runtime", "kind": "installs" },
+    { "from": "capsid", "to": "capsomer", "kind": "installs" },
+    { "from": "carrel", "to": "site-api", "kind": "installs" },
+    { "from": "carrel", "to": "dustinedwards-info", "kind": "publishes-to" },
+    { "from": "carrel", "to": "germomics", "kind": "publishes-to" },
+    { "from": "dustinedwards-mcp", "to": "dustinedwards-info", "kind": "publishes-to" },
+    { "from": "capsid", "to": "capsomer", "kind": "coordinates" },
+    { "from": "capsid", "to": "carrel", "kind": "coordinates" },
+    { "from": "capsid", "to": "dustinedwards-info", "kind": "coordinates" },
+    { "from": "capsid", "to": "enarratio", "kind": "coordinates" },
+    { "from": "capsid", "to": "foxhound", "kind": "coordinates" },
+    { "from": "capsid", "to": "foxing", "kind": "coordinates" },
+    { "from": "capsid", "to": "germomics", "kind": "coordinates" }
+  ]
+}
