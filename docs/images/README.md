@@ -27,12 +27,12 @@ The mock's clock and the browser's are both pinned to the fixture's own time
 
 | File | What it shows |
 | --- | --- |
-| `overview-light.png` | Overview, light theme, 1440 x 900 |
-| `overview-dark.png` | Overview, dark theme |
-| `sites-light.png` | Sites |
+| `health-light.png` | Health, light theme, 1440 x 900 |
+| `health-dark.png` | Health, dark theme |
+| `health-sites-light.png` | Health, opened at its Sites section |
 | `queue-drawer-light.png` | Queue with a job's drawer open |
 | `control-preview-light.png` | A job's Mark failed control with its preview open (never performed) |
 | `activity-light.png` | Activity |
-| `claims-light.png` | Claims |
-| `phone-overview-light.png` | Overview on a phone, 390 x 844 |
-| `phone-overview-dark.png` | Overview on a phone, dark theme |
+| `claims-light.png` | Agents, its Claims tab |
+| `phone-health-light.png` | Health on a phone, 390 x 844 |
+| `phone-health-dark.png` | Health on a phone, dark theme |
