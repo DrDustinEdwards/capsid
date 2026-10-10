@@ -6,6 +6,7 @@ import type { ViewDef, ViewId } from "./ctx";
 // its name.
 const ABOUT: Partial<Record<ViewId, string>> = {
   needs: "The home: what waits on you, per app, then every problem worst first.",
+  shared: "Each shared package, the tag each app pins, who is behind, and the local copies left.",
   overview: "The summary tiles, the maintenance list, the sites and the week of deploys.",
   sites: "Health comes from each site's own route; a root 200 is liveness, not health.",
   incidents: "Watcher findings, open first. Each is posted once and clears on its own.",
