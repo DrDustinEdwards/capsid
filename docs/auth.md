@@ -36,7 +36,7 @@ After all three, a remap gains a driver nothing: the repos axis refuses independ
 
 ### Roles
 
-Roles are few and separated. Each one is a single capability, not a bundle. `scripts/mint-agents.mjs` holds them in two lists: `ROLES`, asked for by name, and `AGENTS`, the per-namespace bootstrap that holds the drivers and the seat. `node scripts/mint-agents.mjs --roles` prints a mint command for each entry in `ROLES`, which is the four below that are not a driver or the seat; the driver rows and the seat are minted by the same script's namespace path (`docs/bootstrap.md`). A test fails the build if any role names a second blast-radius flag.
+Roles are few and separated. Each one is a single capability, not a bundle. `scripts/mint-agents.mjs` holds them in two lists: `ROLES`, asked for by name, and `AGENTS`, the per-namespace bootstrap that holds the drivers and the seat. `node scripts/mint-agents.mjs --roles` prints a mint command for each entry in `ROLES`, which is every row below that is not a driver or the seat; the driver rows and the seat are minted by the same script's namespace path (`docs/bootstrap.md`). A test fails the build if any role names a second blast-radius flag.
 
 | role | reads | writes | flag |
 | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ Roles are few and separated. Each one is a single capability, not a bundle. `scr
 | `watcher` | every namespace | `jobs.post`, and no other job action | none |
 | `seat` | every namespace | every namespace | `can_merge` |
 | `site-seat` | `dustinedwards` | `dustinedwards` | `can_merge` |
+| `live-probe` | `capsid`, through the `read` tool only | nothing at all | none |
 
 **A project driver holds no blast-radius flag by default, and two of them hold one.** Granted by the seat on 2026-09-11, each for a stated reason rather than as a convenience: `capsid-driver` holds `can_touch_protected`, and `claude-skills-driver` holds `can_touch_protected` and `can_write_workflows`. In both repos the protected list is what the driver's own jobs edit, because tests, CI and `scripts/` are the subject of the work rather than something near it, and in claude-skills a skill's workflow is part of the artifact. Every other driver holds none, and `improve_status` and Capsid Portal list the flags each one actually has, so the inventory is the answer rather than this paragraph. Widening one is `agents` action `update_scopes`, which is admin only and audit-logged with the scopes before and after.
 
