@@ -43,17 +43,17 @@ on:
         description: "Optional comma-separated test files to run instead of the whole unit suite (no exclusion list is applied)"
         type: string
         default: ""
-      coverage:
-        description: "Coverage analysis. perTest is fast but cannot see code a test runs in a child process; off runs every mutant against every chosen test, for tests that spawn a script"
+      runner:
+        description: "Test runner. tap runs the chosen test files in one process each and records which killed a mutant. command runs one test file (the tests input, exactly one) as a command per mutant and cannot name a killer on its own; it is for tests that run a script as a child process, whose coverage the tap runner cannot see"
         type: choice
-        options: [perTest, "off"]
-        default: perTest
+        options: [tap, command]
+        default: tap
 
 permissions:
   contents: read
 
 concurrency:
-  group: mutation-baseline-${{ github.ref }}
+  group: mutation-baseline-${{ github.ref }}-${{ inputs.only }}-${{ inputs.tests }}
   cancel-in-progress: false
 
 jobs:
@@ -83,14 +83,14 @@ jobs:
           SCOPE: ${{ inputs.scope }}
           ONLY: ${{ inputs.only }}
           TESTS: ${{ inputs.tests }}
-          COVERAGE: ${{ inputs.coverage }}
+          RUNNER: ${{ inputs.runner }}
         run: |
           set -euo pipefail
           # Dispatch inputs reach the shell through env, never spliced into the script text,
           # and are checked against a path pattern before use.
           scope="${SCOPE:-src}"
           case "$scope" in src|scripts-dashboard|all) ;; *) echo "unknown scope: $scope"; exit 1 ;; esac
-          case "${COVERAGE:-perTest}" in perTest|off) ;; *) echo "unknown coverage: $COVERAGE"; exit 1 ;; esac
+          case "${RUNNER:-tap}" in tap|command) ;; *) echo "unknown runner: $RUNNER"; exit 1 ;; esac
           path_re='^(src|scripts|dashboard/src/lib|test)/[A-Za-z0-9._/-]+\.(ts|mjs)$'
           # Every file to mutate, sorted, dealt out round-robin so each shard gets a mix of
           # large and small files. The total is checked so a glob that matched nothing
@@ -149,7 +149,15 @@ jobs:
               config.tap.testFiles = all.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
               console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
             }
-            config.coverageAnalysis = process.env.COVERAGE || "perTest";
+            if (process.env.RUNNER === "command") {
+              // The tap runner always reports coverage, and Stryker then runs only the tests it
+              // saw cover a mutant, so a script run in a child process is never mutated. The
+              // command runner has no coverage: it runs this one test file for every mutant.
+              if (!process.env.TESTS || process.env.TESTS.includes(",")) throw new Error("the command runner needs exactly one test file in the tests input");
+              config.testRunner = "command";
+              config.coverageAnalysis = "off";
+              config.commandRunner = { command: "node --import ./test/resolve-ts.mjs --test " + config.tap.testFiles[0] };
+            }
             fs.writeFileSync("stryker.run.json", JSON.stringify(config, null, 2));
           '
           # One comma-joined --mutate value: a repeated --mutate flag keeps only the last
