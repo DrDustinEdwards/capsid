@@ -172,9 +172,10 @@ const REVIEWER_AUDIT_SCAN = 500;
 async function reviewerCommentIds(db: D1Database, namespace: string): Promise<Set<number>> {
   const rows = await db
     .prepare(
-      `SELECT a.actor AS actor, a.params AS params, g.scopes AS scopes
+      `SELECT a.actor AS actor, a.params AS params, COALESCE(g.scopes, x.scopes) AS scopes
          FROM audit_log a
          LEFT JOIN agents g ON g.name = substr(a.actor, 7)
+         LEFT JOIN agents_archive x ON x.name = substr(a.actor, 7)
         WHERE a.action = 'manage_pr' AND a.namespace = ?1 AND a.params LIKE '%"comment_id":%'
         ORDER BY a.id DESC
         LIMIT ?2`
@@ -184,7 +185,8 @@ async function reviewerCommentIds(db: D1Database, namespace: string): Promise<Se
   const ids = new Set<number>();
   for (const row of rows.results ?? []) {
     if (row.actor?.startsWith("agent:")) {
-      // An agent that no longer resolves fails closed.
+      // An agent with no row in either table fails closed. An archived one is judged
+      // on the scopes it held, as it was before it moved (src/agents-archive.ts).
       if (!row.scopes || !parseScopes(row.scopes).flags.can_comment_pr) continue;
     }
     let commentId: unknown;

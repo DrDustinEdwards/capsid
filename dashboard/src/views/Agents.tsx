@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { placePath, useApp } from "../app/ctx";
-import { agentState, attemptsText, loopMode, nsList } from "../lib/derive";
+import { agentState, archiveAgents, attemptsText, loopMode, nsList, rosterAgents } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
@@ -12,29 +12,99 @@ import { PageHead } from "./shared";
 // be reloaded or shared.
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 
+type Tab = "roster" | "archive" | "claims";
+
 export function Agents() {
   const search = useSearch();
   const [location, navigate] = useLocation();
-  const claims = new URLSearchParams(search).get("tab") === "claims";
-  const pick = (tab: "roster" | "claims") => navigate(tab === "claims" ? `${location}?tab=claims` : location);
+  const asked = new URLSearchParams(search).get("tab");
+  const tab: Tab = asked === "claims" || asked === "archive" ? asked : "roster";
+  const pick = (to: Tab) => navigate(to === "roster" ? location : `${location}?tab=${to}`);
   return (
     <div className="page">
       <PageHead title="Agents" />
-      <div className="toolbar" role="group" aria-label="Agents or claims">
-        <button type="button" className="chip" aria-pressed={!claims} onClick={() => pick("roster")}>
+      <div className="toolbar" role="group" aria-label="Roster, archive or claims">
+        <button type="button" className="chip" aria-pressed={tab === "roster"} onClick={() => pick("roster")}>
           Roster
         </button>
-        <button type="button" className="chip" aria-pressed={claims} onClick={() => pick("claims")}>
+        <button type="button" className="chip" aria-pressed={tab === "archive"} onClick={() => pick("archive")}>
+          Archive
+        </button>
+        <button type="button" className="chip" aria-pressed={tab === "claims"} onClick={() => pick("claims")}>
           Claims
         </button>
       </div>
-      {claims ? (
+      {tab === "claims" ? (
         <Suspense fallback={null}>
           <Claims embedded />
         </Suspense>
+      ) : tab === "archive" ? (
+        <Archive />
       ) : (
         <Roster />
       )}
+    </div>
+  );
+}
+
+// Revoked agents leave the roster at once and the live table after 7 days (docs/auth.md);
+// a one-job runner key leaves it sooner, once its job ends.
+const ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
+
+// The revoked agents: still in the live table and waiting their 7 days, then the archived,
+// newest move first. Both are history, so each row opens the agent's drawer as the roster's do.
+function Archive() {
+  const { feed, now } = useApp();
+  const rows = archiveAgents(feed.live.agents);
+  return (
+    <div className="embedded">
+      <Panel flush title="Archive" src="agents · agents_archive">
+        {rows.length === 0 ? (
+          <div className="body faint">No agent has been revoked.</div>
+        ) : (
+          <div className="scroll-x reflow">
+            <table className="list cards-below-1100">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Revoked</th>
+                  <th>Archive</th>
+                  <th>Done / failed / blocked</th>
+                  <th>PRs merged</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => (
+                  <tr key={a.name} className="click" data-row="" data-open={`agent:${a.name}`} tabIndex={0}>
+                    <td>
+                      <b>{a.name}</b>
+                      <div className="src">
+                        {a.kind} · {nsList(a)}
+                      </div>
+                    </td>
+                    <td data-label="Revoked">{ago(ms(a.revoked_at as string), now)}</td>
+                    <td data-label="Archive">
+                      {a.archived_at ? (
+                        <St kind="nodata">Archived {ago(ms(a.archived_at), now)}</St>
+                      ) : (
+                        <St kind="queued">Moves by {new Date(ms(a.revoked_at as string) + ARCHIVE_AFTER_MS).toLocaleDateString()}</St>
+                      )}
+                    </td>
+                    <td data-label="Done / failed / blocked" className="num">
+                      {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}
+                    </td>
+                    <td data-label="PRs merged" className="num">
+                      {a.prs_merged} of {a.prs_opened}
+                    </td>
+                    <td data-label="Last seen">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -50,7 +120,7 @@ function Roster() {
   const usdFrac = b.caps.model_usd_month ? b.spend.cost_usd / b.caps.model_usd_month : 0;
   return (
     <div className="embedded">
-      <Panel flush title="Roster" src="agents · job outcomes">
+      <Panel flush title="Roster" src="live agents · job outcomes">
         <div className="scroll-x reflow">
           <table className="list cards-below-1100">
             <thead>
@@ -67,7 +137,7 @@ function Roster() {
               </tr>
             </thead>
             <tbody>
-              {live.agents.map((a) => {
+              {rosterAgents(live.agents).map((a) => {
                 const st = agentState(a, now);
                 return (
                   <tr key={a.name} className="click" data-row="" data-open={`agent:${a.name}`} tabIndex={0}>
@@ -79,7 +149,7 @@ function Roster() {
                     </td>
                     <td data-label="Last seen">
                       <St kind={st.kind}>{st.label}</St>
-                      <div className="src">{a.revoked_at ? `revoked ${ago(ms(a.revoked_at), now)}` : a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
+                      <div className="src">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</div>
                     </td>
                     <td data-label="Done / failed / blocked" className="num">
                       {a.jobs_done} / {a.jobs_failed} / {a.jobs_blocked}

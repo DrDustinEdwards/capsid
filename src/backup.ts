@@ -127,6 +127,9 @@ export const TABLES = [
   // The merge pipeline's approvals (migrations/0037_pr_approvals.sql): who approved which
   // pull request at which head, and how each approval ended. Nothing prunes it.
   "pr_approvals",
+  // Revoked agents moved out of agents by the watcher pass (migrations/0038_agents_archive.sql).
+  // Nothing prunes it: an archived row keeps a name reserved and a revoked key refused.
+  "agents_archive",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

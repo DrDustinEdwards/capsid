@@ -169,10 +169,13 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
       "mint needs at least one namespace. A new agent is scoped to the namespaces it was named for, so minting one with none creates a credential that reaches nothing and says nothing about what it was for. Pass the single entry * deliberately if every namespace is what you mean."
     );
   }
-  // Names are never reused, revoked ones included, so the check is over every row.
-  // An audit actor has to mean one credential forever, or the log cannot answer who
-  // did something.
-  const existing = await db.prepare("SELECT id FROM agents WHERE name = ?1").bind(name).first<{ id: string }>();
+  // Names are never reused, revoked and archived ones included, so the check is over
+  // every row of both tables. An audit actor has to mean one credential forever, or
+  // the log cannot answer who did something.
+  const existing = await db
+    .prepare("SELECT id FROM agents WHERE name = ?1 UNION ALL SELECT id FROM agents_archive WHERE name = ?1")
+    .bind(name)
+    .first<{ id: string }>();
   if (existing) {
     return refuse("mint", `an agent named '${name}' already exists (${existing.id}). A name is an audit identity and is never reused, including after a revoke.`);
   }
@@ -219,8 +222,10 @@ export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs &
 }
 
 export async function listAgents(db: D1Database): Promise<AgentResult> {
-  // Revoked rows are included: a revoked credential is exactly what an inventory is
-  // read for, and hiding it would make "revoked" and "never existed" look the same.
+  // Revoked rows are included until the watcher pass archives them
+  // (src/agents-archive.ts): a revoked credential is exactly what an inventory is read
+  // for, and hiding it would make "revoked" and "never existed" look the same. The
+  // archive is the list action's archived: true.
   const { results } = await db.prepare("SELECT * FROM agents ORDER BY created_at DESC, name").all<AgentRow>();
   return { ok: true, action: "list", agents: (results ?? []).map(publicAgent) };
 }

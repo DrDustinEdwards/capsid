@@ -185,6 +185,7 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
     flags: agent.flags,
     last_seen: isoTime(agent.last_seen),
     revoked_at: isoTime(agent.revoked_at),
+    archived_at: isoTime(agent.archived_at),
     jobs_done: r.jobs_done,
     jobs_failed: r.jobs_failed,
     jobs_blocked: r.jobs_blocked,

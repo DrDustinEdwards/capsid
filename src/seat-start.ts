@@ -85,7 +85,11 @@ export interface InFlight {
 // auto-merge's author_is_driver check refuses any kind but driver.
 export async function isRunnerActor(db: D1Database, actor: string): Promise<boolean> {
   if (!actor.startsWith("agent:")) return false;
-  const row = await db.prepare("SELECT kind FROM agents WHERE name = ?1").bind(actor.slice("agent:".length)).first<{ kind: string }>();
+  // A runner key archived after its job ended is still a runner (src/agents-archive.ts).
+  const row = await db
+    .prepare("SELECT kind FROM agents WHERE name = ?1 UNION ALL SELECT kind FROM agents_archive WHERE name = ?1")
+    .bind(actor.slice("agent:".length))
+    .first<{ kind: string }>();
   return row?.kind === "session";
 }
 

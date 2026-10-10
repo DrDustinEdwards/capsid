@@ -245,6 +245,9 @@ export interface OpsAgent {
   flags: string[];
   last_seen: string | null;
   revoked_at: string | null;
+  // When the watcher pass moved it to the archive (src/agents-archive.ts); null while
+  // its row is in agents. The Agents roster lists rows with neither date set.
+  archived_at: string | null;
   jobs_done: number;
   jobs_failed: number;
   jobs_blocked: number;
