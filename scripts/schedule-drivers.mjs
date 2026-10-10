@@ -284,7 +284,7 @@ export function sessionMcpConfig(origin, key) {
 export async function claimForSession(client, id) {
   let answer;
   try {
-    answer = JSON.parse(await client.tool("jobs", { action: "claim", id, session_key: true }));
+    answer = JSON.parse(await client.tool("capsid_work_jobs", { action: "claim", id, session_key: true }));
   } catch (err) {
     return { ok: false, why: err instanceof Error ? err.message : String(err) };
   }

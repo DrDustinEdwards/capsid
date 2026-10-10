@@ -316,6 +316,12 @@ export function rewriteProse(text) {
       const after = all.slice(offset + whole.length);
       const before = all.slice(0, offset);
       if (dotted !== undefined && FILE_EXTENSION.test(dotted)) return whole;
+      // The action of a tool already named ("`capsid_close_pr` action `delete_branch`"),
+      // which a second run over rewritten text must leave alone.
+      if (/\baction\s*$/.test(before)) return whole;
+      // One in a list of a new tool's actions ("`capsid_change_repo` (actions
+      // `write_file` and `create_branch`)"): still the same clause, after "actions".
+      if (/`capsid_\w+`[^.;:]*\bactions?\b[^.;:]*$/.test(before)) return whole;
       const trailing = tick ?? quoted;
       const action = dotted ?? inner ?? trailing;
       // "the `write` grant", "the `jobs` table": not the tool, and not worth reporting.

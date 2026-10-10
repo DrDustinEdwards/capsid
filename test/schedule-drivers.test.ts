@@ -341,7 +341,7 @@ test("claimForSession asks for a session key by id, returns it, and turns a refu
   });
   const got = await claimForSession(answering({ ok: true, session_key: { name: "d@job_aaaaaaaaaaaa.abcdef", key: "k", note: "n" } }), "job_aaaaaaaaaaaa");
   assert.deepEqual(got, { ok: true, key: "k", name: "d@job_aaaaaaaaaaaa.abcdef" });
-  assert.deepEqual(calls[0], { name: "jobs", args: { action: "claim", id: "job_aaaaaaaaaaaa", session_key: true } });
+  assert.deepEqual(calls[0], { name: "capsid_work_jobs", args: { action: "claim", id: "job_aaaaaaaaaaaa", session_key: true } });
   assert.deepEqual(await claimForSession(answering({ ok: false, refusal: "job_aaaaaaaaaaaa is blocked" }), "job_aaaaaaaaaaaa"), { ok: false, why: "job_aaaaaaaaaaaa is blocked" });
   assert.equal((await claimForSession(answering({ ok: true }), "job_aaaaaaaaaaaa")).ok, false, "a claim with no key must not launch a session on the driver's key");
   const thrown = await claimForSession({ tool: async () => { throw new Error("offline"); } }, "job_aaaaaaaaaaaa");

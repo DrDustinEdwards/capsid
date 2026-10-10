@@ -58,8 +58,8 @@ test("claim with session_key hands the job to a key minted for it, which resolve
   assert.ok(session, "the session key did not resolve under its lease");
   assert.equal(session.agent.job, id);
   assert.deepEqual(session.agent.scopes.namespaces, driver.scopes.namespaces);
-  assert.equal(checkScope(session.agent, { tool: "jobs", action: "heartbeat", namespace: "capsid", grant: "write", jobId: id }), null);
-  assert.match(String(checkScope(session.agent, { tool: "jobs", action: "claim", namespace: "capsid", grant: "write", jobId: other })), /bound to job/);
+  assert.equal(checkScope(session.agent, { tool: "capsid_work_jobs", action: "heartbeat", namespace: "capsid", grant: "write", jobId: id }), null);
+  assert.match(String(checkScope(session.agent, { tool: "capsid_work_jobs", action: "claim", namespace: "capsid", grant: "write", jobId: other })), /bound to job/);
 });
 
 test("PLANT: the driver's claim limit counts the job its session key holds", async () => {

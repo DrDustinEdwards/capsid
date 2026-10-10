@@ -150,6 +150,14 @@ test("the renamed tools' action lists are the ones src serves", async () => {
   assert.deepEqual([...RENAMED_ACTIONS.jobs].sort(), [...JOB_ACTIONS].sort());
 });
 
+test("PLANT: rewriting is idempotent: a second run over rewritten text changes nothing", () => {
+  assert.equal(rewriteProse("So does `capsid_close_pr` action `delete_branch` with force.").changes.length, 0);
+  assert.equal(rewriteProse("then `capsid_change_repo` action `create_branch`").changes.length, 0);
+  assert.equal(rewriteProse("- **Write**: `capsid_change_repo` (actions `write_file`, `delete_file` and `create_branch`), `capsid_close_pr` (actions `merge` and `delete_branch`)").changes.length, 0);
+  const once = rewriteProse("Call `read`, then `list_repo_tree`, `delete_branch`, `jobs.post` and `manage_pr` action `merge`.").text;
+  assert.equal(rewriteProse(once).changes.length, 0, once);
+});
+
 test("a signed body loses its signature before the edit re-signs it", () => {
   assert.equal(unsignedBody(`---\ncapsid-task-signature: ${"a".repeat(64)}\n---\nCall \`read\`.`), "Call `read`.");
   assert.equal(unsignedBody("no signature"), "no signature");
