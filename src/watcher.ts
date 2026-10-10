@@ -18,6 +18,7 @@ import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
+import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
 import {
   buildSnapshot,
   probeSite,
@@ -485,6 +486,7 @@ export const WATCHER_CHECKS = [
   "cloudflare",
   "live checks",
   "site repairs",
+  "domains",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -504,6 +506,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^site-errors-/, "cloudflare"],
   [/^live-/, "live checks"],
   [/^site-(health|weekly)-/, "site repairs"],
+  [/^domain-expiry-/, "domains"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -1137,6 +1140,19 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
             (err: unknown) => ({ state: "error" as const, script, rows: [], reason: (err instanceof Error ? err.message : String(err)).slice(0, 300), read_at })
           );
     await attempt(`secret names ${site.namespace}`, () => storeSecrets(env, site.namespace, stored));
+  }
+
+  // Each configured site's domain registration, by RDAP (src/domain-expiry.ts): a
+  // finding 30 and 7 days before it expires. The check counts as run only when every
+  // domain was read, so a failed read never clears an open finding.
+  if (config) {
+    const domains = [...new Set(config.map((c) => (c.origin ? registrableDomain(c.origin) : null)).filter((d): d is string => d !== null))].sort();
+    const read = await attempt("domains", () => readExpiries(env.APP_KV, domains, fetchImpl, now));
+    if (read) {
+      out.push(...expiryFindings(read.expiries, now));
+      if (read.failed.length === 0) ran.add("domains");
+      for (const f of read.failed) logEvent("warn", "WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` });
+    }
   }
 
   // The configured packages, for the Portal's Packages view (src/ops-packages.ts).

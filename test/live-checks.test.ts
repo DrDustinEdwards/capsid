@@ -543,6 +543,10 @@ test("PLANT: with no live-checks document the pass fetches no page and the check
   const { gathered, requested } = await gather(null, {});
   assert.equal(gathered.ran.has("live checks"), false);
   assert.ok(!gathered.findings.some((f) => f.fingerprint.startsWith("live-")));
-  // The only site request is the probe's own, to the root, not a page the document names.
-  assert.ok(requested.every((u) => u === "https://sample.example.com/"), requested.join(", "));
+  // The only request to the site is the probe's own, to the root, not a page the document
+  // names. (The pass also reads RDAP for the site's domain, src/domain-expiry.ts, which is
+  // not the site.)
+  const toSite = requested.filter((u) => new URL(u).hostname === "sample.example.com");
+  assert.ok(toSite.length > 0, "the probe's request was not seen, so this proves nothing");
+  assert.ok(toSite.every((u) => u === "https://sample.example.com/"), toSite.join(", "));
 });
