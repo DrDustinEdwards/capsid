@@ -274,7 +274,7 @@ function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
 
 // The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
 // so a view can be reloaded or shared. The inputs apply on submit.
-export function Claims() {
+export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now, signOut } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
@@ -323,11 +323,11 @@ export function Claims() {
   }, [job, tick, signOut]);
 
   const go = (next: Filter, nextJob: string) => {
-    const qs = new URLSearchParams();
+    // Claims is Agents' tab, so the tab stays in the address beside the filter.
+    const qs = new URLSearchParams({ tab: "claims" });
     for (const k of FILTER_KEYS) if (next[k].trim()) qs.set(k, next[k].trim());
     if (nextJob.trim()) qs.set("job", nextJob.trim());
-    const s = qs.toString();
-    navigate(s ? `/claims?${s}` : "/claims", { replace: true });
+    navigate(`/agents?${qs}`, { replace: true });
   };
 
   const data = agg.data;
@@ -337,8 +337,8 @@ export function Claims() {
   const checks = data ? byCheck(data.groups) : [];
 
   return (
-    <div className="page">
-      <PageHead title="Claims" />
+    <div className={embedded ? "embedded" : "page"}>
+      {!embedded && <PageHead title="Claims" />}
       <form
         className="toolbar"
         role="search"

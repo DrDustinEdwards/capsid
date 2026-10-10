@@ -9,7 +9,7 @@ import { RAIL_PREF, readPref, setSingleKeys, toggleTheme, useDarkTheme, useSingl
 import { APPS } from "../lib/apps";
 import { BrandMark, NavIcon, RefreshIcon, ThemeIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
-import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
+import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
 import { NeedsYou } from "../views/NeedsYou";
@@ -19,19 +19,13 @@ import { lasting, withMessage, type Message } from "../lib/messages";
 // Needs you, the home, ships in the initial chunk; every other view loads on first visit.
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   needs: NeedsYou,
-  overview: lazy(() => import("../views/Overview").then((m) => ({ default: m.Overview }))),
-  sites: lazy(() => import("../views/Sites").then((m) => ({ default: m.Sites }))),
+  queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
+  prs: lazy(() => import("../views/Ci").then((m) => ({ default: m.PullRequests }))),
+  health: lazy(() => import("../views/Health").then((m) => ({ default: m.Health }))),
+  activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
+  agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
   packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
   shared: lazy(() => import("../views/SharedCode").then((m) => ({ default: m.SharedCode }))),
-  incidents: lazy(() => import("../views/Incidents").then((m) => ({ default: m.Incidents }))),
-  queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
-  deploys: lazy(() => import("../views/Deploys").then((m) => ({ default: m.Deploys }))),
-  agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
-  backups: lazy(() => import("../views/Backups").then((m) => ({ default: m.Backups }))),
-  ci: lazy(() => import("../views/Ci").then((m) => ({ default: m.Ci }))),
-  namespaces: lazy(() => import("../views/Namespaces").then((m) => ({ default: m.Namespaces }))),
-  activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
-  claims: lazy(() => import("../views/Claims").then((m) => ({ default: m.Claims }))),
   settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
 
@@ -40,17 +34,19 @@ const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ defaul
 // Loaded the first time it is opened, then kept: the initial bundle does not carry it.
 const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.HelpSheet })));
 
-// The phone tab bar (DECIDE 12): four views, then More, which lists every other view.
-// With no site configured there is no Sites tab. Settings is under More: on a wide
-// screen it is the top bar's Settings button, not a view in the left menu.
-const TABS: ViewId[] = ["needs", "queue", "incidents", "sites"];
+// The phone tab bar (design-portal-evaluation.md section 2): Needs you, Queue, Health, then
+// More, which lists every other page. Settings is under More: on a wide screen it is the
+// top bar's Settings button, not a page in the left menu.
+const TABS: ViewId[] = ["needs", "queue", "health"];
 
-// The menu's groups, in order (design: Watch, Work, Records). Settings is not a menu entry: it is
-// under the avatar's account panel, with its g then e shortcut and its command-menu entry.
+// The menu's groups (design section 2: Needs you, Work, Health, Records; Needs you and Health
+// share the first group, so no group label repeats a page's name). Settings is not a menu
+// entry: it is under the avatar's account panel, with its g then e shortcut and its
+// command-menu entry.
 const GROUPS: Array<{ label: string; views: ViewId[] }> = [
-  { label: "Watch", views: ["needs", "overview", "sites", "incidents", "deploys", "backups"] },
-  { label: "Work", views: ["queue", "agents", "ci", "claims"] },
-  { label: "Records", views: ["namespaces", "packages", "shared", "activity"] },
+  { label: "Now", views: ["needs", "health"] },
+  { label: "Work", views: ["queue", "prs"] },
+  { label: "Records", views: ["activity", "agents", "packages", "shared"] },
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
@@ -58,24 +54,16 @@ const GROUPS: Array<{ label: string; views: ViewId[] }> = [
 // waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
   needs: "need",
-  overview: "crit",
-  sites: "crit",
-  incidents: "need",
-  queue: "need",
-  ci: "crit",
-  namespaces: "warn",
+  health: "crit",
+  prs: "need",
 };
 
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   needs: "waiting on you",
-  overview: "critical",
-  sites: "down or degraded",
-  incidents: "open findings",
-  queue: "blocked",
-  ci: "red",
-  namespaces: "paused",
+  health: "critical",
+  prs: "awaiting the seat",
 };
 
 function useTick(ms: number): number {
@@ -117,19 +105,44 @@ export function App() {
   // drawer over the view keeps them.
   const search = useSearch();
   const qs = search ? `?${search}` : "";
-  // Until the feed answers, the Sites view is assumed on offer, so a configured install
-  // does not see it flicker in.
+  // Until the feed answers, Packages is assumed on offer, so a configured install does not
+  // see it flicker in.
   const sitesOn = feed ? hasSites(feed) : true;
   const packagesOn = feed ? hasPackages(feed) : true;
   const views = viewsFor(sitesOn, packagesOn);
   const parsed = parseRoute(location);
-  // With no site configured, /sites is not a view, and with no package, /packages is
-  // not: either shows the overview, and the address is replaced below.
-  const hidden = (parsed.view === "sites" && !sitesOn) || (parsed.view === "packages" && !packagesOn);
+  // With no package configured, /packages is not a page: it shows the home, and the
+  // address is replaced below.
+  const hidden = parsed.view === "packages" && !packagesOn;
   const route = hidden ? { view: "needs" as const, drawer: null } : parsed;
   useEffect(() => {
     if (hidden) navigate(routePath("needs"), { replace: true });
   }, [hidden, navigate]);
+  // A retired view's address (a bookmark, say) is replaced by the page, tab and section
+  // that hold its content now (MOVED in ctx.ts).
+  const old = location.split("/").filter(Boolean)[0];
+  const moved = old !== undefined && Object.hasOwn(MOVED, old) ? old : null;
+  useEffect(() => {
+    if (!moved) return;
+    if (parsed.drawer) return navigate(routePath(parsed.view, parsed.drawer) + qs, { replace: true });
+    const [page, anchor] = placePath(moved).split("#");
+    navigate(`${page}${search ? `${page!.includes("?") ? "&" : "?"}${search}` : ""}${anchor ? `#${anchor}` : ""}`, { replace: true });
+  }, [moved, parsed.view, parsed.drawer, qs, search, navigate]);
+  // A page opened with a section's anchor scrolls to it once the section is drawn: the
+  // sections load after the page does.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    let frames = 0;
+    let raf = 0;
+    const seek = () => {
+      const el = document.getElementById(decodeURIComponent(id));
+      if (el) el.scrollIntoView();
+      else if (frames++ < 120) raf = requestAnimationFrame(seek);
+    };
+    raf = requestAnimationFrame(seek);
+    return () => cancelAnimationFrame(raf);
+  }, [location]);
   // Relative times are measured on the server's clock (portalNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
   const tick = useTick(15_000);
@@ -226,7 +239,17 @@ export function App() {
       const i = ref.indexOf(":");
       const type = ref.slice(0, i);
       const id = ref.slice(i + 1);
-      if (type === "view") return isView(id) ? go(id) : undefined;
+      // A page, or a retired view id that placePath maps to its page and section.
+      if (type === "view") {
+        const to = placePath(id);
+        const anchor = to.split("#")[1];
+        navigate(to);
+        // The location effect above scrolls to a section on another page; on this one,
+        // the location does not change, so it is scrolled to here.
+        if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
+        else window.scrollTo(0, 0);
+        return;
+      }
       if (type === "site" || type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }) + qs);
     },
     [go, navigate, route.view, qs],
@@ -423,7 +446,7 @@ export function App() {
   // appears rather than doing nothing.
   const flip = useCallback(
     (id: string) => {
-      go("namespaces");
+      navigate(placePath("namespaces"));
       const until = Date.now() + 3000;
       const press = () => {
         const el = document.getElementById(id);
@@ -456,19 +479,16 @@ export function App() {
   };
 
   const c = feed ? counts(feed) : null;
-  // Needs you counts what the inbox counts, the same number the admin strip's badge shows
-  // (design-portal-evaluation.md section 2, "Badges"). The Overview keeps its count of
-  // critical problems, session incidents included (derive.ts), until Health takes it.
+  // One number, one place (design-portal-evaluation.md section 2, "Badges"): Needs you
+  // counts what the inbox counts, the number the admin strip's badge shows; Health counts
+  // the critical problems, session incidents included (derive.ts); Pull requests counts
+  // what waits on the seat. The Queue's blocked jobs are in Needs you's count already.
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
     ? {
         needs: { n: feed.live.inbox.count, cls: "warm" },
-        overview: { n: critCount, cls: "hot" },
-        sites: { n: c.down + c.degraded, cls: "hot" },
-        incidents: { n: c.findings, cls: "warm" },
-        queue: { n: c.blocked, cls: "warm" },
-        ci: { n: c.ciRed, cls: "warm" },
-        namespaces: { n: c.paused, cls: "warm" },
+        health: { n: critCount, cls: "hot" },
+        prs: { n: feed.live.awaiting_seat.length, cls: "warm" },
       }
     : {};
 
@@ -481,7 +501,7 @@ export function App() {
     document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
   }, [pageTitle, signedOut]);
 
-  const tabs: ViewId[] = sitesOn ? TABS : TABS.filter((id) => id !== "sites");
+  const tabs: ViewId[] = TABS;
   // One menu entry per view on offer, grouped; Settings is under the avatar's account panel.
   const entryFor = (id: ViewId, group?: string): AdminEntry => {
     const v = VIEWS.find((x) => x.id === id)!;

@@ -105,39 +105,11 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
 const NAV_ICONS: Record<string, ReactNode> = {
   needs: <path d="M2 4.5h12v7.5H2zM2 4.5l2.5-2.5h7L14 4.5M2 8h3.5l1 1.5h3l1-1.5H14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   shared: <path d="M5 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM5 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM14 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM3.5 5v6M5 4l6 3.3M5 12l6-3.3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
-  overview: <path d="M2 2h5v6H2zM9 2h5v3H9zM9 7h5v7H9zM2 10h5v4H2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
-  sites: (
-    <>
-      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    </>
-  ),
-  incidents: (
-    <>
-      <path d="M8 1.8 14.5 13H1.5z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      <path d="M8 6v3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </>
-  ),
   queue: <path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />,
-  deploys: <path d="M8 14V3M4 7l4-4 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />,
   agents: (
     <>
       <circle cx="8" cy="5.5" r="3" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <path d="M2.5 14c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    </>
-  ),
-  backups: (
-    <>
-      <ellipse cx="8" cy="4" rx="5.5" ry="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    </>
-  ),
-  ci: (
-    <>
-      <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="12" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M4 6v4M6 4h2a4 4 0 0 1 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
   settings: (
@@ -148,17 +120,19 @@ const NAV_ICONS: Record<string, ReactNode> = {
       <circle cx="7" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
-  namespaces: <path d="M2 3h5v4H2zM9 3h5v4H9zM2 9h5v4H2zM9 9h5v4H9z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   activity: (
     <>
       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
-  claims: (
+  health: <path d="M1.5 8.5h3l1.8-4.5 3.4 8 1.8-3.5h3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />,
+  prs: (
     <>
-      <path d="M2 3h5v10H2zM9 3h5v10H9z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      <path d="M3.5 8.2l1 1 1.8-2.2M10.5 6.5l2 2M12.5 6.5l-2 2" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="12" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M4 6v4M6 4h2a4 4 0 0 1 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
 };

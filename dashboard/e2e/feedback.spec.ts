@@ -21,7 +21,7 @@ async function flipSeat(page: Page, reason: string): Promise<void> {
 test("PLANT: a failed refresh says why, from the Worker's own text, and stays until dismissed", async ({ page }) => {
   await page.clock.install();
   await page.route(REFRESH_URL, (route) => route.fulfill({ status: 500, contentType: "text/plain", body: "the watcher pass failed: GitHub answered 502" }));
-  await visit(page, "overview");
+  await visit(page, "health");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   const failed = message(page).locator(".msg").filter({ hasText: "Refresh failed" });
   await expect(failed).toHaveText(/Refresh failed: the watcher pass failed: GitHub answered 502 \(HTTP 500\)/);
@@ -38,7 +38,7 @@ test("PLANT: a refresh whose audit row was not written shows the warning, and it
     const res = await route.fetch();
     await route.fulfill({ response: res, headers: { ...res.headers(), "x-capsid-warning": AUDIT_WARNING } });
   });
-  await visit(page, "overview");
+  await visit(page, "health");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(message(page)).toContainText(`Warning: ${AUDIT_WARNING}`);
   await page.clock.runFor(30_000);

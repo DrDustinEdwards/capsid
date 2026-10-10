@@ -111,11 +111,10 @@ async function withoutSites(page: Page) {
 
 async function siteItems(page: Page) {
   return {
-    rail: await page.locator("nav.cap-admin-menu a").filter({ hasText: /^Sites/ }).count(),
     tile: await page.locator(".tiles .tile").filter({ hasText: "Sites up" }).count(),
-    // The Overview's one row per site (audit ruling 1).
-    fleet: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
-    timeline: await page.getByRole("heading", { level: 2, name: "Deploys and downtime, 7 days" }).count(),
+    // Health's Sites section, with its one row per site (audit ruling 1).
+    section: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
+    fleet: await page.locator("main table.fleet").count(),
   };
 }
 
@@ -126,35 +125,31 @@ async function siteProblems(page: Page): Promise<number> {
   return page.locator(".att-row .kind").filter({ hasText: /^Site$/ }).count();
 }
 
-test("with sites configured, the Overview shows its site items", async ({ page }) => {
-  await visit(page, "overview");
+test("with sites configured, Health shows its site items", async ({ page }) => {
+  await visit(page, "health");
   const seen = await siteItems(page);
   // The other test's counts of zero mean something only if these are not zero.
-  expect(seen.rail).toBe(1);
-  expect(seen.tile).toBe(1);
-  expect(seen.fleet).toBe(1);
-  expect(seen.timeline).toBe(1);
+  expect(seen).toEqual({ tile: 1, section: 1, fleet: 1 });
   expect(await siteProblems(page)).toBeGreaterThan(0);
 });
 
-test("with no site configured, there is no Sites view and the Overview shows no site items", async ({ page }) => {
+test("with no site configured, Health has no Sites section and shows no site items", async ({ page }) => {
   await withoutSites(page);
-  await visit(page, "overview");
-  expect(await siteItems(page)).toEqual({ rail: 0, tile: 0, fleet: 0, timeline: 0 });
-  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT - 1);
+  await visit(page, "health");
+  expect(await siteItems(page)).toEqual({ tile: 0, section: 0, fleet: 0 });
+  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT);
   // Settings stays reachable: under the avatar, where the first site is added.
   await page.getByRole("button", { name: "Your account" }).click();
   await expect(page.locator(".cap-admin-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
   await page.keyboard.press("Escape");
   // Everything else is still there.
   await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 2, name: "Incidents", exact: true })).toHaveCount(1);
 
-  // The command menu offers no Sites view and no site.
+  // The command menu offers no site.
   await page.keyboard.press("Control+k");
   const menu = page.getByRole("dialog", { name: "Command menu" });
   await expect(menu).toBeVisible();
-  await menu.getByRole("combobox").fill("sites");
-  await expect(menu.getByRole("option").filter({ hasText: /Go to\s*Sites/ })).toHaveCount(0);
   // A site command reads "Site <name>  <host>"; the sample hosts are sample-*.example.com.
   await menu.getByRole("combobox").fill("sample-a.example.com");
   await expect(menu.getByRole("option").filter({ hasText: "sample-a.example.com" })).toHaveCount(0);
@@ -162,15 +157,10 @@ test("with no site configured, there is no Sites view and the Overview shows no 
   await expect(menu.getByRole("option").filter({ hasText: /Go to\s*Settings/ })).toHaveCount(1);
   await page.keyboard.press("Escape");
 
-  // The Sites address lands on the home, Needs you.
+  // The old Sites address lands on Health, which has no Sites section to show.
   await page.goto("sites");
-  await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
-  await expect(page).not.toHaveURL(/\/sites$/);
-  // And its shortcut does nothing.
-  await page.locator("main").focus();
-  await page.keyboard.press("g");
-  await page.keyboard.press("s");
-  await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
+  await expect(page.locator("#sites")).toHaveCount(0);
 
   // Settings says why, and is where the first site is added.
   await visit(page, "settings");
@@ -180,11 +170,11 @@ test("with no site configured, there is no Sites view and the Overview shows no 
 test.describe("on a phone, with no site configured", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("there is no Sites tab, and Settings is under More", async ({ page }) => {
+  test("the tabs are the same, and Settings is under More", async ({ page }) => {
     await withoutSites(page);
-    await visit(page, "overview");
+    await visit(page, "health");
     const tabs = page.locator("nav.cap-admin-tabs > a, nav.cap-admin-tabs > button");
-    await expect(tabs).toHaveText([/^Needs you/, /^Queue/, /^Incidents/, /^More$/]);
+    await expect(tabs).toHaveText([/^Needs you/, /^Queue/, /^Health/, /^More$/]);
     await page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" }).tap();
     await expect(page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ })).toBeVisible();
   });

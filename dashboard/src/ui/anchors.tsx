@@ -12,6 +12,9 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react
 // moves focus to the section and replaces the address's hash. The scroller gets
 // scroll-padding-top in styles.css, so a focused row is never under the bar (WCAG
 // 2.4.11). Render <Anchors /> as the first child of the view's page element.
+//
+// A section inside another section is not an entry: Health's sections hold the panels
+// that were whole views, and the bar names the sections only.
 
 const MIN_SECTIONS = 3;
 const MIN_SCREENS = 2;
@@ -19,6 +22,10 @@ const MIN_SCREENS = 2;
 interface Entry {
   id: string;
   label: string;
+}
+
+function sectionsOf(page: HTMLElement): HTMLElement[] {
+  return [...page.querySelectorAll<HTMLElement>("[data-section][id]")].filter((s) => !s.parentElement?.closest("[data-section]"));
 }
 
 function scrollerOf(el: HTMLElement): HTMLElement {
@@ -39,8 +46,11 @@ export function Anchors() {
     const el = host.current;
     const page = el?.parentElement;
     if (!el || !page || !bar.current) return;
-    const edge = bar.current.getBoundingClientRect().bottom + 1;
-    const sections = [...page.querySelectorAll<HTMLElement>("[data-section][id]")];
+    // A section scrolled to stops at the scroll padding, just under the bar, so either
+    // edge counts as passed.
+    const pad = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+    const edge = Math.max(bar.current.getBoundingClientRect().bottom, pad) + 1;
+    const sections = sectionsOf(page);
     let cur: string | null = null;
     for (const s of sections) {
       if (s.getBoundingClientRect().top <= edge) cur = s.id;
@@ -48,7 +58,7 @@ export function Anchors() {
     // Scrolled to the foot, a last section too short to reach the bar is the current one.
     const sc = scrollerOf(el);
     if (sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) cur = sections[sections.length - 1]?.id ?? cur;
-    setCurrent(cur ?? page.querySelector<HTMLElement>("[data-section][id]")?.id ?? null);
+    setCurrent(cur ?? sections[0]?.id ?? null);
   }, []);
 
   useEffect(() => {
@@ -57,7 +67,7 @@ export function Anchors() {
     if (!el || !page) return;
     const scroller = scrollerOf(el);
     const measure = () => {
-      const sections = [...page.querySelectorAll<HTMLElement>("[data-section][id]")];
+      const sections = sectionsOf(page);
       // The bar's own height does not count, or mounting it could tip the rule.
       const content = scroller.scrollHeight - (bar.current?.offsetHeight ?? 0);
       const on = sections.length >= MIN_SECTIONS && content > MIN_SCREENS * scroller.clientHeight;

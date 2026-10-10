@@ -13,7 +13,7 @@ const menuLinks = (page: Page) => page.locator("nav.cap-admin-menu a");
 test.use({ viewport: { width: 1280, height: 900 } });
 
 test("collapsing shrinks the menu to icons: same order, same places, labels and headings hidden, names and badges kept", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
   await expect(menuLinks(page)).toHaveCount(RAIL_COUNT);
   for (const v of RAIL_VIEWS) await expect(menu(page).getByText(v.label, { exact: true })).toBeVisible();
@@ -48,14 +48,14 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
 });
 
 test("a collapsed icon shows its label on hover and on keyboard focus", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   await toggle(page).click();
-  const sites = menu(page).getByRole("link", { name: /^Sites/ });
+  const sites = menu(page).getByRole("link", { name: /^Queue/ });
   const label = sites.locator(".cap-admin-label");
   await expect(label).toHaveCSS("opacity", "0");
   await sites.hover();
   await expect(label).toHaveCSS("opacity", "1");
-  await expect(label).toHaveText("Sites");
+  await expect(label).toHaveText("Queue");
   await page.mouse.move(900, 500);
   // A key press first, so the focus that follows counts as keyboard focus (:focus-visible).
   await page.keyboard.press("Shift");
@@ -64,7 +64,7 @@ test("a collapsed icon shows its label on hover and on keyboard focus", async ({
 });
 
 test("the strip's controls each have an accessible name and show it, with the key, on hover and focus", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   const strip = page.locator("nav.cap-admin-strip");
   for (const name of ["Search everything", "Help and shortcuts", "Your account"]) await expect(strip.getByRole("button", { name })).toHaveCount(1);
   const search = strip.getByRole("button", { name: "Search everything" });
@@ -80,7 +80,7 @@ test("the strip's controls each have an accessible name and show it, with the ke
 });
 
 test("a count on a menu entry says what it counts in the entry's name", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   let counted = 0;
   for (const v of RAIL_VIEWS) {
     const link = menuLinks(page).filter({ has: page.getByText(v.label, { exact: true }) });
@@ -98,12 +98,12 @@ test("a count on a menu entry says what it counts in the entry's name", async ({
 });
 
 test("the state survives a reload", async ({ page }) => {
-  await visit(page, "sites");
+  await visit(page, "queue");
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
   expect(await page.evaluate((k) => localStorage.getItem(k), RAIL_PREF)).toBe("collapsed");
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Sites" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
   expect((await menu(page).boundingBox())?.width).toBeCloseTo(56, 0);
   await toggle(page).click();
@@ -113,10 +113,10 @@ test("the state survives a reload", async ({ page }) => {
 });
 
 test("it works by keyboard: Tab reaches it, Enter and Space toggle it, and [ does too", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   await page.locator("body").click({ position: { x: 600, y: 5 } });
   let reached = false;
-  for (let i = 0; i < 60 && !reached; i++) {
+  for (let i = 0; i < 200 && !reached; i++) {
     await page.keyboard.press("Tab");
     reached = await toggle(page).evaluate((el) => el === document.activeElement);
   }
@@ -154,11 +154,11 @@ test("the app renders, expanded, when localStorage throws", async ({ page }) => 
   });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await visit(page, "overview");
+  await visit(page, "health");
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -167,11 +167,11 @@ test.describe("on a phone", () => {
 
   test("a collapsed menu does not change the bottom tab bar", async ({ page }) => {
     await page.addInitScript((k) => localStorage.setItem(k, "collapsed"), RAIL_PREF);
-    await visit(page, "overview");
+    await visit(page, "health");
     await expect(menu(page)).toBeHidden();
     await expect(page.locator("nav.cap-admin-strip")).toBeHidden();
     const tabs = page.locator("nav.cap-admin-tabs > a, nav.cap-admin-tabs > button");
-    await expect(tabs).toHaveCount(5);
+    await expect(tabs).toHaveCount(4);
     for (const t of await tabs.all()) await expect(t).toBeInViewport({ ratio: 1 });
   });
 });

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoSideways, measure, urlOf, visit } from "./views.ts";
 
-// The Claims view against the production build and the dev mock (dev/mock-api.ts), whose
+// The Claims tab of Agents against the production build and the dev mock (dev/mock-api.ts), whose
 // claims are fake: four agent groups, and two jobs from the sample feed with claims,
 // checks and touches (job_6b5a4c3d2e1f, done; job_7c1e44b0a912, blocked).
 
@@ -33,7 +33,7 @@ test("the namespace filter narrows the rows and lives in the address", async ({ 
   await visit(page, "claims");
   await page.getByLabel("Namespace", { exact: true }).selectOption("sample-b");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page).toHaveURL(/\/claims\?namespace=sample-b$/);
+  await expect(page).toHaveURL(/\/agents\?tab=claims&namespace=sample-b$/);
   await expect(groupRows(page)).toHaveCount(1);
   await expect(groupRows(page).first()).toContainText("agent:sample-b-driver");
   await page.getByRole("button", { name: "Clear", exact: true }).click();
@@ -41,7 +41,7 @@ test("the namespace filter narrows the rows and lives in the address", async ({ 
 });
 
 test("a job opens with each claim beside the checks the Worker ran on it, then the touch log", async ({ page }) => {
-  await page.goto(`${urlOf("claims")}?job=${DONE}`);
+  await page.goto(`${urlOf("claims")}&job=${DONE}`);
   await expect(page.getByRole("heading", { level: 2, name: `Job ${DONE}` })).toBeVisible();
   const complete = page.locator("[data-claim='3']");
   await expect(complete).toContainText("complete");
@@ -65,7 +65,7 @@ test("a job opens with each claim beside the checks the Worker ran on it, then t
   await expect(touches.nth(1).locator('td[data-label="Waited"]')).toHaveText("55m");
   await page.getByRole("button", { name: "Close job", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: `Job ${DONE}` })).toHaveCount(0);
-  await expect(page).toHaveURL(/\/claims$/);
+  await expect(page).toHaveURL(/\/agents\?tab=claims$/);
 });
 
 test("a job id typed into the form opens it, and an unknown one shows the server's refusal", async ({ page }) => {
@@ -81,7 +81,7 @@ test("a job id typed into the form opens it, and an unknown one shows the server
 
 test("an open job does not scroll sideways at 1024 px", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 900 });
-  await page.goto(`${urlOf("claims")}?job=${DONE}`);
+  await page.goto(`${urlOf("claims")}&job=${DONE}`);
   await expect(page.getByRole("heading", { level: 2, name: `Job ${DONE}` })).toBeVisible();
   expectNoSideways(await measure(page), "Claims with a job open at 1024");
 });

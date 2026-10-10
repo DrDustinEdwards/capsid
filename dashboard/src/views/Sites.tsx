@@ -6,16 +6,14 @@ import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 import { Convergence } from "./Convergence";
 
-export function Sites() {
+export function Sites({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
-  const head = (
-    <PageHead title="Sites" />
-  );
+  const head = embedded ? null : <PageHead title="Sites" />;
   if (!snap) {
     return (
-      <div className="page">
+      <div className={embedded ? "embedded" : "page"}>
         {head}
         <NoSnapshot />
       </div>
@@ -24,7 +22,7 @@ export function Sites() {
   const list = snap.sites.filter((s) => ns === "all" || s.namespace === ns);
   const emptied = !list.length && snap.sites.length > 0;
   return (
-    <div className="page">
+    <div className={embedded ? "embedded" : "page"}>
       {head}
       <NsChips list={snap.sites.map((s) => s.namespace)} />
       <Panel flush title="Fleet" src={`watcher pass ${ago(ms(snap.pass_at), now)}`}>

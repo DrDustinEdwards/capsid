@@ -46,32 +46,33 @@ test("Enter on a Holding now row opens the job", async ({ page }) => {
   await expect(drawer(page).locator("h2")).toHaveText(title);
 });
 
-// Defect 3: a namespace filter belongs to one view and lives in its address, and a list
-// the filter empties says so and offers a way back.
-test("a filter picked on Incidents does not change Sites, lives in the address, and an emptied list says so", async ({ page }) => {
-  await visit(page, "incidents");
-  await page.locator("main [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
-  await expect(page).toHaveURL(/\/incidents\?ns=watcher$/);
-  await expect(page.locator("main [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
-  // g then s: the keyboard way to another view.
+// Defect 3: a namespace filter belongs to one page and lives in its address, and a list
+// the filter empties says so and offers a way back. Health's sections are one page, so
+// one filter narrows them all.
+test("a filter picked on Health narrows each of its sections, lives in the address, stays off Queue, and an emptied list says so", async ({ page }) => {
+  await visit(page, "health");
+  await page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
+  await expect(page).toHaveURL(/\/health\?ns=watcher$/);
+  await expect(page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#sites [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the namespace watcher.");
+  // g then q: the keyboard way to another page, which keeps its own filter.
   await page.keyboard.press("g");
-  await page.keyboard.press("s");
-  await expect(page.getByRole("heading", { level: 1, name: "Sites" })).toBeVisible();
-  await expect(page).toHaveURL(/\/sites$/);
+  await page.keyboard.press("q");
+  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
+  await expect(page).toHaveURL(/\/queue$/);
   await expect(page.locator("main [role=group]").getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("main table.fleet tbody tr[data-row]")).toHaveCount(8);
-  // Reloading a filtered address keeps the filter; one that empties the list says so.
-  await page.goto("./sites?ns=watcher");
-  const empty = page.locator("main [data-filter-empty]");
+  // Reloading a filtered address keeps the filter; Show all clears it.
+  await page.goto("./health?ns=watcher");
+  const empty = page.locator("#sites [data-filter-empty]");
   await expect(empty).toContainText("No site in the namespace watcher.");
-  await expect(page.locator("main [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
   await empty.getByRole("button", { name: "Show all" }).click();
-  await expect(page).toHaveURL(/\/sites$/);
-  await expect(page.locator("main table.fleet tbody tr[data-row]")).toHaveCount(8);
+  await expect(page).toHaveURL(/\/health$/);
+  await expect(page.locator("#sites table.fleet tbody tr[data-row]")).toHaveCount(8);
 });
 
 // Defect 4: a live session stopped on a failure is critical under Needs attention (on
-// Needs you), and the rail's Overview count includes it.
+// Needs you), and the rail's Health count includes it.
 test("a critical session incident appears in Needs attention", async ({ page }) => {
   await visit(page, "needs");
   const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Needs attention" }) });
@@ -80,7 +81,7 @@ test("a critical session incident appears in Needs attention", async ({ page }) 
   await expect(row.locator(".st.crit")).toHaveCount(1);
   const crit = await attention.locator("[data-row] .st.crit").count();
   expect(crit).toBeGreaterThan(0);
-  await expect(page.locator("nav.cap-admin-menu").getByRole("link", { name: `Overview, ${crit} critical` })).toHaveCount(1);
+  await expect(page.locator("nav.cap-admin-menu").getByRole("link", { name: `Health, ${crit} critical` })).toHaveCount(1);
 });
 
 // Defect 5 (DECIDE 11): the perform button is named for the action, a one-way action
@@ -133,7 +134,7 @@ test("j with focus on row 3 moves focus to row 4", async ({ page }) => {
 
 // Defect 8 (SC 2.5.3): the Search button's name contains its visible word.
 test("the Search button's accessible name contains Search", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   const btn = page.locator("nav.cap-admin-strip button").filter({ hasText: "Search" });
   await expect(btn).toHaveCount(1);
   await expect(btn).toHaveAccessibleName(/^Search\b/);

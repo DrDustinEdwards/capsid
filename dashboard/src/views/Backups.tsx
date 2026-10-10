@@ -6,13 +6,13 @@ import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot, PageHead } from "./shared";
 
-export function Backups() {
+export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
-  const head = <PageHead title="Backups" />;
+  const head = embedded ? null : <PageHead title="Backups" />;
   if (!snap) {
     return (
-      <div className="page">
+      <div className={embedded ? "embedded" : "page"}>
         {head}
         <NoSnapshot />
       </div>
@@ -23,7 +23,7 @@ export function Backups() {
   const dumpAge = m?.newest_dump ? now - ms(m.newest_dump) : null;
   const mirrorBad = !m || dumpAge == null || dumpAge > 2 * DAY || (m.last_run?.conclusion != null && m.last_run.conclusion !== "success");
   return (
-    <div className="page">
+    <div className={embedded ? "embedded" : "page"}>
       {head}
       <div className="grid2">
         <Panel flush title="Primary: Capsid D1" src="/health backup">

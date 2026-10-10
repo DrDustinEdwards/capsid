@@ -1,14 +1,47 @@
-import { Link } from "wouter";
-import { routePath, useApp } from "../app/ctx";
+import { Suspense, lazy } from "react";
+import { Link, useLocation, useSearch } from "wouter";
+import { placePath, useApp } from "../app/ctx";
 import { agentState, attemptsText, loopMode, nsList } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 
-// The mode is a status word here; the switch and "Runs on" are in the Automation panel on
-// Namespaces (DECIDE 7).
+// Claims is a tab of Agents (design-portal-evaluation.md section 2: both answer "how is this
+// agent doing"), loaded when the tab opens. The tab is in the address (?tab=claims), so it can
+// be reloaded or shared.
+const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
+
 export function Agents() {
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const claims = new URLSearchParams(search).get("tab") === "claims";
+  const pick = (tab: "roster" | "claims") => navigate(tab === "claims" ? `${location}?tab=claims` : location);
+  return (
+    <div className="page">
+      <PageHead title="Agents" />
+      <div className="toolbar" role="group" aria-label="Agents or claims">
+        <button type="button" className="chip" aria-pressed={!claims} onClick={() => pick("roster")}>
+          Roster
+        </button>
+        <button type="button" className="chip" aria-pressed={claims} onClick={() => pick("claims")}>
+          Claims
+        </button>
+      </div>
+      {claims ? (
+        <Suspense fallback={null}>
+          <Claims embedded />
+        </Suspense>
+      ) : (
+        <Roster />
+      )}
+    </div>
+  );
+}
+
+// The mode is a status word here; the switch and "Runs on" are in the Automation panel in
+// Settings (DECIDE 7).
+function Roster() {
   const { feed, now } = useApp();
   const live = feed.live;
   const mode = loopMode(live.loop.mode);
@@ -16,8 +49,7 @@ export function Agents() {
   const minFrac = b.caps.actions_minutes_month ? b.spend.ci_minutes / b.caps.actions_minutes_month : 0;
   const usdFrac = b.caps.model_usd_month ? b.spend.cost_usd / b.caps.model_usd_month : 0;
   return (
-    <div className="page">
-      <PageHead title="Agents" />
+    <div className="embedded">
       <Panel flush title="Roster" src="agents · job outcomes">
         <div className="scroll-x reflow">
           <table className="list cards-below-1100">
@@ -83,7 +115,7 @@ export function Agents() {
             <dt>Mode</dt>
             <dd className="toolbar">
               <St kind={mode.kind}>{mode.label}</St>
-              <Link href={routePath("namespaces")}>Change it in Namespaces</Link>
+              <Link href={placePath("namespaces")}>Change it in Settings</Link>
             </dd>
             <dt>Actions minutes</dt>
             <dd>

@@ -59,7 +59,7 @@ async function withoutPackages(page: Page) {
 
 test("with no package configured there is no Packages view, and /packages shows the home", async ({ page }) => {
   await withoutPackages(page);
-  await visit(page, "overview");
+  await visit(page, "health");
   await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT - 1);
   await expect(page.locator("nav.cap-admin-menu a").filter({ hasText: /^Packages/ })).toHaveCount(0);
   await page.goto("./packages");

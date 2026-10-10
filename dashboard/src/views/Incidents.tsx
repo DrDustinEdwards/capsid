@@ -7,15 +7,15 @@ import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
-export function Incidents() {
+export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const all = incidents(feed);
   const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
-    <div className="page">
-      <PageHead title="Incidents" />
+    <div className={embedded ? "embedded" : "page"}>
+      {!embedded && <PageHead title="Incidents" />}
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
