@@ -273,6 +273,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
 - `GET /health` no auth. Reports deploy provenance (git sha, whether the tree was dirty, build time) and probes the store: `SELECT 1` against D1 plus an FTS5 MATCH pinned to one known document. Either probe failing returns 503 with `status: "degraded"` and a `store` object naming which one. A Worker whose bindings resolved to nothing starts normally and would otherwise answer `ok` while every read tool errors.
 - `GET /public/model/v1.json` no auth. The public system model the explorer and the dustinedwards.info map are built from: what the daily build stored after the privacy filter, never computed per request. Private systems appear as a name and domain only. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
+- `GET /public/stats/v1.json` no auth. Counts, rates and medians across every namespace, agent and site, over whole UTC days, computed once a day by the same build: never a name, a title or a time of day; a rate over fewer than ten rows is null. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
 
 ## Documentation
 

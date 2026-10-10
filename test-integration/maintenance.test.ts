@@ -12,6 +12,8 @@ import type { Env } from "../src/env";
 import type { PortalMaintenance } from "../src/ops-types";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
+import { gatherModelDriftItems, UNLISTED_DOC } from "../src/model-drift";
+import type { SystemModel } from "../src/system-model";
 
 // The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
 // one at a time beside a clean job each must leave alone.
@@ -42,6 +44,8 @@ const NO_DEPLOYS: DeployReaders = {
     throw new Error("not called");
   },
 };
+// The model drift check has its own tests (test/model-drift.test.ts); here it reads nothing.
+const NO_DRIFT = async () => ({ items: [], read: 0 });
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -70,7 +74,7 @@ describe("gatherMaintenance", () => {
   it("lists a queued LATER job whose date has passed, and leaves a future one alone", async () => {
     const past = await post("LATER 2026-10-01: move the cron");
     await post("LATER 2026-12-01: rename the tool");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(list.items.filter((i) => i.rule === "later-passed").map((i) => i.job)).toEqual([past]);
   });
 
@@ -79,7 +83,7 @@ describe("gatherMaintenance", () => {
     const other = await post("Unrelated work", "See https://github.com/example-org/sample/pull/70 for context.");
     const done = await post("The job that shipped it");
     await env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, ?2, 1)").bind(done, PR).run();
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     const found = list.items.filter((i) => i.rule === "shipped-elsewhere");
     expect(found.map((i) => i.job)).toEqual([shipped]);
     expect(found[0].line).toContain(done);
@@ -91,13 +95,13 @@ describe("gatherMaintenance", () => {
     await env.DB.prepare("UPDATE jobs SET status = 'done', result_summary = ?2, created_at = ?3, updated_at = ?4 WHERE id = ?1")
       .bind(promised, "Design done. The build will follow as separate jobs.", "2026-10-06T00:00:00.000Z", "2026-10-07T00:00:00.000Z")
       .run();
-    let list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    let list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(list.items.filter((i) => i.rule === "followups-missing").map((i) => i.job)).toEqual([promised]);
 
     // A job posted after it moved is the follow-up. (postJob stamps created_at from `now`.)
     const later = await postJob(jobsEnv(), ADMIN, new Date("2026-10-07T06:00:00.000Z"), { namespace: "sample", title: "Build the thing", body: "go" });
     expect(later.ok, later.refusal).toBe(true);
-    list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(list.items.filter((i) => i.rule === "followups-missing")).toEqual([]);
   });
 
@@ -108,7 +112,7 @@ describe("gatherMaintenance", () => {
       env.DB.prepare("INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES (?1, 'sample', 'resume', 'system:merge-resume', 'system', ?2)").bind(id, at).run();
     await touch(recent, "2026-10-08T06:00:00.000Z");
     await touch(old, "2026-10-01T06:00:00.000Z");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(list.items.filter((i) => i.rule === "auto-resumed").map((i) => i.job)).toEqual([recent]);
   });
 
@@ -124,7 +128,7 @@ describe("gatherMaintenance", () => {
     expect(refused.ok).toBe(false);
     expect(refused.disk).toBeUndefined();
 
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     const low = list.items.filter((i) => i.rule === "disk-low");
     expect(low.map((i) => [i.namespace, i.job])).toEqual([["sample", id]]);
     expect(low[0].line).toContain("agent:driver-disk reported 12.5 GB free");
@@ -133,27 +137,57 @@ describe("gatherMaintenance", () => {
 
   it("stays quiet on a clean queue", async () => {
     await post("An ordinary queued job");
-    expect((await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS)).items).toEqual([]);
+    expect((await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT)).items).toEqual([]);
+  });
+});
+
+describe("gatherModelDriftItems", () => {
+  // The reads against the real tables: the namespace mapping, ops_sites and the unlisted
+  // document. The comparison itself is tested in test/model-drift.test.ts.
+  const MODEL: SystemModel = {
+    version: 1,
+    systems: [{ id: "sample-site", name: "Sample", short: "Sample", family: "site", ring: "used", public: true, domain: "example.com", repos: ["example-org/sample-site"] }],
+    containers: [],
+    relationships: [],
+  };
+
+  it("names a mapped repo the model does not, skips one the unlisted document lists, and reports an unread App list", async () => {
+    await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind("drift-sample", JSON.stringify([{ repo: "example-org/sample-site", label: "primary" }, { repo: "example-org/sample-docs", label: "docs" }, { repo: "example-org/sample-notes", label: "notes" }]))
+      .run();
+    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, 'Unlisted', ?3, 'note', 'published')")
+      .bind(UNLISTED_DOC.namespace, UNLISTED_DOC.path, "- example-org/sample-notes\n")
+      .run();
+    const out = await gatherModelDriftItems(env as never, MODEL, async () => {
+      throw new Error("no App key in tests");
+    });
+    const mine = out.items.filter((i) => i.namespace === "drift-sample" || i.rule === "model-not-checked");
+    expect(mine.map((i) => [i.rule, i.namespace])).toEqual([
+      ["model-drift", "drift-sample"],
+      ["model-not-checked", "capsid"],
+    ]);
+    expect(mine[0].line).toContain("example-org/sample-docs is mapped to drift-sample");
+    expect(out.read).toBeGreaterThanOrEqual(3);
   });
 });
 
 describe("maintenanceTick", () => {
   it("does not run before 11:00 UTC, runs once a day after, and stores the list", async () => {
     await post("LATER 2026-10-01: stale");
-    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(early.ran).toBe(false);
     expect(await readMaintenance(env as never)).toBeNull();
 
-    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(first.ran).toBe(true);
     expect((await readMaintenance(env as never))?.items.map((i) => i.rule)).toEqual(["later-passed"]);
     // Every roster repo was read, and the count says so: zero open pull requests, not none read.
     expect(Object.values((await readMaintenance(env as never))?.prs_read ?? {})).toEqual([0, 0, 0, 0, 0, 0, 0]);
     expect(Object.values((await readMaintenance(env as never))?.branches_read ?? {})).toEqual([1, 1, 1, 1, 1, 1, 1]);
 
-    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(second.ran).toBe(false);
-    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS);
+    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(nextDay.ran).toBe(true);
   });
 
@@ -171,7 +205,7 @@ describe("maintenanceTick", () => {
       },
     };
     try {
-      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED, NO_DEPLOYS);
+      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED, NO_DEPLOYS, NO_DRIFT);
       expect(ran.ran && ran.note).toContain("1 pruned");
       const rows = await env.DB.prepare("SELECT actor, namespace, params FROM audit_log WHERE action = ?1").bind(PRUNE_AUDIT_ACTION).all<{ actor: string; namespace: string; params: string }>();
       expect(rows.results.map((r) => [r.actor, r.namespace, JSON.parse(r.params)])).toEqual([
@@ -203,7 +237,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     expect(before.body.items).toEqual([]);
 
     await post("LATER 2026-10-01: stale");
-    expect((await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS)).ran).toBe(true);
+    expect((await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT)).ran).toBe(true);
     const after = await read();
     expect(after.cache).toBe("no-store");
     expect(after.body.generated).toBe(NOW.toISOString());

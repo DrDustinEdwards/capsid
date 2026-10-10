@@ -26,12 +26,14 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "later-passed": { kind: "warn", label: "Date passed", order: 6 },
   "branch-merged": { kind: "warn", label: "Merged branch", order: 7 },
   "branch-stale": { kind: "warn", label: "Old branch", order: 8 },
+  "model-drift": { kind: "warn", label: "Model drift", order: 8 },
   "auto-resumed": { kind: "ok", label: "Resumed", order: 9 },
   "branch-pruned": { kind: "ok", label: "Pruned", order: 10 },
   "prs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "branches-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "disk-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "deploys-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
+  "model-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
 };
 
 // Rows shown before "more"; every critical row is shown.

@@ -923,7 +923,9 @@ export type MaintenanceRule =
   | "disk-low"
   | "disk-not-checked"
   | "undeployed-merge"
-  | "deploys-not-checked";
+  | "deploys-not-checked"
+  | "model-drift"
+  | "model-not-checked";
 
 export interface OpsMaintenanceItem {
   /** Which rule found it. */
