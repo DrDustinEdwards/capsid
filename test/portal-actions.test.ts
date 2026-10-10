@@ -26,6 +26,17 @@ import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_P
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
+import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
+
+// approve_pr reads the pull request's head from GitHub at preview and at perform. Only
+// that read is answered; nothing in this file reaches GitHub otherwise.
+const APPROVED_HEAD = "a".repeat(40);
+const passThrough = globalThis.fetch;
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input instanceof Request ? input.url : input);
+  if (url === "https://api.github.com/repos/owner/repo/pulls/41") return Response.json({ head: { sha: APPROVED_HEAD }, state: "open", merged: false });
+  return passThrough(input, init);
+}) as typeof fetch;
 
 // The Portal's controls (src/portal-actions.ts): a preview that writes nothing and
 // signs what it previewed, then a perform that carries only that token. The job
@@ -96,6 +107,14 @@ function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
     get(target, prop, receiver) {
       if (prop !== "prepare") return Reflect.get(target, prop, receiver);
       return (sql: string) => {
+        // The approval record (migrations/0037): no open approval.
+        if (/FROM pr_approvals/i.test(sql)) {
+          const statement = {
+            bind: () => statement,
+            all: async () => ({ results: [], meta: {} }),
+          };
+          return statement;
+        }
         if (/FROM canon_proposals/i.test(sql)) {
           const statement = {
             params: [] as unknown[],
@@ -182,7 +201,14 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
       { id: "job_parked000001", namespace: "capsid", title: "a parked job", body: "lorem", status: "parked", posted_by: "github:sample", result_summary: "comes back when the design is ruled" },
     ],
   });
-  const kv = fakeKv({ seed: { "improve:paused:capsid": "an old reason" } });
+  // A pull request the tick classed approve, for approve_pr, and the App's token for its repo.
+  const kv = fakeKv({
+    seed: {
+      "improve:paused:capsid": "an old reason",
+      [AWAITING_SEAT_KEY]: JSON.stringify([{ namespace: "capsid", repo: "owner/repo", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }]),
+      "gh:token:v3:owner/repo": "test-token",
+    },
+  });
   const env = {
     DB: withSites(d1.db, SITE_ROWS),
     APP_KV: kv.kv,
@@ -316,6 +342,7 @@ const EVERY_ACTION = [
   ["park_job", { id: "job_queued000001", reason: "comes back when the design is ruled" }],
   ["unpark_job", { id: "job_parked000001" }],
   ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
+  ["approve_pr", { namespace: "capsid", prs: "41", shas: "a".repeat(40) }],
   ["revoke_agent", { name: "capsid-driver" }],
   ["site_add", { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" }],
   ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
@@ -329,10 +356,11 @@ const EVERY_ACTION = [
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, and supersede, park, unpark and PR close, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, supersede, park, unpark and PR close, and approve, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
+    "approve_pr",
     "canon_approve",
     "canon_reject",
     "close_shipped",
@@ -359,7 +387,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 24);
+  assert.equal(PORTAL_ACTIONS.length, 25);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -570,9 +598,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions (close_shipped, supersede, park and unpark among them), the PR close, the site edits, the package edits and the
+// transitions (close_shipped, supersede, park and unpark among them), the PR close, the approval, the site edits, the package edits and the
 // canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && a !== "pr_close" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("canon_"))) {
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && a !== "pr_close" && a !== "approve_pr" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("canon_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);

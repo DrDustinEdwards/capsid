@@ -57,7 +57,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
@@ -509,6 +509,10 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.closedPrs.add(`${repo}#${number}`),
       };
     }
+    case "approve_pr":
+      // The inbox screens that approve are the merge pipeline's PR 5; until then the
+      // mock answers the way the Worker answers a pull request the tick has not classed.
+      throw new Refusal(400, `#${params.prs ?? ""} has no class: the tick has not classed it into the awaiting-seat set yet.`);
     case "release_job": {
       const j = job();
       need(params, "reason", "A reason");
