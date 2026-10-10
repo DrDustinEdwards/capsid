@@ -120,6 +120,7 @@ test("an agent is shown with the record improve_status computes for it, and with
     max_claims: 1,
     last_seen: "2026-09-28 11:00:00",
     revoked_at: null,
+    archived_at: null,
     record,
   });
   assert.deepEqual(shaped, {
@@ -129,6 +130,7 @@ test("an agent is shown with the record improve_status computes for it, and with
     flags: ["can_merge"],
     last_seen: "2026-09-28T11:00:00Z",
     revoked_at: null,
+    archived_at: null,
     jobs_done: 4,
     jobs_failed: 1,
     jobs_blocked: 2,

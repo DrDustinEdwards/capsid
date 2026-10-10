@@ -98,7 +98,10 @@ async function factsForPr(
     }
     if (jobClaimedBy?.startsWith("agent:")) {
       const name = jobClaimedBy.slice("agent:".length);
-      const row = await env.DB.prepare("SELECT name, kind, revoked_at FROM agents WHERE name = ?1")
+      // An archived agent is a revoked one (src/agents-archive.ts).
+      const row = await env.DB.prepare(
+        "SELECT name, kind, revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT name, kind, revoked_at FROM agents_archive WHERE name = ?1"
+      )
         .bind(name)
         .first<{ name: string; kind: string; revoked_at: string | null }>();
       if (row) driverAgent = { name: row.name, kind: row.kind, revoked: row.revoked_at !== null };

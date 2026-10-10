@@ -19,6 +19,7 @@ import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from 
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
 import { anomalyFindings, readActionHours } from "./anomaly";
+import { archiveRevokedAgents } from "./agents-archive";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
 import {
   buildSnapshot,
@@ -795,6 +796,19 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
     } catch (err) {
       logEvent("error", "WATCHER_PACKAGE_WEEKS_FAILED", { message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}` });
     }
+  }
+
+  // Revoked agents out of the live table, history kept (src/agents-archive.ts). A failed
+  // move is logged and retried next pass; it never stops the pass.
+  try {
+    const moved = await archiveRevokedAgents(env.DB, WATCHER_ACTOR, now);
+    if (moved.archived.length > 0 || moved.skipped.length > 0) {
+      logEvent("log", "WATCHER_AGENTS_ARCHIVED", {
+        message: `WATCHER_AGENTS_ARCHIVED ${moved.archived.map((a) => `${a.name} (${a.reason})`).join(", ") || "none"}; changed under the move: ${moved.skipped.join(", ") || "none"}`,
+      });
+    }
+  } catch (err) {
+    logEvent("error", "WATCHER_AGENTS_ARCHIVE_FAILED", { message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}` });
   }
 
   // Written last and only on a pass that ran. A stamp written first would make a

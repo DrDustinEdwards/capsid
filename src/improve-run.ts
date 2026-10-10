@@ -240,6 +240,9 @@ export interface AgentSummary {
   max_claims: number;
   last_seen: string | null;
   revoked_at: string | null;
+  // When the watcher pass moved it to agents_archive (src/agents-archive.ts), or null
+  // for a row still in agents. An archived agent is always revoked.
+  archived_at: string | null;
   // What this credential has done, from job_outcomes. Counts and rates, never a
   // composite score (src/agent-record.ts says why).
   record: AgentRecord;
@@ -247,11 +250,24 @@ export interface AgentSummary {
 
 // Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
 // with the same records rather than a second reading of the agents table.
+// The archive is read newest move first and bounded: one runner key is archived per
+// seat-started job, so it grows with the queue. The full archive is agents list with
+// archived: true.
+const SUMMARY_ARCHIVE_LIMIT = 50;
+
 export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
   const { results } = await db
-    .prepare("SELECT name, kind, scopes, last_seen, revoked_at FROM agents ORDER BY revoked_at IS NOT NULL, name")
-    .all<{ name: string; kind: string; scopes: string; last_seen: string | null; revoked_at: string | null }>();
-  const inventory = (results ?? []).map((row) => {
+    .prepare(
+      `SELECT name, kind, scopes, last_seen, revoked_at, NULL AS archived_at FROM agents
+       UNION ALL
+       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`
+    )
+    .bind(SUMMARY_ARCHIVE_LIMIT)
+    .all<{ name: string; kind: string; scopes: string; last_seen: string | null; revoked_at: string | null; archived_at: string | null }>();
+  // Live first, then revoked, then archived; by name within each.
+  const rank = (r: { revoked_at: string | null; archived_at: string | null }) => (r.archived_at ? 2 : r.revoked_at ? 1 : 0);
+  const rows = [...(results ?? [])].sort((a, b) => rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const inventory = rows.map((row) => {
     const scopes = parseScopes(row.scopes);
     return {
       name: row.name,
@@ -262,6 +278,7 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       max_claims: claimLimit(scopes),
       last_seen: row.last_seen,
       revoked_at: row.revoked_at,
+      archived_at: row.archived_at,
     };
   });
   // Three grouped reads for the whole inventory, not three per credential.

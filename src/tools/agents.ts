@@ -3,6 +3,7 @@ import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { AGENT_KINDS, SCOPE_FLAGS, AGENT_GRANTS, DEFAULT_MAX_CLAIMS, MAX_CLAIMS_CEILING } from "../agents-schema";
 import { listAgents, mintAgent, revokeAgent, updateAgentScopes } from "../agents-admin";
+import { listArchivedAgents } from "../agents-archive";
 import { bounded, MAX_DOC_TYPE, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -20,10 +21,11 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
     {
       annotations: hintsFor("agents"),
       description:
-        `Scoped credentials: one row per caller, with its own key, scopes and audit identity (agent:<name>). Admin only, every action: a minted agent cannot mint, revoke or re-scope. The admin is an OAuth session on /mcp or a write-grant OPERATOR_KEY_HASH entry on /ops/mcp. action "mint" creates an agent and returns its key once; only its sha256 is stored, so a lost key is replaced by revoking and minting again. It takes name (unique, revoked names included), kind (${AGENT_KINDS.join(" | ")}), namespaces (a list, or the single entry "*"), and optionally repos, tools, grants and flags. A new agent defaults to read on its namespaces with no flags. The flags are ${SCOPE_FLAGS.join(", ")}. action "list" returns every agent, revoked ones included, with its scopes, last_seen and a 12-hex fingerprint of its key digest; never the stored verifier. action "revoke" sets revoked_at, keeps the row, and the key stops resolving immediately. action "update_scopes" replaces only the axes named: a call naming one flag leaves the others. max_claims (mint and update_scopes) is how many jobs the agent may hold claimed at once, ${DEFAULT_MAX_CLAIMS} unless set. Mint, revoke and update_scopes are audit-logged, never with the key.`,
+        `Scoped credentials: one row per caller, with its own key, scopes and audit identity (agent:<name>). Admin only, every action: a minted agent cannot mint, revoke or re-scope. The admin is an OAuth session on /mcp or a write-grant OPERATOR_KEY_HASH entry on /ops/mcp. action "mint" creates an agent and returns its key once; only its sha256 is stored, so a lost key is replaced by revoking and minting again. It takes name (unique, revoked names included), kind (${AGENT_KINDS.join(" | ")}), namespaces (a list, or the single entry "*"), and optionally repos, tools, grants and flags. A new agent defaults to read on its namespaces with no flags. The flags are ${SCOPE_FLAGS.join(", ")}. action "list" returns every agent in the live table, revoked ones not yet archived included, with its scopes, last_seen and a 12-hex fingerprint of its key digest; never the stored verifier. With archived: true it returns the archive instead: revoked agents moved out of the live table by the watcher pass 7 days after revocation, or a runner key once its job ended, each with its reason, archived_at and the audit-row and job counts taken at the move. An archived name is never reused. action "revoke" sets revoked_at, keeps the row, and the key stops resolving immediately. action "update_scopes" replaces only the axes named: a call naming one flag leaves the others. max_claims (mint and update_scopes) is how many jobs the agent may hold claimed at once, ${DEFAULT_MAX_CLAIMS} unless set. Mint, revoke and update_scopes are audit-logged, never with the key.`,
       inputSchema: {
         action: z.enum(AGENT_ACTIONS).describe("mint | list | revoke | update_scopes."),
         name: bounded(64).optional().describe("For mint, revoke and update_scopes: the agent's name."),
+        archived: z.boolean().optional().describe("For list: true returns the archived agents instead of the live table."),
         kind: bounded(MAX_DOC_TYPE).optional().describe(`For mint: ${AGENT_KINDS.join(" | ")}. Grants nothing by itself.`),
         namespaces: z
           .array(nsName)
@@ -63,6 +65,7 @@ export function registerAgentTools(server: McpServer, ctx: ToolCtx): void {
             return ok(await mintAgent(db, actor, { ...scopeArgs, name: args.name, kind: args.kind }));
           }
           case "list":
+            if (args.archived === true) return ok({ ok: true, action: "list", archived: await listArchivedAgents(db) });
             return ok(await listAgents(db));
           case "revoke": {
             if (!args.name) return fail("revoke needs the agent's name.");

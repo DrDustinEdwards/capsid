@@ -181,7 +181,13 @@ export async function resolveAgent(
     const agent = agentFromRow(row);
     return { agent, touch: () => touchLastSeen(env.DB, agent) };
   }
-  const revoked = await env.DB.prepare("SELECT id FROM agents WHERE key_hash = ?1").bind(hash).first<{ id: string }>();
+  // A revoked key is refused whether its row is still in agents or has moved to the
+  // archive (src/agents-archive.ts): an archived key is a revoked key.
+  const revoked = await env.DB.prepare(
+    "SELECT id FROM agents WHERE key_hash = ?1 UNION ALL SELECT id FROM agents_archive WHERE key_hash = ?1"
+  )
+    .bind(hash)
+    .first<{ id: string }>();
   if (revoked) return null;
   const { grant, fingerprint } = await operatorIdentity(request, env);
   if (!grant || !fingerprint) return null;

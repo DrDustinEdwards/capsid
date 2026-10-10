@@ -1,3 +1,4 @@
+import { archivedAgentByName } from "./agents-archive";
 import { adminAgentForEmail } from "./agents";
 import { revokeAgent } from "./agents-admin";
 import { agentActor } from "./agents-schema";
@@ -1027,7 +1028,10 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
       const agent = await env.DB.prepare("SELECT name, kind, revoked_at FROM agents WHERE name = ?1")
         .bind(p.name)
         .first<{ name: string; kind: string; revoked_at: string | null }>();
-      if (!agent) return refused(`no agent named '${p.name}'.`);
+      if (!agent) {
+        const archived = await archivedAgentByName(env.DB, p.name);
+        return refused(archived ? `'${p.name}' was revoked at ${archived.revoked_at} and archived at ${archived.archived_at}.` : `no agent named '${p.name}'.`);
+      }
       if (agent.revoked_at) return refused(`'${p.name}' was already revoked at ${agent.revoked_at}.`);
       // Bounded: a live agent holds at most its claim limit (4 at the most) plus its
       // blocked jobs, so the limit is a guard, not a page.
