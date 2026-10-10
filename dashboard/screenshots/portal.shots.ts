@@ -48,19 +48,19 @@ test("the pinned clock is the fixture's own now", () => {
   expect(feed.live.generated).toBe(SHOTS_NOW);
 });
 
-test("overview, light", async ({ page }) => {
+test("health, light", async ({ page }) => {
   await open(page, "health");
-  await shoot(page, "overview-light");
+  await shoot(page, "health-light");
 });
 
-test("overview, dark", async ({ page }) => {
+test("health, dark", async ({ page }) => {
   await open(page, "health", "dark");
-  await shoot(page, "overview-dark");
+  await shoot(page, "health-dark");
 });
 
-test("sites, light", async ({ page }) => {
+test("health's sites section, light", async ({ page }) => {
   await open(page, "sites");
-  await shoot(page, "sites-light");
+  await shoot(page, "health-sites-light");
 });
 
 test("queue with a job drawer open, light", async ({ page }) => {
@@ -101,13 +101,13 @@ test("claims, light", async ({ page }) => {
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
 
-  test("overview, light", async ({ page }) => {
+  test("health, light", async ({ page }) => {
     await open(page, "health");
-    await shoot(page, "phone-overview-light");
+    await shoot(page, "phone-health-light");
   });
 
-  test("overview, dark", async ({ page }) => {
+  test("health, dark", async ({ page }) => {
     await open(page, "health", "dark");
-    await shoot(page, "phone-overview-dark");
+    await shoot(page, "phone-health-dark");
   });
 });

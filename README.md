@@ -58,31 +58,27 @@ An optional loop that proposes one scoped change at a time to a roster of reposi
 
 The Portal is the administrator's view of Capsid, one app served at `/portal/`, and on its own host when `PORTAL_HOST` in `src/portal-host.ts` names one (this deployment's is portal.dustinedwards.info, where the Portal is the whole host). It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
 
-![Overview](docs/images/overview-light.png)
+![Health](docs/images/health-light.png)
 
-![Overview, dark](docs/images/overview-dark.png)
+![Health, dark](docs/images/health-dark.png)
 
-The menu groups the views (`GROUPS` in `dashboard/src/app/App.tsx`):
+The menu groups the pages by task (`GROUPS` in `dashboard/src/app/App.tsx`):
 
-- **Watch**
-  - **Overview**: what needs attention, the fleet of sites, deploys and downtime over seven days, the queue and open incidents.
-  - **Sites**: each configured site, its probe results and a 7-day uptime ring. Shown only while at least one site is configured.
-  - **Incidents**: the watcher's findings and its last pass.
-  - **Deploys**: a deploy timeline per site, read from Cloudflare.
-  - **Backups**: Capsid's own D1 backup and the off-account mirror.
+- **Now**
+  - **Needs you**, the home: what waits on Dustin per app, from `/ops/inbox`, then every problem worst first.
+  - **Health**: "is anything broken" on one page. Summary tiles and the daily maintenance list, then a section each for the sites (each configured site, its probe results and a 7-day uptime ring, shown only while at least one site is configured), incidents (the watcher's findings and its last pass), deploys (a timeline per site, read from Cloudflare), backups (Capsid's own D1 backup and the off-account mirror) and the default branches' CI.
 - **Work**
-  - **Queue**: every open job and every job that ended in the last day, by namespace, with seat-started sessions and live Claude Code sessions.
-  - **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job).
-  - **CI and merges**: default-branch CI, pull requests from the last seven days, and what auto-merge left for the seat.
-  - **Claims**: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
+  - **Queue**: every open job and every job that ended in the last day, by namespace, with the stale jobs, seat-started sessions and live Claude Code sessions.
+  - **Pull requests**: pull requests from the last seven days, and what auto-merge left for the seat.
 - **Records**
-  - **Namespaces**: each namespace as `improve_status` reports it, with the automation switches.
-  - **Packages**: each configured npm package's versions, downloads, dependents and repository. Shown only while at least one package is configured.
   - **Activity**: the last 50 audit rows, filtered by namespace and actor.
+  - **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job), and a Claims tab: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
+  - **Packages**: each configured npm package's versions, downloads, dependents and repository. Shown only while at least one package is configured.
+  - **Shared code**: each shared package, the tag each app pins, who is behind, and the local copies left.
 
-Settings (the site and package configuration) is not in the menu: it is under the avatar's account panel as "Portal settings".
+Settings (the sites, the packages, and the automation switches with each namespace as `improve_status` reports it) is not in the menu: it is under the avatar's account panel as "Portal settings". An old address, such as `/portal/sites`, opens the page and section that hold it now.
 
-![Sites](docs/images/sites-light.png)
+![Health, at its Sites section](docs/images/health-sites-light.png)
 
 ![Queue with a job drawer open](docs/images/queue-drawer-light.png)
 
@@ -90,15 +86,15 @@ Settings (the site and package configuration) is not in the menu: it is under th
 
 ![Activity](docs/images/activity-light.png)
 
-![Claims](docs/images/claims-light.png)
+![Agents, its Claims tab](docs/images/claims-light.png)
 
 The Portal's controls are the registry in `src/controls.ts` (`PORTAL_ACTIONS`); the same controls are available in chat through the admin-only `controls` tool, and the audit row says which door a change came through. They are the automation switches (pause and unpause a namespace, the improve loop's mode, seat start, the overnight run), resetting a namespace's circuit breaker, resuming, failing or releasing a job, revoking an agent, and adding, editing or removing a site or a package. Each one is two requests. The preview reads current state, writes nothing, and returns what will change, the audit rows the perform will write, and a token signed with a key derived from `COOKIE_ENCRYPTION_KEY` (token version 2). The token carries the action, its parameters and the admin's email, and expires after five minutes. The perform takes only that token, so what runs is what the dialog showed. A confirmation is single-use: the perform spends the token's id in KV before the control runs, and a second perform of the same token is refused with a 409. A token is spent even when the control then refuses, because the refusal is about state and the next preview shows it again. Every transition is also guarded on the state it moves from. Both requests need the `X-Capsid-CSRF` header to match the `capsid_portal_csrf` cookie and refuse a cross-site `Sec-Fetch-Site`. The Portal cannot merge a pull request or mint a credential, and `test/portal-actions.test.ts` asserts that both are refused.
 
-Optional panels stay hidden until they are configured. Which sites the watcher probes is configuration in the D1 table `ops_sites`, edited in Settings. With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides the Sites view and every site item on the Overview. Deploy and error columns need `CF_OPS_TOKEN`; until it is set they read "Cloudflare read not configured" rather than zero. A value the feed does not have is shown as "No data" with its reason. The Portal works at phone width.
+Optional panels stay hidden until they are configured. Which sites the watcher probes is configuration in the D1 table `ops_sites`, edited in Settings. With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides Health's Sites section and its site tile. Deploy and error columns need `CF_OPS_TOKEN`; until it is set they read "Cloudflare read not configured" rather than zero. A value the feed does not have is shown as "No data" with its reason. The Portal works at phone width.
 
-![Phone overview](docs/images/phone-overview-light.png)
+![Health on a phone](docs/images/phone-health-light.png)
 
-![Phone overview, dark](docs/images/phone-overview-dark.png)
+![Health on a phone, dark](docs/images/phone-health-dark.png)
 
 ## Security model
 
@@ -153,7 +149,7 @@ A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md]
 
 Before a push, run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `npm run deploy` builds the Portal first and stops if the build or its size budget fails; `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
 
-Optional parts stay hidden or inert until configured. With no row in `ops_sites` that has an origin, nothing is probed and the Sites view is hidden. Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured. The telemetry receiver (`/ops/otlp/v1/*`, [docs/telemetry.md](docs/telemetry.md)) and the hook receiver (`/ops/hooks`, [docs/hooks.md](docs/hooks.md)) are live but store nothing until a Claude Code session is configured to send to them with a key. The improve loop, auto-merge and the nightly driver are each off by default (see Switches below).
+Optional parts stay hidden or inert until configured. With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section. Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured. The telemetry receiver (`/ops/otlp/v1/*`, [docs/telemetry.md](docs/telemetry.md)) and the hook receiver (`/ops/hooks`, [docs/hooks.md](docs/hooks.md)) are live but store nothing until a Claude Code session is configured to send to them with a key. The improve loop, auto-merge and the nightly driver are each off by default (see Switches below).
 
 ### Full setup, step by step
 
