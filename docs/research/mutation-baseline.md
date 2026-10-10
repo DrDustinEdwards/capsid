@@ -22,7 +22,7 @@ Run: mutation-baseline run 38015797140, dispatched from the #313 branch (merged 
 - **The unit between tests is the test file.** Stryker's tap runner runs each `test/*.test.ts` file as one unit and records which files killed a mutant. It does not separate the cases inside a file, so the kill matrix below is per file. A file that is a candidate may still hold cases that matter; a file that is needed may hold cases that do not.
 - **Timeouts have no killer.** 901 mutants ended as timeouts. Stryker records them as detected but names no test, so they are in the score and not in the matrix.
 - **Ten test files are outside the run.** They read source text, which Stryker's instrumentation rewrites. They still run in CI on every PR. They are listed below as always kept. Any mutant that only they would kill shows here as survived or uncovered, so the score is a floor for the suite and the matrix understates those files' share.
-- **Four source files have no mutants.** `src/access-jwt.ts` is left out because Stryker 10's Babel parser rejects it (line 68, a typed async arrow as a computed object key). `src/env.ts`, `src/github.ts` and `src/ops-types.ts` hold only type declarations and re-exports, so there is nothing to mutate. The score says nothing about `access-jwt.ts`, which is security code.
+- **Four source files have no mutants in the 10.0.0 baseline.** `src/access-jwt.ts` is left out because Stryker 10's Babel parser rejects it; it is measured separately under Stryker 9.6.1 in the last section of this report. `src/env.ts`, `src/github.ts` and `src/ops-types.ts` hold only type declarations and re-exports, so there is nothing to mutate.
 - **Integration and browser suites are not measured.** The integration suite runs in workerd, which Stryker's runners cannot drive. Those tests are kept under the ruling.
 - **No type checker ran.** Mutants that do not type-check were not filtered out ahead of time, so some survivors may be mutants no valid program could contain.
 
@@ -557,3 +557,34 @@ The lesson for the grouping above: "kills nothing in `src/`" is a statement abou
 - Because the unit is the file, a pruning plan that wants to drop single cases needs a runner that reports per case. The tap runner does not.
 - Any pruning PR should show this score before and after, as the plan says. The score above is the baseline to beat, 56.5%.
 - The ten excluded files and `access-jwt.ts` are a blind spot of this baseline, not evidence about them.
+
+## src/access-jwt.ts, measured with Stryker 9.6.1
+
+This file is the one that verifies the Access ID token at sign-in. The baseline above leaves it out. This section says why, how it is now measured, and what the score is.
+
+**Why Stryker 10 rejects it.** Stryker 10.0.0 parses TypeScript with Babel 8. Every Babel 8 release tested (8.0.0, 8.0.4, 8.0.6 and the latest, 8.0.7) fails on an `async` arrow function with a return type annotation when it sits in a ternary branch, with "Did not expect a type annotation here". Line 68 of the file has exactly that shape, inside `fetchKeys ? { [customFetch]: async (target: string): Promise<Response> => ... } : {}`. The computed key is not the cause: `c ? async (t: string): R => x : null` fails on its own, and `c ? (t: string): R => x : null` without `async` parses. Babel 7.29.9 parses all of these. One rejected file stops the whole Stryker run before any test, which is why the file had to be left out.
+
+**What was tried.** Stryker 10.0.0 is the latest release, so there is no upstream fix to pick up. Replacing Babel under Stryker 10 with the 7.29 packages parses the file but is not drop-in: Stryker's own code then fails with `traverse is not a function`. Stryker 9.6.1 is built on Babel 7.29 and parses the file, so the workflow takes a `stryker` input (default 10.0.0). With 9.6.1 selected, `src/access-jwt.ts` is mutated. No source file was changed.
+
+**Not comparable to the baseline score.** On the other 155 files of `src/`, Stryker 9.6.1 generates 31,754 mutants and Stryker 10.0.0 generates 31,983, so the two versions do not make the same mutant set (0.7% fewer). This file's score is therefore reported on its own and is not merged into the 56.5% above.
+
+**Result.** 151 mutants: 124 killed, 10 survived, 17 with no covering test. Score **82.1%** (92.5% on covered code). Run with the same unit test selection as the baseline (180 test files, the ten source-reading files left out). `test/access-jwt.test.ts` kills all 124, and `test/portal-login.test.ts` also kills 38 of them.
+
+**Where the gaps are.** Most of the 27 uncovered or surviving mutants are in refusal-reason messages. The rest are a cache constant, an error holder, a message cut and two normalizations of an accepted token (the email and the name). In each refusal branch below the token is refused whether or not the mutant is applied; only the reason text differs.
+
+| Lines | What no test observes |
+|---|---|
+| 71 | A JWKS endpoint that returns no `keys` array: the thrown message is never reached, and removing the check survives. |
+| 100 | The reason text when the token has a bad or missing `kid` and also a wrong `alg`. The wrong `alg` itself is covered by `JOSEAlgNotAllowed` (line 124) and by the test "only RS256 passes", so the token is refused either way. |
+| 131 to 132 | The `default` branch of the claim switch: the message for a claim other than iss, aud, exp or nbf. |
+| 135 | The branch for `JWSInvalid` and `JWTInvalid` errors from the verifier. |
+| 136 | The last fallthrough, `the signature could not be checked`. |
+| 20 | The key cache lifetime (`60 * 60 * 1000`): changing the arithmetic to `60 / 60 * 1000` or `60 * 60 / 1000` goes unnoticed, because no test reads the cache age. |
+| 61 | The initial value of the holder that records a key-fetch error (`{ current: null }` replaced by `{}`). |
+| 86 | The 120-character cut on error text inside `brief`: removing `.slice(0, 120)` survives. |
+| 121 | Forcing the `JWTClaimValidationFailed` check to always be true survives. |
+| 141 | Removing `.trim()` on the email: a token whose email has surrounding spaces is not tested. |
+| 144 | The 80-character cap on the name (`.slice(0, MAX_NAME)`): a longer name is not tested. |
+
+These are measurements for the seat. They are not a request to add tests; the keep rules and the tests themselves are unchanged.
+
