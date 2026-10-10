@@ -142,13 +142,13 @@ async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): P
     try {
       list = JSON.parse(row.repos || "[]");
     } catch {
-      return { error: `namespace '${namespace}' has a corrupt repos mapping. Repair it with update_namespace, or pass repos explicitly.` };
+      return { error: `namespace '${namespace}' has a corrupt repos mapping. Repair it with capsid_admin_manage_namespaces action update, or pass repos explicitly.` };
     }
     if (!Array.isArray(list) || list.length === 0) {
       return {
         error:
           `namespace '${namespace}' maps no repos, so an agent scoped to it would get the wildcard by default. ` +
-          `Map its repos with update_namespace, or pass repos explicitly (pass the single entry * to mean every repo deliberately).`,
+          `Map its repos with capsid_admin_manage_namespaces action update, or pass repos explicitly (pass the single entry * to mean every repo deliberately).`,
       };
     }
     for (const entry of list as Array<{ repo?: unknown }>) {
@@ -238,7 +238,7 @@ export async function listAgents(db: D1Database): Promise<AgentResult> {
 
 export async function revokeAgent(db: D1Database, actor: string, name: string): Promise<AgentResult> {
   const row = await liveAgentByName(db, name);
-  if (!row) return refuse("revoke", `no live agent named '${name}'. Call list to see the inventory, revoked ones included.`);
+  if (!row) return refuse("revoke", `no live agent named '${name}'. Call action list to see the inventory, revoked ones included.`);
   // Keyed UPDATE with RETURNING: no row back means somebody else got there first,
   // and reporting success over that would be false.
   const won = await db
@@ -252,7 +252,7 @@ export async function revokeAgent(db: D1Database, actor: string, name: string): 
 
 export async function updateAgentScopes(db: D1Database, actor: string, name: string, args: ScopeArgs): Promise<AgentResult> {
   const row = await liveAgentByName(db, name);
-  if (!row) return refuse("update_scopes", `no live agent named '${name}'. Call list to see the inventory, revoked ones included.`);
+  if (!row) return refuse("update_scopes", `no live agent named '${name}'. Call action list to see the inventory, revoked ones included.`);
   const before = parseScopes(row.scopes);
   const scopes = applyScopes(before, args);
   const won = await db

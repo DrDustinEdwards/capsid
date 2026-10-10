@@ -109,7 +109,7 @@ export function watcherAgent(): Agent {
     scopes: {
       namespaces: "*",
       repos: [],
-      tools: ["jobs", "jobs.post"],
+      tools: ["capsid_work_jobs", "capsid_work_jobs.post"],
       grants: ["write"],
       flags: noFlags(),
     },
@@ -277,7 +277,7 @@ export function healthFindings(
   return out;
 }
 
-/** What improve_status says that should not be true. Per namespace, because the job
+/** What capsid_run_improve action status says that should not be true. Per namespace, because the job
  *  each finding becomes belongs to the namespace it is about. */
 export function statusFindings(status: StatusReport): Finding[] {
   const out: Finding[] = [];
@@ -315,7 +315,7 @@ export function statusFindings(status: StatusReport): Finding[] {
       out.push(
         finding(ns.namespace, `breaker-open-${ns.namespace}`, `the queue's circuit breaker for ${ns.namespace} is open`, [
           `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
-          "No job in this namespace is handed out until the seat or Dustin resets it: improve_run action breaker_reset, or Reset breaker in the Portal.",
+          "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_control_improve action breaker_reset, or Reset breaker in the Portal.",
         ])
       );
     }
@@ -610,8 +610,8 @@ function unmappedRepoFindings(read: RepoMapRead): Finding[] {
     finding("capsid", `unmapped-repo-${r.full_name.toLowerCase().replace("/", "--")}`, `${r.full_name} is visible to the GitHub App but no namespace maps it`, [
       `${r.full_name}: ${r.private ? "private" : "public"}, ${r.archived ? "archived" : "not archived"}, last push ${r.pushed_at ?? "unknown"}`,
       r.suggested
-        ? `likely namespace: ${r.suggested} (from the repo name). Map it with update_namespace, adding ${r.full_name} with a label.`
-        : "no registered namespace matches its name. Register one with register_namespace, or map it into an existing namespace with update_namespace.",
+        ? `likely namespace: ${r.suggested} (from the repo name). Map it with capsid_admin_manage_namespaces action update, adding ${r.full_name} with a label.`
+        : "no registered namespace matches its name. Register one with capsid_admin_manage_namespaces action register, or map it into an existing namespace with action update.",
       "If it is unmapped on purpose (archived, frozen, or going away), list it in capsid/unmapped-repos.md, one owner/name per line, and this stops.",
       covered,
       "This check only proposes. Mapping is the authorization boundary and stays with the seat or Dustin.",

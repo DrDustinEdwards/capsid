@@ -10,7 +10,7 @@ import { ROLES } from "../scripts/mint-agents.mjs";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import { serveMcp } from "../src/mcp-handler.ts";
-import { TOOL_GRANTS } from "../src/scope.ts";
+import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { breaking, type Handler, healthy, run } from "./verify-live-stub.ts";
@@ -71,8 +71,8 @@ function bridge(serve: Serve): Handler {
 
 const withKey = { CAPSID_LIVE_PROBE_KEY: KEY };
 
-test("EXPECTED_TOOLS is the served tool count, from TOOL_GRANTS", () => {
-  assert.equal(EXPECTED_TOOLS, Object.keys(TOOL_GRANTS).length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
+test("EXPECTED_TOOLS is Capsid's served tool count, from CAPSID_TOOLS", () => {
+  assert.equal(EXPECTED_TOOLS, CAPSID_TOOLS.length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
 });
 
 test("an event-stream answer is read off its data line", () => {
@@ -99,7 +99,7 @@ test("a 401 says the key was refused, and a JSON-RPC error names its code", () =
 
 test("a 2026-07-28 tools/list without its cache fields is a refusal", () => {
   const list = eraSteps("2026-07-28").find((s: { method: string }) => s.method === "tools/list");
-  const tools = Array.from({ length: EXPECTED_TOOLS }, (_, i) => ({ name: i === 0 ? "read" : `t${i}` }));
+  const tools = Array.from({ length: EXPECTED_TOOLS }, (_, i) => ({ name: i === 0 ? "capsid_read_doc" : `t${i}` }));
   assert.equal(stepProblem(list, 200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools, ttlMs: 60000, cacheScope: "public" } })), null);
   assert.match(String(stepProblem(list, 200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools } }))), /no ttlMs\/cacheScope/);
 });
@@ -134,7 +134,7 @@ test("PLANT: a handler that answers 500 to every call is refused", async () => {
 });
 
 test("PLANT: a deploy whose store lost the document is refused at the read", async () => {
-  await refused(realHandler(probeEnv([])), /2025-11-25 tools\/call read: the tool refused/);
+  await refused(realHandler(probeEnv([])), /2025-11-25 tools\/call capsid_read_doc: the tool refused/);
 });
 
 test("PLANT: a deploy that dropped the legacy shim is refused for 2025-11-25 clients", async () => {
@@ -149,7 +149,7 @@ test("PLANT: a deploy that lost a tool is refused at tools/list", async () => {
   const original = McpServer.prototype.registerTool;
   const dropOne = () => {
     McpServer.prototype.registerTool = function (this: McpServer, ...args: unknown[]) {
-      if (args[0] === "history") return undefined as never;
+      if (args[0] === "capsid_inspect_repo") return undefined as never;
       return (original as (...a: unknown[]) => unknown).apply(this, args);
     } as unknown as typeof original;
     try {

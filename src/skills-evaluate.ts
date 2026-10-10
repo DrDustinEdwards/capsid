@@ -60,7 +60,7 @@ export function cycleDue(lastIso: string | null, days: number, now: Date): DueVe
 // Status changes are HELD unless this key reads "apply". During the observation
 // window evaluations are recorded and statuses must not move (Dustin, 2026-09-26), so
 // an unset key, any other value and an unreadable KV all mean hold. The seat turns
-// application on with improve_run action "skill_transitions", value "apply".
+// application on with capsid_admin_control_improve action "skill_transitions", value "apply".
 export const TRANSITIONS_KEY = "skills:transitions";
 export type TransitionMode = "hold" | "apply";
 

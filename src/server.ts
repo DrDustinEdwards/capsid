@@ -6,20 +6,24 @@ import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { CACHE_HINTS } from "./cache-hints";
-import { registerDocTools, type ToolCtx, type ToolGrant } from "./tools/docs";
-import { registerLintTools } from "./tools/lint";
-import { registerRepoTools } from "./tools/repo";
-import { registerImproveTools } from "./tools/improve";
-import { registerJobTools } from "./tools/jobs";
-import { registerAgentTools } from "./tools/agents";
-import { registerClaimsTools } from "./tools/claims";
-import { registerOpsTools } from "./tools/ops";
-import { registerCloudflareTools } from "./tools/cloudflare";
-import { registerControlTools } from "./tools/controls";
+import { defineDocOperations, type ToolCtx, type ToolGrant } from "./tools/docs";
+import { defineLintOperations } from "./tools/lint";
+import { defineRepoOperations } from "./tools/repo";
+import { defineImproveOperations } from "./tools/improve";
+import { defineJobOperations } from "./tools/jobs";
+import { defineAgentOperations } from "./tools/agents";
+import { defineClaimsOperations } from "./tools/claims";
+import { defineOpsSnapshotOperations } from "./tools/ops";
+import { defineCloudflareOperations } from "./tools/cloudflare";
+import { defineControlOperations } from "./tools/controls";
+import { defineAdminOperations } from "./tools/admin";
+import { Operations } from "./tools/operations";
+import { registerCapsidAdminTools, registerCapsidTools } from "./tools/surface";
 
 export type { ToolGrant };
 
 const SERVER_INFO = { name: "capsid", version: "1.0.0" };
+const ADMIN_SERVER_INFO = { name: "capsid-admin", version: "1.0.0" };
 
 // Warn, never refuse, when overwriting a document touched in the last hour without if_match.
 const CONCURRENT_EDIT_WINDOW_MS = 60 * 60 * 1000;
@@ -44,8 +48,20 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // unrestricted caller at that grant: the OPERATOR_KEY_HASH fallback, expressed once so
 // there is no second code path where scopes do not apply.
 export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver): McpServer {
+  return build(env, caller, actor, observeAdminWrite, "capsid");
+}
+
+// Capsid Admin (capsid/rulings/mcp-2026-10-10.md, amendment answer 2): the eight
+// administrator tools, on their own route for the administrator alone
+// (src/mcp-handler.ts). Every tool on it is admin only in TOOL_GRANTS too, so the route
+// and the registrar refuse a non-admin twice.
+export function buildAdminServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver): McpServer {
+  return build(env, caller, actor, observeAdminWrite, "admin");
+}
+
+function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminWrite: AdminWriteObserver | undefined, surface: "capsid" | "admin"): McpServer {
   const agent = typeof caller === "string" ? legacyAgent(caller, actor) : caller;
-  const server = new McpServer(SERVER_INFO, { cacheHints: CACHE_HINTS });
+  const server = new McpServer(surface === "admin" ? ADMIN_SERVER_INFO : SERVER_INFO, { cacheHints: CACHE_HINTS });
   const db = env.DB;
 
   // Provenance: the actor from a document's latest audit_log entry, surfaced by read
@@ -70,21 +86,31 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", obs
     // mode or path.
     scope: (need) => checkScope(agent, need),
     lastActor,
+    ops: new Operations(),
   };
+
+  // Every operation, on both servers: an operation is not served until a tool on this
+  // server dispatches to it (src/tools/surface.ts).
+  defineDocOperations(server, ctx);
+  defineLintOperations(server, ctx);
+  defineRepoOperations(server, ctx);
+  defineImproveOperations(server, ctx);
+  defineJobOperations(server, ctx);
+  defineAgentOperations(server, ctx);
+  defineClaimsOperations(server, ctx);
+  defineOpsSnapshotOperations(server, ctx);
+  defineCloudflareOperations(server, ctx);
+  defineControlOperations(server, ctx);
+  defineAdminOperations(server, ctx);
 
   // Before any registration, so every tool registered below is wrapped.
   guardRegistrations(server, agent, observeAdminWrite);
 
-  registerDocTools(server, ctx);
-  registerLintTools(server, ctx);
-  registerRepoTools(server, ctx);
-  registerImproveTools(server, ctx);
-  registerJobTools(server, ctx);
-  registerAgentTools(server, ctx);
-  registerClaimsTools(server, ctx);
-  registerOpsTools(server, ctx);
-  registerCloudflareTools(server, ctx);
-  registerControlTools(server, ctx);
+  if (surface === "admin") {
+    registerCapsidAdminTools(server, ctx.ops);
+    return server;
+  }
+  registerCapsidTools(server, ctx.ops);
 
   // Resources and prompts are raw request handlers, not tool registrations, so they
   // check scope themselves (src/resources.ts).

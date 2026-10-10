@@ -4,8 +4,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Options, type FakeD1Rows } from "./fakes.ts";
 
-// write AND restore REPORT `snapshotted` FROM THE SNAPSHOT THEY TOOK (audit 2026-09-25,
-// item E1-20, finding F3-8). Both used to answer snapshotted: true whenever their
+// capsid_write_doc's write AND restore actions REPORT `snapshotted` FROM THE SNAPSHOT
+// THEY TOOK (audit 2026-09-25, item E1-20, finding F3-8). Both used to answer snapshotted: true whenever their
 // pre-read found a row. With confirm: true and no if_match no guard is armed, so a row
 // deleted between the pre-read and the batch is snapshotted by nothing and the upsert
 // recreates it; the response still said a snapshot was taken. Nothing is lost (the
@@ -31,7 +31,8 @@ const deleteTarget = (rows: FakeD1Rows, target: { namespace: string; path: strin
 };
 
 test("write reports snapshotted: false when the row was deleted before its batch", async () => {
-  const out = await call({ documents: [DOC], raceAfterPreRead: deleteTarget }, "write", {
+  const out = await call({ documents: [DOC], raceAfterPreRead: deleteTarget }, "capsid_write_doc", {
+    action: "write",
     namespace: DOC.namespace,
     path: DOC.path,
     title: "Lorem",
@@ -42,12 +43,13 @@ test("write reports snapshotted: false when the row was deleted before its batch
 });
 
 test("write reports snapshotted: true when the snapshot was taken", async () => {
-  const out = await call({ documents: [DOC] }, "write", { namespace: DOC.namespace, path: DOC.path, title: "Lorem", body: "new lorem", confirm: true });
+  const out = await call({ documents: [DOC] }, "capsid_write_doc", { action: "write", namespace: DOC.namespace, path: DOC.path, title: "Lorem", body: "new lorem", confirm: true });
   assert.equal(out.snapshotted, true);
 });
 
 test("restore reports snapshotted: false when the row was deleted before its batch", async () => {
-  const out = await call({ documents: [DOC], versions: [VERSION], raceAfterPreRead: deleteTarget }, "restore", {
+  const out = await call({ documents: [DOC], versions: [VERSION], raceAfterPreRead: deleteTarget }, "capsid_write_doc", {
+    action: "restore",
     namespace: DOC.namespace,
     path: DOC.path,
     version_id: VERSION.id,
@@ -57,7 +59,8 @@ test("restore reports snapshotted: false when the row was deleted before its bat
 });
 
 test("restore reports snapshotted: true when the snapshot was taken", async () => {
-  const out = await call({ documents: [DOC], versions: [VERSION] }, "restore", {
+  const out = await call({ documents: [DOC], versions: [VERSION] }, "capsid_write_doc", {
+    action: "restore",
     namespace: DOC.namespace,
     path: DOC.path,
     version_id: VERSION.id,

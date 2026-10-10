@@ -5,10 +5,10 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { type DocRow, fakeD1, fakeEnv } from "./fakes.ts";
 
-// Closure affects only brief's task list. The lint loop must not filter on it,
-// because the archive/ prefix is the only thing that takes a document out of memory.
-// Driven through the tools: a closed document is still in lint gather, and brief
-// leaves a closed task out.
+// Closure affects only the brief's task list (capsid_start_session). The lint loop
+// must not filter on it, because the archive/ prefix is the only thing that takes a
+// document out of memory. Driven through the tools: a closed document is still in
+// capsid_lint_namespace gather, and capsid_start_session leaves a closed task out.
 async function toolOut(name: string, documents: DocRow[]) {
   const fake = fakeD1({ documents, namespaces: [{ namespace: "capsid", repos: "[]" }] });
   const server = buildServer(fakeEnv({ DB: fake.db }), "write", "test:doc-meta");
@@ -30,7 +30,7 @@ const CLOSED_AND_OPEN: DocRow[] = [
 ];
 
 test("closure does not remove a document from the lint loop", async () => {
-  const packet = await toolOut("lint", CLOSED_AND_OPEN);
+  const packet = await toolOut("capsid_lint_namespace", CLOSED_AND_OPEN);
   assert.deepEqual(packet.wiki.map((d: { path: string }) => d.path), ["concept-closed.md"], "a closed concept fell out of gather");
   assert.deepEqual(
     packet.unconsolidated.map((d: { path: string }) => d.path),
@@ -40,7 +40,7 @@ test("closure does not remove a document from the lint loop", async () => {
 });
 
 test("brief leaves a closed task out of its open tasks, and keeps an open one", async () => {
-  const out = await toolOut("brief", CLOSED_AND_OPEN);
+  const out = await toolOut("capsid_start_session", CLOSED_AND_OPEN);
   assert.deepEqual(out.open_tasks.map((t: { path: string }) => t.path), ["TASK-open.md"]);
 });
 

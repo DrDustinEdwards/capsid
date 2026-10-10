@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "../src/github.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// ci_status's drill-in for any run (jobs, job, step) and the redaction of every log it
+// capsid_inspect_repo action ci's drill-in for any run (jobs, job, step) and the redaction of every log it
 // returns (src/redact.ts). Driven through the real ciStatus against a stubbed GitHub,
 // as test/repo-fallthrough.test.ts drives the failed-run tail.
 //
@@ -235,7 +235,7 @@ async function callCiStatus(grants: Array<"read" | "write">, args: Record<string
   const client = new Client({ name: "test", version: "0" });
   await client.connect(clientTransport);
   try {
-    const result = await client.callTool({ name: "ci_status", arguments: { namespace: "ns", ...args } });
+    const result = await client.callTool({ name: "capsid_inspect_repo", arguments: { action: "ci", namespace: "ns", ...args } });
     return JSON.parse((result.content as Array<{ text: string }>)[0].text) as Out;
   } finally {
     await client.close();

@@ -45,7 +45,7 @@ const docs = (n: number, namespace = "capsid", prefix = "doc"): DocRow[] =>
 
 test("list returns a bounded page and says it was cut", async () => {
   const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 25) });
-  const out = parse(await call(client, "list", {}));
+  const out = parse(await call(client, "capsid_find_docs", { action: "list" }));
   await close();
   assert.equal(out.truncated, true, "list returned every row and claimed nothing was cut");
   assert.equal(out.count, MAX_ROWS);
@@ -62,7 +62,7 @@ test("list returns a bounded page and says it was cut", async () => {
 test("list under the bound reports the whole answer, with no note", async () => {
   // A bound that always reported truncation would pass the test above.
   const { client, close } = await connect({ documents: docs(3) });
-  const out = parse(await call(client, "list", {}));
+  const out = parse(await call(client, "capsid_find_docs", { action: "list" }));
   await close();
   assert.equal(out.truncated, false);
   assert.equal(out.count, 3);
@@ -75,7 +75,7 @@ test("a namespace-scoped list is not truncated by another namespace's documents"
   const { client, close } = await connect({
     documents: [...docs(600, "recova"), ...docs(30, "capsid")],
   });
-  const out = parse(await call(client, "list", { namespace: "capsid" }));
+  const out = parse(await call(client, "capsid_find_docs", { action: "list", namespace: "capsid" }));
   await close();
   assert.equal(out.truncated, false, "a scoped list truncated, so the filter is not reaching the query");
   assert.equal(out.count, 30);
@@ -83,7 +83,7 @@ test("a namespace-scoped list is not truncated by another namespace's documents"
 
 test("find returns a bounded page and says it was cut", async () => {
   const { client, reads, close } = await connect({ documents: docs(MAX_ROWS + 10) });
-  const out = parse(await call(client, "find", { glob: "doc-*.md" }));
+  const out = parse(await call(client, "capsid_find_docs", { action: "glob", glob: "doc-*.md" }));
   await close();
   assert.equal(out.truncated, true);
   assert.equal(out.count, MAX_ROWS);
@@ -97,7 +97,7 @@ test("find matching a handful is complete, and the glob really filtered", async 
   const { client, close } = await connect({
     documents: [...docs(400, "capsid", "other"), ...docs(4, "capsid", "notes/session")],
   });
-  const out = parse(await call(client, "find", { glob: "notes/*.md" }));
+  const out = parse(await call(client, "capsid_find_docs", { action: "glob", glob: "notes/*.md" }));
   await close();
   assert.equal(out.truncated, false);
   assert.equal(out.count, 4, "the glob did not filter, so this proves nothing about the bound");
@@ -105,7 +105,7 @@ test("find matching a handful is complete, and the glob really filtered", async 
 
 test("search returns its top page and says when more matched", async () => {
   const { client, reads, close } = await connect({ ftsRows: SEARCH_ROWS + 5 });
-  const out = parse(await call(client, "search", { query: "anything" }));
+  const out = parse(await call(client, "capsid_find_docs", { action: "search", query: "anything" }));
   await close();
   assert.equal(out.truncated, true, "search silently returned a full page as if it were the whole answer");
   assert.equal(out.count, SEARCH_ROWS);
@@ -115,7 +115,7 @@ test("search returns its top page and says when more matched", async () => {
 
 test("search with few hits is not reported as truncated", async () => {
   const { client, close } = await connect({ ftsRows: 2 });
-  const out = parse(await call(client, "search", { query: "anything" }));
+  const out = parse(await call(client, "capsid_find_docs", { action: "search", query: "anything" }));
   await close();
   assert.equal(out.truncated, false);
   assert.equal(out.count, 2);
@@ -152,7 +152,7 @@ test("gather trims an oversized packet and names what it dropped", async () => {
   // 8 x 40KB of body against a 150KB budget, so the packet cannot fit and the
   // tool must choose.
   const { client, close } = await connect(gatherFixture());
-  const out = parse(await call(client, "lint", { namespace: "capsid", mode: "gather" }));
+  const out = parse(await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "gather" }));
   await close();
 
   assert.equal(out.truncated, true, "an oversized packet reported itself as whole");
@@ -164,7 +164,7 @@ test("gather trims an oversized packet and names what it dropped", async () => {
   assert.match(out.trimmed.join(" | "), /wiki bodies/);
   assert.ok(out.wiki.length > 0, "the packet carries no wiki rows, so the stub check below checks nothing");
   for (const row of out.wiki) {
-    assert.match(row.body, /^\(trimmed for size: read capsid\/concept-\d\.md\)$/);
+    assert.match(row.body, /^\(trimmed for size: read it with capsid_read_doc, capsid\/concept-\d\.md\)$/);
   }
   // core and the rules are never trimmed: without them the packet is useless.
   assert.equal(out.core.body, "the core");
@@ -176,7 +176,7 @@ test("gather trims an oversized packet and names what it dropped", async () => {
 
 test("gather keeps the OLDEST unconsolidated bodies, which is the compile order", async () => {
   const { client, close } = await connect(gatherFixture());
-  const out = parse(await call(client, "lint", { namespace: "capsid", mode: "gather" }));
+  const out = parse(await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "gather" }));
   await close();
 
   const kept = out.unconsolidated.filter((r: { body: string }) => !r.body.startsWith("(trimmed"));
@@ -204,7 +204,7 @@ test("a gather that fits is not trimmed at all", async () => {
       { namespace: "capsid", path: "session-0.md", type: "episodic", body: "small" },
     ],
   });
-  const out = parse(await call(client, "lint", { namespace: "capsid", mode: "gather" }));
+  const out = parse(await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "gather" }));
   await close();
   assert.equal(out.truncated, false);
   assert.equal(out.trimmed, undefined);
@@ -277,17 +277,17 @@ test("the resources/list override cannot silently drop a statically registered r
 // sibling tool.
 
 test("read returns the named columns, and not the two dead CMS ones", async () => {
-  // `list` does not return frontmatter or publish_at (always NULL); `read` must not
-  // advertise them either.
+  // capsid_find_docs action list does not return frontmatter or publish_at (always
+  // NULL); capsid_read_doc action read must not advertise them either.
   const { client, close } = await connect({
     documents: [{ namespace: "capsid", path: "doc.md", title: "T", body: "the body", type: "note", status: "published" }],
   });
-  const out = parse(await call(client, "read", { namespace: "capsid", path: "doc.md" }));
+  const out = parse(await call(client, "capsid_read_doc", { action: "read", namespace: "capsid", path: "doc.md" }));
   await close();
   assert.equal(out.body, "the body", "read stopped returning the body");
   assert.deepEqual(
     Object.keys(out).sort(),
-    // list's columns plus body, plus last_actor (on read/brief and not on list).
+    // list's columns plus body, plus last_actor (on read and capsid_start_session, not on list).
     // Not frontmatter/publish_at.
     ["body", "created_at", "id", "last_actor", "namespace", "path", "status", "tags", "title", "type", "updated_at"],
     "read's column set drifted from list's"

@@ -197,7 +197,7 @@ test("delete_branch treats a non-OK pulls response as a refusal, not as no PRs",
 
 // Repo-scoped installation tokens are proven in test/repo-tools.test.ts.
 
-// bounds: lint consumed, ci_dispatch inputs, history
+// bounds: capsid_lint_namespace consumed, capsid_run_ci inputs, history
 
 async function serverClient(opts: FakeD1Options = {}) {
   const d1 = fakeD1({ namespaces: [{ namespace: "capsid", repos: "[]" }], ...opts });
@@ -210,10 +210,10 @@ async function serverClient(opts: FakeD1Options = {}) {
   return { d1, client, call, close: () => client.close() };
 }
 
-test("lint finalize refuses more than 20 consumed paths at the schema", async () => {
+test("capsid_lint_namespace finalize refuses more than 20 consumed paths at the schema", async () => {
   const { d1, call, close } = await serverClient();
   const consumed = Array.from({ length: 21 }, (_, i) => `ep-${i}.md`);
-  const result = await call("lint", { namespace: "capsid", mode: "finalize", consumed, confirm: true });
+  const result = await call("capsid_lint_namespace", { namespace: "capsid", mode: "finalize", consumed, confirm: true });
   await close();
   assert.equal(result.isError, true, "21 consumed paths were accepted");
   assert.match(
@@ -224,10 +224,10 @@ test("lint finalize refuses more than 20 consumed paths at the schema", async ()
   assert.equal(d1.recorded.length, 0, "statements were issued for an over-sized consumed array");
 });
 
-test("ci_dispatch refuses more than 10 workflow inputs at the schema", async () => {
+test("capsid_run_ci refuses more than 10 workflow inputs at the schema", async () => {
   const { call, close } = await serverClient();
   const inputs = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${i}`, "v"]));
-  const result = await call("ci_dispatch", { namespace: "capsid", workflow: "ci.yml", ref: "main", inputs });
+  const result = await call("capsid_run_ci", { namespace: "capsid", workflow: "ci.yml", ref: "main", inputs });
   await close();
   assert.equal(result.isError, true, "11 dispatch inputs were accepted (GitHub's own ceiling is 10)");
   assert.match(

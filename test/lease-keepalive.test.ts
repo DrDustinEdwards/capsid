@@ -32,7 +32,7 @@ interface Call {
   raw: string;
 }
 
-/** A fake /ops/mcp. improve_status lists two claimed jobs; only `held` heartbeats. */
+/** A fake /ops/mcp. capsid_run_improve status lists two claimed jobs; only `held` heartbeats. */
 function fakeMcp(held: string, claimed = ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]) {
   const calls: Call[] = [];
   const fetchImpl = (async (_url: string, init?: RequestInit) => {
@@ -43,16 +43,16 @@ function fakeMcp(held: string, claimed = ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"
     const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200 });
     if (body.method === "initialize") return reply({ protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake", version: "1" } });
     // A namespace-scoped driver lists its own namespaces without naming one, and the Worker
-    // refuses improve_status and jobs from it unless they name one (src/scope.ts).
-    if (body.params?.name === "namespaces") return reply({ content: [{ type: "text", text: JSON.stringify([{ namespace: "sample" }]) }] });
-    if (body.params?.name === "improve_status") {
+    // refuses capsid_run_improve and capsid_work_jobs from it unless they name one (src/scope.ts).
+    if (body.params?.name === "capsid_find_docs" && body.params.arguments?.action === "namespaces") return reply({ content: [{ type: "text", text: JSON.stringify([{ namespace: "sample" }]) }] });
+    if (body.params?.name === "capsid_run_improve" && body.params.arguments?.action === "status") {
       if (body.params.arguments?.namespace !== "sample") {
-        return reply({ isError: true, content: [{ type: "text", text: "unauthorized: this caller is scoped to sample, so it must name a namespace on 'improve_status'." }] });
+        return reply({ isError: true, content: [{ type: "text", text: "unauthorized: this caller is scoped to sample, so it must name a namespace on 'capsid_run_improve'." }] });
       }
       const status = { namespaces: [{ namespace: "sample", jobs: { claimed_jobs: claimed.map((id) => ({ id })) } }] };
       return reply({ content: [{ type: "text", text: JSON.stringify(status) }] });
     }
-    if (body.params?.name === "jobs") {
+    if (body.params?.name === "capsid_work_jobs") {
       const id = body.params.arguments.id;
       return id === held
         ? reply({ content: [{ type: "text", text: "{}" }] })
@@ -72,7 +72,7 @@ test("a working driver heartbeats the job it holds, and the refusal for another'
   // A tool call made INSIDE a subagent carries agent_id; the hook does the same thing.
   const out = await keepAlive({ input: hookInput({ agent_id: "agent-xyz", agent_type: "Explore" }), env: { CLAUDE_PROJECT_DIR: dir }, fetchImpl, stampDir });
   assert.deepEqual(out, { sent: 1, skipped: null });
-  const beats = calls.filter((c) => c.tool === "jobs");
+  const beats = calls.filter((c) => c.tool === "capsid_work_jobs");
   assert.deepEqual(beats.map((b) => b.args?.id), ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]);
   assert.ok(beats.every((b) => b.args?.action === "heartbeat" && b.args?.namespace === "sample"));
   assert.ok(calls.every((c) => c.auth === `Bearer ${KEY}`), "the key travels only in the Authorization header");

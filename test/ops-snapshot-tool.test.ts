@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { OPS_SNAPSHOT_KEY, RING_SLOTS, ringReading, ringSlot, type OpsSnapshot, type SiteSnapshot } from "../src/ops-snapshot.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// ops_snapshot: the watcher's last pass over MCP, admin only (TOOL_GRANTS), and one
-// site's uptime ring read by slot or by time (ringReading in src/ops-snapshot.ts).
+// capsid_admin_read_ops action "snapshot": the watcher's last pass over MCP, admin
+// only (TOOL_GRANTS), and one site's uptime ring read by slot or by time (ringReading
+// in src/ops-snapshot.ts).
 
 const NOW = new Date("2026-09-28T12:10:00.000Z");
 const SLOT = ringSlot(NOW);
@@ -88,12 +89,12 @@ interface ToolResult {
 }
 
 async function connect(caller: Agent, seed: Record<string, string> = { [OPS_SNAPSHOT_KEY]: JSON.stringify(SNAPSHOT) }) {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({ seed }).kv }), caller);
+  const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({ seed }).kv }), caller);
   const client = new Client({ name: "ops-snapshot-tool", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return {
-    call: (args: Record<string, unknown>) => client.callTool({ name: "ops_snapshot", arguments: args }) as Promise<ToolResult>,
+    call: (args: Record<string, unknown>) => client.callTool({ name: "capsid_admin_read_ops", arguments: { action: "snapshot", ...args } }) as Promise<ToolResult>,
     close: async () => {
       await client.close();
       await server.close();
@@ -159,7 +160,7 @@ test("an absent or unreadable snapshot is a named error, not an empty result", a
   }
 });
 
-test("PLANT: a write-grant driver is refused ops_snapshot by the registrar, naming admin", async () => {
+test("PLANT: a write-grant driver is refused capsid_admin_read_ops.snapshot by the registrar, naming admin", async () => {
   const scopes = defaultScopes(["sample"]);
   scopes.grants = ["read", "write"];
   const driver: Agent = {

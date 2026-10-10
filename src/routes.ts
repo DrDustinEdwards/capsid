@@ -14,8 +14,8 @@ import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
 import type { Env, Props } from "./env";
-import { buildServer } from "./server";
-import { serveMcp } from "./mcp-handler";
+import { buildAdminServer, buildServer } from "./server";
+import { ADMIN_OPS_MCP_ROUTE, serveMcp } from "./mcp-handler";
 import { ingestScore } from "./improve-run";
 import {
   BACKUP_CREDENTIAL_PATH,
@@ -230,7 +230,7 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
   if (!login.ok) return login.response;
   const { email, state: oauthReq } = login;
 
-  const props: Props = { email };
+  const props: Props = { email, signed_in_at: Date.now() };
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReq,
     userId: email,
@@ -259,6 +259,25 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
   // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
+}
+
+// Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE): the seat's scripts
+// (scripts/mint-agents.mjs) reach the administrator tools with its operator key. Only
+// the admin identity is served; any other key is refused here, before a server is
+// built, and every tool on it is admin only in the registrar as well.
+async function handleOperatorAdminMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const resolved = await resolveAgent(request, env);
+  if (!resolved) {
+    return new Response("unauthorized: an admin operator key is required", {
+      status: 401,
+      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
+    });
+  }
+  if (!resolved.agent.admin) {
+    return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
+  }
+  ctx.waitUntil(resolved.touch());
+  return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));
 }
 
 async function handleBackup(request: Request, env: Env): Promise<Response> {
@@ -296,7 +315,7 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
     });
   }
   const everything = await gatherInbox(env, new Date(), null);
-  const readable = (namespace: string) => checkScope(caller.agent, { tool: "improve_status", namespace, grant: "read" }) === null;
+  const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_run_improve", action: "status", namespace, grant: "read" }) === null;
   return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff" } });
 }
 
@@ -643,6 +662,7 @@ export const defaultHandler = {
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
+    if (url.pathname === ADMIN_OPS_MCP_ROUTE) return handleOperatorAdminMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);

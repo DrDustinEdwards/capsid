@@ -18,7 +18,7 @@ Retired rows stay, with their record, so the same idea is not abstracted twice f
 same source.
 
 A skill is created in one of two ways. The loop abstracts one when an attempt is
-kept. An admin registers one with `improve_run` action `register_skill`, naming the
+kept. An admin registers one with `capsid_admin_control_improve` action `register_skill`, naming the
 finished job it was abstracted from. That job must be done, with one merged pull
 request and green CI as the Worker verified them, and must not have produced a skill
 before. The skill's namespace is read from the job. Drivers are refused, because a
@@ -78,7 +78,7 @@ later claim of the same job returns that record rather than matching again. `com
 was not offered. Offered is therefore the Worker's record and used is the driver's claim,
 which is the split the observation window measures.
 
-A FINISHED JOB IS EVIDENCE, since 2026-09-18. `jobs` action `complete` and action
+A FINISHED JOB IS EVIDENCE, since 2026-09-18. `capsid_work_jobs` action `complete` and action
 `fail` take a `skills` object naming which skills the run was offered and which it
 used. Those two lists are stored separately on `job_outcomes`, and the gap between them
 is what judges the recommend step. NAMES ONLY: the credit direction never comes from
@@ -110,7 +110,7 @@ STATUS CHANGES ARE HELD during the observation window (Dustin, 2026-09-26). The 
 records evaluations and reports the transitions they decide as `held`, and applies
 none, unless APP_KV `skills:transitions` reads `apply`. An unset key, any other value
 and an unreadable KV all mean hold. When the window closes, the seat (admin) runs
-`improve_run` action `skill_transitions` with `value: "apply"`, which is audited as
+`capsid_admin_control_improve` action `skill_transitions` with `value: "apply"`, which is audited as
 `skill-transitions-set`; the next cycle then applies what the stored evaluations
 decide. `value: "hold"` sets it back. `improve_skills.wins` and `losses` are still
 recorded from each verified run and still move no status.

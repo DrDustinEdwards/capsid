@@ -1,18 +1,15 @@
-// A cache. test/tool-annotations.test.ts derives each flag from the handler and
-// fails both directions. readOnlyHint is the negation of the write gate.
-// destructiveHint is true iff a write-gated handler can overwrite or remove
-// existing state.
-//
-// idempotentHint and openWorldHint were once dropped because a TRANSITIVE "calls
-// github.ts" scan disagreed with the table twice. They are back, derived from a
-// DIRECT scan of each registration block plus a named override list in the test,
-// each override with its reason:
-// - openWorldHint is true iff the block calls into src/github* or
-//   src/ops-cloudflare.ts, or the override list names a call made through another
-//   module (jobs, improve_run).
-// - idempotentHint is true for every read-only tool. For a write it is an explicit
-//   table in the test, one reason per tool, and a scan fails any tool marked
-//   idempotent whose block creates something new on each call.
+// One honest set of hints per served tool (capsid/rulings/mcp-2026-10-10.md, rule 6),
+// so a client can confirm before acting. A tool's hints hold for every action it takes:
+// a tool with one action that writes is not read-only. test/tool-annotations.test.ts
+// derives each flag and fails both directions:
+// - readOnlyHint is true iff every action needs only the read grant (TOOL_GRANTS and
+//   TOOL_ACTION_GRANTS in src/scope.ts): "read", or "admin_read" for an admin tool
+//   that only reads.
+// - destructiveHint is true iff some action can overwrite or remove existing state.
+// - openWorldHint is true iff some operation the tool runs calls into src/github* or
+//   the Cloudflare API, directly or through a named module.
+// - idempotentHint is true for every read-only tool, and for a write only when a
+//   repeat of any of its actions changes nothing further.
 // The protocol's defaults when a hint is omitted are idempotent false and open world
 // true, so both are stated for every tool rather than left to a client's reading.
 
@@ -39,95 +36,61 @@ const additive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructi
 const destructive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructiveHint: true, ...reach(r) });
 
 export const TOOL_HINTS: Record<string, ToolHints> = {
-  list: read({ idempotent: true, openWorld: false }),
-  read: read({ idempotent: true, openWorld: false }),
-  brief: read({ idempotent: true, openWorld: false }),
-  backlinks: read({ idempotent: true, openWorld: false }),
-  find: read({ idempotent: true, openWorld: false }),
-  search: read({ idempotent: true, openWorld: false }),
-  namespaces: read({ idempotent: true, openWorld: false }),
-  history: read({ idempotent: true, openWorld: false }),
-
-  // One tool, one hint: replace/patch overwrite, so write is destructive. append adds
-  // to the body again and every overwrite snapshots a new version, so not idempotent.
-  write: destructive({ idempotent: false, openWorld: false }),
-  // A repeat finds nothing to delete or move and is refused.
-  delete: destructive({ idempotent: true, openWorld: false }),
-  move: destructive({ idempotent: true, openWorld: false }),
-  // Each restore snapshots the live body first, so a repeat adds a version.
-  restore: destructive({ idempotent: false, openWorld: false }),
-  // gather is read-only; finalize archives by rewriting the path column. gather
-  // reads the repo tree from GitHub, and a second report the same day snapshots the
-  // first.
-  lint: destructive({ idempotent: false, openWorld: true }),
-  // A repeat is refused, but the create is an INSERT the idempotence scan cannot tell
-  // from a repeating one, so it is not claimed.
-  register_namespace: additive({ idempotent: false, openWorld: false }),
-  // Sets the mapping to the value given; a repeat sets the same mapping.
-  update_namespace: destructive({ idempotent: true, openWorld: false }),
-  // Deletes the namespaces row, its ops_sites row and, with cascade, every live
-  // document; preview writes nothing, but one tool carries one hint. A repeat finds no
-  // namespace and is refused.
-  delete_namespace: destructive({ idempotent: true, openWorld: false }),
-
-  list_repo_tree: read({ idempotent: true, openWorld: true }),
-  read_repo_file: read({ idempotent: true, openWorld: true }),
-  search_code: read({ idempotent: true, openWorld: true }),
-  repo_refs: read({ idempotent: true, openWorld: true }),
-  repo_history: read({ idempotent: true, openWorld: true }),
-  ci_status: read({ idempotent: true, openWorld: true }),
-  // Every call is a new commit, or a new pull request in pr mode.
-  write_repo_file: destructive({ idempotent: false, openWorld: true }),
-  // GitHub refuses a branch that exists.
-  create_branch: additive({ idempotent: true, openWorld: true }),
-  // GitHub refuses a duplicate only while the first is open; after a close or merge a
-  // repeat opens another.
-  open_pr: additive({ idempotent: false, openWorld: true }),
-  // A repeat finds the file or branch gone and is refused.
-  delete_repo_file: destructive({ idempotent: true, openWorld: true }),
-  // comment posts a new comment on every call.
-  manage_pr: destructive({ idempotent: false, openWorld: true }),
-  delete_branch: destructive({ idempotent: true, openWorld: true }),
+  // ---- Capsid (14)
+  capsid_start_session: read({ idempotent: true, openWorld: false }),
+  capsid_find_docs: read({ idempotent: true, openWorld: false }),
+  capsid_read_doc: read({ idempotent: true, openWorld: false }),
+  // write's replace and patch overwrite, restore overwrites the live body, and move
+  // removes the old path. append adds again and every overwrite snapshots a new
+  // version, so a repeat is not a no-op.
+  capsid_write_doc: destructive({ idempotent: false, openWorld: false }),
+  // A repeat finds nothing to delete and is refused.
+  capsid_delete_doc: destructive({ idempotent: true, openWorld: false }),
+  // gather reads the repo tree from GitHub; finalize archives by rewriting the path
+  // column; a second report the same day snapshots the first.
+  capsid_lint_namespace: destructive({ idempotent: false, openWorld: true }),
+  capsid_read_repo: read({ idempotent: true, openWorld: true }),
+  // The live site check fetches the site; the rest read GitHub.
+  capsid_inspect_repo: read({ idempotent: true, openWorld: true }),
+  // Every file write is a new commit, or a new pull request in pr mode.
+  capsid_change_repo: destructive({ idempotent: false, openWorld: true }),
+  // A comment posts a new comment on every call, and a repeat open after a close
+  // opens another pull request. Nothing existing is overwritten.
+  capsid_open_pr: additive({ idempotent: false, openWorld: true }),
+  // merge and close end a pull request, delete removes a branch, and a release
+  // publishes; a repeat release or tag is refused by GitHub, but a repeat close of a
+  // reopened pull request is not a no-op.
+  capsid_close_pr: destructive({ idempotent: false, openWorld: true }),
   // Every call starts a new workflow run.
-  ci_dispatch: additive({ idempotent: false, openWorld: true }),
-
-  improve_status: read({ idempotent: true, openWorld: false }),
+  capsid_run_ci: additive({ idempotent: false, openWorld: true }),
+  // complete, fail and block overwrite result_summary and move a job out of claimed;
+  // post and record create a job each call; evidence is checked against GitHub.
+  capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),
   // run advances every open run a step and can dispatch a workflow or open a pull
-  // request; mint_operator_key issues a new key each call.
-  improve_run: destructive({ idempotent: false, openWorld: true }),
+  // request; claim takes or releases a lease.
+  capsid_run_improve: destructive({ idempotent: false, openWorld: true }),
 
-  // The work queue. complete, fail and block overwrite result_summary and move a
-  // job out of claimed, and the mirrored document is rewritten on every
-  // transition, so the tool can overwrite existing state. post creates a job each
-  // call. complete and fail check their evidence against GitHub, and start_seat sends
-  // a repository dispatch, both through other modules.
-  jobs: destructive({ idempotent: false, openWorld: true }),
-
-  // The credential control plane. revoke and update_scopes both overwrite existing
-  // state: one ends a credential, the other changes what it may do. mint issues a new
-  // credential each call.
-  agents: destructive({ idempotent: false, openWorld: false }),
-
-  // Claims apart from verified outcomes. The handler only reads, but readOnlyHint is
-  // the negation of the write gate (test/tool-annotations.test.ts), and "admin" is the
-  // write grant plus the admin identity, so it is served as not read-only. It
-  // overwrites and removes nothing, so it is not destructive either. A client that
-  // asks before a non-read-only call asks here too, which costs the admin one click.
-  claims: additive({ idempotent: true, openWorld: false }),
-
-  // The watcher's last pass, read from one KV value. Admin, so not read-only under the
-  // same rule as claims, and it overwrites and removes nothing.
-  ops_snapshot: additive({ idempotent: true, openWorld: false }),
-
-  // Cloudflare Access and Email Routing, read. Admin, so not read-only under the same
-  // rule as claims, and it overwrites and removes nothing. Open world: Cloudflare's API.
-  cloudflare_config: additive({ idempotent: true, openWorld: true }),
-
-  // The administrator's controls. perform can revoke an agent, fail a job or remove a site,
-  // each of which overwrites or removes existing state, and a confirmed token is spent, so
-  // a repeat of the same call is refused rather than repeated. Not open world: it reaches
-  // only this Worker's own stores.
-  controls: destructive({ idempotent: false, openWorld: false }),
+  // ---- Capsid Admin (8)
+  // Reads the queue, the Portal's stored state and GitHub's open pull requests.
+  capsid_admin_whats_next: read({ idempotent: true, openWorld: true }),
+  // update replaces the mapping, delete removes the namespace and, with cascade, its
+  // documents; register creates one each call.
+  capsid_admin_manage_namespaces: destructive({ idempotent: false, openWorld: false }),
+  // revoke and update_scopes overwrite existing state; mint issues a new credential.
+  capsid_admin_manage_agents: destructive({ idempotent: false, openWorld: false }),
+  // Reads claims and their checks, never writes.
+  capsid_admin_read_claims: read({ idempotent: true, openWorld: false }),
+  // The watcher's pass from KV, and Cloudflare's API for Access, Email Routing and
+  // Workers Builds.
+  capsid_admin_read_ops: read({ idempotent: true, openWorld: true }),
+  // perform can revoke an agent, fail a job or remove a site, and a confirmed token is
+  // spent, so a repeat is refused rather than repeated. Only this Worker's own stores.
+  capsid_admin_run_controls: destructive({ idempotent: false, openWorld: false }),
+  // mode, pause and budget overwrite the loop's settings; mint_operator_key issues a
+  // key each call; seat_start sends a repository dispatch.
+  capsid_admin_control_improve: destructive({ idempotent: false, openWorld: true }),
+  // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
+  capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.

@@ -86,29 +86,29 @@ function bound(job: string | null): Agent {
 test("a bound key may work its own job and no other", () => {
   const agent = bound(JOB);
   for (const action of ["claim", "heartbeat", "complete", "fail", "block", "resume"]) {
-    assert.equal(checkScope(agent, { tool: "jobs", action, jobId: JOB }), null, `${action} on its own job was refused`);
-    assert.match(checkScope(agent, { tool: "jobs", action, jobId: OTHER }) ?? "", /bound to job/, `${action} on another job was allowed`);
+    assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action, jobId: JOB }), null, `${action} on its own job was refused`);
+    assert.match(checkScope(agent, { tool: "capsid_work_jobs", action, jobId: OTHER }) ?? "", /bound to job/, `${action} on another job was allowed`);
   }
-  assert.match(checkScope(agent, { tool: "jobs", action: "claim" }) ?? "", /bound to job/, "a claim naming no job was allowed");
+  assert.match(checkScope(agent, { tool: "capsid_work_jobs", action: "claim" }) ?? "", /bound to job/, "a claim naming no job was allowed");
 });
 
 test("a bound key cannot post, start, release or supersede, even on its own job", () => {
   const agent = bound(JOB);
   for (const action of ["post", "start", "release", "supersede"]) {
-    assert.match(checkScope(agent, { tool: "jobs", action, jobId: JOB }) ?? "", /bound to job/, `${action} was allowed`);
+    assert.match(checkScope(agent, { tool: "capsid_work_jobs", action, jobId: JOB }) ?? "", /bound to job/, `${action} was allowed`);
   }
 });
 
 test("a bound key may list, but not name another job in the list", () => {
   const agent = bound(JOB);
-  assert.equal(checkScope(agent, { tool: "jobs", action: "list" }), null);
-  assert.equal(checkScope(agent, { tool: "jobs", action: "list", jobId: JOB }), null);
-  assert.match(checkScope(agent, { tool: "jobs", action: "list", jobId: OTHER }) ?? "", /bound to job/);
+  assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action: "list" }), null);
+  assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action: "list", jobId: JOB }), null);
+  assert.match(checkScope(agent, { tool: "capsid_work_jobs", action: "list", jobId: OTHER }) ?? "", /bound to job/);
 });
 
 test("an unbound key is not narrowed by the binding check", () => {
-  assert.equal(checkScope(bound(null), { tool: "jobs", action: "claim", jobId: OTHER }), null);
-  assert.equal(checkScope(bound(null), { tool: "jobs", action: "claim" }), null);
+  assert.equal(checkScope(bound(null), { tool: "capsid_work_jobs", action: "claim", jobId: OTHER }), null);
+  assert.equal(checkScope(bound(null), { tool: "capsid_work_jobs", action: "claim" }), null);
 });
 
 test("the registrar passes the job id, so the binding holds before the handler runs", async () => {
@@ -116,7 +116,7 @@ test("the registrar passes the job id, so the binding holds before the handler r
   const server = { registerTool: (_n: string, _c: unknown, h: (...a: unknown[]) => unknown) => h };
   guardRegistrations(server as never, bound(JOB));
   const handler = (server.registerTool as unknown as (n: string, c: unknown, h: () => unknown) => (a: unknown) => unknown)(
-    "jobs",
+    "capsid_work_jobs",
     { inputSchema: { action: {}, id: {}, namespace: {} } },
     () => {
       ran++;
@@ -142,7 +142,7 @@ async function callJobs(agent: Agent, args: Record<string, unknown>): Promise<st
   const client = new Client({ name: "bound-key", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name: "jobs", arguments: { namespace: "capsid", ...args } })) as { content: Array<{ text: string }> };
+  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { namespace: "capsid", ...args } })) as { content: Array<{ text: string }> };
   await client.close();
   return result.content[0]?.text ?? "";
 }

@@ -279,7 +279,7 @@ export async function improveDocStatements(
     actor?: string;
   }
 ): Promise<D1PreparedStatement[]> {
-  // Server-side dash normalization, as the write tool applies. A model-written document
+  // Server-side dash normalization, as capsid_write_doc applies. A model-written document
   // is the likeliest source of an em dash in this store.
   const body = normalizeDashes(doc.body, "prose");
   const title = normalizeDashes(doc.title, "title");

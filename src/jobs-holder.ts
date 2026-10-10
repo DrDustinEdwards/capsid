@@ -83,6 +83,15 @@ function seatCloseRefusal(action: string, id: string, seat: string, current: Job
   return refuse(action, `${id} is already ${current.status}; there is nothing to complete.`);
 }
 
+// The seat recording a queued job's outcome. Null when the job is queued and unheld.
+function recordRefusal(action: string, id: string, current: JobRow | null): JobResult | null {
+  if (!current) return refuse(action, `no job ${id}.`);
+  if (current.status === "queued" && current.claimed_by === null) return null;
+  if (current.status === "claimed") return refuse(action, `${id} is claimed by ${current.claimed_by}: its holder completes it. record is for work done on a job nobody claimed.`);
+  if (current.status === "blocked") return refuse(action, `${id} is blocked: the seat completes a blocked job with action complete.`);
+  return refuse(action, `${id} is ${current.status}; record is for a queued job.`);
+}
+
 // What the agent said on one complete, fail or block call, for its job_claims row.
 // `as` and `evidence` are set when the review gate turned the call into another
 // transition: the claim is still the agent's, made on the action it called, and a
@@ -124,6 +133,11 @@ async function holderTransition(
     // and so the outcome row, which copies claimed_by, credits the driver that did the
     // work. The caller is only the actor on the audit, mirror and claim rows.
     seatCloses?: boolean;
+    // The seat recording the outcome of work done on a QUEUED job nobody claimed
+    // (recordAsSeat; capsid/rulings/mcp-2026-10-10.md, amendment answer 2). The row must
+    // be queued and unheld; the UPDATE credits the recorder as claimed_by, so the outcome
+    // row names who said the work was done.
+    records?: boolean;
     // The overlap report for the pull request this call named, recorded on the audit row
     // and returned. Its line is already in result_summary.
     overlaps?: OverlapReport | null;
@@ -131,18 +145,23 @@ async function holderTransition(
 ): Promise<JobResult> {
   const actor = agent.actor;
   const read = await readJob(env.DB, id);
-  const notHeld = patch.seatCloses ? seatCloseRefusal(action, id, actor, read) : holderRefusal(action, id, actor, read);
+  const notHeld = patch.records
+    ? recordRefusal(action, id, read)
+    : patch.seatCloses
+      ? seatCloseRefusal(action, id, actor, read)
+      : holderRefusal(action, id, actor, read);
   if (notHeld) return notHeld;
   if (!read) return refuse(action, `no job ${id}.`);
   // What the row must be for this transition to apply, and who holds it. For a holder's
   // own transition that is the claimed row it holds, as it always was.
-  const fromStatus = patch.seatCloses ? "blocked" : "claimed";
-  const verb = patch.seatCloses ? "admin-complete" : action;
+  const fromStatus = patch.records ? "queued" : patch.seatCloses ? "blocked" : "claimed";
+  const verb = patch.records ? "record" : patch.seatCloses ? "admin-complete" : action;
   // The row as the UPDATE below will leave it, computed from the read so the mirror
   // and the outcome can be built before anything is written. The guard at the head of
   // the batch is what keeps the read true when the batch commits.
   const job: JobRow = {
     ...read,
+    ...(patch.records ? { claimed_by: actor } : {}),
     status: patch.status,
     result_summary: patch.result_summary ?? read.result_summary,
     result_ref: patch.result_ref ?? read.result_ref,
@@ -178,8 +197,8 @@ async function holderTransition(
     env.DB.prepare(
       `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
          summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?9 END,
-         lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8
-       WHERE id = ?1 AND status = ?10 AND claimed_by = ?7 RETURNING id`
+         lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8, claimed_by = COALESCE(?11, claimed_by)
+       WHERE id = ?1 AND status = ?10 AND claimed_by IS ?7 RETURNING id`
     ).bind(
       id,
       patch.status,
@@ -190,7 +209,8 @@ async function holderTransition(
       read.claimed_by,
       patch.bumpBlocked ? 1 : 0,
       summarySig,
-      fromStatus
+      fromStatus,
+      patch.records ? actor : null
     ),
     ...(await mirrorStatements(env, job, `job-${verb}`, actor)),
     jobAudit(env.DB, actor, `job-${verb}`, job, {
@@ -534,6 +554,12 @@ export async function completeAsSeat(env: Env, agent: Agent, now: Date, id: stri
   return completeWith(env, agent, now, id, args, true);
 }
 
+// The seat recording the outcome of a queued job that was worked without a claim. The
+// same checks, verification and records as a complete; the seat's review gate applies.
+export async function recordAsSeat(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+  return completeWith(env, agent, now, id, args, true, true);
+}
+
 // The review gate for a close the seat makes. A holder's complete may write (bind the
 // pull request, send the work back, block it); the seat's close writes nothing until the
 // review allows it, so a CHANGES or a BLOCK is answered, not escaped, and a refusal
@@ -563,7 +589,7 @@ async function seatReviewRefusal(env: Env, id: string, args: CompleteArgs): Prom
   );
 }
 
-async function completeWith(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs, seatCloses: boolean): Promise<JobResult> {
+async function completeWith(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs, seatCloses: boolean, records = false): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
@@ -608,7 +634,9 @@ ${overlap}` : args.result_summary,
     evidence: args.evidence,
     skills: credited.skills,
     said: { claim: claim.claim, raw: completeRaw },
-    ...(seatCloses
+    ...(records
+      ? { records: true }
+      : seatCloses
       ? {
           seatCloses: true,
           // The seat ending a blocked job's wait, in the same batch as the audit row. The job
@@ -665,7 +693,19 @@ export async function failJob(
 // is work waiting on a human, and the human needs the command to run, not a
 // description of the situation. Capsid Portal shows these. blockJob writes this marker
 // and commandFromSummary reads it back, so the format cannot drift between the two.
-export const RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
+export const RESUME_MARKER = "Run this, then send it back in with capsid_work_jobs action 'resume':";
+// What blockJob wrote before the MCP 4 regroup. Summaries already stored carry it, so it
+// is still read; nothing writes it.
+const LEGACY_RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
+
+/** Where a summary's resume marker starts and how long it is, or null with none. */
+export function resumeMarkerIn(summary: string): { at: number; length: number } | null {
+  for (const marker of [RESUME_MARKER, LEGACY_RESUME_MARKER]) {
+    const at = summary.indexOf(marker);
+    if (at !== -1) return { at, length: marker.length };
+  }
+  return null;
+}
 
 // A question block (Track A D4): a session that needs an answer rather than a command run
 // blocks with question: true. The reason is the question, the Worker fixes the command, and
@@ -683,9 +723,9 @@ export function isQuestionSummary(summary: string | null): boolean {
 /** The exact command a blocked job is waiting on, or null when it recorded none. */
 export function commandFromSummary(summary: string | null): string | null {
   if (!summary) return null;
-  const at = summary.indexOf(RESUME_MARKER);
-  if (at === -1) return null;
-  const rest = summary.slice(at + RESUME_MARKER.length).trim();
+  const found = resumeMarkerIn(summary);
+  if (!found) return null;
+  const rest = summary.slice(found.at + found.length).trim();
   return rest.length > 0 ? rest : null;
 }
 

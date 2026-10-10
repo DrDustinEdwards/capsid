@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { hintsFor } from "../tool-annotations";
+import { surfaceOf } from "./surface";
 import { z } from "zod";
 import {
   CI_DISPATCH_POLL_MS,
@@ -27,7 +27,9 @@ import {
   writeRepoFile,
 } from "../github";
 import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_BODY, MAX_CI_NAME, MAX_COMMIT_MESSAGE, MAX_PATH, MAX_PR_BODY, MAX_PR_COMMENT, MAX_PR_TITLE, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
-import { fail, type ToolCtx } from "./docs";
+import { fail, ok, type ToolCtx } from "./docs";
+import { tagRelease } from "../github/releases";
+import { siteCheck } from "../site-check";
 import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
@@ -61,7 +63,7 @@ function headMovedRefusal(number: number) {
   };
 }
 
-export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
+export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
   const { guardedRead, guardedWrite } = repoGuards(ctx);
 
@@ -72,24 +74,22 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
 
   // A namespace can map to more than one repo. The optional `repo` argument on every repo tool selects one: a
   // label ("primary", "legacy") or a full "owner/name" mapped to the namespace. Omit
-  // it to target the primary. `namespaces` shows the mapping.
+  // it to target the primary. capsid_find_docs action namespaces shows the mapping.
   const REPO_ARG = "A repo label or mapped \"owner/name\". Defaults to the primary repo.";
 
-  server.registerTool(
+  ctx.ops.define(
     "list_repo_tree",
     {
-      annotations: hintsFor("list_repo_tree"),
       description: "List a directory in a namespace's GitHub repo. Omit path for the repo root. Live GitHub, briefly cached.",
       inputSchema: { namespace: nsName, path: bounded(MAX_PATH).optional(), ref: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
     ({ namespace, path, ref, repo }) => guardedRead("list_repo_tree", namespace, repo, () => listRepoTree(env, namespace, path ?? "", ref, repo))
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "read_repo_file",
     {
-      annotations: hintsFor("read_repo_file"),
-      description: `Read a file from a namespace's GitHub repo, decoded to text. Optional ref (branch, tag, or sha). Live GitHub, briefly cached. Pass EITHER path for one file, or paths for up to ${REPO_BATCH_MAX_FILES} in one call; in the batch form each file succeeds or fails on its own, and each is capped at ${REPO_FILE_BUDGET} bytes with truncated:true when it is cut. REFUSES: both path and paths together, neither of them, an empty paths array, more than ${REPO_BATCH_MAX_FILES} paths, and a directory (use list_repo_tree).`,
+      description: `Read a file from a namespace's GitHub repo, decoded to text. Optional ref (branch, tag, or sha). Live GitHub, briefly cached. Pass EITHER path for one file, or paths for up to ${REPO_BATCH_MAX_FILES} in one call; in the batch form each file succeeds or fails on its own, and each is capped at ${REPO_FILE_BUDGET} bytes with truncated:true when it is cut. REFUSES: both path and paths together, neither of them, an empty paths array, more than ${REPO_BATCH_MAX_FILES} paths, and a directory (use capsid_read_repo action tree).`,
       inputSchema: {
         namespace: nsName,
         path: bounded(MAX_PATH).optional(),
@@ -112,10 +112,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       })
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "search_code",
     {
-      annotations: hintsFor("search_code"),
       description:
         "Case-insensitive substring search across a namespace repo's files. Scans blobs server-side, so scope large repos with path_prefix. Returns path, line number and the matching line. A scan that stops early sets truncated:true with a note and a next_start to resume from; a truncated result is a partial scan.",
       inputSchema: {
@@ -142,10 +141,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "write_repo_file",
     {
-      annotations: hintsFor("write_repo_file"),
       description:
         "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch, or to branch if given, and opens a PR; mode 'direct' commits straight to the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed. mode 'direct' needs the can_direct_write flag, allow_workflow_write the can_write_workflows flag, a protected path can_touch_protected and a money path money_paths. Needs the write grant.",
       inputSchema: {
@@ -182,10 +180,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "create_branch",
     {
-      annotations: hintsFor("create_branch"),
       description: "Create a branch in a namespace's GitHub repo. Branches off the default branch unless 'from' is given. Needs the write grant.",
       inputSchema: { namespace: nsName, branch: bounded(MAX_REF), from: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
@@ -193,10 +190,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       guardedWrite("create_branch", namespace, null, () => createBranch(env, namespace, branch, from, repo), { repo })
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "open_pr",
     {
-      annotations: hintsFor("open_pr"),
       description: "Open a pull request in a namespace's GitHub repo. Base defaults to the repo's default branch. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
@@ -211,10 +207,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       guardedWrite("open_pr", namespace, null, () => openPr(env, namespace, title, head, base, body, repo), { repo })
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "delete_repo_file",
     {
-      annotations: hintsFor("delete_repo_file"),
       description:
         "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch, or to branch if given, and opens a PR; mode 'direct' deletes on the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number. The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed. mode 'direct' needs the can_direct_write flag, allow_workflow_write the can_write_workflows flag, a protected path can_touch_protected and a money path money_paths. Needs the write grant.",
       inputSchema: {
@@ -250,10 +245,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "manage_pr",
     {
-      annotations: hintsFor("manage_pr"),
       description:
         "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. action 'comment' posts `comment` and changes nothing else; it needs the can_comment_pr flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch, a branch under the improve loop's prefix and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
       inputSchema: {
@@ -309,10 +303,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     }
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "ci_status",
     {
-      annotations: hintsFor("ci_status"),
       description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Those three return the run and its jobs in place of the run list and the failed-run drill-in. Every log is returned with secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share. Read-only.`,
       inputSchema: {
         namespace: nsName,
@@ -336,7 +329,7 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       guardedRead("ci_status", namespace, repo, () =>
         ciStatus(env, namespace, repo, {
           limit,
-          logTail: ctx.scope({ tool: "ci_status", namespace, grant: "write" }) === null,
+          logTail: ctx.scope({ ...surfaceOf("ci_status"), namespace, grant: "write" }) === null,
           ref,
           runId: run_id,
           jobs,
@@ -346,15 +339,14 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       )
   );
 
-  // repo_refs and repo_history are reads and stay open to ro: keys. delete_branch and
-  // ci_dispatch need the write grant: one destroys refs, the other spends CI minutes
+  // capsid_inspect_repo actions refs and history are reads and stay open to ro: keys.
+  // capsid_close_pr action delete_branch and capsid_run_ci need the write grant: one destroys refs, the other spends CI minutes
   // and can start a deploy. These four are a ruled exception to the tool surface
   // rule (CLAUDE.md; capsid/decisions.md).
 
-  server.registerTool(
+  ctx.ops.define(
     "repo_refs",
     {
-      annotations: hintsFor("repo_refs"),
       description:
         "What is in flight in a namespace's repo, in one call: branches (name, head sha, last commit date, ahead/behind the default branch, and the open PR number if the branch has one), tags, and open pull requests. Sets truncated:true when any of the three lists hit its 100-item page. Read-only, live GitHub, briefly cached.",
       inputSchema: { namespace: nsName, repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
@@ -362,10 +354,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     ({ namespace, repo }) => guardedRead("repo_refs", namespace, repo, () => repoRefs(env, namespace, repo))
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "repo_history",
     {
-      annotations: hintsFor("repo_history"),
       description: `Commits, a comparison, or one commit, chosen by which argument is present: ref for the commits on a ref (default ${REPO_HISTORY_DEFAULT_LIMIT}, max ${REPO_HISTORY_MAX_LIMIT}); base and head together for a comparison (ahead/behind, the commit list, and changed files with status and line counts); sha for one commit (full message, parents, changed files). Patch bodies are omitted unless patch:true, and are then budgeted to ${REPO_PATCH_BUDGET} bytes across the whole response with patch_truncated:true when the budget runs out. Commit subjects are the first line only; read one commit by sha for its whole message. REFUSES: more than one of sha / base+head / ref; base without head or head without base; and none of them. Read-only.`,
       inputSchema: {
         namespace: nsName,
@@ -387,10 +378,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
       guardedRead("repo_history", namespace, repo, () => repoHistory(env, namespace, { ref, base, head, sha, limit, patch }, repo))
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "delete_branch",
     {
-      annotations: hintsFor("delete_branch"),
       description:
         "Delete a branch in a namespace's GitHub repo. REFUSES, naming the refusal: the default branch, always; a branch under the improve loop's prefix; a branch with an open pull request; and a branch that does not exist. force:true lifts the prefix and open-PR refusals and needs the can_merge flag. Pass merged:true instead of branch to prune every branch whose latest pull request merged and whose tip is the commit that pull request merged from (so work pushed after the merge is kept): it PREVIEWS by default, deleting nothing, and deletes only with confirm:true, at most 40 per call (it reports how many remain); keep:[names] leaves named branches alone. It keeps the default branch, protected branches, release/*, screenshots, results, gh-pages, improve-loop branches, branches with an open or unmerged pull request and branches with no pull request, and lists why. Give branch or merged, not both; merged does not take force. Needs the write grant; audit-logged with the list.",
       inputSchema: {
@@ -418,10 +408,9 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
     }
   );
 
-  server.registerTool(
+  ctx.ops.define(
     "ci_dispatch",
     {
-      annotations: hintsFor("ci_dispatch"),
       description: `Start a workflow, or rerun one's failed jobs. Pass workflow (the file name, e.g. ci.yml) and ref to trigger a workflow_dispatch; it polls for up to ${CI_DISPATCH_POLL_MS / 1000}s and returns the new run's run_id, or run_id null with a note when no run appeared. Pass run_id alone to rerun that run's failed jobs. REFUSES: a workflow with no workflow_dispatch trigger, and workflow together with run_id. Needs the write grant and the can_dispatch flag; audit-logged. Spends CI minutes and can start a deploy.`,
       inputSchema: {
         namespace: nsName,
@@ -448,5 +437,50 @@ export function registerRepoTools(server: McpServer, ctx: ToolCtx): void {
         // workflow under a protected or money path is checked as one.
         { path: workflow, repo }
       )
+  );
+
+  ctx.ops.define(
+    "tag_release",
+    {
+      description:
+        "Tag a commit, and with action release also publish its GitHub release, whose notes are the section of the repo's CHANGELOG that names the tag (a heading such as \"## [1.4.0]\" or \"## v1.4.0\"), read at the tagged commit. The commit is sha, or the head of ref, or the default branch's head. A release whose CHANGELOG has no section for the tag is refused before anything is tagged. A tag that exists is refused. Needs the write grant and the can_merge flag, because a tag or a release can start a deploy; audit-logged.",
+      inputSchema: {
+        namespace: nsName,
+        tag: bounded(64).describe("The version to tag, such as v1.4.0 or 1.4.0-rc.1."),
+        sha: bounded(MAX_SHA).optional().describe("The full commit sha to tag. Not combinable with ref."),
+        ref: bounded(MAX_REF).optional().describe("A branch whose head is tagged. Defaults to the default branch."),
+        changelog: bounded(MAX_PATH).optional().describe("The CHANGELOG path for a release's notes. Defaults to CHANGELOG.md."),
+        publish_release: z.boolean().describe("Set by the action: true for release, false for tag."),
+        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+      },
+    },
+    ({ namespace, tag, sha, ref, changelog, publish_release, repo }) =>
+      guardedWrite(
+        "tag_release",
+        namespace,
+        null,
+        () => tagRelease(env, namespace, { tag, sha, ref, publishRelease: publish_release, changelogPath: changelog ?? "CHANGELOG.md" }, repo),
+        { repo, surface: surfaceOf("tag_release", undefined, publish_release ? "release" : "tag") }
+      )
+  );
+
+  ctx.ops.define(
+    "site_check",
+    {
+      description:
+        "A live check of the namespace's site from its configured origin: its health route (state, status, the sha it reports), one page (its status and which OWASP security headers fail), and one path that must refuse a caller with no credential (the 401 probe; the site's operator API unless probe names another). Statuses and header verdicts only; no page text is returned. Read-only.",
+      inputSchema: {
+        namespace: nsName,
+        page: bounded(200).optional().describe("The page to read, a path such as /about. Defaults to /."),
+        probe: bounded(200).optional().describe("A path that must answer 401 or 403 to a caller with no credential. Defaults to the site's operator API path."),
+      },
+    },
+    async ({ namespace, page, probe }) => {
+      try {
+        return ok(await siteCheck(env, namespace, { page, probe }));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
   );
 }

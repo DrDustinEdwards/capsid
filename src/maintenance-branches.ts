@@ -5,7 +5,7 @@ import type { MaintenanceItem } from "./maintenance";
 import { auditStatement } from "./store-guards";
 
 // The daily maintenance pass's branch rules (job_549550d73d4e, piece 3). A merged branch is
-// one delete_branch merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
+// one capsid_close_pr action delete_branch with merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
 // latest pull request merged and its tip is the commit that pull request merged from. The
 // same plan is read here, so the default branch, a branch with an open pull request and a
 // branch with commits after its merge are refused exactly as the tool refuses them.

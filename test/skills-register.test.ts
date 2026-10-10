@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
@@ -157,13 +157,14 @@ function driver(): Agent {
   return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
 }
 
-test("register_skill takes improve_run's admin default in the scope table", () => {
-  assert.equal(requiredForAction("improve_run", "register_skill"), "admin");
+test("register_skill is admin in the scope table, on the admin tool and as capsid_run_improve's default", () => {
+  assert.equal(requiredForAction("capsid_admin_control_improve", "register_skill"), "admin");
+  assert.equal(requiredForAction("capsid_run_improve", "register_skill"), "admin");
   const refusal = checkScope(driver(), {
-    tool: "improve_run",
+    tool: "capsid_admin_control_improve",
     action: "register_skill",
     namespace: "capsid",
-    ...needFor(requiredForAction("improve_run", "register_skill")),
+    ...needFor(requiredForAction("capsid_admin_control_improve", "register_skill")),
   });
   assert.match(refusal ?? "", /admin only/);
 });
@@ -173,14 +174,16 @@ interface ToolResult {
   content: Array<{ text: string }>;
 }
 
-async function callAs(caller: Agent, fake: ReturnType<typeof fakeDb>): Promise<ToolResult> {
+// Capsid Admin's capsid_admin_control_improve by default; `capsid` makes the same call
+// as capsid_run_improve on the driver's own server.
+async function callAs(caller: Agent, fake: ReturnType<typeof fakeDb>, surface: "admin" | "capsid" = "admin"): Promise<ToolResult> {
   const env = fakeEnv({ DB: fake.db, APP_KV: fakeKv({ seedToken: true }).kv });
-  const server = buildServer(env, caller);
+  const server = surface === "admin" ? buildAdminServer(env, caller) : buildServer(env, caller);
   const client = new Client({ name: "skills-register", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const result = (await client.callTool({
-    name: "improve_run",
+    name: surface === "admin" ? "capsid_admin_control_improve" : "capsid_run_improve",
     arguments: { action: "register_skill", namespace: "capsid", skill: input() },
   })) as ToolResult;
   await client.close();
@@ -194,6 +197,15 @@ test("PLANT: a driver calling register_skill over a real connection is refused a
   assert.equal(result.isError, true, `a driver registered a skill: ${result.content[0]?.text}`);
   assert.match(result.content[0].text, /admin only/);
   assert.equal(fake.batches.length, 0, "the refusal came after a write");
+
+  // The driver's own improve tool does not take the action at all. The SDK answers a
+  // schema failure as an error result or by rejecting the call; both refuse.
+  const viaCapsid = await callAs(driver(), fake, "capsid").then(
+    (r) => r.isError === true,
+    () => true
+  );
+  assert.equal(viaCapsid, true, "a driver registered a skill through capsid_run_improve");
+  assert.equal(fake.batches.length, 0, "the capsid_run_improve refusal came after a write");
 });
 
 test("the admin making the same call registers the skill", async () => {

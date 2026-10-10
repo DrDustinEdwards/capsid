@@ -9,7 +9,7 @@ import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../
 import { St } from "../ui/icons";
 
 // The Maintenance list on the Overview (job_549550d73d4e): what the daily maintenance pass
-// found, from GET /portal/api/maintenance, the list improve_status serves. The seat reads
+// found, from GET /portal/api/maintenance, the list capsid_run_improve action status serves. The seat reads
 // it at the start of a session. Loaded on its own, after the Overview, so the first paint
 // does not carry it. Nothing here changes anything: a row naming a job in the feed opens
 // that job's drawer, and a pull request is a link.

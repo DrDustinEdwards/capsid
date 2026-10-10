@@ -53,6 +53,11 @@ export interface Agent {
   // The one job a runner key may work (migrations/0021). Absent or null is an unbound
   // agent. Only agentFromRow sets it, because only a row can carry a binding.
   job?: string | null;
+  // When this OAuth session's Access sign-in happened (Props.signed_in_at), for the admin
+  // server's step-up (src/scope.ts STEP_UP). Absent for a caller that holds a key rather
+  // than a session; null for a session whose grant recorded no sign-in time, which is
+  // stale.
+  signedInAt?: number | null;
 }
 
 function flagsAll(value: boolean): Record<ScopeFlag, boolean> {
@@ -72,7 +77,7 @@ function readEverythingScopes(): AgentScopes {
 
 // The admin, as the MCP and Portal logins know it: the email Access verified, already
 // checked against ADMIN_EMAIL at sign-in and on every request.
-export function adminAgentForEmail(email: string): Agent {
+export function adminAgentForEmail(email: string, signedInAt?: number | null): Agent {
   const actor = `access:${email}`;
   return {
     id: actor,
@@ -82,6 +87,7 @@ export function adminAgentForEmail(email: string): Agent {
     scopes: unrestrictedScopes(),
     admin: true,
     row: null,
+    ...(signedInAt === undefined ? {} : { signedInAt }),
   };
 }
 

@@ -47,7 +47,8 @@ test("move and lint finalize still accept an optional boolean confirm", async ()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  for (const name of ["move", "lint"]) {
+  // move is an action of capsid_write_doc; lint finalize a mode of capsid_lint_namespace.
+  for (const name of ["capsid_write_doc", "capsid_lint_namespace"]) {
     const schema = tools.find((t) => t.name === name)?.inputSchema;
     assert.ok(schema, `${name} is not served`);
     assert.equal((schema.properties?.confirm as { type?: string } | undefined)?.type, "boolean", `${name} does not accept confirm`);

@@ -73,8 +73,8 @@ test("the served lint description is the exported one", async () => {
   const { tools } = await client.listTools();
   await client.close();
   assert.equal(
-    tools.find((t) => t.name === "lint")?.description,
+    tools.find((t) => t.name === "capsid_lint_namespace")?.description,
     LINT_DESCRIPTION,
-    "the lint tool does not serve LINT_DESCRIPTION, so what clients see is not what this file checks"
+    "capsid_lint_namespace does not serve LINT_DESCRIPTION, so what clients see is not what this file checks"
   );
 });

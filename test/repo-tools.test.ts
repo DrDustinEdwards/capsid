@@ -658,7 +658,7 @@ test("ci_status still withholds the log tail from a read-only key", async () => 
 // pass whatever the tool hands it; `logTail: true` in the registration would give every
 // read key the CI job logs. This drives the tool through a server built with a read
 // grant.
-test("a read-grant server does not hand the CI log tail to ci_status", async () => {
+test("a read-grant server does not hand the CI log tail to capsid_inspect_repo action ci", async () => {
   await withFetch(
     {
       "GET /repos/o/r/actions/runs": { body: FAILED_RUNS },
@@ -671,8 +671,8 @@ test("a read-grant server does not hand the CI log tail to ci_status", async () 
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
       const result = (await client.callTool({
-        name: "ci_status",
-        arguments: { namespace: "ns" },
+        name: "capsid_inspect_repo",
+        arguments: { action: "ci", namespace: "ns" },
       })) as { content: Array<{ text: string }> };
       await client.close();
       const failed = (JSON.parse(result.content[0].text) as { failed_run: FailedRun }).failed_run;
@@ -698,8 +698,8 @@ test("a write-grant server does hand the log tail through, so the gate is a gate
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
       const result = (await client.callTool({
-        name: "ci_status",
-        arguments: { namespace: "ns" },
+        name: "capsid_inspect_repo",
+        arguments: { action: "ci", namespace: "ns" },
       })) as { content: Array<{ text: string }> };
       await client.close();
       const failed = (JSON.parse(result.content[0].text) as { failed_run: FailedRun }).failed_run;
@@ -905,7 +905,7 @@ test("an empty mapping still reports as unconfigured, not as corrupt", async () 
 // comment must never reach the branch cleanup. Without the early return in
 // src/github/refs.ts a comment falls through to the close branch: it PATCHes the pull
 // request shut and deletes the head branch. The scope tests cannot see that, because
-// the registrar allows manage_pr.comment. Close and delete are wired to throw, so a
+// the registrar allows capsid_open_pr.comment. Close and delete are wired to throw, so a
 // fallthrough fails loudly.
 
 test("PLANT: manage_pr comment POSTs a comment and touches neither the PR state nor the branch", async () => {

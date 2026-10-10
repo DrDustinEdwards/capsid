@@ -4,7 +4,8 @@ import { workflowWriteRefusal, writeRepoFile, deleteRepoFile } from "../src/gith
 import { improveWriteRefusal } from "../src/improve-scores.ts";
 import { RUN_TASK_PREFIX } from "../src/improve-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type FakeD1Options } from "./fakes.ts";
-import { toolBlocks } from "./source-files.ts";
+import { operationBlocks } from "./source-files.ts";
+import { servedAs } from "./served.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
@@ -17,22 +18,35 @@ import type { Agent } from "../src/agents.ts";
 // does the same for pathMutation.
 
 // A handler mutates the document store if it inserts a documents row or calls the
-// one path-mutation helper. Matched by shape rather than by tool name.
+// one path-mutation helper. Matched by shape rather than by tool name. The handlers
+// are operations (src/tools/operations.ts) that the served tools dispatch to, so the
+// scan reads the operation blocks and each plant is driven through the served tool and
+// action that runs it (test/served.ts).
 const MUTATION_MARKERS = [/INSERT INTO documents/i, /\bdocumentUpsert\(/, /\bpathMutation\(/];
 
 function mutationTools() {
-  return toolBlocks().filter((t) => MUTATION_MARKERS.some((re) => re.test(t.body)));
+  return operationBlocks().filter((t) => MUTATION_MARKERS.some((re) => re.test(t.body)));
+}
+
+// The served call for an operation: its tool, and the action that picks it where the
+// tool takes one. Exactly one served entry point per operation, so a second one added
+// later fails here rather than going unplanted.
+function servedCall(op: string, args: Record<string, unknown>): { tool: string; args: Record<string, unknown> } {
+  const served = servedAs(op);
+  assert.equal(served.length, 1, `operation ${op} is served by ${served.length} tool actions; each needs a plant: ${JSON.stringify(served)}`);
+  const { tool, action } = served[0];
+  return { tool, args: action === undefined ? args : { action, ...args } };
 }
 
 // scanner-rule: conventions-verification, enumerate every site (audit 2026-09-07) (count guard)
 test("the scan finds the mutation entry points at all, so this file cannot pass by reading nothing", () => {
   const found = mutationTools().map((t) => t.name).sort();
-  assert.ok(found.length >= 4, `the mutation scan found ${found.length} tools; the walk is broken`);
-  // Named so a tool disappearing from the mutation set is also visible.
+  assert.ok(found.length >= 4, `the mutation scan found ${found.length} operations; the walk is broken`);
+  // Named so an operation disappearing from the mutation set is also visible.
   assert.deepEqual(found, ["delete", "lint", "move", "restore", "write"]);
 });
 
-// Every mutation entry point, driven over MCP: one plant per tool the scan finds,
+// Every mutation entry point, driven over MCP: one plant per operation the scan finds,
 // at the loop's run prompt. A real call exercises the guard, the opt-in and the flag.
 
 const RUN_PROMPT = "improve/prompts/run.md";
@@ -77,7 +91,8 @@ test("every mutation entry point the scan finds has a plant", () => {
 
 test("PLANT: without the opt-in, every mutation entry point refuses the run prompt, even for a caller holding every flag", async () => {
   // The flag is held, so the refusal can only come from the control-surface guard.
-  for (const [tool, args] of Object.entries(PLANTS)) {
+  for (const [op, plant] of Object.entries(PLANTS)) {
+    const { tool, args } = servedCall(op, plant);
     const { result, recorded } = await callAs(driver(["can_touch_protected"]), tool, args);
     assert.equal(result.isError, true, `${tool} changed the run prompt with no opt-in`);
     assert.match(result.content[0].text, /run-prompt surface/, `${tool} was refused for another reason: ${result.content[0].text}`);
@@ -86,15 +101,17 @@ test("PLANT: without the opt-in, every mutation entry point refuses the run prom
 });
 
 test("PLANT: lint finalize has no opt-in, so passing one changes nothing", async () => {
-  const { result, recorded } = await callAs(driver(["can_touch_protected"]), "lint", { ...PLANTS.lint, allow_improve_paths: true });
+  const call = servedCall("lint", { ...PLANTS.lint, allow_improve_paths: true });
+  const { result, recorded } = await callAs(driver(["can_touch_protected"]), call.tool, call.args);
   assert.equal(result.isError, true, "lint finalize archived the run prompt when told it was allowed");
   assert.deepEqual(recorded, []);
 });
 
 test("PLANT: with the opt-in and without can_touch_protected, every tool that takes the opt-in refuses", async () => {
   // The opt-in is the caller's to pass, so it is not a permission; the flag is.
-  for (const [tool, args] of Object.entries(PLANTS).filter(([tool]) => tool !== "lint")) {
-    const { result, recorded } = await callAs(driver([]), tool, { ...args, allow_improve_paths: true });
+  for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
+    const { tool, args } = servedCall(op, { ...plant, allow_improve_paths: true });
+    const { result, recorded } = await callAs(driver([]), tool, args);
     assert.equal(result.isError, true, `${tool} honoured the opt-in without the flag`);
     assert.match(result.content[0].text, /needs the can_touch_protected flag/, `${tool}: ${result.content[0].text}`);
     assert.deepEqual(recorded, [], `${tool} committed statements after refusing`);
@@ -102,8 +119,9 @@ test("PLANT: with the opt-in and without can_touch_protected, every tool that ta
 });
 
 test("THE INNOCENT DIRECTION: with the opt-in and the flag, every tool that takes the opt-in lands", async () => {
-  for (const [tool, args] of Object.entries(PLANTS).filter(([tool]) => tool !== "lint")) {
-    const { result, recorded } = await callAs(driver(["can_touch_protected"]), tool, { ...args, allow_improve_paths: true });
+  for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
+    const { tool, args } = servedCall(op, { ...plant, allow_improve_paths: true });
+    const { result, recorded } = await callAs(driver(["can_touch_protected"]), tool, args);
     assert.notEqual(result.isError, true, `${tool} refused a caller holding the opt-in and the flag: ${result.content[0]?.text}`);
     assert.ok(recorded.length > 0, `${tool} committed nothing`);
   }

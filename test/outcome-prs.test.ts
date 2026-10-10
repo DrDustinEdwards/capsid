@@ -142,7 +142,7 @@ test("a merge that fails to update an outcome does not fail the merge", async ()
       async () => {
         const client = await connectAdmin({ prepare: statement, batch: async () => [] });
         const result = (await client.callTool({
-          name: "manage_pr",
+          name: "capsid_close_pr",
           arguments: { namespace: "capsid", number: 7, action: "merge" },
         })) as { isError?: boolean; content: Array<{ text: string }> };
         await client.close();
@@ -217,7 +217,7 @@ test("the tool refuses an unparseable evidence string and writes nothing", async
   const d1 = fakeD1({});
   const client = await connectAdmin(d1.db);
   const result = (await client.callTool({
-    name: "jobs",
+    name: "capsid_work_jobs",
     arguments: { action: "complete", namespace: "capsid", id: "job_000000000001", result_summary: "done", evidence: "6 commits, 19 files" },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await client.close();

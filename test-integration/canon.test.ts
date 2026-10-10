@@ -59,7 +59,7 @@ beforeEach(async () => {
 
 describe("a driver's canon write", () => {
   it("PLANT: becomes a pending proposal and leaves the document as it was", async () => {
-    const out = await ok(driver(), "write", { namespace: NS, path: "core.md", mode: "append", body: "- Agents must call write after every job." });
+    const out = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "core.md", mode: "append", body: "- Agents must call write after every job." });
     expect(out.action).toBe("pending_review");
     expect(out.directive_lines).toEqual(["- Agents must call write after every job."]);
     expect(await body("core.md"), "the canon document changed").toBe(CORE);
@@ -73,23 +73,23 @@ describe("a driver's canon write", () => {
   });
 
   it("creating a canon document is a proposal too", async () => {
-    const out = await ok(driver(), "write", { namespace: NS, path: "decisions.md", title: "sample decisions", body: "# Decisions" });
+    const out = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "decisions.md", title: "sample decisions", body: "# Decisions" });
     expect(out.action).toBe("pending_review");
     expect(out.base_sha256).toBeNull();
     expect(await body("decisions.md")).toBeNull();
   });
 
   it("is applied at once for the seat, and a driver's write elsewhere is applied too", async () => {
-    const seat = await ok(driver({ can_merge: true }), "write", { namespace: NS, path: "core.md", title: "sample - core", body: "seat body", confirm: true });
+    const seat = await ok(driver({ can_merge: true }), "capsid_write_doc", { action: "write", namespace: NS, path: "core.md", title: "sample - core", body: "seat body", confirm: true });
     expect(seat.action).toBe("updated");
     expect(await body("core.md")).toBe("seat body");
-    const other = await ok(driver(), "write", { namespace: NS, path: "research/plan.md", title: "plan", body: "a plan" });
+    const other = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "research/plan.md", title: "plan", body: "a plan" });
     expect(other.action).toBe("created");
     expect(await proposals()).toHaveLength(0);
   });
 
   it("refuses links, which a proposal does not carry, and stores nothing", async () => {
-    const result = await call(driver(), "write", { namespace: NS, path: "core.md", mode: "append", body: "more", links: "[]" });
+    const result = await call(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "core.md", mode: "append", body: "more", links: "[]" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/carries no links/);
     expect(await proposals()).toHaveLength(0);
@@ -99,13 +99,13 @@ describe("a driver's canon write", () => {
     await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, 'notes.md', 'notes', 'n')").bind(NS).run();
     const version = await env.DB.prepare("INSERT INTO document_versions (document_id, namespace, path, title, body) VALUES (1, ?1, 'core.md', 't', 'old') RETURNING id").bind(NS).first<{ id: number }>();
     for (const [name, args] of [
-      ["restore", { namespace: NS, path: "core.md", version_id: version?.id, confirm: true }],
-      ["delete", { namespace: NS, path: "core.md", confirm: true }],
-      ["move", { namespace: NS, path: "core.md", new_path: "old-core.md", confirm: true }],
-      ["move", { namespace: NS, path: "notes.md", new_path: "decisions.md", confirm: true }],
+      ["capsid_write_doc", { action: "restore", namespace: NS, path: "core.md", version_id: version?.id, confirm: true }],
+      ["capsid_delete_doc", { namespace: NS, path: "core.md", confirm: true }],
+      ["capsid_write_doc", { action: "move", namespace: NS, path: "core.md", new_path: "old-core.md", confirm: true }],
+      ["capsid_write_doc", { action: "move", namespace: NS, path: "notes.md", new_path: "decisions.md", confirm: true }],
     ] as const) {
       const result = await call(driver(), name, args);
-      expect(result.isError, `${name} was not refused`).toBe(true);
+      expect(result.isError, `${name} ${"action" in args ? args.action : ""} was not refused`).toBe(true);
       expect(result.content[0].text).toMatch(/is canon/);
     }
     expect(await body("core.md")).toBe(CORE);
@@ -116,7 +116,7 @@ describe("a driver's canon write", () => {
 
 describe("deciding a proposal", () => {
   async function propose(text = "The sample service answers on port 8080.") {
-    const out = await ok(driver(), "write", { namespace: NS, path: "core.md", title: "sample - core", body: text });
+    const out = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "core.md", title: "sample - core", body: text });
     return out.proposal as number;
   }
 
@@ -144,7 +144,7 @@ describe("deciding a proposal", () => {
   });
 
   it("an approval of a create is refused once the document exists", async () => {
-    const out = await ok(driver(), "write", { namespace: NS, path: "decisions.md", title: "d", body: "# Decisions" });
+    const out = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path: "decisions.md", title: "d", body: "# Decisions" });
     await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, 'decisions.md', 'd', 'the seat wrote it')").bind(NS).run();
     const done = await approveProposal(env.DB, SEAT, new Date(), out.proposal);
     expect(done.ok ? "" : done.refusal).toMatch(/did not exist when proposal/);

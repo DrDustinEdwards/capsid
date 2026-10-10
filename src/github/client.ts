@@ -316,7 +316,7 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
   return primaries === 1 ? null : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// https://github.com/<owner>/<repo>/pull/<number>, as open_pr returns it and a
+// https://github.com/<owner>/<repo>/pull/<number>, as capsid_open_pr action open returns it and a
 // driver pastes it. The one spelling for every site that reads one (the review gate,
 // the evidence verifier and the prose scan in outcome-prs.ts): separate spellings
 // with different character classes let the gate accept owner/repo strings the
@@ -358,7 +358,7 @@ export async function resolveRepo(env: Env, namespace: string, selector?: string
     list = JSON.parse(row.repos || "[]");
   } catch (err) {
     throw new Error(
-      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with update_namespace.`
+      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`
     );
   }
   if (!Array.isArray(list)) {

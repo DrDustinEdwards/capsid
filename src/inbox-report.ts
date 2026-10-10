@@ -16,7 +16,7 @@ import type { InboxItem } from "./inbox";
 // - No severity field: a reported item always counts as needs-you, so an app cannot quiet
 //   its own badge (Dustin, decision 3).
 // - The items are the app's words. A link must stay on the app's own origin (its ops_sites
-//   row), and improve_status fences the title as external before an agent reads it.
+//   row), and capsid_run_improve action status fences the title as external before an agent reads it.
 // - One report per minute per key, fail closed: this is a write path.
 
 const INBOX_REPORT_PATH = "/ops/inbox/report";

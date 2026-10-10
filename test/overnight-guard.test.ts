@@ -153,7 +153,7 @@ function client(answers: { status?: unknown; plan?: unknown; throws?: { status?:
     calls,
     tool: async (name: string, args: object) => {
       calls.push({ name, args });
-      if (name === "improve_status") {
+      if (name === "capsid_run_improve") {
         if (answers.throws?.status) throw new Error("status refused");
         return JSON.stringify(answers.status);
       }
@@ -168,8 +168,8 @@ test("prepareRun with the switch off reads the switch, refuses, and never reads 
   const out = await prepareRun(c, "a", { ANTHROPIC_API_KEY: KEY });
   assert.ok(!out.run);
   assert.equal(out.benign, false);
-  assert.deepEqual(c.calls.map((x) => x.name), ["improve_status"]);
-  assert.deepEqual(c.calls[0].args, { namespace: "a" });
+  assert.deepEqual(c.calls.map((x) => x.name), ["capsid_run_improve"]);
+  assert.deepEqual(c.calls[0].args, { action: "status", namespace: "a" });
 });
 
 test("prepareRun on the API key with a key reads the plan for the namespace and returns the lane, its heaviness and the budget", async () => {
@@ -180,7 +180,7 @@ test("prepareRun on the API key with a key reads the plan for the namespace and 
   assert.equal(out.heavy, false);
   assert.equal(out.budget, 480);
   assert.deepEqual(out.lane.jobs.map((j) => j.id), ["job_aaaaaaaaaaaa", "job_bbbbbbbbbbbb"]);
-  assert.deepEqual(c.calls[1], { name: "jobs", args: { action: "list", view: "plan", namespace: "a" } });
+  assert.deepEqual(c.calls[1], { name: "capsid_work_jobs", args: { action: "list", view: "plan", namespace: "a" } });
 });
 
 test("a namespace with nothing planned is skipped, not refused", async () => {

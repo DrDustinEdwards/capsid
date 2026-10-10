@@ -2,7 +2,7 @@ import { isImproveBranch } from "../improve-schema";
 import type { AttemptEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
-// PRUNE MERGED BRANCHES (job_8779278b8e91, Dustin 2026-10-07). delete_branch with merged:true
+// PRUNE MERGED BRANCHES (job_8779278b8e91, Dustin 2026-10-07). capsid_close_pr action delete_branch with merged:true
 // finds the branches whose work has landed and, only with confirm:true, deletes them. A branch
 // is pruned only when its LATEST pull request in this repo merged AND the branch tip is the
 // commit that pull request merged from, so a commit pushed after the merge is never lost.

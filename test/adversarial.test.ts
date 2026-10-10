@@ -41,7 +41,7 @@ test("every surface named in the manifest is covered by at least one fixture", (
   }
 });
 
-// the store: read and brief
+// the store: capsid_read_doc and capsid_start_session
 
 const DOC_FIXTURES = entriesFor("document");
 const PROMPT_FIXTURE = entriesFor("prompt")[0];
@@ -117,7 +117,7 @@ test("PLANT: read returns a hostile body verbatim, with provenance, and writes n
   try {
     for (const entry of DOC_FIXTURES) {
       const result = (await client.callTool({
-        name: "read",
+        name: "capsid_read_doc",
         arguments: { namespace: "capsid", path: `adversarial/${entry.file}` },
       })) as { isError?: boolean; content: Array<{ text: string }> };
       assert.ok(!result.isError, `read failed for ${entry.file}`);
@@ -159,7 +159,7 @@ test("PLANT: brief carries the payloads through verbatim, each with its provenan
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name: "brief", arguments: { namespace: "capsid" } })) as {
+    const result = (await client.callTool({ name: "capsid_start_session", arguments: { namespace: "capsid" } })) as {
       isError?: boolean;
       content: Array<{ text: string }>;
     };
@@ -236,7 +236,7 @@ test("PLANT: a hostile README comes back as a string field, verbatim", async () 
   );
 });
 
-// ci_status
+// capsid_inspect_repo action ci (the ci_status operation)
 
 const FAILED_RUN = {
   workflow_runs: [

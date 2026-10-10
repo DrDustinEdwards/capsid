@@ -292,7 +292,7 @@ async function connect(grant: "read" | "write") {
 }
 
 const call = async (client: Client, args: Record<string, unknown>) =>
-  (await client.callTool({ name: "lint", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({ name: "capsid_lint_namespace", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
 
 test("PLANT: report mode is write-gated, like finalize", async () => {
   const { client, close } = await connect("read");

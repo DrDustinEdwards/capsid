@@ -578,3 +578,9 @@ test("THE INNOCENT DIRECTION: the migration spellings a driver writes still clas
     assert.deepEqual("klasses" in match ? match.migrationPaths : [], ["migrations/0012_skills.sql"]);
   }
 });
+
+test("a summary stored before the regroup, with the old resume marker, still yields its command", () => {
+  const stored = "Finished up to the push.\n\nRun this, then send it back in with jobs action 'resume':\n\n    git push origin feat/x";
+  assert.equal(commandFromSummary(stored), "git push origin feat/x");
+  assert.match(RESUME_MARKER, /capsid_work_jobs action 'resume'/);
+});

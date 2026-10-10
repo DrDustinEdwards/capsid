@@ -272,7 +272,7 @@ describe("the jobs tool takes claim as an object or a JSON string", () => {
       for (const [form, sent] of [["object", claim], ["string", JSON.stringify(claim)]] as const) {
         const id = await claimed(`claim as ${form}`);
         const result = (await client.callTool({
-          name: "jobs",
+          name: "capsid_work_jobs",
           arguments: { action: "complete", namespace: NS, id, result_summary: "done", claim: sent },
         })) as { isError?: boolean; content: Array<{ text: string }> };
         expect(result.isError, `${form}: ${result.content[0]?.text}`).toBeFalsy();
@@ -291,7 +291,7 @@ describe("the jobs tool takes claim as an object or a JSON string", () => {
     try {
       const id = await claimed("unknown key through the tool");
       const result = (await client.callTool({
-        name: "jobs",
+        name: "capsid_work_jobs",
         arguments: { action: "block", namespace: NS, id, reason: "needs a push", claim: JSON.stringify({ deploy_state: "none", mood: "fine" }) },
       })) as { isError?: boolean; content: Array<{ text: string }> };
       expect(result.isError).toBe(true);

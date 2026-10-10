@@ -1,6 +1,6 @@
 // Whether sessions read the portfolio rules. Every repo's CLAUDE.md says to read
 // capsid/conventions.md first; audit_log recorded writes only, so there was no evidence
-// either way. A read of that document, through `read` or `brief`, now leaves one
+// either way. A read of that document, through `capsid_read_doc` or `capsid_start_session`, now leaves one
 // `conventions-read` row, at most one per caller per hour so it cannot become noise.
 //
 // The row is NOT addressed to capsid/conventions.md. `lastActor` and the Portal read the

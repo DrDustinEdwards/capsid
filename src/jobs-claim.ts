@@ -134,7 +134,7 @@ export async function postJob(
   if (!registered) {
     return refuse(
       "post",
-      `unknown namespace '${args.namespace}'. Nothing was written. A job and its mirror document live in a registered namespace; check the spelling against the namespaces tool, or create it with register_namespace.`
+      `unknown namespace '${args.namespace}'. Nothing was written. A job and its mirror document live in a registered namespace; check the spelling against capsid_find_docs action namespaces, or have the admin create it with capsid_admin_manage_namespaces action register.`
     );
   }
 
@@ -342,7 +342,7 @@ function deliveryOf(routing: Routing) {
 }
 
 // Claims per caller, across every namespace, up to the caller's claim limit (one unless
-// the admin raised it with the agents tool's max_claims). Each held job keeps its own
+// the admin raised it with capsid_admin_manage_agents's max_claims). Each held job keeps its own
 // lease, and every holder action names the job it acts on. A claim past the limit, or a
 // second claim on the repo of a job already held (unless one of the two is a design
 // job), is refused before the CAS, so the refusal names the job already held rather

@@ -37,7 +37,7 @@ function fakeTool(pages: Record<string, Array<{ rows: Row[]; next_after: number 
   const calls: Call[] = [];
   const served: Record<string, number> = {};
   const tool = async (name: string, args: object) => {
-    assert.equal(name, "claims");
+    assert.equal(name, "capsid_admin_read_claims");
     const a = args as { action: string; table: string; after?: number; limit: number };
     assert.equal(a.action, "export");
     calls.push({ table: a.table, after: a.after, limit: a.limit });
@@ -259,14 +259,14 @@ test("verify fails on a missing manifest, a dropped table and a file name that l
 
 type Sent = { method?: string; id?: number; params?: { name?: string; arguments?: { table?: string; after?: number } } };
 
-// A Worker behind a fake fetch: /health answers the sha, /ops/mcp answers JSON-RPC
+// A Worker behind a fake fetch: /health answers the sha, /ops/mcp/admin answers JSON-RPC
 // with the `claims` pages. `answer` may override a tools/call.
 function fakeWorker(answer?: (msg: Sent) => { status?: number; body: string } | undefined) {
   const { tool } = fakeTool(CLAIM_PAGES);
   const auth: string[] = [];
   const impl = (async (url: string, init?: { body?: string; headers?: Record<string, string> }) => {
     if (url === `${ORIGIN}/health`) return new Response(JSON.stringify({ status: "ok", sha: "abc1234" }));
-    assert.equal(url, `${ORIGIN}/ops/mcp`);
+    assert.equal(url, `${ORIGIN}/ops/mcp/admin`);
     auth.push(init?.headers?.Authorization ?? "");
     const msg = JSON.parse(init?.body ?? "{}") as Sent;
     const override = answer?.(msg);

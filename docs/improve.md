@@ -17,7 +17,7 @@ holdout contents and the rulings are not here. What is here is the design.
 - **Protected paths.** Tests, CI configuration, lockfiles, manifests, compiler and lint config, migrations, the agent steering layer and the loop's own files are off limits to an attempt, enforced by a deterministic path guard. These files define the score; an attempt may not change what scores it.
 - **Budget, pause and one driver.** Monthly caps on estimated model spend and CI minutes stop the loop when exceeded. A per-namespace pause key holds that namespace until a human clears it. In subscription mode a KV driver lease (six-hour TTL) keeps two sessions off one namespace.
 
-`improve_status` reports the mode, the budget, the protected-path patterns, the agent inventory and each namespace's state, including queued and blocked jobs. `improve_run` starts or resumes a run by hand.
+`capsid_run_improve` action `status` reports the mode, the budget, the protected-path patterns, the agent inventory and each namespace's state, including queued and blocked jobs. `capsid_run_improve` action `run` starts or resumes a run by hand, and `claim` takes or releases the driver lease; the loop's controls (mode, pause, budget, operator keys, signed policies, skills) are `capsid_admin_control_improve`, admin only.
 
 ## Why it is shaped this way
 

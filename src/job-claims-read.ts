@@ -15,7 +15,7 @@ import type {
 } from "./ops-types";
 
 // The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql,
-// roadmap P0). One set of readers, shared by the `claims` tool (src/tools/claims.ts)
+// roadmap P0). One set of readers, shared by the `capsid_admin_read_claims` tool (src/tools/claims.ts)
 // and the Portal's GET /portal/api/claims (src/portal-claims.ts), so the two cannot
 // disagree about what the tables say.
 //

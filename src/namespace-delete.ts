@@ -19,8 +19,9 @@ import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
 import { logEvent } from "./log";
 
-// delete_namespace: the plan, the refusals, the signed confirmation and the one batch.
-// The tool is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
+// Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
+// delete_perform): the plan, the refusals, the signed confirmation and the one batch.
+// Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
 // src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build".
 //
 // Two calls, as the Portal's controls are (src/portal-actions.ts). The preview reads
@@ -44,9 +45,9 @@ import { logEvent } from "./log";
 // revoked agents that name the namespace, the nightly backup objects, and the holdout
 // bucket (CLAUDE.md, improve loop rule: only src/improve-scorer.ts names it). The kept
 // archived documents still name a namespace that is no longer registered. The read
-// tools (read, list, search, brief, history) still return them by that name; write,
-// delete, move and restore refuse there until the namespace is registered again, and a
-// later register_namespace of the same name brings them back into scope.
+// tools (capsid_read_doc, capsid_find_docs, capsid_start_session) still return them by
+// that name; capsid_write_doc and capsid_delete_doc refuse there until the namespace is registered again, and a
+// later capsid_admin_manage_namespaces action register of the same name brings them back into scope.
 //
 // WHAT ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked),
 // a live agent whose scopes name the namespace, and a namespace on the improve roster.
@@ -303,20 +304,20 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
     const jobs = plan.open_jobs.map((j) => `${j.id} (${j.status}, '${j.title}')`);
     refusals.push(
       `${ns} has ${plan.counts.jobs_open} open job${plan.counts.jobs_open === 1 ? "" : "s"}: ${named(jobs, plan.counts.jobs_open)}. ` +
-        `cascade never reaches jobs. End each with the jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`
+        `cascade never reaches jobs. End each with the capsid_work_jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`
     );
   }
   if (plan.counts.agents_live > 0) {
     refusals.push(
       `${plan.counts.agents_live} live agent${plan.counts.agents_live === 1 ? " names" : "s name"} ${ns} in its scopes: ${named(plan.live_agents, plan.counts.agents_live)}. ` +
-        `cascade never reaches agents. Use the agents tool: action 'revoke', or action 'update_scopes' to drop ${ns} from its namespaces.`
+        `cascade never reaches agents. Use the capsid_admin_manage_agents tool: action 'revoke', or action 'update_scopes' to drop ${ns} from its namespaces.`
     );
   }
   if (plan.counts.documents_live > NAMESPACE_DELETE_MAX_DOCUMENTS) {
     refusals.push(
       `${ns} holds ${plan.counts.documents_live} live documents, and one delete_namespace batch deletes at most ${NAMESPACE_DELETE_MAX_DOCUMENTS} ` +
         `(D1's ${D1_BATCH_STATEMENTS}-statement batch ceiling: ${FIXED_STATEMENTS} fixed statements plus ${STATEMENTS_PER_DOCUMENT} per document). ` +
-        `Delete or move documents with the delete tool first, or ask the seat to rule a set-based helper.`
+        `Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper.`
     );
   }
   if (plan.counts.documents_live > 0 && !opts.cascade) {
@@ -543,7 +544,7 @@ export async function previewNamespaceDelete(
       ...base,
       token,
       expires_at: new Date(exp * 1000).toISOString(),
-      next: `Call delete_namespace with action 'perform', the same namespace, cascade and allow_improve_paths, and this token within five minutes. Any change to what the preview counted refuses it.`,
+      next: `Call capsid_admin_manage_namespaces with action 'delete_perform', the same namespace, cascade and allow_improve_paths, and this token within five minutes. Any change to what the preview counted refuses it.`,
     },
   };
 }
@@ -603,7 +604,7 @@ export async function performNamespaceDelete(
 ): Promise<ToolAnswer> {
   const db = env.DB;
   if (typeof token !== "string" || token.length === 0) {
-    return { ok: false, refusal: "perform needs the token a delete_namespace preview returned. Preview first." };
+    return { ok: false, refusal: "delete_perform needs the token capsid_admin_manage_namespaces action delete_preview returned. Preview first." };
   }
   let verified: Verified;
   try {

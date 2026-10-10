@@ -51,7 +51,7 @@ async function list(agent: Agent, args: Record<string, unknown>) {
   const client = new Client({ name: "jobs-list", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(c), server.connect(s)]);
-  const result = (await client.callTool({ name: "jobs", arguments: { action: "list", namespace: "capsid", ...args } })) as {
+  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", namespace: "capsid", ...args } })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -64,7 +64,7 @@ async function list(agent: Agent, args: Record<string, unknown>) {
 test("PLANT: a read-grant caller listing a namespace gets no job body", async () => {
   const { out } = await list(caller(["read"]), {});
   assert.equal(out.jobs.length, 1);
-  assert.equal("body" in out.jobs[0], false, "jobs.list handed a read-only caller the signed prompt");
+  assert.equal("body" in out.jobs[0], false, "capsid_work_jobs list handed a read-only caller the signed prompt");
   assert.equal(out.jobs[0].id, JOB.id);
   assert.equal(out.jobs[0].title, JOB.title);
 });

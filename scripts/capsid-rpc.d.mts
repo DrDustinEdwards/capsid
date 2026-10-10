@@ -6,5 +6,6 @@ export function capsidClient(
   origin: string,
   key: string,
   clientName: string,
-  fetchImpl?: typeof fetch
+  fetchImpl?: typeof fetch,
+  route?: "/ops/mcp" | "/ops/mcp/admin"
 ): { tool(name: string, args: object): Promise<string> };

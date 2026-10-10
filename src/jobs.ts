@@ -19,7 +19,7 @@ import { logEvent } from "./log";
 //
 // The row is the source of truth for status. The mirror document at
 // <namespace>/jobs/<id>.md is rewritten in the same batch as every transition, so a
-// reader who found the job through brief or search sees the state the table holds.
+// reader who found the job through capsid_start_session or capsid_find_docs sees the state the table holds.
 // It is a projection, and its body says so.
 //
 // The queue is split by who acts. jobs-claim.ts posts, lists and claims;
@@ -29,11 +29,11 @@ import { logEvent } from "./log";
 // parking of a queued one;
 // jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
 // what they share. This module is the one other modules import from, and it keeps the
-// lease sweep and the improve_status summary.
+// lease sweep and the capsid_run_improve action status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
-export { adminFailJob, completeAsCaller, failAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
+export { adminFailJob, completeAsCaller, failAsCaller, recordAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, unparkJob } from "./jobs-park";
 export type { JobResult } from "./jobs-transition";
@@ -44,7 +44,7 @@ export type { JobResult } from "./jobs-transition";
 // committed.
 //
 // The mirror documents are rewritten in the same batch as each job's requeue: a job
-// that reads "claimed by a session that is gone" in brief is the state this sweep
+// that reads "claimed by a session that is gone" in capsid_start_session is the state this sweep
 // exists to clear. Read, then one guarded batch per job, so a job whose records fail
 // is not left requeued with none, and a job whose driver heartbeat in between
 // (updated_at moved) is left alone.
@@ -78,7 +78,7 @@ export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: 
   return { requeued };
 }
 
-// The improve_status block. Counted per namespace, plus what a human has to look at:
+// The capsid_run_improve action status block. Counted per namespace, plus what a human has to look at:
 // the blocked jobs, with the command each is waiting on. Blocked is the only status
 // whose rows come back rather than a count, because a count of blocked jobs tells
 // nobody what to run, and the Portal shows exactly these.
@@ -96,7 +96,7 @@ export interface JobsSummary {
   // command_signature says whether waiting_on is what the holder's block wrote
   // (src/job-signing.ts); a "mismatch" summary is withheld.
   // question is true for a block that asks something rather than waits on a command run
-  // (jobs block with question: true); the seat answers it with a resume note.
+  // (capsid_work_jobs action block with question: true); the seat answers it with a resume note.
   blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; question: boolean; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
   // The claimed jobs and who holds each, so the seat can see a claim whose holder is
   // gone and release it rather than wait out the lease.

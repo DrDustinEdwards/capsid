@@ -2,9 +2,10 @@ import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "../env";
 import type { Agent } from "../agents";
 import { type ScopeNeed } from "../scope";
-import { registerListTool, registerReadTool, registerBriefTool, registerHistoryTool, registerBacklinksTool, registerFindTool, registerSearchTool } from "./docs-read";
-import { registerWriteTool, registerRestoreTool, registerDeleteTool, registerMoveTool } from "./docs-write";
-import { registerNamespaceTools } from "./namespaces";
+import type { Operations } from "./operations";
+import { defineListOperation, defineReadOperation, defineBriefOperation, defineHistoryOperation, defineBacklinksOperation, defineFindOperation, defineSearchOperation } from "./docs-read";
+import { defineWriteOperation, defineRestoreOperation, defineDeleteOperation, defineMoveOperation } from "./docs-write";
+import { defineNamespaceOperations } from "./namespaces";
 
 export function ok(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -130,21 +131,24 @@ export interface ToolCtx {
   // repo; this is for what only the handler knows: an action tool's action, and the
   // flags a repo mutation needs.
   scope: (need: ScopeNeed) => string | null;
+  // Where each module defines its operations (./operations). The composite tools in
+  // ./surface dispatch to them.
+  ops: Operations;
   lastActor: (ns: string, path: string) => Promise<string | null>;
 }
 
 // Registered in this order, which is the order tools/list publishes.
-export function registerDocTools(server: McpServer, ctx: ToolCtx): void {
-  registerListTool(server, ctx);
-  registerReadTool(server, ctx);
-  registerBriefTool(server, ctx);
-  registerWriteTool(server, ctx);
-  registerHistoryTool(server, ctx);
-  registerRestoreTool(server, ctx);
-  registerBacklinksTool(server, ctx);
-  registerDeleteTool(server, ctx);
-  registerMoveTool(server, ctx);
-  registerFindTool(server, ctx);
-  registerSearchTool(server, ctx);
-  registerNamespaceTools(server, ctx);
+export function defineDocOperations(server: McpServer, ctx: ToolCtx): void {
+  defineListOperation(server, ctx);
+  defineReadOperation(server, ctx);
+  defineBriefOperation(server, ctx);
+  defineWriteOperation(server, ctx);
+  defineHistoryOperation(server, ctx);
+  defineRestoreOperation(server, ctx);
+  defineBacklinksOperation(server, ctx);
+  defineDeleteOperation(server, ctx);
+  defineMoveOperation(server, ctx);
+  defineFindOperation(server, ctx);
+  defineSearchOperation(server, ctx);
+  defineNamespaceOperations(server, ctx);
 }

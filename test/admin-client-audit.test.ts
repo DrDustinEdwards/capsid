@@ -48,11 +48,11 @@ const admin = adminAgentForEmail("admin@example.com");
 const minted: Agent = { ...admin, id: "agent_1", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", admin: false };
 
 // The real registrar, with tools named like the real ones (the registrar reads the name):
-// read is a read, write needs the write grant.
+// capsid_read_doc is a read, capsid_write_doc needs the write grant.
 async function connect(agent: Agent, observe: AdminWriteObserver | undefined, ran: string[]) {
   const server = new McpServer({ name: "capsid", version: "1.0.0" });
   guardRegistrations(server, agent, observe);
-  for (const name of ["read", "write"]) {
+  for (const name of ["capsid_read_doc", "capsid_write_doc"]) {
     server.registerTool(name, { inputSchema: { namespace: z.string() } }, async () => {
       ran.push(name);
       return { content: [{ type: "text" as const, text: "ok" }] };
@@ -74,26 +74,26 @@ test("an admin write records one admin-client row with the tool, the User-Agent 
   const { db, rows } = fakeDb();
   const ran: string[] = [];
   const t = await connect(admin, adminWriteObserver(db, admin.actor, "Claude-User", () => BEFORE), ran);
-  const result = await t.call("write");
+  const result = await t.call("capsid_write_doc");
   await t.close();
 
   assert.equal(result.isError, undefined);
-  assert.deepEqual(ran, ["write"]);
+  assert.deepEqual(ran, ["capsid_write_doc"]);
   assert.equal(rows.length, 1, "exactly one row for one admin write");
   assert.match(rows[0].sql, /INSERT INTO audit_log/);
   assert.equal(rows[0].binds[0], "access:admin@example.com");
   assert.equal(rows[0].binds[1], "admin-client");
   assert.equal(rows[0].binds[2], "sample");
-  assert.deepEqual(params(rows[0]), { tool: "write", action: null, user_agent: "Claude-User", client_name: "claude-code" });
+  assert.deepEqual(params(rows[0]), { tool: "capsid_write_doc", action: null, user_agent: "Claude-User", client_name: "claude-code" });
 });
 
 test("an admin read records nothing", async () => {
   const { db, rows } = fakeDb();
   const ran: string[] = [];
   const t = await connect(admin, adminWriteObserver(db, admin.actor, "ua", () => BEFORE), ran);
-  await t.call("read");
+  await t.call("capsid_read_doc");
   await t.close();
-  assert.deepEqual(ran, ["read"]);
+  assert.deepEqual(ran, ["capsid_read_doc"]);
   assert.equal(rows.length, 0);
 });
 
@@ -101,9 +101,9 @@ test("a caller that is not the admin is not observed, so a driver's writes add n
   const { db, rows } = fakeDb();
   const ran: string[] = [];
   const t = await connect(minted, adminWriteObserver(db, minted.actor, "ua", () => BEFORE), ran);
-  await t.call("write");
+  await t.call("capsid_write_doc");
   await t.close();
-  assert.deepEqual(ran, ["write"]);
+  assert.deepEqual(ran, ["capsid_write_doc"]);
   assert.equal(rows.length, 0);
 });
 
@@ -111,9 +111,9 @@ test("after the 30-day window the call runs and no row is written", async () => 
   const { db, rows } = fakeDb();
   const ran: string[] = [];
   const t = await connect(admin, adminWriteObserver(db, admin.actor, "ua", () => AFTER), ran);
-  await t.call("write");
+  await t.call("capsid_write_doc");
   await t.close();
-  assert.deepEqual(ran, ["write"]);
+  assert.deepEqual(ran, ["capsid_write_doc"]);
   assert.equal(rows.length, 0);
 });
 
@@ -134,19 +134,19 @@ test("a failed observational insert is logged and the call still runs, never ref
   const { db } = fakeDb(true);
   const ran: string[] = [];
   const t = await connect(admin, adminWriteObserver(db, admin.actor, "ua", () => BEFORE), ran);
-  const { value: result, logged } = await withCapturedErrors(() => t.call("write"));
+  const { value: result, logged } = await withCapturedErrors(() => t.call("capsid_write_doc"));
   await t.close();
   assert.equal(result.isError, undefined, "the call was refused because the observational row failed");
   assert.equal(result.content[0].text, "ok");
-  assert.deepEqual(ran, ["write"], "the handler did not run");
+  assert.deepEqual(ran, ["capsid_write_doc"], "the handler did not run");
   assert.equal(logged.length, 1, "the failure was not logged exactly once");
-  assert.match(logged[0], /ADMIN_CLIENT_AUDIT_FAILED .*write.*D1_ERROR: unavailable/);
+  assert.match(logged[0], /ADMIN_CLIENT_AUDIT_FAILED .*capsid_write_doc.*D1_ERROR: unavailable/);
 });
 
 test("the observer never refuses on what the client says", async () => {
   for (const ua of [null, "", "curl/8", "Mozilla/5.0 claude.ai", "x".repeat(5000)]) {
     const { db, rows } = fakeDb();
-    const refusal = await adminWriteObserver(db, admin.actor, ua, () => BEFORE)({ tool: "write", action: undefined, namespace: "sample" }, ua);
+    const refusal = await adminWriteObserver(db, admin.actor, ua, () => BEFORE)({ tool: "capsid_write_doc", action: undefined, namespace: "sample" }, ua);
     assert.equal(refusal, null);
     assert.ok(String(params(rows[0]).user_agent ?? "").length <= 200, "a field was stored unbounded");
   }
@@ -184,7 +184,7 @@ test("an initialize is recorded with its client name and User-Agent, and the req
 
 test("a tools/call, a GET, a malformed body, an oversize body and the closed window record no initialize", async () => {
   const { db, rows } = fakeDb();
-  const call = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "write" } });
+  const call = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "capsid_write_doc" } });
   assert.equal(await recordAdminInitialize(db, admin.actor, post(call), () => BEFORE), false);
   assert.equal(await recordAdminInitialize(db, admin.actor, new Request("https://mcp.example.com/mcp"), () => BEFORE), false);
   assert.equal(await recordAdminInitialize(db, admin.actor, post("not json"), () => BEFORE), false);

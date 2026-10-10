@@ -34,7 +34,7 @@ Every other gate stops before the MCP connection: OAuth metadata, `/register`, t
 
 **Seat steps, once.** Until both are done the gate skips, says so, and puts a warning on the run:
 
-1. Mint the probe agent (read grant on `capsid`, the `read` tool only, no repos, no flags). The key goes to `~/.capsid/agent-live-probe.key` and is printed nowhere:
+1. Mint the probe agent (read grant on `capsid`, the `capsid_read_doc` tool only, no repos, no flags). The key goes to `~/.capsid/agent-live-probe.key` and is printed nowhere:
 
    ```
    CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.mjs --role live-probe --apply
@@ -46,6 +46,6 @@ Every other gate stops before the MCP connection: OAuth metadata, `/register`, t
    gh secret set CAPSID_LIVE_PROBE_KEY --repo DrDustinEdwards/capsid < ~/.capsid/agent-live-probe.key
    ```
 
-Then rerun the live job of the latest master run and look for `PASS  8 MCP call through /ops/mcp`. A lost key is replaced as any agent's is: revoke `live-probe` with the `agents` tool, mint under a new name, set the secret again.
+Then rerun the live job of the latest master run and look for `PASS  8 MCP call through /ops/mcp`. A lost key is replaced as any agent's is: revoke `live-probe` with the `capsid_admin_manage_agents` tool, mint under a new name, set the secret again.
 
 The rollback swaps code and bindings only, as above. It never undoes a D1 migration, which is why a migration is the seat's step. The guard's cases are tested in `test/deploy-pipeline.test.ts` and `test/rollback-guard.test.ts`.

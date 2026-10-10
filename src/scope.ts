@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
@@ -28,87 +29,72 @@ import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS
 // What each tool requires, stated once. The registrar enforces this table and
 // src/tool-annotations.ts derives readOnlyHint from it, so the two cannot disagree.
 //
-// "action" means the requirement depends on the action argument. `improve_run` states
+// "action" means the requirement depends on the action argument. `capsid_run_improve` states
 // its per-action requirements in TOOL_ACTION_GRANTS below, and the registrar reads
-// them, because the requirement depends on nothing but the action. `jobs` (list
-// reads) and `lint` (gather reads) also depend on a namespace the handler resolves,
+// them, because the requirement depends on nothing but the action. `capsid_work_jobs` (action
+// list reads) and `capsid_lint_namespace` (mode gather reads) also depend on a namespace the handler resolves,
 // so their handlers call checkScope at the point where both are known.
 //
 // "admin" is write plus the admin identity, for a tool that edits the authorization
-// boundary itself. It lives here, not in a handler, because these tools are
-// admin-only in whole, which the registrar can decide from the tool name alone, and
-// because under the one enforcement point rule (CLAUDE.md) this table is the one
-// statement of what each tool requires. No handler decides a grant for itself.
-export type ToolRequirement = "read" | "write" | "action" | "admin";
+// boundary itself or changes what other callers may do. "admin_read" is the admin
+// identity with only the read grant, for an admin tool that only reads (claims, the
+// operations state, what needs the seat): admin because it spans every namespace, and
+// served read-only because it changes nothing (capsid/research/design-mcp-servers.md,
+// section 3, which fixed claims and ops reading as not read-only). They live here, not
+// in a handler, because these tools are admin-only in whole, which the registrar can
+// decide from the tool name alone, and because under the one enforcement point rule
+// (CLAUDE.md) this table is the one statement of what each tool requires. No handler
+// decides a grant for itself.
+export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 
+// Capsid (14) and Capsid Admin (8): src/tools/surface.ts.
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
-  list: "read",
-  read: "read",
-  brief: "read",
-  backlinks: "read",
-  find: "read",
-  search: "read",
-  namespaces: "read",
-  history: "read",
+  capsid_start_session: "read",
+  capsid_find_docs: "read",
+  capsid_read_doc: "read",
+  capsid_write_doc: "write",
+  capsid_delete_doc: "write",
+  // gather reads, finalize archives and report writes, each checked by the handler
+  // where the namespace is known.
+  capsid_lint_namespace: "action",
+  capsid_read_repo: "read",
+  // The CI log tail beyond the summary needs write, checked by the handler.
+  capsid_inspect_repo: "read",
+  capsid_change_repo: "write",
+  capsid_open_pr: "write",
+  capsid_close_pr: "write",
+  capsid_run_ci: "write",
+  // list reads; every other action changes the queue.
+  capsid_work_jobs: "action",
+  // Per action, in TOOL_ACTION_GRANTS: status reads, run and claim are a driver's work.
+  capsid_run_improve: "action",
 
-  write: "write",
-  delete: "write",
-  move: "write",
-  restore: "write",
+  // What needs the seat, across every namespace and repo. It only reads.
+  capsid_admin_whats_next: "admin_read",
   // The namespace-to-repo mapping is the authorization boundary. A write-grant driver
   // that could edit it could remap its own namespace onto any repo the App reaches
-  // and, with a repos axis of "*", immediately read and write it.
-  register_namespace: "admin",
-  update_namespace: "admin",
-  // Removes the mapping and, with cascade, every live document of the namespace. It
-  // reaches across every table that names the namespace, which no scope narrows.
-  delete_namespace: "admin",
-  // gather reads, finalize archives.
-  lint: "action",
-
-  list_repo_tree: "read",
-  read_repo_file: "read",
-  search_code: "read",
-  repo_refs: "read",
-  repo_history: "read",
-  ci_status: "read",
-  write_repo_file: "write",
-  create_branch: "write",
-  open_pr: "write",
-  delete_repo_file: "write",
-  manage_pr: "write",
-  delete_branch: "write",
-  ci_dispatch: "write",
-
-  improve_status: "read",
-  // Per action, in TOOL_ACTION_GRANTS: run and claim are a driver's work, and every
-  // other action controls the loop rather than doing it.
-  improve_run: "action",
-
-  // list reads; every other action changes the queue.
-  jobs: "action",
-
-  // The credential control plane. Admin in whole: an agent that could mint, revoke or
-  // re-scope another could widen itself.
-  agents: "admin",
-
-  // Claims apart from verified outcomes. It only reads, and is admin only in whole:
-  // it spans every namespace and every agent, and its export is the whole dataset.
-  claims: "admin",
-
-  // The watcher's last pass. It only reads, and is admin only in whole: the snapshot
-  // spans every namespace's sites, CI runs and Cloudflare state.
-  ops_snapshot: "admin",
-
-  // Cloudflare Access and Email Routing, read. Admin only in whole: the account's login
-  // gates and mail routes span every namespace.
-  cloudflare_config: "admin",
-
-  // The administrator's controls, the Portal's buttons as one tool (preview, then perform
-  // with a signed single-use token). Admin only in whole: a control pauses the loop,
-  // revokes an agent or edits a site, so a caller that could use one could widen itself.
-  // A ruled addition to the tool surface (capsid/decisions-vol-5.md, the controls ruling).
-  controls: "admin",
+  // and, with a repos axis of "*", immediately read and write it. Delete reaches
+  // across every table that names the namespace, which no scope narrows.
+  capsid_admin_manage_namespaces: "admin",
+  // The credential control plane. An agent that could mint, revoke or re-scope another
+  // could widen itself.
+  capsid_admin_manage_agents: "admin",
+  // Claims apart from verified outcomes. It only reads; it spans every namespace and
+  // every agent, and its export is the whole dataset.
+  capsid_admin_read_claims: "admin_read",
+  // The watcher's last pass, Cloudflare Access and Email Routing, and Workers Builds.
+  // It only reads, and spans every namespace's sites, CI runs and Cloudflare state.
+  capsid_admin_read_ops: "admin_read",
+  // The administrator's controls (preview, then perform with a signed single-use
+  // token). A control pauses the loop, revokes an agent or edits a site, so a caller
+  // that could use one could widen itself (capsid/decisions-vol-5.md, the controls ruling).
+  capsid_admin_run_controls: "admin",
+  // mode switches the whole loop off, pause stops a namespace, budget moves the spend
+  // ceiling, mint_operator_key issues a credential, and sign_policy decides whether
+  // this Worker may merge without a human. None of those is a driver's work.
+  capsid_admin_control_improve: "admin",
+  // Mints a site key and sets it on the site Worker and on Carrel.
+  capsid_admin_set_site_key: "admin",
 };
 
 // Fail closed: a tool with no entry requires the write grant, so a tool added without
@@ -121,19 +107,17 @@ export function requiredGrant(tool: string): ToolRequirement {
 
 // What each action requires, for an "action" tool whose requirement depends on nothing
 // but the action. The registrar reads this table. An unlisted action takes `default`
-// (admin for improve_run), so a new action is refused to a driver until listed.
+// (admin for capsid_run_improve), so a new action is refused to a driver until listed.
 export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {
-  improve_run: {
-    // mode switches the whole loop off, pause stops a namespace, budget moves the spend
-    // ceiling, mint_operator_key issues a credential, and sign_policy decides whether
-    // this Worker may merge without a human. None of those is a driver's work.
+  capsid_run_improve: {
+    // An unlisted action is refused to a driver until listed.
     default: "admin",
     actions: {
-      // A missing action is a run.
-      run: "write",
+      status: "read",
       // Taking and releasing the driver lease is what a driver does every run, and it
       // is what stops two drivers working one namespace.
       claim: "write",
+      run: "write",
     },
   },
 };
@@ -141,14 +125,15 @@ export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; acti
 export function requiredForAction(tool: string, action: string | undefined): ToolRequirement {
   const spec = Object.hasOwn(TOOL_ACTION_GRANTS, tool) ? TOOL_ACTION_GRANTS[tool] : null;
   if (!spec) return requiredGrant(tool);
-  const key = action ?? "run";
-  return Object.hasOwn(spec.actions, key) ? spec.actions[key] : spec.default;
+  if (action === undefined) return spec.default;
+  return Object.hasOwn(spec.actions, action) ? spec.actions[action] : spec.default;
 }
 
 // A requirement as the part of a ScopeNeed it decides. The registrar and every route
 // use this one mapping, so "admin" means the same thing wherever it is enforced.
 export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" | "admin"> {
   if (requirement === "admin") return { grant: "write", admin: true };
+  if (requirement === "admin_read") return { grant: "read", admin: true };
   if (requirement === "action") return {};
   return { grant: requirement };
 }
@@ -177,6 +162,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
+  "/ops/mcp/admin":
+    "Capsid Admin for a key: resolveAgent on the bearer (401 without one), then the admin identity only (403 for any other key), and every tool call it serves then passes checkScope in the registrar, where each tool is admin only",
   "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
   "/improve/holdout-credential": "signed with the per-namespace HMAC score key, and mints read access to that namespace's holdout only",
   "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
@@ -185,7 +172,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/ops/inbox/report":
     "what an app reports about itself to the inbox (src/inbox-report.ts): resolveAgent on the bearer (401 without one), then checkScope for the write grant on the namespace the report names (403 otherwise), so a key reports for its own app alone; one report per minute per key, failing closed; at most 20 items, links on the app's own ops_sites origin only, a 16KB body cap; POST only, no CORS",
   "/ops/hooks":
-    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver, a runner key or the admin, and through checkScope only a caller holding the write grant on jobs (403 otherwise); each event binds to the runner key's job or the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
+    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver, a runner key or the admin, and through checkScope only a caller holding the write grant on capsid_work_jobs (403 otherwise); each event binds to the runner key's job or the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
   "/ops/runner-key":
     "a GitHub Actions OIDC token verified against GitHub's key set, its run claims pinned against the repo as GitHub reports it, and a pending seat start; it mints a key bound to that one job (src/runner-key.ts)",
   "/ops/otlp/v1/metrics":
@@ -204,14 +191,14 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "a Portal action's preview, which writes nothing: portalGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
   "/portal/api/actions/perform":
     "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
-  "/portal/api/namespaces": "the Portal's per-namespace status, read through improve_status's function, gated by portalGate",
+  "/portal/api/namespaces": "the Portal's per-namespace status, read through the function behind capsid_run_improve action status, gated by portalGate",
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
-  "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the claims tool's readers, gated by portalGate",
-  "/portal/api/stale": "the Portal's stale jobs, through the reader behind jobs list stale: true, gated by portalGate",
-  "/portal/api/plan": "the Portal's Tonight plan, through the reader behind jobs list view plan, over every namespace, gated by portalGate",
-  "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind jobs list view digest, over every namespace, gated by portalGate",
+  "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
+  "/portal/api/stale": "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
+  "/portal/api/plan": "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
+  "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
-  "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that improve_status serves, gated by portalGate",
+  "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
@@ -247,8 +234,11 @@ export interface ScopeNeed {
   path?: string;
   grant?: AgentGrant;
   // The caller must be the admin identity, not merely hold the write grant. Set by
-  // the registrar for a tool whose TOOL_GRANTS entry is "admin".
+  // the registrar for a tool whose TOOL_GRANTS entry is "admin" or "admin_read".
   admin?: boolean;
+  // The action is a risky admin action (STEP_UP): an OAuth session needs a recent
+  // sign-in. Set by the registrar.
+  stepUp?: boolean;
   // Flags whose absence refuses the call. Every one is checked, and the refusal
   // names the FIRST missing one.
   flags?: readonly ScopeFlag[];
@@ -260,6 +250,10 @@ export interface ScopeNeed {
 // id; list may read the queue but not name another job; everything else, including an
 // action added later, is refused, so a new action is closed to a runner until listed.
 const BOUND_WORK_ACTIONS: readonly string[] = ["claim", "heartbeat", "complete", "fail", "block", "resume"];
+
+// The work queue's tool, named once: the job binding and the handlers' re-checks
+// (src/tools/jobs.ts, src/jobs-schema.ts, src/ops-session-auth.ts) all ask about it.
+export const JOBS_TOOL = "capsid_work_jobs";
 
 // capsid/research/design-seat-session-hardening.md, section 2b. A runner that could
 // claim a second job would be choosing its own work, and one that could post or start
@@ -291,17 +285,17 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   const scopes = agent.scopes;
   if (!allowsToolAction(scopes.tools, need.tool, need.action)) {
     // Name the qualified tool.action that failed. A caller told it is not scoped to
-    // 'jobs' after being minted with jobs in its list would look for the wrong bug.
+    // 'capsid_work_jobs' after being minted with capsid_work_jobs in its list would look for the wrong bug.
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
   }
-  // Binds every jobs call that names an action: the registrar's check, which runs
+  // Binds every capsid_work_jobs call that names an action: the registrar's check, which runs
   // before every handler, and the jobs handler's own re-checks (src/tools/jobs.ts),
   // which name the action too. So every caller that names an action must also name
   // the call's id, or a bound key reads as naming no job. That omission refused every
   // claim in the first two hardened canary runs. A check with no action (the namespace
   // re-checks in src/jobs-schema.ts) is not bound here.
-  if (agent.job && need.tool === "jobs" && need.action !== undefined) {
+  if (agent.job && need.tool === JOBS_TOOL && need.action !== undefined) {
     const bound = boundJobRefusal(agent, need.action, need.jobId);
     if (bound) return bound;
   }
@@ -316,6 +310,10 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
   if (need.admin && !agent.admin) {
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: '${asked}' is admin only and ${agent.actor} is not the admin. ${adminReason(need.tool)} Ask the admin to do it.`;
+  }
+  if (need.stepUp) {
+    const stale = stepUpRefusal(agent, need, Date.now());
+    if (stale) return stale;
   }
   if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace) && !portfolioReadAdmits(need)) {
     return (
@@ -338,15 +336,15 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
 
 // The one exception to the namespace axis (src/portfolio-docs.ts): any caller may read
 // the portfolio documents in capsid, because every driver is told to follow them. Only a
-// read tool on the list, so a write, a job or an edge never crosses. `read` must name an
-// allowlisted path. list, find and search name none: they are admitted here and their
+// read tool on the list, so a write, a job or an edge never crosses. capsid_read_doc action read must
+// name an allowlisted path. capsid_find_docs actions list, glob and search name none: they are admitted here and their
 // handlers drop every capsid row that is not on the list (portfolioOnly).
 function portfolioReadAdmits(need: ScopeNeed): boolean {
   if (need.namespace !== PORTFOLIO_DOCS.namespace) return false;
-  if (!isPortfolioTool(need.tool) || requiredGrant(need.tool) !== "read") return false;
+  if (!isPortfolioTool(need.tool, need.action) || requiredGrant(need.tool) !== "read") return false;
   if (need.grant !== undefined && need.grant !== "read") return false;
   if (need.admin || need.flags?.length) return false;
-  if (need.tool === "read") return need.path !== undefined && isPortfolioPath(need.path);
+  if (need.tool === "capsid_read_doc") return need.path !== undefined && isPortfolioPath(need.path);
   return true;
 }
 
@@ -356,26 +354,62 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
   return namespace === PORTFOLIO_DOCS.namespace && !allowsScope(agent.scopes.namespaces, namespace);
 }
 
+// STEP-UP (capsid/rulings/mcp-2026-10-10.md, the rule 9 amendment for Capsid Admin):
+// the admin actions that change who may do what, or that cannot be taken back, need an
+// Access sign-in in the last STEP_UP_WINDOW_MS. A grant lives for weeks and is
+// refreshed without a person; this is the point where a person proves they are there.
+// It is a re-authentication, not a mid-call confirmation, which the ruling's rule 12
+// rules out until client support is verified. "*" is every action of the tool.
+//
+// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
+// seat's operator key at its terminal) has no session to refresh and is not stepped up;
+// its key is the credential.
+export const STEP_UP_WINDOW_MS = 15 * 60 * 1000;
+
+export const STEP_UP: Record<string, readonly string[] | "*"> = {
+  capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
+  capsid_admin_manage_agents: ["mint", "revoke", "update_scopes"],
+  capsid_admin_run_controls: ["perform"],
+  capsid_admin_control_improve: "*",
+  capsid_admin_set_site_key: "*",
+};
+
+export function needsStepUp(tool: string, action: string | undefined): boolean {
+  if (!Object.hasOwn(STEP_UP, tool)) return false;
+  const actions = STEP_UP[tool];
+  return actions === "*" || (action !== undefined && actions.includes(action));
+}
+
+function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | null {
+  if (agent.signedInAt === undefined) return null;
+  if (agent.signedInAt !== null && now - agent.signedInAt <= STEP_UP_WINDOW_MS) return null;
+  const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
+  const when = agent.signedInAt === null ? "before sign-in times were recorded" : `${Math.round((now - agent.signedInAt) / 60000)} minutes ago`;
+  return (
+    `step-up required: '${asked}' changes who may do what or cannot be taken back, so it needs an Access sign-in in the last ${STEP_UP_WINDOW_MS / 60000} minutes, ` +
+    `and this session signed in ${when}. Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`
+  );
+}
+
 // Why each admin-only thing is admin only, for the refusal. An "admin" requirement
 // with no entry here fails the test that reads this table.
 const ADMIN_REASON: Record<string, string> = {
-  register_namespace:
-    "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
-  update_namespace:
-    "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, so a scoped caller that could edit it could widen itself.",
-  delete_namespace:
-    "It removes a namespace's repo mapping, which is the authorization boundary every repo call resolves through, and with cascade every live document in it, so a scoped caller that could use it could delete the boundary it sits behind.",
-  agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
-  claims:
+  capsid_admin_whats_next:
+    "It reads what waits on the seat across every namespace and every mapped repo (blocked jobs, questions, open pull requests and their CI, stale work, failed checks), which is wider than any one caller's scope.",
+  capsid_admin_manage_namespaces:
+    "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, and its delete removes every live document of a namespace, so a scoped caller that could use it could widen itself or delete the boundary it sits behind.",
+  capsid_admin_manage_agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
+  capsid_admin_read_claims:
     "It reads every agent's claims, the Worker's checks of them and every human touch, across every namespace, which is wider than any one caller's scope.",
-  ops_snapshot:
-    "It reads the watcher's last pass: every site's probes and uptime, every roster repo's CI and each site's Cloudflare deploys and errors, across every namespace, which is wider than any one caller's scope.",
-  improve_run:
-    "That action controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver takes its lease with action 'claim' and runs with action 'run'.",
-  controls:
+  capsid_admin_read_ops:
+    "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
+  capsid_admin_run_controls:
     "It runs the administrator's controls (pause the loop, revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
-  cloudflare_config:
-    "It reads the Cloudflare account's Access applications and policies and its Email Routing rules and addresses, which gate and route every namespace's site, so it is wider than any one caller's scope.",
+  capsid_admin_control_improve:
+    "It controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver uses capsid_run_improve.",
+  capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
+  capsid_run_improve:
+    "That action controls the loop rather than doing its work, which is capsid_admin_control_improve. A driver reads with action 'status', takes its lease with 'claim' and runs with 'run'.",
   "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };
 
@@ -395,8 +429,8 @@ function deny(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
-// An omitted namespace means "every namespace" on tools such as list, search, find,
-// improve_status and jobs list. For a caller scoped to "*" that changes nothing. For a
+// An omitted namespace means "every namespace" on tools such as capsid_find_docs
+// (list, glob, search), capsid_run_improve action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
 // narrowed caller it would be a hole with no check in it, invisible because the tool
 // works. So a namespace-restricted caller that omits it is refused and told to name
 // it. Whether a tool takes a namespace is read from its own input schema, so a tool
@@ -410,7 +444,12 @@ function namespaceRefusal(agent: Agent, tool: string): string | null {
 }
 
 interface RegisteredConfig {
-  inputSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | z.ZodObject;
+  // A composite tool's actions whose operation takes a namespace (src/tools/surface.ts).
+  // The merged schema declares `namespace` when any action takes one, and an action that
+  // takes none (capsid_find_docs action namespaces) must not be refused for omitting it.
+  // The registrar reads it and does not pass it on.
+  namespaceActions?: readonly string[];
 }
 
 type ToolHandler = (...args: unknown[]) => unknown;
@@ -419,18 +458,26 @@ type ToolHandler = (...args: unknown[]) => unknown;
 // modes separate a read (gather) from two writes. The registrar needs this to populate
 // need.action, and a per-tool answer scattered across the handlers leaves the
 // qualifier unwired. A tool absent here cannot be narrowed below the tool name. `mode` on
-// write, write_repo_file and delete_repo_file is not an action: it already decides a
-// flag (can_direct_write), and one setting should not have two authorities.
+// capsid_write_doc and capsid_change_repo is not an action: it already decides a flag
+// (can_direct_write) or a write shape, and one setting should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
-  agents: "action",
-  claims: "action",
-  cloudflare_config: "action",
-  controls: "action",
-  delete_namespace: "action",
-  improve_run: "action",
-  jobs: "action",
-  lint: "mode",
-  manage_pr: "action",
+  capsid_find_docs: "action",
+  capsid_read_doc: "action",
+  capsid_write_doc: "action",
+  capsid_lint_namespace: "mode",
+  capsid_read_repo: "action",
+  capsid_inspect_repo: "action",
+  capsid_change_repo: "action",
+  capsid_open_pr: "action",
+  capsid_close_pr: "action",
+  capsid_work_jobs: "action",
+  capsid_run_improve: "action",
+  capsid_admin_manage_namespaces: "action",
+  capsid_admin_manage_agents: "action",
+  capsid_admin_read_claims: "action",
+  capsid_admin_read_ops: "action",
+  capsid_admin_run_controls: "action",
+  capsid_admin_control_improve: "action",
 };
 
 // The action a tool falls back to when the caller omits an optional one, so a
@@ -440,7 +487,13 @@ const ACTION_ARG: Record<string, string> = {
 // registrar saw no action where the handler reads "gather".
 // test/audit-2026-09-16.test.ts derives the required entries from the served schemas:
 // an action argument a tool marks optional is a handler default.
-const DEFAULT_ACTION: Record<string, string> = { claims: "aggregate", improve_run: "run", lint: "gather" };
+const DEFAULT_ACTION: Record<string, string> = {
+  capsid_find_docs: "list",
+  capsid_read_doc: "read",
+  capsid_write_doc: "write",
+  capsid_lint_namespace: "gather",
+  capsid_admin_read_claims: "aggregate",
+};
 
 /** The action a call means when the caller omits the argument, or undefined. */
 export function defaultActionFor(tool: string): string | undefined {
@@ -453,10 +506,19 @@ export function actionArgFor(tool: string): string | undefined {
 
 // The action this call asks for, read off the tool's own declared argument so an
 // unrelated property spelled "action" cannot narrow it.
+// A tool's declared arguments: a raw shape, or the shape of a zod object (the composite
+// tools, src/tools/surface.ts, register one so extra arguments reach their handler).
+function declaredShape(config: RegisteredConfig): Record<string, unknown> | undefined {
+  const schema = config?.inputSchema;
+  if (schema instanceof z.ZodObject) return schema.shape as Record<string, unknown>;
+  return schema;
+}
+
 function actionOf(tool: string, config: RegisteredConfig, args: Record<string, unknown>): string | undefined {
   const key = actionArgFor(tool);
   if (!key) return undefined;
-  if (!config?.inputSchema || !Object.hasOwn(config.inputSchema, key)) return undefined;
+  const shape = declaredShape(config);
+  if (!shape || !Object.hasOwn(shape, key)) return undefined;
   const value = args[key];
   if (typeof value === "string") return value;
   return defaultActionFor(tool);
@@ -474,7 +536,11 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
 export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
-    const takesNamespace = Boolean(config?.inputSchema && Object.hasOwn(config.inputSchema, "namespace"));
+    const shape = declaredShape(config);
+    const declared = Boolean(shape && Object.hasOwn(shape, "namespace"));
+    const namespaceActions = config?.namespaceActions;
+    const takesNamespace = (action: string | undefined): boolean =>
+      namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
     const guarded: ToolHandler = (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
@@ -489,19 +555,21 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         repo,
         path: typeof args.path === "string" ? args.path : undefined,
         action,
-        jobId: name === "jobs" && typeof args.id === "string" ? args.id : undefined,
+        jobId: name === JOBS_TOOL && typeof args.id === "string" ? args.id : undefined,
+        stepUp: needsStepUp(name, action),
         // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
         // handler, where the namespace is known, so the registrar names no grant.
         ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return deny(refusal);
-      if (takesNamespace && namespace === undefined) {
+      if (takesNamespace(action) && namespace === undefined) {
         const missing = namespaceRefusal(agent, name);
         if (missing) return deny(missing);
       }
       // Observation only (src/admin-client-audit.ts): after every refusal above, before
       // the handler, and only for the admin and a requirement that is not a plain read.
-      // "action" tools (jobs, lint) are included, so a jobs list is recorded too: more
+      // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
+      // capsid_work_jobs action list is recorded too: more
       // than a write, never less.
       if (observe && agent.admin && requiredForAction(name, action) !== "read") {
         return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
@@ -510,7 +578,8 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       }
       return handler(...callArgs);
     };
-    return original(name, config, guarded);
+    const { namespaceActions: _namespaceActions, ...served } = config ?? {};
+    return original(name, served, guarded);
   };
   (server as unknown as { registerTool: unknown }).registerTool = patched;
 }
@@ -530,21 +599,24 @@ export function isMoneyPath(path: string): boolean {
 // repo write tools cannot each decide a different answer.
 export function repoWriteFlags(
   tool: string,
-  args: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean }
+  action: string | undefined,
+  args: { path?: string; mode?: string; allow_workflow_write?: boolean; force?: boolean }
 ): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
   if (args.mode === "direct") flags.push("can_direct_write");
   if (args.allow_workflow_write === true) flags.push("can_write_workflows");
   // close deletes the head branch, so a plain write grant could destroy the only copy
   // of a branch somebody else pushed. That is the same blast radius as merge, so it
-  // needs can_merge too. Not deleting on close would leave stale branches behind.
-  if (tool === "manage_pr" && (args.action === "merge" || args.action === "close")) flags.push("can_merge");
+  // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
+  // or a release can start a deploy as a merge can (capsid/rulings/mcp-2026-10-10.md,
+  // amendment answer 2: "extra permission").
+  if (tool === "capsid_close_pr" && (action === "merge" || action === "close" || action === "tag" || action === "release")) flags.push("can_merge");
   // A forced branch delete too: force lifts the open-PR refusal, so it could delete
   // another agent's open PR head. A delete without force needs no flag.
-  if (tool === "delete_branch" && args.force === true) flags.push("can_merge");
+  if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true) flags.push("can_merge");
   // Separate from can_merge so the reviewer role can comment without merging.
-  if (tool === "manage_pr" && args.action === "comment") flags.push("can_comment_pr");
-  if (tool === "ci_dispatch") flags.push("can_dispatch");
+  if (tool === "capsid_open_pr" && action === "comment") flags.push("can_comment_pr");
+  if (tool === "capsid_run_ci") flags.push("can_dispatch");
   // The same protected list the improve loop enforces (src/improve-schema.ts), not a
   // second copy. Those paths are what measure a repo: its tests, CI, lint and compiler
   // config, lockfiles and manifests, agent steering layer and migrations. The loop may

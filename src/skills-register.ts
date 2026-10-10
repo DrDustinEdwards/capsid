@@ -8,7 +8,7 @@ import { alreadyAbstracted, shouldCreateCandidate } from "./skills-records";
 // Registering a candidate skill by hand, beside recordSkill in ./improve-skills,
 // which runs only when an improve attempt is kept.
 //
-// Admin only (improve_run's default in TOOL_ACTION_GRANTS, src/scope.ts): a driver
+// Admin only (capsid_run_improve's default in TOOL_ACTION_GRANTS, src/scope.ts): a driver
 // registering its own skill would be judging its own run.
 //
 // The source is a job, and the job row decides the rest: the namespace comes from

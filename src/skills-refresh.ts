@@ -98,7 +98,7 @@ export function skillsRefreshAgent(): Agent {
     scopes: {
       namespaces: [SKILLS_NAMESPACE],
       repos: [],
-      tools: ["jobs"],
+      tools: ["capsid_work_jobs"],
       grants: ["write"],
       // Derived, so a new flag cannot be missed.
       flags: noFlags(),

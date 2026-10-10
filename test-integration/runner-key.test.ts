@@ -246,17 +246,17 @@ describe("the exchange", () => {
 });
 
 // The path the canary session takes: a key minted by the exchange, resolved as the
-// Worker resolves it, then the jobs TOOL, so the registrar and the handler's own scope
-// re-check both run. The first two hardened canary runs claimed nothing because the
+// Worker resolves it, then the capsid_work_jobs TOOL, so the registrar and the
+// handler's own scope re-check both run. The first two hardened canary runs claimed nothing because the
 // handler's re-check refused a bound key; claimJob called directly, as the tests above
 // do, never passes through it.
-describe("a minted key works its job through the jobs tool", () => {
+describe("a minted key works its job through the capsid_work_jobs tool", () => {
   async function jobsTool(agent: Agent, args: Record<string, unknown>) {
     const server = buildServer(jobsEnv(), agent);
     const client = new Client({ name: "runner-key", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({ name: "jobs", arguments: { namespace: "capsid", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { namespace: "capsid", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
     await client.close();
     return { isError: result.isError === true, text: result.content[0]?.text ?? "" };
   }

@@ -64,9 +64,10 @@ export const ROLES = [
     namespaces: ["*"],
     repos: ["*"],
     grants: ["read", "write"],
-    // A comment goes through manage_pr, a write tool. The tools axis narrows it to the
-    // comment action and the only flag is can_comment_pr, so merge and close are refused.
-    tools: ["manage_pr", "manage_pr.comment"],
+    // A comment goes through capsid_open_pr, a write tool. The tools axis narrows it to
+    // the comment action and the only flag is can_comment_pr, so opening a pull request
+    // is refused, and merge and close are a different tool.
+    tools: ["capsid_open_pr", "capsid_open_pr.comment"],
     flags: { can_comment_pr: true },
     what: "reads everything and may post a comment on a pull request. It cannot merge, close, or write a file.",
   },
@@ -75,9 +76,9 @@ export const ROLES = [
     kind: "cron",
     namespaces: ["*"],
     grants: ["read", "write"],
-    // Same shape, same reason: posting a job is a write, and `jobs.post` is what
-    // stops that write from also being claim, complete, fail, block and resume.
-    tools: ["jobs", "jobs.post"],
+    // Same shape, same reason: posting a job is a write, and `capsid_work_jobs.post` is
+    // what stops that write from also being claim, complete, fail, block and resume.
+    tools: ["capsid_work_jobs", "capsid_work_jobs.post"],
     // NO REPOS, matching watcherAgent() in src/watcher.ts, so the minted credential
     // and the identity the Worker uses are the same authority. The tools axis already
     // refuses every repo tool.
@@ -100,13 +101,13 @@ export const ROLES = [
     kind: "cron",
     namespaces: ["capsid"],
     // The live gate's MCP call (scripts/mcp-probe-lib.mjs, gate 8): one read of
-    // capsid/conventions.md after every deploy. Read grant, the read tool, no repos and no
+    // capsid/conventions.md after every deploy. Read grant, capsid_read_doc, no repos and no
     // flags, so a leaked key reads capsid documents and does nothing else. Its key is the
     // CAPSID_LIVE_PROBE_KEY repo secret (docs/rollback.md).
     repos: [],
     grants: ["read"],
-    tools: ["read"],
-    what: "the live gate's probe: reads capsid documents with the read tool after each deploy, and nothing else.",
+    tools: ["capsid_read_doc"],
+    what: "the live gate's probe: reads capsid documents with capsid_read_doc after each deploy, and nothing else.",
   },
   {
     name: "dustinedwards-grok",
@@ -242,7 +243,7 @@ export function reposForNamespace(map, namespace) {
 export async function attachRepos(wanted, tool) {
   const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
   if (needsRepos.length === 0) return;
-  const mapping = parseNamespaceRepos(await tool("namespaces", {}));
+  const mapping = parseNamespaceRepos(await tool("capsid_find_docs", { action: "namespaces" }));
   for (const a of needsRepos) {
     // One namespace per driver, which selectAgents and driverFor both guarantee.
     a.repos = reposForNamespace(mapping, a.namespaces[0]);
@@ -274,7 +275,7 @@ export async function mintInto(tool, agent, path) {
   try {
     // `what` is documentation, not a scope axis, so it does not go over the wire.
     const { what: _what, ...scopes } = agent;
-    const text = await tool("agents", { action: "mint", ...scopes });
+    const text = await tool("capsid_admin_manage_agents", { action: "mint", ...scopes });
     try {
       minted = JSON.parse(text).key;
     } catch {
@@ -313,11 +314,13 @@ async function main() {
 
   const key = process.env.CAPSID_OPERATOR_KEY;
   if (!key) {
-    console.error("CAPSID_OPERATOR_KEY is not set. It is your write-grant operator key; this script never reads a file for it.");
+    console.error("CAPSID_OPERATOR_KEY is not set. It is the admin operator key (minting is a Capsid Admin tool); this script never reads a file for it.");
     process.exit(2);
   }
   // Refuses a non-https origin before any request carries the key.
   const client = capsidClient(origin, key, "mint-agents");
+  // Minting is a Capsid Admin tool, served on /ops/mcp/admin to the admin key alone.
+  const admin = capsidClient(origin, key, "mint-agents", fetch, "/ops/mcp/admin");
 
   // Resolve before branching on --apply, so a dry run against a non-roster
   // namespace says whether it would mint. The network is touched only when AGENTS
@@ -326,7 +329,7 @@ async function main() {
   if (role !== undefined) {
     wanted = selectAgents(undefined, undefined, role);
   } else if (namespace !== undefined && !AGENTS.some((a) => a.namespaces.includes(namespace))) {
-    wanted = selectAgents(namespace, parseNamespaces(await client.tool("namespaces", {})));
+    wanted = selectAgents(namespace, parseNamespaces(await client.tool("capsid_find_docs", { action: "namespaces" })));
   } else {
     wanted = selectAgents(namespace);
   }
@@ -352,7 +355,7 @@ async function main() {
 
   // Never overwrite: mintInto skips an existing file.
   for (const a of wanted) {
-    console.log(await mintInto(client.tool, a, keyPath(a.name)));
+    console.log(await mintInto(admin.tool, a, keyPath(a.name)));
   }
 }
 

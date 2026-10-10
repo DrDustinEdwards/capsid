@@ -25,8 +25,23 @@ const OIDC_AUDIENCE = "capsid";
 const SEAT_SESSION_WORKFLOW = ".github/workflows/seat-session.yml";
 
 // What a runner may call. Enough to claim, read, heartbeat, open its pull request and
-// hand the job on; nothing that writes a document or touches a repo directly.
-const RUNNER_TOOLS = ["jobs", "read", "list", "search", "brief", "open_pr", "improve_status"] as const;
+// hand the job on; nothing that writes a document or touches a repo directly. The
+// qualified entries narrow a tool to those actions (allowsToolAction): reading a
+// document but not its versions, opening a pull request but not commenting, the loop's
+// status but not a run. .github/workflows/seat-session.yml pre-approves the same tools.
+export const RUNNER_TOOLS = [
+  "capsid_work_jobs",
+  "capsid_read_doc",
+  "capsid_read_doc.read",
+  "capsid_find_docs",
+  "capsid_find_docs.list",
+  "capsid_find_docs.search",
+  "capsid_start_session",
+  "capsid_open_pr",
+  "capsid_open_pr.open",
+  "capsid_run_improve",
+  "capsid_run_improve.status",
+] as const;
 
 // Clock skew allowed on iat and nbf. exp gets none.
 const SKEW_SECONDS = 60;

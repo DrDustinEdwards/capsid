@@ -6,7 +6,7 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type FetchCall } from "./fakes.ts";
 
-// lint is filtered to the caller's namespace and may not read outside it, except
+// capsid_lint_namespace is filtered to the caller's namespace and may not read outside it, except
 // capsid/schema.md and capsid/conventions.md, which every caller's lint reads as its
 // rules. Otherwise a scoped caller learns through dangling edges whether documents in
 // other namespaces exist, and the repo tree is read with no check against its repos axis.
@@ -59,7 +59,7 @@ async function connect(agent: Agent) {
 }
 
 const call = async (client: Client, args: Record<string, unknown>) =>
-  (await client.callTool({ name: "lint", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({ name: "capsid_lint_namespace", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
 const text = (result: { content: Array<{ text: string }> }) => result.content.map((c) => c.text).join("");
 
 const treeRoutes = {

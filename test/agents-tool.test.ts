@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer } from "../src/server.ts";
 import { sha256Hex } from "../src/auth.ts";
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
@@ -19,13 +19,13 @@ interface ToolResult {
 
 async function connect(caller: Agent, rows: Array<Record<string, unknown>> = []) {
   const d1: FakeD1 = fakeD1({ agents: rows });
-  const server = buildServer(fakeEnv({ DB: d1.db }), caller);
+  const server = buildAdminServer(fakeEnv({ DB: d1.db }), caller);
   const client = new Client({ name: "test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return {
     d1,
-    call: (args: Record<string, unknown>) => client.callTool({ name: "agents", arguments: args }) as Promise<ToolResult>,
+    call: (args: Record<string, unknown>) => client.callTool({ name: "capsid_admin_manage_agents", arguments: args }) as Promise<ToolResult>,
     close: async () => {
       await client.close();
       await server.close();
@@ -94,7 +94,7 @@ test("a new agent is born with read on its named namespaces and no flags", async
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
   // defaultScopes has repos "*", so the handler must derive the repos from the
   // namespace mapping, as scripts/mint-agents.mjs does. Driven through a real MCP
-  // `agents` call.
+  // capsid_admin_manage_agents call.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
   const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
   await close();
@@ -152,7 +152,7 @@ test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
     { action: "list" },
   ]) {
     const result = await call(args);
-    assert.equal(result.isError, true, `a minted agent reached agents action '${args.action}'`);
+    assert.equal(result.isError, true, `a minted agent reached capsid_admin_manage_agents action '${args.action}'`);
     assert.match(result.content[0].text, /admin/i, `the refusal for '${args.action}' does not say what is missing`);
   }
   await close();

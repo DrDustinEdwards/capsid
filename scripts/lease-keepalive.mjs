@@ -140,13 +140,13 @@ export async function keepAlive({ input, env, fetchImpl = fetch, now = Date.now(
     // namespaces come first (live run, 2026-10-09: the unscoped call was refused and nothing was sent).
     /** @type {Array<{ id: string, namespace: string }>} */
     const jobs = [];
-    for (const namespace of namespaceNames(await client.tool("namespaces", {}))) {
-      jobs.push(...claimedJobs(await client.tool("improve_status", { namespace })));
+    for (const namespace of namespaceNames(await client.tool("capsid_find_docs", { action: "namespaces" }))) {
+      jobs.push(...claimedJobs(await client.tool("capsid_run_improve", { action: "status", namespace })));
     }
     let sent = 0;
     for (const job of jobs) {
       try {
-        await client.tool("jobs", { action: "heartbeat", id: job.id, namespace: job.namespace, reason: "ok: kept alive by the PostToolUse hook while the session works" });
+        await client.tool("capsid_work_jobs", { action: "heartbeat", id: job.id, namespace: job.namespace, reason: "ok: kept alive by the PostToolUse hook while the session works" });
         sent++;
       } catch {
         // not this session's job: the Worker refuses a heartbeat from a non-holder

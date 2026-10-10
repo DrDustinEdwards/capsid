@@ -83,12 +83,12 @@ describe("the overnight plan on a real D1", () => {
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
     try {
-      const result = (await client.callTool({ name: "jobs", arguments: { action: "list", view: "plan", namespace: ns } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", view: "plan", namespace: ns } })) as { isError?: boolean; content: Array<{ text: string }> };
       expect(result.isError, result.content[0].text).not.toBe(true);
       const plan = JSON.parse(result.content[0].text) as { lanes: Array<{ jobs: Array<{ id: string }> }>; for_namespace: string };
       expect(plan.for_namespace).toBe(ns);
       expect(plan.lanes[0].jobs.map((j) => j.id)).toEqual([id(1)]);
-      const bad = (await client.callTool({ name: "jobs", arguments: { action: "list", view: "digest", since: "yesterday" } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const bad = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", view: "digest", since: "yesterday" } })) as { isError?: boolean; content: Array<{ text: string }> };
       expect(bad.isError).toBe(true);
       expect(bad.content[0].text).toMatch(/since must be an ISO 8601 time/);
     } finally {

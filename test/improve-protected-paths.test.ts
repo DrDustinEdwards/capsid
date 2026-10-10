@@ -7,10 +7,11 @@ import { defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// The ordinary write tool refuses the improve loop's
+// The ordinary write tool, capsid_write_doc, refuses the improve loop's
 // control surface (improve/prompts/, improve/skills/, and the Anchors block of
 // improve/scores.md) unless allow_improve_paths: true is passed, which is
-// audit-logged; read and brief surface the audit actor of every document.
+// audit-logged; capsid_read_doc and capsid_start_session surface the audit actor of
+// every document.
 
 async function connect(opts: FakeD1Options = {}) {
   const { db, recorded } = fakeD1(opts);
@@ -61,7 +62,8 @@ test("write refuses improve/prompts/run.md and writes nothing (old code allowed 
     namespaces: [{ namespace: "capsid", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }],
     documents: [{ namespace: "capsid", path: "improve/prompts/run.md", title: "run", body: "SYSTEM PROMPT", type: "prompt" }],
   });
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     title: "run",
@@ -80,7 +82,8 @@ test("write with allow_improve_paths lands and records the flag in the audit par
     namespaces: [{ namespace: "capsid", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }],
     documents: [{ namespace: "capsid", path: "improve/prompts/run.md", title: "run", body: "SYSTEM PROMPT", type: "prompt" }],
   });
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     title: "run",
@@ -106,7 +109,7 @@ test("read surfaces last_actor from the most recent audit entry (old code had no
       { namespace: "capsid", path: "doc.md", actor: "improve-loop" },
     ],
   });
-  const out = parse(await call(client, "read", { namespace: "capsid", path: "doc.md" }));
+  const out = parse(await call(client, "capsid_read_doc", { action: "read", namespace: "capsid", path: "doc.md" }));
   await close();
   assert.equal(out.last_actor, "improve-loop", "read did not surface the latest audit actor");
 });
@@ -115,7 +118,7 @@ test("read returns null last_actor when a document has no audit history", async 
   const { client, close } = await connect({
     documents: [{ namespace: "capsid", path: "doc.md", title: "T", body: "b", type: "note", status: "published" }],
   });
-  const out = parse(await call(client, "read", { namespace: "capsid", path: "doc.md" }));
+  const out = parse(await call(client, "capsid_read_doc", { action: "read", namespace: "capsid", path: "doc.md" }));
   await close();
   assert.equal(out.last_actor, null);
 });
@@ -133,16 +136,17 @@ test("brief surfaces last_actor on core and on every task", async () => {
       { namespace: "capsid", path: "TASK-x.md", actor: "some-other-client" },
     ],
   });
-  const out = parse(await call(client, "brief", { namespace: "capsid" }));
+  const out = parse(await call(client, "capsid_start_session", { namespace: "capsid" }));
   await close();
   assert.equal(out.core.last_actor, "github:dustin");
   const task = out.open_tasks.find((t: { path: string }) => t.path === "TASK-x.md");
   assert.equal(task.last_actor, "some-other-client", "brief did not surface who wrote a task");
 });
 
-// The override is itself scoped, on delete and move: allow_improve_paths is the
-// caller's to pass, so it is honoured only with can_touch_protected. Otherwise a
-// driver with write and no flags could delete or move improve/prompts/run.md.
+// The override is itself scoped, on capsid_delete_doc and capsid_write_doc's move:
+// allow_improve_paths is the caller's to pass, so it is honoured only with
+// can_touch_protected. Otherwise a driver with write and no flags could delete or
+// move improve/prompts/run.md.
 // Driven through callTool, because improveWriteRefusal correctly answers "allowed"
 // when the opt-in is true; the scope call is the one before it.
 
@@ -180,7 +184,7 @@ const RUN_PROMPT: FakeD1Options = {
 
 test("delete of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
   const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
-  const out = await call(client, "delete", {
+  const out = await call(client, "capsid_delete_doc", {
     namespace: "capsid",
     path: "improve/prompts/run.md",
     confirm: true,
@@ -194,7 +198,8 @@ test("delete of the run prompt with allow_improve_paths needs can_touch_protecte
 
 test("move of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
   const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
-  const out = await call(client, "move", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "move",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     new_path: "parked/run.md",
@@ -213,7 +218,7 @@ test("move of the run prompt with allow_improve_paths needs can_touch_protected"
 test("a driver holding can_touch_protected may delete and move the run prompt", async () => {
   const holder = driverAgent("capsid", ["can_touch_protected"]);
   const del = await connectAs(holder, RUN_PROMPT);
-  const deleted = await call(del.client, "delete", {
+  const deleted = await call(del.client, "capsid_delete_doc", {
     namespace: "capsid",
     path: "improve/prompts/run.md",
     confirm: true,
@@ -223,7 +228,8 @@ test("a driver holding can_touch_protected may delete and move the run prompt", 
   assert.equal(deleted.isError ?? false, false, deleted.content[0]?.text);
 
   const mv = await connectAs(holder, RUN_PROMPT);
-  const moved = await call(mv.client, "move", {
+  const moved = await call(mv.client, "capsid_write_doc", {
+    action: "move",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     new_path: "parked/run.md",
@@ -236,12 +242,13 @@ test("a driver holding can_touch_protected may delete and move the run prompt", 
 
 test("the flag is asked for only when the opt-in is passed, on delete and move", async () => {
   const del = await connectAs(driverAgent(), RUN_PROMPT);
-  const deleted = await call(del.client, "delete", { namespace: "capsid", path: "notes.md", confirm: true });
+  const deleted = await call(del.client, "capsid_delete_doc", { namespace: "capsid", path: "notes.md", confirm: true });
   await del.close();
   assert.equal(deleted.isError ?? false, false, deleted.content[0]?.text);
 
   const mv = await connectAs(driverAgent(), RUN_PROMPT);
-  const moved = await call(mv.client, "move", {
+  const moved = await call(mv.client, "capsid_write_doc", {
+    action: "move",
     namespace: "capsid",
     path: "notes.md",
     new_path: "renamed.md",
@@ -251,14 +258,15 @@ test("the flag is asked for only when the opt-in is passed, on delete and move",
   assert.equal(moved.isError ?? false, false, moved.content[0]?.text);
 });
 
-// The override refusal on write and restore. buildServer(..., "write", ...) is
-// legacyAgent("write") and holds every flag, so these use a flagless driver to make
-// the ctx.scope block refuse. blast-radius.test.ts plants can_touch_protected on repo
+// The override refusal on capsid_write_doc's write and restore.
+// buildServer(..., "write", ...) is legacyAgent("write") and holds every flag, so these
+// use a flagless driver to make the ctx.scope block refuse. blast-radius.test.ts plants can_touch_protected on repo
 // writes, which is the other guard of the same name.
 
 test("write of the run prompt with allow_improve_paths needs can_touch_protected", async () => {
   const { client, recorded, close } = await connectAs(driverAgent(), RUN_PROMPT);
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     title: "run",
@@ -288,7 +296,8 @@ test("restore of the run prompt with allow_improve_paths needs can_touch_protect
       },
     ],
   });
-  const out = await call(client, "restore", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     version_id: 11,
@@ -303,7 +312,8 @@ test("restore of the run prompt with allow_improve_paths needs can_touch_protect
 
 test("a driver holding can_touch_protected may write the run prompt", async () => {
   const { client, close } = await connectAs(driverAgent("capsid", ["can_touch_protected"]), RUN_PROMPT);
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid",
     path: "improve/prompts/run.md",
     title: "run",

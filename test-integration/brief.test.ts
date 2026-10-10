@@ -13,7 +13,7 @@ async function brief(namespace: string) {
   const client = new Client({ name: "brief", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name: "brief", arguments: { namespace } })) as {
+  const result = (await client.callTool({ name: "capsid_start_session", arguments: { namespace } })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };

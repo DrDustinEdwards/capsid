@@ -4,7 +4,7 @@ import { resolveRepo } from "./github/client";
 import { logEvent } from "./log";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
-// D2, ruled by Dustin 2026-10-04). Both are read-only views through `jobs` action `list`
+// D2, ruled by Dustin 2026-10-04). Both are read-only views through `capsid_work_jobs` action `list`
 // (view "plan" and view "digest"), so no tool is added and a hand-started VS Code tab reads
 // them with the credential it already holds.
 //

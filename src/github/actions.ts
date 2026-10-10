@@ -61,10 +61,10 @@ export async function ciStatus(
     throw new Error("ci_status: step needs job, the job (name or id) the step ran in, and run_id");
   }
   if (opts.job !== undefined && opts.runId === undefined) {
-    throw new Error("ci_status: job needs run_id, the run the job belongs to. ci_status without it lists runs and their ids");
+    throw new Error("ci_status: job needs run_id, the run the job belongs to. capsid_inspect_repo action ci without it lists runs and their ids");
   }
   if (opts.jobs === true && opts.runId === undefined) {
-    throw new Error("ci_status: jobs needs run_id, the run whose jobs to list. ci_status without it lists runs and their ids");
+    throw new Error("ci_status: jobs needs run_id, the run whose jobs to list. capsid_inspect_repo action ci without it lists runs and their ids");
   }
   if (opts.jobs === true && opts.job !== undefined) {
     throw new Error("ci_status: pass jobs: true to list every job in the run, or job to read one, not both");
@@ -689,7 +689,7 @@ async function dispatchAndPoll(
       dispatched: true,
       run_id: null,
       polls,
-      note: `dispatch was accepted, but no new run appeared for ${args.ref} within ${timeoutMs / 1000}s. It may still start; check ci_status with this ref. A dispatch that is accepted and never runs usually means the workflow's own conditions excluded it.`,
+      note: `dispatch was accepted, but no new run appeared for ${args.ref} within ${timeoutMs / 1000}s. It may still start; check capsid_inspect_repo action ci with this ref. A dispatch that is accepted and never runs usually means the workflow's own conditions excluded it.`,
     };
   }
   return {

@@ -54,7 +54,7 @@ export interface JobOutcomeRow {
   result_kind: OutcomeResultKind;
   verified: string;
   // The skills this job was offered and used, as JSON arrays. NULL, not an empty
-  // array, when the job named none: improve_status sums json_array_length and SUM
+  // array, when the job named none: capsid_run_improve action status sums json_array_length and SUM
   // skips NULL, so such a job counts toward neither total.
   skill_ids_offered: string | null;
   skill_ids_used: string | null;

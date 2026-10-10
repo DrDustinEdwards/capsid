@@ -35,7 +35,8 @@ import {
   routeRefusal,
 } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
+import { ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // Every route goes through the one enforcement point, or says why it does not. A
@@ -139,6 +140,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PREFIX,
   PUBLIC_MODEL_PATH,
   PUBLIC_STATS_PATH,
+  ADMIN_OPS_MCP_ROUTE,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the
@@ -184,39 +186,38 @@ test("every route in defaultHandler is either gated through checkScope or listed
 
 // the table is the whole statement
 
-test("improve_run: run and claim are a driver's work and every other action is admin", async () => {
-  // The actions come from the schema the server serves, so an action added to the tool
-  // without a decision here fails.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+async function servedActions(build: typeof buildServer, name: string): Promise<string[]> {
+  const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
   const client = new Client({ name: "route-gates", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  const served = tools.find((tool) => tool.name === "improve_run")?.inputSchema.properties?.action as { enum?: string[] } | undefined;
-  const actions = served?.enum ?? [];
-  assert.equal(actions.length, 13, "improve_run's action list changed");
-  const expected: Record<string, string> = {
-    run: "write",
-    claim: "write",
-    mode: "admin",
-    pause: "admin",
-    unpause: "admin",
-    budget: "admin",
-    mint_operator_key: "admin",
-    sign_policy: "admin",
-    register_skill: "admin",
-    skill_transitions: "admin",
-    seat_start: "admin",
-    // The overnight run's switch, with the subscription decision recorded (src/overnight.ts).
-    overnight: "admin",
-    // The queue's circuit breaker is closed only by the seat or Dustin (src/job-breaker.ts).
-    breaker_reset: "admin",
-  };
-  for (const action of actions) {
-    assert.ok(Object.hasOwn(expected, action), `improve_run gained action '${action}'; decide its requirement here and in TOOL_ACTION_GRANTS`);
-    assert.equal(requiredForAction("improve_run", action), expected[action], `improve_run.${action}`);
+  const served = tools.find((tool) => tool.name === name)?.inputSchema.properties?.action as { enum?: string[] } | undefined;
+  return served?.enum ?? [];
+}
+
+test("capsid_run_improve: status reads, run and claim are a driver's work, and the loop's controls are admin", async () => {
+  // The actions come from the schemas the servers serve, so an action added to either
+  // tool without a decision here fails.
+  const driver = await servedActions(buildServer, "capsid_run_improve");
+  assert.equal(driver.length, 3, "capsid_run_improve's action list changed");
+  const expected: Record<string, string> = { status: "read", claim: "write", run: "write" };
+  for (const action of driver) {
+    assert.ok(Object.hasOwn(expected, action), `capsid_run_improve gained action '${action}'; decide its requirement here and in TOOL_ACTION_GRANTS`);
+    assert.equal(requiredForAction("capsid_run_improve", action), expected[action], `capsid_run_improve.${action}`);
   }
-  // An omitted action is a run.
-  assert.equal(requiredForAction("improve_run", undefined), "write");
+  // An unlisted action is admin, never a driver's.
+  assert.equal(requiredForAction("capsid_run_improve", "mode"), "admin");
+
+  const admin = await servedActions(buildAdminServer, "capsid_admin_control_improve");
+  // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker
+  // (src/job-breaker.ts) are among them.
+  assert.deepEqual(
+    [...admin].sort(),
+    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "seat_start", "sign_policy", "skill_transitions", "unpause"],
+    "capsid_admin_control_improve's action list changed"
+  );
+  for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);
+  for (const action of admin) assert.ok(!driver.includes(action), `${action} is served to drivers`);
 });

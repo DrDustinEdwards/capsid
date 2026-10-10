@@ -20,17 +20,17 @@ export const MAX_SHA = 128;
 export const MAX_COMMIT_MESSAGE = 4096;
 export const MAX_PR_TITLE = 512;
 export const MAX_PR_BODY = 65_536;
-// A CI job or step name, or its numeric id, as ci_status takes them. GitHub does not
+// A CI job or step name, or its numeric id, as capsid_inspect_repo action ci takes them. GitHub does not
 // document a ceiling; a name longer than this is not one a workflow file holds.
 export const MAX_CI_NAME = 512;
 // A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
 // a paragraph, and GitHub's own comment ceiling is 65_536 either way.
 export const MAX_PR_COMMENT = 16_384;
-// The seat's note on a jobs resume: rulings and a plan, longer than `reason` allows.
+// The seat's note on a capsid_work_jobs resume: rulings and a plan, longer than `reason` allows.
 // Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror
 // document beside the signed prompt, which can already be MAX_BODY on its own.
 export const MAX_RESUME_NOTE = 16_384;
-// A delete_namespace confirmation token: base64url claims carrying the plan's counts,
+// The confirmation token capsid_admin_manage_namespaces action delete_preview returns: base64url claims carrying the plan's counts,
 // a dot and a 64-hex signature. Well under 2KB in practice.
 export const MAX_CONFIRM_TOKEN = 8192;
 

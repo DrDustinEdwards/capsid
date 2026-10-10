@@ -184,14 +184,14 @@ test("the driver runs in auto mode, and never with permission checks skipped", (
   assert.equal(/bypassPermissions|dangerously-skip-permissions/.test(SOURCE), false);
 });
 
-test("the pre-approved Capsid tools are exactly the read tools plus jobs and improve_run", () => {
+test("the pre-approved Capsid tools are exactly the read tools plus work_jobs and run_improve", () => {
   // Derived from TOOL_GRANTS in both directions, so a new read tool is either added
   // here or fails this test, and a write tool can never be pre-approved.
   const expected = Object.entries(TOOL_GRANTS)
-    .filter(([name, grant]) => grant === "read" || name === "jobs" || name === "improve_run")
+    .filter(([name, grant]) => grant === "read" || name === "capsid_work_jobs" || name === "capsid_run_improve")
     .map(([name]) => name)
     .sort();
-  assert.equal(expected.length, 17, "the derived set changed size; check TOOL_GRANTS before trusting this guard");
+  assert.equal(expected.length, 7, "the derived set changed size; check TOOL_GRANTS before trusting this guard");
   assert.deepEqual([...DRIVER_CAPSID_TOOLS].sort(), expected);
   const allowed = flag(driverArgs(), "--allowedTools").split(",");
   assert.deepEqual(allowed.sort(), expected.map((t) => `mcp__capsid__${t}`).sort());
@@ -210,6 +210,8 @@ test("deploys, ships and force pushes are denied in both shells, and the admin c
     }
   }
   assert.ok(denied.includes("mcp__claude_ai_Capsid"));
+  assert.ok(denied.includes("mcp__claude_ai_Capsid_Admin"));
+  for (const tool of DRIVER_CAPSID_TOOLS) assert.ok(!tool.startsWith("capsid_admin_"), `${tool} is an admin tool and is pre-approved`);
   for (const rule of denied) assert.equal(rule.includes(","), false, `${rule} would split the comma-separated flag`);
 });
 
@@ -314,7 +316,7 @@ test("a log the write tool REFUSED is not reported as posted", async () => {
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: m.id, result }));
   }) as unknown as typeof fetch;
   const client = capsidClient("https://capsid.example.com", "k", "test", impl);
-  await assert.rejects(postLog("capsid", client, "body", "2026-09-25"), /write refused: no write grant/);
+  await assert.rejects(postLog("capsid", client, "body", "2026-09-25"), /capsid_write_doc refused: no write grant/);
 });
 
 // Per-job keys (OWASP item 5): the scheduler claims each job with the driver's key and
