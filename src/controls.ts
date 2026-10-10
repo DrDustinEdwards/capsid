@@ -18,6 +18,7 @@ import { resumeDestination, supersedeJob, workRecorded } from "./jobs-seat";
 import { openTitleHolder } from "./jobs-edit";
 import { resolveRepo } from "./github/client";
 import { managePr } from "./github/refs";
+import { performApproval, planApproval } from "./pr-approvals";
 import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
@@ -56,6 +57,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "park_job",
   "unpark_job",
   "pr_close",
+  "approve_pr",
   "revoke_agent",
   "site_add",
   "site_edit",
@@ -154,6 +156,10 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Unpark job ${id}. It goes back to the queue at its priority, and the next free session may claim it.`;
     case "pr_close":
       return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as manage_pr close deletes it. GitHub can reopen it; the Portal does not.`;
+    case "approve_pr":
+      return params.undo === "true"
+        ? `Void the open approval of pull request ${params.prs ?? ""} in ${ns}. The executor will not merge it.`
+        : `Approve pull request ${params.prs ?? ""} in ${ns} at the head you reviewed. Nothing merges now: the executor merges an approved pull request once CI is green on that exact sha, and a new push, red CI or 7 days voids the approval.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
     case "site_add":
@@ -380,6 +386,17 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason, ...(undo ? { undo: true } : {}) }, click);
         break;
       }
+      case "approve_pr": {
+        // Planned again from the state now: the heads, the classes and the open approvals
+        // may have moved since the preview, and the approval is of what is true now.
+        const clean = Object.fromEntries(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
+        const plan = await planApproval(env, actor, clean, surface, click);
+        if (!plan.ok) return { ok: false, refusal: plan.refusal };
+        summary = await performApproval(env, actor, plan, required(params, "reason"), now);
+        committed = true;
+        await auditClick(env, actor, source, surface, action, plan.namespace, { repo: plan.repo, prs: plan.targets.map((t) => ({ pr: t.number, head_sha: t.head_sha, class: t.class })), approval_surface: plan.surface, ...(undo ? { undo: true } : {}) }, click);
+        break;
+      }
       case "pr_close": {
         const namespace = required(params, "namespace");
         const number = Number(required(params, "number"));
@@ -541,6 +558,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   park_job: ["id", "reason", "undo"],
   unpark_job: ["id", "reason", "undo"],
   pr_close: ["namespace", "repo", "number", "reason"],
+  approve_pr: ["namespace", "repo", "prs", "shas", "confirm", "reason", "undo"],
   revoke_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
   site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script", "operator"],
@@ -848,6 +866,10 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         changes: [`${job.id} ('${job.title}' in ${job.namespace}): parked ("${job.result_summary ?? ""}") -> queued, at priority ${job.priority}. The next free session may claim it.`],
         audit: [`job-unparked by ${actor}`, click],
       };
+    }
+    case "approve_pr": {
+      const plan = await planApproval(env, actor, p, surface, click);
+      return plan.ok ? { ok: true, changes: plan.changes, audit: plan.audit } : refused(plan.refusal);
     }
     case "pr_close": {
       if (!p.namespace) return refused("pr_close needs the namespace whose repo holds the pull request.");

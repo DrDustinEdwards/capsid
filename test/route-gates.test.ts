@@ -27,7 +27,7 @@ import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
-import { PUBLIC_MODEL_PATH } from "../src/public-data.ts";
+import { PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
 import {
   ROUTE_GRANTS,
   UNGATED_ROUTES,
@@ -138,6 +138,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PATH,
   PORTAL_PREFIX,
   PUBLIC_MODEL_PATH,
+  PUBLIC_STATS_PATH,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the

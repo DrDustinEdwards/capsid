@@ -5,7 +5,8 @@
 // ============================================================================
 // REMOVAL CONDITION
 // ============================================================================
-// Delete this file and its single call site in src/mcp-handler.ts when the probe in
+// Delete this file, its single call site in src/mcp-handler.ts, and 2025-11-25 from ERAS in
+// scripts/mcp-probe-lib.mjs (live gate 8 calls both eras) when the probe in
 // dustinedwards-mcp (`node scripts/probe-report.mjs`) shows the clients that reach
 // Capsid opening with `server/discover` instead of `initialize`. Capsid's own
 // admin_client_audit rows (src/admin-client-audit.ts) record the protocol version the

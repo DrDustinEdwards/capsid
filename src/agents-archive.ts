@@ -2,7 +2,7 @@ import { auditStatement } from "./store-guards";
 
 // Revoked agents leave the live inventory and keep their history (job_24e460427d6c;
 // Dustin, 2026-10-02 and 2026-10-10: archive and hide, never delete an agent with
-// history). migrations/0037_agents_archive.sql says what moves and why.
+// history). migrations/0038_agents_archive.sql says what moves and why.
 //
 // Every row that records what an agent did carries the actor string agent:<name>
 // itself, so moving the agents row breaks no join a reader of history needs. Three

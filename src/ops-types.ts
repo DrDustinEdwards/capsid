@@ -545,6 +545,7 @@ export type PortalAction =
   | "park_job"
   | "unpark_job"
   | "pr_close"
+  | "approve_pr"
   | "revoke_agent"
   | "site_add"
   | "site_edit"
@@ -581,6 +582,11 @@ export type PortalAction =
 //                 is recorded in the click row only (unpark itself takes none)
 //   pr_close      { namespace, number, reason, repo? }   reason required; closes an open
 //                 pull request as manage_pr close does, head branch cleanup included
+//   approve_pr    { namespace, prs, shas, repo?, confirm?, reason?, undo? }   prs and shas
+//                 comma-separated, in the same order: each pull request at the head sha
+//                 that was reviewed. Records approvals (src/pr-approvals.ts) and never
+//                 merges; a typed (money) one only alone, with its number as confirm.
+//                 undo: "true" voids the open approvals of prs, "undone"
 //   revoke_agent  { name }
 //   site_add      { namespace, name?, origin?, health_path?, platform?, script? }
 //                 no origin: the namespace serves no site, and takes no other field
@@ -926,7 +932,9 @@ export type MaintenanceRule =
   | "disk-low"
   | "disk-not-checked"
   | "undeployed-merge"
-  | "deploys-not-checked";
+  | "deploys-not-checked"
+  | "model-drift"
+  | "model-not-checked";
 
 export interface OpsMaintenanceItem {
   /** Which rule found it. */

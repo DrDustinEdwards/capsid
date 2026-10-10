@@ -56,6 +56,14 @@ test("the live job rolls back when a gate fails on a run that deployed", () => {
   assert.match(step, /ROLLBACK_TO|after/i, "the rollback does not report the sha now live");
 });
 
+test("the live gate's verify step carries the probe key, so gate 8 makes its MCP call in CI", () => {
+  // Without it gate 8 skips, and a deploy that breaks the connection after sign-in is
+  // not rolled back (job_bb06c9be24c4). The exit-1 rollback itself is the test above.
+  const ci = read(".github/workflows/ci.yml");
+  const verify = ci.slice(ci.indexOf("- name: verify:live"), ci.indexOf("Roll back"));
+  assert.match(verify, /CAPSID_LIVE_PROBE_KEY: \$\{\{ secrets\.CAPSID_LIVE_PROBE_KEY \}\}/);
+});
+
 test("the rollback pins the same wrangler version the deploy uses", () => {
   const ci = read(".github/workflows/ci.yml");
   const pkg = JSON.parse(read("package.json")) as { devDependencies?: Record<string, string> };

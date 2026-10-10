@@ -124,7 +124,10 @@ export const TABLES = [
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
   "shared_packages",
-  // Revoked agents moved out of agents by the watcher pass (migrations/0037_agents_archive.sql).
+  // The merge pipeline's approvals (migrations/0037_pr_approvals.sql): who approved which
+  // pull request at which head, and how each approval ended. Nothing prunes it.
+  "pr_approvals",
+  // Revoked agents moved out of agents by the watcher pass (migrations/0038_agents_archive.sql).
   // Nothing prunes it: an archived row keeps a name reserved and a revoked key refused.
   "agents_archive",
   // The replay cache, pruned below: a jti matters only inside the signature window.

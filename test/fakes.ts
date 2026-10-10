@@ -512,9 +512,9 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   };
   const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
 
-  // Reads of jobs, job_outcomes and job_outcome_prs, and every COUNT, resolved through the
-  // whole statement rather than one or two of its filters. Null when the statement is
-  // for another branch.
+  // Reads of jobs, job_outcomes, job_outcome_prs, job_evaluations and job_touches, and
+  // every COUNT, resolved through the whole statement rather than one or two of its
+  // filters. Null when the statement is for another branch.
   const tableSelect = (flat: string, params: unknown[]): Row[] | null => {
     const main = mainTable(flat);
     if (main === "job_outcomes") {
@@ -527,6 +527,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       return selectRows(pool, text.replace(/ FROM job_outcomes o\b/i, " FROM job_outcomes"), params);
     }
     if (main === "jobs" || main === "job_outcome_prs") return selectRows(tables[main].rows, flat, params);
+    if (main === "job_evaluations" || main === "job_touches") return selectRows(rows[main], flat, params);
     if (main && tables[main] && /^SELECT COUNT\(\*\) AS n FROM/i.test(flat.trim())) return selectRows(tables[main].rows, flat, params);
     return null;
   };

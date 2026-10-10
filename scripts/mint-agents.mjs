@@ -96,6 +96,19 @@ export const ROLES = [
     what: "merges pull requests in dustinedwards and nothing else. No direct write, no workflows, no protected paths.",
   },
   {
+    name: "live-probe",
+    kind: "cron",
+    namespaces: ["capsid"],
+    // The live gate's MCP call (scripts/mcp-probe-lib.mjs, gate 8): one read of
+    // capsid/conventions.md after every deploy. Read grant, the read tool, no repos and no
+    // flags, so a leaked key reads capsid documents and does nothing else. Its key is the
+    // CAPSID_LIVE_PROBE_KEY repo secret (docs/rollback.md).
+    repos: [],
+    grants: ["read"],
+    tools: ["read"],
+    what: "the live gate's probe: reads capsid documents with the read tool after each deploy, and nothing else.",
+  },
+  {
     name: "dustinedwards-grok",
     kind: "driver",
     namespaces: ["dustinedwards"],
