@@ -7,6 +7,8 @@ import { runBackup } from "./backup";
 import { RUNNER_KEY_PATH, exchangeRunnerKey } from "./runner-key";
 import { checkScope, routeRefusal } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
+import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
+import { readSiteConfig } from "./ops-sites";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
@@ -293,6 +295,38 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
   const everything = await gatherInbox(env, new Date(), null);
   const readable = (namespace: string) => checkScope(caller.agent, { tool: "improve_status", namespace, grant: "read" }) === null;
   return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff" } });
+}
+
+// What an app reports about itself to the inbox (src/inbox-report.ts): the app's own
+// key, the write grant on the namespace it names, one report per minute, the 6 hour
+// expiry. The order is the gate's: who, then what, then the rate, then the write, so a
+// refused report spends nothing.
+async function handleInboxReport(request: Request, env: Env): Promise<Response> {
+  const plain = (message: string, status: number, extra: Record<string, string> = {}) =>
+    new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
+  const caller = await resolveAgent(request, env);
+  if (!caller) return plain("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
+  const bounded = await readBoundedText(request, MAX_INBOX_REPORT_BYTES);
+  if (!bounded.ok) return plain(`request too large: exceeds ${MAX_INBOX_REPORT_BYTES} bytes`, 413);
+  let body: unknown;
+  try {
+    body = JSON.parse(bounded.text);
+  } catch {
+    return plain("the body must be JSON", 400);
+  }
+  const namespace = (body as { namespace?: unknown } | null)?.namespace;
+  if (typeof namespace !== "string" || namespace === "") return plain("namespace is required", 400);
+  const refusal = reportCallerRefusal(caller.agent, namespace);
+  if (refusal) return plain(refusal, 403);
+  const now = new Date();
+  const config = await readSiteConfig(env.DB);
+  const origin = config.find((c) => c.namespace === namespace)?.origin ?? null;
+  const parsed = parseReport(body, origin, now);
+  if (!parsed.ok) return plain(parsed.refusal, 400);
+  const rate = await spendReportRate(env.APP_KV, caller.agent.actor);
+  if (!rate.ok) return plain(rate.refusal, rate.status, { "Retry-After": "60" });
+  await storeReport(env.APP_KV, { namespace, reported_at: now.toISOString(), reported_by: caller.agent.actor, items: parsed.value.items });
+  return Response.json({ ok: true, namespace, items: parsed.value.items.length, expires_in_seconds: REPORT_TTL_SECONDS }, { headers: { "Cache-Control": "no-store" } });
 }
 
 const CSP_REPORT_MAX_BYTES = 16384;
@@ -605,6 +639,7 @@ export const defaultHandler = {
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
+    if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
   if (url.pathname === RUNNER_KEY_PATH && request.method === "POST") return handleRunnerKey(request, env);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
