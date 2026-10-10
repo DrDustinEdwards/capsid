@@ -1309,6 +1309,25 @@ test("a head that moved before the merge (GitHub 409) is reported not merged, au
   assert.equal(awaiting[0].failed, "head_moved");
 });
 
+test("PLANT: the awaiting-seat set carries each PR's merge class and why (report-only, design-merge-pipeline.md PR 2)", async () => {
+  for (const [paths, cls, pathClass] of [
+    [["src/inbox.ts"], "approve", "src-routine"],
+    [["migrations/0099_sample.sql"], "seat", "migration"],
+    [["docs/schema.md", "src/billing/plan.ts"], "typed", "money"],
+  ] as const) {
+    const { kv, env } = await pinnedEnv();
+    await withFetch(tickRoutes([...paths]), async () => {
+      const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+      assert.equal(report.outcomes[0].merged, false, `${paths.join(", ")} merged`);
+    });
+    const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string);
+    assert.equal(awaiting.length, 1);
+    assert.equal(awaiting[0].class, cls, paths.join(", "));
+    assert.equal(awaiting[0].path_class, pathClass);
+    assert.ok(awaiting[0].class_reasons.length > 0, "a class with no reason");
+  }
+});
+
 // paging: every page of files and check runs is read
 //
 // The routes below answer the way GitHub does: at most `per_page` rows per call, and a

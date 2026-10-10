@@ -271,6 +271,10 @@ export interface OpsAwaitingSeat {
   failed: string;
   why: string;
   at: string;
+  // The merge pipeline's class, report-only (src/merge-class.ts); absent on older sets.
+  class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
+  path_class?: string | null;
+  class_reasons?: string[];
 }
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is
