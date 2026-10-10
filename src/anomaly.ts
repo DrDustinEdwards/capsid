@@ -35,15 +35,24 @@ export interface ActionHour {
   n: number;
 }
 
-/** The read the rules run on: every agent row of the last BASELINE_DAYS + 1 days,
- *  grouped. On the audit_log_at index (migrations/0005), bounded by the window. */
-export const ANOMALY_SQL = `SELECT actor, action, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n
-  FROM audit_log WHERE at >= ?1 AND actor LIKE 'agent:%' AND actor <> ?2
-  GROUP BY actor, action, hour`;
-
-/** The watcher's own window start for ANOMALY_SQL, in audit_log's datetime format. */
-export function anomalySince(now: Date): string {
+/** The window's start for readActionHours, in audit_log's datetime format. */
+function anomalySince(now: Date): string {
   return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * 3600_000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+/** The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS
+ *  plus one days, grouped by action and hour, the watcher (`except`) left out. On the
+ *  audit_log_at index (migrations/0005), bounded by the window. */
+export async function readActionHours(db: D1Database, now: Date, except: string): Promise<ActionHour[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT actor, action, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n
+       FROM audit_log WHERE at >= ?1 AND actor LIKE 'agent:%' AND actor <> ?2
+       GROUP BY actor, action, hour`
+    )
+    .bind(anomalySince(now), except)
+    .all<ActionHour>();
+  return results ?? [];
 }
 
 function slug(text: string): string {

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { ANOMALY_SQL, anomalyFindings, anomalySince, type ActionHour } from "../src/anomaly";
+import { anomalyFindings, readActionHours } from "../src/anomaly";
 import { WATCHER_ACTOR } from "../src/watcher";
 
 // The anomaly read against a real D1: audit_log's datetime format grouped by hour, the
@@ -26,8 +26,7 @@ describe("the anomaly read", () => {
     await audit(WATCHER_ACTOR, "post", 2, 5);
     await audit("access:admin@example.com", "delete_namespace", 2);
     await audit("agent:sample-driver", "revoke", 24 * 20);
-    const { results } = await env.DB.prepare(ANOMALY_SQL).bind(anomalySince(NOW), WATCHER_ACTOR).all<ActionHour>();
-    const rows = results ?? [];
+    const rows = await readActionHours(env.DB, NOW, WATCHER_ACTOR);
     expect(rows.every((r) => r.actor === "agent:sample-driver"), JSON.stringify(rows)).toBe(true);
     expect(rows.reduce((s, r) => s + r.n, 0), "three baseline hours of two rows, and the new action").toBe(7);
     expect(rows.every((r) => /^\d{4}-\d{2}-\d{2}T\d{2}$/.test(r.hour))).toBe(true);

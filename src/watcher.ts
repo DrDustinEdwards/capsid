@@ -18,7 +18,7 @@ import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
-import { ANOMALY_SQL, anomalyFindings, anomalySince, type ActionHour } from "./anomaly";
+import { anomalyFindings, readActionHours } from "./anomaly";
 import {
   buildSnapshot,
   probeSite,
@@ -1144,10 +1144,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
   // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
-  const actionHours = await attempt("agent anomalies", async () => {
-    const { results } = await env.DB.prepare(ANOMALY_SQL).bind(anomalySince(now), WATCHER_ACTOR).all<ActionHour>();
-    return results ?? [];
-  });
+  const actionHours = await attempt("agent anomalies", () => readActionHours(env.DB, now, WATCHER_ACTOR));
   if (actionHours) {
     ran.add("agent anomalies");
     out.push(...anomalyFindings(actionHours, now));
