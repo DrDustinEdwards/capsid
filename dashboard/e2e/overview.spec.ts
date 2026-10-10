@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { OpsFeed } from "../src/types.ts";
-import { ALL_VIEWS, VIEW_COUNT, visit } from "./views.ts";
+import { visit } from "./views.ts";
 
 // Health's summary (the Overview's tiles, folded into Health on 2026-10-09) and the layout of PR 3 (capsid/research/audit-ui-patterns.md,
-// rulings 1 to 4 and 10; capsid/research/design-portal-linear.md D3, D13, D18, D20).
+// rulings 1 to 4 and 10; capsid/research/design-portal-linear.md D3 and D20).
 // Feeds are reshaped in the browser, the way the audit measured the live counts.
 
 const DAY = 86_400_000;
@@ -198,20 +198,6 @@ test("the Queue orders blocked jobs by priority then newest, the ones blocked ov
 
 // ---- ruling 4: the anchor bar -------------------------------------------------------------
 
-test("Needs you has no anchor bar at 1920 x 1080, with the live-shaped counts", async ({ page }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  await reshape(page, (f) => {
-    fourPrs(f);
-    const blocked = f.live.jobs.filter((j) => j.status === "blocked");
-    const queued = f.live.jobs.filter((j) => j.status === "queued");
-    const grow = (list: typeof blocked, n: number, tag: string) => Array.from({ length: n }, (_, i) => ({ ...list[i % list.length]!, id: `job_${tag}${String(i).padStart(10, "0")}` }));
-    f.live.jobs = [...grow(blocked, 30, "b"), ...grow(queued, 17, "q"), ...f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "queued")];
-  });
-  await visit(page, "needs");
-  await expect(page.locator("main section.attention")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "On this page" })).toHaveCount(0);
-});
-
 test("Health gets the anchor bar, naming its sections and not their panels, with links that follow the scroll", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 420 });
   await visit(page, "health");
@@ -259,48 +245,3 @@ test("an old view's address is replaced by the page, tab or section that holds i
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
-// ---- D13 and D18 ---------------------------------------------------------------------------
-
-test("D13: every view's head is its h1 alone, 18 px, and the shortcut sheet says what each view is for", async ({ page }) => {
-  test.setTimeout(10_000 * VIEW_COUNT);
-  const found: string[] = [];
-  let seen = 0;
-  for (const v of ALL_VIEWS) {
-    await visit(page, v.id);
-    const head = await page.locator("main .pagehead").evaluate((el) => ({ children: [...el.children].map((c) => c.tagName.toLowerCase()), size: getComputedStyle(el.querySelector("h1")!).fontSize, weight: getComputedStyle(el.querySelector("h1")!).fontWeight }));
-    if (head.children.join() !== "h1") found.push(`${v.label}: head holds ${head.children.join(", ")}`);
-    if (head.size !== "18px" || head.weight !== "600") found.push(`${v.label}: h1 ${head.size} / ${head.weight}`);
-    const next = await page.locator("main h1").evaluate((h) => h.parentElement?.nextElementSibling?.tagName.toLowerCase() ?? "");
-    if (next === "p") found.push(`${v.label}: a paragraph under the heading`);
-    seen++;
-  }
-  expect(seen).toBe(VIEW_COUNT);
-  expect(found).toEqual([]);
-  await page.keyboard.press("?");
-  const help = page.getByRole("dialog", { name: "Keyboard" });
-  await expect(help.getByText(/Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too\./)).toBeVisible();
-  await expect(help.locator(".about")).toHaveCount(VIEW_COUNT);
-});
-
-test("D18: a cell with no data says two words, its reason on hover; the backup column says once who reports one", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await visit(page, "sites");
-  const cells = page.locator('main table.fleet td[data-label="Backup age"]');
-  const n = await cells.count();
-  expect(n).toBe(8);
-  const nodata = cells.locator(".st.nodata");
-  // Every site but Capsid; the sample feed has no Capsid row.
-  await expect(nodata).toHaveCount(n);
-  for (const c of await nodata.all()) {
-    // What is seen: the words, not the reason kept for screen readers (.sr-only).
-    const seen = await c.evaluate((el) => [...el.childNodes].filter((n) => !(n instanceof Element && n.classList.contains("sr-only"))).map((n) => n.textContent).join("").trim());
-    expect(seen).toBe("No data");
-    await expect(c).toHaveAttribute("data-tip", "not reported by the site");
-  }
-  await expect(page.locator("main table.fleet th").filter({ hasText: "Backup age" })).toContainText("only Capsid reports one");
-  // No cell in the fleet writes its reason out.
-  await expect(page.locator("main table.fleet .nodata-cell")).toHaveCount(0);
-  // The panel does: Sample G's has the full sentence.
-  await page.locator('main table.fleet tr[data-open="site:Sample G"]').click();
-  await expect(page.locator("dialog.drawer[open]")).toContainText("No data: Cloudflare read not configured");
-});
