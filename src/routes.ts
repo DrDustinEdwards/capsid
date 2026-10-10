@@ -509,12 +509,12 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   const claim = await claimJti(env.DB, "backup", parsed.jti);
   if (!claim.ok) return textResponse(claim.refusal, claim.status);
 
-  const minted = await mintBackupCredential(env);
+  const minted = await mintBackupCredential(env, parsed.site);
   if (!minted.ok) {
-    logEvent("error", "BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED ${minted.refusal}` });
+    logEvent("error", "BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` });
     return textResponse(minted.refusal, minted.status);
   }
-  logEvent("log", "BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED ttl=${minted.credential.expires_in}s` });
+  logEvent("log", "BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 

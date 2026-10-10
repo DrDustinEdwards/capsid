@@ -9,7 +9,7 @@ A daily Cron Trigger (09:00 UTC) exports the database to `MEDIA`:
 
 After each export, `document_versions` rows older than 90 days and `audit_log` rows older than 180 are pruned. Pruning runs after the export, so every pruned row exists in at least one retained dump.
 
-The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps off-account, so they survive loss of the whole Cloudflare account. Its workflow, schedule and retention live in that repository; this repo mints its credential at `POST /backup/credential` and observes the result.
+The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps off-account, so they survive loss of the whole Cloudflare account. Its workflow, schedule and retention live in that repository; this repo mints its credential at `POST /backup/credential` and observes the result. The request may name a `site`; the Worker scopes the credential to that site's bucket from the pinned table in `src/offaccount.ts` and refuses any other site with 400. A request with no site is capsid's (`capsid-media`).
 
 **The watcher measures the mirror, and it measures the dump rather than the run.** Every half hour it lists `backups/json/` in that repo, resolved through the capsid namespace's `backups` mapping, and reads the newest directory name as the dump's own timestamp. Older than `MIRROR_STALE_HOURS` (36, the daily cadence plus slack) and it posts a finding, using the mirror workflow's latest conclusion to say which of three things happened: the workflow ran and failed, it has not run at all, or it ran green and no dump appeared. A GitHub it cannot reach posts nothing, because "cannot see the mirror" and "the mirror is dead" are different facts.
 
