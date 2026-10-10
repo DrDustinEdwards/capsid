@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { ROLES } from "../scripts/mint-agents.mjs";
 import { allowsToolAction } from "../src/agents-schema.ts";
@@ -12,6 +14,9 @@ import {
   BUDGET_WARN_FRACTION,
   CI_RED_HOURS,
   DEFAULT_CADENCE_MINUTES,
+  DEPLOY_SETTLE_MINUTES,
+  MASTER_CI_WORKFLOW,
+  deployVerdict,
   MAX_FINDINGS_PER_PASS,
   WATCHER_ACTOR,
   WATCHER_CHECKS,
@@ -123,6 +128,57 @@ test("a deployed sha that is not master head is a finding", () => {
   assert.equal(found.length, 1);
   assert.match(found[0].fingerprint, /^deploy-drift-0360787$/);
   assert.match(found[0].body, /deployed: 1d6912e/);
+});
+
+// Master head's own CI run deploys it. Drift is judged only once that run has had its
+// say: in flight, or green inside the settle window, is a deploy still landing.
+const minutesAgo = (n: number) => new Date(NOW.getTime() - n * 60_000).toISOString();
+const ciRun = (status: string, conclusion: string | null, endedMinutesAgo = 60, name = "CI") => ({
+  name,
+  status,
+  conclusion,
+  created_at: minutesAgo(endedMinutesAgo + 10),
+  updated_at: minutesAgo(endedMinutesAgo),
+});
+const DRIFTED = "0360787aaaabbbbccccddddeeeeffff0011223344";
+
+test("the workflow the drift check waits for is the one that deploys master", () => {
+  const ci = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  assert.equal(/^name: (.+)$/m.exec(ci)?.[1], MASTER_CI_WORKFLOW);
+  assert.match(ci, /^  deploy:$/m, "ci.yml no longer holds the deploy job, so its run says nothing about the deploy");
+});
+
+test("master head's CI run queued, in progress, or green inside the settle window posts no drift finding", () => {
+  for (const runs of [
+    [ciRun("queued", null)],
+    [ciRun("in_progress", null)],
+    [ciRun("completed", "success", DEPLOY_SETTLE_MINUTES - 1)],
+    // A re-run in flight after a red run: the newest run decides.
+    [{ ...ciRun("completed", "failure", 30) }, { ...ciRun("in_progress", null), created_at: minutesAgo(2) }],
+  ]) {
+    const verdict = deployVerdict(runs, NOW);
+    assert.equal(verdict.wait, true, JSON.stringify(runs));
+    assert.deepEqual(healthFindings(HEALTHY, DRIFTED, HEALTHY.schema_version, "capsid", verdict), [], JSON.stringify(runs));
+  }
+});
+
+test("master head's CI run failed, cancelled, never started, unreadable or long green keeps the drift finding", () => {
+  const cases: Array<[Parameters<typeof deployVerdict>[0], RegExp]> = [
+    [[ciRun("completed", "failure", 1)], /ended failure/],
+    [[ciRun("completed", "cancelled", 1)], /ended cancelled/],
+    [[], /no CI run started/],
+    // Another workflow's run on the same sha is not master's deploy.
+    [[ciRun("in_progress", null, 1, "improve-score")], /no CI run started/],
+    [null, /could not be read/],
+    [[ciRun("completed", "success", DEPLOY_SETTLE_MINUTES + 1)], /succeeded 16 minutes ago/],
+  ];
+  for (const [runs, evidence] of cases) {
+    const verdict = deployVerdict(runs, NOW);
+    assert.equal(verdict.wait, false, JSON.stringify(runs));
+    const found = healthFindings(HEALTHY, DRIFTED, HEALTHY.schema_version, "capsid", verdict);
+    assert.deepEqual(found.map((f) => f.fingerprint), ["deploy-drift-0360787"], JSON.stringify(runs));
+    assert.match(found[0].body, evidence);
+  }
 });
 
 test("an UNKNOWN master sha is not drift, because that is a finding about the watcher", () => {

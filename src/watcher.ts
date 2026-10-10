@@ -175,14 +175,55 @@ const finding = (namespace: string, fingerprint: string, headline: string, evide
   evidence,
 });
 
+// The deploy-drift check waits for master's own CI run, which deploys. On 2026-10-10
+// it fired twice (a160f99, e654650) while the CI run for that exact sha was still
+// running, and both deployed green minutes later. A run that finished green this
+// recently may still be ahead of the /health answer, so it gets a settle window too.
+export const MASTER_CI_WORKFLOW = "CI";
+export const DEPLOY_SETTLE_MINUTES = 15;
+
+export interface HeadRun {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+// wait: the deploy for master head may still be in flight, so drift cannot be judged
+// this pass. Otherwise the line says what master's CI run showed, as evidence.
+export type DeployVerdict = { wait: true; reason: string } | { wait: false; evidence: string };
+
+/** Whether master head's own CI run leaves a drift finding premature. `runs` is the
+ *  run list for that sha, newest first, or null when it could not be read. A failed
+ *  or cancelled run, no run at all, and an unreadable list all keep the finding. */
+export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): DeployVerdict {
+  if (runs === null) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run could not be read` };
+  const run = runs
+    .filter((r) => r.name === MASTER_CI_WORKFLOW)
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+  if (!run) return { wait: false, evidence: `no ${MASTER_CI_WORKFLOW} run started for master head` };
+  if (run.status !== "completed") return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run is ${run.status}` };
+  if (run.conclusion !== "success") return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run ended ${run.conclusion ?? "with no conclusion"}` };
+  const finished = run.updated_at ? Date.parse(run.updated_at) : Number.NaN;
+  if (Number.isNaN(finished)) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded at an unknown time` };
+  const minutes = (now.getTime() - finished) / 60_000;
+  if (minutes < DEPLOY_SETTLE_MINUTES) {
+    return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago, inside the ${DEPLOY_SETTLE_MINUTES} minute settle` };
+  }
+  return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago` };
+}
+
 /** What /health says that should not be true. `masterSha` and `latestMigration` come
  *  from the repo, so this answers "is the deployed Worker the one master describes"
- *  rather than only "is it up". */
+ *  rather than only "is it up". `deploy` is master head's CI verdict; a deploy still in
+ *  flight is not drift. */
 export function healthFindings(
   health: HealthReport,
   masterSha: string | null,
   latestMigration: string | null,
-  namespace: string
+  namespace: string,
+  deploy: DeployVerdict = { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run was not read` }
 ): Finding[] {
   const out: Finding[] = [];
   if (health.status !== "ok") {
@@ -196,11 +237,12 @@ export function healthFindings(
   }
   // A sha comparison needs both sides. A null master sha means the repo read failed,
   // and reporting that as drift would be a finding about the watcher, not the deploy.
-  if (masterSha && health.sha && health.sha !== "unknown" && health.sha !== masterSha) {
+  if (masterSha && health.sha && health.sha !== "unknown" && health.sha !== masterSha && !deploy.wait) {
     out.push(
       finding(namespace, `deploy-drift-${masterSha.slice(0, 7)}`, "the deployed sha is not master head", [
         `deployed: ${health.sha}`,
         `master: ${masterSha}`,
+        deploy.evidence,
         "A docs-only push whose deploy failed, or a deploy that never ran, looks exactly like this.",
       ])
     );
@@ -949,7 +991,15 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   if (health) {
     ran.add("health");
     const head = await attempt("master head", () => defaultBranchSha(env, "capsid"));
-    if (head !== null) ran.add("master head");
+    // Master head's own CI run, read only when the deployed sha differs. A deploy
+    // still in flight leaves the check un-judged this pass: nothing is posted and an
+    // open drift finding is not cleared on it.
+    let deploy: DeployVerdict | undefined;
+    if (head !== null && health.sha && health.sha !== "unknown" && health.sha !== head) {
+      const runs = await attempt("head ci run", async () => (await ciStatus(env, "capsid", undefined, { ref: head, limit: 10 })).runs);
+      deploy = deployVerdict(runs, now);
+    }
+    if (head !== null && !deploy?.wait) ran.add("master head");
     // Wrapped in an object so a tree with no migrations (null) is told apart from a
     // read that failed (also null from attempt).
     const migrations = await attempt("migrations", async () => {
@@ -957,7 +1007,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       return { newest: newestMigration(tree.entries.map((e) => basename(e.path))) };
     });
     if (migrations !== null) ran.add("migrations");
-    out.push(...healthFindings(health, head ?? null, migrations?.newest ?? null, "capsid"));
+    out.push(...healthFindings(health, head ?? null, migrations?.newest ?? null, "capsid", deploy));
   }
 
   const status = await attempt("improve_status", () => improveStatus(env));

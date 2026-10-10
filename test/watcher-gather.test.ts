@@ -95,6 +95,33 @@ test("A DEPLOYED SHA THAT IS NOT MASTER HEAD REACHES THE QUEUE through gatherFin
   assert.deepEqual(failures.filter((f) => f.includes("master head")), [], "the master head read must not fail");
 });
 
+// Master head's CI run, served for the head sha the watcher asks about and nothing else.
+const headRuns = (status: string, conclusion: string | null): Record<string, Route> => ({
+  [`GET /repos/${OWNER}/${REPO}/actions/runs`]: (_body, params) => ({
+    body: {
+      workflow_runs:
+        params.get("head_sha") === MASTER
+          ? [{ id: 1, name: "CI", head_sha: MASTER, status, conclusion, event: "push", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), html_url: "u" }]
+          : [],
+    },
+  }),
+});
+
+test("a deploy-drift finding waits while master head's CI run is in progress, and the check is left un-judged", async () => {
+  const { found, ran, calls } = await gather(NEWER, undefined, headRuns("in_progress", null));
+  assert.ok(calls.some((c) => c.path.endsWith("/actions/runs") && c.search.includes(`head_sha=${MASTER}`)), "the watcher never read master head's CI run");
+  assert.ok(!fingerprints(found).some((f) => f.startsWith("deploy-drift-")), JSON.stringify(fingerprints(found)));
+  assert.ok(!ran.has("master head"), "a deploy in flight must not clear an open drift finding");
+});
+
+test("a deploy-drift finding reaches the queue when master head's CI run failed", async () => {
+  const { found, ran } = await gather(NEWER, undefined, headRuns("completed", "failure"));
+  const drift = found.find((f) => f.fingerprint === `deploy-drift-${MASTER.slice(0, 7)}`);
+  assert.ok(drift, JSON.stringify(fingerprints(found)));
+  assert.match(drift.body, /CI run ended failure/);
+  assert.ok(ran.has("master head"));
+});
+
 test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gatherFindings", async () => {
   const { found, failures } = await gather(LIVE_SCHEMA);
   assert.ok(
