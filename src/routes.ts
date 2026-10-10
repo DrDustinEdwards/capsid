@@ -55,6 +55,7 @@ import {
 import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "./portal-auth";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
+import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "./portal-overnight";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
 import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
@@ -667,6 +668,8 @@ export const defaultHandler = {
     if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
     if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
     if (url.pathname === PORTAL_STALE_PATH && request.method === "GET") return handlePortalStale(request, env);
+    if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET") return handlePortalPlan(request, env);
+    if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
     if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
     if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
     if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);

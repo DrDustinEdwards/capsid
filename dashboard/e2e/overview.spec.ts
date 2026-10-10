@@ -185,7 +185,7 @@ test("the Queue orders blocked jobs by priority then newest, the ones blocked ov
   await visit(page, "queue");
   const group = (id: string) => page.locator(`main .qgroup[data-group="${id}"]`);
   await expect(group("blocked").locator(".qrow b")).toHaveText(["High, two days", "High, three days", "Low, half a day", "Low, one day", "Top, nine days", "Low, twelve days"]);
-  expect(await page.locator("main .qgroup").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.group))).toEqual(["blocked", "running", "queued", "done", "failed"]);
+  expect(await page.locator("main #jobs .qgroup").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.group))).toEqual(["blocked", "running", "queued", "parked", "done", "failed"]);
   for (const id of ["done", "failed"]) {
     const toggle = group(id).getByRole("button");
     await expect(toggle).toHaveAttribute("aria-expanded", "false");

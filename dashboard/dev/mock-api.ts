@@ -35,6 +35,8 @@ import type {
   PortalActivity,
   PortalPackageHistory,
   PortalStale,
+  PortalPlan,
+  PortalDigest,
   PortalMaintenance,
   PortalConvergence,
   ConvergenceSite,
@@ -55,7 +57,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
@@ -67,7 +69,8 @@ function clickName(action: PortalAction, params: Record<string, string>): string
 
 // The Worker's checks on the switches' shared params, with its refusal text.
 function checkSwitch(action: PortalAction, params: Record<string, string>): void {
-  if (params.undo !== undefined && !SWITCHES.includes(action)) throw new Refusal(400, `${action} takes no undo; 'undo' is not one of them.`);
+  // Park and unpark are each other's reverse, so they take undo too (src/controls.ts).
+  if (params.undo !== undefined && !SWITCHES.includes(action) && action !== "park_job" && action !== "unpark_job") throw new Refusal(400, `${action} takes no undo; 'undo' is not one of them.`);
   if (!SWITCHES.includes(action)) return;
   if (params.undo !== undefined && params.undo !== "true") throw new Refusal(400, `${action}'s undo is "true" or absent; got '${params.undo}'.`);
   if (!(params.reason ?? "").trim()) throw new Refusal(400, `${action} needs a reason. It is recorded in the audit row with the change.`);
@@ -121,6 +124,8 @@ interface MockState {
   canonDecided: Set<number>;
   // Repairs run since the mock started, newest first (GET /portal/api/convergence).
   repairs: Array<{ namespace: string; tool: string; at: string }>;
+  // Pull requests closed from the Portal since the mock started, as "<repo>#<number>".
+  closedPrs: Set<string>;
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
 
@@ -321,6 +326,7 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
   out.live.canon_proposals = out.live.canon_proposals.filter((c) => !st.canonDecided.has(c.id));
+  out.live.awaiting_seat = out.live.awaiting_seat.filter((a) => !st.closedPrs.has(`${a.repo}#${a.number}`));
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
@@ -456,6 +462,51 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         done: `Closed ${j.id} as shipped; the outcome is credited to ${j.claimed_by ?? "its holder"}.`,
         changes: [`jobs.${j.id}.status: blocked -> done`, `The outcome row credits ${j.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you.`],
         apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, lease_expires: null, updated_at: now }),
+      };
+    }
+    case "supersede_job": {
+      const j = job();
+      const reason = need(params, "reason", "A reason");
+      const worked = j.blocked_count > 0 || j.resumed_count > 0 || j.result_ref !== null;
+      if (j.status !== "queued" && !(j.status === "claimed" && !worked)) throw new Refusal(400, `${j.id} is ${j.status}. Supersede closes a queued job, or a claimed one with no work recorded.`);
+      return {
+        summary: `Supersede ${j.id} (${j.title}).`,
+        done: `Superseded ${j.id}.`,
+        changes: [`jobs.${j.id}.status: ${j.status} -> superseded`, "No outcome row is written against anybody."],
+        apply: (st) => void st.jobs.set(j.id, { status: "superseded", claimed_by: null, lease_expires: null, updated_at: now, waits_on: `Superseded: ${reason}` }),
+      };
+    }
+    case "park_job": {
+      const j = job();
+      const reason = need(params, "reason", "A reason");
+      if (j.status !== "queued") throw new Refusal(400, `${j.id} is ${j.status}. Park changes a queued job.`);
+      return {
+        summary: `Park ${j.id} (${j.title}).`,
+        done: `Parked ${j.id}.`,
+        changes: [`jobs.${j.id}.status: queued -> parked, with "${reason}"`],
+        apply: (st) => void st.jobs.set(j.id, { status: "parked", parked_reason: reason, updated_at: now }),
+      };
+    }
+    case "unpark_job": {
+      const j = job();
+      if (j.status !== "parked") throw new Refusal(400, `${j.id} is ${j.status}, not parked.`);
+      return {
+        summary: `Unpark ${j.id} (${j.title}).`,
+        done: `Unparked ${j.id}; it is queued again.`,
+        changes: [`jobs.${j.id}.status: parked -> queued, at priority ${j.priority}`],
+        apply: (st) => void st.jobs.set(j.id, { status: "queued", parked_reason: undefined, updated_at: now }),
+      };
+    }
+    case "pr_close": {
+      const repo = need(params, "repo", "The repo");
+      const number = need(params, "number", "The pull request's number");
+      need(params, "reason", "A reason");
+      if (!f.live.awaiting_seat.some((a) => a.repo === repo && String(a.number) === number)) throw new Refusal(400, `${repo}#${number} is not an open pull request the mock knows.`);
+      return {
+        summary: `Close ${repo}#${number} without merging it.`,
+        done: `Closed ${repo}#${number}.`,
+        changes: [`${repo}#${number}: open -> closed, not merged`, "Its head branch is deleted as manage_pr close deletes it."],
+        apply: (st) => void st.closedPrs.add(`${repo}#${number}`),
       };
     }
     case "release_job": {
@@ -646,6 +697,49 @@ function stale(f: OpsFeed): PortalStale {
     else if (days >= 3) rows.push({ ...base, rule: "unchanged", reason: `${j.status} and unchanged since ${j.updated_at} (${days} day${days === 1 ? "" : "s"})` });
   }
   return { generated: new Date(now).toISOString(), rows, truncated: false, note: null };
+}
+
+// GET /portal/api/plan, from the feed's queued jobs: one lane per namespace, the first
+// four planned at an hour each and the rest skipped as over the budget, a gated job marked.
+function tonight(f: OpsFeed): PortalPlan {
+  const queued = f.live.jobs.filter((j) => j.status === "queued").sort((a, b) => b.priority - a.priority);
+  const lanes = new Map<string, PortalPlan["lanes"][number]>();
+  const skipped: PortalPlan["skipped"] = [];
+  let used = 0;
+  for (const j of queued) {
+    if (used >= 240) {
+      skipped.push({ id: j.id, namespace: j.namespace, title: j.title, reason: "over tonight's budget: the heavy lanes have 240 of 240 minutes planned" });
+      continue;
+    }
+    const repo = `example-org/${j.namespace}`;
+    const lane = lanes.get(repo) ?? { repo, namespaces: [j.namespace], heavy: true, jobs: [], planned_minutes: 0 };
+    lane.jobs.push({ id: j.id, namespace: j.namespace, title: j.title, priority: j.priority, estimate_minutes: 60, estimate_source: "default", gated: j.gate_required });
+    lane.planned_minutes += 60;
+    used += 60;
+    lanes.set(repo, lane);
+  }
+  return { generated: new Date(mockNow()).toISOString(), budget_minutes: 240, policy: "document", policy_note: null, heavy_planned_minutes: used, lanes: [...lanes.values()], skipped, queued_read: queued.length, truncated: false };
+}
+
+// GET /portal/api/digest?since=, from the feed: what finished and blocked since then, and
+// the pull requests recorded against jobs.
+function digest(f: OpsFeed, since: string): PortalDigest {
+  const after = (t: string) => Date.parse(t) >= Date.parse(since);
+  const none = { cost_usd: null, active_seconds: null, tokens_input: null, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null };
+  const finished = f.live.jobs.filter((j) => (j.status === "done" || j.status === "failed") && after(j.updated_at));
+  const blocked = f.live.jobs.filter((j) => j.status === "blocked" && after(j.updated_at));
+  const prs = f.live.prs.filter((p) => after(p.recorded_at));
+  return {
+    generated: new Date(mockNow()).toISOString(),
+    since,
+    for_namespace: null,
+    finished: finished.map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, status: j.status, result_kind: null, duration_minutes: null, blocked_count: j.blocked_count, usage: none, usage_source: "none" })),
+    blocked: blocked.map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, at: j.updated_at, summary: j.waits_on ?? "", pull_requests: [], usage: none, usage_source: "none" })),
+    pull_requests_ready: prs.filter((p) => p.merged !== true).map((p) => ({ job_id: p.job_id, namespace: f.live.jobs.find((j) => j.id === p.job_id)?.namespace ?? "sample", url: p.pr_url, state: p.merged === null ? "unchecked" : "open", source: "outcome" })),
+    pull_requests_merged: prs.filter((p) => p.merged === true).length,
+    totals: { telemetry: { ...none, jobs: 0 }, reported: { ...none, jobs: 0 }, jobs_without_usage: finished.length },
+    truncated: [],
+  };
 }
 
 // GET /portal/api/convergence: each site with an operator configuration, as the Worker
@@ -1008,7 +1102,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -1072,7 +1166,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1088,6 +1182,16 @@ export function mockOpsApi(): Plugin {
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/plan") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, tonight(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/digest") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const since = isoOrNull(url.searchParams.get("since"));
+          if (since === "bad") return refuse(res, 400, "since must be an ISO 8601 time such as 2026-10-04 or 2026-10-04T22:00:00Z.");
+          return send(res, 200, digest(feed(nextRefresh, st), since ?? new Date(mockNow() - 86_400_000).toISOString()));
         }
         if (path === "/portal/api/convergence") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

@@ -92,6 +92,7 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
   done: { kind: "done", label: "Done" },
   failed: { kind: "crit", label: "Failed" },
   superseded: { kind: "nodata", label: "Superseded" },
+  parked: { kind: "nodata", label: "Parked" },
 };
 
 export const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];

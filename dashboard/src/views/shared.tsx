@@ -212,6 +212,10 @@ const GROUPS: QueueGroup[] = [
   { id: "blocked", label: "Blocked, waiting on you", pick: (jobs, now) => blockedOrder(jobs, now).all },
   { id: "running", label: "Running", pick: byStatus(["claimed"]) },
   { id: "queued", label: "Queued", pick: (jobs) => jobs.filter((j) => j.status === "queued").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)) },
+  // Wanted, but not now (src/jobs-park.ts): never claimed or planned until unparked. A
+  // row opens the drawer, which holds Unpark; a button in the row would break its height
+  // (design D2).
+  { id: "parked", label: "Parked", pick: (jobs) => jobs.filter((j) => j.status === "parked").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)), hideEmpty: true },
   { id: "done", label: "Done in the last 24h", pick: byStatus(["done"]), collapsed: true },
   { id: "failed", label: "Failed or superseded, last 24h", pick: byStatus(["failed", "superseded"]), collapsed: true },
 ];
@@ -224,6 +228,8 @@ export function jobMeta(j: OpsJob, now: number): string {
       return j.lease_expires ? `lease ${ago(ms(j.lease_expires), now)}` : "no lease";
     case "queued":
       return `queued ${ago(ms(j.created_at), now)}`;
+    case "parked":
+      return `parked ${ago(ms(j.updated_at), now)}`;
     default:
       return `${JOB[j.status].label.toLowerCase()} ${ago(ms(j.updated_at), now)}`;
   }
@@ -260,16 +266,22 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                   const pr = feed.live.prs.find((p) => p.job_id === j.id);
                   // Plain English in the row; the job id is in the drawer (D11).
                   const sub =
-                    j.status === "blocked"
+                    j.status === "blocked" && j.question
+                      ? `Asks: ${(j.waits_on ?? "no question recorded").replace(/^QUESTION:\s*/, "")}`
+                      : j.status === "blocked"
                       ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
+                      : j.status === "parked"
+                        ? `Comes back: ${j.parked_reason ?? "no reason recorded"}`
                       : j.status === "claimed"
                         ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
                         : j.status === "queued"
                           ? `${j.finding ? "Watcher finding · " : ""}priority ${j.priority}`
                           : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
-                  const k = JOB[j.status];
+                  // A blocked job that asks something is marked as a question: it waits on
+                  // an answer, not on a command (design-portal-evaluation.md, the question row).
+                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : JOB[j.status];
                   return (
-                    <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                    <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0} {...(j.question ? { "data-question": "" } : {})}>
                       <St kind={k.kind}>{k.label}</St>
                       <div className="t">
                         <b>{j.title}</b>

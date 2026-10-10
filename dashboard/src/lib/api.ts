@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -14,6 +14,8 @@ export const CLAIMS_URL = `${BASE}/api/claims`;
 export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 export const SHARED_CODE_URL = `${BASE}/api/shared-code`;
 export const STALE_URL = `${BASE}/api/stale`;
+export const PLAN_URL = `${BASE}/api/plan`;
+export const DIGEST_URL = `${BASE}/api/digest`;
 export const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 export const CONVERGENCE_URL = `${BASE}/api/convergence`;
 export const SIGN_OUT_URL = `${BASE}/api/sign-out`;
@@ -239,6 +241,18 @@ export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
 // from the reader behind jobs list stale: true.
 export function fetchStale(): Promise<Answer<PortalStale>> {
   return get<PortalStale>(STALE_URL);
+}
+
+// GET /portal/api/plan: the overnight plan over every namespace, the reader behind jobs
+// list view plan.
+export function fetchPlan(): Promise<Answer<PortalPlan>> {
+  return get<PortalPlan>(PLAN_URL);
+}
+
+// GET /portal/api/digest?since=: what finished, blocked and is ready since then, the
+// reader behind jobs list view digest.
+export function fetchDigest(since: string): Promise<Answer<PortalDigest>> {
+  return get<PortalDigest>(`${DIGEST_URL}?since=${encodeURIComponent(since)}`);
 }
 
 // GET /portal/api/maintenance: the daily maintenance pass's last list and what it read.

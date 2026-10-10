@@ -44,6 +44,8 @@ export type {
   PortalPerformed,
   PortalPreview,
   PortalStale,
+  PortalPlan,
+  PortalDigest,
   PortalMaintenance,
   PortalConvergence,
   ConvergenceSite,

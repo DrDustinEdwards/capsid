@@ -88,6 +88,9 @@ export interface ConfirmRequest {
   title: string;
   // Called after a successful perform, once the app has taken the new feed.
   onDone?: (p: PortalPerformed) => void;
+  // The reverse action the result message offers as Undo, for a reversible control
+  // (park and unpark).
+  undo?: UndoRequest;
 }
 
 // The reverse of a switch change, sent by the message's Undo as its own action, with
@@ -99,7 +102,7 @@ export interface UndoRequest {
   focus?: string;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job", "close_shipped", "canon_reject"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close", "canon_reject"]);
 
 // The actions whose dialog also offers an optional note under the reason: resume_job's
 // is the full approval, which the driver reads as resume_note.note.
@@ -116,6 +119,10 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   release_job: "Release job",
   fail_job: "Mark failed",
   close_shipped: "Close as shipped",
+  supersede_job: "Supersede job",
+  park_job: "Park job",
+  unpark_job: "Unpark job",
+  pr_close: "Close pull request",
   revoke_agent: "Revoke agent",
   site_add: "Add site",
   site_edit: "Save changes",
@@ -135,7 +142,7 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "canon_approve", "canon_reject"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close", "canon_approve", "canon_reject"]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
 export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove"]);

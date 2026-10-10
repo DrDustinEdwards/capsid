@@ -11,8 +11,12 @@ import { addPackage, describePackage, editPackage, readPackageRow, removePackage
 import { IMPROVE_MODES, onLoopRoster, pausedKey, LOOP_ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
 import { adminFailJob, completeAsCaller, releaseJob, resumeJob } from "./jobs";
+import { parkJob, unparkJob } from "./jobs-park";
 import { MAX_RESUME_NOTE } from "./limits";
-import { resumeDestination } from "./jobs-seat";
+import { resumeDestination, supersedeJob, workRecorded } from "./jobs-seat";
+import { openTitleHolder } from "./jobs-edit";
+import { resolveRepo } from "./github/client";
+import { managePr } from "./github/refs";
 import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
@@ -47,6 +51,10 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "fail_job",
   "release_job",
   "close_shipped",
+  "supersede_job",
+  "park_job",
+  "unpark_job",
+  "pr_close",
   "revoke_agent",
   "site_add",
   "site_edit",
@@ -137,6 +145,14 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Mark job ${id} failed. This is the seat stepping in on a job it does not hold, and it is recorded as such.`;
     case "close_shipped":
       return `Close blocked job ${id} as shipped. Its work landed, so the job moves to done, and the outcome is credited to the driver that did the work, not to you. The pull requests it names are read from GitHub for the outcome, and the close is recorded as yours.`;
+    case "supersede_job":
+      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody, and any key bound to it is revoked.`;
+    case "park_job":
+      return `Park job ${id}. It stays listed but is never claimed or planned until somebody unparks it; the reason says when it comes back.`;
+    case "unpark_job":
+      return `Unpark job ${id}. It goes back to the queue at its priority, and the next free session may claim it.`;
+    case "pr_close":
+      return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as manage_pr close deletes it. GitHub can reopen it; the Portal does not.`;
     case "revoke_agent":
       return `Revoke the agent ${params.name ?? ""}. Its key stops resolving immediately. The row stays, so its audit history still reads, and the name can never be minted again.`;
     case "site_add":
@@ -337,6 +353,49 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, job.namespace, { id, reason, held_by: job.claimed_by, prs: shipped.prs.length });
         break;
       }
+      case "supersede_job": {
+        const id = required(params, "id");
+        const reason = required(params, "reason");
+        if (!id) return { ok: false, refusal: "supersede_job needs a job id." };
+        if (!reason) return { ok: false, refusal: "supersede_job needs a reason: what replaced this job, or why it was withdrawn." };
+        const replaced_by = required(params, "replaced_by") ?? undefined;
+        const result = await supersedeJob(env, agent, now, id, { reason, replaced_by });
+        if (!result.ok) return { ok: false, refusal: result.refusal ?? "supersede_job was refused." };
+        committed = true;
+        summary = `Superseded ${id}${replaced_by ? ` with ${replaced_by}` : ""}.`;
+        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason, ...(replaced_by ? { replaced_by } : {}) });
+        break;
+      }
+      case "park_job":
+      case "unpark_job": {
+        const id = required(params, "id");
+        if (!id) return { ok: false, refusal: `${action} needs a job id.` };
+        const reason = required(params, "reason");
+        if (action === "park_job" && !reason) return { ok: false, refusal: "park_job needs a reason in one line saying when the job comes back." };
+        const result = action === "park_job" ? await parkJob(env, agent, now, id, reason ?? undefined) : await unparkJob(env, agent, now, id);
+        if (!result.ok) return { ok: false, refusal: result.refusal ?? `${action} was refused.` };
+        committed = true;
+        summary = action === "park_job" ? `Parked ${id}.` : `Unparked ${id}; it is queued again.`;
+        await auditClick(env, actor, source, surface, action, result.job?.namespace ?? null, { id, reason, ...(undo ? { undo: true } : {}) }, click);
+        break;
+      }
+      case "pr_close": {
+        const namespace = required(params, "namespace");
+        const number = Number(required(params, "number"));
+        const reason = required(params, "reason");
+        if (!namespace || !Number.isInteger(number) || number < 1) return { ok: false, refusal: "pr_close needs a namespace and the pull request's number." };
+        if (!reason) return { ok: false, refusal: "pr_close needs a reason: why the pull request is closed without merging." };
+        const repo = required(params, "repo") ?? undefined;
+        // Only the close shape comes back from action "close".
+        const result = (await managePr(env, namespace, number, "close", "squash", repo)) as { repo: string; head_branch: string | null; head_branch_deleted: boolean };
+        committed = true;
+        summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
+        // managePr writes no audit row of its own (the manage_pr tool's guardedWrite does),
+        // so the control writes the change's row beside the click row.
+        await env.DB.batch([auditStatement(env.DB, actor, "pr-closed", namespace, null, { repo: result.repo, number, reason, head_branch: result.head_branch, head_branch_deleted: result.head_branch_deleted })]);
+        await auditClick(env, actor, source, surface, action, namespace, { repo: result.repo, number, reason });
+        break;
+      }
       case "revoke_agent": {
         const name = required(params, "name");
         if (!name) return { ok: false, refusal: "revoke_agent needs an agent name." };
@@ -477,6 +536,10 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   release_job: ["id", "reason"],
   fail_job: ["id", "reason"],
   close_shipped: ["id", "reason"],
+  supersede_job: ["id", "reason", "replaced_by"],
+  park_job: ["id", "reason", "undo"],
+  unpark_job: ["id", "reason", "undo"],
+  pr_close: ["namespace", "repo", "number", "reason"],
   revoke_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
   site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script", "operator"],
@@ -723,6 +786,85 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           ...(job.review_required ? ["The job needs a review: the close is refused, and nothing written, unless the newest review on its pull request approves the head."] : []),
         ],
         audit: [`job-admin-complete by ${actor}`, click],
+      };
+    }
+    case "supersede_job": {
+      if (!p.id) return refused("supersede_job needs a job id.");
+      if (!p.reason) return refused("supersede_job needs a reason: what replaced this job, or why it was withdrawn.");
+      const job = await readJob(env.DB, p.id);
+      if (!job) return refused(`no job ${p.id}.`);
+      const label = `${job.id} ('${job.title}' in ${job.namespace})`;
+      if (job.status !== "queued" && job.status !== "claimed") {
+        return refused(`${job.id} is ${job.status}. Supersede closes a queued job, or a claimed one with no work recorded; ${job.status === "blocked" ? "a blocked job has hit a gate, so it is failed instead" : "a finished job is not rewritten"}.`);
+      }
+      const work = job.status === "claimed" ? workRecorded(job) : null;
+      if (work) return refused(`${job.id} has work recorded on it: ${work}. Fail it instead; supersede is for a job replaced before any work was done.`);
+      if (p.replaced_by) {
+        if (p.replaced_by === job.id) return refused(`${job.id} cannot be replaced by itself.`);
+        const replacement = await readJob(env.DB, p.replaced_by);
+        if (!replacement) return refused(`no job ${p.replaced_by}. replaced_by names the job that replaces this one, and it must exist.`);
+        if (replacement.namespace !== job.namespace) return refused(`${p.replaced_by} is in ${replacement.namespace} and ${job.id} is in ${job.namespace}. A job is replaced by work in its own namespace.`);
+      }
+      return {
+        ok: true,
+        changes: [
+          `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> superseded, with the summary "${p.replaced_by ? `Superseded by ${p.replaced_by}` : "Superseded"}: ${p.reason}".`,
+          `No outcome row is written against anybody; any key bound to ${job.id} is revoked, and one supersede touch records that you did it.`,
+        ],
+        audit: [`job-superseded by ${actor}`, click],
+      };
+    }
+    case "park_job": {
+      if (!p.id) return refused("park_job needs a job id.");
+      if (!p.reason || p.reason.length > 300 || /[\r\n]/.test(p.reason)) {
+        return refused("park_job needs a reason in one line, at most 300 characters, saying when the job comes back (\"comes back when ...\").");
+      }
+      const job = await readJob(env.DB, p.id);
+      if (!job) return refused(`no job ${p.id}.`);
+      if (job.status !== "queued") {
+        return refused(`${job.id} is ${job.status}. Park changes a queued job; a claimed or blocked one has somebody on it, so resume or supersede that instead.`);
+      }
+      return {
+        ok: true,
+        changes: [
+          `${job.id} ('${job.title}' in ${job.namespace}): queued -> parked, with "${p.reason}". It is never claimed and never planned while parked.`,
+          "It keeps its row, its priority and its mirror document, and Unpark puts it back in the queue.",
+        ],
+        audit: [`job-parked by ${actor}`, click],
+      };
+    }
+    case "unpark_job": {
+      if (!p.id) return refused("unpark_job needs a job id.");
+      const job = await readJob(env.DB, p.id);
+      if (!job) return refused(`no job ${p.id}.`);
+      if (job.status !== "parked") return refused(`${job.id} is ${job.status}, not parked.`);
+      const holder = await openTitleHolder(env.DB, job.namespace, job.title, job.id);
+      if (holder) {
+        return refused(`${job.namespace} already has another open job titled '${job.title}': ${holder.id} is ${holder.status}. One open job per (namespace, title), so ${job.id} stays parked.`);
+      }
+      return {
+        ok: true,
+        changes: [`${job.id} ('${job.title}' in ${job.namespace}): parked ("${job.result_summary ?? ""}") -> queued, at priority ${job.priority}. The next free session may claim it.`],
+        audit: [`job-unparked by ${actor}`, click],
+      };
+    }
+    case "pr_close": {
+      if (!p.namespace) return refused("pr_close needs the namespace whose repo holds the pull request.");
+      if (!p.number || !/^[1-9][0-9]{0,9}$/.test(p.number)) return refused(`pr_close needs the pull request's number; got '${p.number ?? ""}'.`);
+      if (!p.reason) return refused("pr_close needs a reason: why the pull request is closed without merging. It is recorded in the audit row.");
+      let full: string;
+      try {
+        full = (await resolveRepo(env, p.namespace, p.repo)).full;
+      } catch (err) {
+        return refused(err instanceof Error ? err.message : String(err));
+      }
+      return {
+        ok: true,
+        changes: [
+          `${full}#${p.number}: open -> closed, not merged. GitHub refuses it at perform if it is already closed or merged, and nothing is written then.`,
+          "Its head branch is deleted as manage_pr close deletes it: never the default branch, a loop branch or a fork's.",
+        ],
+        audit: [`pr-closed by ${actor}`, click],
       };
     }
     case "site_add": {

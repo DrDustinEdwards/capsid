@@ -287,7 +287,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
 // row to supersede, rather than being superseded out from under its work.
 
 /** Why a job's row shows work was done on it, or null. */
-function workRecorded(job: JobRow): string | null {
+export function workRecorded(job: JobRow): string | null {
   const done: string[] = [];
   if (job.blocked_count > 0) done.push(`it has hit a gate ${job.blocked_count} time${job.blocked_count === 1 ? "" : "s"}`);
   if (job.resumed_count > 0) done.push(`it has been resumed ${job.resumed_count} time${job.resumed_count === 1 ? "" : "s"}`);

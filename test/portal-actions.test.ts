@@ -22,6 +22,7 @@ import {
 import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
+import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
@@ -178,6 +179,7 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
         lease_expires: "2026-09-28T13:00:00.000Z",
       },
       { id: "job_queued000001", namespace: "capsid", title: "a queued job", body: "lorem", status: "queued", posted_by: "github:sample" },
+      { id: "job_parked000001", namespace: "capsid", title: "a parked job", body: "lorem", status: "parked", posted_by: "github:sample", result_summary: "comes back when the design is ruled" },
     ],
   });
   const kv = fakeKv({ seed: { "improve:paused:capsid": "an old reason" } });
@@ -310,6 +312,10 @@ const EVERY_ACTION = [
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
   ["fail_job", { id: "job_queued000001", reason: "superseded" }],
   ["close_shipped", { id: "job_blocked00001", reason: "merged and live" }],
+  ["supersede_job", { id: "job_queued000001", reason: "a duplicate of job_claimed00001" }],
+  ["park_job", { id: "job_queued000001", reason: "comes back when the design is ruled" }],
+  ["unpark_job", { id: "job_parked000001" }],
+  ["pr_close", { namespace: "capsid", number: "41", reason: "replaced by #42" }],
   ["revoke_agent", { name: "capsid-driver" }],
   ["site_add", { namespace: "capsid-new", origin: "https://new.example.com", platform: "cloudflare" }],
   ["site_edit", { namespace: "capsid", revision: "3", name: "Capsid", origin: "https://capsid.example.com", health_path: "/healthz", platform: "cloudflare", script: "capsid" }],
@@ -323,7 +329,7 @@ const EVERY_ACTION = [
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions and the site repair, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, and supersede, park, unpark and PR close, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
@@ -336,7 +342,9 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "package_add",
     "package_edit",
     "package_remove",
+    "park_job",
     "pause",
+    "pr_close",
     "release_job",
     "reset_breaker",
     "resume_job",
@@ -346,10 +354,12 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "site_edit",
     "site_remove",
     "site_repair",
+    "supersede_job",
+    "unpark_job",
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 20);
+  assert.equal(PORTAL_ACTIONS.length, 24);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -426,6 +436,15 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["release_job", { id: "job_blocked00001", reason: "x" }, /not claimed/],
     ["close_shipped", { id: "job_claimed00001", reason: "x" }, /not blocked/],
     ["close_shipped", { id: "job_blocked00001" }, /needs a reason/],
+    ["supersede_job", { id: "job_blocked00001", reason: "x" }, /a blocked job has hit a gate, so it is failed instead/],
+    ["supersede_job", { id: "job_queued000001" }, /needs a reason/],
+    ["supersede_job", { id: "job_queued000001", reason: "x", replaced_by: "job_queued000001" }, /cannot be replaced by itself/],
+    ["park_job", { id: "job_claimed00001", reason: "later" }, /Park changes a queued job/],
+    ["park_job", { id: "job_queued000001", reason: "two\nlines" }, /in one line/],
+    ["unpark_job", { id: "job_queued000001" }, /not parked/],
+    ["pr_close", { namespace: "capsid", number: "41" }, /needs a reason/],
+    ["pr_close", { namespace: "capsid", number: "-1", reason: "x" }, /needs the pull request's number/],
+    ["pr_close", { namespace: "nosuch", number: "41", reason: "x" }, /unknown namespace: nosuch/],
     ["fail_job", { id: "job_missing00001", reason: "x" }, /no job job_missing00001/],
     ["revoke_agent", { name: "ghost" }, /no agent named 'ghost'/],
     ["pause", { namespace: "capsid", reason: "x", extra: "y" }, /'extra' is not one of them/],
@@ -551,9 +570,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The four actions whose mutators write KV and one audit row, and the revoke; the job
-// transitions (close_shipped among them), the site edits, the package edits and the
+// transitions (close_shipped, supersede, park and unpark among them), the PR close, the site edits, the package edits and the
 // canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("canon_"))) {
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && a !== "pr_close" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("canon_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);
@@ -732,14 +751,16 @@ const ROUTES = [
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
   [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
   [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
+  [PORTAL_PLAN_PATH, "GET", (r: Request, e: never) => handlePortalPlan(r, e, NOW)],
+  [PORTAL_DIGEST_PATH, "GET", (r: Request, e: never) => handlePortalDigest(r, e, NOW)],
   [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
   [PORTAL_CONVERGENCE_PATH, "GET", (r: Request, e: never) => handlePortalConvergence(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all ten routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 10);
+test("all twelve routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 12);
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };
@@ -751,6 +772,15 @@ test("all ten routes refuse a bearer with 403 and send an anonymous caller to si
     assert.equal(anonymous.status, 302, `${path} did not send an anonymous caller to sign in`);
     assert.match(anonymous.headers.get("Location") ?? "", /sample\.cloudflareaccess\.com/);
   }
+});
+
+test("the digest route refuses a since that is not an ISO time with 400, before reading anything", async () => {
+  const w = world();
+  const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
+  const res = await handlePortalDigest(new Request(`https://capsid.example${PORTAL_DIGEST_PATH}?since=yesterday`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" } }), w.env, NOW);
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /since must be an ISO 8601 time/);
+  wroteNothing(w, "a refused digest read");
 });
 
 // Sign out

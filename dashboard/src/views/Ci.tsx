@@ -68,7 +68,7 @@ export function DefaultBranches() {
 // Pull requests (design section 2): the PRs recorded against jobs and those awaiting the
 // seat, CI's PR half. The default-branch table moved to Health.
 export function PullRequests() {
-  const { feed, now } = useApp();
+  const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
     <div className="page">
@@ -122,6 +122,9 @@ export function PullRequests() {
                 <th>Failed</th>
                 <th>Why</th>
                 <th>When</th>
+                <th>
+                  <span className="sr-only">Close</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -137,11 +140,23 @@ export function PullRequests() {
                   </td>
                   <td className="muted">{a.why}</td>
                   <td className="num">{ago(ms(a.at), now)}</td>
+                  <td>
+                    {/* Closing without a merge (design-portal-evaluation.md, the PR close row):
+                        a confirm with a reason; GitHub can reopen it, the Portal does not. */}
+                    <button
+                      type="button"
+                      className="btn"
+                      aria-label={`Close ${a.repo} #${a.number}`}
+                      onClick={() => confirm({ action: "pr_close", params: { namespace: a.namespace, repo: a.repo, number: String(a.number) }, title: `Close pull request ${a.repo} #${a.number}` })}
+                    >
+                      Close
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!live.awaiting_seat.length && (
                 <tr>
-                  <td colSpan={4} className="faint">
+                  <td colSpan={5} className="faint">
                     Nothing is waiting on the seat.
                   </td>
                 </tr>

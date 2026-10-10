@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { DigestBlocked, DigestJob, DigestPr, OvernightDigest, OvernightPlan, PlanLane, PlannedJob, SkippedJob, UsageSource, UsageTotals } from "./ops-types";
 import { resolveRepo } from "./github/client";
 import { logEvent } from "./log";
 
@@ -99,48 +100,6 @@ export interface Estimate {
   minutes: number;
   // Where the number came from: the policy document, the namespace's own record, or the default.
   source: "policy" | "record" | "default";
-}
-
-export interface PlannedJob {
-  id: string;
-  namespace: string;
-  title: string;
-  priority: number;
-  estimate_minutes: number;
-  estimate_source: Estimate["source"];
-  /** The job needs a human confirmation for a risky step (gate_required): the session
-   *  does the ordinary work and lists that step in the pull request for the seat. */
-  gated: boolean;
-}
-
-export interface PlanLane {
-  repo: string;
-  namespaces: string[];
-  heavy: boolean;
-  jobs: PlannedJob[];
-  planned_minutes: number;
-}
-
-export interface SkippedJob {
-  id: string;
-  namespace: string;
-  title: string;
-  reason: string;
-}
-
-export interface OvernightPlan {
-  generated: string;
-  budget_minutes: number;
-  // Where the heavy/light split came from, so "every repo is heavy" is never a surprise.
-  policy: "document" | "default" | "invalid";
-  policy_note: string | null;
-  // Heavy lanes share this budget; their sessions run one at a time.
-  heavy_planned_minutes: number;
-  lanes: PlanLane[];
-  skipped: SkippedJob[];
-  // Counts beside the verdict, so an empty plan cannot pass for a clean one.
-  queued_read: number;
-  truncated: boolean;
 }
 
 // A namespace's repo, or why it has none: no mapping, and a corrupt one, are different facts.
@@ -311,64 +270,7 @@ export async function readOvernightPlan(env: Env, args: { namespace?: string }, 
 
 // THE DIGEST.
 
-export interface UsageTotals {
-  cost_usd: number | null;
-  active_seconds: number | null;
-  tokens_input: number | null;
-  tokens_output: number | null;
-  tokens_cache_read: number | null;
-  tokens_cache_creation: number | null;
-}
-
 const NO_USAGE: UsageTotals = { cost_usd: null, active_seconds: null, tokens_input: null, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null };
-
-export type UsageSource = "telemetry" | "reported" | "none";
-
-export interface DigestJob {
-  id: string;
-  namespace: string;
-  title: string;
-  status: string;
-  result_kind: string | null;
-  duration_minutes: number | null;
-  blocked_count: number | null;
-  usage: UsageTotals;
-  usage_source: UsageSource;
-}
-
-export interface DigestBlocked {
-  id: string;
-  namespace: string;
-  title: string;
-  at: string;
-  // The reason and the command, as the driver wrote them, cut to a readable length.
-  summary: string;
-  pull_requests: string[];
-  usage: UsageTotals;
-  usage_source: UsageSource;
-}
-
-export interface DigestPr {
-  job_id: string;
-  namespace: string;
-  url: string;
-  // merged: GitHub says merged. open: not merged (open or closed). unchecked: never read.
-  state: "merged" | "open" | "unchecked";
-  source: "outcome" | "blocked summary";
-}
-
-export interface OvernightDigest {
-  generated: string;
-  since: string;
-  for_namespace: string | null;
-  finished: DigestJob[];
-  blocked: DigestBlocked[];
-  pull_requests_ready: DigestPr[];
-  pull_requests_merged: number;
-  // Per source, never one added to the other: a job in both would count twice.
-  totals: { telemetry: UsageTotals & { jobs: number }; reported: UsageTotals & { jobs: number }; jobs_without_usage: number };
-  truncated: string[];
-}
 
 interface OutcomeRow {
   job_id: string;

@@ -5,6 +5,7 @@ import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, type Answer } from "../lib/api";
 import type { Kind } from "../lib/derive";
 import { age, ago, ms, utc } from "../lib/format";
+import { download, toCsv } from "../lib/csv";
 import type { ClaimsAgreement, ClaimsAgreementCounts, ClaimsGroup, JobClaimRow, JobEvaluationRow, PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
@@ -391,6 +392,7 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
           This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every row through the claims tool's export.
         </div>
       )}
+      {data && <ClaimsExport data={data} />}
       <Panel
         flush
         title="By agent"
@@ -528,6 +530,68 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
         </div>
       )}
       {detail.data && <JobDetail data={detail.data} now={now} />}
+    </div>
+  );
+}
+
+// The export (design-portal-evaluation.md, DECIDE 3, "claims export with waits and
+// usage"): the aggregate as shown, under the filter in force, as three CSV files, one per
+// table. Nothing is read again; a read that hit its bound says so in the file's name.
+function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
+  const stamp = data.generated.slice(0, 10);
+  const cut = data.truncated.length ? "-partial" : "";
+  const checks = [...new Set(data.groups.flatMap((g) => Object.keys(g.evaluations)))].sort();
+  const agents = () =>
+    download(
+      `claims-by-agent-${stamp}${cut}.csv`,
+      toCsv(
+        ["agent", "namespace", "jobs", "claims", ...checks.flatMap((c) => [`${c}_agree`, `${c}_disagree`, `${c}_unclaimed`, `${c}_unchecked`]), "touches", "waits", "waited_ms_total", "waited_ms_median"],
+        data.groups.map((g) => [
+          g.agent,
+          g.namespace,
+          g.jobs,
+          g.claims,
+          ...checks.flatMap((c) => {
+            const e = g.evaluations[c];
+            return e ? [e.agree, e.disagree, e.unclaimed, e.unchecked] : [null, null, null, null];
+          }),
+          g.touches.count,
+          g.touches.waits,
+          g.touches.waited_ms_total,
+          g.touches.waited_ms_median,
+        ]),
+      ),
+    );
+  const waits = () =>
+    download(
+      `claims-waits-${stamp}${cut}.csv`,
+      toCsv(["namespace", "gate_class", "ended_by", "waits", "waited_ms_total", "waited_ms_median"], data.waits.map((w) => [w.namespace, w.gate_class, w.ended_by, w.waits, w.waited_ms_total, w.waited_ms_median])),
+    );
+  const usage = () => {
+    const cols = ["rows", "cost_usd", "active_seconds", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation"] as const;
+    download(
+      `claims-usage-${stamp}${cut}.csv`,
+      toCsv(
+        ["namespace", "source", ...cols],
+        data.usage.flatMap((u) => [
+          [u.namespace, "telemetry", ...cols.map((c) => u.telemetry[c])],
+          [u.namespace, "reported", ...cols.map((c) => u.reported[c])],
+        ]),
+      ),
+    );
+  };
+  return (
+    <div className="toolbar" role="group" aria-label="Export">
+      <span className="faint small">Export as CSV:</span>
+      <button type="button" className="btn" onClick={agents}>
+        By agent
+      </button>
+      <button type="button" className="btn" onClick={waits}>
+        Waits
+      </button>
+      <button type="button" className="btn" onClick={usage}>
+        Usage
+      </button>
     </div>
   );
 }

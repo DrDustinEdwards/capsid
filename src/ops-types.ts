@@ -199,7 +199,7 @@ export interface PortalPackageHistory {
   weeks: Array<{ week: string; stars: number; open_issues: number; open_prs: number; latest_release: string | null }>;
 }
 
-export type OpsJobStatus = "queued" | "claimed" | "blocked" | "done" | "failed" | "superseded";
+export type OpsJobStatus = "queued" | "claimed" | "blocked" | "done" | "failed" | "superseded" | "parked";
 
 export interface OpsJob {
   id: string;
@@ -228,6 +228,9 @@ export interface OpsJob {
   // resume note, rather than one waiting on a command to be run. Optional so a feed written
   // before it, and the app's sample data, stay valid.
   question?: boolean;
+  // A parked job (src/jobs-park.ts): the one line saying when it comes back. Absent for
+  // every other status, and in a feed written before parked jobs were shown.
+  parked_reason?: string;
   result_ref: string | null;
   // Posted by agent:watcher, with its fingerprint from the title, and how often the
   // watcher has seen it (seen_count, last_seen) while this is the finding's current
@@ -517,6 +520,8 @@ export interface OpsFeed {
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   GET  /portal/api/stale                                        -> PortalStale
+//   GET  /portal/api/plan                                         -> PortalPlan
+//   GET  /portal/api/digest?since=                                -> PortalDigest
 //   GET  /portal/api/maintenance                                  -> PortalMaintenance
 //   GET  /portal/api/convergence                                  -> PortalConvergence
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
@@ -533,6 +538,10 @@ export type PortalAction =
   | "release_job"
   | "fail_job"
   | "close_shipped"
+  | "supersede_job"
+  | "park_job"
+  | "unpark_job"
+  | "pr_close"
   | "revoke_agent"
   | "site_add"
   | "site_edit"
@@ -562,6 +571,13 @@ export type PortalAction =
 //   fail_job      { id, reason }          reason required
 //   close_shipped { id, reason }          reason required; the seat's complete of a
 //                 blocked job another credential holds, credited to that holder
+//   supersede_job { id, reason, replaced_by? }   reason required; a queued job, or a
+//                 claimed one with no work recorded, ends as superseded (no outcome)
+//   park_job      { id, reason, undo? }   reason required, one line: when it comes back
+//   unpark_job    { id, reason?, undo? }  a parked job goes back to the queue; the reason
+//                 is recorded in the click row only (unpark itself takes none)
+//   pr_close      { namespace, number, reason, repo? }   reason required; closes an open
+//                 pull request as manage_pr close does, head branch cleanup included
 //   revoke_agent  { name }
 //   site_add      { namespace, name?, origin?, health_path?, platform?, script? }
 //                 no origin: the namespace serves no site, and takes no other field
@@ -975,3 +991,113 @@ export interface PortalConvergence {
   generated: string;
   sites: ConvergenceSite[];
 }
+
+// THE OVERNIGHT PLAN AND THE MORNING DIGEST (src/overnight-plan.ts): the `jobs` list views
+// "plan" and "digest", and the Portal's GET /portal/api/plan and GET /portal/api/digest,
+// which serve the same readers.
+
+export interface PlannedJob {
+  id: string;
+  namespace: string;
+  title: string;
+  priority: number;
+  estimate_minutes: number;
+  estimate_source: "policy" | "record" | "default";
+  /** The job needs a human confirmation for a risky step (gate_required): the session
+   *  does the ordinary work and lists that step in the pull request for the seat. */
+  gated: boolean;
+}
+
+export interface PlanLane {
+  repo: string;
+  namespaces: string[];
+  heavy: boolean;
+  jobs: PlannedJob[];
+  planned_minutes: number;
+}
+
+export interface SkippedJob {
+  id: string;
+  namespace: string;
+  title: string;
+  reason: string;
+}
+
+export interface OvernightPlan {
+  generated: string;
+  budget_minutes: number;
+  // Where the heavy/light split came from, so "every repo is heavy" is never a surprise.
+  policy: "document" | "default" | "invalid";
+  policy_note: string | null;
+  // Heavy lanes share this budget; their sessions run one at a time.
+  heavy_planned_minutes: number;
+  lanes: PlanLane[];
+  skipped: SkippedJob[];
+  // Counts beside the verdict, so an empty plan cannot pass for a clean one.
+  queued_read: number;
+  truncated: boolean;
+}
+
+export interface UsageTotals {
+  cost_usd: number | null;
+  active_seconds: number | null;
+  tokens_input: number | null;
+  tokens_output: number | null;
+  tokens_cache_read: number | null;
+  tokens_cache_creation: number | null;
+}
+
+export interface DigestJob {
+  id: string;
+  namespace: string;
+  title: string;
+  status: string;
+  result_kind: string | null;
+  duration_minutes: number | null;
+  blocked_count: number | null;
+  usage: UsageTotals;
+  usage_source: UsageSource;
+}
+
+export interface DigestBlocked {
+  id: string;
+  namespace: string;
+  title: string;
+  at: string;
+  // The reason and the command, as the driver wrote them, cut to a readable length.
+  summary: string;
+  pull_requests: string[];
+  usage: UsageTotals;
+  usage_source: UsageSource;
+}
+
+export interface DigestPr {
+  job_id: string;
+  namespace: string;
+  url: string;
+  // merged: GitHub says merged. open: not merged (open or closed). unchecked: never read.
+  state: "merged" | "open" | "unchecked";
+  source: "outcome" | "blocked summary";
+}
+
+export interface OvernightDigest {
+  generated: string;
+  since: string;
+  for_namespace: string | null;
+  finished: DigestJob[];
+  blocked: DigestBlocked[];
+  pull_requests_ready: DigestPr[];
+  pull_requests_merged: number;
+  // Per source, never one added to the other: a job in both would count twice.
+  totals: { telemetry: UsageTotals & { jobs: number }; reported: UsageTotals & { jobs: number }; jobs_without_usage: number };
+  truncated: string[];
+}
+
+export type UsageSource = "telemetry" | "reported" | "none";
+
+// GET /portal/api/plan -> PortalPlan: the overnight plan over every namespace.
+export type PortalPlan = OvernightPlan;
+
+// GET /portal/api/digest?since= -> PortalDigest: what happened since then, over every
+// namespace. since defaults to the last 24 hours; one that is not an ISO time is a 400.
+export type PortalDigest = OvernightDigest;
