@@ -1,4 +1,4 @@
-import { PUBLIC_MODEL_PATH, handlePublicModel } from "./public-data";
+import { PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
@@ -637,7 +637,8 @@ export const defaultHandler = {
     const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
-    if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicModel(request, env, ctx);
+    if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
+    if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
