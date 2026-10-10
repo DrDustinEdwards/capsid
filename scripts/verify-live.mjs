@@ -170,19 +170,29 @@ async function gateCimdAndDcr() {
     record("2 CIMD, DCR allowlisted", false, `register=${register.status}: ${refused}`);
     return null;
   }
+  // Polled, like gates 1 and 6: the Worker under test serves the document, and the first
+  // reads after a deploy can still reach the previous version. On 2026-10-10 the deploy
+  // of dbd5e21 failed here on a single read, one second after gate 1 saw the new sha.
   let doc;
-  try {
-    doc = await request(PROBE_CLIENT, { headers: { Accept: "application/json" } });
-  } catch (err) {
-    record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
-    return COULD_NOT_RUN;
+  let attempt = 0;
+  for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
+    try {
+      doc = await request(PROBE_CLIENT, { headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+    } catch (err) {
+      record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
+      return COULD_NOT_RUN;
+    }
+    if (doc.ok) break;
+    if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
   if (!doc.ok) {
-    record("2 CIMD, DCR allowlisted", false, `the probe document answered ${doc.status} at ${PROBE_CLIENT}`);
+    // Who answered, so a 404 from the Worker ("not found") can be told from one at the edge.
+    const body = doc.text.slice(0, 80).replace(/\s+/g, " ");
+    record("2 CIMD, DCR allowlisted", false, `the probe document answered ${doc.status} at ${PROBE_CLIENT} (polls=${Math.min(attempt, POLL_ATTEMPTS)} server=${doc.headers.get("server") ?? "?"} body=${JSON.stringify(body)})`);
     return null;
   }
   const bad = probeDocumentProblem(parseJson(doc.text), PROBE_CLIENT, PROBE_REDIRECT);
-  record("2 CIMD, DCR allowlisted", bad === null, `register=${register.status} probe=${PROBE_CLIENT}${bad ? `: ${bad}` : ""}`);
+  record("2 CIMD, DCR allowlisted", bad === null, `register=${register.status} probe=${PROBE_CLIENT} polls=${attempt}${bad ? `: ${bad}` : ""}`);
   return bad === null ? PROBE_CLIENT : null;
 }
 
