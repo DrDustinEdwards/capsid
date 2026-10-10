@@ -1,4 +1,4 @@
-import { buildSecurityHeaders } from "@dustinedwards/security-headers/headers";
+import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 
 export type SurfaceClass = "html" | "json" | "other";
 
