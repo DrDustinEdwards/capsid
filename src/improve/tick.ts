@@ -8,6 +8,7 @@ import { expireJobLeases } from "../jobs";
 import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
 import { maintenanceTick } from "../maintenance";
+import { publicBuildTick } from "../public-data";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -173,6 +174,22 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MAINTENANCE_THREW:", rethrow: false }
+  );
+
+  // The public system model (src/public-data.ts): once a UTC day, repo visibility read
+  // from GitHub, the model filtered by toPublic and stored for /public/model/v1.json. A
+  // failed read throws before anything is written, so the last good document stays
+  // served and the ledger shows the failure. Not due is not a run.
+  await runTask(
+    env,
+    "public-build",
+    () => publicBuildTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent("log", "PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` });
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
   );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
