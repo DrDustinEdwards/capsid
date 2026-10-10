@@ -23,7 +23,7 @@ wait for the seat. carrel and capsomer joined for auto-merge only on 2026-10-08.
 | `paths_allowed_for_namespace` | for a namespace with allowed paths (capsid: `docs/` outside `docs/policy/`, and `dashboard/**/*.css`), every changed path, old names of renamed files included, is inside them |
 | `head_in_base_repo` | the PR's head branch is on the base repo, not a fork |
 | `body_names_job` | the PR body carries the id of the job the work came from |
-| `pr_author_allowed` | the GitHub account that opened the PR is on the signed document's author allowlist (`DrDustinEdwards` and `capsid-repo-access[bot]` in version 5) |
+| `pr_author_allowed` | the GitHub account that opened the PR is on the signed document's author allowlist (`DrDustinEdwards` and `capsid-repo-access[bot]` in version 6) |
 | `author_is_driver` | that job was claimed by a minted, unrevoked agent of kind `driver` |
 | `job_handed_on` | that job is `blocked` or `done` |
 | `pr_recorded_for_job` | the job's `result_ref` or one of its `job_outcome_prs` rows names this PR |
