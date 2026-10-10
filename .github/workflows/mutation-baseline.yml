@@ -18,6 +18,14 @@ name: Mutation baseline
 #
 # Sharded by source file so one job stays far under GitHub's six hour limit. Each shard
 # runs the whole unit suite once as its dry run, then only its own mutants.
+#
+# A final job, merge, reads every shard's report, merges them (keyed by test file name,
+# because test ids are local to a report), and pushes four files to a results branch,
+# results/mutation-<run id>, with this repo's own token: mutation.json (the merged report,
+# test sources left out), summary.json (counts, scores, per-source scores, shard
+# accounting, and whether the run was complete), kill-matrix.csv (one row per test file and
+# source file with a kill) and per-test.csv. A session reads them with git, so no artifact
+# download is needed. The branch is generated and force-pushed; nothing merges from it.
 
 on:
   workflow_dispatch:
@@ -174,3 +182,163 @@ jobs:
           path: |
             reports/mutation.json
             shard-files.txt
+
+  merge:
+    name: merge the shard reports
+    needs: mutate
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The only job with a write permission. It writes one generated branch under results/.
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mutation-shard-*
+          path: shards
+
+      - name: Merge the shard reports
+        id: merge
+        run: |
+          set +e
+          node --input-type=module - shards "$RUNNER_TEMP/results" 16 "$GITHUB_RUN_ID" "$GITHUB_SHA" "$GITHUB_REF" <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+
+          const [shardsDir, outDir, expectedArg, runId, sha, ref] = process.argv.slice(2);
+          const expected = Number(expectedArg);
+          fs.mkdirSync(outDir, { recursive: true });
+
+          // One directory per shard artifact. A shard that was given files and wrote no report is
+          // a problem; a shard with no files had no work and is fine.
+          const dirs = fs.existsSync(shardsDir)
+            ? fs.readdirSync(shardsDir).filter((d) => /^mutation-shard-\d+$/.test(d)).sort((a, b) => Number(a.split("-").pop()) - Number(b.split("-").pop()))
+            : [];
+          const problems = [];
+          const shardRows = [];
+          const reports = [];
+          for (const d of dirs) {
+            const n = Number(d.split("-").pop());
+            const listFile = path.join(shardsDir, d, "shard-files.txt");
+            const files = fs.existsSync(listFile) ? fs.readFileSync(listFile, "utf8").split("\n").filter(Boolean) : null;
+            const reportFile = path.join(shardsDir, d, "reports", "mutation.json");
+            const hasReport = fs.existsSync(reportFile);
+            shardRows.push({ shard: n, files: files ? files.length : null, report: hasReport });
+            if (files === null) problems.push(`shard ${n}: no shard-files.txt in its artifact`);
+            else if (files.length > 0 && !hasReport) problems.push(`shard ${n}: given ${files.length} files and wrote no report`);
+            if (hasReport) reports.push({ n, report: JSON.parse(fs.readFileSync(reportFile, "utf8")) });
+          }
+          if (dirs.length !== expected) problems.push(`expected ${expected} shard artifacts, found ${dirs.length}`);
+
+          // Test ids are local to each report, so the merge keys everything by test file name.
+          const testNames = [...new Set(reports.flatMap((r) => Object.keys(r.report.testFiles ?? {})))].sort();
+          const canon = new Map(testNames.map((t, i) => [t, String(i)]));
+          const files = {};
+          let framework = null;
+          let thresholds = null;
+          for (const { n, report } of reports) {
+            framework ??= report.framework ? { name: report.framework.name, version: report.framework.version } : null;
+            thresholds ??= report.thresholds ?? null;
+            const idName = {};
+            for (const [name, v] of Object.entries(report.testFiles ?? {})) for (const t of v.tests) idName[t.id] = name;
+            for (const [src, f] of Object.entries(report.files)) {
+              if (files[src]) { problems.push(`${src} appears in two shards`); continue; }
+              files[src] = {
+                language: f.language,
+                mutants: f.mutants.map((m) => ({
+                  id: m.id,
+                  mutatorName: m.mutatorName,
+                  replacement: m.replacement,
+                  status: m.status,
+                  location: m.location,
+                  static: m.static,
+                  coveredBy: (m.coveredBy ?? []).map((i) => canon.get(idName[i])),
+                  killedBy: (m.killedBy ?? []).map((i) => canon.get(idName[i])),
+                  shard: n,
+                })),
+              };
+            }
+          }
+          const testFiles = Object.fromEntries(testNames.map((t) => [t, { tests: [{ id: canon.get(t), name: t }] }]));
+          fs.writeFileSync(path.join(outDir, "mutation.json"), JSON.stringify({ schemaVersion: "1.0", thresholds, framework, files, testFiles }));
+
+          // Counts, scores and the kill matrix.
+          const nameOf = new Map(testNames.map((t) => [canon.get(t), t]));
+          const totals = { Killed: 0, Timeout: 0, Survived: 0, NoCoverage: 0, RuntimeError: 0, CompileError: 0, Ignored: 0, Pending: 0 };
+          const perTest = new Map(testNames.map((t) => [t, { killed: 0, only: 0, covers: 0 }]));
+          const matrix = new Map();
+          const perSource = [];
+          for (const [src, f] of Object.entries(files).sort()) {
+            const c = {};
+            for (const m of f.mutants) {
+              c[m.status] = (c[m.status] ?? 0) + 1;
+              totals[m.status] = (totals[m.status] ?? 0) + 1;
+              for (const t of new Set(m.coveredBy.map((i) => nameOf.get(i)))) perTest.get(t).covers++;
+              if (m.status !== "Killed") continue;
+              const ks = [...new Set(m.killedBy.map((i) => nameOf.get(i)))];
+              for (const t of ks) {
+                perTest.get(t).killed++;
+                if (ks.length === 1) perTest.get(t).only++;
+                const key = `${t}\t${src}`;
+                const e = matrix.get(key) ?? { k: 0, o: 0 };
+                e.k++;
+                if (ks.length === 1) e.o++;
+                matrix.set(key, e);
+              }
+            }
+            const det = (c.Killed ?? 0) + (c.Timeout ?? 0);
+            const valid = det + (c.Survived ?? 0) + (c.NoCoverage ?? 0);
+            perSource.push({ file: src, mutants: f.mutants.length, ...c, score: valid ? Number((100 * det / valid).toFixed(1)) : null });
+          }
+          const det = totals.Killed + totals.Timeout;
+          const valid = det + totals.Survived + totals.NoCoverage;
+          const summary = {
+            run_id: runId, sha, ref,
+            complete: problems.length === 0,
+            problems,
+            stryker: framework,
+            shards: shardRows,
+            mutants: Object.values(totals).reduce((a, b) => a + b, 0),
+            counts: totals,
+            score: valid ? Number((100 * det / valid).toFixed(2)) : null,
+            score_covered_only: det + totals.Survived ? Number((100 * det / (det + totals.Survived)).toFixed(2)) : null,
+            source_files: perSource.length,
+            test_files: testNames.length,
+            per_source: perSource,
+          };
+          fs.writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
+          fs.writeFileSync(path.join(outDir, "kill-matrix.csv"), ["test_file,source_file,mutants_killed,mutants_killed_only_by_this_test", ...[...matrix.entries()].sort().map(([k, v]) => { const [t, s] = k.split("\t"); return `${t},${s},${v.k},${v.o}`; })].join("\n") + "\n");
+          fs.writeFileSync(path.join(outDir, "per-test.csv"), ["test_file,mutants_killed,mutants_killed_only_by_this_test,mutants_covered", ...testNames.map((t) => `${t},${perTest.get(t).killed},${perTest.get(t).only},${perTest.get(t).covers}`)].join("\n") + "\n");
+          console.log(`merged ${reports.length} reports: ${summary.mutants} mutants in ${summary.source_files} files, score ${summary.score}%, ${matrix.size} matrix rows, ${problems.length} problems`);
+          for (const p of problems) console.log("problem: " + p);
+          if (problems.length) process.exitCode = 1;
+          NODE
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Push the results to a branch
+        env:
+          BRANCH: results/mutation-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # An orphan switch drops every tracked file, so the branch starts empty.
+          git switch --orphan "$BRANCH"
+          git clean -fdxq
+          cp "$RUNNER_TEMP"/results/mutation.json "$RUNNER_TEMP"/results/summary.json "$RUNNER_TEMP"/results/kill-matrix.csv "$RUNNER_TEMP"/results/per-test.csv .
+          git add mutation.json summary.json kill-matrix.csv per-test.csv
+          git commit -q -m "Mutation results for workflow run $GITHUB_RUN_ID"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+          line=$(node -e 'const s=require("./summary.json");console.log("results branch '"$BRANCH"': "+s.mutants+" mutants in "+s.source_files+" files, score "+s.score+"%, complete "+s.complete)')
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if the merge found a problem
+        if: steps.merge.outputs.status != '0'
+        run: |
+          echo "the merge found a problem; the results branch is marked complete: false in summary.json"
+          exit 1
