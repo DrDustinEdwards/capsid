@@ -1,4 +1,5 @@
 import type { Finding } from "./watcher";
+import { sessionKeyDriver } from "./job-session-key";
 
 // ANOMALY RULES ON THE AUDIT LOG (OWASP agentic hardening item 6, ASI10;
 // capsid/research/design-owasp-hardening.md; Dustin's D4 of 2026-10-03: a hit is a watcher
@@ -86,9 +87,13 @@ export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding
   const recentFrom = new Date(now.getTime() - RECENT_HOURS * 3600_000).toISOString().slice(0, 13);
   const byActor = new Map<string, { base: ActionHour[]; recent: ActionHour[] }>();
   for (const r of rows) {
-    const a = byActor.get(r.actor) ?? { base: [], recent: [] };
+    // A session key a claim minted for one job (src/job-session-key.ts) is new every
+    // night by design, so it is judged as the driver it was minted for: its rows join
+    // the driver's, against the driver's baseline.
+    const as = sessionKeyDriver(r.actor);
+    const a = byActor.get(as) ?? { base: [], recent: [] };
     (r.hour >= recentFrom ? a.recent : a.base).push(r);
-    byActor.set(r.actor, a);
+    byActor.set(as, a);
   }
   const out: Finding[] = [];
   for (const [actor, { base, recent }] of [...byActor].sort(([x], [y]) => x.localeCompare(y))) {

@@ -16,6 +16,7 @@ import {
   type AgentScopes,
 } from "./agents-schema";
 import { auditStatement } from "./store-guards";
+import { SESSION_KEY_SEPARATOR } from "./job-session-key";
 
 // The control plane for credentials: mint, list, revoke, re-scope. Admin only (see
 // ADMIN_REASON in src/scope.ts): an agent that could mint another could widen itself.
@@ -160,6 +161,11 @@ async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): P
 export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs & { name: string; kind: string }): Promise<AgentResult> {
   const name = args.name.trim();
   if (!name) return refuse("mint", "an agent needs a name: it is the audit identity every row it writes carries.");
+  // '@' marks a key a claim minted for one job (src/job-session-key.ts), and its prefix
+  // names the driver it counts against, so no other name may carry it.
+  if (name.includes(SESSION_KEY_SEPARATOR)) {
+    return refuse("mint", `an agent name may not contain '${SESSION_KEY_SEPARATOR}': it marks a key a claim minted for one job.`);
+  }
   if (!isAgentKind(args.kind)) {
     return refuse("mint", `'${args.kind}' is not an agent kind. One of: ${AGENT_KINDS.join(", ")}.`);
   }

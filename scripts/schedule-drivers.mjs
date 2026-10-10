@@ -22,7 +22,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { capsidClient } from "./capsid-rpc.mjs";
 import { checkAdminExposure } from "./admin-exposure-check.mjs";
-import { childEnv, prepareRun, acquireHeavyLock, releaseHeavyLock, waitForHeavyLock } from "./overnight-guard.mjs";
+import { childEnv, jobPrompt, prepareRun, acquireHeavyLock, releaseHeavyLock, waitForHeavyLock } from "./overnight-guard.mjs";
 
 const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
@@ -232,10 +232,16 @@ export const DRIVER_DENIED = [
 // outside the working directory prompts even in auto mode, and a -p run denies it.
 const WORKTREES = "C:\\Users\\email\\dev\\worktrees";
 
-/** @param {string} [prompt] the session's prompt; the overnight plan builds it (scripts/overnight-guard.mjs). */
-export function driverArgs(prompt = "/improve work") {
+/**
+ * @param {string} [prompt] the session's prompt; the overnight plan builds it (scripts/overnight-guard.mjs).
+ * @param {string} [mcpConfig] the one-off MCP config holding the session's job key. With
+ *   it the session loads that server alone (--strict-mcp-config), so the folder's own
+ *   .mcp.json and its long-lived driver key are never loaded.
+ */
+export function driverArgs(prompt = "/improve work", mcpConfig) {
   return [
     "-p", prompt,
+    ...(mcpConfig ? ["--mcp-config", mcpConfig, "--strict-mcp-config"] : []),
     "--permission-mode", "auto",
     // Anything that would still fall back to a prompt is denied at once, and the model
     // is told nobody can approve it, rather than retrying.
@@ -257,6 +263,43 @@ export function driverArgs(prompt = "/improve work") {
 export function launchRefusal(folder, check = checkAdminExposure) {
   const result = check({ cwd: folder });
   return result.ok ? null : `refused to launch the driver: ${result.reasons.join("; ")}`;
+}
+
+// ---- the session's key: one job each (OWASP item 5) ------------------------------
+
+// The server name the allowedTools entries above name (mcp__capsid__<tool>).
+const MCP_SERVER = "capsid";
+
+/**
+ * The one-off MCP config for one job's session: the agent route, with the key minted
+ * for that job. Written to a private temp folder, read by the session, then deleted.
+ * @param {string} origin
+ * @param {string} key
+ */
+export function sessionMcpConfig(origin, key) {
+  return JSON.stringify({ mcpServers: { [MCP_SERVER]: { type: "http", url: `${origin}/ops/mcp`, headers: { Authorization: `Bearer ${key}` } } } });
+}
+
+/**
+ * Claim one planned job for a session with the driver's long-lived key, which the Worker
+ * answers with a key bound to that job (src/job-session-key.ts). A refusal (the job was
+ * taken, blocked, or the driver is at its limit) skips that job; the key is never printed.
+ * @param {{ tool(name: string, args: object): Promise<string> }} client
+ * @param {string} id
+ * @returns {Promise<{ ok: true; key: string; name: string } | { ok: false; why: string }>}
+ */
+export async function claimForSession(client, id) {
+  let answer;
+  try {
+    answer = JSON.parse(await client.tool("jobs", { action: "claim", id, session_key: true }));
+  } catch (err) {
+    return { ok: false, why: err instanceof Error ? err.message : String(err) };
+  }
+  const minted = answer?.session_key;
+  if (answer?.ok !== true || typeof minted?.key !== "string" || typeof minted?.name !== "string") {
+    return { ok: false, why: typeof answer?.refusal === "string" ? answer.refusal : "the claim returned no session key" };
+  }
+  return { ok: true, key: minted.key, name: minted.name };
 }
 
 // Where the heavy-suite lock lives: one session at a time across this machine.
@@ -308,20 +351,50 @@ async function runOne(ns) {
         return 3;
       }
     }
-    // The driver session (see readKey for its credential). No shell: the arguments carry
-    // `*`, `(` and spaces, and an argv keeps cmd.exe from reading any of them. The
-    // environment is the parent's with the credential change the switch calls for.
+    // One session per planned job, in the plan's order, each holding a key minted for its
+    // job alone (claimForSession). No shell: the arguments carry `*`, `(` and spaces, and
+    // an argv keeps cmd.exe from reading any of them. The environment is the parent's with
+    // the credential change the switch calls for.
+    const deadline = Date.now() + prepared.budget * 60_000;
+    /** @type {string[]} */
+    const parts = [];
+    let status = 0;
     try {
-      res = spawnSync("claude", driverArgs(prepared.prompt), {
-        cwd: folder,
-        encoding: "utf8",
-        // The plan's budget and a half hour to finish the job in hand.
-        timeout: (prepared.budget + 30) * 60_000,
-        env: childEnv(process.env, prepared.env),
-      });
+      for (const job of prepared.lane.jobs) {
+        const left = Math.floor((deadline - Date.now()) / 60_000);
+        if (left <= 0) {
+          parts.push(`stopped before ${job.id}: the night's budget is spent.`);
+          break;
+        }
+        const held = await claimForSession(client, job.id);
+        if (!held.ok) {
+          parts.push(`skipped ${job.id}: ${held.why}`);
+          continue;
+        }
+        const dir = mkdtempSync(join(tmpdir(), "capsid-session-"));
+        const config = join(dir, "mcp.json");
+        /** @type {{ status: number | null, stdout?: string | null, stderr?: string | null, error?: Error }} */
+        let one;
+        try {
+          writeFileSync(config, sessionMcpConfig(origin, held.key), { mode: 0o600 });
+          one = spawnSync("claude", driverArgs(jobPrompt(prepared.lane, job, left), config), {
+            cwd: folder,
+            encoding: "utf8",
+            // What is left of the budget and a half hour to finish the job in hand.
+            timeout: (left + 30) * 60_000,
+            env: childEnv(process.env, prepared.env),
+          });
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+        const spawned = one.error ? `\n${one.error.message}` : "";
+        parts.push(`## ${job.id} (${held.name})\n${`${one.stdout ?? ""}${one.stderr ?? ""}${spawned}`.trim() || "(no output)"}`);
+        if ((one.status ?? 1) !== 0) status = one.status ?? 1;
+      }
     } finally {
       if (prepared.heavy) releaseHeavyLock(HEAVY_LOCK, ns);
     }
+    res = { status, stdout: parts.join("\n\n"), stderr: "", error: undefined };
   }
   const finished = new Date().toISOString();
   // A claude that never started leaves no stdout, only res.error.
@@ -349,8 +422,9 @@ async function runOne(ns) {
   return exitCode;
 }
 
-// The key is read to POST the run log and for nothing else; the driver session gets
-// its own credential from the project-scoped MCP server in that folder. It is never
+// The driver's long-lived key, the bootstrap credential: it reads the switch and the
+// plan, claims each job for its session (claimForSession) and posts the run log. A
+// session never holds it: each gets a key minted for its one job. It is never
 // printed, on the same rule as scripts/mint-agents.mjs.
 /** @param {string} ns */
 function readKey(ns) {

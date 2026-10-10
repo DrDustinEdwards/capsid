@@ -121,26 +121,25 @@ export function laneFor(plan, ns) {
 }
 
 /**
- * The prompt for one session. Job ids and estimates only, never titles: a title can
- * carry text from outside (a watcher finding quotes what a site served), and this goes
- * to a session that acts on it.
+ * The prompt for one job's session. The scheduler claims each planned job before it
+ * launches a session for it, and the session's Capsid key is minted for that job alone
+ * (src/job-session-key.ts), so a session works one job and the scheduler starts the next.
+ * The job id and its estimate only, never its title: a title can carry text from outside
+ * (a watcher finding quotes what a site served), and this goes to a session that acts on it.
  * @param {Lane} lane
- * @param {number} budgetMinutes
+ * @param {PlannedJob} job
+ * @param {number} minutes what is left of the night's budget
  */
-export function planPrompt(lane, budgetMinutes) {
-  const lines = lane.jobs.map((j, i) => `${i + 1}. ${j.id} (about ${j.estimate_minutes} minutes${j.gated ? ", gated" : ""})`);
-  const gated = lane.jobs.some((j) => j.gated);
+export function jobPrompt(lane, job, minutes) {
   return [
     "/improve work",
     "",
-    `Overnight plan for ${lane.repo}. Work only these jobs, in this order, one at a time:`,
-    ...lines,
-    "",
-    "After a job completes or blocks, claim the next one in the list. A job that blocks stops only itself: do not wait for a person, move on to the next.",
-    ...(gated
-      ? ["A gated job needs a person only for its risky steps (a migration, a deploy, a secret, an account setting, deleting data): do its ordinary work, open its pull request, list each risky step there for the seat without doing it, block with the exact command, and move on."]
+    `Overnight plan for ${lane.repo}: job ${job.id} (about ${job.estimate_minutes} minutes${job.gated ? ", gated" : ""}).`,
+    `It is already claimed for this session, and this session's Capsid key works for ${job.id} alone: do not claim it or any other job. Read it with jobs action list and id ${job.id}, do the work, heartbeat while it runs, then complete, block or fail it. The scheduler starts a new session for the next job.`,
+    ...(job.gated
+      ? ["It is gated: it needs a person only for its risky steps (a migration, a deploy, a secret, an account setting, deleting data). Do its ordinary work, open its pull request, list each risky step there for the seat without doing it, and block with the exact command."]
       : []),
-    `Stop after the last job, or when about ${budgetMinutes} minutes have passed since you started. Do not claim any job that is not listed.`,
+    `Stop when the job is completed, blocked or failed, or when about ${minutes} minutes have passed since you started.`,
   ].join("\n");
 }
 
@@ -223,7 +222,7 @@ export async function waitForHeavyLock(path, info, { waitMs, pollMs = 60_000, sl
  * @param {{ tool(name: string, args: object): Promise<string> }} client
  * @param {string} ns
  * @param {Record<string, string | undefined>} env
- * @returns {Promise<{ run: false; why: string; benign: boolean } | { run: true; runsOn: "api" | "subscription"; env: EnvChange; note: string; prompt: string; heavy: boolean; budget: number }>}
+ * @returns {Promise<{ run: false; why: string; benign: boolean } | { run: true; runsOn: "api" | "subscription"; env: EnvChange; note: string; lane: Lane; heavy: boolean; budget: number }>}
  */
 export async function prepareRun(client, ns, env) {
   /** @type {OvernightState | null} */
@@ -246,5 +245,5 @@ export async function prepareRun(client, ns, env) {
   }
   const lane = laneFor(plan, ns);
   if (!lane) return { run: false, why: `nothing is planned for ${ns} tonight (no queued job fits).`, benign: true };
-  return { run: true, runsOn: verdict.runsOn, env: verdict.env, note: verdict.note, prompt: planPrompt(lane, plan.budget_minutes), heavy: lane.heavy, budget: plan.budget_minutes };
+  return { run: true, runsOn: verdict.runsOn, env: verdict.env, note: verdict.note, lane, heavy: lane.heavy, budget: plan.budget_minutes };
 }

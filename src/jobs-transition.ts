@@ -1,3 +1,4 @@
+import { sessionKeyPattern } from "./job-session-key";
 import type { OfferedSkillWithBody } from "./job-skill-offers";
 import type { Env } from "./env";
 import type { DiskRecord } from "./maintenance-disk";
@@ -38,10 +39,14 @@ export function actorShapeRefusal(action: string, actor: string): JobResult | nu
 // limit (claimLimit, src/agents-schema.ts), one unless the admin raised it. Read up to
 // one past the ceiling, so a table holding more than any limit allows still reads as
 // full rather than as a short page.
+//
+// A driver's claims include the jobs its session keys hold (src/job-session-key.ts): a
+// job handed to one is still that driver's work, on that driver's repo, so its limit and
+// the one-session-per-repo rule count it.
 export async function heldClaims(db: D1Database, actor: string): Promise<JobRow[]> {
   const { results } = await db
-    .prepare("SELECT * FROM jobs WHERE status = 'claimed' AND claimed_by = ?1 ORDER BY claimed_at, id LIMIT ?2")
-    .bind(actor, MAX_CLAIMS_CEILING + 1)
+    .prepare("SELECT * FROM jobs WHERE status = 'claimed' AND (claimed_by = ?1 OR claimed_by LIKE ?2) ORDER BY claimed_at, id LIMIT ?3")
+    .bind(actor, sessionKeyPattern(actor), MAX_CLAIMS_CEILING + 1)
     .all<JobRow>();
   return results ?? [];
 }
@@ -151,6 +156,8 @@ export interface JobResult {
   overlaps?: OverlapReport;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
+  // claim with session_key: the key minted to hold this job, shown once (src/job-session-key.ts).
+  session_key?: { name: string; key: string; note: string };
   // claim: the model Capsid recommends for this job, why, and how to follow it
   // (src/model-routing.ts), and a note when the pull request it carries could not be read.
   routing?: Record<string, unknown>;

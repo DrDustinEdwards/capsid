@@ -47,7 +47,7 @@ export const PROVIDER_VARS: string[];
 export function decideRun(state: OvernightState | null, env: Record<string, string | undefined>): Verdict;
 export function childEnv(parent: Record<string, string | undefined>, change: EnvChange): Record<string, string>;
 export function laneFor(plan: Plan, ns: string): Lane | null;
-export function planPrompt(lane: Lane, budgetMinutes: number): string;
+export function jobPrompt(lane: Lane, job: PlannedJob, minutes: number): string;
 export function acquireHeavyLock(path: string, info: LockInfo, opts?: { now?: () => number; staleMs?: number }): LockResult;
 export function releaseHeavyLock(path: string, ns: string): void;
 export function waitForHeavyLock(
@@ -61,5 +61,5 @@ export function prepareRun(
   env: Record<string, string | undefined>
 ): Promise<
   | { run: false; why: string; benign: boolean }
-  | { run: true; runsOn: "api" | "subscription"; env: EnvChange; note: string; prompt: string; heavy: boolean; budget: number }
+  | { run: true; runsOn: "api" | "subscription"; env: EnvChange; note: string; lane: Lane; heavy: boolean; budget: number }
 >;
