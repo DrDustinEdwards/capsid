@@ -142,7 +142,9 @@ export async function postJob(
   }
   // The model is assigned here, by the Worker, from the kind and the risk the job states
   // about itself. Nobody types it.
+  const id = mintJobId();
   const routing = routeJob({
+    id,
     title,
     body: args.body,
     namespace: args.namespace,
@@ -153,7 +155,7 @@ export async function postJob(
   });
 
   const job: JobRow = {
-    id: mintJobId(),
+    id,
     namespace: args.namespace,
     title,
     body: signedBody.signed,
@@ -331,6 +333,7 @@ function deliveryOf(routing: Routing) {
     kind: routing.kind,
     risk: routing.risk,
     reason: routing.reason,
+    trial: routing.trial,
     rules_version: routing.rules_version,
     deliver:
       `A scheduled or cloud launch starts on --model ${routing.model}. An interactive driver keeps its own session for coordination and does the job's work in a subagent on model ${routing.model} (the Agent tool's model parameter), at effort ${routing.effort}.`,
@@ -456,6 +459,7 @@ export async function claimJob(
   const required = parseRequiredScopes(candidate.required_scopes);
   const prRisk = await pullRequestRisk(env, candidate.namespace, candidate.result_ref);
   const routing = routeJob({
+    id: candidate.id,
     title: candidate.title,
     body: candidate.body,
     namespace: candidate.namespace,

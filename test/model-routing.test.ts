@@ -11,6 +11,7 @@ import {
   MIN_SAMPLE,
   MODELS,
   ROUTING_RULES,
+  TRIAL_ARMS,
   WATCHER_ACTOR_NAME,
   cellsOf,
   deriveKind,
@@ -20,6 +21,8 @@ import {
   riskOf,
   worthReviewer,
   routeJob,
+  trialBucket,
+  trialStatus,
   type OutcomeFact,
 } from "../src/model-routing.ts";
 import { WATCHER_ACTOR } from "../src/watcher.ts";
@@ -108,6 +111,63 @@ test("every kind and the rule list are tied: the last rule is the catch-all, and
   assert.deepEqual(last?.when, {});
   for (const rule of ROUTING_RULES) assert.ok((MODELS as readonly string[]).includes(rule.model), rule.model);
   for (const kind of JOB_KINDS.filter((k) => k !== "other")) assert.ok(ROUTING_RULES.some((r) => r.when.kind === kind), `no rule names ${kind}`);
+});
+
+// TRIAL ARMS
+
+// Ids shaped like mintJobId's, and the first of them in and out of the arms.
+const ids = Array.from({ length: 2000 }, (_, i) => `job_${(i * 2654435761 >>> 0).toString(16).padStart(12, "0").slice(-12)}`);
+const inArm = ids.find((id) => trialBucket(id) < 25)!;
+const outOfArm = ids.find((id) => trialBucket(id) >= 25)!;
+
+test("trial arms: a share of routine watcher, maintenance and docs jobs go to haiku at the rule's effort, the rest stay on the rule", () => {
+  assert.deepEqual(TRIAL_ARMS.map((a) => [a.kind, a.model]).sort(), [["docs", "haiku"], ["maintenance", "haiku"], ["watcher", "haiku"]]);
+  for (const arm of TRIAL_ARMS) {
+    const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
+    assert.ok(MODELS.indexOf(arm.model) < MODELS.indexOf(rule.model), `${arm.kind}'s arm is not cheaper than its rule`);
+    const routes = ids.map((id) => routeJob(job("x", { kind: arm.kind, id })));
+    const taken = routes.filter((r) => r.model === arm.model);
+    assert.ok(taken.length / ids.length > (arm.percent - 4) / 100 && taken.length / ids.length < (arm.percent + 4) / 100, `${arm.kind}: ${taken.length} of ${ids.length}`);
+    for (const r of taken) assert.deepEqual([r.trial, r.effort], [arm.model, rule.effort]);
+    assert.match(taken[0]!.reason, new RegExp(`trial arm: haiku on ${arm.percent} percent of routine ${arm.kind} jobs, measured against ${rule.model}`));
+    for (const r of routes.filter((x) => x.model !== arm.model)) assert.deepEqual([r.model, r.trial], [rule.model, null]);
+  }
+});
+
+test("trial arms: the same id always routes the same way, and no id takes no arm", () => {
+  const first = routeJob(job("x", { kind: "docs", id: inArm }));
+  assert.equal(first.model, "haiku");
+  assert.deepEqual(routeJob(job("other title", { kind: "docs", id: inArm, body: "anything" })), { ...first, reason: first.reason });
+  assert.equal(routeJob(job("x", { kind: "docs", id: outOfArm })).model, "sonnet");
+  assert.equal(routeJob(job("x", { kind: "docs" })).model, "sonnet");
+});
+
+test("PLANT: a risky job or one that names its model never takes an arm, and kinds without an arm never reach haiku", () => {
+  assert.equal(routeJob(job("x", { kind: "docs", id: inArm, required_flags: ["can_merge"] })).model, "opus");
+  assert.equal(routeJob(job("x", { kind: "maintenance", id: inArm, pr_risk: riskOf([{ filename: "src/billing/a.ts" }]) })).model, "opus");
+  assert.equal(routeJob(job("x", { kind: "watcher", id: inArm, namespace: "foxhound" })).model, "opus");
+  const named = routeJob(job("x", { kind: "docs", id: inArm, body: "model: sonnet" }));
+  assert.deepEqual([named.model, named.trial], ["sonnet", null]);
+  for (const kind of ["design", "security", "build", "other"] as const) {
+    assert.ok(ids.every((id) => routeJob(job("x", { kind, id })).model !== "haiku"), kind);
+  }
+  assert.ok(ids.every((id) => routeJob(job("x", { kind: "mechanical", id })).trial === null), "mechanical is on haiku already and has no arm");
+});
+
+test("trialStatus: collecting below the minimum, then the verdict proposeRuleChanges gives, with cost", () => {
+  const thin = trialStatus(cellsOf([...many(MIN_SAMPLE - 1, 9, "docs", "haiku"), ...many(40, 30, "docs", "sonnet")]));
+  assert.equal(thin.length, TRIAL_ARMS.length, "one status per arm");
+  const docs = thin.find((t) => t.kind === "docs")!;
+  assert.deepEqual([docs.verdict, docs.n, docs.against_n, docs.against], ["collecting", MIN_SAMPLE - 1, 40, "sonnet"]);
+  assert.equal(thin.find((t) => t.kind === "watcher")!.verdict, "collecting");
+
+  const cost = (usd: number) => (f: OutcomeFact) => ({ ...f, cost_usd: usd });
+  const good = trialStatus(cellsOf([...many(12, 10, "docs", "haiku").map(cost(0.1)), ...many(12, 10, "docs", "sonnet").map(cost(1.5))]));
+  const supports = good.find((t) => t.kind === "docs")!;
+  assert.equal(supports.verdict, "supports");
+  assert.match(supports.why, /haiku merged green 10\/12 at \$0\.10 a job, sonnet 10\/12 at \$1\.50 a job/);
+  const bad = trialStatus(cellsOf([...many(12, 6, "maintenance", "haiku"), ...many(12, 11, "maintenance", "sonnet")]));
+  assert.equal(bad.find((t) => t.kind === "maintenance")!.verdict, "does not support");
 });
 
 // RISK
@@ -269,6 +329,8 @@ test("readModelLearning reads the window, states what it read, and proposes noth
   const out = await readModelLearning(db, new Date("2026-10-06T12:00:00Z"));
   assert.equal(out.outcomes_read, 24);
   assert.equal(out.proposals.length, 1);
+  assert.equal(out.trials.find((t) => t.kind === "docs")?.verdict, "supports", "the view reports the trial's verdict");
+  assert.deepEqual(out.trial_arms.map((a) => a.kind).sort(), ["docs", "maintenance", "watcher"]);
   assert.match(out.note, /none applied/);
   assert.match(sql, /o\.job_kind IS NOT NULL/);
   assert.match(String(bound[0]), /^2026-07-08/, "the window starts 90 days back");
@@ -323,6 +385,27 @@ test("claim returns the recommendation with how to follow it, and routes a job p
   assert.equal(claimed.job?.model_recommended, "opusplan");
   const update = d1.recorded.find((r) => /UPDATE jobs SET status = 'claimed'/.test(r.sql));
   assert.ok(update?.params.includes("opusplan"), "the claim did not record the model it recommended");
+});
+
+test("post and claim place a job in the same arm, by its id", async (t) => {
+  const d1 = fakeD1({});
+  const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
+  const agent = legacyAgent("write", DRIVER);
+  const now = new Date("2026-10-10T12:00:00Z");
+  // mintJobId reads six random bytes; these mint the id in the arm.
+  const hex = inArm.slice(4);
+  t.mock.method(crypto, "getRandomValues", (bytes: Uint8Array) => {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    return bytes;
+  });
+  const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Docs: the routing table", body: "write", kind: "docs" });
+  t.mock.restoreAll();
+  assert.equal(posted.ok, true, JSON.stringify(posted));
+  assert.deepEqual([posted.job?.id, posted.job?.model_recommended], [inArm, "haiku"]);
+  const claimed = await claimJob(env, agent, now, { id: inArm });
+  assert.equal(claimed.ok, true, JSON.stringify(claimed));
+  assert.deepEqual([claimed.routing?.model, claimed.routing?.trial], ["haiku", "haiku"]);
+  assert.match(String(claimed.routing?.deliver), /--model haiku/);
 });
 
 // THE WIRING THE TESTS CANNOT SEE FROM INSIDE ONE FILE
