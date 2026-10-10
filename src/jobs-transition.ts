@@ -1,5 +1,6 @@
 import type { OfferedSkillWithBody } from "./job-skill-offers";
 import type { Env } from "./env";
+import type { DiskRecord } from "./maintenance-disk";
 import type { Agent } from "./agents";
 import { JOB_LEASE_SECONDS, missingForRecord, type JobRow } from "./jobs-schema";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
@@ -159,6 +160,9 @@ export interface JobResult {
   // edit, and list for one named id to a caller holding write: the versions earlier
   // edits replaced, newest first (src/jobs-edit.ts, migrations/0033).
   versions?: JobVersion[];
+  // heartbeat with a reason: whether the driver's free-disk line was stored
+  // (src/maintenance-disk.ts), or why not.
+  disk?: DiskRecord;
 }
 
 export function refuse(action: string, refusal: string): JobResult {

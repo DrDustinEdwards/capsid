@@ -43,6 +43,8 @@ import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-
 import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 import { externalFence } from "./provenance";
+import { recordDiskReading, type DiskRecord } from "./maintenance-disk";
+import { logEvent } from "./log";
 
 // The transitions the driver holding a job makes: heartbeat, complete, fail and
 // block, and the review gate the last three consult.
@@ -283,8 +285,22 @@ async function holderTransition(
   };
 }
 
-export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {
-  return holderTransition(env, agent, now, "heartbeat", id, { status: "claimed", lease_expires: leaseUntil(now) });
+/** Extends the lease. A reason, when sent, is the driver's free-disk line (claude-skills
+ *  scripts/disk-guard.mjs), kept for the maintenance pass's disk rule only after the lease
+ *  was extended, so a refused heartbeat stores nothing. A failed store is said in the
+ *  reply and logged, and never fails the heartbeat: the lease is what the call is for. */
+export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string, reason?: string): Promise<JobResult> {
+  const result = await holderTransition(env, agent, now, "heartbeat", id, { status: "claimed", lease_expires: leaseUntil(now) });
+  if (!result.ok || reason === undefined || !result.job) return result;
+  let disk: DiskRecord;
+  try {
+    disk = await recordDiskReading(env, { actor: agent.actor, namespace: result.job.namespace, job: id }, reason, now);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logEvent("error", "DISK_READING_NOT_STORED", { message: `heartbeat ${id}: the free-disk reading was not stored (${message})`, actor: agent.actor });
+    disk = { recorded: false, note: `the free-disk reading was not stored: ${message}` };
+  }
+  return { ...result, disk };
 }
 
 // The review gate, consulted by complete, fail and block alike.

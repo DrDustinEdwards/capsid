@@ -215,6 +215,11 @@ table.fleet { width: 100%; border-collapse: collapse; }
 /* A stale job's reason is the row's point, so it wraps rather than being cut. */
 .qrow .t div.why { white-space: normal; overflow-wrap: anywhere; }
 .qrow .m { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.mrow { grid-template-columns: 124px minmax(0, 1fr) auto; cursor: default; }
+.mrow[data-open] { cursor: pointer; }
+.mrow:not([data-open]):hover { background: none; }
+.mrow .t div.why { color: var(--text); font-size: 13px; }
+.mt-read { padding: 6px 16px 10px; font-size: 12px; }
 .qrow.canon { cursor: default; }
 .empty-group { padding: 6px 16px; font-size: 12px; color: var(--dim); }
 

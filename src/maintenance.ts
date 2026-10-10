@@ -1,7 +1,10 @@
 import type { Env } from "./env";
+import type { OpsMaintenanceItem } from "./ops-types";
 import { ROSTER } from "./improve-schema";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
+import { gatherDiskItems } from "./maintenance-disk";
+import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
 
 // The actor the merge-resume step records its touches under (capsid/decisions.md,
 // 2026-10-03, stale jobs D1). Spelled here, not imported, so this pass does not depend on
@@ -18,7 +21,9 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 //
 // The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
 // and the branch rules (src/maintenance-branches.ts) read GitHub for every roster
-// namespace. The disk and undeployed-merge rules follow as their own pieces.
+// namespace. The disk rule (src/maintenance-disk.ts) reads the free-disk lines drivers
+// send on heartbeat; the undeployed-merge rule (src/maintenance-deploys.ts) reads the
+// watcher's snapshot and each site's default branch.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
@@ -30,28 +35,9 @@ const MAX_ITEMS_PER_RULE = 50;
 const FOLLOWUP_PROMISE = /follow(?:[- ]?ups?)?\b[^.]{0,60}\bseparate jobs?/i;
 const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
-export interface MaintenanceItem {
-  /** Which rule found it. */
-  rule:
-    | "later-passed"
-    | "shipped-elsewhere"
-    | "followups-missing"
-    | "auto-resumed"
-    | "pr-awaiting-seat"
-    | "pr-red"
-    | "prs-not-checked"
-    | "branch-merged"
-    | "branch-pruned"
-    | "branch-stale"
-    | "branches-not-checked";
-  namespace: string;
-  /** The job the line is about, or null for a pull request that names none. */
-  job: string | null;
-  /** The pull request the line is about, for the pull request rules. */
-  pr?: string;
-  /** One plain line for the seat: what is wrong and what to do. */
-  line: string;
-}
+// The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the
+// other Portal types in src/ops-types.ts.
+export type MaintenanceItem = OpsMaintenanceItem;
 
 interface MaintenanceList {
   generated: string;
@@ -62,6 +48,10 @@ interface MaintenanceList {
   /** Branches read per namespace, the same way: missing means not read, and a
    *  branches-not-checked item says why. */
   branches_read: Record<string, number>;
+  /** Current driver disk readings read (48 hours or newer). */
+  disk_read: number;
+  /** Sites whose live deploy was compared with their default branch, per namespace. */
+  deploys_read: Record<string, number>;
 }
 
 type MaintenanceReport =
@@ -101,7 +91,8 @@ export async function gatherMaintenance(
   env: Env,
   now: Date,
   prReaders: PrReaders = githubPrReaders(env),
-  branchReaders: BranchReaders = githubBranchReaders(env)
+  branchReaders: BranchReaders = githubBranchReaders(env),
+  deployReaders: DeployReaders = githubDeployReaders(env)
 ): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
@@ -168,18 +159,39 @@ export async function gatherMaintenance(
   const branches = await gatherBranchItems(env, ROSTER, branchReaders, now);
   items.push(...branches.items);
 
-  return { generated: now.toISOString(), items, prs_read: prs.read, branches_read: branches.read };
+  // A driver whose last free-disk reading is under 30 GB, or that stopped claiming.
+  const disk = await gatherDiskItems(env, now);
+  items.push(...disk.items);
+
+  // A live Worker older than its default branch's last commit.
+  const deploys = await gatherDeployItems(deployReaders, now);
+  items.push(...deploys.items);
+
+  return {
+    generated: now.toISOString(),
+    items,
+    prs_read: prs.read,
+    branches_read: branches.read,
+    disk_read: disk.read,
+    deploys_read: deploys.read,
+  };
 }
 
 /** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
  *  it in KV for improve_status, and stamps the day. The stamp is written after the list,
  *  so a pass that threw runs again on the next tick. */
-export async function maintenanceTick(env: Env, now: Date, prReaders?: PrReaders, branchReaders?: BranchReaders): Promise<MaintenanceReport> {
+export async function maintenanceTick(
+  env: Env,
+  now: Date,
+  prReaders?: PrReaders,
+  branchReaders?: BranchReaders,
+  deployReaders?: DeployReaders
+): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now, prReaders, branchReaders);
+  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders);
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
@@ -187,9 +199,10 @@ export async function maintenanceTick(env: Env, now: Date, prReaders?: PrReaders
   const branchesRead = Object.values(list.branches_read).reduce((a, b) => a + b, 0);
   const branchRepos = Object.keys(list.branches_read).length;
   const pruned = list.items.filter((i) => i.rule === "branch-pruned").length;
+  const deploySites = Object.keys(list.deploys_read).length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared`,
     list,
   };
 }
@@ -201,9 +214,15 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
   try {
     const parsed = JSON.parse(raw) as MaintenanceList;
     if (!Array.isArray(parsed.items) || typeof parsed.generated !== "string") return null;
-    // A list written before the pull request or branch rules read none.
+    // A list written before a rule existed read nothing for it.
     const counts = (v: unknown): Record<string, number> => (v && typeof v === "object" ? (v as Record<string, number>) : {});
-    return { ...parsed, prs_read: counts(parsed.prs_read), branches_read: counts(parsed.branches_read) };
+    return {
+      ...parsed,
+      prs_read: counts(parsed.prs_read),
+      branches_read: counts(parsed.branches_read),
+      disk_read: typeof parsed.disk_read === "number" ? parsed.disk_read : 0,
+      deploys_read: counts(parsed.deploys_read),
+    };
   } catch {
     return null;
   }

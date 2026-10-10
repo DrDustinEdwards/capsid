@@ -22,6 +22,7 @@ import {
 import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
+import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 
 // The Portal's controls (src/portal-actions.ts): a preview that writes nothing and
@@ -712,12 +713,13 @@ const ROUTES = [
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
   [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
   [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
+  [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
   [PORTAL_SIGN_OUT_PATH, "POST", (r: Request, e: never) => handlePortalSignOut(r, e, NOW)],
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all eight routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 8);
+test("all nine routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 9);
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };
