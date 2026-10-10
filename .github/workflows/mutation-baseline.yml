@@ -18,15 +18,42 @@ name: Mutation baseline
 #
 # Sharded by source file so one job stays far under GitHub's six hour limit. Each shard
 # runs the whole unit suite once as its dry run, then only its own mutants.
+#
+# A final job, merge, reads every shard's report, merges them (keyed by test file name,
+# because test ids are local to a report), and pushes four files to a results branch,
+# results/mutation-<run id>, with this repo's own token: mutation.json (the merged report,
+# test sources left out), summary.json (counts, scores, per-source scores, shard
+# accounting, and whether the run was complete), kill-matrix.csv (one row per test file and
+# source file with a kill) and per-test.csv. A session reads them with git, so no artifact
+# download is needed. The branch is generated and force-pushed; nothing merges from it.
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: "What to mutate: src (the default, as in the baseline), scripts-dashboard (scripts/*.mjs and dashboard/src/lib), or all"
+        type: choice
+        options: [src, scripts-dashboard, all]
+        default: src
+      only:
+        description: "Optional comma-separated files to mutate instead of the scope, for a targeted pass (paths under src/, scripts/ or dashboard/src/lib)"
+        type: string
+        default: ""
+      tests:
+        description: "Optional comma-separated test files to run instead of the whole unit suite (no exclusion list is applied)"
+        type: string
+        default: ""
+      runner:
+        description: "Test runner. tap runs the chosen test files in one process each and records which killed a mutant. command runs one test file (the tests input, exactly one) as a command per mutant and cannot name a killer on its own; it is for tests that run a script as a child process, whose coverage the tap runner cannot see"
+        type: choice
+        options: [tap, command]
+        default: tap
 
 permissions:
   contents: read
 
 concurrency:
-  group: mutation-baseline-${{ github.ref }}
+  group: mutation-baseline-${{ github.ref }}-${{ inputs.only }}-${{ inputs.tests }}
   cancel-in-progress: false
 
 jobs:
@@ -52,33 +79,86 @@ jobs:
         run: npm install --no-save --no-package-lock --ignore-scripts @stryker-mutator/core@10.0.0 @stryker-mutator/tap-runner@10.0.0
 
       - name: Mutate this shard's source files
+        env:
+          SCOPE: ${{ inputs.scope }}
+          ONLY: ${{ inputs.only }}
+          TESTS: ${{ inputs.tests }}
+          RUNNER: ${{ inputs.runner }}
         run: |
           set -euo pipefail
-          # Every non-declaration source file, sorted, dealt out round-robin so each shard
-          # gets a mix of large and small files. The count is printed so a glob that
-          # matched nothing cannot pass as an empty run.
+          # Dispatch inputs reach the shell through env, never spliced into the script text,
+          # and are checked against a path pattern before use.
+          scope="${SCOPE:-src}"
+          case "$scope" in src|scripts-dashboard|all) ;; *) echo "unknown scope: $scope"; exit 1 ;; esac
+          case "${RUNNER:-tap}" in tap|command) ;; *) echo "unknown runner: $RUNNER"; exit 1 ;; esac
+          path_re='^(src|scripts|dashboard/src/lib|test)/[A-Za-z0-9._/-]+\.(ts|mjs)$'
+          # Every file to mutate, sorted, dealt out round-robin so each shard gets a mix of
+          # large and small files. The total is checked so a glob that matched nothing
+          # cannot pass as an empty run.
           #
-          # Every source file is mutated except src/access-jwt.ts, which Stryker 10's Babel
-          # parser rejects (a typed async arrow as a computed object key, line 68), so the
-          # whole run stops before the dry run. Instead of leaving source files out, the
-          # unit test files that read source text are left out of the run: they are listed,
-          # with the reason, in stryker-excluded-tests.txt, and they are always kept.
-          find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' | sort > all-files.txt
+          # src/ is mutated except src/access-jwt.ts, which Stryker 10's Babel parser rejects
+          # (a typed async arrow as a computed object key, line 68), so the whole run stops
+          # before the dry run. scripts-dashboard is scripts/*.mjs and dashboard/src/lib.
+          # Instead of leaving source files out, the unit test files that read source text
+          # are left out of the run: they are listed, with the reason, in
+          # stryker-excluded-tests.txt (src) and stryker-excluded-tests-scripts.txt
+          # (scripts and dashboard), and they are always kept.
+          if [ -n "$ONLY" ]; then
+            printf '%s' "$ONLY" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' | sort -u > all-files.txt
+            while read -r f; do
+              printf '%s\n' "$f" | grep -Eq "$path_re" || { echo "not an allowed path: $f"; exit 1; }
+              test -f "$f" || { echo "no such file: $f"; exit 1; }
+            done < all-files.txt
+          else
+            : > all-files.txt
+            if [ "$scope" = src ] || [ "$scope" = all ]; then
+              find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' >> all-files.txt
+            fi
+            if [ "$scope" = scripts-dashboard ] || [ "$scope" = all ]; then
+              find scripts -maxdepth 1 -name '*.mjs' >> all-files.txt
+              find dashboard/src/lib -name '*.ts' ! -name '*.d.ts' >> all-files.txt
+            fi
+            sort -o all-files.txt all-files.txt
+          fi
           total=$(wc -l < all-files.txt)
+          test "$total" -gt 0
           awk -v s="${{ matrix.shard }}" -v n=16 'NR % n == s' all-files.txt > shard-files.txt
           mine=$(wc -l < shard-files.txt)
-          echo "shard ${{ matrix.shard }}: $mine of $total source files"
-          test "$mine" -gt 0
-          # The run's config is stryker.config.json with the excluded test files removed.
+          echo "shard ${{ matrix.shard }}: $mine of $total files"
+          # A targeted pass can have fewer files than shards; an empty shard has no work.
+          if [ "$mine" -eq 0 ]; then echo "nothing for this shard"; exit 0; fi
+          # The run's config is stryker.config.json with the test files chosen. With a
+          # tests input, exactly those run. Otherwise every unit test runs except the
+          # excluded lists that match what is being mutated.
           node -e '
             const fs = require("node:fs");
-            const excluded = new Set(fs.readFileSync("stryker-excluded-tests.txt", "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")));
-            const tests = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts")).sort();
-            for (const name of excluded) if (!tests.includes(name)) throw new Error("stryker-excluded-tests.txt names a missing test file: " + name);
+            const read = (f) => fs.readFileSync(f, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+            const all = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts")).sort();
             const config = JSON.parse(fs.readFileSync("stryker.config.json", "utf8"));
-            config.tap.testFiles = tests.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
+            if (process.env.TESTS) {
+              const named = process.env.TESTS.split(",").map((t) => t.trim().replace(/^test\//, "")).filter(Boolean);
+              for (const t of named) if (!all.includes(t)) throw new Error("no such test file: " + t);
+              config.tap.testFiles = named.map((f) => "test/" + f);
+              console.log(named.length + " test files run, exclusion lists not applied");
+            } else {
+              const files = read("shard-files.txt");
+              const excluded = new Set();
+              if (files.some((f) => f.startsWith("src/"))) read("stryker-excluded-tests.txt").forEach((t) => excluded.add(t));
+              if (files.some((f) => !f.startsWith("src/"))) read("stryker-excluded-tests-scripts.txt").forEach((t) => excluded.add(t));
+              for (const name of excluded) if (!all.includes(name)) throw new Error("an excluded-tests list names a missing test file: " + name);
+              config.tap.testFiles = all.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
+              console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
+            }
+            if (process.env.RUNNER === "command") {
+              // The tap runner always reports coverage, and Stryker then runs only the tests it
+              // saw cover a mutant, so a script run in a child process is never mutated. The
+              // command runner has no coverage: it runs this one test file for every mutant.
+              if (!process.env.TESTS || process.env.TESTS.includes(",")) throw new Error("the command runner needs exactly one test file in the tests input");
+              config.testRunner = "command";
+              config.coverageAnalysis = "off";
+              config.commandRunner = { command: "node --import ./test/resolve-ts.mjs --test " + config.tap.testFiles[0] };
+            }
             fs.writeFileSync("stryker.run.json", JSON.stringify(config, null, 2));
-            console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
           '
           # One comma-joined --mutate value: a repeated --mutate flag keeps only the last
           # one, so a shard would have mutated a single file.
@@ -110,3 +190,163 @@ jobs:
           path: |
             reports/mutation.json
             shard-files.txt
+
+  merge:
+    name: merge the shard reports
+    needs: mutate
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The only job with a write permission. It writes one generated branch under results/.
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mutation-shard-*
+          path: shards
+
+      - name: Merge the shard reports
+        id: merge
+        run: |
+          set +e
+          node --input-type=module - shards "$RUNNER_TEMP/results" 16 "$GITHUB_RUN_ID" "$GITHUB_SHA" "$GITHUB_REF" <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+
+          const [shardsDir, outDir, expectedArg, runId, sha, ref] = process.argv.slice(2);
+          const expected = Number(expectedArg);
+          fs.mkdirSync(outDir, { recursive: true });
+
+          // One directory per shard artifact. A shard that was given files and wrote no report is
+          // a problem; a shard with no files had no work and is fine.
+          const dirs = fs.existsSync(shardsDir)
+            ? fs.readdirSync(shardsDir).filter((d) => /^mutation-shard-\d+$/.test(d)).sort((a, b) => Number(a.split("-").pop()) - Number(b.split("-").pop()))
+            : [];
+          const problems = [];
+          const shardRows = [];
+          const reports = [];
+          for (const d of dirs) {
+            const n = Number(d.split("-").pop());
+            const listFile = path.join(shardsDir, d, "shard-files.txt");
+            const files = fs.existsSync(listFile) ? fs.readFileSync(listFile, "utf8").split("\n").filter(Boolean) : null;
+            const reportFile = path.join(shardsDir, d, "reports", "mutation.json");
+            const hasReport = fs.existsSync(reportFile);
+            shardRows.push({ shard: n, files: files ? files.length : null, report: hasReport });
+            if (files === null) problems.push(`shard ${n}: no shard-files.txt in its artifact`);
+            else if (files.length > 0 && !hasReport) problems.push(`shard ${n}: given ${files.length} files and wrote no report`);
+            if (hasReport) reports.push({ n, report: JSON.parse(fs.readFileSync(reportFile, "utf8")) });
+          }
+          if (dirs.length !== expected) problems.push(`expected ${expected} shard artifacts, found ${dirs.length}`);
+
+          // Test ids are local to each report, so the merge keys everything by test file name.
+          const testNames = [...new Set(reports.flatMap((r) => Object.keys(r.report.testFiles ?? {})))].sort();
+          const canon = new Map(testNames.map((t, i) => [t, String(i)]));
+          const files = {};
+          let framework = null;
+          let thresholds = null;
+          for (const { n, report } of reports) {
+            framework ??= report.framework ? { name: report.framework.name, version: report.framework.version } : null;
+            thresholds ??= report.thresholds ?? null;
+            const idName = {};
+            for (const [name, v] of Object.entries(report.testFiles ?? {})) for (const t of v.tests) idName[t.id] = name;
+            for (const [src, f] of Object.entries(report.files)) {
+              if (files[src]) { problems.push(`${src} appears in two shards`); continue; }
+              files[src] = {
+                language: f.language,
+                mutants: f.mutants.map((m) => ({
+                  id: m.id,
+                  mutatorName: m.mutatorName,
+                  replacement: m.replacement,
+                  status: m.status,
+                  location: m.location,
+                  static: m.static,
+                  coveredBy: (m.coveredBy ?? []).map((i) => canon.get(idName[i])),
+                  killedBy: (m.killedBy ?? []).map((i) => canon.get(idName[i])),
+                  shard: n,
+                })),
+              };
+            }
+          }
+          const testFiles = Object.fromEntries(testNames.map((t) => [t, { tests: [{ id: canon.get(t), name: t }] }]));
+          fs.writeFileSync(path.join(outDir, "mutation.json"), JSON.stringify({ schemaVersion: "1.0", thresholds, framework, files, testFiles }));
+
+          // Counts, scores and the kill matrix.
+          const nameOf = new Map(testNames.map((t) => [canon.get(t), t]));
+          const totals = { Killed: 0, Timeout: 0, Survived: 0, NoCoverage: 0, RuntimeError: 0, CompileError: 0, Ignored: 0, Pending: 0 };
+          const perTest = new Map(testNames.map((t) => [t, { killed: 0, only: 0, covers: 0 }]));
+          const matrix = new Map();
+          const perSource = [];
+          for (const [src, f] of Object.entries(files).sort()) {
+            const c = {};
+            for (const m of f.mutants) {
+              c[m.status] = (c[m.status] ?? 0) + 1;
+              totals[m.status] = (totals[m.status] ?? 0) + 1;
+              for (const t of new Set(m.coveredBy.map((i) => nameOf.get(i)))) perTest.get(t).covers++;
+              if (m.status !== "Killed") continue;
+              const ks = [...new Set(m.killedBy.map((i) => nameOf.get(i)))];
+              for (const t of ks) {
+                perTest.get(t).killed++;
+                if (ks.length === 1) perTest.get(t).only++;
+                const key = `${t}\t${src}`;
+                const e = matrix.get(key) ?? { k: 0, o: 0 };
+                e.k++;
+                if (ks.length === 1) e.o++;
+                matrix.set(key, e);
+              }
+            }
+            const det = (c.Killed ?? 0) + (c.Timeout ?? 0);
+            const valid = det + (c.Survived ?? 0) + (c.NoCoverage ?? 0);
+            perSource.push({ file: src, mutants: f.mutants.length, ...c, score: valid ? Number((100 * det / valid).toFixed(1)) : null });
+          }
+          const det = totals.Killed + totals.Timeout;
+          const valid = det + totals.Survived + totals.NoCoverage;
+          const summary = {
+            run_id: runId, sha, ref,
+            complete: problems.length === 0,
+            problems,
+            stryker: framework,
+            shards: shardRows,
+            mutants: Object.values(totals).reduce((a, b) => a + b, 0),
+            counts: totals,
+            score: valid ? Number((100 * det / valid).toFixed(2)) : null,
+            score_covered_only: det + totals.Survived ? Number((100 * det / (det + totals.Survived)).toFixed(2)) : null,
+            source_files: perSource.length,
+            test_files: testNames.length,
+            per_source: perSource,
+          };
+          fs.writeFileSync(path.join(outDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
+          fs.writeFileSync(path.join(outDir, "kill-matrix.csv"), ["test_file,source_file,mutants_killed,mutants_killed_only_by_this_test", ...[...matrix.entries()].sort().map(([k, v]) => { const [t, s] = k.split("\t"); return `${t},${s},${v.k},${v.o}`; })].join("\n") + "\n");
+          fs.writeFileSync(path.join(outDir, "per-test.csv"), ["test_file,mutants_killed,mutants_killed_only_by_this_test,mutants_covered", ...testNames.map((t) => `${t},${perTest.get(t).killed},${perTest.get(t).only},${perTest.get(t).covers}`)].join("\n") + "\n");
+          console.log(`merged ${reports.length} reports: ${summary.mutants} mutants in ${summary.source_files} files, score ${summary.score}%, ${matrix.size} matrix rows, ${problems.length} problems`);
+          for (const p of problems) console.log("problem: " + p);
+          if (problems.length) process.exitCode = 1;
+          NODE
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Push the results to a branch
+        env:
+          BRANCH: results/mutation-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # An orphan switch drops every tracked file, so the branch starts empty.
+          git switch --orphan "$BRANCH"
+          git clean -fdxq
+          cp "$RUNNER_TEMP"/results/mutation.json "$RUNNER_TEMP"/results/summary.json "$RUNNER_TEMP"/results/kill-matrix.csv "$RUNNER_TEMP"/results/per-test.csv .
+          git add mutation.json summary.json kill-matrix.csv per-test.csv
+          git commit -q -m "Mutation results for workflow run $GITHUB_RUN_ID"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+          line=$(node -e 'const s=require("./summary.json");console.log("results branch '"$BRANCH"': "+s.mutants+" mutants in "+s.source_files+" files, score "+s.score+"%, complete "+s.complete)')
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if the merge found a problem
+        if: steps.merge.outputs.status != '0'
+        run: |
+          echo "the merge found a problem; the results branch is marked complete: false in summary.json"
+          exit 1

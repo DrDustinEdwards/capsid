@@ -1,0 +1,28 @@
+# Unit test files left out of the mutation run when scripts/ and dashboard/src/lib are
+# mutated (job_bbf8db13c57b, step 2). Found the same way as stryker-excluded-tests.txt:
+# Stryker's instrumentation rewrites a script's text, and each file below reads one of
+# the instrumented scripts as text, so it fails the dry run. They still run in CI on every
+# PR and, under the audit's keep rules, are always kept; none is a removal candidate.
+# Mutants only they would kill show as survivors in the report.
+#
+# Why each fails (the script it reads as text):
+#   admin-exposure-check  scripts/schedule-drivers.mjs
+#   canary                scripts/verify-live.mjs (gate 2b is wired)
+#   cloudflare-platform   scripts/bindings.mjs
+#   counts                scripts/verify-live.mjs (the live gate count)
+#   deploy-pipeline       scripts/deploy.mjs
+#   improve-derive-key    scripts/improve-derive-key.mjs
+#   improve-report        scripts/improve-report.mjs
+#   integration-layer     scripts/bindings.mjs
+#   schedule-drivers      scripts/schedule-drivers.mjs, scripts/capsid-rpc.mjs
+#   workflow-policy       scripts/improve-report.mjs
+admin-exposure-check.test.ts
+canary.test.ts
+cloudflare-platform.test.ts
+counts.test.ts
+deploy-pipeline.test.ts
+improve-derive-key.test.ts
+improve-report.test.ts
+integration-layer.test.ts
+schedule-drivers.test.ts
+workflow-policy.test.ts
