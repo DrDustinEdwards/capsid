@@ -2,6 +2,7 @@ import { hmacHex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
 import { HOLDOUT_PREFIX, holdoutManifestKey, LOOP_ROSTER, type HoldoutManifest } from "./improve-schema";
 import type { MetricMap } from "./improve-scores";
+import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
 
 // HMAC, not operator key: an /ops/ path would invite adding the operator-key check.
 export const SCORE_PATH = "/improve/score";
@@ -12,8 +13,9 @@ export const SCORE_PATH = "/improve/score";
 export const CREDENTIAL_PATH = "/improve/holdout-credential";
 
 // Same envelope, signed with a backup-specific key derived under its own context, so
-// the mirror job's key opens read access to backups/json/ on the media bucket and
-// nothing on the improve side, and no roster repo's score key opens it.
+// the mirror job's key opens read access to backups/json/ on a pinned site's backup
+// bucket (src/offaccount.ts) and nothing on the improve side, and no roster repo's
+// score key opens it.
 export const BACKUP_CREDENTIAL_PATH = "/backup/credential";
 
 // A signature older than this is refused. It bounds replay to the window in which a
@@ -494,13 +496,15 @@ export async function mintHoldoutCredential(
 
 // Named for the same reason as the holdout bucket. Matches the R2 pin in bindings.mjs;
 // the two cannot drift without the off-account mirror going dark loudly.
-export const BACKUP_BUCKET_NAME = "capsid-media";
+export const BACKUP_BUCKET_NAME = OFFACCOUNT_SOURCES.capsid.bucket;
 export const BACKUP_DUMP_PREFIX = "backups/json/";
 
 // Derived from its own parent token, so the holdout parent cannot read backups and
-// the reverse.
+// the reverse. One parent covers every pinned site's bucket; the bucket each mint is
+// scoped to comes from the pinned table, never the caller.
 export async function mintBackupCredential(
-  env: Env
+  env: Env,
+  site: OffaccountSite = OFFACCOUNT_DEFAULT_SITE
 ): Promise<{ ok: true; credential: HoldoutCredential } | { ok: false; status: number; refusal: string }> {
   if (!env.R2_TEMP_CRED_TOKEN || !env.R2_BACKUP_PARENT_ACCESS_KEY_ID || !env.R2_ACCOUNT_ID) {
     return {
@@ -511,17 +515,27 @@ export async function mintBackupCredential(
     };
   }
   return mintScopedCredential(env, {
-    bucket: BACKUP_BUCKET_NAME,
+    bucket: OFFACCOUNT_SOURCES[site].bucket,
     prefix: BACKUP_DUMP_PREFIX,
     parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
   });
 }
 
-// Only a jti; the endpoint fixes the scope.
-export function parseBackupCredentialRequest(body: string): { ok: true; jti: string } | { ok: false; refusal: string } {
+// A jti and an optional site. The site only picks a row of the pinned table, so an
+// unknown one is refused here, before the jti is spent or anything is minted.
+export function parseBackupCredentialRequest(
+  body: string
+): { ok: true; jti: string; site: OffaccountSite } | { ok: false; refusal: string } {
   const json = parseJsonBody(body);
   if (!json.ok) return json;
-  return jtiOf(json.parsed);
+  const jti = jtiOf(json.parsed);
+  if (!jti.ok) return jti;
+  const site = (json.parsed as { site?: unknown } | null)?.site;
+  if (site === undefined) return { ok: true, jti: jti.jti, site: OFFACCOUNT_DEFAULT_SITE };
+  if (typeof site !== "string" || !isOffaccountSite(site)) {
+    return { ok: false, refusal: `the credential request names no known site; the sites are ${OFFACCOUNT_SITES.join(", ")}` };
+  }
+  return { ok: true, jti: jti.jti, site };
 }
 
 // Verified under the same rules as a score report (window both directions, timing-safe

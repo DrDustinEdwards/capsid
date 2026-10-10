@@ -11,6 +11,9 @@ import {
   verifyBackupCredentialRequest,
 } from "../src/improve-scorer.ts";
 import { LOOP_ROSTER } from "../src/improve-schema.ts";
+import { OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "../src/offaccount.ts";
+// @ts-expect-error scripts/ is plain .mjs with no declarations (see test/canary.test.ts).
+import { HOLDOUT_R2, R2 } from "../scripts/bindings.mjs";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -111,6 +114,78 @@ test("the request body must carry a jti", () => {
   assert.equal(parseBackupCredentialRequest(JSON.stringify({ jti: "short" })).ok, false);
   const good = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
   assert.ok(good.ok && good.jti === "0123456789");
+});
+
+// The site field (capsid/rulings/backups-offaccount-2026-10-10.md): one endpoint mints
+// for every pinned site, and the bucket comes from src/offaccount.ts, never the body.
+
+test("every pinned site mints object-read-only on its OWN bucket and backups/json/, and nothing else", async () => {
+  const asked: string[] = [];
+  await withFetch(
+    {
+      "POST /client/v4/accounts/acct-1/r2/temp-access-credentials": (body: unknown) => {
+        const request = body as Record<string, unknown>;
+        asked.push(String(request.bucket));
+        assert.equal(request.permission, "object-read-only");
+        assert.deepEqual(request.prefixes, ["backups/json/"]);
+        return { body: { success: true, result: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "ST" } } };
+      },
+    },
+    async () => {
+      const env = fakeEnv({ R2_TEMP_CRED_TOKEN: "t", R2_BACKUP_PARENT_ACCESS_KEY_ID: "backup-parent-key-id", R2_ACCOUNT_ID: "acct-1" });
+      for (const site of OFFACCOUNT_SITES) {
+        const minted = await mintBackupCredential(env, site);
+        assert.ok(minted.ok, `${site}: mint refused: ${minted.ok ? "" : minted.refusal}`);
+        assert.equal(minted.credential.bucket, OFFACCOUNT_SOURCES[site].bucket, `${site} was minted on another bucket`);
+      }
+    }
+  );
+  assert.deepEqual(asked, OFFACCOUNT_SITES.map((site) => OFFACCOUNT_SOURCES[site].bucket));
+});
+
+test("the pinned table: the five sites that dump, capsid on its media pin, no bucket shared and none the holdout", () => {
+  assert.deepEqual(
+    Object.fromEntries(OFFACCOUNT_SITES.map((site) => [site, OFFACCOUNT_SOURCES[site].bucket])),
+    {
+      capsid: "capsid-media",
+      germomics: "germomics-backups",
+      txasm: "txasm-books",
+      foxing: "foxing-backups",
+      foxhound: "foxhound-backups",
+    }
+  );
+  assert.equal(OFFACCOUNT_SOURCES.capsid.bucket, R2.name, "capsid's backup bucket drifted from the MEDIA pin in scripts/bindings.mjs");
+  const buckets = OFFACCOUNT_SITES.map((site) => OFFACCOUNT_SOURCES[site].bucket);
+  assert.equal(new Set(buckets).size, buckets.length, "two sites share a backup bucket");
+  assert.ok(!buckets.includes(HOLDOUT_R2.name), "a backup credential could read the improve holdout");
+});
+
+test("a request with no site is capsid's, so the existing mirror and rehearsal keep working", () => {
+  const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
+  assert.ok(parsed.ok);
+  assert.equal(parsed.site, "capsid");
+});
+
+test("a pinned site in the body is read through", () => {
+  for (const site of OFFACCOUNT_SITES) {
+    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
+    assert.ok(parsed.ok, `${site} was refused`);
+    assert.equal(parsed.site, site);
+  }
+});
+
+test("an unknown, empty, inherited or non-string site is refused, naming the sites", () => {
+  for (const site of ["dustinedwards", "julieedwards", "CAPSID", "", "constructor", "__proto__", "toString", 5, null, ["capsid"], { bucket: "capsid-media" }]) {
+    const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
+    assert.equal(parsed.ok, false, `site ${JSON.stringify(site)} was admitted`);
+    assert.equal(parsed.ok ? "" : parsed.refusal, "the credential request names no known site; the sites are capsid, germomics, txasm, foxing, foxhound");
+  }
+});
+
+test("a body cannot name its own bucket or prefix: only site picks the scope", () => {
+  const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site: "foxing", bucket: "capsid-improve-holdout", prefix: "" }));
+  assert.ok(parsed.ok);
+  assert.deepEqual(Object.keys(parsed).sort(), ["jti", "ok", "site"]);
 });
 
 // The refusal each signed endpoint returns is checked against the real Worker in

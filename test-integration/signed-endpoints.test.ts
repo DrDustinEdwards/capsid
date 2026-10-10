@@ -214,6 +214,18 @@ describe("the two credential endpoints", () => {
     expect(await response.text()).toMatch(/not configured|R2_TEMP_CRED/);
   });
 
+  it("/backup/credential refuses an unknown site with 400 before it mints or spends the jti", async () => {
+    const jti = crypto.randomUUID();
+    const unknown = await backupPost(await backupKey(), { jti, site: "dustinedwards" });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.text()).toMatch(/names no known site/);
+    // The jti was not claimed: the same jti with a pinned site gets past the replay
+    // cache to the configuration failure.
+    const known = await backupPost(await backupKey(), { jti, site: "foxing" });
+    expect(known.status).not.toBe(401);
+    expect(await known.text()).toMatch(/not configured|R2_TEMP_CRED/);
+  });
+
   it("/backup/credential reads its OWN header names, which are not the improve ones", async () => {
     // Two mint paths with separate header contracts: X-Improve-Timestamp here is a
     // 400, not a 401.
