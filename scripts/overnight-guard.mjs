@@ -104,7 +104,7 @@ export function childEnv(parent, change) {
 // THE PLAN, as the jobs list view returns it (src/overnight-plan.ts).
 
 /**
- * @typedef {{ id: string; namespace: string; estimate_minutes: number }} PlannedJob
+ * @typedef {{ id: string; namespace: string; estimate_minutes: number; gated?: boolean }} PlannedJob
  * @typedef {{ repo: string; namespaces: string[]; heavy: boolean; jobs: PlannedJob[]; planned_minutes: number }} Lane
  * @typedef {{ budget_minutes: number; lanes: Lane[] }} Plan
  */
@@ -128,7 +128,8 @@ export function laneFor(plan, ns) {
  * @param {number} budgetMinutes
  */
 export function planPrompt(lane, budgetMinutes) {
-  const lines = lane.jobs.map((j, i) => `${i + 1}. ${j.id} (about ${j.estimate_minutes} minutes)`);
+  const lines = lane.jobs.map((j, i) => `${i + 1}. ${j.id} (about ${j.estimate_minutes} minutes${j.gated ? ", gated" : ""})`);
+  const gated = lane.jobs.some((j) => j.gated);
   return [
     "/improve work",
     "",
@@ -136,6 +137,9 @@ export function planPrompt(lane, budgetMinutes) {
     ...lines,
     "",
     "After a job completes or blocks, claim the next one in the list. A job that blocks stops only itself: do not wait for a person, move on to the next.",
+    ...(gated
+      ? ["A gated job needs a person only for its risky steps (a migration, a deploy, a secret, an account setting, deleting data): do its ordinary work, open its pull request, list each risky step there for the seat without doing it, block with the exact command, and move on."]
+      : []),
     `Stop after the last job, or when about ${budgetMinutes} minutes have passed since you started. Do not claim any job that is not listed.`,
   ].join("\n");
 }
@@ -241,6 +245,6 @@ export async function prepareRun(client, ns, env) {
     return { run: false, why: `could not read the overnight plan: ${err instanceof Error ? err.message : String(err)}`, benign: false };
   }
   const lane = laneFor(plan, ns);
-  if (!lane) return { run: false, why: `nothing is planned for ${ns} tonight (no gate-free queued job fits).`, benign: true };
+  if (!lane) return { run: false, why: `nothing is planned for ${ns} tonight (no queued job fits).`, benign: true };
   return { run: true, runsOn: verdict.runsOn, env: verdict.env, note: verdict.note, prompt: planPrompt(lane, plan.budget_minutes), heavy: lane.heavy, budget: plan.budget_minutes };
 }

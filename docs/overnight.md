@@ -8,9 +8,10 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 
 ## The plan
 
-`jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the gate-free queued jobs in priority order that fit about eight hours.
+`jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the queued jobs in priority order that fit about eight hours.
 
-- **Eligible:** queued, `gate_required` 0, no required flags, no `min_record`, a title that does not begin `LATER`, and a namespace that maps to a repo. Everything else is in `skipped` with its reason.
+- **Eligible:** queued, no required flags, no `min_record`, a title that does not begin `LATER`, and a namespace that maps to a repo. Everything else is in `skipped` with its reason. A parked job is not queued, so it is never planned and never listed as skipped.
+- **Gated jobs are planned** (conventions 2.3: gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. The scheduled run's prompt says so for each gated job (`planPrompt` in `scripts/overnight-guard.mjs`). test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
 - **One lane per repo.** Two namespaces that map to one repo share one lane, so there is never a second session on a repo.
 - **Heavy suites run one session at a time across repos.** Repos that run heavy suites share one budget (`heavy_planned_minutes`), so their lanes add up to one night, not several. Light repos each get the whole night.
 - **Estimates:** the policy document's `estimate`, else the 75th percentile of that namespace's unblocked job durations (at least 5 samples, floor 15 minutes), else 60 minutes. Each planned job says which.

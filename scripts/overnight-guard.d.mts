@@ -22,6 +22,8 @@ export interface PlannedJob {
   id: string;
   namespace: string;
   estimate_minutes: number;
+  /** A gated job: the session does the ordinary work and lists each risky step in its pull request. */
+  gated?: boolean;
 }
 export interface Lane {
   repo: string;

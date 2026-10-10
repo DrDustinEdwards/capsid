@@ -74,7 +74,7 @@ export function registerJobTools(server: McpServer, ctx: ToolCtx): void {
           .enum(["plan", "digest", "models"])
           .optional()
           .describe(
-            'For list: "plan" returns the overnight plan, per repo the gate-free queued jobs in priority order that fit about 8 hours, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. "models" returns what the model routing has learned: per job kind and model, the share merged with green CI, corrections and cost, with the rule changes the evidence supports (never applied). All three are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
+            'For list: "plan" returns the overnight plan, per repo the queued jobs in priority order that fit about 8 hours, gated ones included and marked gated (the session does the ordinary work and lists each risky step in its pull request), parked ones never, with what was skipped and why (a hand-started session can follow it); "digest" returns the morning digest, the pull requests ready, what blocked and why, and each job\'s usage. "models" returns what the model routing has learned: per job kind and model, the share merged with green CI, corrections and cost, with the rule changes the evidence supports (never applied). All three are read-only. A caller scoped to one namespace names it; the plan is built over every namespace and narrowed to the one named.'
           ),
         stale: z
           .boolean()

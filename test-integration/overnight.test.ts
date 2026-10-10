@@ -37,7 +37,7 @@ async function queue(id: string, ns: string, over: { priority?: number; gate?: n
 }
 
 describe("the overnight plan on a real D1", () => {
-  it("plans the gate-free queued jobs of a mapped namespace in priority order, skips the rest with reasons, and counts what it read", async () => {
+  it("plans the queued jobs of a mapped namespace in priority order, gated ones marked, skips the rest with reasons, and counts what it read", async () => {
     const { ns, id } = fresh("night");
     await mapNamespace(ns, "example/night");
     await queue(id(1), ns, { priority: 10 });
@@ -48,8 +48,9 @@ describe("the overnight plan on a real D1", () => {
     expect(plan.for_namespace).toBe(ns);
     expect(plan.lanes).toHaveLength(1);
     expect(plan.lanes[0].repo).toBe("example/night");
-    expect(plan.lanes[0].jobs.map((j) => j.id)).toEqual([id(2), id(1)]);
-    expect(plan.skipped.map((s) => s.id).sort()).toEqual([id(3), id(4)].sort());
+    // The gated job is planned at its priority (50), between the other two, and marked.
+    expect(plan.lanes[0].jobs.map((j) => [j.id, j.gated])).toEqual([[id(2), false], [id(3), true], [id(1), false]]);
+    expect(plan.skipped.map((s) => s.id)).toEqual([id(4)]);
     // With no policy document every repo is heavy, said aloud.
     expect(plan.policy).toBe("default");
     expect(plan.queued_read).toBeGreaterThanOrEqual(4);
