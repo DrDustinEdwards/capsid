@@ -35,6 +35,11 @@ on:
         description: "Optional comma-separated test files to run instead of the whole unit suite (no exclusion list is applied)"
         type: string
         default: ""
+      stryker:
+        description: "StrykerJS version. 10.0.0 is the baseline's. 9.6.1 is built on Babel 7, whose parser accepts src/access-jwt.ts; Stryker 10's Babel 8 parser rejects it, so that file is mutated only with 9.6.1"
+        type: choice
+        options: ["10.0.0", "9.6.1"]
+        default: "10.0.0"
       coverage:
         description: "Coverage analysis. perTest is fast but cannot see code a test runs in a child process; off runs every mutant against every chosen test, for tests that spawn a script"
         type: choice
@@ -68,7 +73,13 @@ jobs:
       - run: npm ci
 
       - name: Install Stryker without touching the lockfile
-        run: npm install --no-save --no-package-lock --ignore-scripts @stryker-mutator/core@10.0.0 @stryker-mutator/tap-runner@10.0.0
+        env:
+          STRYKER: ${{ inputs.stryker }}
+        run: |
+          set -euo pipefail
+          version="${STRYKER:-10.0.0}"
+          case "$version" in 10.0.0|9.6.1) ;; *) echo "unknown Stryker version: $version"; exit 1 ;; esac
+          npm install --no-save --no-package-lock --ignore-scripts "@stryker-mutator/core@$version" "@stryker-mutator/tap-runner@$version"
 
       - name: Mutate this shard's source files
         env:
@@ -76,6 +87,7 @@ jobs:
           ONLY: ${{ inputs.only }}
           TESTS: ${{ inputs.tests }}
           COVERAGE: ${{ inputs.coverage }}
+          STRYKER: ${{ inputs.stryker }}
         run: |
           set -euo pipefail
           # Dispatch inputs reach the shell through env, never spliced into the script text,
@@ -88,9 +100,14 @@ jobs:
           # large and small files. The total is checked so a glob that matched nothing
           # cannot pass as an empty run.
           #
-          # src/ is mutated except src/access-jwt.ts, which Stryker 10's Babel parser rejects
-          # (a typed async arrow as a computed object key, line 68), so the whole run stops
-          # before the dry run. scripts-dashboard is scripts/*.mjs and dashboard/src/lib.
+          # src/ is mutated except src/access-jwt.ts under Stryker 10.0.0. Its Babel 8 parser
+          # (every 8.x release, 8.0.0 to 8.0.7) rejects an async arrow with a return type
+          # inside a ternary branch ("Did not expect a type annotation here", line 68 of
+          # that file), and one rejected file stops the whole run before the dry run.
+          # Babel 7.29 parses it, and Stryker 9.6.1 is built on Babel 7, so choosing
+          # stryker 9.6.1 includes the file. The two versions generate slightly different
+          # mutant sets, so a 9.6.1 result is reported as such and not merged into the
+          # 10.0.0 baseline. scripts-dashboard is scripts/*.mjs and dashboard/src/lib.
           # Instead of leaving source files out, the unit test files that read source text
           # are left out of the run: they are listed, with the reason, in
           # stryker-excluded-tests.txt (src) and stryker-excluded-tests-scripts.txt
@@ -104,7 +121,11 @@ jobs:
           else
             : > all-files.txt
             if [ "$scope" = src ] || [ "$scope" = all ]; then
-              find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' >> all-files.txt
+              if [ "${STRYKER:-10.0.0}" = 9.6.1 ]; then
+                find src -name '*.ts' ! -name '*.d.ts' >> all-files.txt
+              else
+                find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' >> all-files.txt
+              fi
             fi
             if [ "$scope" = scripts-dashboard ] || [ "$scope" = all ]; then
               find scripts -maxdepth 1 -name '*.mjs' >> all-files.txt
