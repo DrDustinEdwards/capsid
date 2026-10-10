@@ -78,7 +78,7 @@ jobs:
           COVERAGE: ${{ inputs.coverage }}
         run: |
           set -euo pipefail
-          # Dispatch inputs reach the shell through env, never through ${{ }} in the script,
+          # Dispatch inputs reach the shell through env, never spliced into the script text,
           # and are checked against a path pattern before use.
           scope="${SCOPE:-src}"
           case "$scope" in src|scripts-dashboard|all) ;; *) echo "unknown scope: $scope"; exit 1 ;; esac
