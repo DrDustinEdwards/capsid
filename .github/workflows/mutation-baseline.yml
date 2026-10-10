@@ -21,6 +21,25 @@ name: Mutation baseline
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: "What to mutate: src (the default, as in the baseline), scripts-dashboard (scripts/*.mjs and dashboard/src/lib), or all"
+        type: choice
+        options: [src, scripts-dashboard, all]
+        default: src
+      only:
+        description: "Optional comma-separated files to mutate instead of the scope, for a targeted pass (paths under src/, scripts/ or dashboard/src/lib)"
+        type: string
+        default: ""
+      tests:
+        description: "Optional comma-separated test files to run instead of the whole unit suite (no exclusion list is applied)"
+        type: string
+        default: ""
+      coverage:
+        description: "Coverage analysis. perTest is fast but cannot see code a test runs in a child process; off runs every mutant against every chosen test, for tests that spawn a script"
+        type: choice
+        options: [perTest, "off"]
+        default: perTest
 
 permissions:
   contents: read
@@ -52,33 +71,78 @@ jobs:
         run: npm install --no-save --no-package-lock --ignore-scripts @stryker-mutator/core@10.0.0 @stryker-mutator/tap-runner@10.0.0
 
       - name: Mutate this shard's source files
+        env:
+          SCOPE: ${{ inputs.scope }}
+          ONLY: ${{ inputs.only }}
+          TESTS: ${{ inputs.tests }}
+          COVERAGE: ${{ inputs.coverage }}
         run: |
           set -euo pipefail
-          # Every non-declaration source file, sorted, dealt out round-robin so each shard
-          # gets a mix of large and small files. The count is printed so a glob that
-          # matched nothing cannot pass as an empty run.
+          # Dispatch inputs reach the shell through env, never through ${{ }} in the script,
+          # and are checked against a path pattern before use.
+          scope="${SCOPE:-src}"
+          case "$scope" in src|scripts-dashboard|all) ;; *) echo "unknown scope: $scope"; exit 1 ;; esac
+          case "${COVERAGE:-perTest}" in perTest|off) ;; *) echo "unknown coverage: $COVERAGE"; exit 1 ;; esac
+          path_re='^(src|scripts|dashboard/src/lib|test)/[A-Za-z0-9._/-]+\.(ts|mjs)$'
+          # Every file to mutate, sorted, dealt out round-robin so each shard gets a mix of
+          # large and small files. The total is checked so a glob that matched nothing
+          # cannot pass as an empty run.
           #
-          # Every source file is mutated except src/access-jwt.ts, which Stryker 10's Babel
-          # parser rejects (a typed async arrow as a computed object key, line 68), so the
-          # whole run stops before the dry run. Instead of leaving source files out, the
-          # unit test files that read source text are left out of the run: they are listed,
-          # with the reason, in stryker-excluded-tests.txt, and they are always kept.
-          find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' | sort > all-files.txt
+          # src/ is mutated except src/access-jwt.ts, which Stryker 10's Babel parser rejects
+          # (a typed async arrow as a computed object key, line 68), so the whole run stops
+          # before the dry run. scripts-dashboard is scripts/*.mjs and dashboard/src/lib.
+          # Instead of leaving source files out, the unit test files that read source text
+          # are left out of the run: they are listed, with the reason, in
+          # stryker-excluded-tests.txt (src) and stryker-excluded-tests-scripts.txt
+          # (scripts and dashboard), and they are always kept.
+          if [ -n "$ONLY" ]; then
+            printf '%s' "$ONLY" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' | sort -u > all-files.txt
+            while read -r f; do
+              printf '%s\n' "$f" | grep -Eq "$path_re" || { echo "not an allowed path: $f"; exit 1; }
+              test -f "$f" || { echo "no such file: $f"; exit 1; }
+            done < all-files.txt
+          else
+            : > all-files.txt
+            if [ "$scope" = src ] || [ "$scope" = all ]; then
+              find src -name '*.ts' ! -name '*.d.ts' ! -path 'src/access-jwt.ts' >> all-files.txt
+            fi
+            if [ "$scope" = scripts-dashboard ] || [ "$scope" = all ]; then
+              find scripts -maxdepth 1 -name '*.mjs' >> all-files.txt
+              find dashboard/src/lib -name '*.ts' ! -name '*.d.ts' >> all-files.txt
+            fi
+            sort -o all-files.txt all-files.txt
+          fi
           total=$(wc -l < all-files.txt)
+          test "$total" -gt 0
           awk -v s="${{ matrix.shard }}" -v n=16 'NR % n == s' all-files.txt > shard-files.txt
           mine=$(wc -l < shard-files.txt)
-          echo "shard ${{ matrix.shard }}: $mine of $total source files"
-          test "$mine" -gt 0
-          # The run's config is stryker.config.json with the excluded test files removed.
+          echo "shard ${{ matrix.shard }}: $mine of $total files"
+          # A targeted pass can have fewer files than shards; an empty shard has no work.
+          if [ "$mine" -eq 0 ]; then echo "nothing for this shard"; exit 0; fi
+          # The run's config is stryker.config.json with the test files chosen. With a
+          # tests input, exactly those run. Otherwise every unit test runs except the
+          # excluded lists that match what is being mutated.
           node -e '
             const fs = require("node:fs");
-            const excluded = new Set(fs.readFileSync("stryker-excluded-tests.txt", "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")));
-            const tests = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts")).sort();
-            for (const name of excluded) if (!tests.includes(name)) throw new Error("stryker-excluded-tests.txt names a missing test file: " + name);
+            const read = (f) => fs.readFileSync(f, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+            const all = fs.readdirSync("test").filter((f) => f.endsWith(".test.ts")).sort();
             const config = JSON.parse(fs.readFileSync("stryker.config.json", "utf8"));
-            config.tap.testFiles = tests.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
+            if (process.env.TESTS) {
+              const named = process.env.TESTS.split(",").map((t) => t.trim().replace(/^test\//, "")).filter(Boolean);
+              for (const t of named) if (!all.includes(t)) throw new Error("no such test file: " + t);
+              config.tap.testFiles = named.map((f) => "test/" + f);
+              console.log(named.length + " test files run, exclusion lists not applied");
+            } else {
+              const files = read("shard-files.txt");
+              const excluded = new Set();
+              if (files.some((f) => f.startsWith("src/"))) read("stryker-excluded-tests.txt").forEach((t) => excluded.add(t));
+              if (files.some((f) => !f.startsWith("src/"))) read("stryker-excluded-tests-scripts.txt").forEach((t) => excluded.add(t));
+              for (const name of excluded) if (!all.includes(name)) throw new Error("an excluded-tests list names a missing test file: " + name);
+              config.tap.testFiles = all.filter((f) => !excluded.has(f)).map((f) => "test/" + f);
+              console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
+            }
+            config.coverageAnalysis = process.env.COVERAGE || "perTest";
             fs.writeFileSync("stryker.run.json", JSON.stringify(config, null, 2));
-            console.log(config.tap.testFiles.length + " test files run, " + excluded.size + " left out");
           '
           # One comma-joined --mutate value: a repeated --mutate flag keeps only the last
           # one, so a shard would have mutated a single file.
