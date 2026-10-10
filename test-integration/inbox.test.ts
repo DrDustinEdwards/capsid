@@ -134,3 +134,56 @@ describe("improve_status carries the same answer per namespace", () => {
     expect(capsid?.needs_dustin.severity).toBe("needs-you");
   });
 });
+
+// What an app reports about itself (src/inbox-report.ts; Dustin's answers 2026-10-10),
+// posted with the app's own key and read back through GET /ops/inbox and improve_status.
+describe("POST /ops/inbox/report", () => {
+  const CAPSID_ORIGIN = "https://capsid.dustin-edwards.workers.dev";
+  const report = (bearer: string | null, body: unknown) =>
+    SELF.fetch(`${ORIGIN}/ops/inbox/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
+      body: JSON.stringify(body),
+    });
+  const drafts = { namespace: "capsid", items: [{ title: "Four AI drafts wait for review", link: `${CAPSID_ORIGIN}/drafts` }] };
+
+  beforeEach(async () => {
+    for (const { name } of (await env.APP_KV.list({ prefix: "inbox:report" })).keys) await env.APP_KV.delete(name);
+  });
+
+  it("answers 401 with no key and 403 to a key reporting for a namespace it does not hold, storing nothing", async () => {
+    expect((await report(null, drafts)).status).toBe(401);
+    const other = await report(DRIVER_KEY, { namespace: "sample", items: [{ title: "Not mine" }] });
+    expect(other.status, await other.clone().text()).toBe(403);
+    expect(await env.APP_KV.get("inbox:report:sample")).toBeNull();
+  });
+
+  it("stores the app's report, which the inbox counts as needs-you and improve_status fences as external", async () => {
+    const posted = await report(DRIVER_KEY, drafts);
+    expect(posted.status, await posted.clone().text()).toBe(200);
+    const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
+    const item = body.apps[0].items.find((i) => i.kind === "report");
+    expect(item).toMatchObject({ title: "Four AI drafts wait for review", link: `${CAPSID_ORIGIN}/drafts` });
+    expect(body.apps[0].severity).toBe("needs-you");
+    const status = await improveStatus(jobsEnv(), "capsid");
+    const relayed = status.namespaces.find((n) => n.namespace === "capsid")?.needs_dustin.items.find((i) => i.kind === "report");
+    expect(relayed?.title).toBe("~~~external source=inbox-report ref=capsid\nFour AI drafts wait for review\n~~~");
+  });
+
+  it("refuses a second report inside the minute, and a link off the app's own origin", async () => {
+    const offOrigin = await report(DRIVER_KEY, { namespace: "capsid", items: [{ title: "x", link: "https://elsewhere.example.com/" }] });
+    expect(offOrigin.status).toBe(400);
+    expect((await report(DRIVER_KEY, drafts)).status).toBe(200);
+    const again = await report(DRIVER_KEY, { namespace: "capsid", items: [] });
+    expect(again.status).toBe(429);
+    const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
+    expect(body.apps[0].items.some((i) => i.kind === "report"), "the refused report replaced the stored one").toBe(true);
+  });
+
+  it("a report over 6 hours old no longer counts", async () => {
+    const old = new Date(Date.now() - (6 * 3600 + 60) * 1000).toISOString();
+    await env.APP_KV.put("inbox:report:capsid", JSON.stringify({ namespace: "capsid", reported_at: old, reported_by: "agent:capsid-driver", items: [{ title: "stale", kind: "report", link: null, since: old }] }));
+    const body = (await (await inboxAs(DRIVER_KEY)).json()) as Inbox;
+    expect(body.apps[0].items.some((i) => i.kind === "report")).toBe(false);
+  });
+});
