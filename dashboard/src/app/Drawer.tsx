@@ -143,6 +143,13 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
   );
 }
 
+// Whether supersede may end the job: a queued one, or a claimed one with no work
+// recorded yet (src/jobs-seat.ts, supersedeJob). The Worker checks again.
+function supersedable(j: OpsJob): boolean {
+  if (j.status === "queued") return true;
+  return j.status === "claimed" && j.blocked_count === 0 && j.resumed_count === 0 && j.result_ref === null;
+}
+
 // The controls a job's status allows. Each opens the confirm dialog, which asks for a
 // reason and shows what changes before anything is written.
 function JobControls({ j }: { j: OpsJob }) {
@@ -150,15 +157,33 @@ function JobControls({ j }: { j: OpsJob }) {
   const params = { id: j.id };
   const blocked = j.status === "blocked";
   const claimed = j.status === "claimed";
-  const failable = blocked || claimed || j.status === "queued";
+  const queued = j.status === "queued";
+  if (j.status === "parked") {
+    return (
+      <div>
+        <p className="section-title">Change it</p>
+        <div className="toolbar">
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => confirm({ action: "unpark_job", params, title: `Unpark job: ${j.title}`, undo: { action: "park_job", params: { id: j.id, reason: j.parked_reason ?? "parked again", undo: "true" } } })}
+          >
+            Unpark
+          </button>
+        </div>
+        <p className="faint small">Unpark puts it back in the queue at its priority. The result offers Undo.</p>
+      </div>
+    );
+  }
+  const failable = blocked || claimed || queued;
   if (!failable) return null;
   return (
     <div>
       <p className="section-title">Change it</p>
       <div className="toolbar">
         {blocked && (
-          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `Resume job: ${j.title}` })}>
-            Resume
+          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `${j.question ? "Answer" : "Resume job"}: ${j.title}` })}>
+            {j.question ? "Answer" : "Resume"}
           </button>
         )}
         {blocked && (
@@ -171,12 +196,27 @@ function JobControls({ j }: { j: OpsJob }) {
             Release
           </button>
         )}
+        {queued && (
+          <button type="button" className="btn" onClick={() => confirm({ action: "park_job", params, title: `Park job: ${j.title}`, undo: { action: "unpark_job", params: { id: j.id, undo: "true" } } })}>
+            Park
+          </button>
+        )}
+        {supersedable(j) && (
+          <button type="button" className="btn" onClick={() => confirm({ action: "supersede_job", params, title: `Supersede job: ${j.title}` })}>
+            Supersede
+          </button>
+        )}
         <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })}>
           Mark failed
         </button>
       </div>
       <p className="faint small">
-        {blocked ? "Resume sends it back to its driver. Close as shipped ends it as done when its work already landed, credited to the driver. " : claimed ? "Release takes it from its holder and puts it back in the queue. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
+        {blocked
+          ? `${j.question ? "Answer sends your reply to its driver as the resume note." : "Resume sends it back to its driver."} Close as shipped ends it as done when its work already landed, credited to the driver. `
+          : claimed
+            ? "Release takes it from its holder and puts it back in the queue. "
+            : "Park keeps it out of the queue until you unpark it; its reason says when it comes back. "}
+        {supersedable(j) ? "Supersede ends a job replaced before any work was done, with no outcome against anybody. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
       </p>
     </div>
   );
@@ -206,7 +246,22 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
     <>
       <Head label={`Job · ${j.namespace}`} title={j.title} sub={j.id} badge={<Pill kind={k.kind}>{k.label}</Pill>} onClose={onClose} />
       <div className="dbody">
-        {j.status === "blocked" && (
+        {j.status === "parked" && (
+          <div>
+            <p className="section-title">Parked until</p>
+            <div className="callout">{j.parked_reason ?? "No reason was recorded."}</div>
+          </div>
+        )}
+        {j.status === "blocked" && j.question && (
+          <div>
+            <p className="section-title">Asks you</p>
+            <div className="callout warn" data-question="">
+              {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
+            </div>
+            <p className="faint small">Answer it with the button below: your reason and note go to its driver as the resume note.</p>
+          </div>
+        )}
+        {j.status === "blocked" && !j.question && (
           <>
             <div>
               <p className="section-title">Waits on</p>

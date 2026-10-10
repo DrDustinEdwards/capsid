@@ -11,6 +11,7 @@ import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
+import { Tonight } from "./Overnight";
 
 // The state only: the switch is in the Automation panel on Namespaces (DECIDE 7).
 export function SeatStart() {
@@ -294,6 +295,7 @@ export function Queue() {
             <SeatStart />
           </div>
         </Panel>
+        <Tonight />
         <Panel flush title="Canon proposals" id="canon-proposals" section="Canon proposals" src="live · D1 canon_proposals" count={feed.live.canon_proposals.length}>
           <CanonProposals />
         </Panel>

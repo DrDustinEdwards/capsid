@@ -659,7 +659,7 @@ export function App() {
             onClose={(p) => {
               setConfirmReq(null);
               if (!p) return;
-              performed(p);
+              performed(p, confirmReq.undo);
               confirmReq.onDone?.(p);
             }}
           />

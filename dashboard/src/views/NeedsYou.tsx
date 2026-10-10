@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Link } from "wouter";
 import { isView, placePath, useApp } from "../app/ctx";
 import { PROBLEM_ROWS, attentionGroups, hasSites, type AttentionRow, type Kind } from "../lib/derive";
@@ -29,6 +29,10 @@ const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
   "site-down": { label: "Site down", kind: "crit" },
 };
 
+// The digest strip loads after first paint, so the home's first screen is not held up by
+// its read, and its code stays out of the initial bundle.
+const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default: m.SinceLastLooked })));
+
 export function NeedsYou() {
   const { feed } = useApp();
   return (
@@ -36,6 +40,9 @@ export function NeedsYou() {
       <Anchors />
       <PageHead title="Needs you" />
       <ByApp />
+      <Suspense fallback={null}>
+        <SinceLastLooked />
+      </Suspense>
       <NeedsAttention sitesOn={hasSites(feed)} />
     </div>
   );

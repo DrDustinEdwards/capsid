@@ -7,7 +7,8 @@ import type { Env } from "../src/env";
 import { improveStatus } from "../src/improve-run";
 import { MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema";
 import { blockJob, claimJob, postJob } from "../src/jobs";
-import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types";
+import type { PortalActivity, PortalDigest, PortalNamespaces, PortalPerformed, PortalPlan, PortalPreview } from "../src/ops-types";
+import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
 import { PORTAL_ACTIONS } from "../src/controls";
 import {
   PORTAL_ACTIVITY_PATH,
@@ -40,12 +41,23 @@ function workerEnv(): Env {
   return { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET, DUSTINEDWARDS_OPERATOR_TOKEN: OPERATOR_TOKEN } as Env;
 }
 
-// site_repair reaches the site's operator API through the global fetch. Only that route is
-// answered here; everything else goes on as before.
+// site_repair reaches the site's operator API through the global fetch, and pr_close
+// reaches GitHub. Only those routes are answered here; everything else goes on as before.
 const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
+const githubCalls: string[] = [];
+const GITHUB_PR = "https://api.github.com/repos/example/capsid/pulls/41";
 const passThrough = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  if (url.startsWith("https://api.github.com/repos/example/capsid")) {
+    githubCalls.push(`${method} ${url}`);
+    if (url === GITHUB_PR && method === "PATCH") return Response.json({ number: 41, state: "closed", html_url: "https://github.com/example/capsid/pull/41" });
+    if (url === GITHUB_PR) return Response.json({ head: { ref: "feat/sample", repo: { full_name: "example/capsid" } }, base: { ref: "main" } });
+    if (url === "https://api.github.com/repos/example/capsid") return Response.json({ default_branch: "main" });
+    if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE") return new Response(null, { status: 204 });
+    return new Response("not stubbed", { status: 404 });
+  }
   if (url !== "https://dustinedwards.info/api/operator") return passThrough(input, init);
   operatorCalls.push({ url, auth: new Headers(init?.headers).get("authorization"), body: String(init?.body) });
   return Response.json({ ok: true, data: { repaired: 1, expected: 14, present: 14, converged: true } });
@@ -91,6 +103,12 @@ async function blockedJob(title: string, by = DRIVER): Promise<string> {
   const id = await claimedJob(title, by);
   const blocked = await blockJob(await jobsEnv(), by, NOW, id, { reason: "waiting on the push", command: "git push -u origin feat/x" });
   expect(blocked.ok, blocked.refusal).toBe(true);
+  return id;
+}
+
+async function parkedJob(title: string): Promise<string> {
+  const id = await postedJob(title);
+  await env.DB.prepare("UPDATE jobs SET status = 'parked', result_summary = 'comes back when the design is ruled' WHERE id = ?1").bind(id).run();
   return id;
 }
 
@@ -225,6 +243,47 @@ const CASES: Record<string, Case> = {
       expect(touch?.actor).toBe(ACTOR);
     },
   },
+  supersede_job: {
+    // A queued job nobody worked: superseded, with no outcome row against anybody.
+    params: async () => ({ id: await postedJob("a duplicate job"), reason: "a duplicate of the other one" }),
+    after: async ({ id }) => {
+      const stored = await job(id);
+      expect(stored?.status).toBe("superseded");
+      expect(stored?.result_summary).toBe("Superseded: a duplicate of the other one");
+      const outcome = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ n: number }>();
+      expect(outcome?.n).toBe(0);
+    },
+  },
+  park_job: {
+    params: async () => ({ id: await postedJob("a job for later"), reason: "comes back when the design is ruled" }),
+    after: async ({ id }) => {
+      const stored = await job(id);
+      expect(stored?.status).toBe("parked");
+      expect(stored?.result_summary).toBe("comes back when the design is ruled");
+    },
+  },
+  unpark_job: {
+    params: async () => ({ id: await parkedJob("a parked job") }),
+    after: async ({ id }) => {
+      const stored = await job(id);
+      expect(stored?.status).toBe("queued");
+      expect(stored?.result_summary).toBeNull();
+    },
+  },
+  pr_close: {
+    params: async () => {
+      githubCalls.length = 0;
+      await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
+      return { namespace: "capsid", number: "41", reason: "replaced by #42" };
+    },
+    after: async () => {
+      expect(githubCalls).toContain(`PATCH ${GITHUB_PR}`);
+      expect(githubCalls).toContain("DELETE https://api.github.com/repos/example/capsid/git/refs/heads/feat/sample");
+      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'pr-closed' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ repo: "example/capsid", number: 41, reason: "replaced by #42", head_branch: "feat/sample", head_branch_deleted: true });
+      await env.APP_KV.delete("gh:token:v3:example/capsid");
+    },
+  },
   fail_job: {
     params: async () => ({ id: await blockedJob("a job to fail"), reason: "superseded" }),
     after: async ({ id }) => expect((await job(id))?.status).toBe("failed"),
@@ -317,9 +376,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty actions", () => {
+  it("covers the allow-list, twenty-four actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(20);
+    expect(Object.keys(CASES).length).toBe(24);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -354,6 +413,35 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(click?.actor).toBe(ACTOR);
     });
   }
+});
+
+describe("parked jobs, the Tonight plan and the digest", () => {
+  it("a parked job stays in the feed with its reason, and Unpark's Undo writes portal-undo-unpark_job", async () => {
+    const id = await postedJob("a job to park and bring back");
+    const park = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "park_job", params: { id, reason: "comes back on Monday" } } })).json()) as PortalPreview;
+    const parked = (await (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: park.token } })).json()) as PortalPerformed;
+    const inFeed = parked.feed.live.jobs.find((j) => j.id === id);
+    expect(inFeed?.status).toBe("parked");
+    expect(inFeed?.parked_reason).toBe("comes back on Monday");
+    const undo = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "unpark_job", params: { id, reason: "Undo: comes back on Monday", undo: "true" } } })).json()) as PortalPreview;
+    expect(undo.audit).toContain(`portal-undo-unpark_job by ${ACTOR}`);
+    expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: undo.token } })).status).toBe(200);
+    expect((await job(id))?.status).toBe("queued");
+  });
+
+  it("GET /portal/api/plan and /portal/api/digest serve the jobs tool's readers, over every namespace", async () => {
+    const id = await postedJob("a job for tonight");
+    const plan = await call(PORTAL_PLAN_PATH);
+    expect(plan.status, await plan.clone().text()).toBe(200);
+    const planned = (await plan.json()) as PortalPlan;
+    expect(planned.queued_read).toBeGreaterThanOrEqual(1);
+    expect([...planned.lanes.flatMap((l) => l.jobs), ...planned.skipped].some((j) => j.id === id)).toBe(true);
+    expect("for_namespace" in planned).toBe(false);
+    const digest = await call(`${PORTAL_DIGEST_PATH}?since=2026-01-01`);
+    expect(digest.status, await digest.clone().text()).toBe(200);
+    expect(((await digest.json()) as PortalDigest).since).toBe("2026-01-01T00:00:00.000Z");
+    expect((await call(`${PORTAL_DIGEST_PATH}?since=soon`)).status).toBe(400);
+  });
 });
 
 describe("the automation switches against real D1 and KV", () => {

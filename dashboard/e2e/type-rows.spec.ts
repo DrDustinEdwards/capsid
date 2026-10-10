@@ -11,12 +11,13 @@ const LIST_ROWS = "main .att-row, main .qrow:not(.mrow), main .frow";
 // The attention rows are on Needs you, the home (design-portal-evaluation.md DECIDE 1),
 // the Queue rows on the Queue, and the incident rows in Health's Incidents section. Rows of a closed group are not
 // drawn. With the sample feed: 9 attention rows (the first 8 problems, two of them
-// session incidents, and the notices row), 13
-// queue rows (Stale jobs 2, Blocked 1, Running 1, Queued 4, canon proposals 2, live
-// sessions 3: the two stale jobs are in the panel only) and 7 incident rows. The Stale
+// session incidents, and the notices row), 18
+// queue rows (Stale jobs 2, Blocked 1, Running 1, Queued 4, Parked 1, Tonight's 4 planned,
+// canon proposals 2, live sessions 3: the two stale jobs are in the panel only) and 7
+// incident rows. The Stale
 // jobs panel reads its own route, so the Queue is measured once its rows have arrived.
 const LIST_VIEWS = ["needs", "queue", "incidents"] as const;
-const LIST_COUNT = 29;
+const LIST_COUNT = 34;
 
 // fn's results on each list view, in turn.
 async function acrossLists<T>(page: Page, fn: () => Promise<T[]>): Promise<T[]> {
