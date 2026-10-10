@@ -131,6 +131,10 @@ test("the prompt names the jobs in order by id and estimate, tells the session t
   assert.match(prompt, /A job that blocks stops only itself/);
   assert.match(prompt, /Do not claim any job that is not listed/);
   assert.match(prompt, /about 480 minutes/);
+  assert.doesNotMatch(prompt, /gated/, "no gated job, no gated instruction");
+  const gated = planPrompt({ ...lane, jobs: [{ ...lane.jobs[0], gated: true }, lane.jobs[1]] }, 480);
+  assert.match(gated, /1\. job_aaaaaaaaaaaa \(about 30 minutes, gated\)\n2\. job_bbbbbbbbbbbb \(about 40 minutes\)/);
+  assert.match(gated, /list each risky step there for the seat without doing it/);
   assert.equal(driverArgs(prompt)[1], prompt);
   assert.equal(driverArgs()[1], "/improve work", "with no plan the prompt is the plain driver command");
 });

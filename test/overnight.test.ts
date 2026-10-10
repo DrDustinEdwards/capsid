@@ -190,9 +190,8 @@ test("the plan takes gate-free jobs in priority order, then oldest first, in one
   assert.equal(out.queued_read, 3);
 });
 
-test("PLANT: a job that needs a gate, a flag, a track record, or is deferred by its title is skipped with its reason, never planned", () => {
+test("PLANT: a job that needs a flag or a track record, or is deferred by its title, is skipped with its reason, never planned", () => {
   const out = plan([
-    job("gate", "a", { gate_required: 1 }),
     job("flags", "a", { required_scopes: '{"flags":["can_merge"]}' }),
     job("record", "a", { min_record: '{"prs_merged":3}' }),
     job("later", "a", { title: "LATER (after 10/6 reset): mods" }),
@@ -200,13 +199,20 @@ test("PLANT: a job that needs a gate, a flag, a track record, or is deferred by 
   ]);
   assert.deepEqual(out.lanes[0].jobs.map((j) => j.id), ["ok"]);
   const why = Object.fromEntries(out.skipped.map((s) => [s.id, s.reason]));
-  assert.match(why.gate, /gate_required/);
   assert.match(why.flags, /flags a driver does not hold/);
   assert.match(why.record, /track record/);
   assert.match(why.later, /LATER/);
-  assert.equal(out.skipped.length, 4);
+  assert.equal(out.skipped.length, 3);
   // The empty-object forms of the two scope columns are no requirement at all.
   assert.equal(ineligibleReason(job("x", "a", { required_scopes: "{}", min_record: "" }), repos({ a: "o/a" })), null);
+});
+
+test("PLANT: a gated job is planned and marked gated, in its priority place, and an ungated one is not marked", () => {
+  // Conventions 2.3 (Dustin 2026-10-07): gates apply to risky steps, not whole jobs.
+  const out = plan([job("gate", "a", { gate_required: 1, priority: 90 }), job("plain", "a", { priority: 10 })]);
+  assert.deepEqual(out.lanes[0].jobs.map((j) => [j.id, j.gated]), [["gate", true], ["plain", false]]);
+  assert.deepEqual(out.skipped, []);
+  assert.equal(ineligibleReason(job("gate", "a", { gate_required: 1 }), repos({ a: "o/a" })), null);
 });
 
 test("a namespace with no usable repo skips its jobs and says why, corrupt mapping included", () => {

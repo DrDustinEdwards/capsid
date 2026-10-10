@@ -8,7 +8,11 @@ import { logEvent } from "./log";
 // them with the credential it already holds.
 //
 // THE PLAN says what an overnight run of about eight hours should work, per repo:
-//   - only gate-free queued jobs, in priority order, that fit the budget;
+//   - queued jobs, in priority order, that fit the budget. A gated job is planned too
+//     (conventions 2.3, Dustin 2026-10-07: gates apply to risky steps, not whole jobs):
+//     the session does its ordinary work, lists each risky step in the pull request for
+//     the seat, and moves on. It is marked `gated` so the session knows to. A parked job
+//     is never read: the query takes only queued rows;
 //   - one lane, so one session, per repo, however many namespaces map to it;
 //   - repos that run heavy suites share one budget, because their sessions run one at a
 //     time. With no policy document every repo counts as heavy: unknown fails closed.
@@ -104,6 +108,9 @@ export interface PlannedJob {
   priority: number;
   estimate_minutes: number;
   estimate_source: Estimate["source"];
+  /** The job needs a human confirmation for a risky step (gate_required): the session
+   *  does the ordinary work and lists that step in the pull request for the seat. */
+  gated: boolean;
 }
 
 export interface PlanLane {
@@ -141,7 +148,6 @@ export type RepoOf = { repo: string } | { problem: string };
 
 /** Why a queued job is not planned, or null when it is. Order is the order the reasons read best in. */
 export function ineligibleReason(job: PlanJobRow, repoOf: ReadonlyMap<string, RepoOf>): string | null {
-  if (job.gate_required === 1) return "needs a human confirmation (gate_required): it would block at its first gate";
   if (job.required_scopes !== null && job.required_scopes !== "" && job.required_scopes !== "{}") return `requires flags a driver does not hold (${job.required_scopes.slice(0, 80)})`;
   if (job.min_record !== null && job.min_record !== "" && job.min_record !== "{}") return `requires a track record (min_record ${job.min_record.slice(0, 40)}), which a plan cannot check`;
   if (/^LATER\b/.test(job.title)) return "its title defers it (LATER)";
@@ -194,7 +200,7 @@ export function buildOvernightPlan(input: {
     if (!lane.namespaces.includes(job.namespace)) lane.namespaces.push(job.namespace);
     // A repo reached by two namespaces is heavy if either says so, because its one session runs both.
     lane.heavy = lane.heavy || heavy;
-    lane.jobs.push({ id: job.id, namespace: job.namespace, title: job.title, priority: job.priority, estimate_minutes: est.minutes, estimate_source: est.source });
+    lane.jobs.push({ id: job.id, namespace: job.namespace, title: job.title, priority: job.priority, estimate_minutes: est.minutes, estimate_source: est.source, gated: job.gate_required === 1 });
     lane.planned_minutes += est.minutes;
     lanes.set(repo, lane);
   }
