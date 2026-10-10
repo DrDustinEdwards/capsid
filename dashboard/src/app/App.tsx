@@ -12,7 +12,6 @@ import { FreshRing } from "../ui/charts";
 import { AppCtx, VIEWS, isView, parseRoute, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { Drawer } from "./Drawer";
 import { CommandMenu, commands } from "./CommandMenu";
-import { HelpSheet } from "./HelpSheet";
 import { Overview } from "../views/Overview";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -36,6 +35,8 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
 
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
+// Loaded the first time it is opened, then kept: the initial bundle does not carry it.
+const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.HelpSheet })));
 
 // The phone tab bar (DECIDE 12): four views, then More, which lists every other view.
 // With no site configured there is no Sites tab. Settings is under More: on a wide
@@ -136,6 +137,11 @@ export function App() {
   const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  // Set on the first open and never cleared, so the sheet mounts once and keeps its state.
+  const [helpUsed, setHelpUsed] = useState(false);
+  useEffect(() => {
+    if (help) setHelpUsed(true);
+  }, [help]);
   const singleKeys = useSingleKeys();
   const dark = useDarkTheme();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -612,7 +618,11 @@ export function App() {
         shell
       )}
       <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
-      <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+      {helpUsed && (
+        <Suspense fallback={null}>
+          <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+        </Suspense>
+      )}
       {confirmReq && feed && (
         <Suspense fallback={null}>
           <ConfirmDialog
