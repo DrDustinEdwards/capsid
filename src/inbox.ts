@@ -100,7 +100,9 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) {
       for (const a of parsed as AwaitingSeat[]) {
-        add(a.namespace, { title: `PR #${a.number} waits for the seat: ${a.failed}`, kind: "pr", link: `https://github.com/${a.repo}/pull/${a.number}`, since: a.at });
+        // The class says what kind of answer it needs (src/merge-class.ts, report-only).
+        const cls = a.class ? ` (${a.class}${a.class_reasons?.[0] ? `: ${a.class_reasons[0].slice(0, 160)}` : ""})` : "";
+        add(a.namespace, { title: `PR #${a.number} waits for the seat: ${a.failed}${cls}`, kind: "pr", link: `https://github.com/${a.repo}/pull/${a.number}`, since: a.at });
       }
     }
   } catch {

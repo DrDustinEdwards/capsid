@@ -86,6 +86,8 @@ nothing is created without `--apply`, an installed task is created disabled, and
 only if the overnight switch is on, on the API key or on the subscription with Dustin's
 recorded decision (docs/overnight.md). Hand-started tabs are the default and are unaffected.
 
+**Merge classes, report-only** (`src/merge-class.ts`; docs/design/design-merge-pipeline.md section 2, the design's PR 2, ruled 2026-10-09). The tick gives every PR it judges one class with its reasons: `auto` (passes the signed policy), `approve` (stopped only by a rule a person may waive), `typed` (any money path, decided before anything else), `seat` (a migration, a workflow, a fork head, a base other than the default branch, or a file list that could not be read) or `wait` (CI not finished, or a draft). Its path class is its riskiest file's: docs, dashboard-css, tests, dashboard-code, deps-own, src-routine, deps-other, src-worth, workflow, migration, money (a manifest or lockfile counts as deps-other until the diff is read). The class, path class and reasons ride on the awaiting-seat set and in the inbox item's title. Nothing acts on them yet: the approval record and the executor are the design's next PRs. A PR whose body names no job is not read, so it has no class. Tests: test/merge-class.test.ts, and the tick's in test/auto-merge.test.ts.
+
 ## The watcher
 
 A half-hourly step on the five-minute tick that reads the surface and, when something is wrong, posts a job. That is all it does. It holds no blast-radius flag, it is scoped to `jobs.post`, and it cannot claim what it posts or fix what it found.

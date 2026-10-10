@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { mergeClass, type Classification, type MergeClass, type PathClass } from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
 import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
@@ -24,6 +25,7 @@ interface OpenPr {
   // repo is null when the head was on a fork that has since been deleted.
   head: { sha: string; repo?: { full_name?: string } | null };
   user?: { login?: string } | null;
+  draft?: boolean;
 }
 
 const CHECKS_MAX_PAGES = 10;
@@ -230,6 +232,9 @@ export interface AutoMergeOutcome {
   failed: string | null;
   why: string | null;
   passed: string[];
+  // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
+  // files were never read (the body names no job, or the tick threw).
+  merge_class?: Classification | null;
 }
 
 // Where the awaiting-seat set lives. Rewritten whole on every tick rather than
@@ -246,6 +251,11 @@ export interface AwaitingSeat {
   failed: string;
   why: string;
   at: string;
+  // Report-only (docs/design/design-merge-pipeline.md, PR 2): the class, its path class
+  // and why. Absent on sets written before this field, and null when unclassified.
+  class?: MergeClass | null;
+  path_class?: PathClass | null;
+  class_reasons?: string[];
 }
 
 export interface AutoMergeReport {
@@ -353,6 +363,9 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       failed: o.failed ?? "unknown",
       why: o.why ?? "",
       at: now.toISOString(),
+      class: o.merge_class?.class ?? null,
+      path_class: o.merge_class?.path_class ?? null,
+      class_reasons: o.merge_class?.reasons ?? [],
     }));
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));
@@ -386,6 +399,7 @@ async function judgeOnePr(
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   const verdict = evaluatePolicy(facts, allowedAuthors);
+  const merge_class = mergeClass(facts, verdict, pr.draft === true);
   if (!verdict.merge) {
     outcomes.push({
       namespace,
@@ -395,6 +409,7 @@ async function judgeOnePr(
       failed: verdict.failed,
       why: verdict.why,
       passed: verdict.passed,
+      merge_class,
     });
     await auditDeclineOnChange(
       env,
@@ -417,7 +432,7 @@ async function judgeOnePr(
       why: `the PR head moved after the policy judged ${facts.headSha}, so GitHub refused the pinned merge. ${err.message}`,
       passed: verdict.passed,
     };
-    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved });
+    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved, merge_class });
     await auditDeclineOnChange(
       env,
       facts,
@@ -426,7 +441,7 @@ async function judgeOnePr(
     );
     return;
   }
-  outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed });
+  outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed, merge_class });
   await env.DB.batch([
     improveAudit(
       env.DB,
