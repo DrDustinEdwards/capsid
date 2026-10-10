@@ -1,0 +1,2 @@
+test_file,source_file,mutants_killed,mutants_killed_only_by_this_test
+,scripts/dry-run-config.mjs,35,35

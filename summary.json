@@ -1,0 +1,117 @@
+{
+  "run_id": "38031583380",
+  "sha": "310410a3b6bfc0dac833ccc2ff2e73f747b1940c",
+  "ref": "refs/heads/mutation-scripts-dashboard",
+  "complete": true,
+  "problems": [],
+  "stryker": {
+    "name": "StrykerJS",
+    "version": "10.0.0"
+  },
+  "shards": [
+    {
+      "shard": 0,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 1,
+      "files": 1,
+      "report": true
+    },
+    {
+      "shard": 2,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 3,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 4,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 5,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 6,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 7,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 8,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 9,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 10,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 11,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 12,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 13,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 14,
+      "files": 0,
+      "report": false
+    },
+    {
+      "shard": 15,
+      "files": 0,
+      "report": false
+    }
+  ],
+  "mutants": 50,
+  "counts": {
+    "Killed": 35,
+    "Timeout": 0,
+    "Survived": 15,
+    "NoCoverage": 0,
+    "RuntimeError": 0,
+    "CompileError": 0,
+    "Ignored": 0,
+    "Pending": 0
+  },
+  "score": 70,
+  "score_covered_only": 70,
+  "source_files": 1,
+  "test_files": 1,
+  "per_source": [
+    {
+      "file": "scripts/dry-run-config.mjs",
+      "mutants": 50,
+      "Killed": 35,
+      "Survived": 15,
+      "score": 70
+    }
+  ]
+}
