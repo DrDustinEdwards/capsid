@@ -154,7 +154,7 @@ test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 
   assert.match(out, /FAIL {2}3 consent form renders\n.*skipped: no probe client from gate 2/);
 });
 
-test("a probe document GitHub does not serve is could-not-run, not a refusal", async () => {
+test("a probe document the Worker does not serve is a fail of this deploy", async () => {
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.url !== "/probe-client.json") return false;
@@ -164,9 +164,9 @@ test("a probe document GitHub does not serve is could-not-run, not a refusal", a
     }),
     () => false
   );
-  assert.equal(code, 3, out);
-  assert.match(out, /NORUN {2}2 CIMD, DCR allowlisted\n.*answered 404/);
-  assert.match(out, /NORUN {2}3 consent form renders/);
+  assert.equal(code, 1, out);
+  assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*answered 404/);
+  assert.match(out, /FAIL {2}3 consent form renders\n.*skipped: no probe client from gate 2/);
 });
 
 test("gate 6 refuses the Portal answering on the MCP host", async () => {
