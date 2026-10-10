@@ -21,6 +21,7 @@ import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { SEAT_START_KEY } from "../src/seat-start";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import { proposeCanon } from "../src/canon";
+import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -53,7 +54,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.startsWith("https://api.github.com/repos/example/capsid")) {
     githubCalls.push(`${method} ${url}`);
     if (url === GITHUB_PR && method === "PATCH") return Response.json({ number: 41, state: "closed", html_url: "https://github.com/example/capsid/pull/41" });
-    if (url === GITHUB_PR) return Response.json({ head: { ref: "feat/sample", repo: { full_name: "example/capsid" } }, base: { ref: "main" } });
+    if (url === GITHUB_PR) return Response.json({ head: { ref: "feat/sample", sha: "c".repeat(40), repo: { full_name: "example/capsid" } }, base: { ref: "main" }, state: "open", merged: false });
     if (url === "https://api.github.com/repos/example/capsid") return Response.json({ default_branch: "main" });
     if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE") return new Response(null, { status: 204 });
     return new Response("not stubbed", { status: 404 });
@@ -284,6 +285,27 @@ const CASES: Record<string, Case> = {
       await env.APP_KV.delete("gh:token:v3:example/capsid");
     },
   },
+  approve_pr: {
+    // A pull request the tick classed approve: an approval row at the head reviewed, and
+    // nothing merged (no PUT to GitHub's merge).
+    params: async () => {
+      githubCalls.length = 0;
+      await env.DB.prepare("DELETE FROM pr_approvals").run();
+      await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
+      await env.APP_KV.put(
+        AWAITING_SEAT_KEY,
+        JSON.stringify([{ namespace: "capsid", repo: "example/capsid", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }])
+      );
+      return { namespace: "capsid", prs: "41", shas: "c".repeat(7), reason: "read the diff" };
+    },
+    after: async () => {
+      const row = await env.DB.prepare("SELECT repo, pr, head_sha, class, status, approved_by, surface, reason FROM pr_approvals").first<Record<string, unknown>>();
+      expect(row).toEqual({ repo: "example/capsid", pr: 41, head_sha: "c".repeat(40), class: "approve", status: "approved", approved_by: ACTOR, surface: "portal", reason: "read the diff" });
+      expect(githubCalls.filter((c) => c.includes("/merge")), "approve_pr merged").toEqual([]);
+      await env.APP_KV.delete("gh:token:v3:example/capsid");
+      await env.APP_KV.delete(AWAITING_SEAT_KEY);
+    },
+  },
   fail_job: {
     params: async () => ({ id: await blockedJob("a job to fail"), reason: "superseded" }),
     after: async ({ id }) => expect((await job(id))?.status).toBe("failed"),
@@ -376,9 +398,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-four actions", () => {
+  it("covers the allow-list, twenty-five actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(24);
+    expect(Object.keys(CASES).length).toBe(25);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -441,6 +463,35 @@ describe("parked jobs, the Tonight plan and the digest", () => {
     expect(digest.status, await digest.clone().text()).toBe(200);
     expect(((await digest.json()) as PortalDigest).since).toBe("2026-01-01T00:00:00.000Z");
     expect((await call(`${PORTAL_DIGEST_PATH}?since=soon`)).status).toBe(400);
+  });
+});
+
+describe("the approval record against real D1", () => {
+  it("approving again voids the open approval as replaced, and Undo voids the new one as undone, each with its row", async () => {
+    await env.DB.prepare("DELETE FROM pr_approvals").run();
+    await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
+    await env.APP_KV.put(
+      AWAITING_SEAT_KEY,
+      JSON.stringify([{ namespace: "capsid", repo: "example/capsid", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }])
+    );
+    const act = async (params: Record<string, string>) => {
+      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "approve_pr", params } })).json()) as PortalPreview;
+      const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+      expect(performed.status, await performed.clone().text()).toBe(200);
+      return preview;
+    };
+    await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
+    const again = await act({ namespace: "capsid", prs: "41", shas: "c".repeat(40) });
+    expect(again.audit).toContain(`pr-approval-voided by ${ACTOR}`);
+    const undo = await act({ namespace: "capsid", prs: "41", undo: "true" });
+    expect(undo.audit).toContain(`portal-undo-approve_pr by ${ACTOR}`);
+    const { results } = await env.DB.prepare("SELECT status, close_reason FROM pr_approvals ORDER BY id").all<{ status: string; close_reason: string | null }>();
+    expect(results).toEqual([
+      { status: "voided", close_reason: "replaced" },
+      { status: "voided", close_reason: "undone" },
+    ]);
+    await env.APP_KV.delete("gh:token:v3:example/capsid");
+    await env.APP_KV.delete(AWAITING_SEAT_KEY);
   });
 });
 

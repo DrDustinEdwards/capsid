@@ -124,6 +124,9 @@ export const TABLES = [
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
   "shared_packages",
+  // The merge pipeline's approvals (migrations/0037_pr_approvals.sql): who approved which
+  // pull request at which head, and how each approval ended. Nothing prunes it.
+  "pr_approvals",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;
