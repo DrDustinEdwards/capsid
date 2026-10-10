@@ -7,8 +7,8 @@ import { cimdClient } from "./cimd-stub";
 // handlers on either side of that wiring.
 //
 // Asserted here is what a browser and a client depend on: the discovery documents
-// describe this server, there is no /register (CIMD only, design PR 4 of
-// capsid/research/design-capsid-access-login.md), the consent dialog renders for a
+// describe this server, /register takes only the allowlisted Grok, Gemini and ChatGPT
+// callbacks and grants nothing (tightened DCR, src/dcr.ts), the consent dialog renders for a
 // client known by its metadata document with its security headers, and the state
 // cookie is scoped so a stolen one is not reusable.
 
@@ -46,27 +46,56 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // CIMD only: both Claude clients send a metadata document URL, and nothing
-    // advertises a registration endpoint.
-    expect(serverDoc.registration_endpoint).toBeUndefined();
+    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini
+    // (src/dcr.ts), on the MCP host only.
+    expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
+    const legacy = (await (await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-authorization-server")).json()) as { registration_endpoint?: string };
+    expect(legacy.registration_endpoint).toBeUndefined();
     expect((serverDoc as { client_id_metadata_document_supported?: boolean }).client_id_metadata_document_supported).toBe(true);
   });
 });
 
-describe("no dynamic client registration", () => {
-  it("PLANT: POST /register is not an endpoint, and writes no client record", async () => {
-    const before = (await env.OAUTH_KV.list({ prefix: "client:" })).keys.length;
-    const response = await SELF.fetch("https://capsid.test/register", {
+describe("tightened dynamic client registration", () => {
+  const GROK = "https://grok.com/connectors/oauth/callback";
+  const clients = async () => (await env.OAUTH_KV.list({ prefix: "client:" })).keys.length;
+  const register = (redirects: string[], host = "capsid.test", ip = "198.51.100.20") =>
+    SELF.fetch(`https://${host}/register`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: "integration-client",
-        redirect_uris: ["https://client.example.com/callback"],
-        token_endpoint_auth_method: "none",
-      }),
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+      body: JSON.stringify({ client_name: "integration-client", redirect_uris: redirects, token_endpoint_auth_method: "none" }),
     });
-    expect(response.status).toBe(404);
-    expect((await env.OAUTH_KV.list({ prefix: "client:" })).keys.length).toBe(before);
+
+  it("PLANT: an unlisted redirect is refused and writes no client record", async () => {
+    const before = await clients();
+    const response = await register(["https://client.example.com/callback"]);
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toBe("invalid_redirect_uri");
+    expect(await clients()).toBe(before);
+  });
+
+  it("the old address registers nothing", async () => {
+    const before = await clients();
+    const response = await register([GROK], "capsid.dustin-edwards.workers.dev");
+    expect(response.status).not.toBe(201);
+    expect(await clients()).toBe(before);
+  });
+
+  it("PLANT: Grok's callback registers, and the registration grants nothing: the client meets the consent page", async () => {
+    const before = await clients();
+    const response = await register([GROK], "capsid.test", "198.51.100.21");
+    expect(response.status, await response.clone().text()).toBe(201);
+    const registered = (await response.json()) as { client_id: string; redirect_uris: string[]; access_token?: string };
+    expect(registered.redirect_uris).toEqual([GROK]);
+    expect(registered.access_token).toBeUndefined();
+    expect(await clients()).toBe(before + 1);
+
+    const url = new URL("https://capsid.test/authorize");
+    for (const [k, v] of Object.entries({ client_id: registered.client_id, redirect_uri: GROK, response_type: "code", code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method: "S256", state: "s" })) {
+      url.searchParams.set(k, v);
+    }
+    const dialog = await SELF.fetch(url.toString(), { redirect: "manual" });
+    expect(dialog.status, "a registered client skipped the consent page").toBe(200);
+    expect(await dialog.text()).toContain('action="/authorize"');
   });
 });
 

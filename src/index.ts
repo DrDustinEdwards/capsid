@@ -1,5 +1,4 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { createMcpHandler } from "agents/mcp";
 import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
@@ -8,6 +7,8 @@ import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
 import type { Env, Props } from "./env";
 import { buildServer } from "./server";
+import { serveMcp } from "./mcp-handler";
+import { gateRegistration, REGISTER_PATH } from "./dcr";
 import { chicagoHour } from "./improve-schema";
 import { openRuns, tickRuns } from "./improve-run";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
@@ -43,7 +44,7 @@ const apiHandler = {
     // acts through. It never refuses on what the client says.
     await recordAdminInitialize(env.DB, admin.actor, request);
     const observe = adminWriteObserver(env.DB, admin.actor, request.headers.get("User-Agent"));
-    return createMcpHandler(buildServer(env, admin, "", observe), { route: "/mcp" })(request, env, ctx);
+    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe));
   },
 };
 
@@ -66,7 +67,7 @@ function withCacheDefault(response: Response, pathname: string): Response {
 // own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
 // claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
 // The step that turns workers.dev off removes legacyProvider.
-function oauthProvider(resource: string) {
+function oauthProvider(resource: string, registration: boolean) {
   return new OAuthProvider({
     apiRoute: "/mcp",
     apiHandler,
@@ -74,18 +75,19 @@ function oauthProvider(resource: string) {
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
     resourceMetadata: { resource },
-    // CIMD only (capsid/mcp-wrapper-standard.md, amendment 2026-09-27; design PR 4 of
-    // capsid/research/design-capsid-access-login.md): a client's id is the URL of its
-    // metadata document, and there is no registration endpoint. Clients registered by
-    // DCR before PR 4 keep their KV records until the registration TTL they were given.
-    // The provider advertises CIMD only while the global_fetch_strictly_public
-    // compatibility flag is set (wrangler.jsonc.example).
+    // CIMD first (capsid/mcp-wrapper-standard.md, amendment 2026-09-27): a client's id is
+    // the URL of its metadata document. The provider advertises CIMD only while the
+    // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
+    // Tightened DCR for Grok and Gemini (capsid/rulings/mcp-2026-10-10.md, rule 13), on
+    // the MCP host only: src/dcr.ts judges every registration before the provider
+    // sees it. The old address keeps none; it is going.
+    ...(registration ? { clientRegistrationEndpoint: REGISTER_PATH } : {}),
   });
 }
 
-const provider = oauthProvider(MCP_URL);
-const legacyProvider = oauthProvider(LEGACY_MCP_URL);
+const provider = oauthProvider(MCP_URL, true);
+const legacyProvider = oauthProvider(LEGACY_MCP_URL, false);
 
 export default {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -109,7 +111,14 @@ export default {
         return withSecurityHeaders(withCacheDefault(new Response(originProblem, { status: 403 }), pathname));
       }
     }
-    const response = await (new URL(request.url).hostname === LEGACY_HOST ? legacyProvider : provider).fetch(request, env, ctx);
+    const legacy = new URL(request.url).hostname === LEGACY_HOST;
+    let forwarded = request;
+    if (!legacy && pathname === REGISTER_PATH && request.method === "POST") {
+      const gate = await gateRegistration(request, env, new Date());
+      if ("refuse" in gate) return withSecurityHeaders(withCacheDefault(gate.refuse, pathname));
+      forwarded = gate.forward;
+    }
+    const response = await (legacy ? legacyProvider : provider).fetch(forwarded, env, ctx);
     return withSecurityHeaders(withCacheDefault(response, pathname));
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches three of the

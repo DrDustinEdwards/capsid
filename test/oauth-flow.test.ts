@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { approvalTag } from "../src/approval.ts";
 import { callerIp } from "../src/rate-limit.ts";
 
-// The /register rate limit and its redirect cap went with DCR (design PR 4 of
-// capsid/research/design-capsid-access-login.md). The limiter itself is still the one
-// /csp-report uses, and test/csp-rate-limit.test.ts drives it.
+// The /register rate limit and its redirect allowlist are tightened DCR's
+// (src/dcr.ts, test/dcr.test.ts). The limiter is the one /csp-report uses, and
+// test/csp-rate-limit.test.ts drives it.
 
 test("callerIp reads CF-Connecting-IP and falls back off the edge", () => {
   assert.equal(callerIp(new Request("https://x/", { headers: { "CF-Connecting-IP": "5.6.7.8" } })), "5.6.7.8");

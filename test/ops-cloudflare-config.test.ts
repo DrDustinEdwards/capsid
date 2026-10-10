@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { CF_MAX_PAGES } from "../src/ops-cloudflare.ts";
 import { CF_PERMISSION, readCloudflareConfig } from "../src/ops-cloudflare-config.ts";

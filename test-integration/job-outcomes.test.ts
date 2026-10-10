@@ -6,8 +6,7 @@ import { reverifyStatements } from "../src/outcome-prs";
 import { outcomeStatement } from "../src/job-outcomes";
 import { legacyAgent } from "../src/agents";
 import { buildServer } from "../src/server";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // Jobs as evidence, against a real D1 (migrations/0011). Every property below is a
 // property of the database: "exactly one outcome row per job" is a PRIMARY KEY, and

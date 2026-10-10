@@ -1,7 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail } from "../src/agents";
 import { improveStatus } from "../src/improve-run";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY, setOvernight } from "../src/overnight";

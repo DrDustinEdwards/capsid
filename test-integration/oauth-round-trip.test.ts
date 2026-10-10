@@ -124,6 +124,25 @@ describe("the OAuth round trip", () => {
     expect((await mcpInitialize(next.access_token)).status).toBe(200);
   });
 
+  it("PLANT: a token issued for this server is refused by another resource (RFC 8707 audience)", async () => {
+    // Rule 12 of capsid/rulings/mcp-2026-10-10.md: reject any token not issued for this
+    // server. The old address is a second resource on the same Worker and the same
+    // OAUTH_KV, so the token is found there and refused only for its audience.
+    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
+    const { access_token } = (await exchanged.json()) as { access_token: string };
+    expect((await mcpInitialize(access_token)).status, "the token does not open its own resource, so the refusal below proves nothing").toBe(200);
+    const elsewhere = await call(
+      new Request("https://capsid.dustin-edwards.workers.dev/mcp", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "audience", version: "1.0.0" } } }),
+      })
+    );
+    expect(elsewhere.status).toBe(401);
+    expect(await elsewhere.text()).not.toMatch(/"serverInfo"/);
+  });
+
   it("the exchange refuses a redirect_uri other than the authorization request's", async () => {
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
     const refused = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: "https://client.example.com/other", client_id: clientId, code_verifier: VERIFIER });

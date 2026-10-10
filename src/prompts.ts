@@ -1,8 +1,6 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ErrorCode, GetPromptRequestSchema, ListPromptsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import { namespaceFilter, resourceRefusal } from "./resources";
-import { PRIVATE_LIST } from "./cache-hints";
 
 export function registerPrompts(server: McpServer, agent: Agent, db: D1Database): void {
   // Prompts: reusable templates stored as type 'prompt' documents whose bodies use
@@ -25,9 +23,9 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
     return safe || undefined;
   };
   server.server.registerCapabilities({ prompts: { listChanged: false } });
-  server.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  server.server.setRequestHandler("prompts/list", async () => {
     if (!agent.scopes.grants.includes("read")) {
-      throw new McpError(ErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no prompts.`);
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no prompts.`);
     }
     const { results } = await db
       .prepare("SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path")
@@ -38,33 +36,31 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
         description: promptSafeTitle(row.title),
         arguments: promptVariables(row.body ?? "").map((name) => ({ name, required: true })),
       })),
-      // Filtered to the caller's namespaces, so private (src/cache-hints.ts).
-      ...PRIVATE_LIST,
     };
   });
-  server.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  server.server.setRequestHandler("prompts/get", async (request) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     // Split on the FIRST slash only: the namespace never contains one and the
     // path frequently does.
     const slash = name.indexOf("/");
     if (slash <= 0 || slash === name.length - 1) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
         `prompt name must be "<namespace>/<path>", got "${name}". Call prompts/list for the available names.`
       );
     }
     const promptNs = name.slice(0, slash);
     const promptPath = name.slice(slash + 1);
     const refusal = resourceRefusal(agent, promptNs);
-    if (refusal) throw new McpError(ErrorCode.InvalidParams, refusal);
+    if (refusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, refusal);
     const row = await db
       .prepare(
         "SELECT title, body FROM documents WHERE type = 'prompt' AND namespace = ?1 AND (path = ?2 OR path = ?2 || '.md')"
       )
       .bind(promptNs, promptPath)
       .first<{ title: string | null; body: string | null }>();
-    if (!row) throw new McpError(ErrorCode.InvalidParams, `prompt not found: ${name}`);
+    if (!row) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `prompt not found: ${name}`);
     const missing = new Set<string>();
     const text = (row.body ?? "").replace(PLACEHOLDER, (placeholder, variable: string) => {
       const value = args[variable];
@@ -75,7 +71,7 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
       return String(value);
     });
     if (missing.size > 0) {
-      throw new McpError(ErrorCode.InvalidParams, `missing arguments for prompt ${name}: ${[...missing].join(", ")}`);
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `missing arguments for prompt ${name}: ${[...missing].join(", ")}`);
     }
     return {
       description: promptSafeTitle(row.title),

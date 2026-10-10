@@ -24,6 +24,7 @@ const MCP_HOST_PATHS = new Set([
   "/authorize",
   "/token",
   "/callback",
+  "/register",
   "/health",
   "/csp-report",
   "/improve/score",

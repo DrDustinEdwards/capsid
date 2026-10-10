@@ -1,11 +1,11 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "./env";
 import { legacyAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
-import { decorateCacheHints } from "./cache-hints";
+import { CACHE_HINTS } from "./cache-hints";
 import { registerDocTools, type ToolCtx, type ToolGrant } from "./tools/docs";
 import { registerLintTools } from "./tools/lint";
 import { registerRepoTools } from "./tools/repo";
@@ -45,7 +45,7 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // there is no second code path where scopes do not apply.
 export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver): McpServer {
   const agent = typeof caller === "string" ? legacyAgent(caller, actor) : caller;
-  const server = new McpServer(SERVER_INFO);
+  const server = new McpServer(SERVER_INFO, { cacheHints: CACHE_HINTS });
   const db = env.DB;
 
   // Provenance: the actor from a document's latest audit_log entry, surfaced by read
@@ -90,9 +90,6 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", obs
   // check scope themselves (src/resources.ts).
   registerDocumentResources(server, agent, db);
   registerPrompts(server, agent, db);
-
-  // Last, so every handler it decorates exists (src/cache-hints.ts).
-  decorateCacheHints(server);
 
   return server;
 }

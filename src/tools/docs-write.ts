@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
