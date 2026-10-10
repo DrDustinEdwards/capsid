@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMaintenance } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -13,6 +13,7 @@ export const ACTIVITY_URL = `${BASE}/api/activity`;
 export const CLAIMS_URL = `${BASE}/api/claims`;
 export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 export const STALE_URL = `${BASE}/api/stale`;
+export const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 export const SIGN_OUT_URL = `${BASE}/api/sign-out`;
 export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
@@ -230,6 +231,11 @@ export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageH
 // from the reader behind jobs list stale: true.
 export function fetchStale(): Promise<Answer<PortalStale>> {
   return get<PortalStale>(STALE_URL);
+}
+
+// GET /portal/api/maintenance: the daily maintenance pass's last list and what it read.
+export function fetchMaintenance(): Promise<Answer<PortalMaintenance>> {
+  return get<PortalMaintenance>(MAINTENANCE_URL);
 }
 
 // GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. A job

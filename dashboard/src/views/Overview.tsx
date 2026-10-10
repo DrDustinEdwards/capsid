@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Suspense, lazy, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { isView, routePath, useApp, type ViewId } from "../app/ctx";
 import { PROBE, PROBLEM_ROWS, attentionGroups, cfOk, cfShort, counts, hasSites, isOpen, ringOf, siteKey, uptime, type AttentionRow } from "../lib/derive";
@@ -12,8 +12,8 @@ import { Panel } from "capsomer/react/panel";
 import { NoSnapshot, PageHead, TimelinePanel } from "./shared";
 
 // The Overview answers one question: does anything need me? In order: six summary
-// tiles, the problems worst first with like rows grouped, the notices collapsed, one
-// row per site, and the week of deploys (capsid/research/audit-ui-patterns.md,
+// tiles, the problems worst first with like rows grouped, the notices collapsed, the
+// daily maintenance pass's list (job_549550d73d4e), one row per site, and the week of deploys (capsid/research/audit-ui-patterns.md,
 // "Proposed Overview", rulings 1 to 3). No Queue and no Incidents panel: their counts
 // are tiles and their problems are rows (ruling 2). Site monitoring is optional: with no
 // site configured there is no site tile, no Sites table and no timeline.
@@ -25,6 +25,9 @@ interface Tile {
   cls: "" | "ok" | "warn" | "crit";
   go: ViewId;
 }
+
+// The Maintenance list loads on its own, after the Overview's first paint.
+const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m.Maintenance })));
 
 // Past this many sites the table shows the ones not up, then the rest up to the limit.
 const SITE_ROWS = 10;
@@ -74,6 +77,9 @@ export function Overview() {
         ))}
       </div>
       <NeedsAttention sitesOn={sitesOn} />
+      <Suspense fallback={null}>
+        <Maintenance />
+      </Suspense>
       {sitesOn && (
         <>
           <Panel

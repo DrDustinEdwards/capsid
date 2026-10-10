@@ -7,7 +7,7 @@
 //
 // It also mocks the Portal's controls (preview and perform), GET
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale and POST
+// /portal/api/stale, GET /portal/api/maintenance and POST
 // /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -35,6 +35,7 @@ import type {
   PortalActivity,
   PortalPackageHistory,
   PortalStale,
+  PortalMaintenance,
   OpsStaleJob,
   PortalActivityRow,
   PortalClaimsAggregate,
@@ -572,6 +573,32 @@ function stale(f: OpsFeed): PortalStale {
   return { generated: new Date(now).toISOString(), rows, truncated: false, note: null };
 }
 
+// GET /portal/api/maintenance: one row per kind of finding the daily pass makes, the job
+// rows naming the feed's own jobs so they open a drawer. WF_MOCK=no-snapshot answers as
+// before the first pass.
+function maintenance(f: OpsFeed): PortalMaintenance {
+  const now = mockNow();
+  if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0, disk: 0 } };
+  // The sample feed has both; a feed without one fails here, not with a made-up id.
+  const queued = f.live.jobs.find((j) => j.status === "queued")!.id;
+  const blocked = f.live.jobs.find((j) => j.status === "blocked")!.id;
+  const pr = "https://github.com/example-org/sample/pull/41";
+  return {
+    generated: new Date(now - 3 * 3_600_000).toISOString(),
+    items: [
+      { rule: "auto-resumed", namespace: "sample", job: blocked, line: `${blocked} was resumed because its pull requests merged: its holder confirms the deploy and completes it.` },
+      { rule: "pr-awaiting-seat", namespace: "sample", job: blocked, pr, line: `${pr} (${blocked}) is green and has been open 2.1 days: merge it or say why it waits.` },
+      { rule: "undeployed-merge", namespace: "sample-b", job: null, line: "sample-b was last deployed 2026-10-04 09:00 UTC, 4.0 days before example-org/sample-b's last commit on main (1a2b3c4): deploy it, or say why it waits." },
+      { rule: "disk-low", namespace: "sample", job: queued, line: `agent:sample-driver reported 22.5 GB free at ${new Date(now - 5 * 3_600_000).toISOString().slice(0, 16).replace("T", " ")} UTC, under 30 GB: run disk-guard cleanup or free space on that machine.` },
+      { rule: "later-passed", namespace: "sample", job: queued, line: `${queued} is queued as LATER 2026-10-01, a date that has passed: re-title it or work it.` },
+      { rule: "branch-merged", namespace: "sample", job: null, line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune is off, so none was deleted." },
+      { rule: "branch-stale", namespace: "sample-c", job: null, line: "example-org/sample-c branch feat/old-idea has had no commit for 41 days (no pull request): delete it, open its pull request, or keep-list it." },
+      { rule: "deploys-not-checked", namespace: "sample-c", job: null, line: "Deploys in sample-c were not checked (Cloudflare was not read for it (CF_OPS_TOKEN is not set)): what is missing is not a clean result." },
+    ],
+    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2, disk: 2 },
+  };
+}
+
 function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
   const now = mockNow();
   const iso = (agoMs: number) => new Date(now - agoMs).toISOString();
@@ -907,7 +934,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/maintenance", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -923,6 +950,10 @@ export function mockOpsApi(): Plugin {
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/maintenance") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, maintenance(feed(nextRefresh, st)));
         }
         if (path === "/portal/api/sign-out") {
           if (req.method !== "POST") return send(res, 405, { error: "method" });
