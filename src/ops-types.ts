@@ -425,6 +425,7 @@ export interface OpsFeed {
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   GET  /portal/api/stale                                        -> PortalStale
+//   GET  /portal/api/maintenance                                  -> PortalMaintenance
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -788,4 +789,47 @@ export interface PortalStale {
   truncated: boolean;
   // Set when rows may be missing: more than 200, or the pull request cache unreadable.
   note: string | null;
+}
+
+// GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
+// (src/maintenance.ts), as stored by its last run: what the pass found that it did not act
+// on, and what it acted on (an auto-resume, a pruned branch). A "-not-checked" rule is a
+// read that failed, shown so a missing read is never taken for a clean result.
+export type MaintenanceRule =
+  | "later-passed"
+  | "shipped-elsewhere"
+  | "followups-missing"
+  | "auto-resumed"
+  | "pr-awaiting-seat"
+  | "pr-red"
+  | "prs-not-checked"
+  | "branch-merged"
+  | "branch-pruned"
+  | "branch-stale"
+  | "branches-not-checked"
+  | "disk-low"
+  | "disk-not-checked"
+  | "undeployed-merge"
+  | "deploys-not-checked";
+
+export interface OpsMaintenanceItem {
+  /** Which rule found it. */
+  rule: MaintenanceRule;
+  namespace: string;
+  /** The job the line is about, or null for a line that names none. */
+  job: string | null;
+  /** The pull request the line is about, for the pull request rules. */
+  pr?: string;
+  /** One plain line for the seat: what is wrong and what to do. */
+  line: string;
+}
+
+export interface PortalMaintenance {
+  /** When the pass that wrote the list ran; null when no pass has run yet. */
+  generated: string | null;
+  items: OpsMaintenanceItem[];
+  /** What the pass read, so an empty list can be told from one that read nothing: open
+   *  pull requests, branches and compared site deploys summed over the repos read, the
+   *  repos read of the roster, and the current driver disk readings. */
+  read: { prs: number; branches: number; repos: number; roster: number; deploys: number; disk: number };
 }

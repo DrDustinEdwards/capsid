@@ -88,8 +88,9 @@ describe("the route tables are a statement about the Worker that serves them", (
     const NOT_GATED = new Set(["/portal/callback"]);
     const portalRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/portal") && !NOT_GATED.has(p));
     // The feed, the refresh, preview, perform, namespaces, activity, claims, stale jobs,
-    // package history, sign-out, the /portal/api/ fallback, the app and the app's files.
-    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(13);
+    // the Maintenance list, package history, sign-out, the /portal/api/ fallback, the app
+    // and the app's files.
+    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(14);
     for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });

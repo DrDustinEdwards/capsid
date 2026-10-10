@@ -18,6 +18,7 @@ import {
 } from "../src/portal-actions.ts";
 import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
+import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_PACKAGE_HISTORY_PATH } from "../src/portal-packages.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
@@ -122,6 +123,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_ACTIVITY_PATH,
   PORTAL_CLAIMS_PATH,
   PORTAL_STALE_PATH,
+  PORTAL_MAINTENANCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,
