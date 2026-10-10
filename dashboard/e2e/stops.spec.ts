@@ -3,7 +3,7 @@ import { visit } from "./views.ts";
 
 // Every stop in the command menu (capsid/decisions.md 2026-09-30, "admin panels review
 // adopted", item 4; job_fe0da37c07e0 PR 4). A stop runs the control it stands for: a
-// switch's reason field on Namespaces, or the confirm dialog. Nothing here performs a
+// switch's reason field in Settings' automation section, or the confirm dialog. Nothing here performs a
 // change, so the mock's state is left as found.
 
 async function menu(page: Page, query: string) {
@@ -15,7 +15,7 @@ async function menu(page: Page, query: string) {
 }
 
 test("PLANT: typing stop lists the stops, and only for what is running", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   const dlg = await menu(page, "stop");
   const stops = dlg.getByRole("option").filter({ hasText: /^S\s*Stop/ });
   await expect(stops.filter({ hasText: "Pause sample-b" })).toHaveCount(1);
@@ -25,11 +25,11 @@ test("PLANT: typing stop lists the stops, and only for what is running", async (
   await expect(dlg.getByRole("option").filter({ hasText: /all/i }).filter({ hasText: /Stop/ })).toHaveCount(0);
 });
 
-test("PLANT: Pause from the menu opens that switch's reason on Namespaces, and moves nothing", async ({ page }) => {
-  await visit(page, "overview");
+test("PLANT: Pause from the menu opens that switch's reason in Settings, and moves nothing", async ({ page }) => {
+  await visit(page, "health");
   const dlg = await menu(page, "pause sample-b");
   await dlg.getByRole("option").filter({ hasText: "Pause sample-b" }).first().click();
-  await expect(page.getByRole("heading", { level: 1, name: "Namespaces" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   const field = page.getByLabel("Pausing sample-b. Reason:");
   await expect(field).toBeFocused();
   const sw = page.getByRole("switch", { name: "Improve loop for sample-b", exact: true });
@@ -40,7 +40,7 @@ test("PLANT: Pause from the menu opens that switch's reason on Namespaces, and m
 });
 
 test("Revoke from the menu opens the confirm dialog, which previews before anything is done", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   const dlg = await menu(page, "revoke");
   const first = dlg.getByRole("option").filter({ hasText: /Stop\s*Revoke / }).first();
   const name = ((await first.innerText()).match(/Revoke (\S+)/) ?? [])[1];

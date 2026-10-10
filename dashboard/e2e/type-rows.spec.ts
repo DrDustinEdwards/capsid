@@ -5,9 +5,11 @@ import { ALL_VIEWS, VIEW_COUNT, visit } from "./views.ts";
 // the browser lays them out with the sample feed. Every check counts what it looked at,
 // so a selector that stops matching fails rather than passing on nothing.
 
-const LIST_ROWS = "main .att-row, main .qrow, main .frow";
+// The Maintenance list's rows (.qrow.mrow) on Health are left out: they load on their own
+// after first paint, so whether they are in yet is timing.
+const LIST_ROWS = "main .att-row, main .qrow:not(.mrow), main .frow";
 // The attention rows are on Needs you, the home (design-portal-evaluation.md DECIDE 1),
-// and the Queue and Incidents rows on their own views. Rows of a closed group are not
+// the Queue rows on the Queue, and the incident rows in Health's Incidents section. Rows of a closed group are not
 // drawn. With the sample feed: 9 attention rows (the first 8 problems, two of them
 // session incidents, and the notices row), 13
 // queue rows (Stale jobs 2, Blocked 1, Running 1, Queued 4, canon proposals 2, live
@@ -106,12 +108,7 @@ test("D6: no rule between list rows; rules kept between table rows", async ({ pa
   }
   expect(lists.n).toBe(LIST_COUNT);
   expect(lists.out).toEqual([]);
-  // The Overview's Sites table keeps a 1 px rule over each row.
-  await visit(page, "overview");
-  const brief = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("main table.brief tbody td")].map((td) => getComputedStyle(td).borderTopWidth));
-  expect(brief.length).toBe(40);
-  expect(brief.filter((w) => w !== "1px")).toEqual([]);
-  // The fleet table on Sites: rows other than the last keep a 1 px rule under each cell.
+  // The fleet table in Health's Sites section: rows other than the last keep a 1 px rule under each cell.
   await visit(page, "sites");
   const cells = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("main table.fleet tbody tr:not(:last-child) > td")].map((td) => getComputedStyle(td).borderBottomWidth));
   expect(cells.length).toBeGreaterThan(20);

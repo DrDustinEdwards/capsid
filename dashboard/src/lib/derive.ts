@@ -204,8 +204,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     }
     for (const c of snap.ci) {
       const st = ciState(c);
-      if (!c.latest) out.push({ sev: "nodata", kind: "CI", title: `CI runs for ${c.namespace} could not be read`, sub: "The GitHub read failed on the last pass", at: ms(snap.pass_at), open: "view:ci" });
-      else if (st.red) out.push({ sev: "warn", kind: "CI", title: `${c.namespace} default branch is ${st.label}`, sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`, at: ms(c.latest.created_at), open: "view:ci" });
+      if (!c.latest) out.push({ sev: "nodata", kind: "CI", title: `CI runs for ${c.namespace} could not be read`, sub: "The GitHub read failed on the last pass", at: ms(snap.pass_at), open: "view:health#ci" });
+      else if (st.red) out.push({ sev: "warn", kind: "CI", title: `${c.namespace} default branch is ${st.label}`, sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`, at: ms(c.latest.created_at), open: "view:health#ci" });
     }
     for (const c of snap.checks) {
       if (c.state === "could-not-run") out.push({ sev: "nodata", kind: "Watcher", title: `Check '${c.id}' could not run on the last pass`, sub: c.findings.join("; "), at: ms(snap.pass_at), open: "view:incidents" });
@@ -282,7 +282,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     });
   }
   for (const a of live.awaiting_seat) {
-    out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:ci", group: { key: "pr-seat", facet: a.repo } });
+    out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:prs", group: { key: "pr-seat", facet: a.repo } });
   }
   if (live.loop.budget.exceeded) {
     out.push({ sev: "warn", kind: "Budget", title: `The ${live.loop.budget.month} budget is exceeded`, sub: `${live.loop.budget.spend.ci_minutes} of ${live.loop.budget.caps.actions_minutes_month} min · $${live.loop.budget.spend.cost_usd.toFixed(2)} of $${live.loop.budget.caps.model_usd_month}`, at: ms(live.generated), open: "view:agents" });
@@ -339,7 +339,7 @@ export const PROBLEM_ROWS = 8;
 const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
   // The blocked row is already one row (attentionItems); the group gives it children.
   blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Queue" },
-  "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "ci", label: "CI and merges" },
+  "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "prs", label: "Pull requests" },
   lease: { title: (n) => `${n} running jobs have an expired lease`, view: "queue", label: "Queue" },
   silent: { title: (n) => `${n} drivers have been silent for over 7 days`, view: "agents", label: "Agents" },
 };

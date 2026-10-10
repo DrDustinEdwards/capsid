@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { visit } from "../e2e/views.ts";
-import type { ViewId } from "../src/app/ctx.ts";
+import { visit, type Place } from "../e2e/views.ts";
 import { SHOTS_NOW } from "./clock.ts";
 
 // The README screenshots, from sample data only (dev/sample-feed.json and the responses
@@ -31,7 +30,7 @@ async function prepare(page: Page, theme: Theme): Promise<void> {
   await page.clock.setFixedTime(new Date(SHOTS_NOW));
 }
 
-async function open(page: Page, view: ViewId, theme: Theme = "light"): Promise<void> {
+async function open(page: Page, view: Place, theme: Theme = "light"): Promise<void> {
   await prepare(page, theme);
   await visit(page, view);
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -50,12 +49,12 @@ test("the pinned clock is the fixture's own now", () => {
 });
 
 test("overview, light", async ({ page }) => {
-  await open(page, "overview");
+  await open(page, "health");
   await shoot(page, "overview-light");
 });
 
 test("overview, dark", async ({ page }) => {
-  await open(page, "overview", "dark");
+  await open(page, "health", "dark");
   await shoot(page, "overview-dark");
 });
 
@@ -103,12 +102,12 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
 
   test("overview, light", async ({ page }) => {
-    await open(page, "overview");
+    await open(page, "health");
     await shoot(page, "phone-overview-light");
   });
 
   test("overview, dark", async ({ page }) => {
-    await open(page, "overview", "dark");
+    await open(page, "health", "dark");
     await shoot(page, "phone-overview-dark");
   });
 });

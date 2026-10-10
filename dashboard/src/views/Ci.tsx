@@ -10,13 +10,12 @@ function prLabel(url: string): string {
   return m ? `${m[1]} #${m[2]}` : url;
 }
 
-export function Ci() {
+// CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
+export function DefaultBranches() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
-  const live = feed.live;
   return (
-    <div className="page">
-      <PageHead title="CI and merges" />
+    <>
       <Panel flush title="Default branches" src="watcher ci check · GitHub App">
         {snap ? (
           <div className="scroll-x">
@@ -62,6 +61,18 @@ export function Ci() {
           <NoSnapshot />
         )}
       </Panel>
+    </>
+  );
+}
+
+// Pull requests (design section 2): the PRs recorded against jobs and those awaiting the
+// seat, CI's PR half. The default-branch table moved to Health.
+export function PullRequests() {
+  const { feed, now } = useApp();
+  const live = feed.live;
+  return (
+    <div className="page">
+      <PageHead title="Pull requests" />
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x">
           <table className="list">

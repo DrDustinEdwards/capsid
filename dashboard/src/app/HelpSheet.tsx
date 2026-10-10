@@ -6,19 +6,14 @@ import type { ViewDef, ViewId } from "./ctx";
 // its name.
 const ABOUT: Partial<Record<ViewId, string>> = {
   needs: "The home: what waits on you, per app, then every problem worst first.",
-  shared: "Each shared package, the tag each app pins, who is behind, and the local copies left.",
-  overview: "The summary tiles, the maintenance list, the sites and the week of deploys.",
-  sites: "Health comes from each site's own route; a root 200 is liveness, not health.",
-  incidents: "Watcher findings, open first. Each is posted once and clears on its own.",
   queue: "A blocked job shows what it waits on; open it for the command and the resume call.",
-  deploys: "From Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
-  agents: "Every credential and when it was last seen. Verified columns are what the Worker checked against GitHub.",
-  backups: "The nightly dump and the off-account mirror. A stale dump or a dead mirror is red on purpose.",
-  namespaces: "The automation switches, then each roster namespace with its switch. A switch asks for a reason and offers Undo.",
+  prs: "Pull requests recorded against jobs, and those auto-merge left for the seat.",
+  health: "The tiles, then sites, findings, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
   activity: "The audit log, newest first: who did what, where.",
-  claims: "What each agent said beside what the Worker verified. A field not stated is never zero.",
+  agents: "Every credential and when it was last seen; Claims sets what each agent said beside what the Worker verified.",
   packages: "Each package configured in Settings: its versions, downloads, dependents and repository.",
-  settings: "The sites the watcher probes and the npm packages it reads. Every change is previewed first.",
+  shared: "Each shared package, the tag each app pins, who is behind, and the local copies left.",
+  settings: "The sites and packages, then the automation switches and each roster namespace. Every change is previewed first.",
 };
 import { Switch } from "../ui/Switch";
 

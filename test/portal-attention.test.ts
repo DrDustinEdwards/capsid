@@ -37,7 +37,7 @@ test("PLANT: four pull requests awaiting the seat are one row that holds all fou
     row.children?.map((c) => c.title),
     ["example-org/sample-info #32 awaits the seat", "example-org/sample-info #31 awaits the seat", "example-org/sample-info #30 awaits the seat", "example-org/sample-info #29 awaits the seat"],
   );
-  assert.deepEqual(row.view, { id: "ci", label: "CI and merges" });
+  assert.deepEqual(row.view, { id: "prs", label: "Pull requests" });
 });
 
 test("a group shows at most five children and counts the rest", () => {

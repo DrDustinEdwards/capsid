@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { hasSites } from "../lib/derive";
 import { ago, msSql, utc } from "../lib/format";
@@ -9,6 +9,9 @@ import type { OpsSiteConfig } from "../types";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 import { PackageSettings } from "./SettingsPackages";
+
+// The Namespaces panel loads on its own, after Settings' first paint (it reads its own route).
+const Namespaces = lazy(() => import("./Namespaces").then((m) => ({ default: m.Namespaces })));
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -240,7 +243,7 @@ export function Settings() {
       <PageHead title="Settings" />
       {!hasSites(feed) && (
         <div className="callout" role="status">
-          No site is configured, so the watcher probes nothing and the Portal shows no Sites view. Add a site to start.
+          No site is configured, so the watcher probes nothing and Health shows no Sites section. Add a site to start.
         </div>
       )}
       <div className="toolbar">
@@ -280,6 +283,16 @@ export function Settings() {
       </Panel>
       <PackageSettings />
       <Display />
+      {/* The automation switches and the roster, which were the Namespaces view
+          (design-portal-evaluation.md section 2: "Namespaces: it is settings"). */}
+      <section className="health-section" id="automation" data-section="Automation" aria-labelledby="automation-h">
+        <h2 className="health-title" id="automation-h">
+          Automation and namespaces
+        </h2>
+        <Suspense fallback={null}>
+          <Namespaces embedded />
+        </Suspense>
+      </section>
     </div>
   );
 }

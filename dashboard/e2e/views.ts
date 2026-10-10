@@ -1,22 +1,28 @@
 import { expect, type Page } from "@playwright/test";
-import { VIEWS, routePath, type ViewId } from "../src/app/ctx.ts";
+import { MOVED, VIEWS, placePath, type MovedId, type ViewId } from "../src/app/ctx.ts";
 
 // Every view the app registers, so a new view is covered without editing a test. The
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
-export const VIEW_COUNT = 15;
+export const VIEW_COUNT = 9;
 // The left menu holds every view but Settings, which is the top bar's Settings button.
 export const RAIL_VIEWS = ALL_VIEWS.filter((v) => v.id !== "settings");
 export const RAIL_COUNT = VIEW_COUNT - 1;
 
+// A place: a view, or a retired view's id (MOVED in src/app/ctx.ts), which names the page,
+// section or tab that holds its content now.
+export type Place = ViewId | MovedId;
+
 // Relative to the /portal/ base URL.
-export function urlOf(id: ViewId): string {
-  return `.${routePath(id)}`;
+export function urlOf(id: Place): string {
+  return `.${placePath(id)}`;
 }
 
-// Opens a view and waits until its heading is up and nothing on it is still loading.
-export async function visit(page: Page, id: ViewId): Promise<void> {
-  const label = ALL_VIEWS.find((v) => v.id === id)!.label;
+// Opens a place and waits until its page's heading is up and nothing on it is still
+// loading.
+export async function visit(page: Page, id: Place): Promise<void> {
+  const view = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId].view : id;
+  const label = ALL_VIEWS.find((v) => v.id === view)!.label;
   await page.goto(urlOf(id));
   await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
   await expect(page.locator("main .loading")).toHaveCount(0);

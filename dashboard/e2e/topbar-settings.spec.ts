@@ -11,7 +11,7 @@ const openAccount = async (page: Page) => {
 };
 
 test("PLANT: Settings is under the avatar, not in the menu", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT);
   await expect(page.locator("nav.cap-admin-menu a").filter({ hasText: /^Settings/ })).toHaveCount(0);
   const panel = await openAccount(page);
@@ -20,7 +20,7 @@ test("PLANT: Settings is under the avatar, not in the menu", async ({ page }) =>
 });
 
 test("PLANT: the Settings link is current on the Settings view only", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   let panel = await openAccount(page);
   await expect(panel.getByRole("link", { name: "Portal settings" })).not.toHaveAttribute("aria-current", "page");
   await panel.getByRole("link", { name: "Portal settings" }).click();
@@ -30,11 +30,11 @@ test("PLANT: the Settings link is current on the Settings view only", async ({ p
 });
 
 test("PLANT: g then e and the command menu still reach Settings", async ({ page }) => {
-  await visit(page, "overview");
+  await visit(page, "health");
   await page.keyboard.press("g");
   await page.keyboard.press("e");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-  await visit(page, "overview");
+  await visit(page, "health");
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox").fill("settings");
   await expect(page.getByRole("option").filter({ hasText: "Settings" }).first()).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
   test("PLANT: Settings is in the sheet behind More, and More is current on it", async ({ page }) => {
-    await visit(page, "overview");
+    await visit(page, "health");
     await page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" }).tap();
     const link = page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ });
     await expect(link).toBeVisible();

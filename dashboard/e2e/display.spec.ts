@@ -15,7 +15,7 @@ test.describe("with a light system setting", () => {
   test.use({ colorScheme: "light" });
 
   test("PLANT: the theme button has a fixed name and aria-pressed that follows dark", async ({ page }) => {
-    await visit(page, "overview");
+    await visit(page, "health");
     await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
     await themeButton(page).click();
     await expect(themeButton(page)).toHaveAttribute("aria-pressed", "true");
@@ -53,10 +53,10 @@ test("PLANT: the single-key shortcuts switch applies at once, in Display and in 
   await keys.click();
   await expect(keys).toHaveAttribute("aria-checked", "false");
   await expect(keys).toHaveAccessibleName("Single-key shortcuts");
-  // Off: g then n does nothing.
+  // Off: g then h does nothing.
   await page.locator("main").focus();
   await page.keyboard.press("g");
-  await page.keyboard.press("n");
+  await page.keyboard.press("h");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   // The sheet shows the same state, and turning it on there applies at once.
   await page.getByRole("button", { name: "Shortcuts" }).click();
@@ -68,8 +68,8 @@ test("PLANT: the single-key shortcuts switch applies at once, in Display and in 
   await help.getByRole("button", { name: "Close" }).click();
   await page.locator("main").focus();
   await page.keyboard.press("g");
-  await page.keyboard.press("n");
-  await expect(page.getByRole("heading", { level: 1, name: "Namespaces" })).toBeVisible();
+  await page.keyboard.press("h");
+  await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
 });
 
 test.describe("in a time zone behind UTC", () => {

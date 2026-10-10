@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { isView, routePath, useApp, type ViewId } from "../app/ctx";
+import { isView, placePath, useApp } from "../app/ctx";
 import { PROBLEM_ROWS, attentionGroups, hasSites, type AttentionRow, type Kind } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import type { InboxApp, InboxItem } from "../types";
@@ -212,7 +212,7 @@ function GroupRow({ row }: { row: AttentionRow }) {
             ))}
             {view && (
               <div className="grouplink">
-                <Link href={routePath(view.id as ViewId)}>{(row.total ?? 0) > kids.length ? `All ${row.total} in ${view.label}` : `Open ${view.label}`}</Link>
+                <Link href={placePath(view.id)}>{(row.total ?? 0) > kids.length ? `All ${row.total} in ${view.label}` : `Open ${view.label}`}</Link>
               </div>
             )}
           </>

@@ -8,7 +8,7 @@ import { NoSnapshot, NsChips, PageHead, TimelinePanel, useNsFilter } from "./sha
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
 
-export function Deploys() {
+export function Deploys({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
@@ -20,9 +20,9 @@ export function Deploys() {
     .sort((a, b) => ms(b.d.created_on) - ms(a.d.created_on));
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
-    <div className="page">
-      <Anchors />
-      <PageHead title="Deploys" />
+    <div className={embedded ? "embedded" : "page"}>
+      {!embedded && <Anchors />}
+      {!embedded && <PageHead title="Deploys" />}
       <div className="toolbar">
         {RANGES.map((r) => (
           <button key={r} type="button" className="chip" aria-pressed={filters.range === r} onClick={() => setFilters({ range: r })}>

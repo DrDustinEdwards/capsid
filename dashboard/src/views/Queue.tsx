@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Spinner } from "capsomer/react/empty";
-import { routePath, useApp } from "../app/ctx";
+import { placePath, useApp } from "../app/ctx";
 import { fetchStale } from "../lib/api";
 import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
@@ -21,7 +21,7 @@ export function SeatStart() {
       <dt>Seat start</dt>
       <dd className="toolbar">
         {s.enabled ? <St kind="ok">On</St> : <St kind="nodata">Off</St>}
-        <Link href={routePath("namespaces")}>Change it in Namespaces</Link>
+        <Link href={placePath("namespaces")}>Change it in Settings</Link>
       </dd>
       <dt>In flight</dt>
       <dd className="num">

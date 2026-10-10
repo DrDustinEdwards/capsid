@@ -374,7 +374,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
   );
 }
 
-export function Namespaces() {
+export function Namespaces({ embedded = false }: { embedded?: boolean } = {}) {
   const { now, signOut } = useApp();
   const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
   const alive = useRef(true);
@@ -396,8 +396,8 @@ export function Namespaces() {
   }, [read]);
   const data = load.data;
   return (
-    <div className="page">
-      <PageHead title="Namespaces" />
+    <div className={embedded ? "embedded" : "page"}>
+      {!embedded && <PageHead title="Namespaces" />}
       <Automation />
       {load.error && (
         <div className="callout crit" role="alert">

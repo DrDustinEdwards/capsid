@@ -1,32 +1,47 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
+// Eight pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
+// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7). Health holds what Overview,
+// Sites, Incidents, Deploys, Backups and CI's default-branch table held; Pull requests
+// holds CI's PR half; Agents holds Claims as a tab; Settings holds the Namespaces panel.
+// Shared code sits in Records beside Packages. The letters follow the pages, with no
+// redirect period for the old ones (Dustin, 2026-10-09).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },
-  { id: "overview", label: "Overview", key: "o" },
-  { id: "sites", label: "Sites", key: "s" },
-  { id: "packages", label: "Packages", key: "p" },
-  { id: "shared", label: "Shared code", key: "x" },
-  { id: "incidents", label: "Incidents", key: "i" },
   { id: "queue", label: "Queue", key: "q" },
-  { id: "deploys", label: "Deploys", key: "d" },
-  { id: "agents", label: "Agents", key: "a" },
-  { id: "backups", label: "Backups", key: "b" },
-  { id: "ci", label: "CI and merges", key: "c" },
-  { id: "namespaces", label: "Namespaces", key: "n" },
+  { id: "prs", label: "Pull requests", key: "p" },
+  { id: "health", label: "Health", key: "h" },
   { id: "activity", label: "Activity", key: "l" },
-  { id: "claims", label: "Claims", key: "v" },
+  { id: "agents", label: "Agents", key: "a" },
+  { id: "packages", label: "Packages", key: "k" },
+  { id: "shared", label: "Shared code", key: "x" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
+// Where each retired view's content lives now, so an old address, an old "view:" reference
+// and a bookmark land on the page and section that hold it.
+export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims";
+export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor?: string; tab?: string }> = {
+  overview: { view: "health", anchor: "summary" },
+  sites: { view: "health", anchor: "sites" },
+  incidents: { view: "health", anchor: "incidents" },
+  deploys: { view: "health", anchor: "deploys" },
+  backups: { view: "health", anchor: "backups" },
+  ci: { view: "prs" },
+  namespaces: { view: "settings", anchor: "automation" },
+  claims: { view: "agents", tab: "claims" },
+};
+
 export type ViewId = (typeof VIEWS)[number]["id"];
 
-// The views on offer: Sites only while at least one site is configured, Packages only
-// while a package is (hasSites and hasPackages in lib/derive.ts). Every other view is
-// always there, Settings included, since that is where the first of each is added.
+// The views on offer: Packages only while a package is configured (hasPackages in
+// lib/derive.ts). Sites are a section of Health, shown only while one is configured.
+// Every other view is always there, Settings included, since that is where the first of
+// each is added.
 export type ViewDef = (typeof VIEWS)[number];
-export function viewsFor(sites: boolean, packages = true): ReadonlyArray<ViewDef> {
-  return VIEWS.filter((v) => (v.id !== "sites" || sites) && (v.id !== "packages" || packages));
+export function viewsFor(_sites: boolean, packages = true): ReadonlyArray<ViewDef> {
+  return VIEWS.filter((v) => v.id !== "packages" || packages);
 }
 export type DrawerType = "site" | "job" | "agent" | "audit";
 
@@ -156,9 +171,21 @@ export function parseRoute(path: string): Route {
   let view: ViewId = "needs";
   let i = 0;
   if (isView(segs[0])) (view = segs[0]), (i = 1);
+  else if (segs[0] !== undefined && Object.hasOwn(MOVED, segs[0])) (view = MOVED[segs[0] as MovedId].view), (i = 1);
   const type = segs[i] as DrawerType | undefined;
   const id = segs[i + 1];
   return { view, drawer: type && TYPES.includes(type) && id ? { type, id } : null };
+}
+
+/** The address an old view id or a current one names: its page, with the section's anchor
+ *  or the tab's query when it moved into one. A current id may name its section itself,
+ *  as "health#ci". */
+export function placePath(id: string): string {
+  const [page, anchor] = id.split("#");
+  if (isView(page)) return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
+  const moved = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId] : null;
+  if (!moved) return routePath("needs");
+  return `${routePath(moved.view)}${moved.tab ? `?tab=${moved.tab}` : ""}${moved.anchor ? `#${moved.anchor}` : ""}`;
 }
 
 export function routePath(view: ViewId, drawer?: { type: DrawerType; id: string } | null): string {

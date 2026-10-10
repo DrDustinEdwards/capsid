@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { OpsFeed } from "../src/types.ts";
 import { ALL_VIEWS, VIEW_COUNT, visit } from "./views.ts";
 
-// The restructured Overview and the layout of PR 3 (capsid/research/audit-ui-patterns.md,
+// Health's summary (the Overview's tiles, folded into Health on 2026-10-09) and the layout of PR 3 (capsid/research/audit-ui-patterns.md,
 // rulings 1 to 4 and 10; capsid/research/design-portal-linear.md D3, D13, D18, D20).
 // Feeds are reshaped in the browser, the way the audit measured the live counts.
 
@@ -34,7 +34,7 @@ const attention = (page: Page) => page.locator("main section.attention");
 for (const width of [1440, 1100, 400]) {
   test(`D3: at ${width} px no tile cuts, clips or spills its text`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await visit(page, "overview");
+    await visit(page, "health");
     const r = await page.evaluate(() => {
       const bad: string[] = [];
       let checked = 0;
@@ -61,28 +61,27 @@ for (const width of [1440, 1100, 400]) {
   });
 }
 
-test("each tile is a link to its view", async ({ page }) => {
-  await visit(page, "overview");
+test("each tile is a link to its page or section", async ({ page }) => {
+  await visit(page, "health");
   const tiles = page.locator("main .tiles a.tile");
   await expect(tiles).toHaveCount(6);
   // A link to assistive technology too, not only in the markup.
   await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(6);
   await expect(tiles.filter({ hasText: "Blocked on you" })).toHaveAttribute("href", "/portal/queue");
-  await tiles.filter({ hasText: "Open findings" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Incidents" })).toBeVisible();
+  await expect(tiles.filter({ hasText: "Open findings" })).toHaveAttribute("href", "#incidents");
+  await tiles.filter({ hasText: "Blocked on you" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
 });
 
-// ---- ruling 2: no Queue and no Incidents panel ------------------------------------------
+// ---- ruling 2: no Queue panel; the attention list is on Needs you -------------------------
 
-test("the Overview has no Queue panel and no Incidents panel", async ({ page }) => {
-  await visit(page, "overview");
-  const h2 = await page.locator("main h2").allTextContents();
+test("Health has its five sections, no Queue panel and no attention list", async ({ page }) => {
+  await visit(page, "health");
   // Its sections are there, so the absence below is not an empty page.
-  // The Maintenance list loads on its own after first paint, so whether it is in yet is
-  // timing; the attention list is not here at all (it is on Needs you).
-  expect(h2.filter((h) => h !== "Maintenance")).toEqual(["Sites", "Deploys and downtime, 7 days"]);
+  await expect(page.locator("main h2.health-title")).toHaveText(["Sites", "Incidents", "Deploys", "Backups", "CI, default branches"]);
   // The Maintenance list's own rows (.mrow) are the daily pass's, not the Queue's.
-  await expect(page.locator("main .qrow:not(.mrow), main .frow")).toHaveCount(0);
+  await expect(page.locator("main .qrow:not(.mrow)")).toHaveCount(0);
+  await expect(page.locator("main section.attention")).toHaveCount(0);
 });
 
 // ---- ruling 3: grouping and notices -------------------------------------------------------
@@ -100,7 +99,7 @@ test("four pull requests of one repo are one row that opens in place to four", a
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(kids.locator(".att-child")).toHaveCount(4);
   for (const n of [29, 30, 31, 32]) await expect(kids.getByText(`example-org/sample-info #${n} awaits the seat`)).toBeVisible();
-  await expect(kids.getByRole("link", { name: "Open CI and merges" })).toBeVisible();
+  await expect(kids.getByRole("link", { name: "Open Pull requests" })).toHaveAttribute("href", "/portal/prs");
   // Enter on the focused button closes it again.
   await toggle.focus();
   await page.keyboard.press("Enter");
@@ -109,7 +108,7 @@ test("four pull requests of one repo are one row that opens in place to four", a
   // A child opens what it names.
   await toggle.click();
   await kids.locator(".att-child").first().click();
-  await expect(page.getByRole("heading", { level: 1, name: "CI and merges" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Pull requests" })).toBeVisible();
 });
 
 test("the blocked jobs are one row whose children are the jobs, then a link to the Queue", async ({ page }) => {
@@ -199,7 +198,7 @@ test("the Queue orders blocked jobs by priority then newest, the ones blocked ov
 
 // ---- ruling 4: the anchor bar -------------------------------------------------------------
 
-test("the Overview has no anchor bar at 1920 x 1080, with the live-shaped counts", async ({ page }) => {
+test("Needs you has no anchor bar at 1920 x 1080, with the live-shaped counts", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await reshape(page, (f) => {
     fourPrs(f);
@@ -208,22 +207,19 @@ test("the Overview has no anchor bar at 1920 x 1080, with the live-shaped counts
     const grow = (list: typeof blocked, n: number, tag: string) => Array.from({ length: n }, (_, i) => ({ ...list[i % list.length]!, id: `job_${tag}${String(i).padStart(10, "0")}` }));
     f.live.jobs = [...grow(blocked, 30, "b"), ...grow(queued, 17, "q"), ...f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "queued")];
   });
-  await visit(page, "overview");
-  // Four sections, so only the height keeps it away.
-  await expect(page.locator("main [data-section][id]")).toHaveCount(4);
-  const h = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight, client: window.innerHeight }));
-  expect(h.scroll).toBeLessThanOrEqual(2 * h.client);
+  await visit(page, "needs");
+  await expect(page.locator("main section.attention")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "On this page" })).toHaveCount(0);
 });
 
-test("a view with three sections taller than two screens gets the anchor bar, with links that follow the scroll", async ({ page }) => {
+test("Health gets the anchor bar, naming its sections and not their panels, with links that follow the scroll", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 420 });
-  await visit(page, "deploys");
+  await visit(page, "health");
   const bar = page.getByRole("navigation", { name: "On this page" });
   await expect(bar).toBeVisible();
   const links = bar.getByRole("link");
-  await expect(links).toHaveText(["Timeline", "Every deploy", "No deploy data"]);
-  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href")))).toEqual(["#timeline", "#every-deploy", "#no-deploy-data"]);
+  await expect(links).toHaveText(["Summary", "Sites", "Incidents", "Deploys", "Backups", "CI"]);
+  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href")))).toEqual(["#summary", "#sites", "#incidents", "#deploys", "#backups", "#ci"]);
   await expect(links.nth(0)).toHaveAttribute("aria-current", "location");
   // The scroller keeps a focused row clear of the bar.
   const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
@@ -231,16 +227,36 @@ test("a view with three sections taller than two screens gets the anchor bar, wi
   expect(pad).toBeGreaterThanOrEqual(barH);
   // Scrolled to the foot, the last section is current.
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await expect(links.nth(2)).toHaveAttribute("aria-current", "location");
+  await expect(links.nth(5)).toHaveAttribute("aria-current", "location");
   await expect(links.nth(0)).not.toHaveAttribute("aria-current", /.+/);
   // A click jumps there and marks it.
-  await links.nth(1).click();
-  await expect(links.nth(1)).toHaveAttribute("aria-current", "location");
-  await expect.poll(() => page.locator("#every-deploy").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThanOrEqual(Math.ceil(pad) + 1);
-  expect(new URL(page.url()).hash).toBe("#every-deploy");
-  // In a window tall enough, the same view does without it.
-  await page.setViewportSize({ width: 1280, height: 1400 });
-  await expect(bar).toHaveCount(0);
+  await links.nth(3).click();
+  await expect(links.nth(3)).toHaveAttribute("aria-current", "location");
+  await expect.poll(() => page.locator("#deploys").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThanOrEqual(Math.ceil(pad) + 1);
+  expect(new URL(page.url()).hash).toBe("#deploys");
+});
+
+test("an old view's address is replaced by the page, tab or section that holds it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto("./deploys");
+  await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
+  await expect(page).toHaveURL(/\/health#deploys$/);
+  // Scrolled to the section once it is drawn.
+  await expect.poll(() => page.locator("#deploys").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThan(200);
+  await page.goto("./ci");
+  await expect(page.getByRole("heading", { level: 1, name: "Pull requests" })).toBeVisible();
+  await expect(page).toHaveURL(/\/prs$/);
+  await page.goto("./claims?namespace=sample-b");
+  await expect(page.getByRole("heading", { level: 1, name: "Agents" })).toBeVisible();
+  await expect(page).toHaveURL(/\/agents\?tab=claims&namespace=sample-b$/);
+  await expect(page.getByRole("button", { name: "Claims", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("./namespaces");
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings#automation$/);
+  // A drawer over an old view stays open, over the page that holds it.
+  await page.goto("./sites/site/Sample%20A");
+  await expect(page).toHaveURL(/\/health\/site\/Sample%20A$/);
+  await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
 // ---- D13 and D18 ---------------------------------------------------------------------------
@@ -262,8 +278,8 @@ test("D13: every view's head is its h1 alone, 18 px, and the shortcut sheet says
   expect(found).toEqual([]);
   await page.keyboard.press("?");
   const help = page.getByRole("dialog", { name: "Keyboard" });
-  await expect(help.getByText("From Cloudflare's own record, so a hand-run wrangler deploy shows up too.")).toBeVisible();
-  await expect(help.locator(".about")).toHaveCount(VIEW_COUNT - 1);
+  await expect(help.getByText(/Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too\./)).toBeVisible();
+  await expect(help.locator(".about")).toHaveCount(VIEW_COUNT);
 });
 
 test("D18: a cell with no data says two words, its reason on hover; the backup column says once who reports one", async ({ page }) => {

@@ -7,11 +7,11 @@ Capsid Portal is the administrator's view of Capsid, one app at https://portal.d
 **Its controls are the registry in `src/controls.ts`**, each on the row it changes:
 - the job drawer: resume a blocked job (with an optional note, the full approval the driver reads as `resume_note.note`), close a blocked job as shipped, release a claimed one, mark a job failed;
 - the agent drawer: revoke an agent;
-- the Namespaces view: the Automation panel, with the seat-start switch, the improve loop's switch and its "Runs on" choice (Subscription or API), and the overnight run's switch with its own "Runs on" choice (choosing Subscription records Dustin's decision, its date and its reasoning, docs/overnight.md); one switch per roster namespace, On while it runs and Off while it is paused (pause and unpause); and reset the queue's circuit breaker when it is open;
+- Settings, in its Automation and namespaces section: the Automation panel, with the seat-start switch, the improve loop's switch and its "Runs on" choice (Subscription or API), and the overnight run's switch with its own "Runs on" choice (choosing Subscription records Dustin's decision, its date and its reasoning, docs/overnight.md); one switch per roster namespace, On while it runs and Off while it is paused (pause and unpause); and reset the queue's circuit breaker when it is open;
 - the Settings view: add, edit and remove a site, and add, edit and remove a package;
 - the Queue view: approve or reject a driver's proposed change to a canon document (docs/schema.md, "Canon is written by proposal"). Approve previews the lines it adds and removes, with any that read as instructions to agents listed first; a proposal whose document changed since it was written can only be rejected, and a rejection needs the reason the proposer reads. Pending proposals are a warning row in Needs attention.
 
-The Queue view shows seat start, and the Agents view the improve mode, as a status word that links to Namespaces.
+The Queue view shows seat start, and the Agents view the improve mode, as a status word that links to that section of Settings.
 
 **The automation switches** (seat start, the improve loop and each namespace's pause; ruled 2026-09-30) do not move when flipped. Each opens a one-line reason beside it: Enter applies, Esc cancels and returns focus to the switch, and an empty reason is an error on the field that sends nothing. A reason is required in both directions, and the Worker refuses `pause`, `unpause`, `mode`, `seat_start` and `overnight` without one. On Apply the app previews and performs in sequence, with no dialog; a refusal is shown beside the switch. Once it applies the switch moves, and the result stays in the message at the foot of the screen, with Undo, until it is dismissed or the next action replaces it (a result with a warning is never replaced; see below). Undo sends the reverse change as its own action with `undo: "true"` and the reason "Undo: " and the original reason (an undone unpause pauses again with the reason it had), and the Worker writes `portal-undo-<action>` for it. Changing "Runs on" while the loop is on is a change of mode and asks for a reason the same way; while the loop is off the choice is held until the switch turns on, starting at Subscription.
 
@@ -28,18 +28,31 @@ Every other control opens a dialog that previews what will change and the audit 
 
 Browser tests: dashboard/e2e/needs.spec.ts, and the attention list's in dashboard/e2e/overview.spec.ts.
 
-## The Overview
+## The pages
 
-The Overview (`/portal/overview`) is the glance at the system. It holds, in order:
-- six summary tiles, each a link to its view;
+Eight pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09), and Settings:
+- **Now:** Needs you (above) and Health;
+- **Work:** Queue and Pull requests;
+- **Records:** Activity, Agents, Packages (only while a package is configured) and Shared code.
+
+Each old view's content moved whole, so nothing it showed was lost (conventions 1.4). An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
+
+| Was | Is now |
+|---|---|
+| Overview, Sites, Incidents, Deploys, Backups | Health, one section each (`#summary`, `#sites`, `#incidents`, `#deploys`, `#backups`) |
+| CI and merges | Pull requests (the pull requests of the last 7 days and those awaiting the seat); the default branches' runs are Health's CI section (`#ci`) |
+| Claims | Agents, its Claims tab (`?tab=claims`) |
+| Namespaces | Settings, its Automation and namespaces section (`#automation`) |
+
+**Health** (`/portal/health`) answers "is anything broken". It holds, in order:
+- six summary tiles, each a link to its page or section;
 - the daily maintenance pass's list;
-- **Sites**, one row per site (status, 7-day uptime, live deploy, errors); every column is in the Sites view;
-- **Deploys and downtime, 7 days**.
+- **Sites**, one row per site, with every column (only while a site is configured);
+- **Incidents**, **Deploys**, **Backups**, and **CI, default branches**.
 
-Its rail count is the number of critical problems on Needs you, until the Health page takes it (design-portal-evaluation.md section 2). It has no Queue or Incidents panel: their counts are tiles and their problems are rows. With no site configured there is no site tile, Sites table or timeline. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. Stale jobs appear in one place, the Stale jobs panel: the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
+Its rail count is the number of critical problems on Needs you. It has no Queue panel and no attention list: the Queue's counts are tiles and the problems are rows on Needs you. One namespace filter in the address (`?ns=`) narrows every section at once. With no site configured there is no site tile and no Sites section. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. Stale jobs appear in one place, the Stale jobs panel: the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
 
-A view with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Deploys in a short window, the Queue with a long list). The Overview is short enough to do without it.
-
+A page with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Health in most windows, the Queue with a long list). A section inside another is not an entry, so Health's bar names its sections and not their panels.
 
 ## Its own host
 
@@ -78,12 +91,12 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 
 **The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
 
-Five views read more when they open, and not on every poll:
+These read more when they open, and not on every poll:
 - **Queue** reads `GET /portal/api/stale` for its Stale jobs panel: the rows `jobs` list with `stale: true` returns, over every namespace, each with the rule it met and why (docs/work-queue.md). It reads again with each feed, so a job resumed or failed from its drawer leaves the panel, and the Queue's namespace chips narrow it. A row opens the job's drawer, which holds the controls. The Queue's Jobs list leaves out every job the panel shows, so a stale job is listed once; until the panel has read, or if its first read fails, the list shows every job.
-- **Overview** reads `GET /portal/api/maintenance` for its Maintenance panel, loaded after the page's first paint: the daily maintenance pass's last list (docs/work-queue.md), the broken things first, then what waits on the seat, tidying, what the pass did on its own, and what it could not read, with a line saying what it read. A row whose job is in the feed opens that job's drawer.
-- **Namespaces** reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
+- **Health** reads `GET /portal/api/maintenance` for its Maintenance panel, loaded after the page's first paint: the daily maintenance pass's last list (docs/work-queue.md), the broken things first, then what waits on the seat, tidying, what the pass did on its own, and what it could not read, with a line saying what it read. A row whose job is in the feed opens that job's drawer.
+- **Settings**, in its Automation and namespaces section, reads `GET /portal/api/namespaces`: each namespace as `improve_status` reports it.
 - **Activity** reads `GET /portal/api/activity`: the last 50 audit rows, filtered by namespace and actor. A job transition writes two rows with one action, actor and path, one for the job and one for its mirror document, and the view labels them `(job)` and `(mirror document)`. A row opens a drawer that reads that one row (`?id=`) and shows what it recorded: the reason typed with the change, a field-by-field before and after where the row carries both (the old value struck through above the new), and the row's other fields by name. The Worker turns the params into named fields (`src/audit-detail.ts`) and never sends them raw: a hash, a signature, a token or a nested value is counted as not shown and stays in the audit log.
-- **Claims** reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
+- **Agents**, in its Claims tab, reads `GET /portal/api/claims`: what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 - **Shared code** reads `GET /portal/api/shared-code` when it opens (below).
 
@@ -96,7 +109,7 @@ Every scheduled task writes one row per run to `task_runs` (`migrations/0029_tas
 
 A step that was not due makes no run and writes no row: the watcher between passes, the opener's other UTC hour, the skills refresh on any day but its own, auto-merge under a disabled policy, a lease sweep that returned nothing. A refused merge policy is a run, recorded as `refused`. A ledger write that fails never stops the task; it is logged as `TASK_RUN_UNRECORDED`, and the task then shows as quiet. Rows older than 14 days are pruned, 50 at a time, on each write.
 
-**Incidents** shows every task in the Scheduled tasks panel: its state, its newest run and what it did, with the four runs before it folded underneath. A task is flagged, and listed in Needs attention, when its newest run threw or was refused (Failing), or when a periodic task has had no run in twice its period (Not running): the tick every 5 minutes, the watcher at its own cadence, the backup and the opener daily, the skills refresh weekly. A failing or quiet backup is critical; the rest are warnings. A task with no run recorded yet is shown as No run yet and is not flagged, since every task starts there after the migration. Adapted from Foxhound's cron run history (capsid/decisions.md 2026-09-30, "admin panels review adopted").
+Health's **Incidents** section shows every task in the Scheduled tasks panel: its state, its newest run and what it did, with the four runs before it folded underneath. A task is flagged, and listed in Needs attention, when its newest run threw or was refused (Failing), or when a periodic task has had no run in twice its period (Not running): the tick every 5 minutes, the watcher at its own cadence, the backup and the opener daily, the skills refresh weekly. A failing or quiet backup is critical; the rest are warnings. A task with no run recorded yet is shown as No run yet and is not flagged, since every task starts there after the migration. Adapted from Foxhound's cron run history (capsid/decisions.md 2026-09-30, "admin panels review adopted").
 
 ## Packages
 
@@ -122,7 +135,7 @@ How far the centralization has got (job_584b4e7f2824; ruling capsid/rulings/shar
 
 ## Claims
 
-The Claims view shows what each agent said about its work beside what the Worker checked, and every time a human touched a job. The data is the three append-only tables of `migrations/0023_job_claims.sql`, read through `src/job-claims-read.ts`, the same readers the admin-only `claims` tool uses, so the view and the tool agree.
+The Claims tab of Agents shows what each agent said about its work beside what the Worker checked, and every time a human touched a job. The data is the three append-only tables of `migrations/0023_job_claims.sql`, read through `src/job-claims-read.ts`, the same readers the admin-only `claims` tool uses, so the view and the tool agree.
 
 - **By agent.** One row per agent and namespace: jobs and claims, each check's counts (agree, disagree, unclaimed, unchecked), the touches by kind and by who made them, and the median and total wait. A touch on a job no agent has claimed yet has its own row. Filter by namespace, agent, and a since and before date; the filters live in the address.
 - **By check.** The same agreement counts summed over the rows above, one row per check (`pr_merged`, `prs_opened`, `commits`, `files_changed`, `ci_green`).
@@ -137,7 +150,7 @@ Which sites the Portal watches is configuration each install edits, not code (ru
 - **A row per namespace.** A row with an origin is a site: its name, its origin (`https://` and a hostname, nothing else), an optional health route, its platform (`cloudflare` or `vercel`), and optionally the Worker script that serves it. A row with no origin records that the namespace serves no site, so its absence from the probes is a decision.
 - **Edits are controls.** Add, edit and remove go through the same preview and perform as every other control, as `site_add`, `site_edit` and `site_remove`. The preview names every field that changes. An edit or a removal carries the row's `revision` from the preview and is refused if the row changed since. Each writes `ops-site-added`, `ops-site-edited` or `ops-site-removed` (with the row before and after) and then the click row.
 - **What is checked.** The origin must be `https://` and a lowercase public hostname: no user, port, path, query or fragment, no IP address, no single-label or local name. A health path starts with `/` and uses only letters, digits and `- . _ ~ /`, with no empty, `.` or `..` segment. A script is named only for a Cloudflare site. A new row's namespace must be registered. The table's own CHECK constraints hold the origin and platform to both or neither.
-- **Nothing configured.** With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides the Sites view and every site item on the Overview. Settings stays, since that is where the first site is added.
+- **Nothing configured.** With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides Health's Sites section and its site tile. Settings stays, since that is where the first site is added.
 - **Every pass reads it.** The watcher reads the table at the start of each pass. If the read fails, no site check runs that pass: nothing is probed on a guess and no open site finding is cleared.
 - **The site map check** compares the rows with the registered namespaces both ways. A registered namespace with no row, or a row for a namespace that is not registered, is a watcher finding.
 - **The repo map check** (`src/unmapped-repos.ts`) lists every repo the GitHub App's installations can see and compares it with the namespace mapping. Each repo no namespace maps is one watcher finding (`unmapped-repo-<owner>--<name>`) naming the repo, its visibility, whether it is archived, its last push, and the namespace its name suggests. It never maps: mapping is the authorization boundary and stays with the seat (`update_namespace`). A repo that is unmapped on purpose goes in `capsid/unmapped-repos.md`, one `owner/name` per line (`#` starts a comment); the document can only silence a finding. The listing uses a token minted for the call with the `metadata:read` permission only, held in memory and never stored. A list that cannot be read whole, lists no repos, or sits beside a corrupt mapping is the finding `unmapped-repos-unreadable`, and the check does not count as run, so an open finding is not cleared on no evidence. Every finding states how many repos were read and how many are mapped.
@@ -149,9 +162,9 @@ A site may let Capsid call an allowlist of its own repair tools (job_09e5f6cbf78
 
 - **Two allowlists, both in the Worker, checked before every request.** The ceiling, in code: a repair is a `sync_*` tool other than `sync_status`, or `refresh_citations`. `backup_media`, and every write tool the site's operator API serves, is never called. Then the site's own list: the tools its `repairs` and `weekly` name. A configuration that breaks the ceiling is refused whole when it is saved, and a stored one is checked again before each call. `test/site-operator.test.ts` ("PLANT: backup_media and an unknown tool are refused at the Worker before any request") and `test-integration/site-repair.test.ts` ("PLANT: refuses backup_media and a tool outside the site's list") hold it.
 - **The token.** Read by name from the Worker's environment, sent only to the site's own origin, never logged, returned or put in an audit row. Unset, nothing is called and the Portal and the incident say so. Capsid never merges and never mints.
-- **Run repair** is the registry control `site_repair` (`namespace`, `tool`), from the Sites view or the `controls` tool, previewed and performed like every control. Each call that leaves the Worker writes an `audit_log` row (`site-repair`, with the tool, the surface, the HTTP status and the site's read-back verdict) and a `task_runs` row (`site-repair`).
+- **Run repair** is the registry control `site_repair` (`namespace`, `tool`), from Health's Sites section or the `controls` tool, previewed and performed like every control. Each call that leaves the Worker writes an `audit_log` row (`site-repair`, with the tool, the surface, the HTTP status and the site's read-back verdict) and a `task_runs` row (`site-repair`).
 - **The rate limit** (`src/site-repair.ts`), per site and tool: any call waits 2 minutes after the last; the watcher waits 30 minutes and makes at most 4 calls a day, after which only a person can run it and the incident says so.
-- **The convergence view** (`GET /portal/api/convergence`, the Sites view): per opted-in site, its operator API's `sync_status` and its health route's checks, read live, each failing check with the repair it maps to and a Run button, the weekly tools, the last repairs, and the site Worker's secrets by name, set or not. The names come from the watcher's pass (`GET /accounts/{id}/workers/scripts/{script}/secrets` with `CF_OPS_TOKEN`, permission **Account / Workers Scripts / Read**, the one the deploys column already needs), because no Portal request calls Cloudflare. A value is never read: Cloudflare's list has none.
+- **The convergence view** (`GET /portal/api/convergence`, Health's Sites section): per opted-in site, its operator API's `sync_status` and its health route's checks, read live, each failing check with the repair it maps to and a Run button, the weekly tools, the last repairs, and the site Worker's secrets by name, set or not. The names come from the watcher's pass (`GET /accounts/{id}/workers/scripts/{script}/secrets` with `CF_OPS_TOKEN`, permission **Account / Workers Scripts / Read**, the one the deploys column already needs), because no Portal request calls Cloudflare. A value is never read: Cloudflare's list has none.
 - **The watcher** (`src/site-watch.ts`), on each pass: reads the health route; when every failing check maps to an allowlisted repair it runs them in order and reads the health again; when a failing check maps to nothing, it repairs nothing, because a failure with an unmapped part may share its cause. Still unhealthy, or a repair failed: the finding `site-health-<namespace>` opens under Incidents and clears when a pass finds the site healthy. A weekly tool runs once every 7 days; a failure is `site-weekly-<namespace>-<tool>`. A change between healthy and not mails once, from `ALERT_FROM` to `ALERT_EMAIL` through a `send_email` binding named `EMAIL`, where the seat has set them; without them the finding still opens and the log says the mail was not sent.
 
 ## No data is a state, never a zero
@@ -164,7 +177,7 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
   - If the analytics query fails, the error column shows the query's error text.
 - **Uptime.** Each half-hour slot the watcher did not run is hatched, not counted as up.
 - **Backups.** Capsid's backup age comes from its own `/health`. No other site reports a backup yet: that arrives with each site's `/health` contract, one PR in each site's repo. Until then the column says so.
-- **The store's size.** The Backups view's primary panel shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-feed.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Needs attention as a warning, Foxhound's threshold (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 5). The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
+- **The store's size.** Health's Backups section, in its primary panel, shows the D1 store's size against the per-database cap, 10 GB on Workers Paid (`D1_CAP_BYTES` in `src/ops-feed.ts`; 500 MB on Workers Free, the one line to change). From half the cap it is flagged there and listed in Needs attention as a warning, Foxhound's threshold (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 5). The size is read in the admin-only feed, not in the public `/health`. A size D1 did not report reads "Not reported", never zero.
 
 ## The Cloudflare token
 
@@ -196,16 +209,16 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 
 ## Using it
 
-- **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Incidents, Sites (none when no site is configured) and More, which lists every other view with its count, Settings among them.
+- **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.
 - **Keyboard:**
-  - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Namespaces and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
-  - `g` then a letter goes to a view: `y` Needs you, `o` overview, `s` sites, `p` packages, `x` shared code, `i` incidents, `q` queue, `d` deploys, `a` agents, `n` namespaces, `l` activity, `v` claims, `b` backups, `c` CI, `e` settings. With no site configured, `s` does nothing, and with no package, `p` does nothing.
+  - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Settings' Automation and namespaces section and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
+  - `g` then a letter goes to a page: `y` Needs you, `q` queue, `p` pull requests, `h` health, `l` activity, `a` agents, `k` packages, `x` shared code, `e` settings. With no package configured, `k` does nothing. The old views' letters (`o`, `s`, `i`, `d`, `b`, `c`, `n`, `v`) were retired with them (job_d62abdbfc270 PR 7).
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
-  - `f` goes to the Queue's text filter. A namespace filter belongs to its view and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
+  - `f` goes to the Queue's text filter. A namespace filter belongs to its page and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
   - `r` refreshes and `t` switches light and dark. The top bar's theme button is named "Dark theme" and is pressed while dark is in effect. **Settings, Display** chooses System, Light or Dark: System removes the saved choice (localStorage `wf-theme`), so the device's setting applies.
   - `[` collapses the side menu to its icons, or expands it (also the button at the foot of the menu). This browser remembers the choice (localStorage `wf-rail`). Collapsed, each icon names its view in a tooltip, and a count shows as a dot.
   - `?` lists the keys. Single-key shortcuts can be turned off with a switch, in that sheet or in Settings, Display; it applies at once (localStorage `wf-single-keys`).
-- **Width:** no view scrolls sideways from 1024 px up. The wide tables (Namespaces, the fleet, Agents) turn each row into a card when their panel is too narrow for the columns.
+- **Width:** no view scrolls sideways from 1024 px up. The wide tables (the namespaces, the fleet, Agents) turn each row into a card when their panel is too narrow for the columns.
 - **Freshness:** the top bar shows when the live part was read and when the watcher's pass ran. The stamp turns to the warning colour when the pass is older than two cadences, which means the watcher has gone quiet. The app polls every 60 seconds while its tab is visible.
 
 ## Building and changing it
@@ -221,11 +234,12 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
   - no sideways scrolling at 1920, 1440, 1280 and 1024 px on every view;
   - the phone layout;
   - the collapsible sidebar;
-  - the Claims view: the aggregate, its filter, and a job's claims beside their checks;
+  - Agents' Claims tab: the aggregate, its filter, and a job's claims beside their checks;
+  - the pages: an old view's address replaced by the page, tab or section that holds it, and Health's anchor bar naming its sections;
   - the stale view: a job in the panel is not listed again in the Jobs list, and a stale row opens its job, where Resume sends the typed note with the reason (`e2e/stale.spec.ts`);
   - contrast as painted, in both themes: each text tone, the status words and pills, and a button's border, against what is behind them;
   - the keyboard: `j` and `k` move focus, Enter opens the row and Esc closes it, and the selected row can be seen (a changed background and a ring at 3:1);
-  - the audit's eight defects (`e2e/defects.spec.ts`): the panel keeps Tab inside, Enter opens a held job, a namespace filter stays with its view, session incidents reach Needs attention, the confirm dialog's named button and focus, and each view's page title.
+  - the audit's eight defects (`e2e/defects.spec.ts`): the panel keeps Tab inside, Enter opens a held job, a namespace filter stays with its page, session incidents reach Needs attention, the confirm dialog's named button and focus, and each view's page title.
 - **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. The initial JavaScript must be at most 100 KB gzip, each lazily loaded view at most 40 KB, and all CSS at most 12 KB.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/portal/callback` with the app's `index.html`, or serve the app's files without the gate.
 
