@@ -149,6 +149,8 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
     `- claimed by: ${job.claimed_by ?? "(unclaimed)"}`,
     `- lease expires: ${job.lease_expires ?? "(no lease)"}`,
   ];
+  // The started label (src/jobs-begin.ts), once somebody began the job.
+  if (job.started_by) lines.push(`- started by: ${job.started_by} at ${job.started_at ?? "(no time recorded)"}`);
   // Only once it has happened, so a job that never hit a gate carries no line of zeroes.
   if (job.blocked_count > 0) lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
   // The brief carries open job documents, so this line is how brief hands the

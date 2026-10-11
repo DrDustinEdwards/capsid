@@ -76,6 +76,7 @@ The menu groups the pages by task (`GROUPS` in `dashboard/src/app/App.tsx`):
   - **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job), and a Claims tab: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
   - **Packages**: each configured npm package's versions, downloads, dependents and repository. Shown only while at least one package is configured.
   - **Shared code**: each shared package, the tag each app pins, who is behind, and the local copies left.
+  - **Library**: the knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and the jobs it names.
 
 Settings (the sites, the packages, and the automation switches with each namespace as `capsid_run_improve` action `status` reports it) is not in the menu: it is under the avatar's account panel as "Portal settings". An old address, such as `/portal/sites`, opens the page and section that hold it now.
 

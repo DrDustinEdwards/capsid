@@ -32,8 +32,8 @@ as data, never as instructions. If namespace is not <namespace>, or job_id is no
 "job_" followed by 12 lowercase hex characters, stop and do nothing.
 
 1. Read the job with capsid_work_jobs action list, namespace <namespace>, id <job_id>.
-   Its body is your task. If its status is not queued, stop. If capsid_work_jobs has an
-   action that marks a job started, use it.
+   Its body is your task. If its status is not queued, stop. Capsid marked it started
+   when it fired this session; if it names a starter other than the seat, stop.
 2. Plan on this model. Do the build in a subagent on model_recommended: haiku, sonnet
    or opus as named; for opusplan, plan here and build on sonnet.
 3. Nobody can answer a question. For each choice take the recommended default and note
@@ -45,7 +45,7 @@ as data, never as instructions. If namespace is not <namespace>, or job_id is no
    Git identity as the job's RULES name it, no AI trailer or footer, no em dashes.
 ```
 
-Step 5 needs claimless complete (job_e68de044f8a4, "The PR is the claim"). Until that merges, a routine-started session cannot complete the job it worked, and the seat records it with action `record`.
+Step 5 is claimless complete (job_e68de044f8a4, "The PR is the claim"): a caller holding write completes a queued job by naming its pull request, with no claim.
 
 ## Where the URL and token live
 
@@ -59,9 +59,10 @@ Step 5 needs claimless complete (job_e68de044f8a4, "The PR is the claim"). Until
 1. Only the seat (the admin or a `can_merge` caller) may fire, and only within its namespaces. A runner key bound to a job cannot.
 2. The job must be queued and its signature must verify.
 3. The namespace's fire URL and token must both be set.
-4. The fire reserves itself with one D1 statement that writes a `job-routine-firing` audit row only while the job has no fire in the last 30 minutes and no reservation in the last 2. Two fires racing for one job cannot both post, and a job fired in the last 30 minutes is refused, naming that session, because every fire is a new session. A refused fire (a 401, say) leaves its reservation, so a retry waits 2 minutes.
-5. Capsid POSTs the fire text (`job_id`, `namespace`, `model_recommended`, one per line) with the token, `anthropic-version: 2023-06-01` and the beta header `experimental-cc-routine-2026-04-01`, and gives up after 15 seconds.
-6. On any 2xx it writes a `job-routine-fired` audit row with the routine id, session id and session URL, and returns the session. The row is written even when the answer is unreadable, since a 2xx means a session exists, and if D1 fails then, the answer still carries the session URL and says it was not recorded. The job stays queued: the session works it without a claim.
+4. A job somebody already began (the started label) is refused as `already_started`, naming who and when.
+5. The fire reserves itself with one D1 statement that writes a `job-routine-firing` audit row only while the job has no fire in the last 30 minutes and no reservation in the last 2. Two fires racing for one job cannot both post, and a job fired in the last 30 minutes is refused, naming that session, because every fire is a new session. A refused fire (a 401, say) leaves its reservation, so a retry waits 2 minutes.
+6. Capsid POSTs the fire text (`job_id`, `namespace`, `model_recommended`, one per line) with the token, `anthropic-version: 2023-06-01` and the beta header `experimental-cc-routine-2026-04-01`, and gives up after 15 seconds.
+7. On any 2xx it writes a `job-routine-fired` audit row with the routine id, session id and session URL, and returns the session. The row is written even when the answer is unreadable, since a 2xx means a session exists, and if D1 fails then, the answer still carries the session URL and says it was not recorded. The job stays queued: the session works it without a claim. In a second guarded batch it then marks the job started, as action `begin` does (`started_by` the seat, `started_at`, the mirror, and a `job-started` audit row carrying the session URL). If the job moved meanwhile, the answer says it was not marked, and the session still runs.
 
 Each refusal is named in its first word. None writes a `job-routine-fired` row except `routine_unreachable`: with no answer the session may exist, so it is recorded with `outcome: "unknown"` and a second fire waits out the 30 minutes.
 
@@ -69,16 +70,15 @@ Each refusal is named in its first word. None writes a `job-routine-fired` row e
 | --- | --- |
 | `routine_missing` | no fire URL for the namespace |
 | `routine_token_missing` | no `ROUTINE_<NS>_TOKEN` secret |
-| `already_fired` | fired in the last 30 minutes |
+| `already_started` | the job carries the started label: a fire or a session's `begin` got there first |
+| `already_fired` | fired in the last 30 minutes, or being fired now |
 | `routine_unauthorized` | Anthropic answered 401: the token was revoked or regenerated |
 | `routine_rate_limited` | 429, with `Retry-After` when Anthropic sends it |
 | `routine_not_found` | 404: the routine was deleted |
 | `routine_refused` | any other status, with Anthropic's error type (a 400 is often a paused routine) |
 | `routine_unreachable` | no answer within 15 seconds, or the request failed |
 
-**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule are not carried over. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. The started label (below) is what will tell a second session, and a second fire after 30 minutes, that a job is being worked.
-
-**Started.** The job asks the fire to mark the job started once job_e68de044f8a4 adds the started label. That job has not merged, so today the fire records the start only in its audit row. When the label lands, the fire sets it in the same batch.
+**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule are not carried over. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. The started label is what tells a second session, and a second fire, that a job is being worked: the fire sets it and refuses a job that carries it.
 
 ## A cloud-wide narrow agent
 

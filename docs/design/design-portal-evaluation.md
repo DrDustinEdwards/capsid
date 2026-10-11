@@ -146,7 +146,7 @@ That is 8 pages, down from 13.
 - Namespaces: it is settings.
 - Claims: a tab of Agents.
 
-None of their content is removed (conventions 1.4); it moves.
+None of their content is removed (conventions 1.3); it moves.
 
 **Keyboard.** `g` then a letter, regrouped: `g y` Needs you, `g q` Queue, `g p` Pull requests, `g h` Health, `g l` Activity, `g a` Agents, `g e` Settings. Old letters redirect for one release.
 
@@ -161,7 +161,7 @@ None of their content is removed (conventions 1.4); it moves.
 
 Rules:
 - Each visual answers one named question.
-- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent (conventions 7.6).
+- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent (conventions-web.md rule 8).
 - No decorative charts. A table stays wherever the question is a lookup.
 
 **Two prerequisites:**
@@ -244,3 +244,7 @@ In the order Dustin should answer them; each has a recommendation.
 7. **Enarratio delivery** (enarratio-coverage DECIDE 1): recommend a client-side call for the existing charts, measured against the size budget first, as that document says.
 8. **Keyboard letters regrouped**, with the old ones redirecting for one release. Recommend yes.
 9. **Run the Claude in Chrome check** before and after the regroup. Recommend yes, from a seat session with the browser.
+
+## Answered (Dustin, 2026-10-09)
+
+1, 2, 3, 5 and 7 as recommended (7 also answers job_8dc82e742c7d: option a). 4: the chat-only rulings are recorded (job post and edit, agent scopes, namespace admin, Cloudflare config, budget edits, signing), except the knowledge store, which is not chat-only and gets a read-only Library page. 6: build all eleven visuals, not just the first four. 8: regroup the letters with no one-release redirect of the old ones. 9: no separate Claude in Chrome check; the usual PR screenshots apply.

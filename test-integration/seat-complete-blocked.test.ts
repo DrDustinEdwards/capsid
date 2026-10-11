@@ -162,12 +162,20 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect((await outcome(id))?.agent).toBe(SEAT_ACTOR);
   });
 
-  it("refuses a job nobody worked, a job still held, and a job already finished, each saying what to do instead", async () => {
+  it("refuses a queued job with no pull request, a job still held, and a job already finished, each saying what to do instead", async () => {
     stubGitHub();
+    // A queued job is not the seat's close: since job_e68de044f8a4 the pull request is the
+    // claim, so a queued job completed with no pull request is refused, and one completed
+    // with its pull request is closed without a claim and credits the caller, with no
+    // admin_complete touch.
     const queued = await post("queued");
-    const refusedQueued = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x", result_ref: PR });
+    const refusedQueued = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x" });
     expect(refusedQueued.ok).toBe(false);
-    expect(refusedQueued.refusal).toMatch(/queued/);
+    expect(refusedQueued.refusal).toMatch(/is queued and nobody holds it/);
+    const unclaimed = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x", result_ref: PR });
+    expect(unclaimed.ok, unclaimed.refusal).toBe(true);
+    expect((await outcome(queued))?.agent).toBe(SEAT_ACTOR);
+    expect((await touches(queued)).map((t) => t.kind)).toEqual([]);
 
     const held = await post("held");
     await claimJob(jobsEnv(), HOLDER_B, NOW, { id: held });
@@ -182,7 +190,8 @@ describe("the seat completes a blocked job it does not hold", () => {
     const again = await completeAsCaller(jobsEnv(), SEAT, LATER, finished, { result_summary: "second", result_ref: PR });
     expect(again.ok).toBe(false);
     expect(again.refusal).toMatch(/already done/);
-    expect(await outcomeCount()).toBe(1);
+    // One for the queued job closed with its pull request, one for the finished job.
+    expect(await outcomeCount()).toBe(2);
   });
 
   it("refuses a driver, and an empty summary, and writes nothing", async () => {

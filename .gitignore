@@ -17,3 +17,5 @@ wrangler.dryrun.jsonc
 # 16MB of it, in the working tree of a public repo. Nothing reads it from here.
 .improve-build/
 
+# Per-user Claude Code settings (conventions 6.3): never committed.
+.claude/settings.local.json

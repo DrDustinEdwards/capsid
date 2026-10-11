@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { claimJob, postJob } from "../src/jobs";
+import { beginJob } from "../src/jobs-begin";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { REFIRE_MINUTES, fireRoutine, fireText, routineTokenName, routineUrlKey, setRoutine } from "../src/routine-fire";
@@ -57,6 +58,9 @@ async function queued(title = "a job") {
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
+
+// The started label taken off by hand, so a test reaches the fire window behind it.
+const clearLabel = (id: string) => env.DB.prepare("UPDATE jobs SET started_at = NULL, started_by = NULL WHERE id = ?1").bind(id).run();
 
 const fireRows = async () =>
   (await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'job-routine-fired' ORDER BY id").all<{ actor: string; params: string }>()).results ?? [];
@@ -124,8 +128,11 @@ describe("a fire", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].actor).toBe("agent:seat");
     expect(JSON.parse(rows[0].params)).toEqual({ job_id: id, routine_id: "trig_01ABCDEFGHJKLMNOP", session_id: SESSION, session_url: `https://claude.ai/code/${SESSION}` });
-    const job = await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(id).first<{ status: string }>();
-    expect(job?.status).toBe("queued");
+    const job = await env.DB.prepare("SELECT status, started_by, started_at FROM jobs WHERE id = ?1").bind(id).first<{ status: string; started_by: string; started_at: string }>();
+    expect(job).toEqual({ status: "queued", started_by: "agent:seat", started_at: NOW.toISOString() });
+    expect(fired.started?.by).toBe("agent:seat");
+    const label = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'job-started' AND json_extract(params, '$.started_at') IS NOT NULL").first<{ params: string }>();
+    expect(JSON.parse(label!.params)).toMatchObject({ job_id: id, session_url: `https://claude.ai/code/${SESSION}` });
   });
 
   it("a 200 with an unreadable answer still records the fire, so a second is refused", async () => {
@@ -135,6 +142,7 @@ describe("a fire", () => {
     expect(fired.ok).toBe(true);
     expect(fired.session).toEqual({ id: null, url: null });
     expect(await fireRows()).toHaveLength(1);
+    await clearLabel(id);
     expect((await fireRoutine(jobsEnv(), seatAgent(), NOW, id)).refusal).toMatch(/^already_fired/);
   });
 
@@ -142,6 +150,10 @@ describe("a fire", () => {
     const fires = anthropic();
     const id = await queued();
     expect((await fireRoutine(jobsEnv(), seatAgent(), NOW, id)).ok).toBe(true);
+    // A refire is refused first because the job is started; with the label gone, the
+    // window still refuses it.
+    expect((await fireRoutine(jobsEnv(), seatAgent(), NOW, id)).refusal).toMatch(/^already_started/);
+    await clearLabel(id);
     const again = await fireRoutine(jobsEnv(), seatAgent(), NOW, id);
     expect(again.refusal).toMatch(new RegExp(`^already_fired: ${id} was fired at .*claude\\.ai/code/${SESSION}`));
     expect(fires).toHaveLength(1);
@@ -240,6 +252,12 @@ describe("each refusal is named, and nothing is fired or recorded", () => {
     admin.scopes = { ...admin.scopes, namespaces: "*" };
     expect((await setRoutine(jobsEnv(), admin, "cap_sid", FIRE_URL)).refusal).toMatch(/lowercase letters and digits joined by single dashes/);
     expect(await env.APP_KV.get(routineUrlKey("cap_sid"))).toBeNull();
+  });
+
+  it("already_started: a job somebody began is not fired, whoever began it", async () => {
+    const id = await queued();
+    expect((await beginJob(jobsEnv(), driver(), NOW, id)).ok).toBe(true);
+    expect(await refusedWith(/^already_started: agent:capsid-driver started this job at /, { id })).toEqual([]);
   });
 
   it("a driver, a job that is not queued, and a job that does not exist", async () => {

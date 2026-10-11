@@ -1,0 +1,20 @@
+---
+paths:
+  - "src/**"
+  - "test/**"
+  - "test-integration/**"
+---
+
+# Capsid's invariants, in full
+
+Detail for the rules CLAUDE.md names. The tests named here enforce them.
+
+- **Tool surface.** Every served tool has an entry in `TOOL_GRANTS` in `src/scope.ts`, and `src/counts.ts` derives the count from it. `src/tools/surface.ts` names each tool and its actions, on Capsid (`/mcp`, `/ops/mcp`) or Capsid Admin (`/mcp/admin`, `/ops/mcp/admin`). Adding a tool needs a ruling in `capsid/decisions.md` first.
+- **Snapshot.** Every overwrite and delete snapshots to `document_versions` and writes `audit_log`. Lint finalize archives and never deletes. (test/invariants.test.ts, test/write-invariants.test.ts)
+- **One enforcement point.** `checkScope` in `src/scope.ts` is the only grant check. Every served tool refuses a caller without that tool, and every write refuses a read-only caller, with `checkScope`'s refusal and before its handler runs (test/scope.test.ts, the two SWEEP tests). Every repo mutation goes through `guardedWrite` (test/blast-radius.test.ts).
+- **Path mutation.** Paths change only through `pathMutation()`. State moves are `UPDATE ... WHERE status = ? RETURNING id`. (test/path-mutation.test.ts)
+- **Improve loop.** Only `src/improve-scorer.ts` names `HOLDOUT`. (test/improve-holdout.test.ts)
+- **No AI trailer.** `.claude/settings.json` turns attribution off, and `.github/workflows/ai-author.yml` (devkit's reusable workflow and its `devkit-check-trailers` bin, tested in devkit) refuses a commit that carries one.
+- **Health probe.** `/health` and the backup preflight search `capsid/conventions.md` for the word "conventions" (`src/store-probe.ts`). That document must keep the word, or Capsid reports itself degraded and the backup refuses to prune.
+
+The other portfolio rules once restated here (a check trusted only after it fails, no swallowed error, D1 `meta.changes`) are in `capsid/conventions.md` and its topic files.

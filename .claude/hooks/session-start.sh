@@ -8,7 +8,7 @@
 # Node setting, so the repo installs the version in .nvmrc itself.
 #
 # Cloud only (CLAUDE_CODE_REMOTE), and a no-op when the right Node and node_modules are
-# already there, so a local session pays one `node -v`. POSIX sh (conventions 4.2).
+# already there, so a local session pays one `node -v`. POSIX sh (conventions 3.3).
 # Changes no tracked file: not package.json, the lockfile, or engines.
 set -eu
 

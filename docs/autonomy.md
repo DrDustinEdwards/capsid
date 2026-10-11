@@ -14,6 +14,10 @@ capsid merge deploys the control plane, put back with no limit on 2026-10-07, an
 by version 6 (D6 of 2026-10-03, confirmed 2026-10-09) to docs-only PRs outside
 `docs/policy/` and dashboard CSS-only PRs; its tests, Portal scripts and every other path
 wait for the seat. carrel and capsomer joined for auto-merge only on 2026-10-08.
+Version 7 (job_e68de044f8a4, 2026-10-10) makes the pull request the claim: it drops
+`author_is_driver`, so a job a cloud session completed without a claim can merge, and
+adds `size_within_cap`, so a pull request over 1,000 changed lines waits for a person's
+approval.
 
 | check | what it requires |
 | --- | --- |
@@ -23,11 +27,11 @@ wait for the seat. carrel and capsomer joined for auto-merge only on 2026-10-08.
 | `paths_allowed_for_namespace` | for a namespace with allowed paths (capsid: `docs/` outside `docs/policy/`, and `dashboard/**/*.css`), every changed path, old names of renamed files included, is inside them |
 | `head_in_base_repo` | the PR's head branch is on the base repo, not a fork |
 | `body_names_job` | the PR body carries the id of the job the work came from |
-| `pr_author_allowed` | the GitHub account that opened the PR is on the signed document's author allowlist (`DrDustinEdwards` and `capsid-repo-access[bot]` in version 6) |
-| `author_is_driver` | that job was claimed by a minted, unrevoked agent of kind `driver` |
+| `pr_author_allowed` | the GitHub account that opened the PR is on the signed document's author allowlist (`DrDustinEdwards` and `capsid-repo-access[bot]` in version 7) |
 | `job_handed_on` | that job is `blocked` or `done` |
 | `pr_recorded_for_job` | the job's `result_ref` or one of its `job_outcome_prs` rows names this PR |
 | `base_is_default_branch` | the PR targets the repo's default branch |
+| `size_within_cap` | the PR changes at most 1,000 lines (additions plus deletions); a larger one is merge class `approve`, "over the size cap" |
 | `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the lint step, the unit suite and the integration suite to success |
 
 Tests, `src/`, docs, `CLAUDE.md` and `.claude/` pass the refused-path check since policy version 2 (2026-09-17); in capsid, version 6 then holds all but docs and dashboard CSS for the seat. The improve loop's `PROTECTED_PATH_PATTERNS` still decides what the loop may edit and no longer decides what auto-merges.

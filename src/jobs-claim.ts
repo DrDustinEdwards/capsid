@@ -13,6 +13,7 @@ import {
   swallowedParamTag,
   swallowedTagRefusal,
   serializeRequiredScopes,
+  startedNotice,
   type JobRow,
   type JobStatus,
   type MinRecord,
@@ -263,6 +264,8 @@ const JOB_LIST_COLUMNS = [
   "kind",
   "model_recommended",
   "effort_recommended",
+  "started_at",
+  "started_by",
 ] as const;
 
 export type JobListRow = Pick<JobRow, (typeof JOB_LIST_COLUMNS)[number]>;
@@ -302,9 +305,12 @@ export async function listJobs(
   // would cost one read per resumed job.
   const listNotes = args.id && rows.length === 1 ? await resumeNotes(env, rows[0]) : null;
   const listNote = listNotes?.notes[0] ?? null;
+  // One named job somebody began says who and when (src/jobs-begin.ts).
+  const listStarted = args.id && rows.length === 1 ? startedNotice(rows[0]) : null;
   return {
     ok: true,
     action: "list",
+    ...(listStarted ? { started: listStarted } : {}),
     ...(listNote ? { resume_note: listNote } : {}),
     ...(listNotes && listNotes.notes.length > 0 ? { resume_notes: listNotes.notes } : {}),
     ...(listNotes && listNotes.dropped > 0 ? { resume_notes_dropped: listNotes.dropped } : {}),
@@ -516,6 +522,7 @@ export async function claimJob(
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
   }
+  const startedOn = startedNotice(candidate);
   // A job that went back to the queue after a resume (an expired lease) reaches its
   // next driver here, so the approval has to come with it: the note read and checked
   // above, before the lease.
@@ -523,6 +530,8 @@ export async function claimJob(
     ok: true,
     action: "claim",
     job: claimed,
+    // A label is not a lease, so it refuses nothing; the claimant is told who began it.
+    ...(startedOn ? { started: startedOn } : {}),
     ...(claimNote ? { resume_note: claimNote } : {}),
     ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),
     ...(claimNotes.dropped > 0 ? { resume_notes_dropped: claimNotes.dropped } : {}),

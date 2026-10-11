@@ -231,6 +231,10 @@ export interface OpsJob {
   // A parked job (src/jobs-park.ts): the one line saying when it comes back. Absent for
   // every other status, and in a feed written before parked jobs were shown.
   parked_reason?: string;
+  // The started label (src/jobs-begin.ts): who began a job worked without a claim, and
+  // when. Absent for a job nobody began, and in a feed written before the label existed.
+  started_by?: string;
+  started_at?: string;
   result_ref: string | null;
   // Posted by agent:watcher, with its fingerprint from the title, and how often the
   // watcher has seen it (seen_count, last_seen) while this is the finding's current
@@ -888,6 +892,16 @@ export interface WebAnalyticsSite {
   enabled: boolean | null;
 }
 
+// The daily email digest (src/digest.ts), as Settings shows it: on, or the reason it is
+// off, where it goes, the hour it is sent, and the last send or refusal.
+export interface DigestState {
+  on: boolean;
+  problem: string | null;
+  to: string | null;
+  hour_utc: number;
+  last: { at: string; outcome: "sent" | "failed"; note: string } | null;
+}
+
 // GET /portal/api/push -> PortalPush. Phone alerts (src/push.ts): the VAPID public key a
 // browser subscribes with (null, with the problem, when the key is not set), and the
 // devices with alerts on. Never an endpoint.
@@ -896,6 +910,8 @@ export interface PortalPush {
   public_key: string | null;
   problem: string | null;
   devices: { id: number; label: string | null; created_at: string; last_sent_at: string | null; last_status: number | null }[];
+  // The daily email digest beside the alerts, so Settings says why it is off.
+  digest: DigestState;
   // Present after op "test": each device's push service answer (0 when unreachable).
   results?: { id: number; status: number }[];
 }
@@ -927,6 +943,44 @@ export interface PortalStale {
   note: string | null;
 }
 
+// GET /portal/api/library -> PortalLibrary (src/portal-library.ts). The read-only Library
+// over the knowledge store (capsid/decisions.md 2026-10-09, Portal review item 4). One of
+// three answers, by the query string: the shelves (no query), a search (?q=) or one
+// document (?ns=&path=). Writing stays in chat and with drivers.
+export type LibraryShelf = "decisions" | "rulings" | "research";
+
+export interface LibraryEntry {
+  namespace: string;
+  path: string;
+  title: string | null;
+  type: string;
+  status: string;
+  updated_at: string;
+}
+
+export interface LibraryHit extends LibraryEntry {
+  // FTS5's snippet: each matched word between U+0002 and U+0003 (LIBRARY_MARK_OPEN and
+  // LIBRARY_MARK_CLOSE in src/portal-library.ts), gaps as " ... ".
+  snippet: string;
+}
+
+export interface LibraryDocument extends LibraryEntry {
+  tags: string | null;
+  created_at: string;
+  body: string;
+}
+
+export type PortalLibrary =
+  | { kind: "shelves"; generated: string; shelves: Record<LibraryShelf, LibraryEntry[]>; truncated: boolean }
+  | { kind: "search"; generated: string; query: string; rows: LibraryHit[]; truncated: boolean }
+  | {
+      kind: "document";
+      generated: string;
+      doc: LibraryDocument;
+      outgoing: Array<{ type: string; to_ns: string; to_path: string }>;
+      incoming: Array<{ type: string; from_ns: string; from_path: string }>;
+    };
+
 // GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
 // (src/maintenance.ts), as stored by its last run: what the pass found that it did not act
 // on, and what it acted on (an auto-resume, a pruned branch). A "-not-checked" rule is a
@@ -948,7 +1002,9 @@ export type MaintenanceRule =
   | "undeployed-merge"
   | "deploys-not-checked"
   | "model-drift"
-  | "model-not-checked";
+  | "model-not-checked"
+  | "rule-doc"
+  | "rule-docs-not-checked";
 
 export interface OpsMaintenanceItem {
   /** Which rule found it. */

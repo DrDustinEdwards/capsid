@@ -7,6 +7,7 @@ import { portalGate } from "./portal-auth";
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalPush } from "./ops-types";
 import { auditStatement } from "./store-guards";
+import { digestState } from "./digest";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
@@ -223,6 +224,7 @@ async function listDevices(env: Env, now: Date): Promise<PortalPush> {
     public_key: typeof vapid === "string" ? null : vapid.publicKey,
     problem: typeof vapid === "string" ? vapid : null,
     devices: rows.results ?? [],
+    digest: await digestState(env),
   };
 }
 

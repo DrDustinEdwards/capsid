@@ -1,8 +1,8 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
-import { jobDocPath, outsideJobNamespace, type JobRow } from "./jobs-schema";
-import { jobAudit } from "./jobs-mirror";
-import { callerIsSeat, readJob, refuse, type JobResult } from "./jobs-transition";
+import { jobDocPath, outsideJobNamespace, startedNotice, type JobRow } from "./jobs-schema";
+import { jobAudit, mirrorStatements } from "./jobs-mirror";
+import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { verifySignedBody } from "./improve-task";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
@@ -12,7 +12,9 @@ import { logEvent } from "./log";
 // with only the Capsid connection through the network secret. Its API trigger is a
 // per-routine URL and bearer token. The seat fires it for one queued job, and the
 // routine's prompt reads the job id from the routine-fire-payload block the fire text
-// arrives in. Nothing here claims the job: the session works it without a claim.
+// arrives in. Nothing here claims the job: the session works it without a claim, and the
+// fire marks it started (the label begin sets, src/jobs-begin.ts) so the next session and
+// the next fire are told somebody is on it.
 //
 // Where each piece lives: the fire URL in APP_KV (`routine:<namespace>:url`), set by the
 // seat with capsid_work_jobs action "routine", because it is not a secret and a new
@@ -153,6 +155,8 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
   if (job.status !== "queued") {
     return refuse("fire", `${id} is ${job.status}, not queued. A routine is fired for a queued job only.`);
   }
+  const begun = startedNotice(job);
+  if (begun) return refuse("fire", `already_started: ${begun.note} No session was fired.`);
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, job.body, "job body");
   if (!verdict.ok) return refuse("fire", `${id} does not verify, so no session is started for it: ${verdict.reason}`);
 
@@ -223,16 +227,38 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
     logEvent("error", "ROUTINE_FIRE_UNRECORDED", { message: `ROUTINE_FIRE_UNRECORDED: ${job.id} ${sessionId ?? "(no session id)"}: ${message}` });
     unrecorded = ` The fire could not be recorded (${message}); keep this session URL.`;
   }
+  const marked = await markStarted(env, agent, job, now, sessionUrl);
   return {
     ok: true,
     action: "fire",
-    job,
+    job: marked.job,
+    started: startedNotice(marked.job) ?? undefined,
     session: { id: sessionId, url: sessionUrl },
     note:
       (sessionUrl
         ? `${routineId} started ${sessionUrl} for ${job.id}. The job stays queued: the session works it without a claim and completes it naming its pull request.`
-        : `${routineId} answered ${res.status}, so a session started for ${job.id}, but its answer named no readable session URL. Find it at claude.ai/code.`) + unrecorded,
+        : `${routineId} answered ${res.status}, so a session started for ${job.id}, but its answer named no readable session URL. Find it at claude.ai/code.`) +
+      unrecorded +
+      marked.note,
   };
+}
+
+// The started label, set as begin sets it and in one guarded batch with its mirror and
+// audit row. A job that moved or was begun since the read keeps what it has: the session
+// is already running, so that is said, never refused.
+async function markStarted(env: Env, agent: Agent, job: JobRow, now: Date, sessionUrl: string | null): Promise<{ job: JobRow; note: string }> {
+  const at = now.toISOString();
+  const started: JobRow = { ...job, started_at: at, started_by: agent.actor, updated_at: at };
+  const won = await guardedTransition(env, job, [
+    env.DB.prepare(
+      `UPDATE jobs SET started_at = ?2, started_by = ?3, updated_at = ?2 WHERE id = ?1 AND status = 'queued' AND started_at IS NULL RETURNING id`
+    ).bind(job.id, at, agent.actor),
+    ...(await mirrorStatements(env, started, "job-started", agent.actor)),
+    jobAudit(env.DB, agent.actor, "job-started", started, { started_at: at, session_url: sessionUrl }),
+  ]);
+  if (won) return { job: started, note: "" };
+  const moved = (await readJob(env.DB, job.id)) ?? job;
+  return { job: moved, note: ` The job was not marked started: it changed while the routine was fired (now ${moved.status}${moved.started_by ? `, started by ${moved.started_by}` : ""}).` };
 }
 
 async function errorType(res: Response): Promise<string | null> {

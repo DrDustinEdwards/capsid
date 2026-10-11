@@ -7,6 +7,7 @@ import { gatherDiskItems } from "./maintenance-disk";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
 import { gatherModelDriftItems } from "./model-drift";
 import { bundledModel } from "./public-data";
+import { gatherRuleDocItems } from "./rule-docs";
 
 // The actor the merge-resume step records its touches under (capsid/decisions.md,
 // 2026-10-03, stale jobs D1). Spelled here, not imported, so this pass does not depend on
@@ -59,6 +60,8 @@ interface MaintenanceList {
   deploys_read: Record<string, number>;
   /** Facts compared with system/model.json: mapped repos, App repos and watched sites. */
   model_read: number;
+  /** Rule documents checked for their cap and for stale tool names (src/rule-docs.ts). */
+  rule_docs_read: number;
 }
 
 type MaintenanceReport =
@@ -179,6 +182,10 @@ export async function gatherMaintenance(
   const drift = await driftReader(env);
   items.push(...drift.items);
 
+  // A rule document over its cap or naming a tool the Worker does not serve.
+  const ruleDocs = await gatherRuleDocItems(env.DB);
+  items.push(...ruleDocs.items);
+
   return {
     generated: now.toISOString(),
     items,
@@ -187,6 +194,7 @@ export async function gatherMaintenance(
     disk_read: disk.read,
     deploys_read: deploys.read,
     model_read: drift.read,
+    rule_docs_read: ruleDocs.read,
   };
 }
 
@@ -216,7 +224,7 @@ export async function maintenanceTick(
   const deploySites = Object.keys(list.deploys_read).length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
     list,
   };
 }
@@ -237,6 +245,7 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
       disk_read: typeof parsed.disk_read === "number" ? parsed.disk_read : 0,
       deploys_read: counts(parsed.deploys_read),
       model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
+      rule_docs_read: typeof parsed.rule_docs_read === "number" ? parsed.rule_docs_read : 0,
     };
   } catch {
     return null;

@@ -66,8 +66,8 @@ async function mcpInitialize(accessToken: string): Promise<Response> {
 }
 
 // Runs the flow up to the code, as `login`. Returns the client id and the code.
-async function authorize(email: string, extra: Record<string, unknown> = {}): Promise<{ clientId: string; code: string | null; callback: Response; tokenBodies: URLSearchParams[]; signIn: URL }> {
-  const clientId = cimdClient([REDIRECT], "round-trip");
+async function authorize(email: string, extra: Record<string, unknown> = {}, sameClient?: string): Promise<{ clientId: string; code: string | null; callback: Response; tokenBodies: URLSearchParams[]; signIn: URL }> {
+  const clientId = sameClient ?? cimdClient([REDIRECT], "round-trip");
 
   const url = new URL(`${ORIGIN}/authorize`);
   for (const [k, v] of Object.entries({ client_id: clientId, redirect_uri: REDIRECT, response_type: "code", code_challenge: CHALLENGE, code_challenge_method: "S256", state: "client-state" })) {
@@ -135,6 +135,29 @@ describe("the OAuth round trip", () => {
     const next = (await refreshed.json()) as { access_token: string };
     expect(next.access_token).not.toBe(tokens.access_token);
     expect((await mcpInitialize(next.access_token)).status).toBe(200);
+  });
+
+  it("PLANT: a second authorization for the same user and client leaves the first grant usable", async () => {
+    // Claude uses one CIMD client id for both the Capsid (/mcp) and Capsid Admin
+    // (/mcp/admin) connectors. The provider revokes every earlier grant for the same
+    // user and client on each authorization unless handleCallback passes
+    // revokeExistingGrants: false, so signing into one signed the other out.
+    const first = await authorize(env.ADMIN_EMAIL!);
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: first.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
+    expect(exchanged.status, await exchanged.clone().text()).toBe(200);
+    const one = (await exchanged.json()) as { access_token: string; refresh_token: string };
+    expect((await mcpInitialize(one.access_token)).status, "the first token does not open /mcp before the second sign-in").toBe(200);
+
+    const second = await authorize(env.ADMIN_EMAIL!, {}, first.clientId);
+    expect(second.code, "the second authorization sent no code").toBeTruthy();
+    const exchangedTwo = await tokenRequest({ grant_type: "authorization_code", code: second.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
+    expect(exchangedTwo.status, await exchangedTwo.clone().text()).toBe(200);
+    const two = (await exchangedTwo.json()) as { access_token: string };
+
+    expect((await mcpInitialize(two.access_token)).status, "the second token does not open /mcp").toBe(200);
+    expect((await mcpInitialize(one.access_token)).status, "the second authorization signed the first grant out").toBe(200);
+    const refreshed = await tokenRequest({ grant_type: "refresh_token", refresh_token: one.refresh_token, client_id: first.clientId });
+    expect(refreshed.status, "the first grant's refresh token was revoked").toBe(200);
   });
 
   it("PLANT: a token issued for this server is refused by another resource (RFC 8707 audience)", async () => {

@@ -27,14 +27,23 @@ export const AUTO_MERGE_POLICY_PATH = "policy/auto-merge.md";
 // not merged without a human, whatever the rest of the PR looks like.
 //
 // Job ids are public, in commit subjects and PR bodies, so judging only the job a PR
-// body names would let any open PR that named a finished driver job merge on green CI.
+// body names would let any open PR that named a finished job merge on green CI.
 // The PR itself is judged too: head_in_base_repo refuses a fork head, job_handed_on
 // refuses a job that is not blocked or done, and pr_recorded_for_job refuses a PR the
-// driver never recorded against that job.
+// holder never recorded against that job.
 //
 // pr_author_allowed refuses a PR whose GitHub author login is not on the allowlist the
 // signed document carries. The list is in the document and not here, so changing who
 // may author an unattended merge is a signed act.
+//
+// Version 7 (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2) drops author_is_driver,
+// which required the job to have been claimed by a minted driver agent. Cloud sessions
+// sign in as the admin login and complete a job without a claim, naming its pull request
+// (src/jobs-seat.ts completeUnclaimed), so nothing they opened could merge. Who may open
+// an unattended merge stays pr_author_allowed's question, and pr_recorded_for_job still
+// requires the pull request to be recorded against the job by whoever completed it. The
+// same version adds size_within_cap: a pull request over AUTO_MERGE_SIZE_CAP changed lines
+// waits for a person's approval.
 export const POLICY_CHECKS = [
   "paths_not_refused",
   "paths_not_money",
@@ -43,14 +52,28 @@ export const POLICY_CHECKS = [
   "head_in_base_repo",
   "body_names_job",
   "pr_author_allowed",
-  "author_is_driver",
   "job_handed_on",
   "pr_recorded_for_job",
   "base_is_default_branch",
+  "size_within_cap",
   "ci_green",
 ] as const;
 
 export type PolicyCheck = (typeof POLICY_CHECKS)[number];
+
+// The most changed lines (additions plus deletions, as GitHub counts them) a pull request
+// may carry and still merge with no human. Over it, the merge class is approve: one tap,
+// with the reason "over the size cap". Ona caps its auto-approval at 1,000 lines, and
+// Intercom's agent refuses large pull requests; a big diff is where a review earns its time.
+export const AUTO_MERGE_SIZE_CAP = 1000;
+
+/** Whether a pull request's changed lines are over the size cap. Uncounted is not over it;
+ *  the policy refuses an uncounted pull request on its own. */
+export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean => facts.changedLines !== null && facts.changedLines > AUTO_MERGE_SIZE_CAP;
+
+/** The reason a pull request over the cap carries, in the merge class and the decline. */
+export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
+  `over the size cap: ${facts.changedLines} changed lines, more than ${AUTO_MERGE_SIZE_CAP}`;
 
 // The paths auto-merge refuses, separate from PROTECTED_PATH_PATTERNS (what the improve
 // loop may edit). Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
@@ -373,6 +396,9 @@ export interface PrFacts {
   changedPaths: string[];
   // Why the changed-file list is incomplete, or null. An incomplete list refuses.
   filesProblem: string | null;
+  // Additions plus deletions across the changed files, as GitHub counts them, or null
+  // when a file came back without its counts, which size_within_cap refuses.
+  changedLines: number | null;
   // null when no check run has reported, which is NOT green.
   ciConclusion: string | null;
   ciNote: string;
@@ -386,14 +412,14 @@ export interface PrFacts {
   // The login of the GitHub account that opened the PR (pr.user.login), or null when
   // GitHub reports none.
   prAuthor: string | null;
-  // Resolved from the job id in the PR body.
+  // Resolved from the job id in the PR body. jobClaimedBy is who held or completed the
+  // job, for the audit row; no check reads it.
   jobId: string | null;
   jobClaimedBy: string | null;
   jobStatus: string | null;
-  driverAgent: { name: string; kind: string; revoked: boolean } | null;
   // Every pull request URL the job's holder recorded: result_ref and the
-  // job_outcome_prs rows, all written by transitions keyed on claimed_by or seeded
-  // from what they wrote.
+  // job_outcome_prs rows, all written by the transitions that complete or block a job
+  // (src/jobs-holder.ts) or seeded from what they wrote.
   jobPrUrls: string[];
 }
 
@@ -408,9 +434,10 @@ export function jobIdFromBody(body: string): string | null {
   return JOB_ID_IN_BODY.exec(body ?? "")?.[0] ?? null;
 }
 
-// The statuses in which a job has handed its PR on. A driver opens the PR and then
+// The statuses in which a job has handed its PR on. A session opens the PR and then
 // completes (done) or stops at a gate (blocked). A queued, claimed, failed or
-// superseded job has not handed anything on, so its id in a PR body proves nothing.
+// superseded job has not handed anything on, so its id in a PR body proves nothing,
+// and a job id no row in this namespace carries has no status at all.
 const HANDED_ON_STATUSES = ["blocked", "done"];
 
 // A PR URL as the job records hold it, compared case-insensitively. The match ends at
@@ -506,27 +533,13 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
   }
   passed.push("pr_author_allowed");
 
-  if (!facts.jobClaimedBy) {
-    return no("author_is_driver", `the PR body names ${facts.jobId}, but no such job is recorded in this namespace.`);
-  }
-  if (!facts.driverAgent) {
-    return no("author_is_driver", `${facts.jobId} was held by ${facts.jobClaimedBy}, which is not a minted agent. Only a driver agent's work auto-merges.`);
-  }
-  if (facts.driverAgent.kind !== "driver") {
-    return no("author_is_driver", `${facts.driverAgent.name} is kind '${facts.driverAgent.kind}', not a driver.`);
-  }
-  if (facts.driverAgent.revoked) {
-    return no("author_is_driver", `${facts.driverAgent.name} has been revoked, so its open work waits for the seat.`);
-  }
-  passed.push("author_is_driver");
-
   if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
     return no("job_handed_on", `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`);
   }
   passed.push("job_handed_on");
 
   // The PR itself must be recorded against the job, or anyone could name a finished
-  // driver job in a PR body.
+  // job in a PR body.
   const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
   if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
     return no(
@@ -540,6 +553,12 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
     return no("base_is_default_branch", `the PR targets '${facts.baseRef}', not the default branch '${facts.defaultBranch}'.`);
   }
   passed.push("base_is_default_branch");
+
+  if (facts.changedLines === null) {
+    return no("size_within_cap", "GitHub reported no line counts for at least one changed file, so the size cap cannot be judged. A person approves it.");
+  }
+  if (overSizeCap(facts)) return no("size_within_cap", `${sizeCapReason(facts)}. A person approves it.`);
+  passed.push("size_within_cap");
 
   const ci = ciGreenOn(facts);
   if (ci.state !== "green") return no("ci_green", ci.why);

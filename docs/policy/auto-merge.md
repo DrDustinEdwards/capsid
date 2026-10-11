@@ -6,9 +6,25 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as an improve loop task document. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 6
+- version: 7
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 7 makes the pull request the claim (job_e68de044f8a4, ruled by Dustin
+2026-10-10, plan step 2). Cloud sessions all sign in as the admin login, which may hold
+one claim, so they work jobs without claiming them, and complete a queued job by naming
+its pull request. Up to version 6, `author_is_driver` required the job to have been
+claimed by a minted driver agent, so nothing a cloud session opened could merge.
+Version 7 drops that check. Who may open an unattended merge is still
+`pr_author_allowed`'s question, and `pr_recorded_for_job` still requires the pull
+request to be recorded against the job by whoever completed it. Every other check is
+unchanged.
+
+Version 7 also adds `size_within_cap`: a pull request with more than 1,000 changed
+lines (additions plus deletions) is not merged without a human. Its merge class is
+`approve`, with the reason "over the size cap", so a person approves it in one tap.
+Ona caps its auto-approval at 1,000 lines, and Intercom's agent refuses large pull
+requests: a big diff is where a review earns its time.
 
 Version 6 covers capsid again, for docs and the Portal's stylesheets only (ruled by
 Dustin as D6 of 2026-10-03 on job_c2b1c3b07573, confirmed 2026-10-09). A capsid merge
@@ -105,17 +121,19 @@ are the never-list, and the per-namespace limit follows them.
 - `pr_author_allowed` The GitHub account that opened the PR is under Allowed PR
   authors below, compared without regard to letter case. A PR from any other account,
   or one GitHub reports no author for, is left for the seat.
-- `author_is_driver` That job was claimed by a minted agent whose kind is `driver` and
-  which has not been revoked. A job claimed by a seat, a cron agent, an operator key or
-  a person is left for the seat.
 - `job_handed_on` That job is `blocked` or `done`. A queued, claimed, failed or
   superseded job has not handed a PR on.
 - `pr_recorded_for_job` The job's holder recorded this PR against the job: the job's
   `result_ref`, or one of its `job_outcome_prs` rows, names this PR's URL in this repo.
-  Both are written by the transition keyed on the job's holder. Naming a job id in a
-  PR body does not make the PR that job's work.
+  Both are written by the transition that completes or blocks the job: a holder's
+  complete or block, or a complete without a claim, which names the pull request and
+  credits the caller as the job's holder. Naming a job id in a PR body does not make
+  the PR that job's work.
 - `base_is_default_branch` The PR targets the repo's default branch. A PR onto a
   release or staging branch is somebody's sequencing decision, not this policy's.
+- `size_within_cap` The PR changes at most 1,000 lines, counted as additions plus
+  deletions across its files as GitHub reports them. A larger PR is left for a person,
+  in the merge class `approve` with the reason "over the size cap".
 - `ci_green` Every check run on the head sha has completed and concluded success,
   skipped or neutral, and at least one has reported. The newest run of each workflow
   under Required CI on the head sha also ran every step listed there to success. A
@@ -294,6 +312,8 @@ of version 4 against the version 5 code, whose document does not name the four c
 version 5 added and carries no author allowlist. A version 5 document does not name
 `paths_allowed_for_namespace` or carry capsid's allowed paths, so between the version 6
 code deploying and version 6 being signed nothing is auto-merged in any namespace.
+A version 6 document does not name `size_within_cap`, so between the version 7 code
+deploying and version 7 being signed nothing is auto-merged in any namespace either.
 
 It can change who may author an unattended merge without a code change. The author
 allowlist is the one list the code does not also hold, so a signed document that adds

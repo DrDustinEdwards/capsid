@@ -5,6 +5,7 @@ import { ok, fail, type ToolCtx } from "./docs";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocuments } from "../portfolio-docs";
 import { portfolioOnly } from "../scope";
+import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
@@ -80,15 +81,7 @@ export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
-      // Named columns: the set `list` returns plus the body. See `list` for why
-      // frontmatter and publish_at are left out.
-      const row = await db
-        .prepare(
-          `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at, body
-           FROM documents WHERE namespace = ?1 AND path = ?2`
-        )
-        .bind(namespace, path)
-        .first();
+      const row = await readDocument(db, namespace, path);
       if (!row) return fail(`not found: ${namespace}/${path}`);
       // Read first: the row recorded below is not addressed to this document, so it
       // cannot change last_actor, but the order keeps that from depending on it.
@@ -321,19 +314,7 @@ export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void 
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
-      const outgoing = await db
-        .prepare(
-          "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = ?2 ORDER BY type, to_ns, to_path"
-        )
-        .bind(namespace, path)
-        .all();
-      const incoming = await db
-        .prepare(
-          "SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = ?2 ORDER BY type, from_ns, from_path"
-        )
-        .bind(namespace, path)
-        .all();
-      return ok({ namespace, path, outgoing: outgoing.results, incoming: incoming.results });
+      return ok({ namespace, path, ...(await documentEdges(db, namespace, path)) });
     }
   );
 }
@@ -385,22 +366,6 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
       // below, so the narrowing is never what keeps another document out.
       const restricted = portfolioOnly(agent, namespace);
       const allowed = restricted ? JSON.stringify((await portfolioDocuments(db)).map((r) => r.path)) : null;
-      const run = (match: string) =>
-        db
-          .prepare(
-            `SELECT d.id, d.namespace, d.path, d.title, d.type, d.status, d.updated_at,
-                    snippet(documents_fts, 1, '[', ']', ' ... ', 16) AS snippet
-             FROM documents_fts
-             JOIN documents d ON d.id = documents_fts.rowid
-             WHERE documents_fts MATCH ?1
-               AND (?2 IS NULL OR d.namespace = ?2)
-               AND (?3 IS NULL OR d.type = ?3)
-               AND (?4 IS NULL OR d.path IN (SELECT value FROM json_each(?4)))
-             ORDER BY bm25(documents_fts)
-             LIMIT ?5`
-          )
-          .bind(match, namespace ?? null, type ?? null, allowed, SEARCH_ROWS + 1)
-          .all<{ path: string }>();
       const bound = (rows: Array<{ path: string }>) =>
         boundedRows(
           restricted ? rows.filter((r) => isPortfolioPath(r.path)) : rows,
@@ -408,15 +373,9 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
           "Add a namespace or type filter, or make the query more specific."
         );
       try {
-        return ok(bound((await run(query)).results));
-      } catch {
-        // Hyphens, quotes, and bare AND/OR/NOT are FTS5 syntax. Retry the whole query
-        // as a quoted phrase so plain text is always a safe input.
-        try {
-          return ok(bound((await run(`"${query.replace(/"/g, '""')}"`)).results));
-        } catch (err) {
-          return fail(`search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`);
-        }
+        return ok(bound(await searchDocuments(db, query, { namespace: namespace ?? null, type: type ?? null, allowed })));
+      } catch (err) {
+        return fail(`search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   );

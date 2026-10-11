@@ -82,7 +82,6 @@ async function factsForPr(
 
   let jobClaimedBy: string | null = null;
   let jobStatus: string | null = null;
-  let driverAgent: PrFacts["driverAgent"] = null;
   const jobPrUrls: string[] = [];
   if (jobId) {
     const job = await env.DB.prepare("SELECT claimed_by, status, result_ref FROM jobs WHERE id = ?1 AND namespace = ?2")
@@ -96,16 +95,6 @@ async function factsForPr(
         .bind(jobId)
         .all<{ pr_url: string }>();
       jobPrUrls.push(...(recorded.results ?? []).map((r) => r.pr_url));
-    }
-    if (jobClaimedBy?.startsWith("agent:")) {
-      const name = jobClaimedBy.slice("agent:".length);
-      // An archived agent is a revoked one (src/agents-archive.ts).
-      const row = await env.DB.prepare(
-        "SELECT name, kind, revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT name, kind, revoked_at FROM agents_archive WHERE name = ?1"
-      )
-        .bind(name)
-        .first<{ name: string; kind: string; revoked_at: string | null }>();
-      if (row) driverAgent = { name: row.name, kind: row.kind, revoked: row.revoked_at !== null };
     }
   }
 
@@ -135,6 +124,7 @@ async function factsForPr(
     body,
     changedPaths,
     filesProblem,
+    changedLines: files.changedLines,
     ciConclusion: ci.conclusion,
     ciNote: ci.note,
     ciSteps: steps.steps,
@@ -144,7 +134,6 @@ async function factsForPr(
     jobId,
     jobClaimedBy,
     jobStatus,
-    driverAgent,
     jobPrUrls,
   };
 }

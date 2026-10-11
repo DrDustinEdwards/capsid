@@ -204,7 +204,7 @@ capsid is included in one-tap approval. Its protection is the live gate and the 
 - Immediate effect: the tick suspends that unit (a KV flag, so its PRs fall to `approve`). This only narrows, so it needs no human, and the inbox shows it with Undo.
 - What it raises: a proposal to remove the unit from the signed list, approved the same way.
 
-The learning table proposes and never applies (conventions 11.3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
+The learning table proposes and never applies (conventions-routing.md rule 3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
 
 ## 8. The permanent exception
 
@@ -265,3 +265,7 @@ In the order to answer them. Each has a recommendation.
 9. **Promotion:** at least 20 approved merges over at least 14 days, no rollback and no revert, proposed in the inbox and approved by typing the new policy version. Recommend yes.
 10. **Demotion:** a rollback suspends the unit at once (it only narrows), and the permanent removal is proposed. Recommend yes.
 11. **Money:** typed confirmation forever, no batch, no push button, whatever the record says. Recommend yes. This only restates the ruling.
+
+## Answered (Dustin, 2026-10-09)
+
+All eleven as recommended. 1: v6 was signed that day by the seat with Dustin's admin login. 5: the phone is Android, so Web Push, plus a daily email digest; turning on Email Routing is Dustin's account step. 3: chat reaches `pr_approvals` through the existing `capsid_admin_run_controls`, no new tool. Why the whole design: what protects a merge is the checks around it, not who presses the button, and a pause that only routes through the seat adds friction without review (capsid/decisions.md, 2026-10-09).

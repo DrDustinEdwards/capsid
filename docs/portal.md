@@ -36,12 +36,12 @@ Browser tests: dashboard/e2e/needs.spec.ts, and the attention list's in dashboar
 
 ## The pages
 
-Eight pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09), and Settings:
+The pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09), with Shared code and the Library added since, and Settings:
 - **Now:** Needs you (above) and Health;
 - **Work:** Queue and Pull requests;
-- **Records:** Activity, Agents, Packages (only while a package is configured) and Shared code.
+- **Records:** Activity, Agents, Packages (only while a package is configured), Shared code and Library.
 
-Each old view's content moved whole, so nothing it showed was lost (conventions 1.4). An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
+Each old view's content moved whole, so nothing it showed was lost (conventions 1.3). An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
 
 | Was | Is now |
 |---|---|
@@ -56,7 +56,7 @@ Each old view's content moved whole, so nothing it showed was lost (conventions 
 - **Sites**, one row per site, with every column (only while a site is configured);
 - **Incidents**, **Deploys**, **Backups**, and **CI, default branches**.
 
-Its rail count is the number of critical problems on Needs you. It has no Queue panel and no attention list: the Queue's counts are tiles and the problems are rows on Needs you. One namespace filter in the address (`?ns=`) narrows every section at once. With no site configured there is no site tile and no Sites section. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. Parked jobs have their own group, each row saying when it comes back; a parked job stays in the feed whatever its age, so it never vanishes. A blocked job that asks a question is marked Question, its row says what it asks, and its drawer shows the question instead of a command. Stale jobs appear in one place, the Stale jobs panel, by the Worker's own rules (src/stale-jobs.ts): the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
+Its rail count is the number of critical problems on Needs you. It has no Queue panel and no attention list: the Queue's counts are tiles and the problems are rows on Needs you. One namespace filter in the address (`?ns=`) narrows every section at once. With no site configured there is no site tile and no Sites section. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). In the Queue, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. A queued job somebody began (`capsid_work_jobs` action `begin`, docs/work-queue.md) says who started it and how long ago. Parked jobs have their own group, each row saying when it comes back; a parked job stays in the feed whatever its age, so it never vanishes. A blocked job that asks a question is marked Question, its row says what it asks, and its drawer shows the question instead of a command. Stale jobs appear in one place, the Stale jobs panel, by the Worker's own rules (src/stale-jobs.ts): the list's old "Stale" group was folded into it (Dustin, 2026-10-09).
 
 A page with three or more sections that is taller than two screens of the window gets an "On this page" bar of links to them (Health in most windows, the Queue with a long list). A section inside another is not an entry, so Health's bar names its sections and not their panels.
 
@@ -107,6 +107,7 @@ These read more when they open, and not on every poll:
 - **Agents**, in its Claims tab, reads `GET /portal/api/claims` (and exports the aggregate on screen as three CSV files, by agent, waits and usage, under the filter in force; a cell a spreadsheet would read as a formula is prefixed with an apostrophe): what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 - **Shared code** reads `GET /portal/api/shared-code` when it opens (below).
+- **Library** reads `GET /portal/api/library` when it opens, searches and opens a document (below).
 
 ## Scheduled tasks
 
@@ -134,6 +135,16 @@ A pass costs up to nine requests per package. No rate limit is published for npm
 **Exact times** in a panel or a detail field are shown in the viewer's own time zone with UTC beside it, in a `<time>` element, and need no hover. Rows keep relative times.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
+
+## Library
+
+The knowledge store, read-only (capsid/decisions.md 2026-10-09: Portal review item 4, and experience review answer 11). Writing stays in chat and with drivers, so the page has one button, Search. `GET /portal/api/library` (`src/portal-library.ts`) answers one of three ways, by its query string:
+
+- **No argument:** the shelves, over every namespace. Decisions are documents of type `decision`; Rulings are paths under `rulings/`; Research is paths under `research/`. Nothing under `archive/` is shelved. One statement ordered by namespace and path, so it walks the unique index and stops at 500 rows; past that the page says to search.
+- **`?q=`:** full text search over every namespace, the best 25 by bm25, with the matched words marked. A query FTS5 refuses (a hyphen, a quote) is retried as a phrase.
+- **`?ns=&path=`:** one document, its text as written, and the typed edges declared on it and pointing at it. Every job id in the text opens that job's drawer over the page.
+
+Search, the document read and the edges go through `src/doc-reads.ts`, the same readers `capsid_find_docs` action `search` and `capsid_read_doc` actions `read` and `links` use, so the Library and chat cannot disagree. The route writes nothing, not even the conventions-read row (that row records an agent loading the rules). The page's own state is in its address: `?q=` for a search and `?doc=<namespace>/<path>` for a document, so either can be reloaded or shared. Tests: test-integration/portal-library.test.ts, dashboard/e2e/library.spec.ts.
 
 ## Shared code
 
@@ -261,12 +272,28 @@ To set it up, the seat, one step at a time:
 
 Until the key is set the panel says so and the `push` step sends nothing. The improve loop's attempt code cannot see the key (`AttemptEnv`).
 
+## Daily digest
+
+Everything that is not urgent enough for a phone alert waits for one email a day (`src/digest.ts`; docs/design/design-merge-pipeline.md section 5, DECIDE 5). Once a UTC day after 12:00 the tick's `digest` step mails `ALERT_EMAIL`: the pull requests waiting on Dustin by class (a typed one says to approve it by typing its number), questions, blocked jobs, rollbacks, and what finished or became ready since the last digest that was sent. It reads the same reader as `capsid_work_jobs` action `list` view `digest`, so the mail and the Portal agree. A send Cloudflare refuses is recorded for the day (KV `digest:last`) and shown in Settings, and the next day's digest covers both days.
+
+**It does nothing until Email Routing is on.** Cloudflare sends from a Worker only from a domain with Email Routing turned on and only to a verified destination address, and turning it on is an account setting only Dustin can change. So the digest needs the `send_email` binding `EMAIL`, `ALERT_EMAIL`, `ALERT_FROM` and the var `EMAIL_ROUTING` set to `"on"`. Until all four are set, every tick returns at once, and Settings, **Daily digest**, says which is missing.
+
+Turning it on, one step at a time:
+1. **Dustin:** at dash.cloudflare.com open the dustinedwards.info zone, then **Email**, **Email Routing**. If it says the domain already receives mail through another provider (existing MX records), stop and tell the seat: turning Email Routing on would move that mail.
+2. **Dustin:** press **Get started** (or **Enable Email Routing**), then **Add records and enable**. Cloudflare adds the MX and SPF records itself.
+3. **Dustin:** on **Destination addresses**, **Add destination address**: the address the digest should go to.
+4. **Dustin:** open the verification email Cloudflare sends there and press **Verify email address**. The address shows **Verified**.
+5. **The seat:** in the real `wrangler.jsonc` (never committed), add `"send_email": [{ "name": "EMAIL", "destination_address": "<the verified address>" }]` and the vars `ALERT_EMAIL` (the verified address), `ALERT_FROM` (`capsid@dustinedwards.info`) and `EMAIL_ROUTING: "on"`. Then `npm run deploy`.
+6. **Dustin:** Settings, **Daily digest**, now says **On**. The first email arrives after 12:00 UTC.
+
+The same binding and addresses also turn on the watcher's site health mail (above, "Site repairs").
+
 ## Using it
 
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Settings' Automation and namespaces section and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
-  - `g` then a letter goes to a page: `y` Needs you, `q` queue, `p` pull requests, `h` health, `l` activity, `a` agents, `k` packages, `x` shared code, `e` settings. With no package configured, `k` does nothing. The old views' letters (`o`, `s`, `i`, `d`, `b`, `c`, `n`, `v`) were retired with them (job_d62abdbfc270 PR 7).
+  - `g` then a letter goes to a page: `y` Needs you, `q` queue, `p` pull requests, `h` health, `l` activity, `a` agents, `k` packages, `x` shared code, `b` library, `e` settings. With no package configured, `k` does nothing. The old views' letters (`o`, `s`, `i`, `d`, `b`, `c`, `n`, `v`) were retired with them (job_d62abdbfc270 PR 7); `b` has since been given to the Library.
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
   - `f` goes to the Queue's text filter. A namespace filter belongs to its page and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
   - `r` refreshes and `t` switches light and dark. The top bar's theme button is named "Dark theme" and is pressed while dark is in effect. **Settings, Display** chooses System, Light or Dark: System removes the saved choice (localStorage `wf-theme`), so the device's setting applies.
@@ -279,7 +306,7 @@ Until the key is set the panel says so and the `push` step sends nothing. The im
 
 `dashboard/` is its own package (React 19, Vite, wouter), with its own lockfile and README.
 - **Develop:** `npm --prefix dashboard run dev` serves it with fake sample data (`dashboard/dev/sample-feed.json`, checked against `OpsFeed`).
-- **Design tokens:** every colour, font and shadow is a custom property from Capsomer, the shared design system (`capsomer` in `dashboard/package.json`, pinned to a release tag; `main.tsx` imports `capsomer/tokens.css`). Capsomer's `tokens/palette.mjs` generates the colours and its own `npm run check` refuses any text or control pair below WCAG 2.2's bar (4.5:1 for text, 3:1 for a boundary) in either theme; `dashboard/e2e/contrast.spec.ts` checks the colours as painted. Capsomer v0.5.0, the pinned release, ships the purple family palette that arrived in v0.3.0 (accent `#8c5fd2`, with `--accent-text` for text, links in `--accent-text`) and replaced the Portal's own seed `#4F2D7F` of 2026-09-30; neutrals and statuses moved a few hex steps and every pair still passes the contrast check. The Portal is excluded from Cloudflare Web Analytics and its page CSP stays strict (capsid/decisions.md 2026-10-03, analytics): it is a private tool, so conventions 7.9 keeps it out of analytics and the CSP names no analytics host. Capsomer's rules sit in `cap.*` layers, so the Portal's own unlayered styles win. Change a colour in Capsomer, never here.
+- **Design tokens:** every colour, font and shadow is a custom property from Capsomer, the shared design system (`capsomer` in `dashboard/package.json`, pinned to a release tag; `main.tsx` imports `capsomer/tokens.css`). Capsomer's `tokens/palette.mjs` generates the colours and its own `npm run check` refuses any text or control pair below WCAG 2.2's bar (4.5:1 for text, 3:1 for a boundary) in either theme; `dashboard/e2e/contrast.spec.ts` checks the colours as painted. Capsomer v0.5.0, the pinned release, ships the purple family palette that arrived in v0.3.0 (accent `#8c5fd2`, with `--accent-text` for text, links in `--accent-text`) and replaced the Portal's own seed `#4F2D7F` of 2026-09-30; neutrals and statuses moved a few hex steps and every pair still passes the contrast check. The Portal is excluded from Cloudflare Web Analytics and its page CSP stays strict (capsid/decisions.md 2026-10-03, analytics): it is a private tool, so conventions-web.md rule 11 keeps it out of analytics and the CSP names no analytics host. Capsomer's rules sit in `cap.*` layers, so the Portal's own unlayered styles win. Change a colour in Capsomer, never here.
 - **Deploy:** `scripts/deploy.mjs` builds it into `dashboard/dist` before every deploy, and the Worker serves those files as its static assets. A failed build stops the deploy.
 - **Browser tests:** `npm run test:browser`, after `npm run build:dashboard`, drives the built app in Chromium through Playwright (`dashboard/e2e`). It runs under `vite preview` with the dev mock and the Worker's own page CSP (`src/dashboard-csp.ts`). CI runs it after the build. What it covers:
   - the confirm dialog: every Preview ends in a preview, a refusal, a timeout or a stated reason;
@@ -330,7 +357,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
 - **`GET /portal/api/maintenance`** (`src/portal-maintenance.ts`) returns `PortalMaintenance`, uncached: the list the daily maintenance pass stored, the one `capsid_run_improve` action `status` serves, with `generated` null before the first pass, and `read`, the open pull requests, branches, repos, compared deploys and driver disk readings the pass read. It reads KV only.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `capsid_admin_read_claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
-- **`GET /portal/api/push`** and **`POST /portal/api/push`** (`src/push.ts`), the phone alerts above. The GET returns `PortalPush`: the VAPID public key (null, with the reason, when the key is not set) and the devices with alerts on, never an endpoint. The POST takes `{op: "on", subscription, label}`, `{op: "off", id}` or `{op: "test"}` behind the preview's checks (same-origin, the body cap, CSRF), and returns `PortalPush`. Refusals: 400 a bad subscription or op, 409 a device already off or ten already on, 503 no key.
+- **`GET /portal/api/push`** and **`POST /portal/api/push`** (`src/push.ts`), the phone alerts above. The GET returns `PortalPush`: the VAPID public key (null, with the reason, when the key is not set), the devices with alerts on (never an endpoint), and `digest`, the daily digest's state ("Daily digest", above). The POST takes `{op: "on", subscription, label}`, `{op: "off", id}` or `{op: "test"}` behind the preview's checks (same-origin, the body cap, CSRF), and returns `PortalPush`. Refusals: 400 a bad subscription or op, 409 a device already off or ten already on, 503 no key.
 - **`POST /portal/api/sign-out`**, above.
 - **Any other `/portal/api/` path** is a JSON 404 behind the gate, never the app's page.
 - **`/portal/`** and everything under it serves the built app from the `ASSETS` binding, only after the gate. The page gets `no-store` and its own CSP (scripts, styles and fetches from this origin only); hashed files under `/portal/assets/` are cached privately for a year. A browser loading an unknown path as a page gets the app's page, so the app's own routes load; a missing file stays a 404. With no `ASSETS` binding the admin gets a 503 saying the Portal is not deployed.

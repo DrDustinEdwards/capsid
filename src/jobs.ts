@@ -26,7 +26,7 @@ import { logEvent } from "./log";
 // jobs-holder.ts holds the transitions the claiming driver makes; jobs-seat.ts holds
 // the ones made on a job the caller does not hold (admin fail, supersede, resume);
 // jobs-edit.ts holds the seat's edit of a queued or blocked job, and jobs-park.ts its
-// parking of a queued one;
+// parking of a queued one; jobs-begin.ts holds the started label any writer may set;
 // jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
 // what they share. This module is the one other modules import from, and it keeps the
 // lease sweep and the capsid_run_improve action status summary.
@@ -36,6 +36,7 @@ export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, isQue
 export { adminFailJob, completeAsCaller, failAsCaller, recordAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, unparkJob } from "./jobs-park";
+export { beginJob } from "./jobs-begin";
 export type { JobResult } from "./jobs-transition";
 
 // The lease sweep, run by the five-minute improve tick. A claim whose lease has
