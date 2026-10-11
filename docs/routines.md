@@ -81,6 +81,16 @@ Step 7 is claimless complete (job_e68de044f8a4, "The PR is the claim"): a caller
 6. Capsid POSTs the fire text (`job_id`, `namespace`, `model_recommended`, one per line) with the token, `anthropic-version: 2023-06-01` and the beta header `experimental-cc-routine-2026-04-01`, and gives up after 15 seconds.
 7. On any 2xx it writes a `job-routine-fired` audit row with the routine id, session id, session URL and token secret name, and returns the session. The row is written even when the answer is unreadable, since a 2xx means a session exists, and if D1 fails then, the answer still carries the session URL and says it was not recorded. The job stays queued: the session works it without a claim. In a second guarded batch it then marks the job started, as action `begin` does (`started_by` the seat, `started_at`, the mirror, and a `job-started` audit row carrying the session URL). If the job moved meanwhile, the answer says it was not marked, and the session still runs.
 
+**Reading the answer** (`src/routine-fire.ts`). Anthropic documents it as `{"type":"routine_fire","claude_code_session_id":"session_01...","claude_code_session_url":"https://claude.ai/code/session_01..."}`. The first real fire answered 200 and was not read, so the answer is now read leniently and what is kept is still checked:
+
+- The body is read once as text and parsed as JSON. A body that is not a JSON object has its head recorded (below).
+- A session id is `session_` and 8 to 128 letters, digits, dashes or underscores.
+- A session URL must parse, be `https`, have no port, sit on `claude.ai` or a subdomain of it, and hold a `session_...` path segment. Only its origin and path are kept: a query string and a fragment are dropped.
+- A good id with a missing or unreadable URL gets `https://claude.ai/code/<id>`. A good URL with an unreadable id gives its id back.
+- When neither reads, the `job-routine-fired` row also carries `answer`: whether the body was a JSON object, its top-level keys (at most 20), the `type` value, and the first 200 characters of up to 10 string fields, each passed through `src/redact.ts` with the token and any non-printable character removed. A body that is not JSON records its first 200 characters the same way. The answer carries no secret, but the record is bounded and redacted anyway. The returned note says the answer named no readable session id or URL, so the next failure can be read from that row.
+
+Whatever is stored or returned matches the id and URL shapes above, so nothing else from the answer reaches the audit row except the bounded `answer` description.
+
 Each refusal is named in its first word. None writes a `job-routine-fired` row except `routine_unreachable`: with no answer the session may exist, so it is recorded with `outcome: "unknown"` and a second fire waits out the 30 minutes.
 
 | refusal | cause |
