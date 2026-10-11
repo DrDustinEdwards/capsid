@@ -40,7 +40,7 @@ Facts from Cloudflare's documentation, read from its source (cloudflare/cloudfla
 
 In d1-dump v0.4.1 (`src/runs.ts`, the tag every site pins), `pruneDumps` lists the runs, picks the stale ones with `selectStaleRuns`, and passes every key of every stale run to one `deleteInChunks` call, 1000 keys a call. Nothing catches an error. One refused key therefore throws out of `pruneDumps`: no stale run after that chunk is deleted, and the throw reaches the caller's nightly run. In Capsid that is `pruneR2` inside `exportAndPrune` (`src/backup.ts`): the marker and the markdown mirror are already written, but the CSP report prune, the `document_versions` and `audit_log` prune and the `backup:last-ok` stamp are skipped, so the run reports an error and `/health` warns once the stamp is 26 hours old. The same young run is stale again the next night, so the failure repeats every night until that run is older than the lock.
 
-The fix is on d1-dump branch `claude/prune-skip-locked` (commit 805b12e, not yet released): each stale run is deleted on its own, `_complete.json` first and then the rest, so a partly deleted run never looks complete. A refusal with error 10069 skips that run, counts it in the result's new `locked` field (`kept + pruned + locked` is every run), and the prune goes on to the other runs. Any other delete failure still throws. A later prune selects the skipped run again and deletes it once the lock has aged off it.
+The fix is in d1-dump pull request #17 (branch `claude/prune-skip-locked`, not yet released): each stale run is deleted on its own, `_complete.json` first and then the rest, so a partly deleted run never looks complete. A refusal with error 10069 skips that run, counts it in the result's new `locked` field (`kept + pruned + locked` is every run), and the prune goes on to the other runs. Any other delete failure still throws. A later prune selects the skipped run again and deletes it once the lock has aged off it.
 
 ### Why 13 days
 
@@ -59,11 +59,11 @@ What a refused delete costs, once the fix is in: one run's objects stay up to 13
 
 ### Order
 
-1. Merge `claude/prune-skip-locked` in d1-dump and tag a release.
+1. Merge d1-dump pull request #17 and tag a release.
 2. Bump every site that calls `pruneDumps` to that tag and deploy it. Capsid's bump should also carry the new `locked` count into its backup summary, beside `json_backups_kept` and `json_backups_pruned`.
 3. Only then add the lock to that site's bucket. A bucket locked while its site still runs v0.4.1 fails its nightly run on any day a same-day duplicate is pruned.
 
-Safe to lock first, before any bump: `dustinedwards-backups`, because the dustinedwards site runs no d1-dump today (`src/offaccount.ts`), so nothing prunes there; and `carrel-backups` if Carrel's Worker does not call `pruneDumps` (check before locking it). The other five wait for their site's bump.
+Safe to lock first, before any bump: `dustinedwards-backups`, because the dustinedwards site runs no d1-dump today (`src/offaccount.ts`), so nothing prunes there (if its d1-dump job, job_e40ec706c10a, lands first, it must pin the fixed release before this lock); and `carrel-backups` if Carrel's Worker does not call `pruneDumps` (check before locking it). The other five wait for their site's bump.
 
 ### Steps, one bucket at a time
 
