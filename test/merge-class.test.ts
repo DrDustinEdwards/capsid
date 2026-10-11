@@ -20,6 +20,7 @@ function pr(over: Partial<PrFacts> = {}): PrFacts {
     body: "Closes job_4c0ecc28548b.",
     changedPaths: ["docs/schema.md"],
     filesProblem: null,
+    changedLines: 40,
     ciConclusion: "success",
     ciNote: "3 check(s) green",
     ciSteps: AUTO_MERGE_REQUIRED_CI.capsid.map((r) => ({ ...r, conclusion: "success" })),
@@ -29,7 +30,6 @@ function pr(over: Partial<PrFacts> = {}): PrFacts {
     jobId: "job_4c0ecc28548b",
     jobClaimedBy: "agent:capsid-driver",
     jobStatus: "done",
-    driverAgent: { name: "capsid-driver", kind: "driver", revoked: false },
     jobPrUrls: ["https://github.com/example-org/sample/pull/23"],
     ...over,
   };
@@ -57,6 +57,21 @@ test("each file's path class, and a PR's is its riskiest file's", () => {
 
 test("a PR that passes the policy is auto", () => {
   assert.deepEqual(classOf(pr()).class, "auto");
+});
+
+test("a PR over the size cap is approve, with the reason 'over the size cap', whatever else it fails", () => {
+  const big = classOf(pr({ changedLines: 1001 }));
+  assert.equal(big.class, "approve");
+  assert.deepEqual(big.reasons, ["over the size cap: 1001 changed lines, more than 1000"]);
+  // Red CI as well: the size reason leads, and the approval still waits for green.
+  const red = classOf(pr({ changedLines: 5000, ciConclusion: "failure", ciNote: "test=failure" }));
+  assert.equal(red.class, "approve");
+  assert.equal(red.reasons[0], "over the size cap: 5000 changed lines, more than 1000");
+  assert.match(red.reasons.join(" "), /CI is failure: an approval waits for green/);
+  // Money and the seat still outrank it.
+  assert.equal(classOf(pr({ changedLines: 5000, changedPaths: ["src/stripe.ts"] })).class, "typed");
+  assert.equal(classOf(pr({ changedLines: 5000, changedPaths: ["migrations/0041_x.sql"] })).class, "seat");
+  assert.equal(classOf(pr({ changedLines: 1000 })).class, "auto");
 });
 
 test("PLANT: a money file in a docs PR is typed, even when everything else would merge", () => {

@@ -7,6 +7,7 @@ import {
   AUTO_MERGE_POLICY_PATH,
   AUTO_MERGE_REFUSED_PATHS,
   AUTO_MERGE_REQUIRED_CI,
+  AUTO_MERGE_SIZE_CAP,
   POLICY_CHECKS,
   ciVerdict,
   evaluatePolicy,
@@ -52,6 +53,7 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     body: "Closes job_4c0ecc28548b.\n\nRefuse a swallowed parameter tag.",
     changedPaths: ["docs/schema.md"],
     filesProblem: null,
+    changedLines: 40,
     ciConclusion: "success",
     ciNote: "3 check(s) green",
     ciSteps: CAPSID_CI.map((r) => ({ ...r, conclusion: "success" })),
@@ -61,7 +63,6 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     jobId: "job_4c0ecc28548b",
     jobClaimedBy: "agent:capsid-driver",
     jobStatus: "done",
-    driverAgent: { name: "capsid-driver", kind: "driver", revoked: false },
     jobPrUrls: ["https://github.com/DrDustinEdwards/capsid-mcp/pull/23"],
     ...over,
   };
@@ -87,36 +88,38 @@ test("body_names_job: a PR body with no job id never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "body_names_job");
 });
 
-test("author_is_driver: a job nobody claimed never merges", () => {
-  const verdict = evaluate(greenPr({ jobClaimedBy: null, driverAgent: null }));
-  assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
+// Version 7 (job_e68de044f8a4): the pull request is the claim. A cloud session signs in as
+// the admin login and completes a job without claiming it, so the job's holder is that
+// login, not a minted driver. author_is_driver is gone; every other check still judges.
+
+test("v7: a PR from a job completed without a claim passes every check", () => {
+  for (const jobClaimedBy of ["access:dustin@example.com", "agent:seat", "opkey:9f2c1a", "github:DrDustinEdwards"]) {
+    const verdict = evaluate(greenPr({ jobClaimedBy }));
+    assert.equal(verdict.merge, true, `${jobClaimedBy}: ${verdict.merge ? "" : verdict.why}`);
+    assert.deepEqual(verdict.merge ? [...verdict.passed].sort() : [], [...POLICY_CHECKS].sort());
+  }
 });
 
-test("author_is_driver: a PR from a non-driver author never merges", () => {
-  // The seat is a real minted agent and still not a driver. This is the check that
-  // stops a human's own PR being merged by the Worker on the seat's credential.
-  const verdict = evaluate(
-    greenPr({ jobClaimedBy: "agent:seat", driverAgent: { name: "seat", kind: "seat", revoked: false } })
-  );
-  assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
-  assert.match(verdict.merge === false ? verdict.why : "", /kind 'seat', not a driver/);
+test("v7: author_is_driver is no check of the policy", () => {
+  assert.equal((POLICY_CHECKS as readonly string[]).includes("author_is_driver"), false);
 });
 
-test("author_is_driver: a revoked driver's open work waits for the seat", () => {
-  const verdict = evaluate(
-    greenPr({ driverAgent: { name: "capsid-driver", kind: "driver", revoked: true } })
-  );
+test("v7: a job id no job in this namespace carries never merges", () => {
+  const verdict = evaluate(greenPr({ jobClaimedBy: null, jobStatus: null, jobPrUrls: [] }));
   assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
-  assert.match(verdict.merge === false ? verdict.why : "", /revoked/);
+  assert.equal(verdict.merge === false && verdict.failed, "job_handed_on");
 });
 
-test("author_is_driver: a claim by an opkey rather than an agent never merges", () => {
-  const verdict = evaluate(greenPr({ jobClaimedBy: "opkey:9f2c1a", driverAgent: null }));
-  assert.equal(verdict.merge, false);
-  assert.equal(verdict.merge === false && verdict.failed, "author_is_driver");
+// The size cap (version 7): over AUTO_MERGE_SIZE_CAP changed lines waits for a person.
+
+test("size_within_cap: a 1,001-line PR never merges, and a 1,000-line one does", () => {
+  assert.equal(AUTO_MERGE_SIZE_CAP, 1000);
+  const over = evaluate(greenPr({ changedLines: 1001 }));
+  assert.equal(over.merge, false);
+  assert.equal(over.merge === false && over.failed, "size_within_cap");
+  assert.match(over.merge === false ? over.why : "", /over the size cap: 1001 changed lines, more than 1000/);
+  const at = evaluate(greenPr({ changedLines: 1000 }));
+  assert.equal(at.merge, true, at.merge ? "" : at.why);
 });
 
 // the PR itself, not only the job it names
@@ -177,10 +180,10 @@ test("pr_author_allowed: each allowlisted author proceeds, in any letter case", 
   }
 });
 
-test("pr_author_allowed sits with author_is_driver, after the job is named", () => {
+test("pr_author_allowed sits after the job is named, and before the job is judged", () => {
   const at = POLICY_CHECKS.indexOf("pr_author_allowed");
   assert.equal(POLICY_CHECKS[at - 1], "body_names_job");
-  assert.equal(POLICY_CHECKS[at + 1], "author_is_driver");
+  assert.equal(POLICY_CHECKS[at + 1], "job_handed_on");
 });
 
 test("paths_not_refused: src/jobs.ts and src/outcome-prs.ts refuse, since they write what pr_recorded_for_job reads", () => {
@@ -834,7 +837,11 @@ test("the shipped policy document names exactly the checks the code enforces", (
   // capsid is covered for docs and dashboard CSS only (D6 of 2026-10-03, version 6).
   assert.deepEqual(parsed.policy.namespaces, ["dustinedwards", "carrel", "capsomer", "capsid"]);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
-  assert.equal(parsed.policy.version, "6");
+  // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4).
+  assert.equal(parsed.policy.version, "7");
+  // The cap is a number in the code; the document states the same one in its check.
+  const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
+  assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));
   // The two allowed logins, exactly as GitHub reports them, and no others.
   assert.deepEqual(parsed.policy.authors, ["DrDustinEdwards", "capsid-repo-access[bot]"]);
 });
@@ -876,10 +883,10 @@ test("the decline audit row names the policy version, the PR, the failing check 
       "head_in_base_repo",
       "body_names_job",
       "pr_author_allowed",
-      "author_is_driver",
       "job_handed_on",
       "pr_recorded_for_job",
       "base_is_default_branch",
+      "size_within_cap",
     ],
     at: "2026-09-12T03:00:00.000Z",
   });
@@ -974,7 +981,7 @@ function tickRoutes(changedFiles: string[], headRepo: string | null = "DrDustinE
         },
       ],
     },
-    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename })) },
+    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename, additions: 1, deletions: 0 })) },
     [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
       body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
     },
@@ -1135,11 +1142,37 @@ test("PLANT v2: a PR whose CI lacks the integration suite is refused by the tick
   assert.match(outcome.why ?? "", /Integration tests/);
 });
 
-test("PLANT v2: a PR from the seat's job is refused by the tick", async () => {
-  const { outcome, merges } = await tickPlant(["docs/schema.md"], { claimedBy: "agent:seat" });
+test("PLANT v7: a PR from a job completed without a claim is merged by the tick", async () => {
+  // Version 2 to 6 refused it as author_is_driver: the holder was not a minted driver.
+  const { outcome, merges } = await tickPlant(["docs/schema.md"], { claimedBy: "access:dustin@example.com" });
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+  assert.equal(merges, 1);
+  assert.deepEqual(outcome.passed, [...POLICY_CHECKS]);
+});
+
+test("PLANT v7: a PR whose files GitHub reports without line counts is declined by the tick, not counted as zero", async () => {
+  const routes = { ...tickRoutes([]), [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/autonomy.md" }] } };
+  const { outcome, merges } = await tickWith(await enabledEnv(), routes);
   assert.equal(merges, 0);
-  assert.equal(outcome.failed, "author_is_driver");
-  assert.match(outcome.why ?? "", /kind 'seat', not a driver/);
+  assert.equal(outcome.failed, "size_within_cap");
+  assert.match(outcome.why ?? "", /no line counts/);
+});
+
+test("PLANT v7: a 1,001-line PR is declined by the tick and held as approve", async () => {
+  const routes = {
+    ...tickRoutes([]),
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: [
+        { filename: "docs/autonomy.md", additions: 600, deletions: 1 },
+        { filename: "docs/backups.md", additions: 300, deletions: 100 },
+      ],
+    },
+  };
+  const { outcome, merges } = await tickWith(await enabledEnv(), routes);
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "size_within_cap");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.equal(outcome.merge_class?.reasons[0], "over the size cap: 1001 changed lines, more than 1000");
 });
 
 // the PR itself, through the tick
@@ -1206,7 +1239,7 @@ test("PLANT: a PR that renames a refused file to an ordinary path is refused by 
 test("PLANT: a PR that renames an ordinary file to another ordinary path is still merged by the tick", async () => {
   const routes = {
     ...tickRoutes([]),
-    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/new-name.md", previous_filename: "docs/old-name.md", status: "renamed" }] },
+    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/new-name.md", previous_filename: "docs/old-name.md", status: "renamed", additions: 0, deletions: 0 }] },
   };
   const { outcome, merges } = await tickWith(await enabledEnv(), routes);
   assert.equal(outcome.merged, true, outcome.why ?? "");
@@ -1349,7 +1382,7 @@ function paged<T>(rows: T[], wrap: (page: T[]) => unknown = (page) => page) {
 function pagedRoutes(files: string[], runs: Array<{ name: string; status: string; conclusion: string | null }>) {
   return {
     ...tickRoutes([]),
-    [`GET ${OWNER}/pulls/23/files`]: paged(files.map((filename) => ({ filename }))),
+    [`GET ${OWNER}/pulls/23/files`]: paged(files.map((filename) => ({ filename, additions: 1, deletions: 0 }))),
     [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: paged(runs, (page) => ({ total_count: runs.length, check_runs: page })),
   };
 }
@@ -1400,7 +1433,7 @@ test("a file list GitHub itself truncates is refused, not judged on what came ba
 });
 
 test("a page that fails partway is refused, not judged on the pages that loaded", async () => {
-  const files = paged(safeFiles(150).map((filename) => ({ filename })));
+  const files = paged(safeFiles(150).map((filename) => ({ filename, additions: 1, deletions: 0 })));
   const routes = {
     ...pagedRoutes([], green(1)),
     [`GET ${OWNER}/pulls/23/files`]: (body: unknown, search: URLSearchParams) =>

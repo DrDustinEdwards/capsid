@@ -1,4 +1,4 @@
-import { AUTO_MERGE_REFUSED_PATHS, type PrFacts, type PolicyVerdict } from "./auto-merge-policy";
+import { AUTO_MERGE_REFUSED_PATHS, overSizeCap, sizeCapReason, type PrFacts, type PolicyVerdict } from "./auto-merge-policy";
 import { worthReviewer } from "./model-routing";
 import { isMoneyPath } from "./scope";
 
@@ -76,7 +76,10 @@ export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false
   if (facts.headRepo === null || facts.headRepo.toLowerCase() !== facts.repo.toLowerCase()) seat.push("the head is not on the base repo");
   if (facts.baseRef !== facts.defaultBranch) seat.push(`the base is ${facts.baseRef}, not the default branch ${facts.defaultBranch}`);
   if (seat.length) return { class: "seat", path_class, reasons: seat };
-  const reasons = [`the policy stops at ${verdict.failed}: ${verdict.why}`];
+  // Over the size cap is its own reason, named first whichever check the policy stopped
+  // at, so a big pull request reads as one a person approves for its size.
+  const reasons = overSizeCap(facts) ? [sizeCapReason(facts)] : [];
+  if (verdict.failed !== "size_within_cap") reasons.push(`the policy stops at ${verdict.failed}: ${verdict.why}`);
   if (facts.ciConclusion !== "success") reasons.push(`CI is ${facts.ciConclusion}: an approval waits for green`);
   return { class: "approve", path_class, reasons };
 }

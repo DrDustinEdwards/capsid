@@ -3,7 +3,7 @@ import type { OfferedSkillWithBody } from "./job-skill-offers";
 import type { Env } from "./env";
 import type { DiskRecord } from "./maintenance-disk";
 import type { Agent } from "./agents";
-import { JOB_LEASE_SECONDS, missingForRecord, type JobRow } from "./jobs-schema";
+import { JOB_LEASE_SECONDS, missingForRecord, type JobRow, type StartedNotice } from "./jobs-schema";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import { loadRecordRows, recordFor } from "./agent-record";
 import type { JobOutcomeRow } from "./job-outcomes";
@@ -157,6 +157,9 @@ export interface JobResult {
   // this call named, or why that could not be checked (src/job-overlaps.ts). Absent when the
   // call named no pull request of the namespace's repo.
   overlaps?: OverlapReport;
+  // A job somebody marked started (src/jobs-begin.ts): who and when, so a second session
+  // reading it knows. begin, claim and list for one id return it. Never a refusal.
+  started?: StartedNotice;
   // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
   offered_skills?: OfferedSkillWithBody[];
   // claim with session_key: the key minted to hold this job, shown once (src/job-session-key.ts).

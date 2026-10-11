@@ -29,7 +29,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "edit", "park", "unpark"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "begin", "edit", "park", "unpark"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // Four hours. Long enough for a driver to do a real job without heartbeating on a
@@ -88,8 +88,30 @@ export interface JobRow {
   model_recommended?: string | null;
   effort_recommended?: string | null;
   routing_reason?: string | null;
+  // The started label (migrations/0042, src/jobs-begin.ts): who marked a queued job
+  // started, and when. Not a lease: it never expires and refuses nothing. NULL until
+  // somebody begins the job.
+  started_at?: string | null;
+  started_by?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// The started label as a reader is told it (src/jobs-begin.ts): who began the job, when,
+// and what that means. Null for a job nobody began.
+export interface StartedNotice {
+  by: string;
+  at: string;
+  note: string;
+}
+
+export function startedNotice(job: Pick<JobRow, "started_at" | "started_by">): StartedNotice | null {
+  if (!job.started_by || !job.started_at) return null;
+  return {
+    by: job.started_by,
+    at: job.started_at,
+    note: `${job.started_by} started this job at ${job.started_at}. A label, not a lease: nothing is refused, but that session may already have a branch or a pull request for it.`,
+  };
 }
 
 // The retry cap: two corrections, then a human. Each round is defensible on its own,
