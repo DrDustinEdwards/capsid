@@ -33,7 +33,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "4.20260702.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.5.0",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.6.0",
     "@modelcontextprotocol/client": "2.2.0",
     "@types/node": "24.13.3",
     "jscpd": "5.3.2",
