@@ -38,6 +38,7 @@ import { handlePortalApp } from "./portal-app";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH, handleOtlpLogs, handleOtlpMetrics } from "./ops-otlp";
 import { OPS_HOOKS_PATH, handleOpsHooks } from "./ops-hooks";
+import { ACCESS_SYNC_PATH, handleAccessSync } from "./access-sync";
 import {
   handlePortalActivity,
   handlePortalApiNotFound,
@@ -666,6 +667,7 @@ export const defaultHandler = {
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
+    if (url.pathname === ACCESS_SYNC_PATH && request.method === "POST") return handleAccessSync(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
   if (url.pathname === RUNNER_KEY_PATH && request.method === "POST") return handleRunnerKey(request, env);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
