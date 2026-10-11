@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "./env";
 import { legacyAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
+import { recordStepUp } from "./step-up";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
@@ -104,7 +105,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
   defineAdminOperations(server, ctx);
 
   // Before any registration, so every tool registered below is wrapped.
-  guardRegistrations(server, agent, observeAdminWrite);
+  guardRegistrations(server, agent, observeAdminWrite, agent.signedInAt === undefined ? undefined : () => recordStepUp(env.APP_KV, agent.actor, agent.signedInAt));
 
   if (surface === "admin") {
     registerCapsidAdminTools(server, ctx.ops);

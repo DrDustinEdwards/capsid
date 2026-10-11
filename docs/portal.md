@@ -204,7 +204,7 @@ A site may let Capsid call an allowlist of its own repair tools (job_09e5f6cbf78
 
 ## Site keys
 
-A site's operator key is the site API's key (DrDustinEdwards/site-api): the site's Worker holds it as `CARREL_SITE_KEY`, and Carrel holds the same value as `SITE_<NAMESPACE>_KEY` (upper case, dashes as underscores) to call that site. `capsid_admin_set_site_key` (`src/site-key.ts`), a Capsid Admin tool, mints a new one and sets it on both sides through the Cloudflare API. It is admin only, and from an OAuth session it needs a sign-in in the last 15 minutes (docs/auth.md, the Capsid Admin endpoints and their step-up).
+A site's operator key is the site API's key (DrDustinEdwards/site-api): the site's Worker holds it as `CARREL_SITE_KEY`, and Carrel holds the same value as `SITE_<NAMESPACE>_KEY` (upper case, dashes as underscores) to call that site. `capsid_admin_set_site_key` (`src/site-key.ts`), a Capsid Admin tool, mints a new one and sets it on both sides through the Cloudflare API. It is admin only, and from an OAuth session it needs an Access sign-in or a step-up action in the last 2 hours, and a sign-in within 12 hours (docs/auth.md, the Capsid Admin endpoints and their step-up).
 
 - **The value is never shown.** It is not returned, logged, written to the audit row or put in an error. It exists in that call's memory and in the two secrets.
 - **The token.** `CF_SECRETS_TOKEN`, a Cloudflare API token apart from `CF_OPS_TOKEN` because it can write: **Account / Workers Scripts / Edit**. The account is `CF_ACCOUNT_ID`, or `R2_ACCOUNT_ID` where that is unset. Unset, nothing is minted, and a 403 from Cloudflare says the token needs that permission.

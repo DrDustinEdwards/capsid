@@ -2,16 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { checkScope, needsStepUp, STEP_UP, STEP_UP_WINDOW_MS, TOOL_GRANTS } from "../src/scope.ts";
+import { checkScope, guardRegistrations, needsStepUp, STEP_UP, STEP_UP_MAX_MS, STEP_UP_WINDOW_MS, TOOL_GRANTS } from "../src/scope.ts";
 import { buildAdminServer } from "../src/server.ts";
+import { readLastStepUp, recordStepUp } from "../src/step-up.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The step-up (src/scope.ts STEP_UP): a risky Capsid Admin action needs an Access
-// sign-in in the last 15 minutes from an OAuth session. A key holder has no session and
+// sign-in or a step-up action in the last 2 hours (each step-up action resets that clock),
+// and never more than 12 hours after the sign-in, from an OAuth session. A key holder has no session and
 // is not stepped up. The refusal comes from checkScope, before the handler runs.
 
 const MINUTE = 60 * 1000;
-const signedIn = (msAgo: number | null) => adminAgentForEmail("admin@example.com", msAgo === null ? null : Date.now() - msAgo);
+const HOUR = 60 * MINUTE;
+const signedIn = (msAgo: number | null, lastActionMsAgo: number | null = null): Agent => ({
+  ...adminAgentForEmail("admin@example.com", msAgo === null ? null : Date.now() - msAgo),
+  lastStepUpAt: lastActionMsAgo === null ? null : Date.now() - lastActionMsAgo,
+});
 
 async function call(agent: Agent, name: string, args: Record<string, unknown>) {
   const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({}).kv }), agent);
@@ -90,8 +96,61 @@ test("a key holder (no session) is not stepped up: its key is the credential", (
   assert.match(checkScope(signedIn(STEP_UP_WINDOW_MS + MINUTE), { tool: "capsid_admin_set_site_key", grant: "write", admin: true, stepUp: true }) ?? "", /step-up required/);
 });
 
-test("the window edge: exactly 15 minutes passes, a minute more is refused", () => {
-  const need = { tool: "capsid_admin_run_controls", action: "perform", grant: "write" as const, admin: true, stepUp: true };
-  assert.equal(checkScope(signedIn(STEP_UP_WINDOW_MS - 1000), need), null);
-  assert.match(checkScope(signedIn(STEP_UP_WINDOW_MS + MINUTE), need) ?? "", /step-up required/);
+const need = { tool: "capsid_admin_run_controls", action: "perform", grant: "write" as const, admin: true, stepUp: true };
+
+test("the window edge: allowed at 1h59 after sign-in, refused at 2h01 with no activity", () => {
+  assert.equal(checkScope(signedIn(2 * HOUR - MINUTE), need), null);
+  assert.match(checkScope(signedIn(2 * HOUR + MINUTE), need) ?? "", /step-up required/);
+});
+
+test("a step-up action slides the window: allowed at 3h when an action happened at 1h30", () => {
+  assert.equal(checkScope(signedIn(3 * HOUR, 90 * MINUTE), need), null);
+  // The action itself is stale: 1h30 ago is 3h after sign-in only if the action was at 1h30; at 2h01 since it, refused.
+  assert.match(checkScope(signedIn(5 * HOUR, 2 * HOUR + MINUTE), need) ?? "", /step-up required/);
+});
+
+test("the cap: refused at 12h01 after sign-in even with activity a minute ago", () => {
+  assert.equal(checkScope(signedIn(12 * HOUR - MINUTE, MINUTE), need), null);
+  assert.match(checkScope(signedIn(STEP_UP_MAX_MS + MINUTE, MINUTE), need) ?? "", /step-up required/);
+});
+
+test("the refusal states the rule", () => {
+  const text = checkScope(signedIn(STEP_UP_MAX_MS + MINUTE, MINUTE), need) ?? "";
+  assert.match(text, /last 2 hours/);
+  assert.match(text, /never more than 12 hours after the sign-in/);
+});
+
+test("a successful step-up action records the reset, a failed one does not", async () => {
+  const { kv, puts } = fakeKv({});
+  const agent = signedIn(MINUTE);
+  const server = buildAdminServer(fakeEnv({ APP_KV: kv }), agent);
+  const client = new Client({ name: "step-up", version: "1.0.0" });
+  const [c, sv] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(sv), client.connect(c)]);
+  const r = (await client.callTool({ name: "capsid_admin_set_site_key", arguments: { namespace: "sample" } })) as { isError?: boolean };
+  await client.close();
+  // The handler refuses for want of CF_SECRETS_TOKEN, so no reset is recorded.
+  assert.equal(r.isError, true);
+  assert.equal(puts.some((p) => p.key.startsWith("step-up:last:")), false);
+  await recordStepUp(kv, agent.actor, 1000, 123);
+  assert.equal(await readLastStepUp(kv, agent.actor, 1000), 123);
+  // Another session's reset (a different sign-in) does not count.
+  assert.equal(await readLastStepUp(kv, agent.actor, 2000), null);
+});
+
+test("the registrar records a reset after a successful step-up action, not after an error, a read or a key holder", async () => {
+  const run = async (agent: Agent, tool: string, args: Record<string, unknown>, result: { isError?: boolean }) => {
+    let guarded: ((...a: unknown[]) => unknown) | undefined;
+    const stub = { registerTool: (_n: string, _c: unknown, h: (...a: unknown[]) => unknown) => (guarded = h), server: { getClientVersion: () => null } };
+    let resets = 0;
+    guardRegistrations(stub as never, agent, undefined, async () => void resets++);
+    (stub.registerTool as (n: string, c: unknown, h: unknown) => unknown)(tool, { inputSchema: { action: {} } }, async () => result);
+    await guarded?.(args);
+    return resets;
+  };
+  const mint = { action: "mint", name: "sample-driver", kind: "driver", namespaces: ["sample"] };
+  assert.equal(await run(signedIn(MINUTE), "capsid_admin_manage_agents", mint, {}), 1);
+  assert.equal(await run(signedIn(MINUTE), "capsid_admin_manage_agents", mint, { isError: true }), 0);
+  assert.equal(await run(signedIn(MINUTE), "capsid_admin_manage_agents", { action: "list" }, {}), 0);
+  assert.equal(await run(signedIn(STEP_UP_WINDOW_MS + MINUTE), "capsid_admin_manage_agents", mint, {}), 0);
 });

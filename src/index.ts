@@ -6,6 +6,7 @@ import { runBackup } from "./backup";
 import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
 import type { Env, Props } from "./env";
+import { readLastStepUp } from "./step-up";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";
 import { gateRegistration, REGISTER_PATH } from "./dcr";
@@ -41,7 +42,10 @@ const apiHandler = {
     // The admin agent holds every scope; the email Access verified is the audit actor.
     const props = (ctx as ExecutionContext & { props?: Props }).props;
     const signedInAt = typeof props?.signed_in_at === "number" ? props.signed_in_at : null;
-    const admin = adminAgentForEmail(email, signedInAt);
+    const isAdminRoute = new URL(request.url).pathname === ADMIN_MCP_ROUTE;
+    const base = adminAgentForEmail(email, signedInAt);
+    // Only the admin route serves the stepped-up tools, so only it reads the last reset.
+    const admin = isAdminRoute ? { ...base, lastStepUpAt: await readLastStepUp(env.APP_KV, base.actor, signedInAt) } : base;
     // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
     // acts through. It never refuses on what the client says.
     await recordAdminInitialize(env.DB, admin.actor, request);
@@ -49,7 +53,7 @@ const apiHandler = {
     // Capsid Admin on its own route (capsid/rulings/mcp-2026-10-10.md, amendment answer
     // 2): the eight administrator tools, never on /mcp. Only the administrator's grant
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
-    if (new URL(request.url).pathname === ADMIN_MCP_ROUTE) {
+    if (isAdminRoute) {
       return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe));
     }
     return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe));

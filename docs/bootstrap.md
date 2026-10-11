@@ -166,7 +166,7 @@ keeps every authority it has today. Agents replace it, one credential at
 a time. The old key is removed when nothing needs it any more.
 
 Mint one as the admin with Capsid Admin's `capsid_admin_manage_agents` (an OAuth
-session on `/mcp/admin`, which needs a sign-in in the last 15 minutes, or the admin's
+session on `/mcp/admin`, which needs an Access sign-in or a step-up action in the last 2 hours (never more than 12 hours after the sign-in), or the admin's
 key on `/ops/mcp/admin`). A minted agent cannot mint another. An agent that can
 widen itself has no scope.
 

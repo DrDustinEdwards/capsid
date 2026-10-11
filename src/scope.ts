@@ -361,16 +361,23 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 }
 
 // STEP-UP (capsid/rulings/mcp-2026-10-10.md, the rule 9 amendment for Capsid Admin):
-// the admin actions that change who may do what, or that cannot be taken back, need an
-// Access sign-in in the last STEP_UP_WINDOW_MS. A grant lives for weeks and is
-// refreshed without a person; this is the point where a person proves they are there.
-// It is a re-authentication, not a mid-call confirmation, which the ruling's rule 12
-// rules out until client support is verified. "*" is every action of the tool.
+// the admin actions that change who may do what, or that cannot be taken back, need a
+// recent Access sign-in. A grant lives for weeks and is refreshed without a person; this
+// is the point where a person proves they are there. It is a re-authentication, not a
+// mid-call confirmation, which the ruling's rule 12 rules out until client support is
+// verified. "*" is every action of the tool.
+//
+// The window slides, as GitHub's sudo mode does: the action is allowed when the Access
+// sign-in OR the last successful step-up action was within STEP_UP_WINDOW_MS, and each
+// successful step-up action resets that clock (src/step-up.ts keeps it per admin
+// identity). STEP_UP_MAX_MS caps it: never more than that since the sign-in, whatever
+// the activity.
 //
 // Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
 // seat's operator key at its terminal) has no session to refresh and is not stepped up;
 // its key is the credential.
-export const STEP_UP_WINDOW_MS = 15 * 60 * 1000;
+export const STEP_UP_WINDOW_MS = 2 * 60 * 60 * 1000;
+export const STEP_UP_MAX_MS = 12 * 60 * 60 * 1000;
 
 export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
@@ -388,12 +395,18 @@ export function needsStepUp(tool: string, action: string | undefined): boolean {
 
 function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | null {
   if (agent.signedInAt === undefined) return null;
-  if (agent.signedInAt !== null && now - agent.signedInAt <= STEP_UP_WINDOW_MS) return null;
+  const signedIn = agent.signedInAt;
+  const lastAction = agent.lastStepUpAt ?? null;
+  const sinceSignIn = signedIn === null ? null : now - signedIn;
+  const capped = sinceSignIn !== null && sinceSignIn > STEP_UP_MAX_MS;
+  const active = sinceSignIn !== null && (sinceSignIn <= STEP_UP_WINDOW_MS || (lastAction !== null && now - lastAction <= STEP_UP_WINDOW_MS));
+  if (sinceSignIn !== null && !capped && active) return null;
   const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
-  const when = agent.signedInAt === null ? "before sign-in times were recorded" : `${Math.round((now - agent.signedInAt) / 60000)} minutes ago`;
+  const when = sinceSignIn === null ? "before sign-in times were recorded" : `${Math.round(sinceSignIn / 60000)} minutes ago`;
   return (
-    `step-up required: '${asked}' changes who may do what or cannot be taken back, so it needs an Access sign-in in the last ${STEP_UP_WINDOW_MS / 60000} minutes, ` +
-    `and this session signed in ${when}. Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`
+    `step-up required: '${asked}' changes who may do what or cannot be taken back, so it needs an Access sign-in or a step-up action in the last ${STEP_UP_WINDOW_MS / 3_600_000} hours ` +
+    `(each step-up action resets that clock) and never more than ${STEP_UP_MAX_MS / 3_600_000} hours after the sign-in, and this session signed in ${when}. ` +
+    `Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`
   );
 }
 
@@ -539,7 +552,7 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
 // stays a literal call on the server object, which test/invariants.test.ts,
 // test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
 // module must never spell that call itself, or those scanners would count it.
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver): void {
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, afterStepUp?: () => Promise<void>): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     const shape = declaredShape(config);
@@ -577,12 +590,22 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
       // capsid_work_jobs action list is recorded too: more
       // than a write, never less.
-      if (observe && agent.admin && requiredForAction(name, action) !== "read") {
-        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
-          refusal ? deny(refusal) : handler(...callArgs)
-        );
+      const run = (): unknown => {
+        if (observe && agent.admin && requiredForAction(name, action) !== "read") {
+          return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
+            refusal ? deny(refusal) : handler(...callArgs)
+          );
+        }
+        return handler(...callArgs);
+      };
+      // A step-up action that succeeded resets the sliding window (src/step-up.ts).
+      if (afterStepUp && needsStepUp(name, action)) {
+        return Promise.resolve(run()).then(async (result) => {
+          if ((result as { isError?: boolean } | undefined)?.isError !== true) await afterStepUp();
+          return result;
+        });
       }
-      return handler(...callArgs);
+      return run();
     };
     const { namespaceActions: _namespaceActions, ...served } = config ?? {};
     return original(name, served, guarded);

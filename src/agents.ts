@@ -58,6 +58,9 @@ export interface Agent {
   // than a session; null for a session whose grant recorded no sign-in time, which is
   // stale.
   signedInAt?: number | null;
+  // When this admin identity last completed a step-up action, from KV (src/step-up.ts). It
+  // slides the step-up window; the cap still counts from signedInAt.
+  lastStepUpAt?: number | null;
 }
 
 function flagsAll(value: boolean): Record<ScopeFlag, boolean> {
