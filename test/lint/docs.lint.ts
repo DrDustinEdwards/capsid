@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { globSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { TABLES } from "../../src/backup.ts";
@@ -94,4 +94,30 @@ test("the README states the authoritative tool count", () => {
     new RegExp(`\\b${AUTHORITATIVE.capsid.tools} tools\\b`),
     `README does not state the current tool count (${AUTHORITATIVE.capsid.tools})`
   );
+});
+
+// CLAUDE.md is the one file every session in this repo loads whole, so it holds what is
+// true of this repo alone and stays small (capsid/repo-structure.md, layer 8: under 5KB).
+// Detail lives in .claude/rules/, path-scoped so it loads only when a session touches the
+// files it is about (job_c13dc0d4f22f).
+const CLAUDE_MD_CAP_BYTES = 5 * 1024;
+
+test("CLAUDE.md stays under 5KB", () => {
+  const bytes = Buffer.byteLength(read("CLAUDE.md"), "utf8");
+  assert.ok(bytes > 500, `CLAUDE.md read as ${bytes} bytes, which is not the file`);
+  assert.ok(bytes <= CLAUDE_MD_CAP_BYTES, `CLAUDE.md is ${bytes} bytes, over ${CLAUDE_MD_CAP_BYTES}: move detail into a path-scoped .claude/rules/ file`);
+});
+
+test("every .claude/rules/ file is path-scoped to globs that match files, so it loads somewhere", () => {
+  const files = readdirSync(join(ROOT, ".claude", "rules")).filter((f) => f.endsWith(".md"));
+  assert.ok(files.length >= 3, `the rules scan found only ${files.length} files`);
+  for (const file of files) {
+    const text = read(`.claude/rules/${file}`);
+    const front = /^---\npaths:\n((?:  - "[^"]+"\n)+)---\n/.exec(text);
+    assert.ok(front, `.claude/rules/${file} has no paths frontmatter, so it would load in every session`);
+    const globs = [...front[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    for (const g of globs) {
+      assert.ok(globSync(g, { cwd: ROOT }).length > 0, `.claude/rules/${file}: "${g}" matches no file, so it never loads for that path`);
+    }
+  }
 });

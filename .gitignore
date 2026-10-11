@@ -19,3 +19,6 @@ wrangler.dryrun.jsonc
 
 # Project MCP config: carries a driver bearer token
 .mcp.json
+
+# Per-user Claude Code settings (conventions 6.3): never committed.
+.claude/settings.local.json
