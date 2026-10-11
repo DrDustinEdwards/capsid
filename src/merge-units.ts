@@ -21,11 +21,14 @@ import { auditStatement } from "./store-guards";
 // at most one approval voided for anything but a new push. Demotion: a rollback of an
 // unattended merge suspends its unit and proposes removing the unit from the signed list.
 // Both reach Dustin as inbox items of kind "proposal". Acting on a proposal is a signed
-// policy change (PR 10, sign_policy_change); until then the seat lifts a suspension by
-// deleting its KV entry (docs/autonomy.md, "Earned promotion and demotion").
+// policy change (the sign_policy_change control, src/policy-sign.ts), and a suspension is
+// lifted with the unit_resume control (liftSuspension below).
 
 export const SUSPENDED_KEY = "merge-units:suspended";
 export const REPORT_KEY = "merge-units:report";
+// When Dustin lifted each unit's suspension (the unit_resume control): a rollback from
+// before then is answered and suspends the unit no more.
+export const LIFTED_KEY = "merge-units:lifted";
 const WINDOW_MS = 90 * 86_400_000;
 const PROMOTE_MERGES = 20;
 const PROMOTE_SPAN_MS = 14 * 86_400_000;
@@ -78,7 +81,13 @@ export interface UnitsReport {
 }
 
 /** The proposals and the suspensions, from the evidence. Pure. */
-export function judgeUnits(approvals: readonly ApprovalEvidence[], rollbacks: readonly RollbackEvidence[], suspended: readonly Suspension[], now: Date): UnitsReport {
+export function judgeUnits(
+  approvals: readonly ApprovalEvidence[],
+  rollbacks: readonly RollbackEvidence[],
+  suspended: readonly Suspension[],
+  now: Date,
+  lifted: Readonly<Record<string, string>> = {}
+): UnitsReport {
   const units = new Map<string, { merged: number[]; bad: number; rollbacks: number }>();
   const unit = (k: string) => units.get(k) ?? (units.set(k, { merged: [], bad: 0, rollbacks: 0 }), units.get(k)!);
   for (const a of approvals) {
@@ -98,6 +107,8 @@ export function judgeUnits(approvals: readonly ApprovalEvidence[], rollbacks: re
     const k = unitKey(r.namespace, r.path_class);
     unit(k).rollbacks++;
     if (r.merged_by !== "tick") continue;
+    // Dustin lifted the suspension after this rollback: it is answered.
+    if (lifted[k] && Date.parse(r.run_at) <= Date.parse(lifted[k]!)) continue;
     if (!nowSuspended.has(k)) nowSuspended.set(k, { unit: k, since: now.toISOString(), reason: `${r.repo}#${r.pr} merged unattended and was rolled back (run ${r.run_id})` });
     if (!demote.some((d) => d.unit === k)) {
       demote.push({ kind: "demote", unit: k, title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and was rolled back`, evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 } });
@@ -122,6 +133,34 @@ export function judgeUnits(approvals: readonly ApprovalEvidence[], rollbacks: re
 export async function readSuspended(kv: KVNamespace): Promise<Suspension[]> {
   const raw = await kv.get(SUSPENDED_KEY);
   return raw ? (JSON.parse(raw) as Suspension[]) : [];
+}
+
+async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
+  const raw = await kv.get(LIFTED_KEY);
+  return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+}
+
+/** What lifting a unit's suspension will do, or why it cannot. Reads only. */
+export async function planLift(kv: KVNamespace, rawUnit: string | undefined): Promise<{ ok: true; unit: string; suspension: Suspension } | { ok: false; refusal: string }> {
+  const m = /^\s*([a-z0-9-]+)\s*\/\s*([a-z-]+)\s*$/.exec(rawUnit ?? "");
+  if (!m) return { ok: false, refusal: `unit_resume needs unit as '<namespace>/<path class>', for example 'capsid/docs'; got '${rawUnit ?? ""}'.` };
+  const unit = unitKey(m[1]!, m[2]!);
+  const suspension = (await readSuspended(kv)).find((s) => s.unit === unit);
+  if (!suspension) return { ok: false, refusal: `${unit} is not suspended, so there is nothing to lift.` };
+  return { ok: true, unit, suspension };
+}
+
+/** Lift a unit's suspension: the tick may merge its pull requests unattended again, and
+ *  the rollbacks before now suspend it no more. Audited. */
+export async function liftSuspension(env: Env, actor: string, rawUnit: string | undefined, reason: string, now: Date): Promise<{ ok: true; summary: string } | { ok: false; refusal: string }> {
+  const plan = await planLift(env.APP_KV, rawUnit);
+  if (!plan.ok) return plan;
+  const rest = (await readSuspended(env.APP_KV)).filter((s) => s.unit !== plan.unit);
+  const lifted = { ...(await readLifted(env.APP_KV)), [plan.unit]: now.toISOString() };
+  await env.APP_KV.put(LIFTED_KEY, JSON.stringify(lifted));
+  await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(rest));
+  await env.DB.batch([auditStatement(env.DB, actor, "merge-unit-resumed", plan.unit.split("/")[0]!, null, { unit: plan.unit, reason, was: plan.suspension })]);
+  return { ok: true, summary: `Lifted the suspension of ${plan.unit}. The tick may merge its pull requests unattended again; a new rollback suspends it again.` };
 }
 
 /** The evidence from D1. Reads only. */
@@ -175,8 +214,9 @@ export interface UnitsTickReport {
 /** One pass: judge the units, store the report, and suspend a unit a rollback hit. */
 export async function unitsTick(env: Env, now: Date, read: typeof readUnitEvidence = readUnitEvidence): Promise<UnitsTickReport> {
   const before = await readSuspended(env.APP_KV);
+  const lifted = await readLifted(env.APP_KV);
   const evidence = await read(env, now);
-  const report = judgeUnits(evidence.approvals, evidence.rollbacks, before, now);
+  const report = judgeUnits(evidence.approvals, evidence.rollbacks, before, now, lifted);
   const added = report.suspended.filter((s) => !before.some((b) => b.unit === s.unit));
   if (added.length) {
     await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(report.suspended));

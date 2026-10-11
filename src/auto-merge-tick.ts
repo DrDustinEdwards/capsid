@@ -1,6 +1,6 @@
 import { readSuspended, unitKey } from "./merge-units";
 import type { Env } from "./env";
-import { mergeClass, type Classification, type MergeClass, type PathClass } from "./merge-class";
+import { mergeClass, pathClassOfAll, type Classification, type MergeClass, type PathClass } from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
 import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
@@ -348,7 +348,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
-        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended);
+        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
         logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
@@ -428,10 +428,15 @@ async function judgeOnePr(
   // The pull request's open approval (src/pr-approvals.ts), or null.
   approval: OpenApproval | null = null,
   // The merge units a rollback suspended, or "all" when they could not be read.
-  suspended: Suspended = new Set()
+  suspended: Suspended = new Set(),
+  // The units the signed policy promoted to auto, each `<namespace> / <path class>`.
+  units: readonly string[] = []
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
-  const verdict = evaluatePolicy(facts, allowedAuthors);
+  // A promoted unit widens only the namespace's allowed paths (src/auto-merge-policy.ts).
+  const pathClass = facts.filesProblem ? null : pathClassOfAll(facts.changedPaths);
+  const promotedUnit = pathClass && units.includes(`${namespace} / ${pathClass}`) ? { unit: `${namespace} / ${pathClass}` } : null;
+  const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
   // A suspended unit (src/merge-units.ts): the policy would merge it, but a rollback of an
   // unattended merge in the same unit holds it back, so it falls to class approve.

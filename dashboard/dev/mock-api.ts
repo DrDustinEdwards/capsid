@@ -764,6 +764,12 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.repairs.unshift({ namespace: ns, tool, at: now }),
       };
     }
+    // The merge units' controls have no screen yet: the mock answers as the Worker does
+    // when nothing is promoted or suspended.
+    case "sign_policy_change":
+      throw new Refusal(400, "The mock holds no signed auto-merge policy, so no version is changed.");
+    case "unit_resume":
+      throw new Refusal(400, `${params.unit ?? "That unit"} is not suspended, so there is nothing to lift.`);
   }
 }
 

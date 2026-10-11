@@ -22,7 +22,7 @@ const MERGE_CLASSES = ["auto", "approve", "typed", "seat", "wait"] as const;
 export type MergeClass = (typeof MERGE_CLASSES)[number];
 
 // The path classes, least risky first: a PR's path class is the riskiest of its files'.
-const PATH_CLASSES = ["docs", "dashboard-css", "tests", "dashboard-code", "deps-own", "src-routine", "deps-other", "src-worth", "workflow", "migration", "money"] as const;
+export const PATH_CLASSES = ["docs", "dashboard-css", "tests", "dashboard-code", "deps-own", "src-routine", "deps-other", "src-worth", "workflow", "migration", "money"] as const;
 export type PathClass = (typeof PATH_CLASSES)[number];
 
 export interface Classification {
