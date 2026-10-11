@@ -28,7 +28,8 @@ export type TaskId =
   | "public-build"
   | "push"
   | "digest"
-  | "merge-units";
+  | "merge-units"
+  | "merge-safety";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -66,6 +67,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // Merge unit promotion and demotion (src/merge-units.ts), on the tick; recorded only
   // when its report or a suspension changed.
   { id: "merge-units", label: "Merge unit proposals", period_ms: null },
+  // The auto-merge safety meter and shutoff (src/merge-safety.ts), on the tick; recorded
+  // only when a revert was recorded, a namespace paused or the meter changed.
+  { id: "merge-safety", label: "Auto-merge safety meter", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

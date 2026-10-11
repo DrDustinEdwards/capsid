@@ -1690,6 +1690,13 @@
         "recorded_at": "2026-09-26T07:12:00.000Z"
       }
     ],
+    "merge_safety": {
+      "generated": "2026-09-28T12:00:00.000Z",
+      "namespaces": [
+        { "namespace": "sample-a", "auto_merged": 5, "approved": 2, "deploys_verified": 7, "rolled_back": 0, "rollback_failed": 0, "reverts": 0, "bad_auto_7d": 0, "paused": null },
+        { "namespace": "sample-c", "auto_merged": 3, "approved": 1, "deploys_verified": 3, "rolled_back": 1, "rollback_failed": 0, "reverts": 1, "bad_auto_7d": 2, "paused": { "since": "2026-09-27T09:00:00.000Z", "reason": "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } }
+      ]
+    },
     "awaiting_seat": [
       {
         "namespace": "sample-c",

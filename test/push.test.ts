@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
+import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { RETRY_CAP_REASON } from "../src/jobs-schema.ts";
 import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
@@ -12,7 +13,7 @@ import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts"
 import { fakeKv } from "./fakes.ts";
 
 // Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
-// 2026-10-09): exactly four triggers, each sent once, never with an Approve button, never
+// 2026-10-09): exactly five triggers, each sent once, never with an Approve button, never
 // with a title. The encryption itself is in test/web-push.test.ts.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -72,9 +73,10 @@ const device = (over: Row = {}): Row => ({ id: 1, endpoint: ENDPOINT, p256dh: DE
 const typed = (number: number) => ({ namespace: "foxhound", repo: "owner/foxhound", number, failed: "paths_not_money", why: "money", at: NOW.toISOString(), class: "typed", path_class: "money", class_reasons: ["billing"] });
 const approve = (number: number) => ({ ...typed(number), class: "approve", path_class: "src-routine" });
 
-function world(opts: { awaiting?: object[]; jobs?: Row[]; deploys?: Row[]; devices?: Row[]; state?: object; key?: boolean } = {}) {
+function world(opts: { awaiting?: object[]; jobs?: Row[]; deploys?: Row[]; devices?: Row[]; state?: object; key?: boolean; paused?: object } = {}) {
   const { d1, tables, writes } = db({ jobs: opts.jobs, deploys: opts.deploys, devices: opts.devices ?? [device()] });
   const seed: Record<string, string> = { [AWAITING_SEAT_KEY]: JSON.stringify(opts.awaiting ?? []) };
+  if (opts.paused) seed[PAUSED_KEY] = JSON.stringify(opts.paused);
   if (opts.state) seed["push:state"] = JSON.stringify(opts.state);
   const kv = fakeKv({ seed });
   const env = {
@@ -118,7 +120,7 @@ async function decrypt(body: Uint8Array): Promise<string> {
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
 
-// The four triggers
+// The five triggers
 
 test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
   const w = world({ awaiting: [typed(7)] });
@@ -155,6 +157,17 @@ test("a rollback and a failed rollback alert; a verified deploy and an old rollb
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.deepEqual(report.sent.sort(), ["rollback:owner/capsid:1", "rollback:owner/carrel:2"]);
   assert.deepEqual(s.got.map((g) => g.title).sort(), ["Deploy rolled back", "Rollback failed"]);
+});
+
+test("PLANT: a namespace the safety shutoff paused alerts once, naming the namespace and the reason", async () => {
+  const since = iso(-H);
+  const w = world({ paused: { capsid: { since, reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } } });
+  const s = service();
+  const report = await pushTick(w.env, NOW, s.fetcher);
+  assert.deepEqual(report.sent, [`paused:capsid:${since}`]);
+  assert.equal(s.got[0]!.title, "Auto-merge paused");
+  assert.match(s.got[0]!.body, /^capsid: 2 of the pull requests auto-merge merged were rolled back or reverted in 7 days\./);
+  assert.equal((await pushTick(w.env, new Date(NOW.getTime() + 5 * 60_000), service().fetcher)).sent.length, 0, "the same pause alerted twice");
 });
 
 test("a job at the correction cap alerts; a question alerts only past 4 hours on priority 70 or more", async () => {

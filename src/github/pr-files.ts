@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { TEST_FILE } from "../merge-class";
 import { ghFetch } from "./client";
 
 // The one reader of a pull request's changed files. The auto-merge tick judges them
@@ -40,17 +41,51 @@ export interface PrFiles {
   // file came back without its counts. Auto-merge's size cap reads it
   // (src/auto-merge-policy.ts), and refuses a null rather than reading it as zero.
   changedLines: number | null;
+  // The existing tests the pull request changes (existingTestEdits below). Auto-merge
+  // never merges one unattended (src/merge-class.ts).
+  testEdits: string[];
+}
+
+export interface PrFileRow {
+  filename: string;
+  previous_filename?: string;
+  status?: string;
+  additions?: number;
+  deletions?: number;
+}
+
+// Where the tests live: capsid's three directories, and anything merge-class names a test
+// (tests/, __tests__/, e2e/, *.test.* and *.spec.*), which is what the other covered repos use.
+const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
+const inTestDir = (path: string | undefined) => path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
+
+/** The tests a pull request changes that already exist: a test removed or renamed away
+ *  (the old path is deleted), or any file there with a deleted line. A file added whole,
+ *  or modified with only added lines, is new test code and not an edit. Fails closed: a
+ *  file under a test directory with no status, or with no integer deletions, counts as
+ *  an edit, since a test cannot be shown untouched. Pure. */
+export function existingTestEdits(files: readonly PrFileRow[]): string[] {
+  const edited: string[] = [];
+  for (const f of files) {
+    // A rename is a deletion of the old path whichever directory the new one is in.
+    const path = inTestDir(f.previous_filename) ? f.previous_filename! : inTestDir(f.filename) ? f.filename : null;
+    if (path === null) continue;
+    if (f.status === "added") continue;
+    const pureAdditions = f.status === "modified" && Number.isInteger(f.deletions) && f.deletions === 0;
+    if (!pureAdditions) edited.push(path);
+  }
+  return edited;
 }
 
 export async function readPrFiles(env: Env, owner: string, repo: string, number: number): Promise<PrFiles> {
-  const files = await readAllPages<{ filename: string; previous_filename?: string; additions?: number; deletions?: number }>(
+  const files = await readAllPages<PrFileRow>(
     env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/files`,
-    (page) => page as Array<{ filename: string; previous_filename?: string; additions?: number; deletions?: number }>, FILES_MAX_PAGES
+    (page) => page as PrFileRow[], FILES_MAX_PAGES
   );
   // A list that reached FILES_LIMIT may have been cut by GitHub with no next page.
   const problem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
   const paths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
   const counted = files.items.every((f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions));
   const changedLines = counted ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0) : null;
-  return { paths, problem, changedLines };
+  return { paths, problem, changedLines, testEdits: existingTestEdits(files.items) };
 }

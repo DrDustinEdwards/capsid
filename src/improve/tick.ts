@@ -12,6 +12,7 @@ import { publicBuildTick } from "../public-data";
 import { pushTick } from "../push";
 import { digestTick } from "../digest";
 import { unitsTick } from "../merge-units";
+import { mergeSafetyTick } from "../merge-safety";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -156,6 +157,22 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_UNITS_THREW:", rethrow: false }
+  );
+
+  // The auto-merge safety meter and shutoff (src/merge-safety.ts): after merge-units. Its
+  // revert pass runs at most half-hourly; the counts and the shutoff read D1 only, every
+  // tick. A namespace it pauses only narrows: the auto-merge step reads the pause on the
+  // next tick. Recorded only when something changed.
+  await runTask(
+    env,
+    "merge-safety",
+    () => mergeSafetyTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent(report.newly_paused.length ? "error" : "log", "MERGE_SAFETY", { message: `MERGE_SAFETY ${report.note}` });
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "MERGE_SAFETY_THREW:", rethrow: false }
   );
 
   // Stale jobs: a blocked job whose named pull requests have all merged goes back to its

@@ -113,6 +113,44 @@ export function PullRequests() {
           </table>
         </div>
       </Panel>
+      {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
+          namespace, and the shutoff. Resuming is the automerge_resume control. */}
+      {live.merge_safety && (
+        <Panel flush title="Auto-merge, last 7 days" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
+          <div className="scroll-x">
+            <table className="list">
+              <thead>
+                <tr>
+                  <th>Namespace</th>
+                  <th>Auto</th>
+                  <th>Approved</th>
+                  <th>Verified</th>
+                  <th>Rolled back</th>
+                  <th>Rollback failed</th>
+                  <th>Reverts</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {live.merge_safety.namespaces.map((n) => (
+                  <tr key={n.namespace}>
+                    <td>
+                      <b>{n.namespace}</b>
+                    </td>
+                    <td className="num">{n.auto_merged}</td>
+                    <td className="num">{n.approved}</td>
+                    <td className="num">{n.deploys_verified}</td>
+                    <td className="num">{n.rolled_back}</td>
+                    <td className="num">{n.rollback_failed}</td>
+                    <td className="num">{n.reverts}</td>
+                    <td>{n.paused ? <St kind="warn">Paused: {n.paused.reason}</St> : <span className="faint">running</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
       <Panel flush title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
         <div className="scroll-x">
           <table className="list">

@@ -156,7 +156,7 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
   assert.deepEqual(JSON.parse(kv.store.get(SUSPENDED_KEY)!), []);
   assert.equal(batches.length, 1, "the lift was not audited");
   const lifted = JSON.parse(kv.store.get(LIFTED_KEY)!) as Record<string, string>;
-  const rollback = (runAt: string) => ({ namespace: "capsid", repo: "o/capsid", pr: 4, head_sha: "a".repeat(40), run_id: 1, run_at: runAt, merged_by: "tick" as const, path_class: "docs" });
+  const rollback = (runAt: string) => ({ kind: "rollback" as const, namespace: "capsid", repo: "o/capsid", pr: 4, head_sha: "a".repeat(40), run_id: 1, run_at: runAt, merged_by: "tick" as const, path_class: "docs" });
   assert.deepEqual(judgeUnits([], [rollback("2026-10-10T09:00:00.000Z")], [], NOW, lifted).suspended, [], "the answered rollback suspended the unit again");
   assert.deepEqual(judgeUnits([], [rollback("2026-10-11T13:00:00.000Z")], [], new Date("2026-10-11T14:00:00Z"), lifted).suspended.map((s) => s.unit), ["capsid/docs"]);
   assert.equal((await liftSuspension(env, "access:admin@example.com", "capsid/docs", "again", NOW)).ok, false, "a unit not suspended was lifted");

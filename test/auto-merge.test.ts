@@ -23,6 +23,7 @@ import {
 import { FILES_LIMIT } from "../src/github/pr-files.ts";
 import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
 import { SUSPENDED_KEY } from "../src/merge-units.ts";
+import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { LOOP_ROSTER, ROSTER, onLoopRoster, onRoster, scheduledFor } from "../src/improve-schema.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
@@ -55,6 +56,7 @@ function greenPr(over: Partial<PrFacts> = {}): PrFacts {
     changedPaths: ["docs/schema.md"],
     filesProblem: null,
     changedLines: 40,
+    existingTestEdits: [],
     ciConclusion: "success",
     ciNote: "3 check(s) green",
     ciSteps: CAPSID_CI.map((r) => ({ ...r, conclusion: "success" })),
@@ -983,7 +985,7 @@ function tickRoutes(changedFiles: string[], headRepo: string | null = "DrDustinE
         },
       ],
     },
-    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename, additions: 1, deletions: 0 })) },
+    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename, status: "modified", additions: 1, deletions: 0 })) },
     [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
       body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
     },
@@ -1816,4 +1818,105 @@ test("a promoted unit is still held back by a suspension", async () => {
   const { outcome, merges } = await tickWith(env, tickRoutes(["test/jobs.test.ts"]));
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "unit_suspended");
+});
+
+// An existing test, changed, always waits for Dustin (src/merge-class.ts,
+// existingTestEdits), even in a unit the signed policy promoted: the tick holds it as
+// class approve and Dustin's approval still merges it.
+
+async function testFilesTick(files: Array<Record<string, unknown>>) {
+  const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
+  const env = await tickEnv(await signTaskBody(SECRET, policy), {
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+  return tickWith(env, { ...tickRoutes(["test/x.test.ts"]), [`GET ${OWNER}/pulls/23/files`]: { body: files } });
+}
+
+test("PLANT: a PR that only adds tests (a new file, and added lines in an old one) merges in a promoted tests unit", async () => {
+  const { outcome, merges } = await testFilesTick([
+    { filename: "test/new.test.ts", status: "added", additions: 40, deletions: 0 },
+    { filename: "test/old.test.ts", status: "modified", additions: 6, deletions: 0 },
+  ]);
+  assert.equal(merges, 1, outcome.why ?? "");
+  assert.equal(outcome.merged, true);
+  assert.equal(outcome.merge_class?.class, "auto");
+});
+
+test("PLANT: a one-line edit of an existing test is held as class approve, though the unit is promoted", async () => {
+  const { outcome, merges } = await testFilesTick([{ filename: "test/old.test.ts", status: "modified", additions: 1, deletions: 1 }]);
+  assert.equal(merges, 0, "an edited existing test was merged unattended");
+  assert.equal(outcome.failed, "changes_existing_test");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.match(outcome.merge_class?.reasons[0] ?? "", /^changes an existing test: test\/old\.test\.ts/);
+});
+
+test("PLANT: a deleted test and a renamed test are held", async () => {
+  const removed = await testFilesTick([{ filename: "test/gone.test.ts", status: "removed", additions: 0, deletions: 30 }]);
+  assert.equal(removed.merges, 0, "a deleted test was merged unattended");
+  assert.equal(removed.outcome.failed, "changes_existing_test");
+  const renamed = await testFilesTick([{ filename: "test/new-name.test.ts", previous_filename: "test/old-name.test.ts", status: "renamed", additions: 0, deletions: 0 }]);
+  assert.equal(renamed.merges, 0, "a renamed test was merged unattended");
+  assert.equal(renamed.outcome.failed, "changes_existing_test");
+  assert.match(renamed.outcome.merge_class?.reasons[0] ?? "", /test\/old-name\.test\.ts/);
+});
+
+test("a test file GitHub reports with no status is held, not read as an addition", async () => {
+  const { outcome, merges } = await testFilesTick([{ filename: "test/old.test.ts", additions: 3, deletions: 0 }]);
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "changes_existing_test");
+});
+
+// The safety shutoff (src/merge-safety.ts): a paused namespace's pull requests wait for
+// Dustin as class approve, and his approvals still execute.
+
+async function pausedTick(paused: string | null) {
+  const env = await enabledEnv();
+  if (paused !== null) await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(PAUSED_KEY, paused);
+  return tickWith(env, tickRoutes(["docs/autonomy.md"]));
+}
+
+test("PLANT: a paused namespace holds a PR the policy would merge, as class approve", async () => {
+  const { outcome, merges } = await pausedTick(JSON.stringify({ capsid: { since: "2026-09-24T00:00:00Z", reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } }));
+  assert.equal(merges, 0, "a PR in a paused namespace was merged unattended");
+  assert.equal(outcome.failed, "namespace_paused");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.match(outcome.why ?? "", /^auto-merge for capsid is paused: 2 of the pull requests/);
+});
+
+test("another namespace's pause leaves the PR to merge", async () => {
+  const { outcome, merges } = await pausedTick(JSON.stringify({ carrel: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }));
+  assert.equal(merges, 1);
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+});
+
+test("a pause list that cannot be read holds every namespace this tick", async () => {
+  const { outcome, merges } = await pausedTick("not json");
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "namespace_paused");
+  assert.match(outcome.why ?? "", /could not be read/);
+});
+
+test("Dustin's approval still merges a PR in a paused namespace, and one that changes an existing test", async () => {
+  const paused = await enabledEnv();
+  await (paused as unknown as { APP_KV: KVNamespace }).APP_KV.put(PAUSED_KEY, JSON.stringify({ capsid: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }));
+  const a = withApprovals(paused, [approval()]);
+  await withFetch(tickRoutes(["docs/autonomy.md"]), async (calls) => {
+    const report = await autoMergeTick(a.env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+    assert.equal(calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length, 1);
+  });
+  assert.equal(a.moves.length, 1);
+  const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
+  const env = await tickEnv(await signTaskBody(SECRET, policy), {
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+  const b = withApprovals(env, [approval()]);
+  const routes = { ...tickRoutes(["test/x.test.ts"]), [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "test/x.test.ts", status: "modified", additions: 1, deletions: 1 }] } };
+  await withFetch(routes, async (calls) => {
+    const report = await autoMergeTick(b.env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+    assert.equal(calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length, 1);
+  });
 });

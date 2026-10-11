@@ -77,3 +77,19 @@ test("a Worker with no agents yet reports an empty inventory rather than failing
   const status = await improveStatus(await statusEnv([]));
   assert.deepEqual(status.agents, []);
 });
+
+// The auto-merge safety meter (src/merge-safety.ts) rides on improve_status from the
+// report the tick keeps, so asking costs one KV read.
+
+test("improve_status carries the auto-merge safety meter, null before the first pass, and a scoped caller sees its own namespaces", async () => {
+  const empty = await improveStatus(await statusEnv([]));
+  assert.equal(empty.merge_safety, null);
+  const row = (namespace: string, paused: { since: string; reason: string } | null) => ({ namespace, auto_merged: 3, approved: 1, deploys_verified: 4, rolled_back: 1, rollback_failed: 0, reverts: 1, bad_auto_7d: 2, paused });
+  const report = { generated: "2026-10-11T12:00:00.000Z", namespaces: [row("capsid", { since: "2026-10-11T11:00:00.000Z", reason: "2 rolled back" }), row("carrel", null)] };
+  const kv = fakeKv({ seed: { "merge-safety:report": JSON.stringify(report) } });
+  const env = fakeEnv({ DB: fakeD1({ agents: [] }).db, APP_KV: kv.kv, MEDIA: fakeR2().bucket, HOLDOUT: fakeR2().bucket });
+  const status = await improveStatus(env);
+  assert.deepEqual(status.merge_safety, report);
+  const scoped = await improveStatus(env, undefined, undefined, { namespaces: ["carrel"], admin: false });
+  assert.deepEqual(scoped.merge_safety?.namespaces.map((n) => n.namespace), ["carrel"]);
+});

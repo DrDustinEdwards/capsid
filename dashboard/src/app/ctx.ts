@@ -138,6 +138,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
   sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
   unit_resume: "Lift suspension",
+  automerge_resume: "Resume auto-merge",
 };
 
 export function performLabel(action: PortalAction, params: Record<string, string>): string {

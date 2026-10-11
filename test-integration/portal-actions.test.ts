@@ -25,6 +25,7 @@ import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PATHS, AUTO_MERGE_REQUIRED_CI, loadMergePolicy, POLICY_CHECKS, requiredCiLabel } from "../src/auto-merge-policy";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/improve-task";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
+import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -438,6 +439,17 @@ const CASES: Record<string, Case> = {
       expect(Object.keys(JSON.parse((await env.APP_KV.get(LIFTED_KEY))!))).toEqual(["capsid/docs"]);
     },
   },
+  automerge_resume: {
+    params: async () => {
+      await env.APP_KV.put(PAUSED_KEY, JSON.stringify({ capsid: { since: "2026-09-27T00:00:00.000Z", reason: "2 rolled back" } }));
+      await env.APP_KV.delete(SAFETY_LIFTED_KEY);
+      return { namespace: "capsid", reason: "both are answered" };
+    },
+    after: async () => {
+      expect(JSON.parse((await env.APP_KV.get(PAUSED_KEY))!)).toEqual({});
+      expect(Object.keys(JSON.parse((await env.APP_KV.get(SAFETY_LIFTED_KEY))!))).toEqual(["capsid"]);
+    },
+  },
   site_repair: {
     params: async () => {
       operatorCalls.length = 0;
@@ -462,9 +474,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-seven actions", () => {
+  it("covers the allow-list, twenty-eight actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(27);
+    expect(Object.keys(CASES).length).toBe(28);
   });
 
   for (const action of PORTAL_ACTIONS) {

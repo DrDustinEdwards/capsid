@@ -31,6 +31,7 @@ import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
 import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { SUSPENDED_KEY } from "../src/merge-units.ts";
+import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { policyPin, policyPinKey, signTaskBody } from "../src/improve-task.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -225,6 +226,8 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
       [policyPinKey(AUTO_MERGE_POLICY_PATH)]: POLICY_PIN,
       // A merge unit a rollback suspended (src/merge-units.ts), for unit_resume.
       [SUSPENDED_KEY]: JSON.stringify([{ unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "owner/repo#40 merged unattended and was rolled back" }]),
+      // A namespace the safety shutoff paused (src/merge-safety.ts), for automerge_resume.
+      [PAUSED_KEY]: JSON.stringify({ capsid: { since: "2026-09-27T00:00:00.000Z", reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } }),
     },
   });
   const env = {
@@ -282,6 +285,7 @@ const FEED: OpsFeedData = {
     agents: [],
     prs: [],
     awaiting_seat: [],
+    merge_safety: null,
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     overnight: { mode: "off", decision: null },
     sessions: [],
@@ -374,13 +378,15 @@ const EVERY_ACTION = [
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
   ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "8" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
+  ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, supersede, park, unpark and PR close, and approve, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
     "approve_pr",
+    "automerge_resume",
     "canon_approve",
     "canon_reject",
     "close_shipped",
@@ -409,7 +415,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 27);
+  assert.equal(PORTAL_ACTIONS.length, 28);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
