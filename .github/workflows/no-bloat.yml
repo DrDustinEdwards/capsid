@@ -1,0 +1,34 @@
+name: no-bloat
+
+# THE NO-BLOAT REPORT (capsid/decisions.md 2026-10-01, "no bloat, as a standing plan").
+# Warn-only by ruling: Knip on the Worker and the dashboard, and jscpd over the source,
+# against the baseline in .no-bloat.json. What grew is a ::warning:: line and a table in
+# the job summary. This was a step of ci.yml running scripts/no-bloat-report.mjs; it is
+# now devkit's reusable workflow and its devkit-no-bloat bin
+# (capsid/research/design-shared-tests.md, section 3). Every step there is
+# continue-on-error and so is the job, so it never turns a pull request red. Page weight
+# stays in ci.yml's dashboard build step.
+#
+# The sha is devkit's v0.5.0 commit. A reusable workflow is pinned by full sha like any
+# action (test/workflow-policy.test.ts), and it declares its own timeout.
+
+on:
+  # A public repository: every pull request and every push to the default branch.
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: no-bloat-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  no-bloat:
+    uses: DrDustinEdwards/devkit/.github/workflows/no-bloat.yml@2c5c7a5dd2d92b05d005e4f3abc47b001cdc0bf6 # v0.5.0
+    with:
+      # The knip (dashboard) run reads dashboard/, its own package.
+      install: npm ci && npm ci --prefix dashboard

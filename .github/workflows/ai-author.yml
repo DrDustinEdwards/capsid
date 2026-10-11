@@ -1,0 +1,27 @@
+name: ai-author
+
+# CLAUDE.md, no AI trailer rule. Fails when a commit this push or pull request adds
+# carries Co-Authored-By naming Claude, "Generated with Claude Code", a Claude-Session
+# link or any other trailer naming Claude, and on a pull request a commit authored or
+# committed as Claude. Older commits are not checked (no history rewrite, ruled
+# 2026-09-25). This was a step of ci.yml running scripts/check-commit-trailers.mjs; the
+# same check is now devkit's reusable workflow and its devkit-check-trailers bin
+# (capsid/research/design-shared-tests.md, section 3), run from the devkit tag
+# package.json pins.
+#
+# The sha is devkit's v0.5.0 commit. A reusable workflow is pinned by full sha like any
+# action (test/workflow-policy.test.ts), and it declares its own timeout.
+
+on:
+  # Both names while master moves to main, as in ci.yml.
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+jobs:
+  ai-author:
+    uses: DrDustinEdwards/devkit/.github/workflows/ai-author.yml@2c5c7a5dd2d92b05d005e4f3abc47b001cdc0bf6 # v0.5.0

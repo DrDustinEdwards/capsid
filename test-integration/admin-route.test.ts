@@ -1,12 +1,13 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
+import { clearIdTokenKeysCache } from "../src/access-jwt";
 import { sha256Hex } from "../src/auth";
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { ADMIN_MCP_ROUTE, ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
-import { stubAccess } from "./access-stub";
-import { cimdClient } from "./cimd-stub";
+import { stubAccess } from "@dustinedwards/devkit/access";
+import { cimdClient, cimdResponse } from "./cimd-stub";
 
 // CAPSID ADMIN ON ITS OWN ROUTES (capsid/rulings/mcp-2026-10-10.md, amendment answer 2),
 // through the WHOLE Worker: the host rules, the OAuth provider, src/routes.ts
@@ -28,10 +29,6 @@ const REDIRECT = "https://client.example.com/callback";
 // RFC 7636 appendix B, as in oauth-round-trip.test.ts.
 const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 beforeEach(async () => {
   // A driver minted for one namespace with read and write: everything a driver can hold
@@ -221,9 +218,22 @@ async function adminToken(): Promise<string> {
   const signIn = new URL(String(approved.headers.get("location")));
   const state = String(signIn.searchParams.get("state"));
   const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
-  stubAccess(env.ADMIN_EMAIL!, signIn.href);
-  const callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
-  vi.restoreAllMocks();
+  // Each stub signs with a key of its own under the same kid, and the verifier keeps the
+  // keys it read per JWKS URL, so the last sign-in's key is dropped first.
+  clearIdTokenKeysCache();
+  const access = await stubAccess({
+    issuer: `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`,
+    audience: env.ACCESS_SAAS_CLIENT_ID!,
+    email: env.ADMIN_EMAIL!,
+    authorizationUrl: signIn.href,
+    fallback: (u) => cimdResponse(u) ?? undefined,
+  });
+  let callback: Response;
+  try {
+    callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
+  } finally {
+    access.restore();
+  }
   const location = callback.headers.get("location");
   const code = location && location.startsWith(REDIRECT) ? new URL(location).searchParams.get("code") : null;
   expect(code, `the callback did not send a code back: ${callback.status} ${location}`).toBeTruthy();

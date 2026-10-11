@@ -156,8 +156,14 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
   );
 });
 
+// A job that calls a reusable workflow (a `uses:` of its own) cannot carry
+// timeout-minutes: GitHub refuses the key there, and the called workflow's jobs declare
+// their own (devkit's ai-author.yml and no-bloat.yml do).
+const callsWorkflow = (job: Job): boolean => job.lines.some((l) => /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l));
+
 test("every job declares timeout-minutes", () => {
   const offenders = jobs()
+    .filter((job) => !callsWorkflow(job))
     .filter((job) => !job.lines.some((l) => /^\s{4,}timeout-minutes:\s*\d+/.test(l)))
     .map((job) => `${job.workflow}:${job.id}`);
   assert.deepEqual(
