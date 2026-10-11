@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { OPEN_JOB_STATUSES, outsideJobNamespace, type JobRow } from "./jobs-schema";
 import { signedJobBody } from "./jobs-claim";
+import { jobTextRefusal } from "./job-body-check";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 
@@ -82,6 +83,10 @@ export async function editJob(
   if (args.title !== undefined && !title) {
     return refuse("edit", "a job needs a title: it is how the queue refuses a duplicate while one is still open.");
   }
+  // After the seat check, so a driver is told it may not edit before it is told its body is
+  // unfilled (src/job-body-check.ts).
+  const unfilled = jobTextRefusal(args.title, args.body);
+  if (unfilled) return refuse("edit", unfilled);
   let signed: string | undefined;
   if (args.body !== undefined) {
     const checked = await signedJobBody(env, args.body);
