@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { STEP_UP, STEP_UP_WINDOW_MS } from "../src/scope.ts";
+import { STEP_UP } from "../src/scope.ts";
 import { buildAdminServer } from "../src/server.ts";
 import { CARREL_SCRIPT, SITE_SECRET, carrelSecretName, mintSiteKey, setSiteKey } from "../src/site-key.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
@@ -268,7 +268,7 @@ test("PLANT: a non-admin is refused capsid_admin_set_site_key before its handler
 test("PLANT: an admin whose sign-in is older than the step-up window is refused, and nothing is set", async () => {
   const { db, audits } = siteDb();
   await withFetch(ROUTES, async (calls) => {
-    const r = await callAs(adminAgentForEmail("admin@example.com", Date.now() - STEP_UP_WINDOW_MS - MINUTE), db);
+    const r = await callAs(adminAgentForEmail("admin@example.com", Date.now() - 13 * 60 * MINUTE), db);
     assert.equal(r.isError, true);
     assert.match(r.text, /step-up required: 'capsid_admin_set_site_key'/);
     assert.match(r.text, /Nothing was done\./);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
+import { logEvent } from "./log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./improve-schema";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
@@ -361,16 +362,24 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 }
 
 // STEP-UP (capsid/rulings/mcp-2026-10-10.md, the rule 9 amendment for Capsid Admin):
-// the admin actions that change who may do what, or that cannot be taken back, need an
-// Access sign-in in the last STEP_UP_WINDOW_MS. A grant lives for weeks and is
-// refreshed without a person; this is the point where a person proves they are there.
-// It is a re-authentication, not a mid-call confirmation, which the ruling's rule 12
-// rules out until client support is verified. "*" is every action of the tool.
+// the admin actions that change who may do what, or that cannot be taken back, need a
+// recent Access sign-in. A grant lives for weeks and is refreshed without a person;
+// this is the point where a person proves they are there. It is a re-authentication,
+// not a mid-call confirmation, which the ruling's rule 12 rules out until client
+// support is verified. "*" is every action of the tool.
+//
+// The window slides, as GitHub's sudo mode does: a step-up action is allowed when the
+// Access sign-in or the last SUCCESSFUL step-up action was within STEP_UP_IDLE_MS, and
+// each success resets that clock. A fixed window refused a working session mid-task.
+// STEP_UP_MAX_MS caps it from the sign-in whatever the activity (NIST SP 800-63B-4
+// allows an AAL3 session no more than 12 hours overall), so only a new sign-in extends
+// past it.
 //
 // Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
 // seat's operator key at its terminal) has no session to refresh and is not stepped up;
 // its key is the credential.
-export const STEP_UP_WINDOW_MS = 15 * 60 * 1000;
+const STEP_UP_IDLE_MS = 2 * 60 * 60 * 1000;
+const STEP_UP_MAX_MS = 12 * 60 * 60 * 1000;
 
 export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
@@ -386,15 +395,57 @@ export function needsStepUp(tool: string, action: string | undefined): boolean {
   return actions === "*" || (action !== undefined && actions.includes(action));
 }
 
+// The last successful step-up action is kept in KV, because each MCP request builds a
+// fresh Agent. It is kept per SESSION, keyed by the admin and the session's sign-in time,
+// not per admin: activity in one session (a laptop) must not keep another, idle one (a
+// forgotten device, or a grant whose refresh token leaked) inside the window. The entry
+// outlives the hard cap, so it never expires while it could still matter.
+const stepUpKey = (actor: string, signedInAt: number): string => `step-up:last:${actor}:${signedInAt}`;
+
+/** The time of this session's last successful step-up action, or undefined when there
+ *  is none or KV cannot say. Undefined falls back to the sign-in time alone, so a KV
+ *  failure can only narrow access, never widen it; a time after `now` is refused for the
+ *  same reason, since it would read as activity that has not happened. */
+export async function readLastStepUp(kv: KVNamespace, actor: string, signedInAt: number, now: number = Date.now()): Promise<number | undefined> {
+  try {
+    const value = Number(await kv.get(stepUpKey(actor, signedInAt)));
+    return Number.isFinite(value) && value > 0 && value <= now ? value : undefined;
+  } catch (error) {
+    logEvent("error", "STEP_UP_READ_FAILED", { message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone` });
+    return undefined;
+  }
+}
+
+// Called only after a step-up action succeeded. The action is already done, so a KV
+// failure is logged and never fails it; the cost is that the idle clock is not reset.
+async function recordStepUp(kv: KVNamespace, agent: Agent, signedInAt: number, now: number): Promise<void> {
+  agent.lastStepUpAt = now;
+  try {
+    await kv.put(stepUpKey(agent.actor, signedInAt), String(now), { expirationTtl: STEP_UP_MAX_MS / 1000 + 3600 });
+  } catch (error) {
+    logEvent("error", "STEP_UP_WRITE_FAILED", { message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset` });
+  }
+}
+
 function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | null {
   if (agent.signedInAt === undefined) return null;
-  if (agent.signedInAt !== null && now - agent.signedInAt <= STEP_UP_WINDOW_MS) return null;
   const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
-  const when = agent.signedInAt === null ? "before sign-in times were recorded" : `${Math.round((now - agent.signedInAt) / 60000)} minutes ago`;
-  return (
-    `step-up required: '${asked}' changes who may do what or cannot be taken back, so it needs an Access sign-in in the last ${STEP_UP_WINDOW_MS / 60000} minutes, ` +
-    `and this session signed in ${when}. Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`
-  );
+  const rule =
+    `A step-up action needs an Access sign-in or a step-up action within the last ${STEP_UP_IDLE_MS / 3600000} hours, ` +
+    `and never more than ${STEP_UP_MAX_MS / 3600000} hours after the sign-in.`;
+  const fix = `Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`;
+  if (agent.signedInAt === null) {
+    return `step-up required: '${asked}' changes who may do what or cannot be taken back. ${rule} This session signed in before sign-in times were recorded. ${fix}`;
+  }
+  const sinceSignIn = now - agent.signedInAt;
+  const sinceActive = now - Math.max(agent.signedInAt, agent.lastStepUpAt ?? 0);
+  if (sinceSignIn <= STEP_UP_MAX_MS && sinceActive <= STEP_UP_IDLE_MS) return null;
+  const minutes = (ms: number): string => `${Math.round(ms / 60000)} minutes ago`;
+  const why =
+    sinceSignIn > STEP_UP_MAX_MS
+      ? `this session signed in ${minutes(sinceSignIn)}, past the ${STEP_UP_MAX_MS / 3600000} hour cap`
+      : `this session signed in ${minutes(sinceSignIn)} and its last step-up action was ${agent.lastStepUpAt === undefined ? "none" : minutes(now - agent.lastStepUpAt)}`;
+  return `step-up required: '${asked}' changes who may do what or cannot be taken back. ${rule} Here ${why}. ${fix}`;
 }
 
 // Why each admin-only thing is admin only, for the refusal. An "admin" requirement
@@ -459,6 +510,22 @@ interface RegisteredConfig {
 }
 
 type ToolHandler = (...args: unknown[]) => unknown;
+
+// Whether a handler's result is a success. An error result is not, and neither is a
+// domain refusal, which the tools return as an ordinary result whose JSON says ok:false
+// (the call was legitimate and the answer was no, so nothing was done).
+function toolSucceeded(result: unknown): boolean {
+  const r = result as { isError?: boolean; content?: Array<{ text?: unknown }> } | null;
+  if (r?.isError === true) return false;
+  const text = r?.content?.[0]?.text;
+  if (typeof text !== "string" || !text.startsWith("{")) return true;
+  try {
+    return (JSON.parse(text) as { ok?: unknown }).ok !== false;
+  } catch {
+    // Text that looks like JSON and is not is no proof of success: it does not reset the clock.
+    return false;
+  }
+}
 
 // Which argument names what a tool is asked to do. lint spells it `mode`, because its
 // modes separate a read (gather) from two writes. The registrar needs this to populate
@@ -539,7 +606,7 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
 // stays a literal call on the server object, which test/invariants.test.ts,
 // test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
 // module must never spell that call itself, or those scanners would count it.
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver): void {
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     const shape = declaredShape(config);
@@ -577,12 +644,23 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
       // capsid_work_jobs action list is recorded too: more
       // than a write, never less.
+      const run = (): unknown => {
+        const result = handler(...callArgs);
+        // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
+        // failed one does not: it proves nothing about the person being there.
+        const signedInAt = agent.signedInAt;
+        if (!stepUpKv || signedInAt === undefined || signedInAt === null || !needsStepUp(name, action)) return result;
+        return Promise.resolve(result).then(async (value) => {
+          if (toolSucceeded(value)) await recordStepUp(stepUpKv, agent, signedInAt, Date.now());
+          return value;
+        });
+      };
       if (observe && agent.admin && requiredForAction(name, action) !== "read") {
         return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
-          refusal ? deny(refusal) : handler(...callArgs)
+          refusal ? deny(refusal) : run()
         );
       }
-      return handler(...callArgs);
+      return run();
     };
     const { namespaceActions: _namespaceActions, ...served } = config ?? {};
     return original(name, served, guarded);

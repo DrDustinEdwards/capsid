@@ -208,5 +208,5 @@ test("src/index.ts builds the admin server with the observer, and buildServer ha
   assert.match(index, /recordAdminInitialize\(env\.DB, admin\.actor, request\)/);
   assert.match(index, /buildServer\(env, admin, "", observe\)/);
   const server = readFileSync(join(import.meta.dirname, "..", "src", "server.ts"), "utf8");
-  assert.match(server, /guardRegistrations\(server, agent, observeAdminWrite\)/);
+  assert.match(server, /guardRegistrations\(server, agent, observeAdminWrite, env\.APP_KV\)/);
 });

@@ -104,7 +104,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
   defineAdminOperations(server, ctx);
 
   // Before any registration, so every tool registered below is wrapped.
-  guardRegistrations(server, agent, observeAdminWrite);
+  guardRegistrations(server, agent, observeAdminWrite, env.APP_KV);
 
   if (surface === "admin") {
     registerCapsidAdminTools(server, ctx.ops);
