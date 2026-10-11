@@ -413,7 +413,7 @@ jobs:
             -v "${GITHUB_WORKSPACE}:/repo:ro" \
             -w /work \
             --entrypoint /bin/sh \
-            node:24.14.1-bookworm@sha256:80fc934952c8f1b2b4d39907af7211f8a9fff1a4c2cf673fb49099292c251cec \
+            node:26.11.1-bookworm@sha256:f1233c415b41ffcf237c717b3dea92e9d4ea006e0e4c71edcb790605d74f5404 \
             -c '
               set -u
               # The nonce becomes a SHELL variable and leaves the environment, so no
