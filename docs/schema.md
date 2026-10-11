@@ -92,6 +92,10 @@ Four invariants, each enforced in code rather than by discipline:
    whole transaction and returns the current hash to rebase against. Racing
    creates resolve to one winner and one refusal.
 
+## Store design choices and why
+
+Ruled 2026-08-13 to 2026-08-17 (capsid/decisions.md). The type and status vocabulary is enforced on write in src/doc-meta.ts, so a new word needs no migration. A version row stores title and body only; metadata changes go in audit_log as prior_meta. if_match compares the stored body inside the write batch, with no hash column, because a stored hash is a mirror that drifts. An overwrite within the hour without if_match warns, never refuses. No cross-namespace move: a namespace is an ownership boundary, not a folder. CI logs are withheld from read-only keys, because logs carry whatever a step printed. Decision documents are exempt from the count lint: a dated log is history.
+
 ## Canon is written by proposal
 
 Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its volumes, live or archived. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
