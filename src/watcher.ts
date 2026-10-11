@@ -773,12 +773,19 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
   };
 
   const cleared: string[] = [];
+  // Non-job findings whose old job was cleared this pass, and those whose job the clear
+  // refused (claimed, blocked, parked): the second stay attached to their job.
+  const movedOff = new Set<string>();
+  const stillHeld = new Map<string, string>();
   for (const [fingerprint, id] of open) {
     // A still-found finding whose class is not job: its queued job is noise now, cleared
     // the way a gone finding is, with a summary saying where it went.
     const klass = byFingerprint.has(fingerprint) ? findingClass(fingerprint) : "job";
     if (klass !== "job") {
-      if (await readers.clear(id, movedSummary(klass))) cleared.push(fingerprint);
+      if (await readers.clear(id, movedSummary(klass))) {
+        cleared.push(fingerprint);
+        movedOff.add(fingerprint);
+      } else stillHeld.set(fingerprint, id);
       continue;
     }
     if (!clearable(fingerprint)) continue;
@@ -799,14 +806,30 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
     const row: FindingRow | null = rows.get(f.fingerprint) ?? null;
     if (findingClass(f.fingerprint) !== "job") {
       // Recorded for the Portal and the digest, never filed. Open with no job; a row
-      // still pointing at a job from before the class existed is pointed at none.
+      // still pointing at a job from before the class existed is pointed at none once
+      // that job is gone. A person's dismissal and the quiet period hold as they do for
+      // a job-class finding (onSighting).
       routed.push(f.fingerprint);
-      const ok = !row
-        ? await readers.memory.insert(f, "open", null, now)
-        : row.state === "open" && row.job_id === null
-          ? await readers.memory.sight(row, f, now)
-          : await readers.memory.open(row, f, null, now);
-      moved(ok, f.fingerprint, "record of a finding with no job");
+      const heldJob = stillHeld.get(f.fingerprint) ?? null;
+      const justMoved = movedOff.has(f.fingerprint) && row?.state === "open";
+      const rowJob = !heldJob && !justMoved && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
+      const verdict = justMoved ? ({ do: "post" } as const) : onSighting(row, heldJob, rowJob, now);
+      if (verdict.do === "bump") moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
+      else if (verdict.do === "adopt") moved(row ? await readers.memory.open(row, f, verdict.jobId, now) : await readers.memory.insert(f, "open", verdict.jobId, now), f.fingerprint, "adoption of its open job");
+      else if (verdict.do === "dismiss") {
+        held.push(f.fingerprint);
+        moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
+      } else if (verdict.do === "quiet") {
+        held.push(f.fingerprint);
+        moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, `sighting (${verdict.why})`);
+      } else {
+        const ok = !row
+          ? await readers.memory.insert(f, "open", null, now)
+          : row.state === "open" && row.job_id === null
+            ? await readers.memory.sight(row, f, now)
+            : await readers.memory.open(row, f, null, now);
+        moved(ok, f.fingerprint, "record of a finding with no job");
+      }
       continue;
     }
     const openJob = open.get(f.fingerprint) ?? null;

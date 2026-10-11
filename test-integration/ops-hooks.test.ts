@@ -106,7 +106,7 @@ describe("who may post hooks", () => {
     expect(await ro.text()).toMatch(/write grant/);
     const cron = await hook(CRON_KEY, start());
     expect(cron.status, "a cron agent").toBe(403);
-    expect(await cron.text()).toMatch(/not a driver or a runner/);
+    expect(await cron.text()).toMatch(/is not a driver\./);
     expect(await sessionCount()).toBe(0);
     expect(await eventCount()).toBe(0);
   });

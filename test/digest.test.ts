@@ -42,7 +42,7 @@ const awaiting = [
   { namespace: "capsid", repo: "owner/capsid", number: 9, failed: "ci", why: "", at: "", class: "wait" },
 ];
 
-function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) => Promise<void>; last?: object; deploys?: Row[]; findings?: Row[] } = {}) {
+function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) => Promise<void>; last?: object; deploys?: Row[]; findings?: Row[]; findingsThrow?: boolean } = {}) {
   const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
   const kv = fakeKv({ seed: { [AWAITING_SEAT_KEY]: JSON.stringify(awaiting), ...(opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {}) } });
   const deploys = opts.deploys ?? [];
@@ -51,7 +51,10 @@ function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) =>
       let params: unknown[] = [];
       const st = {
         bind: (...p: unknown[]) => ((params = p), st),
-        all: async () => ({ results: selectRows(/FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys, sql, params) }),
+        all: async () => {
+          if (opts.findingsThrow && /FROM watcher_findings/.test(sql)) throw new Error("D1 down");
+          return { results: selectRows(/FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys, sql, params) };
+        },
       };
       return st;
     },
@@ -198,4 +201,14 @@ test("on Monday the mail lists the open digest-class findings per site; other da
   const none = world();
   await digestTick(none.env, MONDAY, read(EMPTY));
   assert.doesNotMatch(none.sent[0]!.text, /Weekly digest/);
+});
+
+test("a failing weekly read is a one-line note and the mail still goes out", async () => {
+  const w = world({ findingsThrow: true });
+  const report = await digestTick(w.env, MONDAY, read(EMPTY));
+  assert.equal(report.sent, true);
+  assert.match(w.sent[0]!.text, /Weekly digest could not be read\./);
+  const other = world({ findingsThrow: true });
+  await digestTick(other.env, NOON, read(EMPTY));
+  assert.doesNotMatch(other.sent[0]!.text, /Weekly digest/, "a non-Monday read the findings");
 });

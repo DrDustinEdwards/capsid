@@ -224,8 +224,8 @@ export interface AgentSummary {
 
 // Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
 // with the same records rather than a second reading of the agents table.
-// The archive is read newest move first and bounded: one runner key is archived per
-// seat-started job, so it grows with the queue. The full archive is agents list with
+// The archive is read newest move first and bounded: the archive grows as revoked agents
+// move out of the live table. The full archive is agents list with
 // archived: true.
 const SUMMARY_ARCHIVE_LIMIT = 50;
 

@@ -149,7 +149,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
     case "close_shipped":
       return `Close blocked job ${id} as shipped. Its work landed, so the job moves to done, and the outcome is credited to the driver that did the work, not to you. The pull requests it names are read from GitHub for the outcome, and the close is recorded as yours.`;
     case "supersede_job":
-      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody, and any key bound to it is revoked.`;
+      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody.`;
     case "park_job":
       return `Park job ${id}. It stays listed but is never claimed or planned until somebody unparks it; the reason says when it comes back.`;
     case "unpark_job":
@@ -781,7 +781,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           ok: true,
           changes: [
             `${label}: claimed by ${job.claimed_by} -> queued, claimed by nobody.`,
-            `${job.claimed_by}'s claim ends, any key bound to ${job.id} is revoked, and no outcome is recorded against ${job.claimed_by}.`,
+            `${job.claimed_by}'s claim ends, and no outcome is recorded against ${job.claimed_by}.`,
           ],
           audit: [`job-released by ${actor}`, click],
         };
@@ -794,8 +794,8 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         changes: [
           `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> failed, with the reason "${p.reason}".`,
           job.claimed_by
-            ? `An outcome row records the failure against ${job.claimed_by}, and any key bound to ${job.id} is revoked.`
-            : `Nobody held it, so no outcome row is written; any key bound to ${job.id} is revoked.`,
+            ? `An outcome row records the failure against ${job.claimed_by}.`
+            : `Nobody held it, so no outcome row is written.`,
         ],
         audit: [`job-admin-fail by ${actor}`, click],
       };
@@ -846,7 +846,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [
           `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> superseded, with the summary "${p.replaced_by ? `Superseded by ${p.replaced_by}` : "Superseded"}: ${p.reason}".`,
-          `No outcome row is written against anybody; any key bound to ${job.id} is revoked, and one supersede touch records that you did it.`,
+          `No outcome row is written against anybody, and one supersede touch records that you did it.`,
         ],
         audit: [`job-superseded by ${actor}`, click],
       };

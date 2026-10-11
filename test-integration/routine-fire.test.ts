@@ -189,6 +189,14 @@ describe("a fire", () => {
     expect(again.fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}` });
   });
 
+  it("trusts the id and rebuilds the URL when the two name different sessions, noting it in the audit row", async () => {
+    const other = "session_01ZZZZZZZZZZZZZZZZZZ";
+    const { fired, params } = await answered({ claude_code_session_id: SESSION, claude_code_session_url: `https://claude.ai/code/${other}` });
+    expect(fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}` });
+    expect(params.session_url).toBe(`https://claude.ai/code/${SESSION}`);
+    expect(params.session_url_mismatch).toBe(other);
+  });
+
   it("refuses a URL on another host, another scheme or a look-alike host, and an id with a bad character", async () => {
     for (const url of [`http://claude.ai/code/${SESSION}`, `https://claude.ai.evil.example/code/${SESSION}`, `https://evilclaude.ai/code/${SESSION}`, `https://claude.ai:8443/code/${SESSION}`, "https://claude.ai/code/not-a-session"]) {
       await env.DB.prepare("DELETE FROM audit_log").run();

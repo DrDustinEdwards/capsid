@@ -5,8 +5,8 @@ import { checkScope, JOBS_TOOL } from "./scope";
 // The one caller check for the receivers a session posts to on its own: the hook
 // receiver (src/ops-hooks.ts) and the OTLP receiver (src/ops-otlp.ts).
 //
-// The bearer is the session's own key. Accepted:
-//   - a minted driver (kind driver) or a runner/session key (kind session, row-backed),
+// The bearer is the session's own driver key. Accepted:
+//   - a minted driver (kind driver, row-backed),
 //   - the admin (a legacy write operator key), for testing.
 // Anything else that resolves is 403; nothing that resolves is 401.
 //
@@ -37,7 +37,7 @@ function text(message: string, status: number, extra: Record<string, string> = {
 export function sessionCallerRefusal(agent: Agent): string | null {
   if (agent.admin) return null;
   if (!agent.row || (agent.kind !== "driver" && agent.kind !== "session")) {
-    return `forbidden: ${agent.actor} is not a driver or a runner. Hooks and telemetry are posted with the session's own driver or runner key (docs/hooks.md, docs/telemetry.md).`;
+    return `forbidden: ${agent.actor} is not a driver. Hooks and telemetry are posted with the session's own driver key (docs/hooks.md, docs/telemetry.md).`;
   }
   return checkScope(agent, { tool: JOBS_TOOL, grant: "write" });
 }
@@ -62,7 +62,7 @@ export async function resolveSessionCaller(
 ): Promise<SessionCaller | Response> {
   const resolved = await resolveAgent(request, env, now);
   if (!resolved) {
-    return text("unauthorized: a driver or runner key is required as Authorization: Bearer <key>", 401, {
+    return text("unauthorized: a driver key is required as Authorization: Bearer <key>", 401, {
       "WWW-Authenticate": `Bearer realm="${SESSION_REALM}"`,
     });
   }

@@ -156,3 +156,59 @@ test("a queued job for a finding that is now digest or attention class is cleare
   assert.equal(memory.rows.get("live-headers-sample-home")!.job_id, null, "the row still points at the closed job");
   assert.deepEqual(w.posted, [], "a job-class finding with an open job was posted again");
 });
+
+const routedRow = (over: Partial<FindingRow>): FindingRow => ({
+  fingerprint: "live-headers-sample-home",
+  namespace: "sample",
+  title: "Watcher: x [live-headers-sample-home]",
+  state: "open",
+  job_id: null,
+  first_seen_at: hoursAgo(100),
+  last_seen_at: hoursAgo(1),
+  seen_count: 3,
+  cleared_at: null,
+  reopen_after: null,
+  evidence: "[]",
+  updated_at: hoursAgo(1),
+  ...over,
+});
+
+test("A DISMISSED DIGEST OR ATTENTION ROW STAYS DISMISSED", async () => {
+  const memory = fakeFindingMemory([routedRow({ state: "dismissed" }), routedRow({ fingerprint: "anomaly-rate-x", state: "dismissed" })]);
+  const w = pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory);
+  await w.result;
+  assert.equal(memory.rows.get("live-headers-sample-home")!.state, "dismissed");
+  assert.equal(memory.rows.get("anomaly-rate-x")!.state, "dismissed");
+});
+
+test("A CLEARED DIGEST ROW STAYS CLEARED INSIDE THE QUIET PERIOD and reopens outside it", async () => {
+  const inside = routedRow({ state: "cleared", cleared_at: hoursAgo(1), reopen_after: new Date(NOW.getTime() + 3_600_000).toISOString() });
+  const outside = routedRow({ fingerprint: "anomaly-rate-x", state: "cleared", cleared_at: hoursAgo(30), reopen_after: hoursAgo(6) });
+  const memory = fakeFindingMemory([inside, outside]);
+  await pass([fake("live-headers-sample-home"), fake("anomaly-rate-x")], new Map(), memory).result;
+  assert.equal(memory.rows.get("live-headers-sample-home")!.state, "cleared");
+  assert.equal(memory.rows.get("anomaly-rate-x")!.state, "open");
+  assert.equal(memory.rows.get("anomaly-rate-x")!.job_id, null);
+});
+
+test("A ROUTED FINDING WHOSE JOB IS CLAIMED STAYS ATTACHED TO IT", async () => {
+  const memory = fakeFindingMemory([routedRow({ job_id: "job_held" })]);
+  const closed: string[] = [];
+  const result = await runPass(
+    {
+      findings: async () => ({ findings: [fake("live-headers-sample-home")], ran: new Set(WATCHER_CHECKS) }),
+      open: async () => new Map([["live-headers-sample-home", "job_held"]]),
+      clear: async (id) => {
+        closed.push(id);
+        return false;
+      },
+      post: async () => ({ ok: false as const }),
+      memory: memory.memory,
+    },
+    NOW
+  );
+  assert.deepEqual(closed, ["job_held"]);
+  assert.deepEqual(result.cleared, []);
+  assert.equal(memory.rows.get("live-headers-sample-home")!.job_id, "job_held", "the job was orphaned");
+  assert.equal(memory.rows.get("live-headers-sample-home")!.state, "open");
+});

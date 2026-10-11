@@ -121,13 +121,20 @@ function readSessionId(raw: unknown): string | null {
  * readable URL gets the URL built from it, and a good URL with no readable id gives its
  * id back, so a session is recorded whenever either one reads.
  */
-function readSession(answer: unknown): { id: string | null; url: string | null } {
+function readSession(answer: unknown): { id: string | null; url: string | null; mismatch: string | null } {
   const body = answer !== null && typeof answer === "object" && !Array.isArray(answer) ? (answer as Record<string, unknown>) : {};
   let id = readSessionId(body.claude_code_session_id);
   let url = readSessionUrl(body.claude_code_session_url);
   if (id === null && url !== null) id = url.split("/").find((segment) => SESSION_SEGMENT.test(segment)) ?? null;
   if (url === null && id !== null) url = `https://claude.ai/code/${id}`;
-  return { id, url };
+  // Both read but naming different sessions: the id is trusted and the URL rebuilt from it.
+  let mismatch: string | null = null;
+  const named = url?.split("/").find((segment) => SESSION_SEGMENT.test(segment)) ?? null;
+  if (id !== null && named !== null && named !== id) {
+    mismatch = named;
+    url = `https://claude.ai/code/${id}`;
+  }
+  return { id, url, mismatch };
 }
 
 // Printable ASCII only, redacted, bounded: what is kept of an answer nothing could read.
@@ -325,12 +332,12 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
   } catch {
     answer = null;
   }
-  const { id: sessionId, url: sessionUrl } = readSession(answer);
+  const { id: sessionId, url: sessionUrl, mismatch } = readSession(answer);
   // Nothing readable: keep what the answer looked like, so the next failure can be diagnosed.
   const unreadable = sessionId === null && sessionUrl === null ? { answer: describeAnswer(answerText, answer, token) } : {};
   let unrecorded = "";
   try {
-    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl, token_secret: tokenSecret, ...unreadable })]);
+    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl, token_secret: tokenSecret, ...(mismatch ? { session_url_mismatch: mismatch } : {}), ...unreadable })]);
   } catch (err) {
     // The session exists whatever D1 says, so the answer still returns it; the reservation
     // row holds off a second fire for RESERVE_MINUTES.

@@ -343,9 +343,9 @@ test("a driver, a runner and the admin may post hooks; a read-only key, a cron o
   assert.equal(sessionCallerRefusal(adminAgentForEmail("admin@example.com")), null);
   assert.equal(sessionCallerRefusal(legacyAgent("write", "opkey:abc")), null);
   assert.match(sessionCallerRefusal(rowAgent("driver", ["read"])) ?? "", /requires the write grant/);
-  assert.match(sessionCallerRefusal(rowAgent("cron", ["read", "write"])) ?? "", /not a driver or a runner/);
-  assert.match(sessionCallerRefusal(rowAgent("seat", ["read", "write"])) ?? "", /not a driver or a runner/);
-  assert.match(sessionCallerRefusal(legacyAgent("read", "opkey:def")) ?? "", /not a driver or a runner/);
+  assert.match(sessionCallerRefusal(rowAgent("cron", ["read", "write"])) ?? "", /is not a driver\./);
+  assert.match(sessionCallerRefusal(rowAgent("seat", ["read", "write"])) ?? "", /is not a driver\./);
+  assert.match(sessionCallerRefusal(legacyAgent("read", "opkey:def")) ?? "", /is not a driver\./);
 });
 
 // ---- the feed's incidents ------------------------------------------------------------

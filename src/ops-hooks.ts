@@ -23,8 +23,7 @@ import { resolveSessionCaller } from "./ops-session-auth";
 //
 // Authorization: resolveSessionCaller (src/ops-session-auth.ts), the one caller check
 // this route shares with the OTLP receiver. The bearer resolves through resolveAgent,
-// and only three callers are admitted: a driver, a runner (a session key, bound to its
-// job), or the admin for testing. It is a route, not a tool, and src/scope.ts lists it among
+// and only two callers are admitted: a driver or the admin for testing. It is a route, not a tool, and src/scope.ts lists it among
 // the routes gated some other way.
 
 export const OPS_HOOKS_PATH = "/ops/hooks";
