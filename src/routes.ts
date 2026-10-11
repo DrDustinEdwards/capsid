@@ -238,6 +238,11 @@ async function handleCallback(request: Request, env: Env): Promise<Response> {
     metadata: { email },
     scope: oauthReq.scope,
     props,
+    // Claude identifies both connectors, Capsid on /mcp and Capsid Admin on /mcp/admin,
+    // with one client id (its CIMD document). The provider's default revokes every
+    // earlier grant for the same user and client on each authorization, so signing into
+    // one connector signed the other out. Each grant still expires on its own.
+    revokeExistingGrants: false,
   });
 
   const headers = new Headers({ Location: redirectTo });
