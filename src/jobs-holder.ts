@@ -136,8 +136,11 @@ async function holderTransition(
     // The seat recording the outcome of work done on a QUEUED job nobody claimed
     // (recordAsSeat; capsid/rulings/mcp-2026-10-10.md, amendment answer 2). The row must
     // be queued and unheld; the UPDATE credits the recorder as claimed_by, so the outcome
-    // row names who said the work was done.
+    // row names who said the work was done. recordVerb names the audit and mirror action:
+    // "record" for the seat's record, "complete-unclaimed" for a session completing its own
+    // work without a claim (src/jobs-seat.ts completeUnclaimed), so the two stay apart.
     records?: boolean;
+    recordVerb?: "record" | "complete-unclaimed";
     // The overlap report for the pull request this call named, recorded on the audit row
     // and returned. Its line is already in result_summary.
     overlaps?: OverlapReport | null;
@@ -155,7 +158,7 @@ async function holderTransition(
   // What the row must be for this transition to apply, and who holds it. For a holder's
   // own transition that is the claimed row it holds, as it always was.
   const fromStatus = patch.records ? "queued" : patch.seatCloses ? "blocked" : "claimed";
-  const verb = patch.records ? "record" : patch.seatCloses ? "admin-complete" : action;
+  const verb = patch.records ? (patch.recordVerb ?? "record") : patch.seatCloses ? "admin-complete" : action;
   // The row as the UPDATE below will leave it, computed from the read so the mirror
   // and the outcome can be built before anything is written. The guard at the head of
   // the batch is what keeps the read true when the batch commits.
@@ -557,7 +560,14 @@ export async function completeAsSeat(env: Env, agent: Agent, now: Date, id: stri
 // The seat recording the outcome of a queued job that was worked without a claim. The
 // same checks, verification and records as a complete; the seat's review gate applies.
 export async function recordAsSeat(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
-  return completeWith(env, agent, now, id, args, true, true);
+  return completeWith(env, agent, now, id, args, true, "record");
+}
+
+// A session completing a queued job it worked without a claim, naming the pull request
+// (src/jobs-seat.ts completeUnclaimed checks who may). The record path, audited as
+// complete-unclaimed so it is not read as the seat recording somebody else's work.
+export async function completeWithoutClaim(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+  return completeWith(env, agent, now, id, args, true, "complete-unclaimed");
 }
 
 // The review gate for a close the seat makes. A holder's complete may write (bind the
@@ -589,7 +599,15 @@ async function seatReviewRefusal(env: Env, id: string, args: CompleteArgs): Prom
   );
 }
 
-async function completeWith(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs, seatCloses: boolean, records = false): Promise<JobResult> {
+async function completeWith(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: CompleteArgs,
+  seatCloses: boolean,
+  records: false | "record" | "complete-unclaimed" = false
+): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
     return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
   }
@@ -635,7 +653,7 @@ ${overlap}` : args.result_summary,
     skills: credited.skills,
     said: { claim: claim.claim, raw: completeRaw },
     ...(records
-      ? { records: true }
+      ? { records: true, recordVerb: records }
       : seatCloses
       ? {
           seatCloses: true,

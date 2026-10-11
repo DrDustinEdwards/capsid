@@ -81,8 +81,9 @@ export interface InFlight {
 }
 
 // A runner is a minted agent of kind "session" (capsid-runner, dustinedwards-runner).
-// Runners hold no flags, and their pull requests are never auto-merged, because
-// auto-merge's author_is_driver check refuses any kind but driver.
+// Runners hold no flags. Their pull requests are judged by auto-merge like any other
+// since policy version 7 dropped author_is_driver (job_e68de044f8a4): the author
+// allowlist, the recorded pull request and every other check decide.
 export async function isRunnerActor(db: D1Database, actor: string): Promise<boolean> {
   if (!actor.startsWith("agent:")) return false;
   // A runner key archived after its job ended is still a runner (src/agents-archive.ts).

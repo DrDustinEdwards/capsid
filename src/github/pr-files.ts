@@ -36,15 +36,21 @@ export interface PrFiles {
   paths: string[];
   // Why the list is not the whole of the pull request's files, or null when it is.
   problem: string | null;
+  // Additions plus deletions across the files read, as GitHub counts them, or null when a
+  // file came back without its counts. Auto-merge's size cap reads it
+  // (src/auto-merge-policy.ts), and refuses a null rather than reading it as zero.
+  changedLines: number | null;
 }
 
 export async function readPrFiles(env: Env, owner: string, repo: string, number: number): Promise<PrFiles> {
-  const files = await readAllPages<{ filename: string; previous_filename?: string }>(
+  const files = await readAllPages<{ filename: string; previous_filename?: string; additions?: number; deletions?: number }>(
     env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/files`,
-    (page) => page as Array<{ filename: string; previous_filename?: string }>, FILES_MAX_PAGES
+    (page) => page as Array<{ filename: string; previous_filename?: string; additions?: number; deletions?: number }>, FILES_MAX_PAGES
   );
   // A list that reached FILES_LIMIT may have been cut by GitHub with no next page.
   const problem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
   const paths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
-  return { paths, problem };
+  const counted = files.items.every((f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions));
+  const changedLines = counted ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0) : null;
+  return { paths, problem, changedLines };
 }

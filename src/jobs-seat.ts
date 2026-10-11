@@ -19,7 +19,7 @@ import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
-import { commandFromSummary, completeAsSeat, completeJob, failJob, recordAsSeat } from "./jobs-holder";
+import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
 import type { JobSkills } from "./job-outcomes";
@@ -199,9 +199,49 @@ export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: stri
   return recordAsSeat(env, agent, now, id, args);
 }
 
+// The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2). A
+// cloud session signs in as the admin login, which may hold one claim, so it works a job
+// without claiming it, the way Copilot, Codex and Claude Code Projects work a task: one
+// branch and one pull request, no lease. Any caller holding the write grant on the job's
+// namespace completes the QUEUED job by naming that pull request, and the outcome credits
+// the caller. It runs the record path (completeWithoutClaim): the same review gate, GitHub
+// verification, outcome row and overlap check as a complete. record stays the seat's, for
+// closing work somebody else did.
+//
+// What a claim would have asked of the caller is asked here, since no claim was made: the
+// job's required_flags and min_record. Every named pull request must be on one of the
+// namespace's repos, and at least one must be named, because without one nothing a
+// reviewer or auto-merge can read ties the work to the job.
+async function completeUnclaimed(env: Env, agent: Agent, now: Date, current: JobRow, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
+  const id = current.id;
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`);
+  const refs = [args.result_ref, ...(args.evidence?.prs ?? [])].filter((ref): ref is string => Boolean(ref));
+  const prs = refs.map((ref) => ({ ref, pr: parsePrUrl(ref) })).filter((p): p is { ref: string; pr: PrUrl } => p.pr !== null);
+  if (prs.length === 0) {
+    return refuse(
+      "complete",
+      `${id} is queued and nobody holds it. A job worked without a claim is completed by naming its pull request (a pull request URL in result_ref or evidence.prs): the pull request is the claim. Nothing was written.`
+    );
+  }
+  for (const { ref, pr } of prs) {
+    try {
+      await resolveRepo(env, current.namespace, `${pr.owner}/${pr.repo}`);
+    } catch {
+      return refuse("complete", `${ref} is not on a repo mapped to ${current.namespace}, so it is not shown to be ${id}'s work. Nothing was written.`);
+    }
+  }
+  const missing = missingForJob(agent, current.namespace, current.required_scopes);
+  if (missing) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${missing} A claim would have refused it too. Nothing was written.`);
+  const shortfall = await recordShortfall(env.DB, agent.actor, current);
+  if (shortfall) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${shortfall} A claim would have refused it too. Nothing was written.`);
+  return completeWithoutClaim(env, agent, now, id, args);
+}
+
 // complete through the capsid_work_jobs tool. The holder completing its own job is an ordinary
-// complete. The seat completing a job somebody else holds is adminCompleteJob. Anyone
-// else gets completeJob's own refusal for a job it does not hold.
+// complete. A queued job nobody holds is completed without a claim (completeUnclaimed). The
+// seat completing a job somebody else holds is adminCompleteJob. Anyone else gets
+// completeJob's own refusal for a job it does not hold.
 export async function completeAsCaller(
   env: Env,
   agent: Agent,
@@ -212,6 +252,7 @@ export async function completeAsCaller(
   // An argument completeJob refuses before it reads anything is refused the same way here.
   if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
   const current = await readJob(env.DB, id);
+  if (current && current.status === "queued" && current.claimed_by === null) return completeUnclaimed(env, agent, now, current, args);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) return adminCompleteJob(env, agent, now, id, args);
   return completeJob(env, agent, now, id, args);
 }

@@ -275,7 +275,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                       : j.status === "claimed"
                         ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
                         : j.status === "queued"
-                          ? `${j.finding ? "Watcher finding · " : ""}priority ${j.priority}`
+                          ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(ms(j.started_at), now)} · ` : ""}priority ${j.priority}`
                           : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                   // A blocked job that asks something is marked as a question: it waits on
                   // an answer, not on a command (design-portal-evaluation.md, the question row).

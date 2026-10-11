@@ -130,6 +130,9 @@ export interface JobFeedRow {
   result_ref: string | null;
   result_summary: string | null;
   summary_sig?: string | null;
+  // The started label (migrations/0042). Absent in a row read before it.
+  started_by?: string | null;
+  started_at?: string | null;
   // From the finding's watcher_findings row when this job is its current one
   // (src/watcher-findings.ts). Null, or absent, otherwise.
   finding_seen_count?: number | null;
@@ -169,6 +172,7 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     command_signature: blocked ? commandSignature : null,
     question: blocked && commandSignature !== "mismatch" && isQuestionSummary(summary),
     ...(row.status === "parked" && summary !== null ? { parked_reason: summary } : {}),
+    ...(row.started_by && row.started_at ? { started_by: row.started_by, started_at: isoTime(row.started_at) } : {}),
     result_ref: row.result_ref,
     finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
   };
@@ -301,6 +305,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
     .prepare(
       `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
               j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
+              j.started_by, j.started_at,
               wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
        FROM jobs j LEFT JOIN watcher_findings wf ON wf.job_id = j.id
        WHERE j.status IN (${open}) OR j.status = 'parked' OR datetime(j.updated_at) >= datetime(?1)

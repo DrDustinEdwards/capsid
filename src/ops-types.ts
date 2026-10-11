@@ -231,6 +231,10 @@ export interface OpsJob {
   // A parked job (src/jobs-park.ts): the one line saying when it comes back. Absent for
   // every other status, and in a feed written before parked jobs were shown.
   parked_reason?: string;
+  // The started label (src/jobs-begin.ts): who began a job worked without a claim, and
+  // when. Absent for a job nobody began, and in a feed written before the label existed.
+  started_by?: string;
+  started_at?: string;
   result_ref: string | null;
   // Posted by agent:watcher, with its fingerprint from the title, and how often the
   // watcher has seen it (seen_count, last_seen) while this is the finding's current
