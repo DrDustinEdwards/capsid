@@ -21,7 +21,7 @@ bindings. Only `wrangler dev` and `wrangler deploy` need the real file.
 | binding | kind | why it is separate |
 | --- | --- | --- |
 | `DB` | D1 | documents, versions, links, audit log, the loop's tables |
-| `APP_KV` | KV | the Worker's own bookkeeping: caches, leases, counters |
+| `APP_KV` | KV | the Worker's own bookkeeping: caches, counters |
 | `OAUTH_KV` | KV | the OAuth provider's clients, grants and tokens |
 | `MEDIA` | R2 | backups, the markdown mirror, the report sink |
 | `HOLDOUT` | R2 | the loop's hidden test suites |
@@ -428,7 +428,7 @@ starts writing to every repository on the roster.
       `docs/policy/auto-merge.md`, and every merge it makes names the policy
       version and every check that passed in the audit log.
 
-## 11. A fresh install, step by step
+## 10. A fresh install, step by step
 
 The sections above explain each part. This is the order to do them in. The host names in `src/mcp-host.ts` (`MCP_HOST`) and `src/portal-host.ts` (`PORTAL_HOST`) are this deployment's own; the examples below use a workers.dev address.
 
@@ -463,20 +463,17 @@ Optional parts stay hidden or inert until configured:
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
 - The telemetry receiver (`/ops/otlp/v1/*`, docs/telemetry.md) and the hook receiver (`/ops/hooks`, docs/hooks.md) are live but store nothing until a Claude Code session is configured to send to them with a key.
-- The improve loop, auto-merge and the nightly driver are each off by default (section 12).
+- The improve loop and auto-merge are each off by default (section 11).
 
-## 12. Switches
+## 11. Switches
 
-Three switches, all off by default. Each is turned on separately.
+Two switches, all off by default. Each is turned on separately.
 
 - **The improve loop** runs only when `improve_mode` in `APP_KV` is `subscription` or `api`, set by `capsid_admin_control_improve` action `mode`. Anything unreadable or unexpected falls back to `off`.
 - **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
-- **The nightly driver** exists only after `node scripts/schedule-drivers.mjs --install --namespace <ns> --apply`. The task it creates is disabled until it is enabled by hand (section 10).
-
-Seat-started sessions have a fourth switch, `seat_start:enabled` in `APP_KV`, which reads on only for the value `on` (docs/seat-start.md).
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16; the loop is still off.
 
-## 13. Checks before a push
+## 12. Checks before a push
 
 Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
