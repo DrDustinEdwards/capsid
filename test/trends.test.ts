@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { backupSlots, ciDays, isoWeek, lastDays, mondayOf, sessionMinutes, timeMs, weekStarts } from "../src/trends.ts";
+import { backupSlots, ciDays, costWeeks, isoWeek, lastDays, mondayOf, sessionMinutes, timeMs, weekStarts } from "../src/trends.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
 // a real D1 in test-integration/portal-trends.test.ts.
@@ -100,4 +100,26 @@ test("PLANT: a backup slot is filled only by a complete run inside it", () => {
   assert.deepEqual(filled(slots.weekly), ["2026-10-05"]);
   assert.deepEqual(filled(slots.monthly), ["2026-08", "2026-10"]);
   assert.equal(slots.monthly[0]!.key, "2026-05");
+});
+
+test("PLANT: a week's cost sums its costed outcomes, and a week with none is null, not zero", () => {
+  const weeks = weekStarts(NOW, 3);
+  const out = costWeeks(
+    [
+      { day: "2026-10-05", usd: 1.25, n: 2 },
+      { day: "2026-10-09", usd: 0.5, n: 1 },
+      { day: "2026-09-22", usd: 3.333, n: 1 },
+      // Before the window: not counted.
+      { day: "2026-09-01", usd: 9, n: 1 },
+    ],
+    weeks
+  );
+  assert.deepEqual(
+    out.map((w) => [w.week, w.usd, w.jobs]),
+    [
+      ["2026-W39", 3.33, 1],
+      ["2026-W40", null, 0],
+      ["2026-W41", 1.75, 3],
+    ]
+  );
 });

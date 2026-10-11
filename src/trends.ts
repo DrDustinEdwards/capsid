@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { LOOP_ROSTER } from "./improve-schema";
 import { logEvent } from "./log";
-import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types";
+import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -15,11 +15,12 @@ import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendMergeWeek, TrendMin
 //   queue      visual 3: per day, jobs posted, jobs ended, and jobs open at the day's end
 //   merges     visual 7: per week, merged by the policy, by an approval, by the seat, closed;
 //              and each rollback as an event
+//   cost       visual 6: per week, model spend of the jobs that ended, against the cap in the feed
 //   backups    visual 10: the retention slots, 14 daily, 8 weekly, 6 monthly, filled or not
 //   ci         visual 11: per roster repo and day, the default branch green, red or not run
 //
-// Visuals 2, 5 and 6 (waits, claim agreement, cost) come from GET /portal/api/claims, which
-// already serves them; 4, 8 and 9 from the plan and the feed. Every time here is UTC.
+// Visuals 2 and 5 (waits, claim agreement) come from GET /portal/api/claims, which already
+// serves them; 4, 8 and 9 from the plan and the feed. Every time here is UTC.
 
 const DAY_MS = 86_400_000;
 const TRENDS_QUEUE_DAYS = 14;
@@ -199,6 +200,30 @@ async function readMerges(db: D1Database, mondays: string[]): Promise<{ weeks: T
   return { weeks: [...weeks.values()], rollbacks: rollbacks.results.map((r) => ({ at: r.run_at, repo: r.repo, pr: r.pr, outcome: r.outcome })) };
 }
 
+/** Model spend per week from outcome rows summed by day (cost_usd, rows that carried one).
+ *  A week with no costed outcome is null, never 0: no telemetry is not a free week. */
+export function costWeeks(rows: Array<{ day: string; usd: number | null; n: number }>, mondays: string[]): TrendCostWeek[] {
+  const weeks = new Map<string, { usd: number; jobs: number }>(mondays.map((m) => [m, { usd: 0, jobs: 0 }]));
+  for (const r of rows) {
+    const w = weeks.get(mondayOf(r.day));
+    if (!w || !r.n) continue;
+    w.usd += r.usd ?? 0;
+    w.jobs += r.n;
+  }
+  return mondays.map((m) => {
+    const w = weeks.get(m)!;
+    return { week: isoWeek(m), start: m, usd: w.jobs ? Math.round(w.usd * 100) / 100 : null, jobs: w.jobs };
+  });
+}
+
+async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWeek[]> {
+  const rows = await db
+    .prepare("SELECT substr(recorded_at, 1, 10) AS day, SUM(cost_usd) AS usd, COUNT(cost_usd) AS n FROM job_outcomes WHERE recorded_at >= ?1 AND cost_usd IS NOT NULL GROUP BY day")
+    .bind(mondays[0])
+    .all<{ day: string; usd: number | null; n: number }>();
+  return costWeeks(rows.results, mondays);
+}
+
 /** The retention slots d1-dump keeps (14 daily, 8 weekly, 6 monthly), each filled when a
  *  complete run falls in it. Run ids begin with their ISO day. */
 export function backupSlots(completeRunIds: string[], now: Date): NonNullable<PortalTrends["backups"]["slots"]> {
@@ -309,10 +334,11 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
 /** Every series, for `weeks` weeks of the weekly ones. */
 export async function readTrends(env: Env, now: Date, weeks: number): Promise<PortalTrends> {
   const mondays = weekStarts(now, weeks);
-  const [minutes, queue, merges, backups, ci] = await Promise.all([
+  const [minutes, queue, merges, cost, backups, ci] = await Promise.all([
     readMinutes(env.DB, mondays),
     readQueue(env.DB, lastDays(now, TRENDS_QUEUE_DAYS)),
     readMerges(env.DB, mondays),
+    readCost(env.DB, mondays),
     readBackups(env, now),
     readCi(env, now),
   ]);
@@ -326,6 +352,7 @@ export async function readTrends(env: Env, now: Date, weeks: number): Promise<Po
     },
     queue,
     merges,
+    cost: { weeks: cost },
     backups,
     ci,
   };
