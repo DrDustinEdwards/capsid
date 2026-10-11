@@ -33,7 +33,6 @@ Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints.
 - **Capsid Admin** (8 tools) holds what changes who may do what or reads across every namespace. It is on `/mcp/admin` and `/ops/mcp/admin`, for the owner only, and its risky actions need a recent sign-in.
 - **22 tools in all.** `src/counts.ts` derives the count from `TOOL_GRANTS` in `src/scope.ts`, and tests hold that table to the tools actually registered.
 - **Clients.** Claude and ChatGPT identify themselves by a Client ID Metadata Document. Grok and Gemini use a tightened dynamic registration at `/register` that admits only allowlisted callbacks and grants nothing on its own (`src/dcr.ts`).
-- **Job keys.** A session the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job.
 
 Detail: [docs/auth.md](docs/auth.md) (including the full endpoint list), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
 
@@ -76,7 +75,7 @@ The Portal is the owner's admin app, served at `/portal/` and on its own host. I
 - **Seat-started sessions.** The seat can start a Claude Code session on GitHub's runners for one queued job. It is off by default, runs on a public repo only, and has a network allowlist, a per-job key, no deploy rights and a canary test.
 - **Limits.** [docs/auth.md](docs/auth.md) lists what Capsid cannot control, such as the owner's own shell.
 
-Detail: [docs/auth.md](docs/auth.md), [docs/repo-access.md](docs/repo-access.md), [docs/seat-start.md](docs/seat-start.md), [docs/hooks.md](docs/hooks.md). A 2026-09-16 source audit is [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md); it is a snapshot, not canon.
+Detail: [docs/auth.md](docs/auth.md), [docs/repo-access.md](docs/repo-access.md), [docs/hooks.md](docs/hooks.md). A 2026-09-16 source audit is [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md); it is a snapshot, not canon.
 
 ## Backups
 
@@ -88,7 +87,6 @@ A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mi
 - [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the endpoint list, the co-owner, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
 - [docs/routines.md](docs/routines.md) how Capsid starts a Claude Code cloud session for a queued job by firing its namespace's routine
-- [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, its guards and its canary
 - [docs/telemetry.md](docs/telemetry.md) Claude Code's OpenTelemetry into Capsid: per-session usage, per-job cost on the outcome row, and the settings that turn it on
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, gates, evidence and agent records
 - [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes and the watcher

@@ -28,7 +28,6 @@ import { prUrlsFromJob } from "./outcome-prs";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
 import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
-import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { approveProposal, checkProposal, lineChanges, rejectProposal } from "./canon";
 import { logEvent } from "./log";
@@ -50,7 +49,6 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "pause",
   "unpause",
   "mode",
-  "seat_start",
   "overnight",
   "resume_job",
   "fail_job",
@@ -83,11 +81,11 @@ export type ActionParams = Record<string, string | undefined>;
 // /portal say console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
 
-// The four automation switches (pause, unpause, mode, seat_start) take a reason in both
+// The automation switches (pause, unpause, mode, overnight) take a reason in both
 // directions, and an Undo from the Portal's result message sends the reverse change with
 // undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
 // own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
-const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start", "overnight"]);
+const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "overnight"]);
 const UNDO_INFIX = "undo-";
 
 // Which front door an action came in by. A click in the Portal and a call to the
@@ -116,7 +114,7 @@ function switchReasonRefusal(action: PortalAction): string {
     case "overnight":
       return "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded in the audit row with the change.";
     default:
-      return "seat_start needs a reason: why seat-started sessions go on or off. It is recorded in the audit row with the change.";
+      return `${action} needs a reason, recorded in the audit row with the change.`;
   }
 }
 
@@ -136,10 +134,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Unpause ${ns}. The loop will open a run for it on the next opener.`;
     case "mode":
       return `Set the improve mode to ${params.value ?? ""} for every namespace.`;
-    case "seat_start":
-      return params.value === "on"
-        ? "Turn seat-started sessions ON. The seat may then start Claude Code sessions on GitHub's runners for queued capsid and dustinedwards jobs, billed to your subscription, up to the cap. Confirm on the Anthropic billing page after the first run that nothing was billed as API usage."
-        : "Turn seat-started sessions OFF. No new session starts; one already running finishes.";
     case "overnight":
       return params.value === "off"
         ? "Turn the overnight run OFF. No scheduled run starts; one already running finishes."
@@ -257,8 +251,8 @@ async function performAction(
   let summary = "";
   // The switches: a reason in both directions, checked again here because the token
   // binds the params and a token signed before this rule could lack one. The reason and
-  // whether this is an Undo go in the click row; the shared mutators for unpause, mode
-  // and seat_start record no reason, and their contract is left as it is.
+  // whether this is an Undo go in the click row; the shared mutators for unpause and mode
+  // record no reason, and their contract is left as it is.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason) return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
@@ -295,15 +289,6 @@ async function performAction(
         committed = true;
         summary = `Reset the circuit breaker for ${namespace}.`;
         await auditClick(env, actor, source, surface, action, namespace, result.state);
-        break;
-      }
-      case "seat_start": {
-        const value = required(params, "value");
-        if (!value) return { ok: false, refusal: "seat_start needs a value." };
-        const result = await setSeatStart(env, actor, { value });
-        committed = true;
-        summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
-        await auditClick(env, actor, source, surface, action, null, switchDetail(result), click);
         break;
       }
       case "overnight": {
@@ -591,7 +576,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   pause: ["namespace", "reason", "undo"],
   unpause: ["namespace", "reason", "undo"],
   mode: ["value", "reason", "undo"],
-  seat_start: ["value", "reason", "undo"],
   overnight: ["value", "reason", "undo"],
   resume_job: ["id", "reason", "note"],
   release_job: ["id", "reason"],
@@ -733,20 +717,6 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             : `improve_mode: ${current.mode} -> ${p.value}, for every namespace.${current.reason ? ` (It reads ${current.mode} now because ${current.reason}.)` : ""}`,
         ],
         audit: [`improve-mode-set by ${actor}`, click],
-      };
-    }
-    case "seat_start": {
-      if (p.value !== "on" && p.value !== "off") return refused(`seat_start must be "on" or "off"; got '${p.value ?? ""}'.`);
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const state = await seatStartState(env);
-      const current = state.enabled ? "on" : "off";
-      return {
-        ok: true,
-        changes: [
-          current === p.value ? `${SEAT_START_KEY} is already ${p.value}; it is written again unchanged.` : `${SEAT_START_KEY}: ${current} -> ${p.value}.`,
-          `The cap stays at ${state.max_sessions} session${state.max_sessions === 1 ? "" : "s"} in flight.`,
-        ],
-        audit: [`seat-start-set by ${actor}`, click],
       };
     }
     case "overnight": {

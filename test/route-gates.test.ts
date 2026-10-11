@@ -28,7 +28,6 @@ import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
-import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
 import { PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
@@ -121,7 +120,6 @@ const PATH_CONSTANTS: Record<string, string> = {
   CREDENTIAL_PATH,
   BACKUP_CREDENTIAL_PATH,
   PORTAL_CALLBACK_PATH,
-  RUNNER_KEY_PATH,
   OTLP_METRICS_PATH,
   OTLP_LOGS_PATH,
   OPS_FEED_PATH,
@@ -223,7 +221,7 @@ test("capsid_run_improve: status reads, run and claim are a driver's work, and t
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
-    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "seat_start", "sign_policy", "skill_transitions", "unpause"],
+    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "sign_policy", "skill_transitions", "unpause"],
     "capsid_admin_control_improve's action list changed"
   );
   for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);

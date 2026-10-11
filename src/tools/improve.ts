@@ -1,5 +1,4 @@
 import { setOvernight } from "../overnight";
-import { setSeatStart } from "../seat-start";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { bounded, docPath, MAX_BODY, MAX_DOC_STATUS, MAX_TITLE, nsName } from "../limits";
@@ -27,15 +26,14 @@ export function defineImproveOperations(server: McpServer, ctx: ToolCtx): void {
         `Open improve runs, or control the loop. action "run" opens runs for the roster, or one roster namespace, and advances them one step; it respects improve_mode, skips paused namespaces, refuses a namespace not on the roster, and with dry_run reports the plan and writes nothing. action "mode" sets improve_mode to value ("off" | "subscription" | "api"). action "pause" or "unpause" sets or clears the pause for one namespace or "all"; pause takes an optional reason. action "budget" sets the monthly caps actions_minutes_month and model_usd_month. mode, pause, unpause and budget are audit-logged and return the value read back from KV. action "mint_operator_key" returns a new read-only (ro:) operator key once, stores it nowhere, and returns the wrangler command that adds its hash to OPERATOR_KEY_HASH; it does not set the secret. action "claim" takes the subscription-mode driver lease for one namespace (six-hour TTL) and is refused while the lease is held; release: true gives it back. The lease is best-effort. action "register_skill" registers one candidate skill from the skill object; refused unless the source job is done with one merged pull request and green CI and has produced no skill yet. The body is stored at capsid/improve/skills/<id>.md. action "skill_transitions" sets whether the skills evaluation cycle applies the status changes its evaluations decide ("apply") or records them and holds every status ("hold", also what an unset value means); audit-logged and read back. action "seat_start" turns seat-started sessions on or off (value "on" | "off") and sets their cap (max_sessions, 1 or 2); unset means off and 1; audit-logged and read back. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. run and claim need the write grant; every other action is admin only.`,
       inputSchema: {
         action: z
-          .enum(["run", "mode", "pause", "unpause", "budget", "mint_operator_key", "claim", "sign_policy", "register_skill", "skill_transitions", "seat_start", "breaker_reset", "overnight"])
+          .enum(["run", "mode", "pause", "unpause", "budget", "mint_operator_key", "claim", "sign_policy", "register_skill", "skill_transitions", "breaker_reset", "overnight"])
           .optional()
           .describe('Defaults to "run".'),
         namespace: nsName.optional().describe('For "run", limit to one namespace (omit for the whole roster). For pause/unpause, the target namespace, or "all".'),
         value: z
           .enum(["off", "subscription", "api", "hold", "apply", "on"])
           .optional()
-          .describe('For action "mode": the mode to set ("off" | "subscription" | "api"). For action "skill_transitions": "hold" or "apply". For action "seat_start": "on" or "off". For action "overnight": "off", "api" or "subscription".'),
-        max_sessions: z.number().int().min(1).max(2).optional().describe('For action "seat_start": the cap on seat-started sessions in flight, 1 or 2.'),
+          .describe('For action "mode": the mode to set ("off" | "subscription" | "api"). For action "skill_transitions": "hold" or "apply". For action "overnight": "off", "api" or "subscription".'),
         threshold: z.number().int().min(1).max(50).optional().describe('For action "breaker_reset": the number of holder fails in 24 hours that opens the breaker of any namespace.'),
         reason: bounded(MAX_DOC_STATUS).optional().describe('For action "pause": the reason recorded on the pause key. For action "overnight": the required reason for the change.'),
         actions_minutes_month: z.number().positive().optional().describe('For action "budget": the monthly Actions-minutes cap.'),
@@ -70,7 +68,7 @@ export function defineImproveOperations(server: McpServer, ctx: ToolCtx): void {
           ),
       },
     },
-    async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path, skill, max_sessions, threshold }) => {
+    async ({ action, namespace, value, reason, actions_minutes_month, model_usd_month, dry_run, condition, release, path, skill, threshold }) => {
       try {
         // Every action but run and claim is admin only, stated in TOOL_ACTION_GRANTS
         // (src/scope.ts) and enforced by the registrar before this handler runs.
@@ -78,9 +76,6 @@ export function defineImproveOperations(server: McpServer, ctx: ToolCtx): void {
           if (!namespace || !path) return fail("sign_policy needs the namespace and the path of the policy document.");
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
           return signed.ok ? ok(signed) : fail(signed.error);
-        }
-        if (action === "seat_start") {
-          return ok(await setSeatStart(env, ctx.actor, { value, max_sessions }));
         }
         if (action === "overnight") {
           // Admin only, like every action but run and claim (TOOL_ACTION_GRANTS).

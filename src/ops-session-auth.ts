@@ -14,7 +14,7 @@ import { checkScope, JOBS_TOOL } from "./scope";
 // these routes write is part of a job's record, so a read-only caller may not send it.
 // The tool named is "jobs", which every caller that works jobs holds.
 //
-// The job: a runner key is bound to one job (agent.job). A driver is bound to the single
+// The job: a driver is bound to the single
 // job it holds claimed, or to none when it holds zero or several. The admin is bound to
 // none.
 
@@ -42,13 +42,8 @@ export function sessionCallerRefusal(agent: Agent): string | null {
   return checkScope(agent, { tool: JOBS_TOOL, grant: "write" });
 }
 
-/** The job a caller's session is working: a runner key's bound job, or the one job a
- *  driver holds claimed. None, or more than one, is no binding. */
+/** The job a caller's session is working: the one job a driver holds claimed. None, or more than one, is no binding. */
 async function sessionJobFor(db: D1Database, agent: Agent): Promise<{ job_id: string; namespace: string } | null> {
-  if (agent.job) {
-    const row = await db.prepare("SELECT id, namespace FROM jobs WHERE id = ?1").bind(agent.job).first<{ id: string; namespace: string }>();
-    return row ? { job_id: row.id, namespace: row.namespace } : null;
-  }
   if (!agent.row || agent.kind !== "driver") return null;
   // LIMIT 2, so "holds several" is told apart from "holds one" without reading them all.
   const { results } = await db

@@ -301,15 +301,6 @@ export interface OpsOvernight {
   } | null;
 }
 
-export interface OpsSeatStart {
-  enabled: boolean;
-  max_sessions: number;
-  in_flight: number;
-  // Sessions started in the last 7 days, newest first. run_id and run_url are null
-  // for a session whose runner never presented its token.
-  recent: Array<{ job_id: string; namespace: string | null; at: string; run_id: number | null; run_url: string | null }>;
-}
-
 // A Claude Code session Capsid has heard from through its hooks (POST /ops/hooks,
 // src/ops-hooks.ts). Summaries only: no prompt, response or tool content is kept.
 export interface OpsSession {
@@ -451,7 +442,6 @@ export interface OpsLive {
   // The auto-merge safety meter the tick's merge-safety step kept, or null before its
   // first pass. One KV get, no D1 or GitHub read.
   merge_safety: OpsMergeSafety | null;
-  seat_start: OpsSeatStart;
   overnight: OpsOvernight;
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
   // first, at most 50.
@@ -564,7 +554,6 @@ export type PortalAction =
   | "pause"
   | "unpause"
   | "mode"
-  | "seat_start"
   | "overnight"
   | "resume_job"
   | "release_job"
@@ -598,7 +587,6 @@ export type PortalAction =
 //   pause         { namespace, reason, undo? }   reason required
 //   unpause       { namespace, reason, undo? }   reason required
 //   mode          { value: "api" | "subscription" | "off", reason, undo? }   reason required
-//   seat_start    { value: "on" | "off", reason, undo? }                     reason required
 //   overnight     { value: "off" | "api" | "subscription", reason, undo? }   reason required
 //                 choosing subscription records Dustin's decision, its date and its
 //                 reasoning with the switch (src/overnight.ts)

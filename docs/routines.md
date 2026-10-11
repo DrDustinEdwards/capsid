@@ -1,6 +1,6 @@
 # Routine-started sessions
 
-Capsid starts a Claude Code cloud session for one queued job itself, by firing its namespace's routine (job_a7d6f6009242, step 5 of `capsid/research/plan-lean-capsid.md`). Until now Dustin relayed every prompt and every report by hand. This replaces seat-start (`docs/seat-start.md`), which runs sessions on GitHub's runners; seat-start is retired once a routine-started session has completed one real job.
+Capsid starts a Claude Code cloud session for one queued job itself, by firing that namespace's routine (job_a7d6f6009242, step 5 of `capsid/research/plan-lean-capsid.md`). Until now Dustin relayed every prompt and every report by hand. This replaced seat-start, which ran sessions on GitHub's runners with a per-job runner key. Seat-start is retired (job_2c92174d5bff, 2026-10-11): its action `start`, its switch and cap, the `seat-session` workflows, `/ops/runner-key` and the bound runner keys are gone from the code.
 
 A routine is a saved Claude Code configuration on Dustin's claude.ai account: a prompt, a repository, an environment and triggers (code.claude.com/docs/en/routines). Its API trigger is a per-routine URL and bearer token. A POST to the URL starts a new cloud session and answers with its id and URL. Runs count against the subscription like any session, each routine accepts 30 fires an hour and the account 100, and the endpoint has no idempotency key, so every accepted fire is a new session.
 
@@ -73,7 +73,7 @@ Step 7 is claimless complete (job_e68de044f8a4, "The PR is the claim"): a caller
 
 `capsid_work_jobs` action `fire` with a job `id` (`src/routine-fire.ts`, tests in `test-integration/routine-fire.test.ts` against a fake endpoint):
 
-1. Only the seat (the admin or a `can_merge` caller) may fire, and only within its namespaces. A runner key bound to a job cannot.
+1. Only the seat (the admin or a `can_merge` caller) may fire, and only within its namespaces.
 2. The job must be queued and its signature must verify.
 3. The namespace's fire URL must be set, and a token must resolve for it (above).
 4. A job somebody already began (the started label) is refused as `already_started`, naming who and when.
@@ -95,7 +95,7 @@ Each refusal is named in its first word. None writes a `job-routine-fired` row e
 | `routine_refused` | any other status, with Anthropic's error type (a 400 is often a paused routine) |
 | `routine_unreachable` | no answer within 15 seconds, or the request failed |
 
-**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule are not carried over. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. With one routine for every namespace the 30 an hour is shared across them. The started label is what tells a second session, and a second fire, that a job is being worked: the fire sets it and refuses a job that carries it.
+**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule were not carried over, and are gone with it. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. With one routine for every namespace the 30 an hour is shared across them. The started label is what tells a second session, and a second fire, that a job is being worked: the fire sets it and refuses a job that carries it.
 
 ## The cloud-driver agent
 

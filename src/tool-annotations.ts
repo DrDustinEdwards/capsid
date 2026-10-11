@@ -87,7 +87,7 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // spent, so a repeat is refused rather than repeated. Only this Worker's own stores.
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: false }),
   // mode, pause and budget overwrite the loop's settings; mint_operator_key issues a
-  // key each call; seat_start sends a repository dispatch.
+  // key each call.
   capsid_admin_control_improve: destructive({ idempotent: false, openWorld: true }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),

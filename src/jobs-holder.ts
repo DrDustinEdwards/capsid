@@ -40,7 +40,7 @@ import {
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
-import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 import { externalFence } from "./provenance";
 
@@ -217,9 +217,6 @@ async function holderTransition(
       ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
     }),
   ];
-  // complete, fail and block all end the run that held the job, so a runner key bound
-  // to it stops here, in the same batch.
-  if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
   if (patch.touches) statements.push(...patch.touches(job));
   // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as
   // sent, so nothing GitHub says can reach it (src/job-claims.ts). It rides in this

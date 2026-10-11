@@ -19,7 +19,6 @@ import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./j
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
-import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
 import type { JobSkills } from "./job-outcomes";
 import type { ClaimInput, ClaimRaw } from "./job-claims";
@@ -33,7 +32,6 @@ import {
   readJob,
   recordShortfall,
   refuse,
-  revokeBoundKeys,
   type JobResult,
 } from "./jobs-transition";
 
@@ -78,7 +76,6 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
     ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
-    revokeBoundKeys(env.DB, id),
     // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
     // a gate a resume already answered is not this touch's wait.
     touchStatement(env.DB, {
@@ -295,8 +292,6 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
     ).bind(id, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env, job, "job-released", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
-    // Back in the queue, a bound key would resolve again inside its pending window.
-    revokeBoundKeys(env.DB, id),
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -418,7 +413,6 @@ export async function supersedeJob(
       from: current.status,
       held_by: current.claimed_by,
     }),
-    revokeBoundKeys(env.DB, id),
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -515,11 +509,9 @@ export async function resumeDestination(env: Env, holder: string, job: JobRow, t
     ? null
     : !isMintedActor(holder)
       ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
-      : (await isRunnerActor(db, holder))
-        ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
-        : (await isRevokedActor(db, holder))
-          ? `${holder} is revoked and can no longer claim, so ${id} went back to the queue for the next session.`
-          : null;
+      : (await isRevokedActor(db, holder))
+        ? `${holder} is revoked and can no longer claim, so ${id} went back to the queue for the next session.`
+        : null;
   return { toQueue };
 }
 

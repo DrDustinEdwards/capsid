@@ -1499,6 +1499,31 @@ describe("migrations/0044, claimed jobs become started jobs", () => {
   });
 });
 
+describe("migrations/0045, runner keys bound to a job are revoked", () => {
+  const migration = env.TEST_MIGRATIONS.find((m) => m.name === "0045_no_runner_keys.sql");
+
+  it("revokes every live key with a job binding and leaves unbound keys alone", async () => {
+    expect(migration, "no migration named 0045_no_runner_keys.sql").toBeTruthy();
+    await env.DB.prepare("DELETE FROM agents WHERE name IN ('runner-bound-live', 'runner-bound-old', 'sample-unbound')").run();
+    const insert = (id: string, name: string, hash: string, job: string | null, revoked: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?1, ?2, 'session', ?3, '{}', 'test', '2026-10-10 08:00:00', ?4, ?5)"
+      )
+        .bind(id, name, hash, revoked, job)
+        .run();
+    await insert("agent_bound0000002", "runner-bound-live", "f".repeat(64), "job_queued00001", null);
+    await insert("agent_bound0000003", "runner-bound-old", "a".repeat(64), "job_done0000001", "2026-10-09 08:00:00");
+    await insert("agent_unbound00001", "sample-unbound", "b".repeat(64), null, null);
+
+    for (const query of migration!.queries) await env.DB.prepare(query).run();
+
+    const revoked = async (name: string) => (await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = ?1").bind(name).first<{ revoked_at: string | null }>())?.revoked_at;
+    expect(await revoked("runner-bound-live")).not.toBeNull();
+    expect(await revoked("runner-bound-old")).toBe("2026-10-09 08:00:00");
+    expect(await revoked("sample-unbound")).toBeNull();
+  });
+});
+
 describe("edit", () => {
   // The seat correcting a job nobody is working (src/jobs-edit.ts). The legacy callers
   // above are admin, so the driver here has the admin bit and can_merge taken away, as a

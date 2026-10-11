@@ -1698,27 +1698,6 @@
       "mode": "off",
       "decision": null
     },
-    "seat_start": {
-      "enabled": false,
-      "max_sessions": 1,
-      "in_flight": 0,
-      "recent": [
-        {
-          "job_id": "job_91b3c0de5a24",
-          "namespace": "sample",
-          "at": "2026-09-26T07:12:00.000Z",
-          "run_id": 1000000011,
-          "run_url": "https://github.com/example-org/sample-a/actions/runs/1000000011"
-        },
-        {
-          "job_id": "job_7c1e44b0a912",
-          "namespace": "sample",
-          "at": "2026-09-24T12:00:00.000Z",
-          "run_id": null,
-          "run_url": null
-        }
-      ]
-    },
     "sessions": [
       {
         "session_id": "5e55a0a1-0000-4000-8000-000000000001",

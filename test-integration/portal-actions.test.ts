@@ -18,7 +18,6 @@ import {
   PORTAL_PREVIEW_PATH,
 } from "../src/portal-actions";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
-import { SEAT_START_KEY } from "../src/seat-start";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import { proposeCanon } from "../src/canon";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
@@ -126,7 +125,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, SEAT_START_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...LOOP_ROSTER.map(pausedKey), ...LOOP_ROSTER.map(breakerResetKey)];
+const KEYS = [MODE_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...LOOP_ROSTER.map(pausedKey), ...LOOP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -230,10 +229,6 @@ const CASES: Record<string, Case> = {
   mode: {
     params: async () => ({ value: "off", reason: "stop the loop" }),
     after: async () => expect(await env.APP_KV.get(MODE_KEY)).toBe("off"),
-  },
-  seat_start: {
-    params: async () => ({ value: "off", reason: "no session should start" }),
-    after: async () => expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("off"),
   },
   overnight: {
     // The subscription, so the real KV shows the decision record written with the mode.
@@ -474,9 +469,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-eight actions", () => {
+  it("covers the allow-list, twenty-seven actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(28);
+    expect(Object.keys(CASES).length).toBe(27);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -572,7 +567,7 @@ describe("the approval record against real D1", () => {
 });
 
 describe("the automation switches against real D1 and KV", () => {
-  it("unpause, mode and seat_start refuse a missing reason at preview, as pause does, and write nothing", async () => {
+  it("unpause, mode and overnight refuse a missing reason at preview, as pause does, and write nothing", async () => {
     await env.APP_KV.put(pausedKey("capsid"), "an old reason");
     const auditBefore = await auditRows();
     const kvBefore = await Promise.all(KEYS.map((k) => env.APP_KV.get(k)));
@@ -580,7 +575,7 @@ describe("the automation switches against real D1 and KV", () => {
       ["pause", { namespace: "foxing" }],
       ["unpause", { namespace: "capsid" }],
       ["mode", { value: "off" }],
-      ["seat_start", { value: "on" }],
+      ["overnight", { value: "api" }],
     ] as const) {
       const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params } });
       expect(res.status, `${action} without a reason`).toBe(400);
@@ -590,20 +585,20 @@ describe("the automation switches against real D1 and KV", () => {
     expect(await Promise.all(KEYS.map((k) => env.APP_KV.get(k)))).toEqual(kvBefore);
   });
 
-  it("a switch and its Undo write their own click rows: portal-seat_start, then portal-undo-seat_start, each with its reason", async () => {
+  it("a switch and its Undo write their own click rows: portal-overnight, then portal-undo-overnight, each with its reason", async () => {
     const flip = async (params: Record<string, string>) => {
-      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "seat_start", params } })).json()) as PortalPreview;
+      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "overnight", params } })).json()) as PortalPreview;
       const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
       expect(performed.status, await performed.clone().text()).toBe(200);
       return preview;
     };
-    await flip({ value: "on", reason: "queued jobs are waiting" });
-    expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("on");
+    await flip({ value: "api", reason: "queued jobs are waiting" });
+    expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("api");
     const undo = await flip({ value: "off", reason: "Undo: queued jobs are waiting", undo: "true" });
-    expect(undo.audit).toContain(`portal-undo-seat_start by ${ACTOR}`);
-    expect(await env.APP_KV.get(SEAT_START_KEY)).toBe("off");
-    const clicks = (await auditRows()).filter((r) => r.action.endsWith("seat_start"));
-    expect(clicks.map((r) => r.action)).toEqual(["portal-seat_start", "portal-undo-seat_start"]);
+    expect(undo.audit).toContain(`portal-undo-overnight by ${ACTOR}`);
+    expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("off");
+    const clicks = (await auditRows()).filter((r) => r.action.endsWith("overnight"));
+    expect(clicks.map((r) => r.action)).toEqual(["portal-overnight", "portal-undo-overnight"]);
     expect(JSON.parse(clicks[0].params)).toMatchObject({ reason: "queued jobs are waiting" });
     expect(JSON.parse(clicks[0].params).undo).toBeUndefined();
     expect(JSON.parse(clicks[1].params)).toMatchObject({ reason: "Undo: queued jobs are waiting", undo: true });

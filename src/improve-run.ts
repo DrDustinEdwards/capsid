@@ -1,5 +1,4 @@
 import { overnightState, type OvernightState } from "./overnight";
-import { seatStartState, sessionsInFlight, type SeatStartState } from "./seat-start";
 import { TRANSITIONS_KEY, transitionMode, type TransitionMode } from "./skills-evaluate";
 import { sha256Hex } from "./auth";
 import { bytesToHex } from "./encoding";
@@ -216,11 +215,6 @@ export interface StatusReport {
   // whether it is on, never the body. Reported only when the policy loads (signature
   // verified, agreeing with the code); otherwise the reason it does not.
   policies: PolicyVersions;
-  // Whether the seat may start sessions on GitHub's runners, the cap, and how many are
-  // in flight now (src/seat-start.ts). Off unless switched on.
-  // in_flight is null while the switch is off: nothing new can start, and the count is
-  // read only when it decides something.
-  seat_start: SeatStartState & { in_flight: number | null };
   // The overnight run's switch and, when it runs on the subscription, the recorded
   // decision (src/overnight.ts). The scheduler reads this before it starts a session.
   overnight: OvernightState;
@@ -311,11 +305,6 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
     }
   };
   return { gates: await one(() => loadGatePolicy(env)), auto_merge: await one(() => loadMergePolicy(env)) };
-}
-
-async function seatStartStatus(env: Env): Promise<StatusReport["seat_start"]> {
-  const state = await seatStartState(env);
-  return { ...state, in_flight: state.enabled ? (await sessionsInFlight(env, new Date())).length : null };
 }
 
 // An item an app reported about itself is the app's words, and an agent reads
@@ -428,7 +417,6 @@ export async function improveStatus(
     protected_paths: servedProtectedPaths(),
     canon_paths: servedCanonPaths(),
     policies: await servedPolicies(env),
-    seat_start: await seatStartStatus(env),
     overnight: await overnightState(env),
     merge_safety: mergeSafety && allowed !== "*" ? { ...mergeSafety, namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)) } : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.

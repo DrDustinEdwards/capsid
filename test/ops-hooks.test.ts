@@ -330,16 +330,16 @@ test("a body over the cap is refused with 413 before it is parsed", async () => 
 
 // ---- who may post ------------------------------------------------------------------
 
-function rowAgent(kind: AgentKind, grants: Array<"read" | "write">, job: string | null = null): Agent {
+function rowAgent(kind: AgentKind, grants: Array<"read" | "write">): Agent {
   const scopes = defaultScopes(["sample"]);
   scopes.grants = grants;
-  const row = { id: "agent_x", name: `sample-${kind}`, kind, key_hash: "h", scopes: serializeScopes(scopes), created_by: "github:sample", created_at: "2026-09-11 00:00:00", revoked_at: null, last_seen: null, job_id: job } as AgentRow;
-  return { id: row.id, name: row.name, kind, actor: `agent:${row.name}`, scopes, admin: false, row, job };
+  const row = { id: "agent_x", name: `sample-${kind}`, kind, key_hash: "h", scopes: serializeScopes(scopes), created_by: "github:sample", created_at: "2026-09-11 00:00:00", revoked_at: null, last_seen: null, job_id: null } as AgentRow;
+  return { id: row.id, name: row.name, kind, actor: `agent:${row.name}`, scopes, admin: false, row };
 }
 
 test("a driver, a runner and the admin may post hooks; a read-only key, a cron or seat agent and a legacy read key may not", () => {
   assert.equal(sessionCallerRefusal(rowAgent("driver", ["read", "write"])), null);
-  assert.equal(sessionCallerRefusal(rowAgent("session", ["read", "write"], "job_00000000abcd")), null);
+  assert.equal(sessionCallerRefusal(rowAgent("session", ["read", "write"])), null);
   assert.equal(sessionCallerRefusal(adminAgentForEmail("admin@example.com")), null);
   assert.equal(sessionCallerRefusal(legacyAgent("write", "opkey:abc")), null);
   assert.match(sessionCallerRefusal(rowAgent("driver", ["read"])) ?? "", /requires the write grant/);

@@ -34,7 +34,6 @@ const isRunsOn = (m: string): m is RunsOn => m === "subscription" || m === "api"
 function Automation() {
   const { feed } = useApp();
   const apply = useApplySwitch();
-  const seat = feed.live.seat_start;
   const mode = feed.live.loop.mode;
   const loopOn = isRunsOn(mode);
   // What the loop runs on when it is turned on. Nothing is stored while it is off, so
@@ -67,28 +66,6 @@ function Automation() {
   return (
     <Panel flush title="Automation" src="each change is recorded in Activity with its reason">
       <div className="auto">
-        <div className="auto-row">
-          <div className="what">
-            <b>Seat start</b>
-            <span>Starts a Claude Code session on GitHub's runners for a queued capsid or dustinedwards job, billed to the subscription, up to the cap.</span>
-          </div>
-          <AutomationSwitch
-            id="sw-seat"
-            label="Seat start"
-            checked={seat.enabled}
-            verb={(next) => (next ? "Turning seat start on" : "Turning seat start off")}
-            onApply={(next, why) =>
-              apply(
-                { action: "seat_start", params: { value: next ? "on" : "off", reason: why } },
-                { action: "seat_start", params: { value: next ? "off" : "on", reason: `Undo: ${why}`, undo: "true" }, focus: "sw-seat" },
-              )
-            }
-          >
-            <span className="state-note">
-              {seat.enabled ? `${seat.in_flight} of ${seat.max_sessions} session${seat.max_sessions === 1 ? "" : "s"} in flight` : "No session starts until this is on."}
-            </span>
-          </AutomationSwitch>
-        </div>
         <div className="auto-row">
           <div className="what">
             <b>Improve loop</b>

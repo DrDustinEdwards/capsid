@@ -10,11 +10,11 @@ const PERFORM_URL = "**/portal/api/actions/perform";
 const AUDIT_WARNING = "the Portal audit row naming access:admin@example.com was not written: D1 is unavailable";
 
 const message = (page: Page) => page.locator(".msg-region");
-const seat = (page: Page) => page.getByRole("switch", { name: "Seat start", exact: true });
+const seat = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
 
 async function flipSeat(page: Page, reason: string): Promise<void> {
   await seat(page).click();
-  await page.getByLabel(/^Turning seat start (on|off)\. Reason:$/).fill(reason);
+  await page.getByLabel(/^Turning the overnight run (on, on .*|off)\. Reason:$/).fill(reason);
   await page.keyboard.press("Enter");
 }
 
@@ -57,13 +57,13 @@ test("PLANT: an action's audit warning stays through the next action and its Und
   await flipSeat(page, "queued jobs are waiting");
   await expect(seat(page)).toHaveAttribute("aria-checked", "true");
   const warned = message(page).locator(".msg").filter({ hasText: AUDIT_WARNING });
-  await expect(warned).toContainText("Seat start is on.");
+  await expect(warned).toContainText("The overnight run is now api.");
 
   // The next action replaces nothing that carries a warning.
   await flipSeat(page, "back as it was");
   await expect(seat(page)).toHaveAttribute("aria-checked", "false");
   await expect(message(page).locator(".msg")).toHaveCount(2);
-  await expect(message(page).locator(".msg").first()).toContainText("Seat start is off.");
+  await expect(message(page).locator(".msg").first()).toContainText("The overnight run is now off.");
   await expect(warned).toBeVisible();
 
   await warned.getByRole("button", { name: "Dismiss" }).click();

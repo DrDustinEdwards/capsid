@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
 import { Spinner } from "capsomer/react/empty";
-import { placePath, useApp } from "../app/ctx";
+import { useApp } from "../app/ctx";
 import { fetchStale } from "../lib/api";
 import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
@@ -12,45 +11,6 @@ import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
-
-// The state only: the switch is in the Automation panel on Namespaces (DECIDE 7).
-export function SeatStart() {
-  const { feed, now } = useApp();
-  const s = feed.live.seat_start;
-  return (
-    <dl className="kv">
-      <dt>Seat start</dt>
-      <dd className="toolbar">
-        {s.enabled ? <St kind="ok">On</St> : <St kind="nodata">Off</St>}
-        <Link href={placePath("namespaces")}>Change it in Settings</Link>
-      </dd>
-      <dt>In flight</dt>
-      <dd className="num">
-        {s.in_flight} of {s.max_sessions}
-      </dd>
-      <dt>Last 7 days</dt>
-      <dd>
-        {s.recent.length
-          ? s.recent.map((r) => (
-              <div key={`${r.job_id}-${r.at}`}>
-                <span className="mono">{r.job_id}</span>{" "}
-                <span className="faint">
-                  {r.namespace ?? "no namespace"} · {ago(ms(r.at), now)} ·{" "}
-                </span>
-                {r.run_url ? (
-                  <a href={r.run_url} target="_blank" rel="noopener noreferrer">
-                    run {r.run_id ?? ""}
-                  </a>
-                ) : (
-                  <span className="faint">runner never presented its token</span>
-                )}
-              </div>
-            ))
-          : <span className="faint">No sessions started.</span>}
-      </dd>
-    </dl>
-  );
-}
 
 // Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
 // the job each is bound to, the key, its last event, whether it waits on a person, and
@@ -289,10 +249,6 @@ export function Queue() {
                 })}
               </tbody>
             </table>
-          </div>
-          <div className="body">
-            <p className="section-title">Seat-started sessions</p>
-            <SeatStart />
           </div>
         </Panel>
         <Tonight />

@@ -91,17 +91,6 @@ export function refuse(action: string, refusal: string): JobResult {
   return { ok: false, action, refusal };
 }
 
-// A runner key bound to this job (migrations/0021) is revoked in the same batch as
-// every transition that ends the run that held it: done, failed, blocked, superseded,
-// and a return to the queue by release. The queue return is the
-// one the resolver alone does not cover: it accepts a bound key on a queued job for
-// the pending-start window, so a key minted less than 20 minutes earlier would claim
-// its job again (seat review of #174). For the others this is the record of when the
-// key stopped, which `capsid_admin_manage_agents` action "list" shows.
-export function revokeBoundKeys(db: D1Database, jobId: string): D1PreparedStatement {
-  return db.prepare("UPDATE agents SET revoked_at = datetime('now') WHERE job_id = ?1 AND revoked_at IS NULL").bind(jobId);
-}
-
 export async function readJob(db: D1Database, id: string): Promise<JobRow | null> {
   return db.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<JobRow>();
 }
@@ -130,7 +119,6 @@ export async function markJobFailed(
     ).bind(job.id, summary, now.toISOString(), fromStatus),
     ...(await mirrorStatements(env, failed, auditAction, actor)),
     jobAudit(env.DB, actor, auditAction, failed, auditParams),
-    revokeBoundKeys(env.DB, job.id),
   ]);
   if (!committed) return { failed: false, current: await readJob(env.DB, job.id) };
   return { failed: true };

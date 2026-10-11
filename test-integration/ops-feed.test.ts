@@ -34,7 +34,6 @@ beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM jobs"),
     env.DB.prepare("DELETE FROM job_outcome_prs"),
-    env.DB.prepare("DELETE FROM audit_log WHERE action IN ('job-seat-started', 'runner-key-minted')"),
   ]);
   await seedJob("job_00000000000a", { status: "queued", updated_at: iso(10 * DAY) });
   await seedJob("job_00000000000b", {
@@ -54,17 +53,6 @@ beforeEach(async () => {
     env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000c', 'https://github.com/example/sample/pull/2', NULL, ?1)").bind(sqlite(2 * HOUR)),
     env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000e', 'https://github.com/example/sample/pull/0', 0, ?1)").bind(sqlite(10 * DAY)),
   ]);
-  // A start two days ago, outside the pending window, so sessionsInFlight reads no job.
-  const start = await env.DB.prepare(
-    `INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES ('access:admin@example.com', 'job-seat-started', 'sample', 'jobs/job_00000000000c.md', ?1, ?2) RETURNING id`
-  )
-    .bind(JSON.stringify({ job_id: "job_00000000000c", repo: "example/sample" }), sqlite(2 * DAY))
-    .first<{ id: number }>();
-  await env.DB.prepare(
-    `INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES ('github-oidc:example/sample@77.1', 'runner-key-minted', 'sample', 'jobs/job_00000000000c.md', ?1, ?2)`
-  )
-    .bind(JSON.stringify({ job_id: "job_00000000000c", start_audit_id: start!.id, run_id: "77", run_url: "https://github.com/example/sample/actions/runs/77" }), sqlite(2 * DAY - 60_000))
-    .run();
 });
 
 // The Worker's env, with every D1 prepare and APP_KV get counted.
@@ -96,7 +84,7 @@ describe("the feed against real D1", () => {
     // One pause key per roster namespace, and those are the only per-namespace reads.
     const pauseKeys = reads.kv.filter((key) => key.startsWith("improve:paused:"));
     expect(pauseKeys.sort()).toEqual(LOOP_ROSTER.map(pausedKey).sort());
-    expect(OPS_FEED_READS.kv).toBe(12 + LOOP_ROSTER.length);
+    expect(OPS_FEED_READS.kv).toBe(10 + LOOP_ROSTER.length);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
     const again = counted();
@@ -140,16 +128,12 @@ describe("the feed against real D1", () => {
     await env.DB.prepare("DELETE FROM watcher_findings").run();
   });
 
-  it("lists pull requests from the last seven days with their three merge states, and the week's seat starts with their runs", async () => {
+  it("lists pull requests from the last seven days with their three merge states", async () => {
     const feed = await opsFeed(env as unknown as Env, NOW);
     expect(feed.live.prs.map((p) => [p.pr_url, p.merged])).toEqual([
       ["https://github.com/example/sample/pull/2", null],
       ["https://github.com/example/sample/pull/1", true],
     ]);
-    expect(feed.live.seat_start.recent).toEqual([
-      expect.objectContaining({ job_id: "job_00000000000c", namespace: "sample", run_id: 77, run_url: "https://github.com/example/sample/actions/runs/77" }),
-    ]);
-    expect(feed.live.seat_start.in_flight).toBe(0);
     expect(feed.cloudflare_configured).toBe(false);
     expect(feed.refresh_allowed_at).toBeNull();
   });

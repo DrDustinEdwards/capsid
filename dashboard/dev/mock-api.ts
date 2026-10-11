@@ -61,10 +61,10 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
-const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
+const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "overnight"];
 
 // The click row's action name, as the Worker names it, in the mock's "portal." form.
 function clickName(action: PortalAction, params: Record<string, string>): string {
@@ -113,7 +113,6 @@ interface MockState {
   // Namespaces whose breaker was reset since the mock started.
   breakerReset: Set<string>;
   mode: string | null;
-  seat: boolean | null;
   overnight: "off" | "api" | "subscription" | null;
   // The reason typed when the overnight switch was last set, recorded with the decision.
   overnightReason: string;
@@ -420,7 +419,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   }
   for (const n of out.live.namespaces) if (st.paused.has(n.name)) n.paused = st.paused.get(n.name) ?? null;
   if (st.mode != null) out.live.loop.mode = st.mode;
-  if (st.seat != null) out.live.seat_start.enabled = st.seat;
   if (st.overnight != null) {
     out.live.overnight = {
       mode: st.overnight,
@@ -565,13 +563,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           st.overnightReason = params.reason?.trim() ?? "";
         },
       };
-    }
-    case "seat_start": {
-      const value = need(params, "value", "The value");
-      if (value !== "on" && value !== "off") throw new Refusal(400, `seat_start must be on or off, not ${value}.`);
-      const on = value === "on";
-      if (on === f.live.seat_start.enabled) throw new Refusal(400, `Seat start is already ${value}.`);
-      return { summary: `Turn seat start ${value}.`, done: `Seat start is ${value}.`, changes: [`seat:start:enabled: ${f.live.seat_start.enabled ? "on" : "off"} -> ${value}`], apply: (st) => void (st.seat = on) };
     }
     case "resume_job": {
       const j = job();
@@ -1248,7 +1239,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();

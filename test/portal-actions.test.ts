@@ -287,7 +287,6 @@ const FEED: OpsFeedData = {
     prs: [],
     awaiting_seat: [],
     merge_safety: null,
-    seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     overnight: { mode: "off", decision: null },
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
@@ -355,7 +354,6 @@ const EVERY_ACTION = [
   ["pause", { namespace: "foxing", reason: "holdout rebuild" }],
   ["unpause", { namespace: "capsid", reason: "the regression is fixed" }],
   ["mode", { value: "subscription", reason: "move the loop onto the subscription" }],
-  ["seat_start", { value: "on", reason: "queued jobs are waiting" }],
   ["overnight", { value: "api", reason: "first supervised night" }],
   ["resume_job", { id: "job_blocked00001", reason: "ran the push" }],
   ["release_job", { id: "job_claimed00001", reason: "the holder is gone" }],
@@ -404,7 +402,6 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "reset_breaker",
     "resume_job",
     "revoke_agent",
-    "seat_start",
     "sign_policy_change",
     "site_add",
     "site_edit",
@@ -416,7 +413,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 28);
+  assert.equal(PORTAL_ACTIONS.length, 27);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -492,7 +489,6 @@ test("preview refuses what the mutator would refuse, and writes nothing", async 
     ["pause", { namespace: "nosuch", reason: "x" }, /not on the improve roster/],
     ["pause", { namespace: "capsid" }, /needs a reason/],
     ["mode", { value: "banana", reason: "x" }, /banana/],
-    ["seat_start", { value: "maybe", reason: "x" }, /"on" or "off"/],
     ["overnight", { value: "on", reason: "x" }, /overnight must be one of api, subscription, off/],
     ["resume_job", { id: "job_queued000001", reason: "x" }, /not blocked/],
     ["resume_job", { id: "job_blocked00001" }, /needs a reason/],
@@ -535,11 +531,10 @@ const SWITCH_CASES = [
   ["pause", { namespace: "foxing" }],
   ["unpause", { namespace: "capsid" }],
   ["mode", { value: "subscription" }],
-  ["seat_start", { value: "on" }],
   ["overnight", { value: "api" }],
 ] as const;
 
-test("PLANT: unpause, mode and seat_start REFUSE a missing or blank reason at preview, as pause does, and write nothing", async () => {
+test("PLANT: unpause, mode and overnight REFUSE a missing or blank reason at preview, as pause does, and write nothing", async () => {
   for (const [action, params] of SWITCH_CASES) {
     for (const reason of [undefined, "   "]) {
       const w = world();

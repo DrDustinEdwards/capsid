@@ -51,7 +51,7 @@ export const RENAMED = {
 // The actions (lint: modes) of each renamed tool, so `jobs.claimed_by`, a column, is not
 // read as an action. test/tool-names-lib.test.ts holds these to src.
 export const RENAMED_ACTIONS = {
-  jobs: ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "begin", "fire", "routine", "edit", "park", "unpark"],
+  jobs: ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "fire", "routine", "edit", "park", "unpark"],
   lint: ["gather", "finalize", "report"],
   agents: ["mint", "list", "revoke", "update_scopes"],
   claims: ["job", "aggregate", "export"],
@@ -86,7 +86,6 @@ export const SPLIT = {
     sign_policy: ["capsid_admin_control_improve", "sign_policy"],
     register_skill: ["capsid_admin_control_improve", "register_skill"],
     skill_transitions: ["capsid_admin_control_improve", "skill_transitions"],
-    seat_start: ["capsid_admin_control_improve", "seat_start"],
     breaker_reset: ["capsid_admin_control_improve", "breaker_reset"],
     overnight: ["capsid_admin_control_improve", "overnight"],
   },
