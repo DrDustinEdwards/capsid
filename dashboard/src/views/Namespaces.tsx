@@ -263,7 +263,6 @@ function LoopDetail({ n }: { n: PortalNamespace }) {
         <span className="num">
           {sk.live} live · {sk.candidate} candidate · {sk.retired} retired
         </span>
-        <div className="src">{sk.use_rate == null ? "nothing offered yet" : `used ${pct(sk.use_rate, 0)} (${sk.used} of ${sk.offered} offered)`}</div>
       </dd>
     </dl>
   );

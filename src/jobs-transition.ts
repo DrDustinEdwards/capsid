@@ -1,4 +1,3 @@
-import type { OfferedSkillWithBody } from "./job-skill-offers";
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { missingForRecord, type JobRow, type StartedNotice } from "./jobs-schema";
@@ -68,8 +67,6 @@ export interface JobResult {
   // A job somebody marked started (src/jobs-begin.ts): who and when, so a second session
   // reading it knows. begin, claim and list for one id return it. Never a refusal.
   started?: StartedNotice;
-  // claim: the skills this job is offered, bodies inline. See ./job-skill-offers.
-  offered_skills?: OfferedSkillWithBody[];
   // claim: the model Capsid recommends for this job, why, and how to follow it
   // (src/model-routing.ts), and a note when the pull request it carries could not be read.
   routing?: Record<string, unknown>;

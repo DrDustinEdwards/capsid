@@ -239,29 +239,6 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
 // The innocent direction, a clean summary driven to a completed row, is in
 // test-integration/jobs.test.ts ("the tag guard is not a wall").
 
-// The skills a run names are checked before anything is written. These two refusals
-// keep the offered-to-used rate accurate, and both refuse before the transition.
-
-test("a skill id that does not exist is REFUSED, not dropped", async () => {
-  // Dropping it would record this run as having been offered nothing.
-  const d1 = fakeD1({ improveSkills: [{ id: "sk-real", status: "candidate", version: 1, source_namespace: "foxhound" }] });
-  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
-    result_summary: "done",
-    skills: { offered: ["sk-real", "sk-ghost"], used: ["sk-real"] },
-  });
-  assert.equal(out.ok, false, "a non-existent skill id was accepted");
-  assert.match(out.refusal ?? "", /sk-ghost/);
-  assert.match(out.refusal ?? "", /refused rather than dropped/);
-  const wrote = d1.recorded.some((r) => /INSERT INTO job_outcomes/i.test(r.sql));
-  assert.equal(wrote, false, "a refused complete still wrote an outcome row");
-});
-
-// A skill named as used but not offered is refused against the offer the Worker
-// recorded at claim, which lives in audit_log: test-integration/job-skill-offers.test.ts.
-
-// Naming no skills at all is not a refusal: test-integration/jobs.test.ts drives that
-// case to a completed row.
-
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
   // A client keying on isError must not read a refusal as success.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));

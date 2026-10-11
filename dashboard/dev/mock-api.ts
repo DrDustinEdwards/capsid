@@ -979,14 +979,14 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
       last_run: { status: "done", started: iso(5 * H), attempts: 4, kept: 1, reverts: 3 },
       totals: { runs: 38, attempts: 152, kept: 14, reverts: 9, cost_usd: 11.2, ci_minutes: 140 },
       latest_report: { integrity: 0.93, generated: iso(26 * H) },
-      skills: { candidate: 2, live: 5, retired: 1, offered: 40, used: 23, use_rate: 0.575, last_evaluation: iso(50 * H) },
+      skills: { candidate: 2, live: 5, retired: 1, last_evaluation: iso(50 * H) },
     },
     "sample-b": {
       anchor_problem: "The anchor sha 9f8e7d6 is not on the default branch of example-org/sample-b.",
       best: { sha: "0f1e2d3c4b5a69788796", score: 0.71, recorded_at: iso(90 * H) },
       last_run: { status: "failed", started: iso(20 * H), attempts: 2, kept: 0, reverts: 2 },
       totals: { runs: 12, attempts: 40, kept: 6, reverts: 11, cost_usd: 4.9, ci_minutes: 52 },
-      skills: { candidate: 1, live: 2, retired: 0, offered: 6, used: 1, use_rate: 1 / 6, last_evaluation: null },
+      skills: { candidate: 1, live: 2, retired: 0, last_evaluation: null },
     },
     "sample-c": {
       anchor_pinned: true,
@@ -1005,7 +1005,7 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
     totals: { runs: 0, attempts: 0, kept: 0, reverts: 0, cost_usd: 0, ci_minutes: 0 },
     latest_report: null,
     jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
-    skills: { candidate: 0, live: 0, retired: 0, offered: 0, used: 0, use_rate: null, last_evaluation: null },
+    skills: { candidate: 0, live: 0, retired: 0, last_evaluation: null },
     breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
   };
   const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");

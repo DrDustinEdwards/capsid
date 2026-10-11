@@ -2,16 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   attributionStatements,
-  dueTransitions,
-  offerSkills,
-  failureNoteStatements,
-  ftsQuery,
   shouldCreateCandidate,
 } from "../src/skills-records.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
 
-// What gets offered, what earns a candidate, and what a failed run
-// leaves behind for the next driver to read.
+// What earns a candidate and how a verified run credits a skill.
 
 // A statement recorder thin enough to read the bound parameters back out.
 function recorder() {
@@ -51,22 +45,6 @@ test("a job earns a candidate only when its outcome is fully verified", () => {
 
 // scanner-rule: skills lifecycle, "never live on creation" (docs/skills.md). A module
 // that holds no INSERT cannot create a row, which no call to it can demonstrate.
-
-// what gets offered. The status, trigger, limit and failure-note rules of the recommend query, and the
-// retired-source lookup, are proven against a real D1 in
-// test-integration/skills-records.test.ts.
-
-test("ftsQuery reduces free prose to bare words, so an operator in a description cannot change the query", () => {
-  // FTS5 takes a query language and work descriptions regularly contain its
-  // operators. A description containing NEAR or a quote must not become a syntax
-  // error, or worse, a query meaning something other than it says.
-  assert.equal(ftsQuery('a "slow" query NEAR the loader'), "slow OR query OR near OR the OR loader");
-  assert.equal(ftsQuery("a* OR b^"), null, "nothing over two characters survives, so there is no query");
-  assert.equal(ftsQuery(""), null);
-  assert.equal(ftsQuery("   "), null);
-  const long = ftsQuery(Array.from({ length: 100 }, (_, i) => `word${i}`).join(" "));
-  assert.equal((long ?? "").split(" OR ").length, 24, "the term list is bounded");
-});
 
 // attribution, applied
 
@@ -121,81 +99,4 @@ test("a verified failure charges a loss to the used skill only", () => {
     signal: "verified-failure",
     reason: "the skill was used and the verifier reported failure.",
   });
-});
-
-// failure memory
-
-test("a failure note is written per skill in use, carrying the source it came from", () => {
-  const { recorded, db } = recorder();
-  failureNoteStatements(db, "capsid", { kind: "job", id: "job_abc" }, ["s1", "s2"], "the migration was refused");
-  assert.equal(recorded.length, 2);
-  assert.deepEqual(recorded[0].params, ["s1", "capsid", "job", "job_abc", "the migration was refused"]);
-  assert.match(recorded[0].sql, /INSERT INTO skill_failures/);
-});
-
-test("no skills in use means no notes, rather than a note attributed to nothing", () => {
-  const { recorded, db } = recorder();
-  failureNoteStatements(db, "capsid", { kind: "attempt", id: "a1" }, [], "it failed");
-  assert.equal(recorded.length, 0);
-});
-
-test("a very long note is bounded before it is stored", () => {
-  const { recorded, db } = recorder();
-  failureNoteStatements(db, "capsid", { kind: "job", id: "j" }, ["s1"], "x".repeat(5000));
-  assert.equal(String(recorded[0].params[4]).length, 2000);
-});
-
-// offerSkills and dueTransitions, driven against the fake
-
-test("offerSkills returns only candidate and live skills, with their recent failures", async () => {
-  const { db, rows } = fakeD1({
-    documents: [
-      { namespace: "capsid", path: "improve/skills/s1.md", title: "slow query", body: "look for a slow database query in a loader" },
-      { namespace: "capsid", path: "improve/skills/s3.md", title: "retired idea", body: "a slow database query in a loader" },
-    ],
-  });
-  rows.improve_skills.push(
-    { id: "s1", status: "candidate", version: 1, trigger_condition: "a slow database query", body_ref: "improve/skills/s1.md", title: "slow query", namespaces: null },
-    { id: "s3", status: "retired", version: 1, trigger_condition: "a slow database query", body_ref: "improve/skills/s3.md", title: "retired idea", namespaces: null }
-  );
-  rows.skill_failures.push(
-    { skill: "s1", namespace: "capsid", source_kind: "job", source_id: "j1", note: "older", created_at: "2026-09-01" },
-    { skill: "s1", namespace: "capsid", source_kind: "job", source_id: "j2", note: "newer", created_at: "2026-09-09" }
-  );
-
-  const offered = await offerSkills(fakeEnv({ DB: db }), "capsid", "a slow database query in a loader");
-  assert.deepEqual(offered.map((s) => s.id), ["s1"], "the retired skill must not be offered");
-  assert.equal(offered[0].recent_failures.length, 2);
-  assert.equal(offered[0].recent_failures[0].note, "newer", "newest first");
-});
-
-test("offerSkills returns nothing when the work description yields no searchable terms", async () => {
-  const { db } = fakeD1({});
-  assert.deepEqual(await offerSkills(fakeEnv({ DB: db }), "capsid", "a of to"), []);
-});
-
-test("dueTransitions reads each skill's evaluations at its own version and applies the rules", async () => {
-  const { db, rows } = fakeD1({});
-  rows.improve_skills.push(
-    { id: "ready", status: "candidate", version: 1 },
-    { id: "thin", status: "candidate", version: 1 },
-    { id: "bumped", status: "candidate", version: 2 }
-  );
-  const evaluation = (skill: string, version: number, verdict: string, day: string) => ({
-    skill, version, namespace: "capsid", probe_set_version: "p1", delta: verdict === "positive" ? 0.1 : -0.1, runs: 5, verdict, evaluated_at: `2026-09-${day}`,
-  });
-  rows.skill_evaluations.push(
-    evaluation("ready", 1, "positive", "01"),
-    evaluation("ready", 1, "positive", "02"),
-    evaluation("thin", 1, "positive", "01"),
-    // Two positives, but recorded against version 1 while the skill is now version 2.
-    evaluation("bumped", 1, "positive", "01"),
-    evaluation("bumped", 1, "positive", "02")
-  );
-
-  const verdicts = await dueTransitions(fakeEnv({ DB: db }));
-  const by = new Map(verdicts.map((v) => [v.skill, v.verdict]));
-  assert.equal(by.get("ready")?.change, true, "two positives at the current version promote");
-  assert.equal(by.get("thin")?.change, false, "one is not enough");
-  assert.equal(by.get("bumped")?.change, false, "evidence at an older version does not carry forward");
 });

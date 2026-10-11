@@ -20,7 +20,6 @@ import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from ".
 import { signJobText } from "./job-signing";
 import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
 import { actorKind, touchStatement } from "./job-touches";
-import type { JobSkills } from "./job-outcomes";
 import type { ClaimInput, ClaimRaw } from "./job-claims";
 import {
   actorShapeRefusal,
@@ -97,7 +96,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
-    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, undefined, await readJobUsage(env.DB, job.id))));
+    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id))));
   }
   if (!(await guardedTransition(env, current, statements))) {
     const moved = await readJob(env.DB, id);
@@ -121,7 +120,6 @@ export async function failAsCaller(
   now: Date,
   id: string,
   reason: string,
-  skills?: JobSkills,
   said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
@@ -138,7 +136,7 @@ export async function failAsCaller(
     }
     return adminFailJob(env, agent, now, id, reason);
   }
-  return failJob(env, agent, now, id, reason, skills, said);
+  return failJob(env, agent, now, id, reason, said);
 }
 
 // The seat completing a job another credential blocked, the way it can fail one. The job

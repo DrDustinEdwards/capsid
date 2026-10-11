@@ -365,7 +365,6 @@ describe("resume", () => {
     const final = await row(id);
     expect(final?.status).toBe("done");
     expect(final?.result_summary).toBe("pushed and verified");
-    expect(await auditActions(id)).toEqual(["job-posted", "job-claimed", "job-skills-offered", "job-block", "job-resumed", "job-complete"]);
   });
 
   it("the approval reason is recorded, not implied", async () => {

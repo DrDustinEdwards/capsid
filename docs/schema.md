@@ -252,7 +252,7 @@ work was done on it, so there is nothing to record against a driver. The jobs th
 `migrations/0020_jobs_superseded.sql` relabelled from failed to superseded had
 already written a row when they were failed; those rows are kept, and every read
 that builds a record or a count from `job_outcomes` leaves out a row whose job is
-superseded (`src/agent-record.ts`, the skill totals in `src/improve-run.ts`, and the
+superseded (`src/agent-record.ts` and the
 pull request re-verification in `src/outcome-prs.ts`).
 
 | column | what it is |
@@ -514,22 +514,19 @@ that changes nothing measurable still resets the evidence. Rejected edits are st
 in `skill_edits` and handed to the next optimizer run, so a proposal that was already
 refused is not proposed again.
 
-Attribution separates three things a single counter conflated. A skill moves only
+Attribution (improve attempts only now) separates three things a single counter conflated. A skill moves only
 when it was used and the verifier reported on the work itself. A skill that was
 offered and ignored while the run succeeded anyway counts as nothing, because the
 success is not its. A run that died on the environment counts as nothing either,
 because charging a loss for a failed checkout would retire skills for being present
 during an outage.
 
-Offered and used are both stored, on `job_outcomes`. The gap between them is its
-own measurement: a skill offered fifty times and used twice is not a failing skill.
-It is a trigger condition that does not describe the work it is matched to, and those
-are different problems with different fixes.
-
-Failure notes are not a second score. `skill_failures` carries a note per reverted
-attempt and failed job, linked to the skills in use at the time, and the recommend
-step attaches the two most recent for each skill it offers. Nothing there moves a
-status; it exists so the next driver reads the failure rather than repeating it.
+Offered and used were once stored on `job_outcomes` (`skill_ids_offered`,
+`skill_ids_used`, migration 0013), from the claim-time offer and the driver's `skills`
+param. Both are removed from the claim, complete and fail path (docs/skills.md); the two
+columns stay, unused, with their old values. `skill_evaluations` and `skill_failures` stay
+as history with no writer, since the evaluation cycle and the failure notes read the same
+removed input.
 
 ## Why documents carry provenance
 

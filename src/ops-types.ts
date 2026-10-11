@@ -668,7 +668,7 @@ export interface PortalNamespace {
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
   jobs: { queued: number; claimed: number; blocked: number; done_today: number };
-  skills: { candidate: number; live: number; retired: number; offered: number; used: number; use_rate: number | null; last_evaluation: string | null };
+  skills: { candidate: number; live: number; retired: number; last_evaluation: string | null };
 }
 
 export interface PortalNamespaces {

@@ -240,8 +240,6 @@ describe("job outcomes", () => {
       duration_minutes: null,
       result_kind: "none" as const,
       verified: UNVERIFIED,
-      skill_ids_offered: null,
-      skill_ids_used: null,
       recorded_at: NOW.toISOString(),
       cost_usd: null,
       tokens_input: null,
@@ -540,7 +538,7 @@ describe("model routing, against the real tables (migrations/0032)", () => {
     expect(claim.ok).toBe(true);
     expect(claim.routing).toMatchObject({ model: "opus", effort: "high", kind: "design" });
 
-    const failed = await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "the approach did not work", undefined, {
+    const failed = await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "the approach did not work", {
       claim: { versions: { model_id: "claude-opus-5-5" } },
     });
     expect(failed.ok).toBe(true);

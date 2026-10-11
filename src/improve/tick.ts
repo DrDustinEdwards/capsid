@@ -2,7 +2,6 @@ import type { Env } from "../env";
 import { dispatchWorkflow } from "../github";
 import { autoMergeTick } from "../auto-merge-tick";
 import { mergeResumeTick } from "../merge-resume";
-import { runEvaluationCycle } from "../skills-evaluate";
 import { sweepIfDue } from "../outcome-prs";
 import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
@@ -95,20 +94,6 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
     },
     { tag: "AUTO_MERGE_THREW:", rethrow: false }
-  );
-
-  // The skill evaluation cycle, gated on its own fortnightly cadence: the tick runs every
-  // five minutes, so all but about one call in four thousand return after one KV read.
-  await runTask(
-    env,
-    "skill-cycle",
-    () => runEvaluationCycle(env, now),
-    (cycle): TaskResult => {
-      if (!cycle.ran) return null;
-      logEvent("log", "SKILL_CYCLE", { message: `SKILL_CYCLE ${cycle.note}` });
-      return { outcome: "ok", reason: cycle.note };
-    },
-    { tag: "SKILL_CYCLE_THREW:", rethrow: false }
   );
 
   // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a

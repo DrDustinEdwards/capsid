@@ -21,7 +21,6 @@ import { signTaskBody, verifySignedBody } from "./improve-task";
 import { JOB_KINDS, isJobKind, routeJob, type Routing } from "./model-routing";
 import { pullRequestRisk } from "./model-routing-pr";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
-import { offerForClaim } from "./job-skill-offers";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { externalFenceProblem, jobOrigin } from "./provenance";
 import {
@@ -457,9 +456,6 @@ export async function claimJob(
     claimed_at: candidate.claimed_at ?? now.toISOString(),
     updated_at: now.toISOString(),
   };
-  // The skills this job is offered: decided at its first claim and recorded in the
-  // same batch, or read back from that record on a later claim.
-  const offer = await offerForClaim(env, claimed, holder);
   // One batch with its records, behind the guard. Two drivers reading the same
   // candidate still resolve to one winner, because the first commit moves updated_at
   // and the second batch's guard aborts before its UPDATE runs.
@@ -471,7 +467,6 @@ export async function claimJob(
     ).bind(candidate.id, holder, now.toISOString(), routing.kind, routing.model, routing.effort, routing.reason),
     ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
     jobAudit(env.DB, actor, "job-claimed", claimed, {}),
-    ...(offer.record ? [offer.record] : []),
   ]);
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
@@ -488,7 +483,6 @@ export async function claimJob(
     ...(claimNote ? { resume_note: claimNote } : {}),
     ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),
     ...(claimNotes.dropped > 0 ? { resume_notes_dropped: claimNotes.dropped } : {}),
-    offered_skills: offer.skills,
     routing: deliveryOf(routing),
     ...(prRisk.note ? { routing_note: prRisk.note } : {}),
   };

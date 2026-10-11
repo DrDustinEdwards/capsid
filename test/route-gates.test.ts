@@ -221,7 +221,7 @@ test("capsid_run_improve: status reads, run and claim are a driver's work, and t
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
-    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "sign_policy", "skill_transitions", "unpause"],
+    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "sign_policy", "unpause"],
     "capsid_admin_control_improve's action list changed"
   );
   for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);

@@ -1,6 +1,6 @@
 # Skills
 
-The loop abstracts an idea from work that landed and offers it back to other projects.
+The loop abstracts an idea from work that landed and tries it on other projects' improve attempts.
 
 A skill package is layered. The Worker reads the layers separately. The declared
 fields (trigger condition, namespaces, termination test, composition interface) live on
@@ -15,7 +15,9 @@ abstracted from an attempt that was kept. Being born of a success says nothing
 about whether the written form helps anybody else. A candidate goes `live` on two
 positive evaluations. A live skill goes `retired` on two consecutive non-positive ones.
 Retired rows stay, with their record, so the same idea is not abstracted twice from the
-same source.
+same source. NOTHING WRITES EVALUATIONS NOW (see "Skills no longer ride on claim" below), so
+the rules for moving between states have no input and a skill stays `candidate` unless a
+row is changed by hand.
 
 A skill is created in one of two ways. The loop abstracts one when an attempt is
 kept. An admin registers one with `capsid_admin_control_improve` action `register_skill`, naming the
@@ -24,103 +26,53 @@ request and green CI as the Worker verified them, and must not have produced a s
 before. The skill's namespace is read from the job. Drivers are refused, because a
 driver registering its own skill would be judging its own run.
 
-A status changes on VERIFIED EVIDENCE and never on a driver's report of its own run.
-Verified means the Worker read it from GitHub itself: a pull request merged and CI
-green, as recorded on `job_outcomes`, and a scored improve attempt when the loop runs.
-Two evaluations minimum in either direction: one result is a sample. Evidence counts
-per version and per probe set, so an accepted edit resets it. Edits are bounded
-at 20 percent of the instruction lines, counted by distinct lines touched, and accepted
-only on strict improvement. A tie is a rejection. Rejected edits are kept in
-`skill_edits` and handed to the next optimizer run, so a proposal already refused is not
-proposed again.
+Rules that still apply to an improve attempt. A skill is credited only when it was used and
+the verifier reported success: `attributionStatements` (src/skills-records.ts) writes
+`improve_skills.wins` and `losses` from an attempt's scored result, and an offered-and-ignored
+skill, or a run that died on the environment, counts as nothing. Edits are bounded at 20
+percent of the instruction lines, counted by distinct lines touched, and accepted only on
+strict improvement; a tie is a rejection. Rejected edits are kept in `skill_edits` so a
+proposal already refused is not proposed again. Two live skills whose triggers overlap and
+whose bodies differ by less than 10 percent are proposed for merging, to a human. These
+edit and merge rules (`judgeEdit`, `mergeProposals` in src/skills-evaluate.ts) are
+library code with no scheduled caller.
 
-A skill is credited only when it was used and the verifier reported success.
-An offered-and-ignored skill and a run that died on the environment both count as
-nothing. Offered and used are both stored on `job_outcomes`. The gap between them is
-its own measurement.
+Skills no longer ride on claim (job_2c92174d5bff item 3). A job's first `claim` used to
+match its title and prompt against candidate and live skills and return up to three as
+`offered_skills`, record the offer in a `job-skills-offered` audit row, and `complete` and
+`fail` took a `skills` object ({offered, used}) that was stored on `job_outcomes` and credited
+against the verified outcome. All of that is removed: the claim answer carries no skills,
+`complete`, `record` and `fail` take no `skills` param, and `job_outcomes` no longer writes
+`skill_ids_offered` or `skill_ids_used` (the columns stay, unused; rows written before keep
+their values). The fortnightly evaluation cycle read exactly those two sources, so with no
+offers it had no evidence to gather and is removed with them: the `skill-cycle` tick task,
+the cadence and last-run KV keys, `capsid_admin_control_improve` action `skill_transitions`
+and its hold/apply switch (`skills:transitions`), `commitTransition` and `dueTransitions`.
+The tables (`improve_skills`, `skill_evaluations`, `skill_failures`, `skill_edits`) and
+their history stay. Failure notes (`skill_failures`) have no writer now either; they were
+written for the skills a failed job reported using.
 
-Failure notes are not a second score. `skill_failures` carries a note
-per reverted attempt and failed job, linked to the skills in use at the time, and the
-recommend step attaches the two most recent for each skill it offers. Nothing there
-moves a status.
+A skill a project wants every session to follow is committed to that project instead, as a
+Claude Code skill under `.claude/skills/<name>/SKILL.md` (or a plugin), so the session loads
+it by its own description and no claim has to carry it. This repo carries
+`.claude/skills/reproduce-before-fixing/SKILL.md`, the body of the stored skill
+`capsid/improve/skills/reproduce-before-fixing.md`. Model routing did not move:
+`src/model-routing.ts` still sets `model_recommended` on a job at claim and the fire text
+sends it.
 
-Two live skills whose triggers overlap and whose bodies differ by less than 10 percent
-are proposed for merging, to a human. Only live skills. A candidate has not been
-evaluated enough to merge, and a retired one is a record.
+WHAT STILL USES STORED SKILLS. The improve loop. `candidateSkills` (src/improve-skills.ts)
+hands an attempt candidate and live skills from other namespaces that claim this one (or
+none), best Laplace-smoothed win rate first, in the no-transfer condition, and wins and
+losses are credited from the attempt's scored result. An admin registers a skill with
+`register_skill` (above), so a registered skill is tried on other projects' attempts.
 
-THERE IS NO SCHEDULED PROBE. Dropped 2026-09-16, ruled by Dustin as option C. The
-evaluation cycle used to end by running each namespace's probe set in the scorer
-sandbox twice per skill, with the skill and without it. That never happened once: the
-cycle dispatched `improve-score.yml` with `mode`, `skill_id` and `skill_version`, and
-that workflow declares only `branch`, `run_id` and `attempt_id`, all required, so
-GitHub refused every dispatch and the cycle logged the error. It was dropped rather
-than repaired because a working probe needs the loop's attempt path, model spend, and a
-probe set that exists nowhere: a probe set is only the `probe_set_version` string on
-`skill_evaluations`. Evidence comes from verified job outcomes instead, which is a
-signal GitHub already produces.
+THERE IS NO SCHEDULED PROBE. Dropped 2026-09-16, ruled by Dustin as option C: the probe
+dispatched `improve-score.yml` with inputs that workflow does not declare, so GitHub refused
+every dispatch. Verified job outcomes replaced it as the evidence source on 2026-09-26, and
+those depended on the claim-time offer, which is the part removed above. Reviving
+evaluation means choosing a new evidence source; it needs a ruling in `capsid/decisions.md`.
 
-What survives is the cycle's other half, which applies stored evidence: it reads the
-evaluations, commits the transitions they decide, and audits each one. It is
-fortnightly, KV-configurable under `skills:evaluate:cadence-days` and riding the
-five-minute tick, which gates on the cadence before doing anything else. A cadence below
-one day falls back to the default rather than being obeyed. The cadence is unchanged
-from the probing design, so a status moves up to a fortnight after the evidence that
-decides it lands.
-
-THE WORKER OFFERS, AND RECORDS WHAT IT OFFERED. A job's first `claim` matches its title
-and prompt against candidate and live skills (`offerSkills`, at most three) and returns them
-as `offered_skills`, each with its instructions inline, since a driver scoped to its own
-namespace cannot read `capsid/improve/skills/`. The offer is recorded in the same batch as
-the claim, as a `job-skills-offered` audit row naming each skill and its version, and a
-later claim of the same job returns that record rather than matching again. `complete` and
-`fail` store the recorded offer as `skill_ids_offered`: a driver may omit `offered`, an
-`offered` list that differs from the record is refused, and so is a `used` skill the job
-was not offered. Offered is therefore the Worker's record and used is the driver's claim,
-which is the split the observation window measures.
-
-A FINISHED JOB IS EVIDENCE, since 2026-09-18. `capsid_work_jobs` action `complete` and action
-`fail` take a `skills` object naming which skills the run was offered and which it
-used. Those two lists are stored separately on `job_outcomes`, and the gap between them
-is what judges the recommend step. NAMES ONLY: the credit direction never comes from
-the driver. `signalFor` reads what this Worker verified on GitHub, and gives a win only
-when every named pull request merged and CI was green, a loss when a named pull request
-did not merge or CI was red, and nothing at all when the run named no pull request or
-could not be verified. That last case is most jobs in this queue, which are research or
-documents; counting them as losses would retire every skill on the ordinary work of the
-portfolio. A skill id that does not exist is refused rather than dropped, and so is one
-named as used but not as offered.
-
-EVALUATIONS COME FROM VERIFIED JOB OUTCOMES, since 2026-09-26. The fortnightly cycle
-writes one `skill_evaluations` row per candidate or live skill when enough new runs
-exist. The measure (`probe_set_version` `job-outcomes-used-vs-offered-unused-v1`): among
-jobs offered the skill at its current version (the Worker's `job-skills-offered`
-records), the verified success rate of those whose driver reported using it, minus the
-verified success rate of those that were offered it and did not. A run the Worker could
-not verify counts in neither group. An evaluation needs at least 5 verified used runs and
-at least one verified offered-but-unused run since the skill's last evaluation, and a
-run is counted once. Each evaluation also writes a `skill-evaluated` audit row with the
-four counts behind the delta.
-
-THIS IS NOT A CONTROLLED COMPARISON, and anything reporting it must say so. A session
-chooses when to use a skill, so the used and unused groups differ in more than the skill:
-a driver may use it on exactly the jobs it expected to go well, or badly. The delta is an
-observed association, not an effect.
-
-STATUS CHANGES ARE HELD during the observation window (Dustin, 2026-09-26). The cycle
-records evaluations and reports the transitions they decide as `held`, and applies
-none, unless APP_KV `skills:transitions` reads `apply`. An unset key, any other value
-and an unreadable KV all mean hold. When the window closes, the seat (admin) runs
-`capsid_admin_control_improve` action `skill_transitions` with `value: "apply"`, which is audited as
-`skill-transitions-set`; the next cycle then applies what the stored evaluations
-decide. `value: "hold"` sets it back. `improve_skills.wins` and `losses` are still
-recorded from each verified run and still move no status.
-
-FAILURE NOTES. A failed job, or a complete the Worker verified as a loss, writes one
-`skill_failures` note per skill the run reported using, from its reason or summary.
-`offerSkills` attaches the two newest to the next offer. They move no status.
-
-Capsid Portal carries a skills panel per namespace: counts by status, the last
-evaluation, and the offered-to-used rate, which is the number a reader cannot compute
-from the others.
+Capsid Portal's skills line per namespace shows counts by status and the last stored
+evaluation. The offered-to-used rate is gone with the data behind it.
 
 Full model: `docs/schema.md`, under Skill records.

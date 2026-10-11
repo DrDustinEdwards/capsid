@@ -271,7 +271,6 @@ const IMPROVE_ADMIN_ACTIONS = [
   "mint_operator_key",
   "sign_policy",
   "register_skill",
-  "skill_transitions",
   "breaker_reset",
   "overnight",
 ] as const;

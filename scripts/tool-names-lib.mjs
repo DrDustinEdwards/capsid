@@ -85,7 +85,6 @@ export const SPLIT = {
     mint_operator_key: ["capsid_admin_control_improve", "mint_operator_key"],
     sign_policy: ["capsid_admin_control_improve", "sign_policy"],
     register_skill: ["capsid_admin_control_improve", "register_skill"],
-    skill_transitions: ["capsid_admin_control_improve", "skill_transitions"],
     breaker_reset: ["capsid_admin_control_improve", "breaker_reset"],
     overnight: ["capsid_admin_control_improve", "overnight"],
   },
