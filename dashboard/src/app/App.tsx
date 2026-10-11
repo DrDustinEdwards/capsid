@@ -26,6 +26,7 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
   packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
   shared: lazy(() => import("../views/SharedCode").then((m) => ({ default: m.SharedCode }))),
+  library: lazy(() => import("../views/Library").then((m) => ({ default: m.Library }))),
   settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
 
@@ -46,7 +47,7 @@ const TABS: ViewId[] = ["needs", "queue", "health"];
 const GROUPS: Array<{ label: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
   { label: "Work", views: ["queue", "prs"] },
-  { label: "Records", views: ["activity", "agents", "packages", "shared"] },
+  { label: "Records", views: ["activity", "agents", "packages", "shared", "library"] },
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are

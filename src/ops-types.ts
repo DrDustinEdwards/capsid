@@ -927,6 +927,44 @@ export interface PortalStale {
   note: string | null;
 }
 
+// GET /portal/api/library -> PortalLibrary (src/portal-library.ts). The read-only Library
+// over the knowledge store (capsid/decisions.md 2026-10-09, Portal review item 4). One of
+// three answers, by the query string: the shelves (no query), a search (?q=) or one
+// document (?ns=&path=). Writing stays in chat and with drivers.
+export type LibraryShelf = "decisions" | "rulings" | "research";
+
+export interface LibraryEntry {
+  namespace: string;
+  path: string;
+  title: string | null;
+  type: string;
+  status: string;
+  updated_at: string;
+}
+
+export interface LibraryHit extends LibraryEntry {
+  // FTS5's snippet: each matched word between U+0002 and U+0003 (LIBRARY_MARK_OPEN and
+  // LIBRARY_MARK_CLOSE in src/portal-library.ts), gaps as " ... ".
+  snippet: string;
+}
+
+export interface LibraryDocument extends LibraryEntry {
+  tags: string | null;
+  created_at: string;
+  body: string;
+}
+
+export type PortalLibrary =
+  | { kind: "shelves"; generated: string; shelves: Record<LibraryShelf, LibraryEntry[]>; truncated: boolean }
+  | { kind: "search"; generated: string; query: string; rows: LibraryHit[]; truncated: boolean }
+  | {
+      kind: "document";
+      generated: string;
+      doc: LibraryDocument;
+      outgoing: Array<{ type: string; to_ns: string; to_path: string }>;
+      incoming: Array<{ type: string; from_ns: string; from_path: string }>;
+    };
+
 // GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
 // (src/maintenance.ts), as stored by its last run: what the pass found that it did not act
 // on, and what it acted on (an auto-resume, a pruned branch). A "-not-checked" rule is a

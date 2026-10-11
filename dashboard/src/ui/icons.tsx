@@ -120,6 +120,7 @@ const NAV_ICONS: Record<string, ReactNode> = {
       <circle cx="7" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
+  library: <path d="M2.5 2.5h3v11h-3zM6.5 2.5h3v11h-3zM10.5 3.2l2.6-.7 2.4 10.6-2.6.7z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   activity: (
     <>
       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />

@@ -63,8 +63,9 @@ A missing `dist/` or manifest is a failure, not a pass.
 
 ## Keyboard
 
-`Ctrl K` or `/` opens the command menu. `g` then `o s i q d a b c n l e` goes to a view
-(`s`, Sites, only while a site is configured; `e` is Settings),
+`Ctrl K` or `/` opens the command menu. `g` then `y q p h l a k x b e` goes to a page
+(Needs you, Queue, Pull requests, Health, Activity, Agents, Packages, Shared code,
+Library, Settings; `k` only while a package is configured),
 `j` and `k` move through rows, `Enter` opens one, `Esc` closes, `r` refreshes,
 `t` switches theme, `f` focuses the queue filter, `?` shows the sheet, where
 single-key shortcuts can be turned off.
