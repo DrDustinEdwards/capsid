@@ -144,7 +144,7 @@ export function jobPrompt(lane, job, minutes) {
 }
 
 // THE HEAVY LOCK. Repos that run heavy suites run one session at a time across the machine
-// (conventions 4.1, CLAUDE.md "one heavy session at a time"). Scheduled tasks all start at
+// (capsid/conventions-testing.md rule 3, CLAUDE.md "one heavy session at a time"). Scheduled tasks all start at
 // the same minute, so the second heavy session waits for the first.
 
 /**

@@ -146,7 +146,7 @@ That is 8 pages, down from 13.
 - Namespaces: it is settings.
 - Claims: a tab of Agents.
 
-None of their content is removed (conventions 1.4); it moves.
+None of their content is removed (conventions 1.3); it moves.
 
 **Keyboard.** `g` then a letter, regrouped: `g y` Needs you, `g q` Queue, `g p` Pull requests, `g h` Health, `g l` Activity, `g a` Agents, `g e` Settings. Old letters redirect for one release.
 
@@ -161,7 +161,7 @@ None of their content is removed (conventions 1.4); it moves.
 
 Rules:
 - Each visual answers one named question.
-- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent (conventions 7.6).
+- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent (conventions-web.md rule 8).
 - No decorative charts. A table stays wherever the question is a lookup.
 
 **Two prerequisites:**

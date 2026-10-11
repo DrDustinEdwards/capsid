@@ -113,11 +113,14 @@ test("every .claude/rules/ file is path-scoped to globs that match files, so it 
   assert.ok(files.length >= 3, `the rules scan found only ${files.length} files`);
   for (const file of files) {
     const text = read(`.claude/rules/${file}`);
-    const front = /^---\npaths:\n((?:  - "[^"]+"\n)+)---\n/.exec(text);
-    assert.ok(front, `.claude/rules/${file} has no paths frontmatter, so it would load in every session`);
-    const globs = [...front[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+    const list = front ? /^paths:\s*\r?\n((?:[ \t]+-[^\n]*\r?\n?)+)/m.exec(front[1]) : null;
+    assert.ok(list, `.claude/rules/${file} has no paths frontmatter, so it would load in every session`);
+    const globs = [...list[1].matchAll(/-\s*["']?([^"'\r\n]+?)["']?\s*$/gm)].map((m) => m[1]);
+    assert.ok(globs.length > 0, `.claude/rules/${file} lists no paths`);
     for (const g of globs) {
-      assert.ok(globSync(g, { cwd: ROOT }).length > 0, `.claude/rules/${file}: "${g}" matches no file, so it never loads for that path`);
+      const hits = globSync(g, { cwd: ROOT, exclude: (p: string) => p.includes("node_modules") });
+      assert.ok(hits.length > 0, `.claude/rules/${file}: "${g}" matches no file, so it never loads for that path`);
     }
   }
 });

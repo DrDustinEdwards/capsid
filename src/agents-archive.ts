@@ -102,7 +102,7 @@ export async function archiveRevokedAgents(db: D1Database, actor: string, now: D
   for (const due of await archiveDue(db, now)) {
     const results = await db.batch(archiveStatements(db, actor, due));
     // The DELETE is what takes the row out of the live table, so its count is the move.
-    // agents has no trigger to inflate it (conventions 8.2).
+    // agents has no trigger to inflate it (conventions-cloudflare.md rule 2).
     if ((results[1]?.meta?.changes ?? 0) === 1) out.archived.push({ name: due.name, reason: due.reason });
     else out.skipped.push(due.name);
   }
