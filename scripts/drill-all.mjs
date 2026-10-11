@@ -18,12 +18,16 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { COMPLETE_MARKER, latestDump } from "@dustinedwards/d1-dump";
 
-// txasm, dustinedwards and foxing join this list as their backup jobs land
-// (job_cf5cafaa8c52, job_e40ec706c10a, job_d087b66eef22).
+// dustinedwards and foxing join this list as their backup jobs land
+// (job_e40ec706c10a, job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
+// txasm has no FTS5 table, and d1-dump's `search` check fails when none held a word to
+// search for, so txasm's line reads FAIL (search: no FTS5 table) until that is satisfied
+// or skipped; every other check must pass.
 export const SITES = [
   { name: "foxhound", bucket: "foxhound-backups" },
   { name: "carrel", bucket: "carrel-backups" },
   { name: "germomics", bucket: "germomics-backups" },
+  { name: "txasm", bucket: "txasm-books" },
 ];
 
 // The drill's own freshness threshold (d1-dump DEFAULT_STALE_HOURS). Checked here against
