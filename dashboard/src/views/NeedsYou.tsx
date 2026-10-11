@@ -35,6 +35,8 @@ const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default:
 // Chart 1, minutes of Dustin per week, loads the same way: its Enarratio primitives stay
 // out of the initial bundle.
 const MinutesTile = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MinutesTile })));
+// Chart 2, where waiting goes, sits beside it and loads the same way.
+const WaitingChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.WaitingChart })));
 
 export function NeedsYou() {
   const { feed } = useApp();
@@ -42,9 +44,14 @@ export function NeedsYou() {
     <div className="page">
       <Anchors />
       <PageHead title="Needs you" />
-      <Suspense fallback={null}>
-        <MinutesTile />
-      </Suspense>
+      <div className="chart-row">
+        <Suspense fallback={null}>
+          <MinutesTile />
+        </Suspense>
+        <Suspense fallback={null}>
+          <WaitingChart />
+        </Suspense>
+      </div>
       <ByApp />
       <Suspense fallback={null}>
         <SinceLastLooked />

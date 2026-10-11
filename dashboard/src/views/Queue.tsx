@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Spinner } from "capsomer/react/empty";
 import { placePath, useApp } from "../app/ctx";
@@ -12,6 +12,10 @@ import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
+
+// Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
+// Enarratio's area chart stays out of the initial bundle.
+const QueueChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.QueueChart })));
 
 // The state only: the switch is in the Automation panel on Namespaces (DECIDE 7).
 export function SeatStart() {
@@ -245,6 +249,9 @@ export function Queue() {
     <div className="page">
       <Anchors />
       <PageHead title="Queue" />
+      <Suspense fallback={null}>
+        <QueueChart />
+      </Suspense>
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
