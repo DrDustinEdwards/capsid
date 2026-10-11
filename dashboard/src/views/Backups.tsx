@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { DAY, ago, bytes, ms } from "../lib/format";
 import { storeUse } from "../lib/store";
@@ -5,6 +6,9 @@ import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot, PageHead } from "./shared";
+
+// Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
+const BackupSlots = lazy(() => import("./TrendCharts").then((m) => ({ default: m.BackupSlots })));
 
 export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now } = useApp();
@@ -109,6 +113,9 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
         </Panel>
       </div>
+      <Suspense fallback={null}>
+        <BackupSlots />
+      </Suspense>
       <p className="faint note">The feed reports Capsid's own store and its mirror. Backups of the other sites are not part of it, so they are not shown here.</p>
     </div>
   );

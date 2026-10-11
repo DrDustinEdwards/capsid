@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, SharedCodeView } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -14,6 +14,7 @@ export const CLAIMS_URL = `${BASE}/api/claims`;
 export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 export const SHARED_CODE_URL = `${BASE}/api/shared-code`;
 export const LIBRARY_URL = `${BASE}/api/library`;
+export const TRENDS_URL = `${BASE}/api/trends`;
 export const STALE_URL = `${BASE}/api/stale`;
 export const PLAN_URL = `${BASE}/api/plan`;
 export const DIGEST_URL = `${BASE}/api/digest`;
@@ -262,6 +263,12 @@ export function fetchLibrary(args: { q: string } | { ns: string; path: string } 
 // from the reader behind jobs list stale: true.
 export function fetchStale(): Promise<Answer<PortalStale>> {
   return get<PortalStale>(STALE_URL);
+}
+
+// GET /portal/api/trends: the series behind the charts the feed does not carry (minutes
+// per week, the queue, merges, backup slots, CI by day), from src/trends.ts. Read-only.
+export function fetchTrends(): Promise<Answer<PortalTrends>> {
+  return get<PortalTrends>(TRENDS_URL);
 }
 
 // GET /portal/api/plan: the overnight plan over every namespace, the reader behind jobs

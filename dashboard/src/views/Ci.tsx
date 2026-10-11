@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
 import { ago, ms, utc } from "../lib/format";
@@ -9,6 +10,10 @@ function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
   return m ? `${m[1]} #${m[2]}` : url;
 }
+
+// Chart 11, each default branch by day for 14 days, from GET /portal/api/trends. Lazy, so
+// Enarratio loads with Health and not with Pull requests, which shares this file.
+const CiHistory = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CiHistory })));
 
 // CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
 export function DefaultBranches() {
@@ -61,6 +66,9 @@ export function DefaultBranches() {
           <NoSnapshot />
         )}
       </Panel>
+      <Suspense fallback={null}>
+        <CiHistory />
+      </Suspense>
     </>
   );
 }
