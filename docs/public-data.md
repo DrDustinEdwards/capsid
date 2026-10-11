@@ -10,6 +10,12 @@ The file holds public-safe facts only. A private system is written as its public
 
 The schema is Zod, in `src/system-model.ts`. `system/model.schema.json` is generated from it (`node --import ./test/resolve-ts.mjs scripts/write-system-schema.mjs`) for editors, and `test/system-model.test.ts` fails when the committed file differs from the schema the Worker enforces. The same test file checks the committed model: ids unique, every relationship's ends exist, every container's system exists, and no repo without a public product named.
 
+### Flows
+
+A flow (design section 4) is an ordered walk over the model, drawn by the explorer: `flows[]` with an `id`, a `name`, an optional `description` and two to twenty `steps`. A step names one relationship already in the model by its `from`, `kind` and `to`, goes `toward` one of its two ends, says what happens in `text`, and may `lights` up to eight containers it touches. The schema refuses a step on a relationship the model does not have, one toward neither end, and a light that is not a container, so a flow can never show a connection the map does not. In the public document a step is `{relationship, toward, text, lights?}`, the relationship by its derived id.
+
+The first flow is `job-life`, a job from posted to its claims checked against GitHub. It runs over Capsid's containers and two `external` ones, Agents and GitHub (Dustin, 2026-10-11: external boxes with ordinary edges, drawn outside the dashed boundary). The explorer lists them under "Outside it", apart from Capsid's own parts. Capsomer's map draws them inside the boundary until its release that places `external` boxes outside it; the explorer and dustinedwards.info take that release.
+
 ## The filter
 
 `toPublic` in `src/system-model.ts` builds the public document by picking named fields into new objects, never by copying and deleting, so a field nobody listed cannot pass through.
@@ -18,6 +24,7 @@ The schema is Zod, in `src/system-model.ts`. `system/model.schema.json` is gener
 2. A private system is `id`, `name`, `short`, `domain`, `family`, `ring` and `private: true`, nothing more (`PRIVATE_SYSTEM_KEYS`). Its containers are dropped.
 3. A relationship with a private end survives only between two systems, with no title (answer 6). Every output relationship id is derived from its ends and kind, never copied from the file.
 4. A public system marked `hide_repo_link` is published without its repo link (answer 15: Skills).
+5. A flow is published only whole: every step must ride a relationship whose two ends belong to public systems, and light only public containers. Otherwise the flow is dropped, its name and step text with it (design section 2, rule 2).
 
 Proven in `test/system-model.test.ts`: the canary fixture (a private system carrying a marker string in every field it has, and in containers and titles that touch it, none of which reaches the output), visibility both ways, an unmodelled repo, the strict key walk, and 500 seeded random models.
 

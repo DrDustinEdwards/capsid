@@ -170,6 +170,8 @@ test("seeded random models: no private system ever carries more than its allowed
   const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
   let privateSeen = 0;
+  let flowsKept = 0;
+  let flowsDropped = 0;
   for (let run = 0; run < 500; run++) {
     const n = 2 + Math.floor(rand() * 6);
     const systems: SystemModel["systems"] = [];
@@ -210,8 +212,24 @@ test("seeded random models: no private system ever carries more than its allowed
       seen.add(key);
       relationships.push({ from, to, kind: "reads", title: `title ${CANARY}` });
     }
-    const out = toPublic({ version: 1, systems, containers, relationships }, privacy, "2026-10-10");
+    // Flows over the generated edges, each lighting a part of its first step's start, every
+    // text carrying the canary: only a flow whose every edge and light is public may survive.
+    const flows: NonNullable<SystemModel["flows"]> = [];
+    for (let f = 0; f < 2 && relationships.length > 0; f++) {
+      const steps = [pick(relationships), pick(relationships)].map((r) => ({ from: r.from, kind: r.kind, to: r.to, toward: r.to, text: `step ${CANARY}`, lights: [`c${ownerOf(r.from).slice(1)}`] }));
+      flows.push({ id: `f${f}`, name: `flow ${CANARY}`, steps });
+    }
+    const out = toPublic({ version: 1, systems, containers, relationships, flows }, privacy, "2026-10-10");
     const open = new Set(out.systems.filter((s) => !s.private).map((s) => s.id));
+    for (const f of out.flows ?? []) {
+      flowsKept++;
+      for (const step of f.steps) {
+        const [from, , to] = step.relationship.split("--");
+        assert.ok(open.has(ownerOf(from ?? "")) && open.has(ownerOf(to ?? "")), `flow ${f.id} rides ${step.relationship}, which has a private end`);
+        for (const l of step.lights ?? []) assert.ok(open.has(ownerOf(l)), `flow ${f.id} lights ${l}, a private part`);
+      }
+    }
+    flowsDropped += flows.length - (out.flows?.length ?? 0);
     for (const s of out.systems) {
       if (!s.private) continue;
       privateSeen++;
@@ -227,6 +245,7 @@ test("seeded random models: no private system ever carries more than its allowed
     assert.ok(PublicModelSchema.safeParse(out).success);
   }
   assert.ok(privateSeen > 500, `only ${privateSeen} private systems were generated, too few to prove anything`);
+  assert.ok(flowsKept > 20 && flowsDropped > 50, `flows kept ${flowsKept}, dropped ${flowsDropped}: too few of either to prove anything`);
 });
 
 function ownerOf(id: string): string {
@@ -269,4 +288,79 @@ test("system/model.schema.json is the schema the code enforces", () => {
   const committed = JSON.parse(readFileSync(join(ROOT, "system", "model.schema.json"), "utf8"));
   const generated = z.toJSONSchema(SystemModelSchema, { io: "input" });
   assert.deepEqual(committed, generated, "system/model.schema.json is stale: run `node --import ./test/resolve-ts.mjs scripts/write-system-schema.mjs`");
+});
+
+// Flows (design section 4): ordered steps over relationships the model already has.
+test("a flow step must ride a relationship in the model, toward one of its ends, lighting only containers", () => {
+  const broken = structuredClone(MODEL);
+  broken.containers.push({ id: "sample-elsewhere", system: "carrel", name: "Elsewhere", kind: "worker", technology: "Cloudflare Worker" });
+  broken.flows = [
+    {
+      id: "sample-flow",
+      name: "Sample",
+      steps: [
+        { from: "capsid-worker", kind: "serves", to: "capsid-agents", toward: "capsid-worker", text: "Fine." },
+        { from: "capsid-agents", kind: "writes", to: "capsid-db", toward: "capsid-db", text: "No such edge." },
+        { from: "capsid-worker", kind: "writes", to: "capsid-db", toward: "capsid-media", text: "Wrong end." },
+        { from: "capsid-worker", kind: "writes", to: "capsid-db", toward: "capsid-db", lights: ["capsid"], text: "A system is not a container." },
+        { from: "capsid-worker", kind: "writes", to: "capsid-db", toward: "capsid-db", lights: ["sample-elsewhere"], text: "Another system's part." },
+      ],
+    },
+    { id: "capsid", name: "Clash", steps: [] },
+  ];
+  const refused = parseSystemModel(broken);
+  assert.equal(refused.ok, false);
+  const problems = refused.ok ? "" : refused.problems.join("\n");
+  assert.match(problems, /flow sample-flow step 2 rides capsid-agents writes capsid-db, which is not a relationship in the model/);
+  assert.match(problems, /flow sample-flow step 3 goes toward capsid-media, which is not an end of capsid-worker writes capsid-db/);
+  assert.match(problems, /flow sample-flow step 4 lights capsid, which is not a container/);
+  assert.match(problems, /flow sample-flow step 5 lights sample-elsewhere, a part of carrel, which the step does not run in/);
+  assert.match(problems, /id capsid is used by a system and a flow/);
+  assert.match(problems, /flows\.1\.steps/);
+});
+
+test("the committed job's-life flow reaches the public document whole, every step on a public relationship", () => {
+  const model = parseSystemModel(MODEL);
+  assert.ok(model.ok);
+  const privacy: RepoPrivacy = new Map(model.model.systems.flatMap((s) => s.repos.map((r) => [r.toLowerCase(), !s.public] as const)));
+  const out = toPublic(model.model, privacy, "2026-10-11");
+  assert.ok(PublicModelSchema.safeParse(out).success);
+  const life = out.flows?.find((f) => f.id === "job-life");
+  assert.ok(life, "job-life did not reach the public document");
+  const edges = new Map(out.relationships.map((r) => [r.id, r]));
+  assert.equal(life.steps.length, model.model.flows?.find((f) => f.id === "job-life")?.steps.length);
+  for (const step of life.steps) {
+    const edge = edges.get(step.relationship);
+    assert.ok(edge, `a step rides ${step.relationship}, which the document does not carry`);
+    assert.ok(step.toward === edge.from || step.toward === edge.to);
+  }
+});
+
+// A light on a private part needs a step in that private system (the schema's rule), and that
+// step's edge is never public, so the edge check drops it; toPublic checks lights as well.
+test("a flow that touches a private system is dropped whole, its name and text with it", () => {
+  const model = fixture();
+  model.flows = [
+    {
+      id: "open-flow",
+      name: "Open",
+      steps: [
+        { from: "open-worker", kind: "serves", to: "sample-open", toward: "sample-open", text: "Open step." },
+        { from: "open-worker", kind: "serves", to: "sample-open", toward: "open-worker", lights: ["open-worker"], text: "Back." },
+      ],
+    },
+    {
+      id: "leaky-flow",
+      name: `Leaky ${CANARY}`,
+      steps: [
+        { from: "open-worker", kind: "serves", to: "sample-open", toward: "sample-open", text: `first ${CANARY}` },
+        { from: "open-worker", kind: "writes", to: `${CANARY.toLowerCase()}-db`, toward: `${CANARY.toLowerCase()}-db`, text: `into the ${CANARY} db` },
+      ],
+    },
+  ];
+  assert.ok(parseSystemModel(model).ok, "the fixture's flows should pass the model's own checks");
+  const out = toPublic(model, ALL_PUBLIC, "2026-10-11");
+  assert.deepEqual(out.flows?.map((f) => f.id), ["open-flow"]);
+  assertNoCanary(out.flows);
+  assert.deepEqual(Object.keys(out.flows?.[0]?.steps[1] ?? {}).sort(), ["lights", "relationship", "text", "toward"]);
 });
