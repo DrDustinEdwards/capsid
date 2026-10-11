@@ -64,7 +64,7 @@ Audit rows and `jobs.claimed_by` record a minted agent as `agent:<name>`.
 
 **Four of these have never connected, and what each is waiting for is written down so an unused credential reads as a plan rather than a loose end.** `capsid_run_improve` action `status` shows `last_seen: null` for all four today.
 
-- `seat` is not what auto-merge uses. `capsid/policy/auto-merge.md` is signed and enabled, and the Worker merges a qualifying pull request itself on its cron tick (`src/improve/tick.ts`), on the namespaces the policy names. Version 5 names dustinedwards, capsid, carrel and capsomer; a pull request that touches a refused path, or fails any other check, waits for the seat. The seat's key is for a seat session working through `/ops/mcp`, and its `last_seen` in `capsid_run_improve` action `status` shows whether one has.
+- `seat` is not what auto-merge uses. `capsid/policy/auto-merge.md` is signed and enabled, and the Worker merges a qualifying pull request itself on its cron tick (`src/improve/tick.ts`), on the namespaces the policy names. The signed policy (reviewable source: `docs/policy/auto-merge.md`) decides which namespaces may auto-merge; a pull request that touches a refused path, or fails any other check, waits for the seat. The seat's key is for a seat session working through `/ops/mcp`, and its `last_seen` in `capsid_run_improve` action `status` shows whether one has.
 - `reviewer` is used the first time a job is posted with `review_required`, since that is the only thing that waits for a `REVIEW:` comment. No job has been posted with it yet.
 - `auditor` is used by an outside model doing a cold audit, which is a thing a person starts rather than something the system reaches for.
 - `watcher` is different from the other three, and its `null` means something else. The tick has no bearer token to present, so it builds a SYNTHETIC watcher identity in `src/watcher.ts` shaped to match the minted role exactly, and `touchLastSeen` returns early for an agent with no row. The minted `watcher` key is therefore unused by construction, and its `last_seen` stays `null` however many findings the tick posts. What records that work is `audit_log`, where the actor is `agent:watcher` either way. The key is there for a person driving the watcher's checks by hand from outside the Worker.
@@ -81,7 +81,7 @@ Four gated MCP endpoints, two servers. Capsid (14 tools) is served on `/mcp` and
 
 1. **OAuth (`/mcp`)** for human clients. The client discovers the server via `.well-known` and identifies itself by Client ID Metadata Document (CIMD): its client id is the https URL of a JSON document naming its redirect URIs, which the Worker fetches. CIMD is advertised only while the `global_fetch_strictly_public` compatibility flag is set. Grok and Gemini cannot send a metadata document, so `POST /register` is a tightened Dynamic Client Registration (capsid/rulings/mcp-2026-10-10.md, rule 13; `src/dcr.ts`), on the MCP host only. Every redirect URI a registration names must be on the allowlist, matched exactly: Grok's connector callback and ChatGPT's legacy callback are fixed in code, and the per-connector callbacks Gemini and ChatGPT issue are listed by the seat in the `DCR_REDIRECT_URIS` var (comma separated; a listed URI that is not a Google or ChatGPT connector callback is ignored and logged). Registration is rate limited per address, 10 an hour and 30 a day, and refuses when the limit cannot be read. It writes a client record and grants nothing: the client still meets the consent page on its first `/authorize` and the Access sign-in that admits `ADMIN_EMAIL` and `CO_OWNER_EMAILS` only. DCR is removed when Grok and Gemini sign in by CIMD, at the latest when the specification drops it. Every token is bound to its host's resource (RFC 8707) by the provider and refused at any other (`test-integration/oauth-round-trip.test.ts`, the audience plant). The live gate's probe client has its document served by the Worker itself at `/oauth/clients/verify-live.json` (`src/oauth-client-docs.ts`), a path that names no branch, so the master to main rename cannot change the probe's identity. The probe uses it on whatever origin it checks (`probeClientId` in `scripts/cimd-probe-lib.mjs`), so a 404 there is a failed gate of that deploy (test/cimd-probe.test.ts, test/verify-live-no-answer.test.ts). `scripts/verify-live-client.json` on GitHub stays until plan step 4, so a rollback to older code still finds its client. It then goes through `/authorize` and a one-time approval screen to Cloudflare Access for SaaS (OIDC), the app "Capsid" on the `dustinedwards.cloudflareaccess.com` team (capsid/research/design-capsid-access-login.md). Access has been the upstream since #185 merged, 2026-09-28 00:01 UTC (2026-09-27 in America/Chicago); GitHub was the upstream before.
    - **The sign-in** uses PKCE and a nonce. `src/access-jwt.ts` verifies the ID token with jose (6.2.12, pinned; the verifier the portfolio's sites share): RS256 only, against the app's `/jwks` through `createRemoteJWKSet` (a kid it does not hold refetches the keys at once, so a rotation is picked up), `iss` the app's issuer, `aud` its client id, `exp` and `nbf` on the caller's clock. A token must name a kid, whatever the key set holds. Then, checked in that file, the nonce, `email_verified` not false, and an email. The admin is still `ADMIN_EMAIL`, or a co-owner listed in `CO_OWNER_EMAILS`, checked on every request.
-   - **The admin check:** the email must equal `ADMIN_EMAIL` or an entry of `CO_OWNER_EMAILS` exactly (comma separated, each trimmed, empty entries ignored, no case folding, timing-safe compare). Any other identity gets a 403, and the check runs again on every `/mcp` request. A co-owner is audited as `access:<her email>`, is stepped up like the admin, and cannot change `ADMIN_EMAIL` or `CO_OWNER_EMAILS`, which are set only in Cloudflare (README, "Co-owner").
+   - **The admin check:** the email must equal `ADMIN_EMAIL` or an entry of `CO_OWNER_EMAILS` exactly (comma separated, each trimmed, empty entries ignored, no case folding, timing-safe compare). Any other identity gets a 403, and the check runs again on every `/mcp` request. A co-owner is audited as `access:<her email>`, is stepped up like the admin, and cannot change `ADMIN_EMAIL` or `CO_OWNER_EMAILS`, which are set only in Cloudflare (below, "Co-owner").
    - **Grants from before the switch** carry a GitHub login and no email, fail that check, and the client signs in again once.
    - **The audit actor** is `access:<email>`, since #185 (2026-09-28 00:01 UTC). Audit rows and job rows from before it name the admin as `github:<login>`, so a query for the admin's history across the switch matches both prefixes.
    - **Capsid Portal** (https://portal.dustinedwards.info, and `/portal/` on workers.dev until that is verified live) signs in through the same Access app with its own redirect URL on each host, `https://portal.dustinedwards.info/callback` and `/portal/callback` on workers.dev, both listed in the Access app, and keeps a signed twelve-hour cookie carrying the email (docs/portal.md). It signed in at `/console/callback` from the design's PR 3 (#188, merged 2026-09-28 02:37 UTC) until PR B of capsid/research/design-portal-unify.md moved it to `/portal` with no redirects; the Access app's `/console/callback` redirect URL is removed once the Portal sign-in is confirmed live. The same `ADMIN_EMAIL` or `CO_OWNER_EMAILS` check runs on every Portal request, so a cookie from the GitHub login, which carries no email, is refused and the Portal asks to sign in once. A click in the Portal is audited as `access:<email>`.
@@ -114,3 +114,79 @@ What the clients do with them, as of 2026-09-29:
 
 - **Claude Code**, verified: it refreshes its tool list on `notifications/tools/list_changed`. On protocol 2026-07-28 it rejects a `tools/list` result that lacks `ttlMs` or `cacheScope` (anthropics/claude-code#88128). capsid serves both on 2026-07-28 (`test/cache-hints.test.ts`). Nothing shows Claude Code caching by `ttlMs`.
 - **claude.ai**, unknown: nothing observed shows whether it reads the annotations, the cache fields, or either. It is known to cache the tool list from connect time, so a deploy still needs a reconnect (docs/bootstrap.md, "Verifying a deploy").
+
+## Co-owner
+
+A second person can hold the same access as the administrator. Her email goes in the optional Worker secret `CO_OWNER_EMAILS` (comma separated for more than one; each entry trimmed, empty entries ignored, exact match, no case folding, the same timing-safe compare as `ADMIN_EMAIL`). Unset or empty means no co-owners, and while `ADMIN_EMAIL` is unset nobody is admitted, a co-owner included.
+
+- She is admitted to `/mcp`, `/mcp/admin` and the Portal like the administrator. Every audit row, actor and "signed in as" carries the email Access verified for her, `access:<her email>`, never `ADMIN_EMAIL`.
+- The step-up applies to her exactly as to the administrator, on her own sign-in and her own idle clock.
+- `ADMIN_EMAIL` stays the primary owner and is set only in Cloudflare. No Capsid tool, Portal action or sync can change it, `CO_OWNER_EMAILS` or who is admitted, so a co-owner cannot remove or demote the primary owner from inside Capsid. The push alerts' VAPID subject stays `ADMIN_EMAIL`.
+- To add her: in the Cloudflare dashboard, Workers & Pages, capsid, Settings, Variables and Secrets, add `CO_OWNER_EMAILS` as a Secret (Type: Secret, not Text) holding her email. The Access policies that admit the admin (the Capsid app and the apps behind Access) must list her email too, or Access refuses her before Capsid is asked.
+
+## Repo mutations and the audit trail
+
+Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`). It resolves the repo the call actually reaches, asks `checkScope` about that repo with the flags the call's intent needs, runs the write, and then writes an `audit_log` row. GitHub cannot join a D1 transaction, so if that audit insert fails after the write landed, the result reports the write as done with an `audit_warning` rather than as a failure (`test/blast-radius.test.ts` covers the rule).
+
+Every overwrite and delete of a document snapshots the prior version to `document_versions` and writes `audit_log` (`test/invariants.test.ts`, `test/write-invariants.test.ts`). These tables are not kept forever in D1: after each daily backup, `document_versions` rows older than 90 days and `audit_log` rows older than 180 days are pruned, and they survive only in retained dumps (docs/backups.md).
+
+The minted roles each hold at most one blast-radius flag, and `test/roles.test.ts` fails the build if a role names a second. Two project drivers hold a flag by a recorded exception; the Portal and `capsid_run_improve` action `status` list what each agent actually holds.
+
+## What Capsid cannot control
+
+- The admin's own session. The OAuth admin is a synthetic agent with every scope, so a client holding that login on Dustin's machine is not narrowed by `checkScope`, and his own shell can push, deploy or run `wrangler` without going through Capsid at all.
+- The legacy operator key, on any deployment where `OPERATOR_KEY_HASH` is still set: a plain entry has the admin grant. This deployment deleted it on 2026-09-12.
+- Client-side tool caching. MCP clients cache the tool list at connect time; claude.ai's handling of the cache hints is unknown. A deploy is verified by calling the Worker directly.
+- Tool annotations such as `readOnlyHint` are hints to the client and enforce nothing.
+- Portal sign-out ends the Portal cookie only. The Access session is Cloudflare's, and a copied cookie stays valid until it expires.
+- Hooks and telemetry from a session are reported by that session. A session that sends no key records nothing.
+
+## Audits
+
+Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, the scorer isolated so attempt code never runs beside a credential, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Two further audits on 2026-09-13, one on the source and one on the test suite, closed four more criticals, each one a check a call path did not reach rather than a rule nobody had written. Each fix ships with a test observed failing against the code it replaced. Private audits live in Capsid. A 2026-09-16 source audit of this Worker is `AUDIT-2026-09-16.md` at the repo root; it is a snapshot, not canon.
+
+## Endpoints
+
+The router is `defaultHandler` in `src/routes.ts`, behind the OAuth provider and the host rules in `src/index.ts`. On the MCP host (`mcp.dustinedwards.info`) only the paths in `src/mcp-host.ts` answer; the Portal host serves the Portal and nothing else (`src/portal-host.ts`). Each route's auth is also stated in `src/scope.ts`.
+
+MCP and sign-in:
+
+- `POST /mcp` and `POST /mcp/admin` MCP over Streamable HTTP, requires an OAuth access token (the admin and any co-owner only)
+- `POST /ops/mcp` and `POST /ops/mcp/admin` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`; the admin route takes the admin identity only
+- `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
+- `POST /token` token exchange (served by the library)
+- `POST /register` tightened dynamic client registration for Grok and Gemini, MCP host only, rate limited, grants nothing (`src/dcr.ts`, above). Claude and ChatGPT use a Client ID Metadata Document instead
+- `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
+- `GET /oauth/clients/verify-live.json` the live gate's probe client document (`src/oauth-client-docs.ts`)
+
+Agents and operators (`/ops/`):
+
+- `POST /ops/otlp/v1/metrics`, `POST /ops/otlp/v1/logs` Claude Code's OpenTelemetry as OTLP/HTTP JSON, gzip or plain, at most 1MB. A driver key, a runner key or the admin key as `Authorization: Bearer <key>` (401 without one, 403 for a read-only key). Keeps usage totals per session and a count of api_error events; never a prompt, a response or tool content (docs/telemetry.md)
+- `POST /ops/hooks` Claude Code HTTP hook events, requires a driver or runner key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, a response or a tool's input or output beyond its name, an edited file's path and a Bash command's first word and exit code (docs/hooks.md)
+- `POST /ops/runner-key` a seat-started session trades its GitHub OIDC token for a key bound to one job (docs/seat-start.md)
+- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, the admin sees every app, and the response carries no CORS headers (docs/portal.md)
+- `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
+- `POST /ops/access-sync` an app's members page makes its Cloudflare Access group hold exactly its current members, with the app's own key and the write grant on its namespace. The group is the one the seat pinned for that namespace in `access_sync_groups`, its name checked before every write; removed people's Zero Trust seats are freed; every call is audited. Capsid holds the only write token, `CF_ACCESS_SYNC_TOKEN` (docs/portal.md)
+- `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
+
+The improve loop and backups (signed, no bearer):
+
+- `POST /improve/score` the signed score report a roster repo's CI posts back
+- `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
+- `POST /backup/credential` mints the credential the off-account backup writes with
+
+Public:
+
+- `GET /health` no auth. Reports deploy provenance (git sha, whether the tree was dirty, build time) and probes the store: `SELECT 1` against D1 plus an FTS5 MATCH pinned to one known document. Either probe failing returns 503 with `status: "degraded"` and a `store` object naming which one. A Worker whose bindings resolved to nothing starts normally and would otherwise answer `ok` while every read tool errors.
+- `GET /public/model/v1.json` no auth. The public system model the explorer and the dustinedwards.info map are built from: what the daily build stored after the privacy filter, never computed per request. Private systems appear as a name and domain only. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
+- `GET /public/stats/v1.json` no auth. Counts, rates and medians across every namespace, agent and site, over whole UTC days, computed once a day by the same build: never a name, a title or a time of day; a rate over fewer than ten rows is null. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
+- `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
+
+Capsid Portal (admin Access session only; a request with any `Authorization` header is refused with 403; docs/portal.md, "Routes"):
+
+- `GET /portal/` the app, and `GET /portal/callback` its sign-in return
+- `GET /portal/api/ops` the feed, and `POST /portal/api/ops/refresh` an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes)
+- `POST /portal/api/actions/preview` and `POST /portal/api/actions/perform` the controls as a preview and a perform (header `X-Capsid-CSRF`)
+- `GET /portal/api/` reads: `namespaces`, `activity`, `claims`, `stale`, `plan`, `digest`, `maintenance`, `convergence`, `packages/history`, `shared-code`, `library`, `trends`
+- `GET` and `POST /portal/api/push` phone alerts, and `POST /portal/api/sign-out`
+- Any other path under `/portal/api/` is a JSON 404. Nothing answers under `/console`

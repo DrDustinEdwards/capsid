@@ -39,3 +39,11 @@ A name two jobs or two steps share is refused with the ids or numbers that tell 
 **Redaction.** Every log text `capsid_inspect_repo` action `ci` returns, and every GitHub error body it echoes, passes through `src/redact.ts` first. It replaces each secret-shaped value with `[REDACTED:<kind>]` and counts them in `log_redactions`: GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), Authorization header values and Bearer or Basic credentials, AWS access key ids, private key blocks (an unterminated block to the end of the text), JWTs, Slack tokens and webhook URLs, assignments to a secret-named key (`API_TOKEN=...`, `password: ...`, `"client_secret": "..."`, `?access_token=...`), and long random-looking runs just after a word such as secret, token, key or password. Redaction runs before the 64KB cut, so a cut cannot split a secret into a half no pattern matches. It errs toward over-redacting. GitHub masks only the secrets it was given, as `***`; this covers what a step printed by accident.
 
 `capsid_read_repo` action `search` is a server-side tree walk (a recursive Git Trees listing, then bounded content scans), not GitHub's code search API, which returns empty results for private repositories under an App installation token. Use `path_prefix` to narrow large repos.
+
+## Writes and the audit row
+
+Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`); the rule and its audit behavior are in docs/auth.md, "Repo mutations and the audit trail".
+
+## The repository's name
+
+The repository was renamed from `capsid-mcp` to `DrDustinEdwards/capsid` on 2026-09-12; the code names itself by that name in `SELF_REPO` (`src/github/contents.ts`).

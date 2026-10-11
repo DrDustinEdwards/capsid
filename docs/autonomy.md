@@ -8,8 +8,8 @@ Both ship with `enabled: false`, and **both are now on**: gates since 2026-09-13
 The five-minute tick walks every open pull request on the namespaces the policy names
 and merges only those that pass all twelve checks, evaluated in order, each refusing on
 its own. **A merge is a deploy on any repo that deploys on merge to its default branch**,
-so passing these checks there ships to production with no human. Version 6 names
-dustinedwards, carrel, capsomer and capsid. capsid was taken out on 2026-09-25 because a
+so passing these checks there ships to production with no human. The live signed
+policy is version 7 and names dustinedwards, carrel, capsomer and capsid. capsid was taken out on 2026-09-25 because a
 capsid merge deploys the control plane, put back with no limit on 2026-10-07, and limited
 by version 6 (D6 of 2026-10-03, confirmed 2026-10-09) to docs-only PRs outside
 `docs/policy/` and dashboard CSS-only PRs; its tests, Portal scripts and every other path
