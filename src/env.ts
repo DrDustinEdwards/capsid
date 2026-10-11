@@ -65,13 +65,18 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // fixed Grok and ChatGPT callbacks can register.
   DCR_REDIRECT_URIS?: string;
   EMAIL?: SendEmail;
+  // Phone alerts (src/push.ts, src/web-push.ts): the VAPID key that signs each Web Push,
+  // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
+  // and the Portal's Settings says why.
+  VAPID_PRIVATE_KEY?: string;
   ALERT_EMAIL?: string;
   ALERT_FROM?: string;
 }
 
 // Everything except the holdout bucket, the credentials that could mint read access to it,
-// the Cloudflare read token (it can read Worker code) and the Access sync's write token.
-export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN">;
+// the Cloudflare read token (it can read Worker code), the Access sync's write token and
+// the key that signs phone alerts.
+export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

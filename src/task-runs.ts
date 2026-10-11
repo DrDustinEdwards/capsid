@@ -25,7 +25,8 @@ export type TaskId =
   | "merge-resume"
   | "maintenance"
   | "site-repair"
-  | "public-build";
+  | "public-build"
+  | "push";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -55,6 +56,8 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "site-repair", label: "Site repairs", period_ms: null },
   // The public system model (src/public-data.ts), built once a UTC day on the tick.
   { id: "public-build", label: "Public model build", period_ms: 24 * 3_600_000 },
+  // Phone alerts (src/push.ts), on the tick; recorded only when an alert was due.
+  { id: "push", label: "Phone alerts", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

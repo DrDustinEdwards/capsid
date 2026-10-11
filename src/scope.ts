@@ -203,6 +203,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
+  "/portal/api/push":
+    "the Portal's phone alerts: GET lists the devices with alerts on behind portalGate; POST turns one on or off or sends a test behind the preview's checks (portalGate, same-origin, the body cap, CSRF)",
   "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
   "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
   "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",

@@ -9,6 +9,7 @@ import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
 import { maintenanceTick } from "../maintenance";
 import { publicBuildTick } from "../public-data";
+import { pushTick } from "../push";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -208,6 +209,22 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: line };
     },
     { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
+  );
+
+  // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a typed
+  // pull request or a rollback they just recorded is seen this tick. It spends no model
+  // tokens. Recorded only when an alert was due, so the ledger is not one empty pass
+  // every five minutes; no key or no device is not a run.
+  await runTask(
+    env,
+    "push",
+    () => pushTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent("log", "PUSH", { message: `PUSH ${report.note}` });
+      return { outcome: report.sent.length > 0 ? "ok" : "refused", reason: report.note };
+    },
+    { tag: "PUSH_THREW:", rethrow: false }
   );
 
   const runs = await advanceableRuns(env.DB, RUNS_PER_TICK);

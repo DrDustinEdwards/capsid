@@ -23,6 +23,7 @@ import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
+import { PORTAL_PUSH_PATH } from "../src/push.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
@@ -136,6 +137,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_CONVERGENCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SHARED_CODE_PATH,
+  PORTAL_PUSH_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,
   PORTAL_PATH,

@@ -7,7 +7,7 @@
 //
 // It also mocks the Portal's controls (preview and perform), GET
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale, GET /portal/api/maintenance and POST
+// /portal/api/stale, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
 // /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -35,6 +35,7 @@ import type {
   PortalActivity,
   PortalPackageHistory,
   PortalStale,
+  PortalPush,
   PortalPlan,
   PortalDigest,
   PortalMaintenance,
@@ -352,6 +353,16 @@ class Refusal extends Error {
   ) {
     super(message);
   }
+}
+
+// Phone alerts (GET and POST /portal/api/push): one device on, with a sample key. A
+// fake key is enough: the mock never sends anything.
+// Its times are relative to the mock's clock, so they read the same under WF_MOCK_NOW.
+let pushDevices: PortalPush["devices"] = [
+  { id: 1, label: "Chrome on Android", created_at: new Date(mockNow() - 2 * 86_400_000).toISOString(), last_sent_at: new Date(mockNow() - 3 * 3_600_000).toISOString(), last_status: 201 },
+];
+function pushView(): PortalPush {
+  return { generated: new Date(mockNow()).toISOString(), public_key: `B${"A".repeat(86)}`, problem: null, devices: pushDevices };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -1170,7 +1181,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1204,6 +1215,22 @@ export function mockOpsApi(): Plugin {
         if (path === "/portal/api/maintenance") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, maintenance(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/push") {
+          if (req.method === "GET") return send(res, 200, pushView());
+          if (req.method !== "POST") return send(res, 405, { error: "method" });
+          if (req.headers["x-capsid-csrf"] !== csrf()) return refuse(res, 403, "csrf validation failed: reload Capsid Portal and try again.");
+          readBody(req)
+            .then((raw) => {
+              const b = JSON.parse(raw) as { op?: string; id?: number; label?: string };
+              if (b.op === "off") pushDevices = pushDevices.filter((d) => d.id !== b.id);
+              else if (b.op === "on") pushDevices.push({ id: pushDevices.length + 10, label: b.label ?? null, created_at: new Date(mockNow()).toISOString(), last_sent_at: null, last_status: null });
+              else if (b.op === "test") return send(res, 200, { ...pushView(), results: pushDevices.map((d) => ({ id: d.id, status: 201 })) });
+              else return refuse(res, 400, "op must be on, off or test.");
+              return send(res, 200, pushView());
+            })
+            .catch(next);
+          return;
         }
         if (path === "/portal/api/sign-out") {
           if (req.method !== "POST") return send(res, 405, { error: "method" });

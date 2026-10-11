@@ -64,7 +64,7 @@ type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Re
 
 /** The checks both POSTs run, in order: the session, the fetch metadata, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
-async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
+export async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate;
 
