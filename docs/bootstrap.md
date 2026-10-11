@@ -357,7 +357,7 @@ stay off for all six until something concrete needs one, at which point
 `capsid_work_jobs(action: "post", ..., required_flags: ["can_merge"])` records the blast radius
 the work needs. The claim refuses a driver that does not hold those flags and
 leaves the job queued for one that does, so the mismatch surfaces at the claim
-rather than four hours later when the lease expires.
+rather than after a driver has already taken it.
 
 ## 9. The loop on/off checklist
 
@@ -427,65 +427,6 @@ starts writing to every repository on the roster.
       That is the human gate. What the Worker may merge alone is
       `docs/policy/auto-merge.md`, and every merge it makes names the policy
       version and every check that passed in the audit log.
-
-## 10. The nightly driver, one scheduled task per project
-
-`scripts/schedule-drivers.mjs` installs a Windows Task Scheduler task per project
-folder that runs `claude -p "/improve work"` at 04:00 America/Chicago and posts the
-run log to `<namespace>/jobs/nightly-<date>.md`.
-
-Why a local task and not a cloud routine. Ruled 2026-09-12 against a measured
-alternative, recorded in `capsid/autonomy-part3-routines.md`. A Claude Code cloud
-routine can only attach claude.ai connectors, and the registered Capsid connector
-points at `/mcp`, the OAuth path, which resolves to the single admin login. A nightly
-routine would therefore run the whole queue as the admin, holding every namespace and
-every blast-radius flag, which is the wide credential the per-namespace driver agents
-were minted to replace. There is also no verified way to hand a routine a secret. On
-this machine the per-namespace key files already exist, so the scheduler runs here and
-each task reaches Capsid as exactly one driver.
-
-It is off in two separate senses, and both are on purpose:
-
-```
-node scripts/schedule-drivers.mjs --list                            # what exists now
-node scripts/schedule-drivers.mjs --install                         # dry run, changes nothing
-node scripts/schedule-drivers.mjs --install --namespace capsid --apply
-schtasks /Change /TN "Capsid improve driver (capsid)" /ENABLE       # the separate act
-```
-
-Nothing is created without `--apply`, and a task that is created is created
-disabled. Enabling it is its own command, because installing a scheduler and
-switching on a nightly unattended agent are two different decisions and a setup script
-should not make the second one.
-
-Removing is the same shape:
-
-```
-node scripts/schedule-drivers.mjs --remove --namespace capsid --apply
-```
-
-- **The task does not carry a credential.** It runs the script, which runs `claude` in
-  that project folder, and the driver session gets its credential from the
-  project-scoped MCP server configured there. The key file is read only to post the run
-  log afterwards, and its value never reaches a log or a console.
-- **The log is posted even when the run fails.** The task invokes the script rather
-  than `claude` directly for exactly this reason: a session that died is the run whose
-  record matters most. A long transcript is trimmed to its tail.
-- **04:00 stays 04:00 across the daylight-saving switch**, because Task Scheduler takes
-  a local wall-clock time. The Worker's own cron needs two UTC expressions and
-  `chicagoHour()` to pin the same instant.
-- **The session runs in auto mode.** `claude -p` starts in Manual mode and has nobody
-  to answer a prompt, so a driver started without flags is denied its first tool call;
-  every nightly run did nothing until 2026-09-23. `driverArgs()` passes
-  `--permission-mode auto` and `--permission-prompts none`, pre-approves the Capsid
-  read tools plus `capsid_work_jobs` and `capsid_run_improve`, and denies `npm run ship`, `npm run deploy`,
-  `wrangler deploy`, any force push, and the claude.ai Capsid and Capsid Admin connectors, which
-  reach `/mcp` and `/mcp/admin` as the admin. It adds `C:\Users\email\dev\worktrees` as a working directory,
-  because a read outside the working directory is denied in a `-p` run. The scheduled
-  task's command did not change; the task picks this up from the checkout it runs.
-
-A namespace with no `~/.capsid/agent-<ns>-driver.key` is skipped by name rather than
-scheduled on whatever credential happens to be configured.
 
 ## 11. A fresh install, step by step
 

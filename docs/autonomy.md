@@ -78,17 +78,7 @@ after the key is deleted), the load records whatever signed body is stored at th
 moment. The key is not in the backup's KV pins: after a D1 restore to an older policy,
 the loaders refuse it until the seat signs it again.
 
-**The nightly driver runs on this machine, not in the cloud.** `scripts/schedule-drivers.mjs`
-installs one Windows Task Scheduler task per project folder, each invoking `/improve work`
-in that folder at 04:00 America/Chicago, so each task reaches Capsid as exactly one
-driver agent from its own `~/.capsid/agent-<ns>-driver.key`. A Claude Code cloud routine
-was measured and rejected: a routine can attach only claude.ai connectors, the registered
-Capsid connector points at `/mcp`, the OAuth admin path, and there is no verified way to
-hand a routine a secret, so a nightly routine would run the whole queue on the wide
-credential the driver agents were minted to replace. The scheduler is off three times over:
-nothing is created without `--apply`, an installed task is created disabled, and a run starts
-only if the overnight switch is on, on the API key or on the subscription with Dustin's
-recorded decision (docs/overnight.md). Hand-started tabs are the default and are unaffected.
+**The Windows nightly driver is gone** (job_2c92174d5bff). `scripts/schedule-drivers.mjs`, which installed a Task Scheduler task per project folder to run `/improve work` at 04:00, was removed with the claim leases it depended on. Routines now start sessions in the cloud (docs/routines.md): a routine fires a session for a queued job, the job is marked started, and the session completes it by naming its pull request. The overnight switch and the plan and digest views remain (docs/overnight.md). Hand-started tabs are unaffected.
 
 **Merge classes, report-only** (`src/merge-class.ts`; docs/design/design-merge-pipeline.md section 2, the design's PR 2, ruled 2026-10-09). The tick gives every PR it judges one class with its reasons: `auto` (passes the signed policy), `approve` (stopped only by a rule a person may waive), `typed` (any money path, decided before anything else), `seat` (a migration, a workflow, a fork head, a base other than the default branch, or a file list that could not be read) or `wait` (CI not finished, or a draft). Its path class is its riskiest file's: docs, dashboard-css, tests, dashboard-code, deps-own, src-routine, deps-other, src-worth, workflow, migration, money (a manifest or lockfile counts as deps-other until the diff is read). The class, path class and reasons ride on the awaiting-seat set and in the inbox item's title. The approval record reads them, and the executor merges what was approved (both below). A PR whose body names no job is not read, so it has no class. Tests: test/merge-class.test.ts, and the tick's in test/auto-merge.test.ts.
 
@@ -138,7 +128,7 @@ A half-hourly step on the five-minute tick that reads the surface and, when some
 
   A finding with no row is filed. An open job with no row (posted before the table) is adopted rather than filed again. Every write is keyed on the fingerprint, and a state move is guarded on the state it was read in, so the tick and the Portal's Refresh cannot both move a row; a lost move is logged as `WATCHER_FINDING_MOVED`.
 - **CI red is one incident per namespace.** The fingerprint is `ci-red-<namespace>`, and the head sha of each sighting is evidence. It carried the sha until 2026-09-29, and ci-red was filed 13 times between 2026-09-20 and 09-23 as each red commit became a new finding.
-- **Cadence** is `watcher:cadence-minutes` in `APP_KV`, 30 by default, with a floor of 5. It rides the tick before the budget check, with the lease sweep and auto-merge. It spends no model tokens and no CI minutes. An exhausted budget is when nobody is looking.
+- **Cadence** is `watcher:cadence-minutes` in `APP_KV`, 30 by default, with a floor of 5. It rides the tick before the budget check, with auto-merge. It spends no model tokens and no CI minutes. An exhausted budget is when nobody is looking.
 - **It keeps each pass in `ops:snapshot`** (`APP_KV`, `src/ops-snapshot.ts`), the data the operations dashboard reads (capsid/research/design-ops-console.md). The snapshot holds:
   - every check as clear, finding or could not run;
   - `/health`;
