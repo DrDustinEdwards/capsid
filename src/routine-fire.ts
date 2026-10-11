@@ -7,8 +7,8 @@ import { verifySignedBody } from "./improve-task";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 
-// CAPSID STARTS A SESSION ITSELF (job_a7d6f6009242, docs/routines.md). Each namespace
-// has one Claude Code routine, created by Dustin at claude.ai/code/routines on Opus,
+// CAPSID STARTS A SESSION ITSELF (job_a7d6f6009242, docs/routines.md). One Claude Code
+// routine serves every namespace, created by Dustin at claude.ai/code/routines on Opus,
 // with only the Capsid connection through the network secret. Its API trigger is a
 // per-routine URL and bearer token. The seat fires it for one queued job, and the
 // routine's prompt reads the job id from the routine-fire-payload block the fire text
@@ -20,6 +20,12 @@ import { logEvent } from "./log";
 // seat with capsid_work_jobs action "routine", because it is not a secret and a new
 // routine should not need a deploy; the token as a Worker secret, ROUTINE_<NS>_TOKEN,
 // set by Dustin with `npx wrangler secret put`, read by name and never returned.
+//
+// One routine for every namespace (job_77b45a741ddc): the seat sets the same fire URL on
+// each namespace, and Dustin sets one token. A namespace's own ROUTINE_<NS>_TOKEN wins;
+// otherwise the token falls back to the secret of any namespace whose stored fire URL
+// names the same routine id. A different routine id never borrows a token, and only the
+// secret's name is ever reported or audited, never its value.
 
 export const routineUrlKey = (namespace: string) => `routine:${namespace}:url`;
 
@@ -29,6 +35,27 @@ export const routineTokenName = (namespace: string) => `ROUTINE_${namespace.toUp
 function routineToken(env: Env, namespace: string): string | null {
   const value = (env as unknown as Record<string, unknown>)[routineTokenName(namespace)];
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+// The token a fire for this namespace sends, and the name of the secret it came from. The
+// namespace's own secret wins. Otherwise, when the namespace's fire URL names a routine,
+// the secret of another namespace whose stored fire URL names the same routine is used,
+// in namespace order so the answer is deterministic. A token is lent only from a
+// namespace the caller may act in, so a seat held to one namespace never fires with
+// another's credential. A different routine id never borrows.
+async function resolveRoutineToken(env: Env, agent: Agent, namespace: string, routineId: string | null): Promise<{ secret: string; value: string } | null> {
+  const own = routineToken(env, namespace);
+  if (own !== null) return { secret: routineTokenName(namespace), value: own };
+  if (routineId === null) return null;
+  const rows = (await env.DB.prepare("SELECT namespace FROM namespaces ORDER BY namespace").all<{ namespace: string }>()).results ?? [];
+  for (const { namespace: other } of rows) {
+    if (other === namespace || !ROUTINE_NAMESPACE.test(other) || outsideJobNamespace(agent, other)) continue;
+    const value = routineToken(env, other);
+    if (value === null) continue;
+    const url = await env.APP_KV.get(routineUrlKey(other));
+    if (url && routineIdOf(url) === routineId) return { secret: routineTokenName(other), value };
+  }
+  return null;
 }
 
 const namespaceRefusal = (action: string, namespace: string) =>
@@ -80,8 +107,6 @@ export async function setRoutine(env: Env, agent: Agent, namespace: string | und
   const outside = outsideJobNamespace(agent, namespace);
   if (outside) return refuse("routine", `${agent.actor} cannot set the routine for ${namespace}: ${outside}`);
   if (!ROUTINE_NAMESPACE.test(namespace)) return namespaceRefusal("routine", namespace);
-  const tokenSecret = routineTokenName(namespace);
-  const tokenSet = routineToken(env, namespace) !== null;
   const key = routineUrlKey(namespace);
   if (url !== undefined) {
     const value = url.trim();
@@ -96,11 +121,16 @@ export async function setRoutine(env: Env, agent: Agent, namespace: string | und
     await env.DB.batch([auditStatement(env.DB, agent.actor, "routine-set", namespace, null, { namespace, routine_id: value === "off" ? null : routineIdOf(value) })]);
   }
   const stored = await env.APP_KV.get(key);
+  const routineId = stored ? routineIdOf(stored) : null;
+  const token = await resolveRoutineToken(env, agent, namespace, routineId);
+  const tokenSecret = token?.secret ?? routineTokenName(namespace);
   return {
     ok: true,
     action: "routine",
-    routine: { namespace, routine_id: stored ? routineIdOf(stored) : null, token_secret: tokenSecret, token_set: tokenSet },
-    note: tokenSet ? undefined : `${tokenSecret} is not set. Dustin sets it with: npx wrangler secret put ${tokenSecret}`,
+    routine: { namespace, routine_id: routineId, token_secret: tokenSecret, token_set: token !== null },
+    note: token
+      ? undefined
+      : `No token is set for ${namespace}. Dustin sets it with: npx wrangler secret put ${tokenSecret}, or the seat sets the same routine's fire URL on a namespace whose token is set.`,
   };
 }
 
@@ -165,12 +195,13 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
   if (!url || !routineId) {
     return refuse("fire", `routine_missing: ${job.namespace} has no routine. Create it at claude.ai/code/routines (docs/routines.md), then the seat sets its fire URL with capsid_work_jobs action "routine".`);
   }
-  const tokenSecret = routineTokenName(job.namespace);
-  const token = routineToken(env, job.namespace);
-  if (token === null) {
-    return refuse("fire", `routine_token_missing: ${tokenSecret} is not set. Dustin generates the token on the routine's API trigger and sets it with: npx wrangler secret put ${tokenSecret}`);
+  const resolved = await resolveRoutineToken(env, agent, job.namespace, routineId);
+  if (resolved === null) {
+    const tokenSecret = routineTokenName(job.namespace);
+    return refuse("fire", `routine_token_missing: ${tokenSecret} is not set, and no namespace sharing routine ${routineId} has a token either. The seat sets the same fire URL on a namespace whose token is set (docs/routines.md), or Dustin generates the token on the routine's API trigger and sets it with: npx wrangler secret put ${tokenSecret}`);
   }
 
+  const { secret: tokenSecret, value: token } = resolved;
   if ((await reserveFire(env.DB, agent.actor, job, routineId, now)) === null) {
     const earlier = await lastFire(env.DB, job.id);
     return refuse("fire", `already_fired: ${id} was fired at ${earlier?.at ?? "a moment ago"}${earlier?.session_url ? ` (${earlier.session_url})` : ""}. Each fire is a new session, so a second one inside ${REFIRE_MINUTES} minutes is refused.`);
@@ -219,7 +250,7 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
   const sessionUrl = typeof body?.claude_code_session_url === "string" && SESSION_URL.test(body.claude_code_session_url) ? body.claude_code_session_url : null;
   let unrecorded = "";
   try {
-    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl })]);
+    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl, token_secret: tokenSecret })]);
   } catch (err) {
     // The session exists whatever D1 says, so the answer still returns it; the reservation
     // row holds off a second fire for RESERVE_MINUTES.

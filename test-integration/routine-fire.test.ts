@@ -21,8 +21,8 @@ function jobsEnv(token: string | null = TOKEN) {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET, ...(token === null ? {} : { ROUTINE_CAPSID_TOKEN: token }) } as unknown as Parameters<typeof postJob>[0];
 }
 
-function seatAgent(): Agent {
-  const scopes = defaultScopes(["capsid"]);
+function seatAgent(namespaces = ["capsid"]): Agent {
+  const scopes = defaultScopes(namespaces);
   scopes.grants = ["read", "write"];
   scopes.flags.can_merge = true;
   return { id: "agent_seat", name: "seat", kind: "seat", actor: "agent:seat", scopes, admin: false, row: null };
@@ -72,6 +72,7 @@ beforeEach(async () => {
     .bind(JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();
   await env.APP_KV.put(routineUrlKey("capsid"), FIRE_URL);
+  await env.APP_KV.delete(routineUrlKey("sample"));
 });
 
 afterEach(() => {
@@ -127,7 +128,7 @@ describe("a fire", () => {
     const rows = await fireRows();
     expect(rows).toHaveLength(1);
     expect(rows[0].actor).toBe("agent:seat");
-    expect(JSON.parse(rows[0].params)).toEqual({ job_id: id, routine_id: "trig_01ABCDEFGHJKLMNOP", session_id: SESSION, session_url: `https://claude.ai/code/${SESSION}` });
+    expect(JSON.parse(rows[0].params)).toEqual({ job_id: id, routine_id: "trig_01ABCDEFGHJKLMNOP", session_id: SESSION, session_url: `https://claude.ai/code/${SESSION}`, token_secret: "ROUTINE_CAPSID_TOKEN" });
     const job = await env.DB.prepare("SELECT status, started_by, started_at FROM jobs WHERE id = ?1").bind(id).first<{ status: string; started_by: string; started_at: string }>();
     expect(job).toEqual({ status: "queued", started_by: "agent:seat", started_at: NOW.toISOString() });
     expect(fired.started?.by).toBe("agent:seat");
@@ -266,5 +267,84 @@ describe("each refusal is named, and nothing is fired or recorded", () => {
     expect((await claimJob(jobsEnv(), driver(), NOW, { namespace: "capsid", id: claimed })).ok).toBe(true);
     expect(await refusedWith(/is claimed, not queued/, { id: claimed })).toEqual([]);
     expect(await refusedWith(/^no job job_000000000000/, { id: "job_000000000000" })).toEqual([]);
+  });
+});
+
+describe("one routine for every namespace", () => {
+  const SAMPLE_TOKEN = "fake-sample-token-not-a-key";
+  const OTHER_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01ZZZZZZZZZZZZZZZ/fire";
+
+  const BOTH = ["capsid", "sample"];
+
+  const sampleEnv = (tokens: Record<string, string>) => ({ ...jobsEnv(null), ...tokens }) as unknown as ReturnType<typeof jobsEnv>;
+
+  beforeEach(async () => {
+    await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES ('sample', '[]')").run();
+  });
+
+  const auditParams = async () => (await env.DB.prepare("SELECT params FROM audit_log").all<{ params: string | null }>()).results.map((r) => r.params ?? "").join("\n");
+
+  it("a namespace's own token wins over another namespace's on the same routine", async () => {
+    await env.APP_KV.put(routineUrlKey("sample"), FIRE_URL);
+    const fires = anthropic();
+    const id = await queued();
+    const fired = await fireRoutine(sampleEnv({ ROUTINE_CAPSID_TOKEN: TOKEN, ROUTINE_SAMPLE_TOKEN: SAMPLE_TOKEN }), seatAgent(BOTH), NOW, id);
+    expect(fired.ok, fired.refusal).toBe(true);
+    expect(fires).toHaveLength(1);
+    expect(fires[0].headers.authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it("falls back to the token of a namespace whose fire URL names the same routine", async () => {
+    await env.APP_KV.put(routineUrlKey("sample"), FIRE_URL);
+    const shared = sampleEnv({ ROUTINE_SAMPLE_TOKEN: SAMPLE_TOKEN });
+    const fires = anthropic();
+    const id = await queued();
+    const fired = await fireRoutine(shared, seatAgent(BOTH), NOW, id);
+    expect(fired.ok, fired.refusal).toBe(true);
+    expect(fires[0].headers.authorization).toBe(`Bearer ${SAMPLE_TOKEN}`);
+    const read = await setRoutine(shared, seatAgent(BOTH), "capsid", undefined);
+    expect(read.routine).toEqual({ namespace: "capsid", routine_id: "trig_01ABCDEFGHJKLMNOP", token_secret: "ROUTINE_SAMPLE_TOKEN", token_set: true });
+    expect(read.note).toBeUndefined();
+  });
+
+  it("a different routine id never borrows", async () => {
+    await env.APP_KV.put(routineUrlKey("sample"), OTHER_URL);
+    const other = sampleEnv({ ROUTINE_SAMPLE_TOKEN: SAMPLE_TOKEN });
+    const fires = anthropic();
+    const id = await queued();
+    const refused = await fireRoutine(other, seatAgent(BOTH), NOW, id);
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/^routine_token_missing: ROUTINE_CAPSID_TOKEN is not set.*no namespace sharing routine trig_01ABCDEFGHJKLMNOP/);
+    expect(fires).toEqual([]);
+    expect(await fireRows()).toEqual([]);
+    const read = await setRoutine(other, seatAgent(BOTH), "capsid", undefined);
+    expect(read.routine).toMatchObject({ token_secret: "ROUTINE_CAPSID_TOKEN", token_set: false });
+    expect(read.note).toMatch(/ROUTINE_CAPSID_TOKEN/);
+  });
+
+  it("the token value appears in no response and no audit row", async () => {
+    await env.APP_KV.put(routineUrlKey("sample"), FIRE_URL);
+    const shared = sampleEnv({ ROUTINE_SAMPLE_TOKEN: SAMPLE_TOKEN });
+    anthropic();
+    const id = await queued();
+    const fired = await fireRoutine(shared, seatAgent(BOTH), NOW, id);
+    expect(fired.ok, fired.refusal).toBe(true);
+    const set = await setRoutine(shared, seatAgent(BOTH), "capsid", FIRE_URL);
+    const read = await setRoutine(shared, seatAgent(BOTH), "capsid", undefined);
+    for (const text of [JSON.stringify(fired), JSON.stringify(set), JSON.stringify(read), await auditParams()]) expect(text).not.toContain(SAMPLE_TOKEN);
+    expect(await auditParams()).toContain("ROUTINE_SAMPLE_TOKEN");
+  });
+
+  it("never lends a token from a namespace the caller may not act in", async () => {
+    await env.APP_KV.put(routineUrlKey("sample"), FIRE_URL);
+    const shared = sampleEnv({ ROUTINE_SAMPLE_TOKEN: SAMPLE_TOKEN });
+    const fires = anthropic();
+    const id = await queued();
+    const refused = await fireRoutine(shared, seatAgent(["capsid"]), NOW, id);
+    expect(refused.ok).toBe(false);
+    expect(refused.refusal).toMatch(/^routine_token_missing/);
+    expect(fires).toEqual([]);
+    const read = await setRoutine(shared, seatAgent(["capsid"]), "capsid", undefined);
+    expect(read.routine).toMatchObject({ token_secret: "ROUTINE_CAPSID_TOKEN", token_set: false });
   });
 });
