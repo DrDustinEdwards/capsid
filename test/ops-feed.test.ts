@@ -238,6 +238,7 @@ const FEED: OpsFeedData = {
     agents: [],
     prs: [],
     awaiting_seat: [],
+    merge_safety: null,
     seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     overnight: { mode: "off", decision: null },
     sessions: [],

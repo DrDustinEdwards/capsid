@@ -2,6 +2,7 @@ import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
+import { readSafetyReport } from "./merge-safety";
 import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
@@ -53,10 +54,10 @@ import { pendingProposals } from "./canon";
 //        one batch (src/task-runs.ts, TASKS)
 //     2  gatherInbox (src/inbox.ts): the blocked jobs and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 11 gets plus one per LOOP_ROSTER namespace (5 today, so 16): gatherInbox's own
+//   KV, 12 gets plus one per LOOP_ROSTER namespace (5 today, so 17): gatherInbox's own
 //     reads of ops:snapshot, the awaiting-seat set and the merge units' report
 //     (src/merge-units.ts), then ops:snapshot, the
-//     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
+//     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, the overnight switch's mode (its decision record is
 //     read only while the mode is subscription), and each namespace's pause key.
 // They run concurrently; the longest chain is agentSummaries' two steps.
@@ -66,7 +67,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 11 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 12 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -422,11 +423,12 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
 }
 
 export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
     env.APP_KV.get(AWAITING_SEAT_KEY),
+    readSafetyReport(env.APP_KV),
     seatStartState(env),
     sessionsInFlight(env, now),
     seatRows(env.DB, now),
@@ -447,6 +449,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     agents: agents.map(opsAgentFrom),
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
+    merge_safety: mergeSafety,
     seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
     overnight,
     sessions,

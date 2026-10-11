@@ -6,22 +6,24 @@ import { gateActionRequest } from "./portal-actions";
 import { portalGate } from "./portal-auth";
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalPush } from "./ops-types";
+import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
-// Portal's Settings, for exactly four things:
+// Portal's Settings, for exactly five things:
 //   1. a `typed` pull request (a money path) waiting more than 2 hours;
 //   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
 //   3. a job at the correction cap (blocked with the retry-cap reason);
-//   4. a question over 4 hours old on a job with priority 70 or more.
+//   4. a question over 4 hours old on a job with priority 70 or more;
+//   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts).
 // Everything else waits for the digest.
 //
 // No alert carries an Approve button. The button was for `approve`-class pull requests,
-// and none of the four triggers is one: a typed PR is approved only by typing its number
-// (design section 8), and the other three are not pull requests. So there is no
+// and none of the five triggers is one: a typed PR is approved only by typing its number
+// (design section 8), and the other four are not pull requests. So there is no
 // /ops/approve route: a tap opens the Portal, where every answer is given. An alert names
 // the repo, the pull request or job id and the class, never a title.
 //
@@ -41,7 +43,7 @@ const MAX_PER_TICK = 3;
 const MAX_DEVICES = 10;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
-export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question";
+export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused";
 
 export interface Urgent {
   key: string;
@@ -73,7 +75,7 @@ async function readState(env: Env): Promise<PushState> {
 
 const hours = (ms: number) => `${Math.floor(ms / 3_600_000)}h`;
 
-/** The four triggers, from what the tick, the watcher and the queue already keep. Reads
+/** The five triggers, from what the tick, the watcher and the queue already keep. Reads
  *  only; `typedSeen` is updated in place with the typed PRs seen now. */
 async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, string>): Promise<Urgent[]> {
   const out: Urgent[] = [];
@@ -127,6 +129,16 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     } else if (summary.startsWith("QUESTION:") && j.priority >= QUESTION_PRIORITY && age > QUESTION_AGE_MS) {
       out.push({ key: `question:${j.id}:${j.updated_at}`, kind: "question", namespace: j.namespace, title: "Question waiting", body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.` });
     }
+  }
+
+  // 5. Namespaces the safety shutoff paused. An unreadable value alerts nothing: the
+  // tick already holds every namespace then (src/auto-merge-tick.ts) and logs it.
+  try {
+    for (const [namespace, p] of Object.entries(await readPaused(env.APP_KV))) {
+      out.push({ key: `paused:${namespace}:${p.since}`, kind: "automerge-paused", namespace, title: "Auto-merge paused", body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.` });
+    }
+  } catch {
+    // See above.
   }
   return out;
 }

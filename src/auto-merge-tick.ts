@@ -1,6 +1,7 @@
 import { readSuspended, unitKey } from "./merge-units";
+import { readPaused } from "./merge-safety";
 import type { Env } from "./env";
-import { mergeClass, pathClassOfAll, type Classification, type MergeClass, type PathClass } from "./merge-class";
+import { existingTestReason, mergeClass, pathClassOfAll, type Classification, type MergeClass, type PathClass } from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
 import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
@@ -126,6 +127,7 @@ async function factsForPr(
     changedPaths,
     filesProblem,
     changedLines: files.changedLines,
+    existingTestEdits: files.testEdits,
     ciConclusion: ci.conclusion,
     ciNote: ci.note,
     ciSteps: steps.steps,
@@ -146,8 +148,10 @@ export function declineParams(
   // Only the PR and head, so a PR declined before its facts were read is audited alike.
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
   // A policy refusal, "head_moved" when GitHub refused the pinned merge, or
-  // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts).
-  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended"; why: string; passed: PolicyCheck[] },
+  // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts),
+  // "namespace_paused" when the safety shutoff paused the namespace (src/merge-safety.ts),
+  // or "changes_existing_test" when the PR edits an existing test (src/merge-class.ts).
+  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test"; why: string; passed: PolicyCheck[] },
   now: Date
 ): Record<string, unknown> {
   return {
@@ -222,8 +226,10 @@ async function auditDeclineOnChange(
   }
 }
 
-// The merge units held back this tick (src/merge-units.ts).
+// The merge units held back this tick (src/merge-units.ts), and the namespaces the safety
+// shutoff paused (src/merge-safety.ts): each a set, or "all" when it could not be read.
 type Suspended = ReadonlySet<string> | "all";
+type PausedNamespaces = ReadonlyMap<string, string> | "all";
 
 export interface AutoMergeOutcome {
   namespace: string;
@@ -288,6 +294,16 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     suspended = "all";
   }
 
+  // The namespaces the safety shutoff paused: the same rule, an unreadable value pauses
+  // every namespace this tick.
+  let paused: PausedNamespaces;
+  try {
+    paused = new Map(Object.entries(await readPaused(env.APP_KV)).map(([ns, p]) => [ns, p.reason]));
+  } catch (err) {
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` });
+    paused = "all";
+  }
+
   for (const namespace of policy.namespaces) {
     let owner: string;
     let repo: string;
@@ -348,7 +364,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
-        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units);
+        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
         logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
@@ -430,7 +446,9 @@ async function judgeOnePr(
   // The merge units a rollback suspended, or "all" when they could not be read.
   suspended: Suspended = new Set(),
   // The units the signed policy promoted to auto, each `<namespace> / <path class>`.
-  units: readonly string[] = []
+  units: readonly string[] = [],
+  // The namespaces the safety shutoff paused, or "all" when they could not be read.
+  paused: PausedNamespaces = new Map()
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   // A promoted unit widens only the namespace's allowed paths (src/auto-merge-policy.ts).
@@ -438,17 +456,27 @@ async function judgeOnePr(
   const promotedUnit = pathClass && units.includes(`${namespace} / ${pathClass}`) ? { unit: `${namespace} / ${pathClass}` } : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
-  // A suspended unit (src/merge-units.ts): the policy would merge it, but a rollback of an
-  // unattended merge in the same unit holds it back, so it falls to class approve.
+  // Three holds that only narrow, each leaving the PR for Dustin as class approve (his
+  // approval still executes below): an existing test it changes (src/merge-class.ts), a
+  // paused namespace (src/merge-safety.ts), and a unit a rollback suspended
+  // (src/merge-units.ts). The policy would merge it, so it is held with the reason.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
-  const held = verdict.merge && (suspended === "all" || (unit !== null && suspended.has(unit)));
-  if (held) {
-    merge_class = {
-      class: "approve",
-      path_class: merge_class.path_class,
-      reasons: [suspended === "all" ? "the suspended merge units could not be read, so nothing merges unattended this tick" : `the merge unit ${unit} is suspended after a rollback`],
+  let hold: { failed: "changes_existing_test" | "namespace_paused" | "unit_suspended"; reason: string } | null = null;
+  if (verdict.merge && facts.existingTestEdits.length > 0) {
+    hold = { failed: "changes_existing_test", reason: existingTestReason(facts.existingTestEdits) };
+  } else if (verdict.merge && (paused === "all" || paused.has(namespace))) {
+    hold = {
+      failed: "namespace_paused",
+      reason: paused === "all" ? "the paused namespaces could not be read, so nothing merges unattended this tick" : `auto-merge for ${namespace} is paused: ${paused.get(namespace)}`,
+    };
+  } else if (verdict.merge && (suspended === "all" || (unit !== null && suspended.has(unit)))) {
+    hold = {
+      failed: "unit_suspended",
+      reason: suspended === "all" ? "the suspended merge units could not be read, so nothing merges unattended this tick" : `the merge unit ${unit} is suspended after a rollback`,
     };
   }
+  if (hold) merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
+  const held = hold !== null;
   const merges = verdict.merge && !held;
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
   // policy leaves open but Dustin approved merges here once CI is green on the approved
@@ -479,10 +507,10 @@ async function judgeOnePr(
     );
     return;
   }
-  if (held) {
-    const hold = { failed: "unit_suspended" as const, why: merge_class.reasons[0]!, passed: verdict.passed };
-    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...hold, merge_class });
-    await auditDeclineOnChange(env, facts, hold.failed, improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, hold, now)));
+  if (hold) {
+    const held = { failed: hold.failed, why: hold.reason, passed: verdict.passed };
+    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...held, merge_class });
+    await auditDeclineOnChange(env, facts, held.failed, improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, held, now)));
     return;
   }
   // merge_method "merge", because a squash would not keep the audited head sha. Pinned

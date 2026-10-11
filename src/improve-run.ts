@@ -50,6 +50,8 @@ import {
 } from "./improve/open";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { gatherInbox, type InboxApp } from "./inbox";
+import { readSafetyReport } from "./merge-safety";
+import type { OpsMergeSafety } from "./ops-types";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 import { tickRuns, type TickOutcome } from "./improve/tick";
@@ -222,6 +224,11 @@ export interface StatusReport {
   // The overnight run's switch and, when it runs on the subscription, the recorded
   // decision (src/overnight.ts). The scheduler reads this before it starts a session.
   overnight: OvernightState;
+  // The auto-merge safety meter and shutoff (src/merge-safety.ts): the last seven days per
+  // namespace and whether auto-merge is paused there, from the report the tick keeps, so
+  // asking costs one KV read. Null before the tick's first pass. A scoped caller sees its
+  // own namespaces' rows only.
+  merge_safety: OpsMergeSafety | null;
   // The credential inventory. Revoked rows are included and say so, so "revoked" and
   // "never existed" look different. Never the key or the stored verifier, and only the
   // flags an agent holds. Absent, not empty, for a scoped caller: an empty list would
@@ -350,6 +357,7 @@ export async function improveStatus(
   } catch {
     awaitingAll = [];
   }
+  const mergeSafety = await readSafetyReport(env.APP_KV);
   const inboxAll = await gatherInbox(env, new Date(), namespaces);
   const maintenanceList = await readMaintenance(env);
   const maintenanceAll = maintenanceList?.items ?? [];
@@ -425,6 +433,7 @@ export async function improveStatus(
     policies: await servedPolicies(env),
     seat_start: await seatStartStatus(env),
     overnight: await overnightState(env),
+    merge_safety: mergeSafety && allowed !== "*" ? { ...mergeSafety, namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)) } : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB), canon_proposals: await pendingProposals(env.DB) }),
     namespaces: out,

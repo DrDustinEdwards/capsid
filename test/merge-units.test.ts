@@ -17,6 +17,7 @@ function merges(n: number, spanDays: number, namespace = "capsid", pathClass = "
 }
 const voided = (reason: string): ApprovalEvidence => ({ namespace: "capsid", path_class: "tests", status: "voided", close_reason: reason, closed_at: at(1) });
 const rollback = (over: Partial<RollbackEvidence> = {}): RollbackEvidence => ({
+  kind: "rollback",
   namespace: "capsid",
   repo: "owner/capsid",
   pr: 41,

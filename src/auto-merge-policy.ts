@@ -430,6 +430,9 @@ export interface PrFacts {
   // Additions plus deletions across the changed files, as GitHub counts them, or null
   // when a file came back without its counts, which size_within_cap refuses.
   changedLines: number | null;
+  // The existing tests the pull request changes (src/github/pr-files.ts). No policy check
+  // reads it: the class and the tick do, and hold such a pull request for Dustin.
+  existingTestEdits: string[];
   // null when no check run has reported, which is NOT green.
   ciConclusion: string | null;
   ciNote: string;

@@ -421,6 +421,26 @@ export interface Inbox {
   apps: InboxApp[];
 }
 
+// One namespace's last seven days of auto-merge, the safety meter (src/merge-safety.ts).
+// approved: merges Dustin approved. bad_auto_7d: rollbacks and reverts of pull requests
+// the tick merged unattended. paused: the shutoff, with when and why, or null.
+export interface OpsMergeSafetyRow {
+  namespace: string;
+  auto_merged: number;
+  approved: number;
+  deploys_verified: number;
+  rolled_back: number;
+  rollback_failed: number;
+  reverts: number;
+  bad_auto_7d: number;
+  paused: { since: string; reason: string } | null;
+}
+
+export interface OpsMergeSafety {
+  generated: string;
+  namespaces: OpsMergeSafetyRow[];
+}
+
 export interface OpsLive {
   generated: string;
   // Every open job, and every job that ended in the last 24 hours.
@@ -429,6 +449,9 @@ export interface OpsLive {
   // Pull requests recorded against jobs in the last 7 days.
   prs: OpsPr[];
   awaiting_seat: OpsAwaitingSeat[];
+  // The auto-merge safety meter the tick's merge-safety step kept, or null before its
+  // first pass. One KV get, no D1 or GitHub read.
+  merge_safety: OpsMergeSafety | null;
   seat_start: OpsSeatStart;
   overnight: OpsOvernight;
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
@@ -567,7 +590,10 @@ export type PortalAction =
   // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
   // change that promotes or removes a unit, and the Undo of a unit's suspension.
   | "sign_policy_change"
-  | "unit_resume";
+  | "unit_resume"
+  // Lift a namespace's auto-merge pause (src/merge-safety.ts), the shutoff after bad
+  // unattended merges.
+  | "automerge_resume";
 
 // params by action:
 //   pause         { namespace, reason, undo? }   reason required

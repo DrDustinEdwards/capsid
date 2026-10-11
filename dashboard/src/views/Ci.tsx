@@ -113,6 +113,47 @@ export function PullRequests() {
           </table>
         </div>
       </Panel>
+      {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
+          namespace, and the shutoff. Resuming is the automerge_resume control. */}
+      {live.merge_safety && (
+        <Panel flush title="Auto-merge, last 7 days" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
+          <div className="scroll-x reflow">
+            <table className="list cards-below-1100">
+              <thead>
+                <tr>
+                  <th>Namespace</th>
+                  <th>Auto</th>
+                  <th>Approved</th>
+                  <th>Verified</th>
+                  <th>Rolled back</th>
+                  <th>Rollback failed</th>
+                  <th>Reverts</th>
+                  <th>State</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {live.merge_safety.namespaces.map((n) => (
+                  <tr key={n.namespace}>
+                    <td>
+                      <b>{n.namespace}</b>
+                    </td>
+                    <td className="num" data-label="Auto">{n.auto_merged}</td>
+                    <td className="num" data-label="Approved">{n.approved}</td>
+                    <td className="num" data-label="Verified">{n.deploys_verified}</td>
+                    <td className="num" data-label="Rolled back">{n.rolled_back}</td>
+                    <td className="num" data-label="Rollback failed">{n.rollback_failed}</td>
+                    <td className="num" data-label="Reverts">{n.reverts}</td>
+                    <td data-label="State">{n.paused ? <St kind="warn">Paused</St> : <span className="faint">running</span>}</td>
+                    {/* The reason wraps in its own cell: a status chip does not wrap. */}
+                    <td className="muted" data-label="Why">{n.paused?.reason ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
       <Panel flush title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
         <div className="scroll-x">
           <table className="list">

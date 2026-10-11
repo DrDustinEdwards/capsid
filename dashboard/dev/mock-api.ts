@@ -770,6 +770,8 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       throw new Refusal(400, "The mock holds no signed auto-merge policy, so no version is changed.");
     case "unit_resume":
       throw new Refusal(400, `${params.unit ?? "That unit"} is not suspended, so there is nothing to lift.`);
+    case "automerge_resume":
+      throw new Refusal(400, `auto-merge for ${params.namespace ?? "that namespace"} is not paused, so there is nothing to lift.`);
   }
 }
 

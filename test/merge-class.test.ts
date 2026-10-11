@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AUTO_MERGE_REQUIRED_CI, evaluatePolicy, type PrFacts } from "../src/auto-merge-policy.ts";
+import { existingTestEdits, type PrFileRow } from "../src/github/pr-files.ts";
 import { mergeClass, pathClassOf, pathClassOfAll } from "../src/merge-class.ts";
 
 // The merge classes (docs/design/design-merge-pipeline.md section 2, the design's PR 2),
@@ -21,6 +22,7 @@ function pr(over: Partial<PrFacts> = {}): PrFacts {
     changedPaths: ["docs/schema.md"],
     filesProblem: null,
     changedLines: 40,
+    existingTestEdits: [],
     ciConclusion: "success",
     ciNote: "3 check(s) green",
     ciSteps: AUTO_MERGE_REQUIRED_CI.capsid.map((r) => ({ ...r, conclusion: "success" })),
@@ -106,4 +108,58 @@ test("a PR stopped only by a rule a person may waive is approve, with the rule a
   const red = classOf(pr({ changedPaths: ["src/inbox.ts"], ciConclusion: "failure", ciNote: "checks=failure" }));
   assert.equal(red.class, "approve");
   assert.ok(red.reasons.some((r) => /approval waits for green/.test(r)));
+});
+
+// An existing test, changed, always waits for Dustin (src/github/pr-files.ts,
+// existingTestEdits), whatever the policy says and whichever units are promoted.
+
+const file = (over: Partial<PrFileRow>): PrFileRow => ({ filename: "test/a.test.ts", status: "modified", additions: 3, deletions: 0, ...over });
+
+test("existingTestEdits: a file added whole, or modified with only added lines, is not an edit", () => {
+  assert.deepEqual(existingTestEdits([file({ status: "added" }), file({ filename: "test-integration/b.test.ts", status: "added", deletions: 0 })]), []);
+  assert.deepEqual(existingTestEdits([file({ status: "modified", deletions: 0 })]), []);
+  assert.deepEqual(existingTestEdits([file({ filename: "src/a.ts", status: "modified", deletions: 9 }), file({ filename: "docs/a.md", status: "removed" })]), [], "a file outside the test directories counted");
+});
+
+test("PLANT: existingTestEdits names a one-line edit, a deleted test and a renamed test, in the three test directories", () => {
+  assert.deepEqual(existingTestEdits([file({ deletions: 1 })]), ["test/a.test.ts"]);
+  assert.deepEqual(existingTestEdits([file({ filename: "test-integration/x.test.ts", status: "removed", additions: 0, deletions: 40 })]), ["test-integration/x.test.ts"]);
+  assert.deepEqual(existingTestEdits([file({ filename: "dashboard/e2e/y.spec.ts", status: "renamed", previous_filename: "dashboard/e2e/old.spec.ts", additions: 0 })]), ["dashboard/e2e/old.spec.ts"]);
+  // Moved out of the test directory: the old path is deleted all the same.
+  assert.deepEqual(existingTestEdits([file({ filename: "scripts/t.mjs", status: "renamed", previous_filename: "test/t.mjs", deletions: 0 })]), ["test/t.mjs"]);
+});
+
+test("existingTestEdits covers every path merge-class calls a test: tests/, __tests__/, *.test.* and *.spec.*", () => {
+  assert.deepEqual(existingTestEdits([file({ filename: "src/foo.test.ts", deletions: 1 })]), ["src/foo.test.ts"]);
+  assert.deepEqual(existingTestEdits([file({ filename: "lib/__tests__/a.ts", deletions: 1 }), file({ filename: "tests/b.ts", status: "removed" }), file({ filename: "web/c.spec.tsx", status: "removed" })]), ["lib/__tests__/a.ts", "tests/b.ts", "web/c.spec.tsx"]);
+  assert.deepEqual(existingTestEdits([file({ filename: "src/foo.test.ts", status: "added", deletions: 0 })]), []);
+});
+
+test("existingTestEdits fails closed: a test file with no status or no integer deletions is an edit", () => {
+  assert.deepEqual(existingTestEdits([{ filename: "test/a.test.ts", additions: 1, deletions: 0 }]), ["test/a.test.ts"]);
+  assert.deepEqual(existingTestEdits([{ filename: "test/a.test.ts", status: "modified", additions: 1 }]), ["test/a.test.ts"]);
+  assert.deepEqual(existingTestEdits([file({ status: "changed" })]), ["test/a.test.ts"]);
+});
+
+test("PLANT: a PR the policy would merge that changes an existing test is class approve, naming the tests first", () => {
+  const edits = ["test/a.test.ts", "test/b.test.ts", "test/c.test.ts", "test/d.test.ts"];
+  const facts = pr({ existingTestEdits: edits });
+  const verdict = evaluatePolicy(facts, ALLOWED_AUTHORS);
+  assert.equal(verdict.merge, true, "the fixture should pass the policy");
+  const c = mergeClass(facts, verdict);
+  assert.equal(c.class, "approve");
+  assert.match(c.reasons[0]!, /^changes an existing test: test\/a\.test\.ts, test\/b\.test\.ts, test\/c\.test\.ts, and 1 more$/);
+  assert.equal(c.path_class, "docs");
+});
+
+test("a policy refusal on a PR that changes an existing test is approve with the test reason first; money, a draft and unfinished CI still outrank it", () => {
+  const edits = ["test/a.test.ts"];
+  const refused = classOf(pr({ existingTestEdits: edits, changedLines: 5000 }));
+  assert.equal(refused.class, "approve");
+  assert.match(refused.reasons[0]!, /^changes an existing test: test\/a\.test\.ts$/);
+  assert.ok(refused.reasons.length > 1);
+  assert.equal(classOf(pr({ existingTestEdits: edits, changedPaths: ["src/stripe.ts"] })).class, "typed");
+  assert.equal(classOf(pr({ existingTestEdits: edits }), true).class, "wait");
+  assert.equal(classOf(pr({ existingTestEdits: edits, ciConclusion: "pending" })).class, "wait");
+  assert.equal(classOf(pr({ existingTestEdits: edits, changedPaths: ["migrations/0041_x.sql"] })).class, "seat");
 });

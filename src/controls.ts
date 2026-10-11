@@ -21,6 +21,7 @@ import { managePr } from "./github/refs";
 import { performApproval, planApproval } from "./pr-approvals";
 import { performPolicyChange, planPolicyChange } from "./policy-sign";
 import { liftSuspension, planLift } from "./merge-units";
+import { planResume, resumeNamespace } from "./merge-safety";
 import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
@@ -73,6 +74,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "site_repair",
   "sign_policy_change",
   "unit_resume",
+  "automerge_resume",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -194,6 +196,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
         : `Write and sign the next version of the auto-merge policy with the merge unit ${params.unit ?? ""} promoted to auto: its pull requests may merge with no human when every other check passes. This widens autonomy, so the new version number is typed as confirm.`;
     case "unit_resume":
       return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
+    case "automerge_resume":
+      return `Lift the pause on auto-merge for ${ns}. The tick may merge its pull requests unattended again, and the rollbacks and reverts before now count against it no more.`;
   }
 }
 
@@ -426,6 +430,16 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, (params.unit ?? "").split("/")[0]!.trim() || null, { unit: params.unit, reason }, click);
         break;
       }
+      case "automerge_resume": {
+        const reason = required(params, "reason");
+        if (!reason) return { ok: false, refusal: AUTOMERGE_RESUME_REASON };
+        const done = await resumeNamespace(env, actor, required(params, "namespace") ?? undefined, reason, now);
+        if (!done.ok) return { ok: false, refusal: done.refusal };
+        summary = done.summary;
+        committed = true;
+        await auditClick(env, actor, source, surface, action, (params.namespace ?? "").trim() || null, { namespace: params.namespace, reason }, click);
+        break;
+      }
       case "pr_close": {
         const namespace = required(params, "namespace");
         const number = Number(required(params, "number"));
@@ -601,6 +615,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   site_repair: ["namespace", "tool"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   unit_resume: ["unit", "reason"],
+  automerge_resume: ["namespace", "reason"],
 };
 
 
@@ -641,6 +656,7 @@ const refused = (refusal: string): Plan => ({ ok: false, refusal });
 // more there are. The whole body is in the proposal row.
 const CANON_PREVIEW_LINES = 40;
 const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
+const AUTOMERGE_RESUME_REASON = "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
 const CANON_REJECT_REASON = "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.";
 
 function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
@@ -915,6 +931,16 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [`${plan.unit}: suspended since ${plan.suspension.since} ("${plan.suspension.reason}") -> lifted. The tick may merge its pull requests unattended again; a rollback after now suspends it again.`],
         audit: [`merge-unit-resumed by ${actor}`, click],
+      };
+    }
+    case "automerge_resume": {
+      if (!p.reason) return refused(AUTOMERGE_RESUME_REASON);
+      const plan = await planResume(env.APP_KV, p.namespace);
+      if (!plan.ok) return refused(plan.refusal);
+      return {
+        ok: true,
+        changes: [`${plan.namespace}: auto-merge paused since ${plan.paused.since} ("${plan.paused.reason}") -> lifted. The tick may merge its pull requests unattended again; new bad merges pause it again.`],
+        audit: [`auto-merge-resumed by ${actor}`, click],
       };
     }
     case "pr_close": {

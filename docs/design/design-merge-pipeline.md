@@ -206,6 +206,13 @@ capsid is included in one-tap approval. Its protection is the live gate and the 
 
 The learning table proposes and never applies (conventions-routing.md rule 3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
 
+**Safety meter and shutoff** (`src/merge-safety.ts`; job_cd5ffb1f87b4). A unit's suspension narrows one path class; this narrows a namespace, and adds the one signal nothing recorded, the revert. All of it is done by the tick outside the signed policy, like the suspension, so it needs no new policy version, and it only narrows.
+- *Revert tracking.* Half-hourly, a merged pull request that reverts one the tick auto-merged (GitHub's revert button, "revert #N", or "This reverts commit <sha>") is recorded as an `auto-merge-reverted` audit row. Units read these rows as rollbacks of an unattended merge.
+- *The meter.* Per namespace, the last 7 days: merged by the tick, approved by Dustin, deploys verified, rolled back, rollback failed, reverted. It sits in KV and shows in `improve_status`, the Portal's CI view and the phone alerts.
+- *The shutoff.* Two bad unattended merges in 7 days, or a 7-day bad rate over 3 times the rate of the 30 days before, pauses the namespace (KV `merge-safety:paused`, audit `auto-merge-paused`, one phone alert). Its pull requests fall to class `approve` (`namespace_paused`); approvals still merge. A clean baseline leaves only the count rule, because any first event would otherwise be an infinite rate.
+- *Resume.* The `automerge_resume` control, with a reason, clears the pause and ignores the events before it (audit `auto-merge-resumed`).
+- *Existing tests.* A changed, deleted or renamed existing test under `test/`, `test-integration/` or `dashboard/e2e/` makes the pull request class `approve` ("changes an existing test") whatever units are promoted, because a test edited to pass is how a regression gets past green CI. New test files and added lines are not edits.
+
 ## 8. The permanent exception
 
 Money paths, and foxhound billing in particular, are class `typed`, whatever the promotion record says:

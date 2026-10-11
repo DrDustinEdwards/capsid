@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { InboxItem } from "./ops-types";
+import { logEvent } from "./log";
 import { auditStatement } from "./store-guards";
 
 // EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
@@ -13,11 +14,13 @@ import { auditStatement } from "./store-guards";
 //   - approved merges, from pr_approvals (namespace and path_class, migrations/0043);
 //   - approvals voided for anything but a new push (an undo, red CI);
 //   - rollbacks, from deploy_outcomes, joined to the pull request's unit through the
-//     tick's auto-merged audit row or its approval.
-// Reverts are not read yet: nothing records them. The CI-green share joins in with the
-// signed unit list (PR 10).
+//     tick's auto-merged audit row or its approval;
+//   - reverts of a pull request the tick merged, from the auto-merge-reverted audit rows
+//     src/merge-safety.ts records. A revert counts as a rollback of an unattended merge:
+//     it suspends the unit and blocks its promotion.
+// The CI-green share joins in with the signed unit list (PR 10).
 //
-// Promotion proposal: at least 20 approved merges over at least 14 days, no rollback, and
+// Promotion proposal: at least 20 approved merges over at least 14 days, no rollback or revert, and
 // at most one approval voided for anything but a new push. Demotion: a rollback of an
 // unattended merge suspends its unit and proposes removing the unit from the signed list.
 // Both reach Dustin as inbox items of kind "proposal". Acting on a proposal is a signed
@@ -48,6 +51,11 @@ export interface ApprovalEvidence {
 }
 
 export interface RollbackEvidence {
+  // A deploy the gate rolled back, or a merged pull request that reverts an unattended
+  // merge (src/merge-safety.ts). For a revert, run_at is when the revert merged, run_id
+  // is 0 and head_sha is the reverted merge's (zeros when the row has none), and `reverted_by` is the revert's number.
+  kind: "rollback" | "revert";
+  reverted_by?: number | null;
   namespace: string;
   repo: string;
   pr: number | null;
@@ -80,6 +88,8 @@ export interface UnitsReport {
   unplaced: string[];
 }
 
+const happened = (r: RollbackEvidence) => (r.kind === "revert" ? `was reverted by ${r.repo}#${r.reverted_by}` : "was rolled back");
+
 /** The proposals and the suspensions, from the evidence. Pure. */
 export function judgeUnits(
   approvals: readonly ApprovalEvidence[],
@@ -101,7 +111,7 @@ export function judgeUnits(
   const demote: UnitProposal[] = [];
   for (const r of rollbacks) {
     if (!r.path_class) {
-      unplaced.push(`${r.repo} run ${r.run_id} at ${r.head_sha.slice(0, 7)}: ${r.pr ? `#${r.pr}'s unit is not recorded` : "no pull request is recorded for it"}`);
+      unplaced.push(`${r.repo} ${r.kind === "revert" ? `revert #${r.reverted_by}` : `run ${r.run_id}`} at ${r.head_sha.slice(0, 7)}: ${r.pr ? `#${r.pr}'s unit is not recorded` : "no pull request is recorded for it"}`);
       continue;
     }
     const k = unitKey(r.namespace, r.path_class);
@@ -109,9 +119,9 @@ export function judgeUnits(
     if (r.merged_by !== "tick") continue;
     // Dustin lifted the suspension after this rollback: it is answered.
     if (lifted[k] && Date.parse(r.run_at) <= Date.parse(lifted[k]!)) continue;
-    if (!nowSuspended.has(k)) nowSuspended.set(k, { unit: k, since: now.toISOString(), reason: `${r.repo}#${r.pr} merged unattended and was rolled back (run ${r.run_id})` });
+    if (!nowSuspended.has(k)) nowSuspended.set(k, { unit: k, since: now.toISOString(), reason: `${r.repo}#${r.pr} merged unattended and ${happened(r)}${r.kind === "revert" ? "" : ` (run ${r.run_id})`}` });
     if (!demote.some((d) => d.unit === k)) {
-      demote.push({ kind: "demote", unit: k, title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and was rolled back`, evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 } });
+      demote.push({ kind: "demote", unit: k, title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and ${happened(r)}`, evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 } });
     }
   }
   const promote: UnitProposal[] = [];
@@ -200,7 +210,36 @@ export async function readUnitEvidence(env: Env, now: Date): Promise<{ approvals
         }
       }
     }
-    rollbacks.push({ ...r, merged_by, path_class });
+    rollbacks.push({ ...r, kind: "rollback", merged_by, path_class });
+  }
+  // The reverts of pull requests the tick merged (src/merge-safety.ts): the audit row
+  // carries the unit, so a revert places itself.
+  const reverted = await env.DB.prepare(
+    `SELECT namespace, params FROM audit_log WHERE action = 'auto-merge-reverted' AND at >= ?1 ORDER BY id DESC LIMIT 50`
+  )
+    .bind(since.slice(0, 19).replace("T", " "))
+    .all<{ namespace: string; params: string }>();
+  for (const row of reverted.results ?? []) {
+    let p: { repo: string; pr: number; reverted_by: number; head_sha?: string | null; path_class?: string | null; merged_at: string };
+    try {
+      p = JSON.parse(row.params);
+    } catch (err) {
+      // One malformed row must not fail the step that suspends units.
+      logEvent("error", "MERGE_UNITS", { message: `MERGE_UNITS skipped an unreadable auto-merge-reverted row: ${err instanceof Error ? err.message : String(err)}` });
+      continue;
+    }
+    rollbacks.push({
+      kind: "revert",
+      reverted_by: p.reverted_by,
+      namespace: row.namespace,
+      repo: p.repo,
+      pr: p.pr,
+      head_sha: p.head_sha ?? "0".repeat(40),
+      run_id: 0,
+      run_at: p.merged_at,
+      merged_by: "tick",
+      path_class: p.path_class ?? null,
+    });
   }
   return { approvals: approvals.results ?? [], rollbacks };
 }

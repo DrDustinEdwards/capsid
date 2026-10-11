@@ -31,7 +31,7 @@ export interface Classification {
   reasons: string[];
 }
 
-const TEST_FILE = /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
+export const TEST_FILE = /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 const DEPS_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/i;
 const DOC_FILE = /\.(md|mdx|txt|png|jpe?g|gif|svg|webp)$/i;
 
@@ -59,6 +59,11 @@ export function pathClassOfAll(paths: readonly string[]): PathClass | null {
   return worst < 0 ? null : PATH_CLASSES[worst];
 }
 
+/** The reason a pull request that changes an existing test waits for Dustin. */
+export function existingTestReason(edits: readonly string[]): string {
+  return `changes an existing test: ${edits.slice(0, 3).join(", ")}${edits.length > 3 ? `, and ${edits.length - 3} more` : ""}`;
+}
+
 /** The class of one pull request, from the facts the tick read and the policy's verdict. */
 export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false): Classification {
   const paths = facts.changedPaths;
@@ -67,6 +72,11 @@ export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false
   if (money.length) return { class: "typed", path_class, reasons: [`${money.slice(0, 3).join(", ")} ${money.length === 1 ? "is a money path" : "are money paths"}: typed confirmation only`] };
   if (draft) return { class: "wait", path_class, reasons: ["the PR is a draft"] };
   if (facts.ciConclusion === null || facts.ciConclusion === "pending") return { class: "wait", path_class, reasons: [`CI has not finished: ${facts.ciNote}`] };
+  // A changed existing test is never merged unattended, whatever the policy and the
+  // promoted units say: a test edited to pass is how a regression gets past CI. It is
+  // approve, one tap, and it holds with every unit promoted (src/auto-merge-tick.ts).
+  const testEdit = facts.existingTestEdits.length ? existingTestReason(facts.existingTestEdits) : null;
+  if (verdict.merge && testEdit) return { class: "approve", path_class, reasons: [testEdit] };
   if (verdict.merge) return { class: "auto", path_class, reasons: ["passes every check of the signed policy"] };
   const seat: string[] = [];
   if (facts.filesProblem) seat.push(`the changed files could not be read whole: ${facts.filesProblem}`);
@@ -78,7 +88,8 @@ export function mergeClass(facts: PrFacts, verdict: PolicyVerdict, draft = false
   if (seat.length) return { class: "seat", path_class, reasons: seat };
   // Over the size cap is its own reason, named first whichever check the policy stopped
   // at, so a big pull request reads as one a person approves for its size.
-  const reasons = overSizeCap(facts) ? [sizeCapReason(facts)] : [];
+  const reasons = testEdit ? [testEdit] : [];
+  if (overSizeCap(facts)) reasons.push(sizeCapReason(facts));
   if (verdict.failed !== "size_within_cap") reasons.push(`the policy stops at ${verdict.failed}: ${verdict.why}`);
   if (facts.ciConclusion !== "success") reasons.push(`CI is ${facts.ciConclusion}: an approval waits for green`);
   return { class: "approve", path_class, reasons };
