@@ -1783,3 +1783,37 @@ test("the merge audit row carries the PR's path class, so a rollback can find it
   const params = mergeParams("6", { repo: "o/r", number: 1, headSha: "a".repeat(40), jobId: "job_x", jobClaimedBy: "agent:d" } as never, [], "b".repeat(40), new Date("2026-10-11T00:00:00Z"), "docs");
   assert.equal(params.path_class, "docs");
 });
+
+// Promoted merge units (docs/design/design-merge-pipeline.md section 7, PR 10): a unit the
+// signed policy lists under ## Auto units widens its namespace's allowed paths, and only
+// those, through the tick.
+
+async function unitTick(files: string[], units: string[]) {
+  const policy = `${GOOD_POLICY}\n\n## Auto units\n\n${units.map((u) => `- unit \`${u}\``).join("\n")}\n`;
+  const env = await tickEnv(await signTaskBody(SECRET, policy), {
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+  return tickWith(env, tickRoutes(files));
+}
+
+test("PLANT: a promoted unit merges what v7 held back; another unit's promotion does not", async () => {
+  const promoted = await unitTick(["test/jobs.test.ts"], ["capsid / tests"]);
+  assert.equal(promoted.merges, 1, promoted.outcome.why ?? "");
+  assert.equal(promoted.outcome.merged, true);
+  const other = await unitTick(["test/jobs.test.ts"], ["capsid / dashboard-code"]);
+  assert.equal(other.merges, 0);
+  assert.equal(other.outcome.failed, "paths_allowed_for_namespace");
+});
+
+test("a promoted unit is still held back by a suspension", async () => {
+  const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
+  const env = await tickEnv(await signTaskBody(SECRET, policy), {
+    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
+  });
+  await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(SUSPENDED_KEY, JSON.stringify([{ unit: "capsid/tests", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  const { outcome, merges } = await tickWith(env, tickRoutes(["test/jobs.test.ts"]));
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "unit_suspended");
+});

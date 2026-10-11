@@ -22,6 +22,9 @@ import { SEAT_START_KEY } from "../src/seat-start";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import { proposeCanon } from "../src/canon";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
+import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PATHS, AUTO_MERGE_REQUIRED_CI, loadMergePolicy, POLICY_CHECKS, requiredCiLabel } from "../src/auto-merge-policy";
+import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/improve-task";
+import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -175,6 +178,37 @@ async function coreBody() {
 
 async function proposalRow(id: string) {
   return env.DB.prepare("SELECT state, decided_by, decided_reason FROM canon_proposals WHERE id = ?1").bind(Number(id)).first<Record<string, unknown>>();
+}
+
+// A signed auto-merge policy that agrees with the code, at version 7 (as shipped since #367), and its pin, as a
+// Worker that has loaded it before holds them: for sign_policy_change.
+async function signedPolicy(): Promise<void> {
+  const body = [
+    "# Auto-merge policy",
+    "",
+    "- version: 7",
+    "- enabled: true",
+    "- namespaces: capsid",
+    "",
+    "## Checks",
+    "",
+    ...POLICY_CHECKS.map((c) => `- \`${c}\` refuses on its own.`),
+    "",
+    "## Allowed PR authors",
+    "",
+    "- author `DrDustinEdwards`",
+    "",
+    "## Refused paths",
+    "",
+    ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
+    "",
+    ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [`## Allowed paths, ${ns}`, "", ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`), ""]),
+    ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [`## Required CI, ${ns}`, "", ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``), ""]),
+  ].join("\n");
+  const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
+  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).run();
+  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('capsid', ?1, 'Auto-merge policy', ?2)").bind(AUTO_MERGE_POLICY_PATH, await signTaskBody(secret, body)).run();
+  await env.APP_KV.put(policyPinKey(AUTO_MERGE_POLICY_PATH), JSON.stringify(await policyPin(body)));
 }
 
 // Each action: its params, the state it starts from, and what the perform must leave.
@@ -374,6 +408,36 @@ const CASES: Record<string, Case> = {
       expect(version?.body, "the approval did not snapshot the body it replaced").toBe("The sample service answers on port 80.");
     },
   },
+  sign_policy_change: {
+    // Version 8, signed, with the unit, snapshotting version 7, and loading as the Worker's
+    // copy: the typed version is what lets it through.
+    params: async () => {
+      await signedPolicy();
+      return { change: "promote", unit: "capsid/tests", confirm: "8" };
+    },
+    after: async () => {
+      const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const { signature, body } = splitSignedTask(row!.body);
+      expect(signature).toBeTruthy();
+      expect(body).toMatch(/^- version: 8$/m);
+      expect(body).toContain("- unit `capsid / tests`");
+      const loaded = await loadMergePolicy(env as unknown as Env);
+      expect("policy" in loaded && loaded.policy.units).toEqual(["capsid / tests"]);
+      const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
+    },
+  },
+  unit_resume: {
+    params: async () => {
+      await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify([{ unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "rolled back" }]));
+      await env.APP_KV.delete(LIFTED_KEY);
+      return { unit: "capsid/docs", reason: "the cause is fixed" };
+    },
+    after: async () => {
+      expect(JSON.parse((await env.APP_KV.get(SUSPENDED_KEY))!)).toEqual([]);
+      expect(Object.keys(JSON.parse((await env.APP_KV.get(LIFTED_KEY))!))).toEqual(["capsid/docs"]);
+    },
+  },
   site_repair: {
     params: async () => {
       operatorCalls.length = 0;
@@ -398,9 +462,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-five actions", () => {
+  it("covers the allow-list, twenty-seven actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(25);
+    expect(Object.keys(CASES).length).toBe(27);
   });
 
   for (const action of PORTAL_ACTIONS) {

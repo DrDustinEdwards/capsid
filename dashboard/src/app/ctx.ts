@@ -136,6 +136,8 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   canon_approve: "Approve and write",
   canon_reject: "Reject proposal",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
+  sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
+  unit_resume: "Lift suspension",
 };
 
 export function performLabel(action: PortalAction, params: Record<string, string>): string {

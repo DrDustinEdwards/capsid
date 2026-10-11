@@ -29,6 +29,11 @@ import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
+import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
+import { SUSPENDED_KEY } from "../src/merge-units.ts";
+import { policyPin, policyPinKey, signTaskBody } from "../src/improve-task.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // approve_pr reads the pull request's head from GitHub at preview and at perform. Only
 // that read is answered; nothing in this file reaches GitHub otherwise.
@@ -168,8 +173,16 @@ function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
   });
 }
 
+// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md, version 7), for
+// sign_policy_change: signed with the world's key, so it loads as the Worker's copy does.
+const POLICY_BODY = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8");
+const SIGNED_POLICY = await signTaskBody("portal-test-signing-secret", POLICY_BODY);
+// Its anti-rollback pin, as a Worker that has loaded the policy before holds it.
+const POLICY_PIN = JSON.stringify(await policyPin(POLICY_BODY));
+
 function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; env: never } {
   const d1 = fakeD1({
+    documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "Auto-merge policy", body: SIGNED_POLICY }],
     namespaces: [
       { namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) },
       { namespace: "capsid-new", repos: JSON.stringify([{ repo: "owner/new", label: "primary" }]) },
@@ -209,6 +222,9 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
       "improve:paused:capsid": "an old reason",
       [AWAITING_SEAT_KEY]: JSON.stringify([{ namespace: "capsid", repo: "owner/repo", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }]),
       "gh:token:v3:owner/repo": "test-token",
+      [policyPinKey(AUTO_MERGE_POLICY_PATH)]: POLICY_PIN,
+      // A merge unit a rollback suspended (src/merge-units.ts), for unit_resume.
+      [SUSPENDED_KEY]: JSON.stringify([{ unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "owner/repo#40 merged unattended and was rolled back" }]),
     },
   });
   const env = {
@@ -356,6 +372,8 @@ const EVERY_ACTION = [
   ["canon_approve", { id: "7" }],
   ["canon_reject", { id: "7", reason: "the rule belongs in a typed doc" }],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
+  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "8" }],
+  ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
 ] as const;
 
 test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, supersede, park, unpark and PR close, and approve, and every loop below covers each", () => {
@@ -380,16 +398,18 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "resume_job",
     "revoke_agent",
     "seat_start",
+    "sign_policy_change",
     "site_add",
     "site_edit",
     "site_remove",
     "site_repair",
     "supersede_job",
+    "unit_resume",
     "unpark_job",
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 25);
+  assert.equal(PORTAL_ACTIONS.length, 27);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing

@@ -252,6 +252,11 @@ export interface MergePolicy {
   allowedPaths: string[];
   // GitHub logins whose PRs may merge without a human, from the document only.
   authors: string[];
+  // The merge units promoted to auto (docs/design/design-merge-pipeline.md section 7,
+  // PR 10), each `<namespace> / <path class>`, from the `## Auto units` section. Like the
+  // author allowlist, the list lives only in the signed document; the code holds only the
+  // path classes a unit may name (PROMOTABLE_PATH_CLASSES).
+  units: string[];
   // Each entry is `<namespace> / <workflow> / <job> / <step>`, built from the heading
   // the step was written under. One flat list keeps the load-time agreement check a
   // single comparison in both directions, so a namespace section missing from the
@@ -265,6 +270,13 @@ const PATH_ITEM = /^- path `([^`]+)`/;
 const STEP_ITEM = /^- step `([^`]+)`/;
 const AUTHOR_ITEM = /^- author `([^`]+)`/;
 const ALLOW_ITEM = /^- allow `([^`]+)`/;
+const UNIT_ITEM = /^- unit `([^`]+)`/;
+const UNITS_HEADING = /^##\s+Auto units\s*$/i;
+
+// The path classes a unit may promote: every class src/merge-class.ts holds except
+// money (typed forever, design section 8), migration and workflow (each a step outside a
+// merge, class seat). test/auto-merge-units.test.ts holds this to merge-class's list.
+export const PROMOTABLE_PATH_CLASSES: readonly string[] = ["docs", "dashboard-css", "tests", "dashboard-code", "deps-own", "src-routine", "deps-other", "src-worth"];
 // The heading a required step is filed under: `## Required CI, <namespace>`. A step
 // written before any such heading is a refusal rather than a step belonging to
 // whichever namespace came first.
@@ -297,8 +309,10 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   const authors: string[] = [];
   const requiredCi: string[] = [];
   const allowedPaths: string[] = [];
+  const units: string[] = [];
   let ciNamespace: string | null = null;
   let allowNamespace: string | null = null;
+  let inUnits = false;
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
     // Any heading closes the section, so a step under `## What a merge means` is not
@@ -308,6 +322,23 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
       ciNamespace = heading ? heading[1] : null;
       const allowHeading = ALLOW_HEADING.exec(trimmed);
       allowNamespace = allowHeading ? allowHeading[1] : null;
+      inUnits = UNITS_HEADING.test(trimmed);
+      continue;
+    }
+    const unitItem = UNIT_ITEM.exec(trimmed);
+    if (unitItem) {
+      // A unit is a widening, so every way it can be malformed refuses the whole document.
+      if (!inUnits) return { error: `the policy lists unit '${unitItem[1]}' outside the ## Auto units section, so whether it is promoted is unstated.` };
+      const m = /^([a-z0-9-]+)\s*\/\s*([a-z-]+)$/.exec(unitItem[1]!.trim());
+      if (!m) return { error: `the policy's unit '${unitItem[1]}' is not '<namespace> / <path class>'.` };
+      const [, ns, cls] = m;
+      if (!PROMOTABLE_PATH_CLASSES.includes(cls!)) {
+        return { error: `the policy's unit '${unitItem[1]}' names path class '${cls}', which is ${cls === "money" || cls === "migration" || cls === "workflow" ? "never promoted to auto" : "not a path class this Worker knows"}. Refusing the whole document rather than guessing what it widens.` };
+      }
+      if (!namespaces.includes(ns!)) return { error: `the policy's unit '${unitItem[1]}' names ${ns}, which the policy does not cover.` };
+      const unit = `${ns} / ${cls}`;
+      if (units.includes(unit)) return { error: `the policy lists unit '${unit}' twice.` };
+      units.push(unit);
       continue;
     }
     const check = POLICY_ID_ITEM.exec(trimmed);
@@ -335,7 +366,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   if (authors.length === 0) {
     return { error: "the policy document names no PR author, so it authorises no pull request. Refusing rather than merging with no author allowlist." };
   }
-  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, allowedPaths, authors, requiredCi } };
+  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, allowedPaths, authors, requiredCi, units } };
 }
 
 // Both directions: what the document lists and the code does not, and the reverse.
@@ -466,7 +497,14 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
  * The whole policy, as a pure function of facts and the signed document's author
  * allowlist. Every check refuses on its own.
  */
-export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): PolicyVerdict {
+export function evaluatePolicy(
+  facts: PrFacts,
+  allowedAuthors: string[],
+  // The promoted unit this PR falls in, when the signed policy lists its namespace and
+  // path class under ## Auto units (the tick computes the path class). It widens only
+  // paths_allowed_for_namespace: never a refused path, money, a migration or a workflow.
+  promoted: { unit: string } | null = null
+): PolicyVerdict {
   const passed: PolicyCheck[] = [];
   const no = (failed: PolicyCheck, why: string): PolicyVerdict => ({ merge: false, failed, why, passed: [...passed] });
 
@@ -502,7 +540,7 @@ export function evaluatePolicy(facts: PrFacts, allowedAuthors: string[]): Policy
       return no("paths_allowed_for_namespace", `the PR changes no file, and ${facts.namespace} merges unattended only a change inside its allowed paths.`);
     }
     const outside = facts.changedPaths.filter((p) => !allowedRules.some(({ pattern }) => pattern.test(p)));
-    if (outside.length > 0) {
+    if (outside.length > 0 && !promoted) {
       return no(
         "paths_allowed_for_namespace",
         `${facts.namespace} merges unattended only ${allowedRules.map((r) => r.why).join(" or ")}, and the change also touches ${outside.join(", ")}.`

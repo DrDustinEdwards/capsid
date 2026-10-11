@@ -563,7 +563,11 @@ export type PortalAction =
   | "package_remove"
   | "canon_approve"
   | "canon_reject"
-  | "site_repair";
+  | "site_repair"
+  // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
+  // change that promotes or removes a unit, and the Undo of a unit's suspension.
+  | "sign_policy_change"
+  | "unit_resume";
 
 // params by action:
 //   pause         { namespace, reason, undo? }   reason required

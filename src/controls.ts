@@ -19,6 +19,8 @@ import { openTitleHolder } from "./jobs-edit";
 import { resolveRepo } from "./github/client";
 import { managePr } from "./github/refs";
 import { performApproval, planApproval } from "./pr-approvals";
+import { performPolicyChange, planPolicyChange } from "./policy-sign";
+import { liftSuspension, planLift } from "./merge-units";
 import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
@@ -69,6 +71,8 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "canon_approve",
   "canon_reject",
   "site_repair",
+  "sign_policy_change",
+  "unit_resume",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -184,6 +188,12 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Reject canon proposal ${params.id ?? ""}. The document is not touched, and the proposer reads your reason.`;
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
+    case "sign_policy_change":
+      return params.change === "demote"
+        ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
+        : `Write and sign the next version of the auto-merge policy with the merge unit ${params.unit ?? ""} promoted to auto: its pull requests may merge with no human when every other check passes. This widens autonomy, so the new version number is typed as confirm.`;
+    case "unit_resume":
+      return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
   }
 }
 
@@ -397,6 +407,25 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, plan.namespace, { repo: plan.repo, prs: plan.targets.map((t) => ({ pr: t.number, head_sha: t.head_sha, class: t.class })), approval_surface: plan.surface, ...(undo ? { undo: true } : {}) }, click);
         break;
       }
+      case "sign_policy_change": {
+        // Planned again from the policy now, and refused unless the new version is typed.
+        const done = await performPolicyChange(env, actor, required(params, "change") ?? undefined, required(params, "unit") ?? undefined, required(params, "confirm") ?? undefined);
+        if (!done.ok) return { ok: false, refusal: done.error };
+        summary = done.summary;
+        committed = true;
+        await auditClick(env, actor, source, surface, action, "capsid", { change: params.change, unit: params.unit, confirm: params.confirm, reason: required(params, "reason") }, click);
+        break;
+      }
+      case "unit_resume": {
+        const reason = required(params, "reason");
+        if (!reason) return { ok: false, refusal: UNIT_RESUME_REASON };
+        const done = await liftSuspension(env, actor, required(params, "unit") ?? undefined, reason, now);
+        if (!done.ok) return { ok: false, refusal: done.refusal };
+        summary = done.summary;
+        committed = true;
+        await auditClick(env, actor, source, surface, action, (params.unit ?? "").split("/")[0]!.trim() || null, { unit: params.unit, reason }, click);
+        break;
+      }
       case "pr_close": {
         const namespace = required(params, "namespace");
         const number = Number(required(params, "number"));
@@ -570,6 +599,8 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   canon_approve: ["id"],
   canon_reject: ["id", "reason"],
   site_repair: ["namespace", "tool"],
+  sign_policy_change: ["change", "unit", "confirm", "reason"],
+  unit_resume: ["unit", "reason"],
 };
 
 
@@ -609,6 +640,7 @@ const refused = (refusal: string): Plan => ({ ok: false, refusal });
 // How many added and removed lines a canon_approve preview lists before it says how many
 // more there are. The whole body is in the proposal row.
 const CANON_PREVIEW_LINES = 40;
+const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
 const CANON_REJECT_REASON = "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.";
 
 function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
@@ -870,6 +902,20 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
     case "approve_pr": {
       const plan = await planApproval(env, actor, p, surface, click);
       return plan.ok ? { ok: true, changes: plan.changes, audit: plan.audit } : refused(plan.refusal);
+    }
+    case "sign_policy_change": {
+      const plan = await planPolicyChange(env, p.change, p.unit);
+      return plan.ok ? { ok: true, changes: plan.changes, audit: [`policy-changed by ${actor}`, click] } : refused(plan.error);
+    }
+    case "unit_resume": {
+      if (!p.reason) return refused(UNIT_RESUME_REASON);
+      const plan = await planLift(env.APP_KV, p.unit);
+      if (!plan.ok) return refused(plan.refusal);
+      return {
+        ok: true,
+        changes: [`${plan.unit}: suspended since ${plan.suspension.since} ("${plan.suspension.reason}") -> lifted. The tick may merge its pull requests unattended again; a rollback after now suspends it again.`],
+        audit: [`merge-unit-resumed by ${actor}`, click],
+      };
     }
     case "pr_close": {
       if (!p.namespace) return refused("pr_close needs the namespace whose repo holds the pull request.");
