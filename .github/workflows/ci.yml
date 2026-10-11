@@ -54,6 +54,34 @@ concurrency:
 #
 # Nothing here sets continue-on-error, and nothing should.
 jobs:
+  # CLAUDE.md, no AI trailer rule. The check is devkit's reusable ai-author workflow
+  # (DrDustinEdwards/devkit, capsid/research/design-shared-tests.md section 3), pinned to
+  # the commit v0.5.0 tags, which a caller must give as a full sha. It runs the package's
+  # devkit-check-trailers bin, the version listed in package.json. It fails when a commit
+  # this push or pull request adds carries Co-Authored-By naming Claude, "Generated with
+  # Claude Code", a Claude-Session link or any other trailer naming Claude, and on a pull
+  # request when a commit is authored or committed as Claude. Older commits are not
+  # checked (no history rewrite, ruled 2026-09-25). A check that cannot run fails. It is a
+  # gate: deploy needs it, as it needed the step this replaces. Not on the schedule, which
+  # adds no commits.
+  ai-author:
+    name: ai-author
+    if: github.event_name != 'schedule'
+    uses: DrDustinEdwards/devkit/.github/workflows/ai-author.yml@2c5c7a5dd2d92b05d005e4f3abc47b001cdc0bf6 # v0.5.0
+
+  # THE NO-BLOAT REPORT (capsid/decisions.md 2026-10-01, "no bloat, as a standing plan").
+  # Devkit's reusable no-bloat workflow, pinned like ai-author above: Knip on the Worker and
+  # the dashboard, and jscpd over the source, against the baseline in .no-bloat.json. What
+  # grew is a ::warning:: line and a table in the job summary. Warn-only by ruling: the
+  # workflow sets continue-on-error on the job, so nothing here blocks a merge, and no job
+  # needs it. Page weight is the dashboard build step in checks.
+  no-bloat:
+    name: no-bloat
+    if: github.event_name != 'schedule'
+    uses: DrDustinEdwards/devkit/.github/workflows/no-bloat.yml@2c5c7a5dd2d92b05d005e4f3abc47b001cdc0bf6 # v0.5.0
+    with:
+      install: npm ci && npm ci --prefix dashboard
+
   checks:
     name: checks
     runs-on: ubuntu-latest
@@ -69,30 +97,12 @@ jobs:
     # job's observed run.
     timeout-minutes: 20
     steps:
-      # Full history, so the trailer check below can read every commit in the range
-      # a push or pull request adds. The default depth of 1 holds only the tip.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
-
-      # CLAUDE.md, no AI trailer rule. Fails when a commit this push or pull request
-      # adds carries Co-Authored-By naming Claude, "Generated with Claude Code", a
-      # Claude-Session link, or any other trailer naming Claude. Older commits are not
-      # checked (no history rewrite, ruled 2026-09-25). A schedule or dispatch run adds
-      # no commits and checks nothing. Needs no install, so it runs first.
-      - name: No AI trailer on new commits
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PUSH_AFTER: ${{ github.sha }}
-        run: node scripts/check-commit-trailers.mjs
 
       # Verified on a fresh clone 2026-08-11: npm ci, npm run check and npm test all
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
@@ -167,14 +177,6 @@ jobs:
       - name: Build the dashboard and hold its size budget
         run: npm run build:dashboard
 
-      # THE NO-BLOAT REPORT (capsid/decisions.md 2026-10-01, "no bloat, as a standing plan").
-      # Warn-only by ruling: Knip on the Worker and the dashboard, and jscpd over the source,
-      # against scripts/no-bloat-baseline.json. What grew is a ::warning:: line and a table
-      # in the job summary. The script always exits 0, so it never blocks a merge; a tool
-      # that cannot run is said as a warning. Page weight is the build step above. About 10 s.
-      - name: No-bloat report (warn-only)
-        run: npm run report:bloat
-
       # The app in a real browser (dashboard/e2e, Playwright): the build above under
       # vite preview, the dev mock, and the Worker's page CSP. A Preview click that did
       # nothing live, and pages that scrolled sideways, passed every other step here.
@@ -193,7 +195,7 @@ jobs:
   # If the secrets are absent this job fails loudly.
   deploy:
     name: deploy
-    needs: checks
+    needs: [checks, ai-author]
     timeout-minutes: 15
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest

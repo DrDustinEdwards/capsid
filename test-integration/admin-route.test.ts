@@ -5,7 +5,7 @@ import { sha256Hex } from "../src/auth";
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { ADMIN_MCP_ROUTE, ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
-import { stubAccess } from "./access-stub";
+import { stubSignIn } from "./access-sign-in";
 import { cimdClient } from "./cimd-stub";
 
 // CAPSID ADMIN ON ITS OWN ROUTES (capsid/rulings/mcp-2026-10-10.md, amendment answer 2),
@@ -221,7 +221,7 @@ async function adminToken(): Promise<string> {
   const signIn = new URL(String(approved.headers.get("location")));
   const state = String(signIn.searchParams.get("state"));
   const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
-  stubAccess(env.ADMIN_EMAIL!, signIn.href);
+  stubSignIn(env.ADMIN_EMAIL!, signIn.href);
   const callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
   vi.restoreAllMocks();
   const location = callback.headers.get("location");

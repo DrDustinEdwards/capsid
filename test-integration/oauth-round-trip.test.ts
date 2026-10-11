@@ -1,7 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
-import { ISSUER, stubAccess } from "./access-stub";
+import { ISSUER, stubSignIn } from "./access-sign-in";
 import { cimdClient } from "./cimd-stub";
 
 // THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: a CIMD client, consent,
@@ -85,7 +85,7 @@ async function authorize(email: string, extra: Record<string, unknown> = {}): Pr
   const state = String(signIn.searchParams.get("state"));
   const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
 
-  const tokenBodies = stubAccess(email, signIn.href, extra);
+  const tokenBodies = stubSignIn(email, signIn.href, extra);
   const callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
   vi.restoreAllMocks();
   const location = callback.headers.get("location");

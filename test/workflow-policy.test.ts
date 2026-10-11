@@ -156,9 +156,17 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
   );
 });
 
+// A job that calls a reusable workflow cannot carry timeout-minutes (GitHub refuses the key
+// there); the called workflow sets its own. Only devkit's, pinned by sha in the test above,
+// are let through, and the count says the exemption read something.
+const DEVKIT_CALL = /^\s{4}uses:\s*DrDustinEdwards\/devkit\/\.github\/workflows\/[\w.-]+@[0-9a-f]{40}\b/;
+
 test("every job declares timeout-minutes", () => {
-  const offenders = jobs()
-    .filter((job) => !job.lines.some((l) => /^\s{4,}timeout-minutes:\s*\d+/.test(l)))
+  const all = jobs();
+  const calls = all.filter((job) => job.lines.some((l) => DEVKIT_CALL.test(l)));
+  assert.deepEqual(calls.map((job) => `${job.workflow}:${job.id}`).sort(), ["ci.yml:ai-author", "ci.yml:no-bloat"]);
+  const offenders = all
+    .filter((job) => !calls.includes(job) && !job.lines.some((l) => /^\s{4,}timeout-minutes:\s*\d+/.test(l)))
     .map((job) => `${job.workflow}:${job.id}`);
   assert.deepEqual(
     offenders,
