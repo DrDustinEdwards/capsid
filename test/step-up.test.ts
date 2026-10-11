@@ -190,3 +190,15 @@ test("PLANT: an unreadable or future last step-up time is treated as absent, nev
   assert.equal(await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "1234" } }).kv, ACTOR, at, 5000), 1234);
   assert.equal(await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "9999" } }).kv, ACTOR, at, 5000), undefined, "a time after now widened the window");
 });
+
+test("a co-owner is stepped up exactly as the primary owner: the check keys on the admin agent, not on ADMIN_EMAIL", () => {
+  const need = { tool: "capsid_admin_set_site_key", grant: "write" as const, admin: true, stepUp: true };
+  const co = (msAgo: number | null) => adminAgentForEmail("co@example.com", msAgo === null ? null : Date.now() - msAgo);
+  assert.equal(co(STALE).actor, "access:co@example.com");
+  assert.match(checkScope(co(STALE), need) ?? "", /step-up required/);
+  assert.match(checkScope(co(null), need) ?? "", /step-up required/);
+  assert.equal(checkScope(co(MINUTE), need), null);
+  // Her idle clock is her own: the primary owner's recent step-up does not refresh hers.
+  assert.match(checkScope({ ...co(STALE), lastStepUpAt: undefined }, need) ?? "", /step-up required/);
+  assert.equal(checkScope({ ...co(STALE), lastStepUpAt: Date.now() - MINUTE }, need), null);
+});

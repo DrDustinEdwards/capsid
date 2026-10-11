@@ -45,7 +45,8 @@ npx wrangler secret put GITHUB_APP_PRIVATE_KEY   # the .pem contents
 npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareaccess.com, the MCP and Capsid Portal logins (docs/auth.md)
 npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Capsid"
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
-npx wrangler secret put ADMIN_EMAIL              # the one email both logins admit, exactly
+npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
+npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (README, Co-owner)
 npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys

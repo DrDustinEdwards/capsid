@@ -167,9 +167,9 @@ test("a state with no KV entry is refused as expired", async () => {
 
 // Each of these reaches the ID token check and must end with no session cookie.
 for (const [name, claims, overrides, pattern] of [
-  ["an email that is not the admin", { email: "someone@example.com" }, {}, /not its administrator/],
-  ["the admin's email in another case", { email: "Admin@example.com" }, {}, /not its administrator/],
-  ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not its administrator/],
+  ["an email that is not the admin", { email: "someone@example.com" }, {}, /not an administrator of capsid/],
+  ["the admin's email in another case", { email: "Admin@example.com" }, {}, /not an administrator of capsid/],
+  ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not an administrator of capsid/],
   ["a wrong issuer", { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" }, {}, /could not be verified/],
   ["a wrong audience", { aud: "other-client" }, {}, /could not be verified/],
   ["a nonce from another sign-in", { nonce: "someone-elses-nonce" }, {}, /could not be verified/],
@@ -273,4 +273,37 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
   // Two hosts, each: the state cookie, the session and the cleared state, two sign-out
   // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
   assert.equal(seen.length, 12);
+});
+
+test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {
+  const e = env({ CO_OWNER_EMAILS: " other@example.com , co@example.com " });
+  const { state, cookie, location } = await started(e);
+  stubAccess(location, { email: "co@example.com" });
+  const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+  assert.equal(res.status, 302);
+  const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
+  assert.deepEqual(session, { email: "co@example.com" });
+  // The same cookie stops verifying when she is taken off the list.
+  const removed = await readPortalSession(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+    env({ CO_OWNER_EMAILS: "other@example.com" }),
+    new Date()
+  );
+  assert.equal(removed, null);
+});
+
+test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refused and gets no session", async () => {
+  for (const [claims, overrides] of [
+    [{ email: "Co@example.com" }, { CO_OWNER_EMAILS: "co@example.com" }],
+    [{ email: "co@example.com" }, {}],
+    [{ email: "co@example.com" }, { CO_OWNER_EMAILS: "" }],
+  ] as const) {
+    const e = env(overrides);
+    const { state, cookie, location } = await started(e);
+    stubAccess(location, claims);
+    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+    assert.equal(res.status, 403);
+    assert.match(await res.text(), /not an administrator of capsid/);
+    assert.equal(res.headers.get("Set-Cookie"), null);
+  }
 });

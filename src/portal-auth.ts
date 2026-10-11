@@ -13,7 +13,7 @@ import { isPortalHost, PORTAL_HOST, portalCookiePath, publicPortalPath } from ".
 //
 // The cookie is a signed assertion (HMAC over a base64url payload with the email and
 // an expiry), not a session record. It cannot be revoked before it expires, so the
-// TTL is twelve hours and the admin check (ADMIN_EMAIL) runs again on every request.
+// TTL is twelve hours and the admin check (ADMIN_EMAIL or CO_OWNER_EMAILS) runs again on every request.
 // Sign out expires it in this browser; a copy taken elsewhere stays valid until it
 // expires, which is the cost of a stateless cookie.
 //
@@ -79,7 +79,7 @@ export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[]
 }
 
 // The session's user, or null for anything that does not verify. The admin check
-// means changing ADMIN_EMAIL invalidates every outstanding Portal cookie.
+// means changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every outstanding Portal cookie.
 export async function readPortalSession(request: Request, env: Env, now: Date): Promise<PortalUser | null> {
   const raw = getCookie(request, PORTAL_SESSION_COOKIE);
   if (!raw) return null;

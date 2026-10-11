@@ -35,7 +35,7 @@ const apiHandler = {
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
     const email = adminGrantEmail(env, (ctx as ExecutionContext & { props?: Props }).props);
     if (!email) {
-      return new Response("forbidden: capsid is a single-user server and this grant does not belong to its administrator", {
+      return new Response("forbidden: this grant does not belong to an administrator of capsid", {
         status: 403,
       });
     }

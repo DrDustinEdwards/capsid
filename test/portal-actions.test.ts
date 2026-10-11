@@ -181,7 +181,7 @@ const SIGNED_POLICY = await signTaskBody("portal-test-signing-secret", POLICY_BO
 // Its anti-rollback pin, as a Worker that has loaded the policy before holds it.
 const POLICY_PIN = JSON.stringify(await policyPin(POLICY_BODY));
 
-function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; env: never } {
+function world(opts: { adminEmail?: string; coOwners?: string } = {}): { d1: FakeD1; kv: FakeKv; env: never } {
   const d1 = fakeD1({
     documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "Auto-merge policy", body: SIGNED_POLICY }],
     namespaces: [
@@ -237,6 +237,7 @@ function world(opts: { adminEmail?: string } = {}): { d1: FakeD1; kv: FakeKv; en
     COOKIE_ENCRYPTION_KEY: SECRET,
     IMPROVE_SCORE_SECRET: "portal-test-signing-secret",
     ADMIN_EMAIL: opts.adminEmail ?? EMAIL,
+    ...(opts.coOwners === undefined ? {} : { CO_OWNER_EMAILS: opts.coOwners }),
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
     ACCESS_SAAS_CLIENT_ID: "sample-client",
     ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
@@ -650,6 +651,37 @@ test("the click row names the administrator, and the mutator's row says what hap
   const click = w.d1.recorded.find((r) => r.params[1] === "portal-pause");
   assert.equal(click?.params[0], ACTOR);
   assert.equal(click?.params[2], "foxing");
+});
+
+test("a co-owner's click is audited under her own verified email, never ADMIN_EMAIL", async () => {
+  const w = world({ coOwners: " other@example.com , co@example.com " });
+  const co = { session: "co@example.com" };
+  const prev = await handlePortalPreview(await preview({ action: "pause", params: { namespace: "foxing", reason: "holdout rebuild" } }, co), w.env, NOW);
+  assert.equal(prev.status, 200, await prev.clone().text());
+  const { token } = (await prev.json()) as PortalPreview;
+  const res = await handlePortalPerform(await perform({ token }, co), w.env, NOW, deps);
+  assert.equal(res.status, 200, await res.clone().text());
+  const rows = auditRows(w.d1);
+  assert.ok(rows.length > 0);
+  for (const row of rows) {
+    assert.match(row, / by access:co@example\.com$/, row);
+    assert.doesNotMatch(row, /admin@example\.com/, row);
+  }
+  const click = w.d1.recorded.find((r) => r.params[1] === "portal-pause");
+  assert.equal(click?.params[0], "access:co@example.com");
+});
+
+test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confirmation previewed by the primary owner is refused to her", async () => {
+  const none = world();
+  const refused = await handlePortalPreview(await preview({ action: "pause", params: { namespace: "foxing", reason: "r" } }, { session: "co@example.com" }), none.env, NOW);
+  assert.equal(refused.status, 302, "an unadmitted session is sent to sign in");
+  wroteNothing(none, "a co-owner with no CO_OWNER_EMAILS");
+  const w = world({ coOwners: "co@example.com" });
+  const { token } = await previewOk(w, "mode", { value: "off", reason: "stop the loop" });
+  const res = await handlePortalPerform(await perform({ token }, { session: "co@example.com" }), w.env, NOW, deps);
+  assert.equal(res.status, 403);
+  assert.match(await res.text(), /another session/);
+  wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
 // A confirmation is used once (controls design, D2). It was allowed to replay inside its

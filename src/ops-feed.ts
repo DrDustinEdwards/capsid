@@ -32,7 +32,7 @@ import { pendingProposals } from "./canon";
 // watcher pass now and returns the new feed.
 //
 // Both answer to portalGate, as every Portal route does: the administrator's Access
-// session and ADMIN_EMAIL on every request, and a 403 for any Authorization header.
+// session and the ADMIN_EMAIL or CO_OWNER_EMAILS check on every request, and a 403 for any Authorization header.
 // They are routes, not tools, so no grant is checked here (CLAUDE.md, one enforcement
 // point rule); src/scope.ts lists them among the routes gated some other way.
 //
