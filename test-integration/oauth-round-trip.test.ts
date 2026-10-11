@@ -1,8 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
-import { ISSUER, stubAccess } from "./access-stub";
-import { cimdClient } from "./cimd-stub";
+import { clearIdTokenKeysCache } from "../src/access-jwt";
+import { stubAccess } from "@dustinedwards/devkit/access";
+import { cimdClient, cimdResponse } from "./cimd-stub";
 
 // THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: a CIMD client, consent,
 // the Access for SaaS sign-in (stubbed, with a real signed ID token), the code exchange with PKCE, an MCP call
@@ -17,6 +18,8 @@ const REDIRECT = "https://client.example.com/callback";
 // RFC 7636 appendix B: this verifier's S256 challenge is E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM.
 const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+// The Access for SaaS application the test bindings in vitest.config.ts name.
+const ISSUER = `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -85,9 +88,19 @@ async function authorize(email: string, extra: Record<string, unknown> = {}): Pr
   const state = String(signIn.searchParams.get("state"));
   const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
 
-  const tokenBodies = stubAccess(email, signIn.href, extra);
-  const callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
-  vi.restoreAllMocks();
+  // Each stub signs with a key of its own under the same kid, and the verifier keeps the
+  // keys it read per JWKS URL, so the last sign-in's key is dropped first.
+  clearIdTokenKeysCache();
+  // The stub swaps the global fetch outright, so it is put back here rather than by
+  // vi.restoreAllMocks. The token exchange after it finds the client documents again.
+  const access = await stubAccess({ issuer: ISSUER, audience: env.ACCESS_SAAS_CLIENT_ID!, email, authorizationUrl: signIn.href, claims: extra, fallback: (u) => cimdResponse(u) ?? undefined });
+  let callback: Response;
+  try {
+    callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
+  } finally {
+    access.restore();
+  }
+  const tokenBodies = access.tokenRequests;
   const location = callback.headers.get("location");
   const code = location && location.startsWith(REDIRECT) ? new URL(location).searchParams.get("code") : null;
   return { clientId, code, callback, tokenBodies, signIn };

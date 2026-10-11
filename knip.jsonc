@@ -10,7 +10,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/index.ts", "scripts/*.mjs", "scripts/*.d.mts", "test/**/*.ts", "test-integration/**/*.ts", "dashboard/src/types.ts"],
   "project": ["src/**/*.ts", "scripts/**/*.{mjs,mts}", "test/**/*.ts", "test-integration/**/*.ts"],
-  // jscpd is run by scripts/no-bloat-report.mjs through its bin, which Knip does not trace.
+  // jscpd is run by devkit-no-bloat (.no-bloat.json) through its bin, which Knip does not trace.
   "ignoreDependencies": ["cloudflare", "jscpd"],
   "ignoreBinaries": ["schtasks"]
 }
