@@ -234,7 +234,7 @@
       "name": "Agents",
       "kind": "external",
       "technology": "Coding sessions over MCP",
-      "description": "The sessions that post, claim and work jobs, outside Capsid's boundary."
+      "description": "The sessions that post, claim and work jobs."
     },
     {
       "id": "capsid-github",
