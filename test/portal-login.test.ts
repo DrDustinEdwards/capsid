@@ -167,9 +167,9 @@ test("a state with no KV entry is refused as expired", async () => {
 
 // Each of these reaches the ID token check and must end with no session cookie.
 for (const [name, claims, overrides, pattern] of [
-  ["an email that is not the admin", { email: "someone@example.com" }, {}, /not its administrator/],
-  ["the admin's email in another case", { email: "Admin@example.com" }, {}, /not its administrator/],
-  ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not its administrator/],
+  ["an email that is not the admin", { email: "someone@example.com" }, {}, /not an administrator of capsid/],
+  ["the admin's email in another case", { email: "Admin@example.com" }, {}, /not an administrator of capsid/],
+  ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not an administrator of capsid/],
   ["a wrong issuer", { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" }, {}, /could not be verified/],
   ["a wrong audience", { aud: "other-client" }, {}, /could not be verified/],
   ["a nonce from another sign-in", { nonce: "someone-elses-nonce" }, {}, /could not be verified/],
@@ -303,7 +303,7 @@ test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refu
     stubAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     assert.equal(res.status, 403);
-    assert.match(await res.text(), /not its administrator/);
+    assert.match(await res.text(), /not an administrator of capsid/);
     assert.equal(res.headers.get("Set-Cookie"), null);
   }
 });

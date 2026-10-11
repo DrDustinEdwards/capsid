@@ -13,7 +13,8 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   OPERATOR_KEY_HASH: string;
   COOKIE_ENCRYPTION_KEY: string;
   // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
-  // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset and no CO_OWNER_EMAILS admits nobody.
+  // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody,
+  // co-owners included.
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_SAAS_CLIENT_ID?: string;
   ACCESS_SAAS_CLIENT_SECRET?: string;
@@ -21,7 +22,7 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // Co-owners: comma-separated emails admitted exactly like ADMIN_EMAIL (src/auth.ts
   // isAdminEmail), each recorded under its own verified email, `access:<email>`. A
   // co-owner cannot change ADMIN_EMAIL or this list: both are set only in Cloudflare.
-  // Optional; unset or empty means no co-owners.
+  // Optional; unset or empty means no co-owners. Ignored while ADMIN_EMAIL is unset.
   CO_OWNER_EMAILS?: string;
   // The Watch Floor's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
   // with Account Analytics Read and Workers Scripts Read, and the account it reads.

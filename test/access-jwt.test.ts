@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { clearIdTokenKeysCache, verifyIdToken, type Jwk } from "../src/access-jwt.ts";
-import { adminGrantEmail, isAdminEmail, isPrimaryOwnerEmail } from "../src/auth.ts";
+import { adminGrantEmail, isAdminEmail } from "../src/auth.ts";
 
 // The ID token Access for SaaS returns at the login callback. Tokens are real RS256
 // JWTs signed with a key pair made here; the "JWKS endpoint" serves its public half.
@@ -174,7 +174,6 @@ test("a co-owner is admitted from a list with spaces, and the primary owner stil
   assert.equal(isAdminEmail(CO_ENV, "admin@example.com"), true);
   assert.equal(isAdminEmail(CO_ENV, "co@example.com"), true);
   assert.equal(isAdminEmail(CO_ENV, "other@example.com"), true);
-  assert.equal(isAdminEmail({ CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), true, "no ADMIN_EMAIL set, a co-owner is still admitted");
 });
 
 test("PLANT: near misses of a co-owner entry are refused: case, extra character, shorter or other domain", () => {
@@ -191,10 +190,9 @@ test("an unset or empty CO_OWNER_EMAILS admits nobody extra, and empty entries n
   assert.equal(isAdminEmail({}, "co@example.com"), false);
 });
 
-test("only ADMIN_EMAIL is the primary owner: a co-owner is admitted but is not the primary", () => {
-  assert.equal(isPrimaryOwnerEmail(CO_ENV, "admin@example.com"), true);
-  assert.equal(isPrimaryOwnerEmail(CO_ENV, "co@example.com"), false);
-  assert.equal(isPrimaryOwnerEmail({ CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
+test("an unset ADMIN_EMAIL admits nobody, a co-owner included", () => {
+  assert.equal(isAdminEmail({ CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
+  assert.equal(isAdminEmail({ ADMIN_EMAIL: " ", CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
 });
 
 test("a /mcp grant whose props carry a co-owner's email passes, and returns that email", () => {

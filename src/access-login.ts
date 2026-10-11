@@ -168,7 +168,7 @@ export async function completeAccessLogin<T>(
   );
   if (!verdict.ok) return fail(`the sign-in could not be verified: ${verdict.reason}. ${flow.restartHint}`, 403);
   if (!isAdminEmail(env, verdict.email)) {
-    return fail("access denied: capsid is a single-user server and this email is not its administrator", 403);
+    return fail("access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)", 403);
   }
   return verdict.name ? { ok: true, email: verdict.email, name: verdict.name, state } : { ok: true, email: verdict.email, state };
 }
