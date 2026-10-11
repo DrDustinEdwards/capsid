@@ -27,6 +27,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
   // because it writes. Unset, capsid_admin_set_site_key mints nothing and says why.
   CF_SECRETS_TOKEN?: string;
+  // The Access sync's write token (src/access-sync.ts): Access: Groups Write, Access: Users
+  // Read and Zero Trust: Seats Write on this account only. Capsid is its only holder
+  // (Dustin, 2026-10-09). Unset, POST /ops/access-sync answers 503 and calls nothing.
+  CF_ACCESS_SYNC_TOKEN?: string;
   // The dashboard app's built files (dashboard/dist), served under /portal/ only
   // after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;
@@ -66,8 +70,8 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
 }
 
 // Everything except the holdout bucket, the credentials that could mint read access to it,
-// and the Cloudflare read token (it can read Worker code).
-export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN">;
+// the Cloudflare read token (it can read Worker code) and the Access sync's write token.
+export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

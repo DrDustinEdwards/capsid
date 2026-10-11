@@ -133,6 +133,9 @@ export const TABLES = [
   // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
   // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
+  // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
+  // configuration the seat writes by hand. Nothing prunes it.
+  "access_sync_groups",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

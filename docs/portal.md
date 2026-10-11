@@ -229,6 +229,19 @@ The secret value does not change, so no Worker secret is updated.
 
 The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is unset (the same account). Both are Worker secrets, never in the repo, and the improve loop's attempt code cannot see the token (`AttemptEnv`). The watcher calls Cloudflare once per pass and never once per page load.
 
+## The Access sync token
+
+`POST /ops/access-sync` (`src/access-sync.ts`) is how an app's members page reaches Cloudflare without holding a token (Dustin, 2026-10-09: Capsid is the only holder). The app posts its whole current members list with its own minted agent key, which must hold the write grant on its namespace. Capsid writes that namespace's pinned Access group so it holds exactly those emails, then frees the Zero Trust seats of the people the app says it removed. It never touches a policy, so an admin policy that lists Dustin's emails directly cannot be changed by a sync.
+
+The write token is its own secret, `CF_ACCESS_SYNC_TOKEN`, never the read-only `CF_OPS_TOKEN`, and the improve loop's attempt code cannot see it (`AttemptEnv`). Create it once, at dash.cloudflare.com/profile/api-tokens, **Create Token**, **Create Custom Token**, named **capsid-access-sync**, with exactly these three permissions:
+1. **Account / Access: Groups / Write**, to read and write rule groups. It is narrower than "Access: Organizations, Identity Providers, and Groups Write", which would also reach organization settings and identity providers.
+2. **Account / Access: Users / Read**, to find a removed person's seat.
+3. **Account / Zero Trust: Seats / Write**, to free that seat.
+
+Under **Account Resources**, choose this one account. Then **Continue to summary**, **Create Token**, and `npx wrangler secret put CF_ACCESS_SYNC_TOKEN` with the value. The value is shown once and is never pasted anywhere else. A 403 names the permission that is missing.
+
+Each app's group is pinned by hand in `access_sync_groups` (`migrations/0040_access_sync_groups.sql`): the namespace, the group's id and its name. The caller never names a group. Before every write the group is read, and the sync refuses with a 409 and writes nothing when the name differs from the pin, or when the group holds an include rule that is not a single email (a rule the sync would erase). A Cloudflare refusal answers 502, so the app shows "Waiting for Cloudflare" and retries. Every call, refused or not, is one `audit_log` row with action `access-sync`.
+
 ## Using it
 
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.

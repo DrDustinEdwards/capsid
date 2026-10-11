@@ -75,6 +75,9 @@
   //   wrangler secret put ANTHROPIC_API_KEY            (improve_mode "api" only)
   //   wrangler secret put IMPROVE_SCORE_SECRET         (root of the per-namespace
   //                                                     score-report HMAC keys)
+  //   wrangler secret put CF_ACCESS_SYNC_TOKEN         (POST /ops/access-sync only:
+  //                                                     Access: Groups Write, Access: Users
+  //                                                     Read, Zero Trust: Seats Write)
   "vars": {
     "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID"
   },
