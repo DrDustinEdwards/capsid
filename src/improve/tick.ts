@@ -10,6 +10,7 @@ import { gatherFindings, watcherTick } from "../watcher";
 import { maintenanceTick } from "../maintenance";
 import { publicBuildTick } from "../public-data";
 import { pushTick } from "../push";
+import { digestTick } from "../digest";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -225,6 +226,20 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: report.sent.length > 0 ? "ok" : "refused", reason: report.note };
     },
     { tag: "PUSH_THREW:", rethrow: false }
+  );
+
+  // The daily email digest (src/digest.ts): once a UTC day, and only once Email Routing is
+  // on. Off or not due is not a run; a send Cloudflare refused is recorded as refused.
+  await runTask(
+    env,
+    "digest",
+    () => digestTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent(report.sent ? "log" : "error", "DIGEST", { message: `DIGEST ${report.note}` });
+      return { outcome: report.sent ? "ok" : "refused", reason: report.note };
+    },
+    { tag: "DIGEST_THREW:", rethrow: false }
   );
 
   const runs = await advanceableRuns(env.DB, RUNS_PER_TICK);

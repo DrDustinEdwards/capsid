@@ -65,6 +65,9 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // fixed Grok and ChatGPT callbacks can register.
   DCR_REDIRECT_URIS?: string;
   EMAIL?: SendEmail;
+  // The daily digest (src/digest.ts) sends only when this var is "on", which the seat sets
+  // once Dustin has turned Email Routing on for the domain and verified ALERT_EMAIL.
+  EMAIL_ROUTING?: string;
   // Phone alerts (src/push.ts, src/web-push.ts): the VAPID key that signs each Web Push,
   // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
   // and the Portal's Settings says why.

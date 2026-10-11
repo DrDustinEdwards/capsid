@@ -892,6 +892,16 @@ export interface WebAnalyticsSite {
   enabled: boolean | null;
 }
 
+// The daily email digest (src/digest.ts), as Settings shows it: on, or the reason it is
+// off, where it goes, the hour it is sent, and the last send or refusal.
+export interface DigestState {
+  on: boolean;
+  problem: string | null;
+  to: string | null;
+  hour_utc: number;
+  last: { at: string; outcome: "sent" | "failed"; note: string } | null;
+}
+
 // GET /portal/api/push -> PortalPush. Phone alerts (src/push.ts): the VAPID public key a
 // browser subscribes with (null, with the problem, when the key is not set), and the
 // devices with alerts on. Never an endpoint.
@@ -900,6 +910,8 @@ export interface PortalPush {
   public_key: string | null;
   problem: string | null;
   devices: { id: number; label: string | null; created_at: string; last_sent_at: string | null; last_status: number | null }[];
+  // The daily email digest beside the alerts, so Settings says why it is off.
+  digest: DigestState;
   // Present after op "test": each device's push service answer (0 when unreachable).
   results?: { id: number; status: number }[];
 }

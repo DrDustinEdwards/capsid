@@ -196,3 +196,11 @@ test.describe.serial("phone alerts", () => {
     await expect(panel.getByRole("button", { name: "Send a test alert", exact: true })).toBeDisabled();
   });
 });
+
+// The daily digest (src/digest.ts): off until Email Routing is on, and Settings says why.
+test("the daily digest says it is off and why until Email Routing is on", async ({ page }) => {
+  await visit(page, "settings");
+  const panel = page.locator("section.cap-panel", { has: page.getByRole("heading", { name: "Daily digest" }) });
+  await expect(panel.getByRole("status")).toContainText("Off, and nothing is sent: Email Routing is not on");
+  await expect(panel).toContainText("after 12:00 UTC");
+});
