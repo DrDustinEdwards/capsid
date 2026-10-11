@@ -166,3 +166,12 @@ test("each week is labelled by its last whole day, the day before as_of for the 
   assert.match(section, /26 Nov/);
   assert.doesNotMatch(section, /15 Jan/);
 });
+
+test("an external container is listed outside the system, never as one of its parts", () => {
+  const page = readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8");
+  const table = page.slice(page.indexOf("<table"), page.indexOf("</table>"));
+  assert.doesNotMatch(table, /Agents/);
+  assert.match(page, /<h2 id="outside-title">Outside it<\/h2>\s*<ul><li><strong>Agents<\/strong> \(Sample sessions\)/);
+  assert.match(page, /Its 3 parts, .*, and the 1 it works with outside it\./);
+  assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts and how they connect/);
+});

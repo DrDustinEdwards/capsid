@@ -66,6 +66,26 @@ const Relationship = z.strictObject({
   title: Text.optional(),
 });
 
+// A flow (design section 4, animated flows): ordered steps, each riding one relationship
+// already in the model, toward one of its two ends, with the sentence the explorer shows
+// and the containers it lights. A flow never draws a line of its own, so it cannot show
+// a connection the model does not have.
+const FlowStep = z.strictObject({
+  from: Id,
+  kind: z.enum(RELATIONSHIP_KINDS),
+  to: Id,
+  toward: Id,
+  text: Text,
+  lights: z.array(Id).max(8).optional(),
+});
+
+const Flow = z.strictObject({
+  id: Id,
+  name: bounded(60).trim().min(1),
+  description: Text.optional(),
+  steps: z.array(FlowStep).min(2).max(20),
+});
+
 export const SystemModelSchema = z
   .strictObject({
     $schema: bounded(512).optional(),
@@ -73,6 +93,7 @@ export const SystemModelSchema = z
     systems: z.array(System).min(1),
     containers: z.array(Container),
     relationships: z.array(Relationship),
+    flows: z.array(Flow).optional(),
   })
   .superRefine((m, ctx) => {
     const ids = new Map<string, string>();
@@ -99,6 +120,25 @@ export const SystemModelSchema = z
       const key = `${r.from} ${r.kind} ${r.to}`;
       if (seen.has(key)) ctx.addIssue({ code: "custom", message: `relationship ${key} is listed twice` });
       seen.add(key);
+    }
+    const containerSystem = new Map(m.containers.map((c) => [c.id, c.system]));
+    const ownerOf = (id: string) => containerSystem.get(id) ?? id;
+    for (const f of m.flows ?? []) {
+      claim(f.id, "flow");
+      f.steps.forEach((step, i) => {
+        const where = `flow ${f.id} step ${i + 1}`;
+        const key = `${step.from} ${step.kind} ${step.to}`;
+        if (!seen.has(key)) ctx.addIssue({ code: "custom", message: `${where} rides ${key}, which is not a relationship in the model` });
+        if (step.toward !== step.from && step.toward !== step.to) ctx.addIssue({ code: "custom", message: `${where} goes toward ${step.toward}, which is not an end of ${key}` });
+        // A light is a part the step's work touches (a store written while the Worker
+        // serves an agent), so it belongs to a system one of the step's ends belongs to.
+        const within = new Set([ownerOf(step.from), ownerOf(step.to)]);
+        for (const l of step.lights ?? []) {
+          const system = containerSystem.get(l);
+          if (system === undefined) ctx.addIssue({ code: "custom", message: `${where} lights ${l}, which is not a container` });
+          else if (!within.has(system)) ctx.addIssue({ code: "custom", message: `${where} lights ${l}, a part of ${system}, which the step does not run in` });
+        }
+      });
     }
   });
 
@@ -160,6 +200,27 @@ export const PublicModelSchema = z.strictObject({
       title: bounded(280).optional(),
     })
   ),
+  // Optional so a document built before flows existed still parses; toPublic always writes it.
+  flows: z
+    .array(
+      z.strictObject({
+        id: Id,
+        name: bounded(60),
+        description: bounded(280).optional(),
+        steps: z
+          .array(
+            z.strictObject({
+              relationship: bounded(200),
+              toward: Id,
+              text: bounded(280),
+              lights: z.array(Id).max(8).optional(),
+            })
+          )
+          .min(2)
+          .max(20),
+      })
+    )
+    .optional(),
   counts: z.strictObject({
     systems: z.number().int(),
     public: z.number().int(),
@@ -175,6 +236,9 @@ export type PublicModel = z.infer<typeof PublicModelSchema>;
  *  a private repo, false for a public one. A repo missing from the map is unknown. */
 export type RepoPrivacy = ReadonlyMap<string, boolean>;
 
+/** A relationship's published id, derived from its ends and kind, never copied from text. */
+const relationshipId = (r: { from: string; kind: string; to: string }) => `${r.from}--${r.kind}--${r.to}`;
+
 /** Public only when the model says so AND GitHub says every repo it lists is public.
  *  Any other answer, an unknown repo included, is private. */
 function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
@@ -189,7 +253,9 @@ function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
  * section 2): a system is private unless the model and GitHub both say public; a
  * private system is its PRIVATE_SYSTEM_KEYS and nothing else; its containers are
  * dropped; a relationship with a private end survives only between two systems, with
- * no title (answer 6); an output id is derived from its ends, never copied from text.
+ * no title (answer 6); an output id is derived from its ends, never copied from text;
+ * a flow survives only when every step rides a relationship between public ends and
+ * lights only public containers, so a private system's flows are dropped whole.
  * Repos that are not in the model are never read here at all (answer 7).
  */
 export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string): PublicModel {
@@ -229,12 +295,15 @@ export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string)
     });
 
   const relationships: PublicModel["relationships"] = [];
+  // Relationships whose two ends are both public: the only ones a flow may ride.
+  const publicEdges = new Set<string>();
   for (const r of model.relationships) {
     const fromOwner = owner.get(r.from);
     const toOwner = owner.get(r.to);
     if (fromOwner === undefined || toOwner === undefined) continue;
-    const id = `${r.from}--${r.kind}--${r.to}`;
+    const id = relationshipId(r);
     if (open.has(fromOwner) && open.has(toOwner)) {
+      publicEdges.add(id);
       const out: PublicModel["relationships"][number] = { id, from: r.from, to: r.to, kind: r.kind };
       if (r.title !== undefined) out.title = r.title;
       relationships.push(out);
@@ -243,12 +312,32 @@ export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string)
     }
   }
 
+  const publicContainers = new Set(containers.map((c) => c.id));
+  const flows: NonNullable<PublicModel["flows"]> = [];
+  for (const f of model.flows ?? []) {
+    const steps = f.steps.map((step) => ({ step, relationship: relationshipId(step) }));
+    const whole = steps.every(({ step, relationship }) => publicEdges.has(relationship) && (step.lights ?? []).every((l) => publicContainers.has(l)));
+    if (!whole) continue;
+    const out: NonNullable<PublicModel["flows"]>[number] = {
+      id: f.id,
+      name: f.name,
+      steps: steps.map(({ step, relationship }) => {
+        const s: NonNullable<PublicModel["flows"]>[number]["steps"][number] = { relationship, toward: step.toward, text: step.text };
+        if (step.lights?.length) s.lights = [...step.lights];
+        return s;
+      }),
+    };
+    if (f.description !== undefined) out.description = f.description;
+    flows.push(out);
+  }
+
   return {
     version: 1,
     as_of: asOf,
     systems,
     containers,
     relationships,
+    flows,
     counts: {
       systems: systems.length,
       public: open.size,

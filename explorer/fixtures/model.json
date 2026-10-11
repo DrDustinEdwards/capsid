@@ -2,26 +2,187 @@
   "version": 1,
   "as_of": "2026-01-15",
   "systems": [
-    { "id": "hub", "name": "Hub", "short": "Hub", "family": "system", "ring": "core", "private": false, "description": "The invented system in the middle.", "domain": "hub.example.com", "repos": ["https://github.com/example/hub"] },
-    { "id": "kit", "name": "Kit", "short": "Kit", "family": "plumbing", "ring": "shared", "private": false, "description": "Shared parts every app installs." },
-    { "id": "theme", "name": "Theme", "short": "Theme", "family": "system", "ring": "shared", "private": false, "description": "The invented design system.", "domain": "theme.example.com", "repos": ["https://github.com/example/theme"] },
-    { "id": "desk", "name": "Desk", "short": "Desk", "family": "writing", "ring": "used", "private": false, "description": "Where invented writing happens.", "domain": "desk.example.com", "repos": ["https://github.com/example/desk"] },
-    { "id": "site", "name": "The site", "short": "Site", "family": "site", "ring": "used", "private": false, "description": "An invented personal site.", "domain": "example.com" },
-    { "id": "vault", "name": "Vault", "short": "Vault", "domain": "vault.example.org", "family": "product", "ring": "used", "private": true },
-    { "id": "gone", "name": "Gone", "short": "Gone", "domain": "", "family": "plumbing", "ring": "used", "private": true }
+    {
+      "id": "hub",
+      "name": "Hub",
+      "short": "Hub",
+      "family": "system",
+      "ring": "core",
+      "private": false,
+      "description": "The invented system in the middle.",
+      "domain": "hub.example.com",
+      "repos": [
+        "https://github.com/example/hub"
+      ]
+    },
+    {
+      "id": "kit",
+      "name": "Kit",
+      "short": "Kit",
+      "family": "plumbing",
+      "ring": "shared",
+      "private": false,
+      "description": "Shared parts every app installs."
+    },
+    {
+      "id": "theme",
+      "name": "Theme",
+      "short": "Theme",
+      "family": "system",
+      "ring": "shared",
+      "private": false,
+      "description": "The invented design system.",
+      "domain": "theme.example.com",
+      "repos": [
+        "https://github.com/example/theme"
+      ]
+    },
+    {
+      "id": "desk",
+      "name": "Desk",
+      "short": "Desk",
+      "family": "writing",
+      "ring": "used",
+      "private": false,
+      "description": "Where invented writing happens.",
+      "domain": "desk.example.com",
+      "repos": [
+        "https://github.com/example/desk"
+      ]
+    },
+    {
+      "id": "site",
+      "name": "The site",
+      "short": "Site",
+      "family": "site",
+      "ring": "used",
+      "private": false,
+      "description": "An invented personal site.",
+      "domain": "example.com"
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "short": "Vault",
+      "domain": "vault.example.org",
+      "family": "product",
+      "ring": "used",
+      "private": true
+    },
+    {
+      "id": "gone",
+      "name": "Gone",
+      "short": "Gone",
+      "domain": "",
+      "family": "plumbing",
+      "ring": "used",
+      "private": true
+    }
   ],
   "containers": [
-    { "id": "hub-worker", "system": "hub", "name": "Worker", "kind": "worker", "technology": "Cloudflare Worker", "description": "Answers every request." },
-    { "id": "hub-db", "system": "hub", "name": "Store", "kind": "database", "technology": "D1", "description": "Holds the invented documents." },
-    { "id": "hub-tick", "system": "hub", "name": "Tick", "kind": "cron", "technology": "Workers cron trigger" }
+    {
+      "id": "hub-worker",
+      "system": "hub",
+      "name": "Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "Answers every request."
+    },
+    {
+      "id": "hub-db",
+      "system": "hub",
+      "name": "Store",
+      "kind": "database",
+      "technology": "D1",
+      "description": "Holds the invented documents."
+    },
+    {
+      "id": "hub-tick",
+      "system": "hub",
+      "name": "Tick",
+      "kind": "cron",
+      "technology": "Workers cron trigger"
+    },
+    {
+      "id": "hub-agents",
+      "system": "hub",
+      "name": "Agents",
+      "kind": "external",
+      "technology": "Sample sessions",
+      "description": "Invented callers outside the hub."
+    }
   ],
   "relationships": [
-    { "id": "hub--installs--kit", "from": "hub", "to": "kit", "kind": "installs" },
-    { "id": "desk--installs--theme", "from": "desk", "to": "theme", "kind": "installs" },
-    { "id": "desk--publishes-to--site", "from": "desk", "to": "site", "kind": "publishes-to" },
-    { "id": "hub--coordinates--vault", "from": "hub", "to": "vault", "kind": "coordinates" },
-    { "id": "hub-worker--writes--hub-db", "from": "hub-worker", "to": "hub-db", "kind": "writes" },
-    { "id": "hub-tick--writes--hub-db", "from": "hub-tick", "to": "hub-db", "kind": "writes" }
+    {
+      "id": "hub--installs--kit",
+      "from": "hub",
+      "to": "kit",
+      "kind": "installs"
+    },
+    {
+      "id": "desk--installs--theme",
+      "from": "desk",
+      "to": "theme",
+      "kind": "installs"
+    },
+    {
+      "id": "desk--publishes-to--site",
+      "from": "desk",
+      "to": "site",
+      "kind": "publishes-to"
+    },
+    {
+      "id": "hub--coordinates--vault",
+      "from": "hub",
+      "to": "vault",
+      "kind": "coordinates"
+    },
+    {
+      "id": "hub-worker--writes--hub-db",
+      "from": "hub-worker",
+      "to": "hub-db",
+      "kind": "writes"
+    },
+    {
+      "id": "hub-tick--writes--hub-db",
+      "from": "hub-tick",
+      "to": "hub-db",
+      "kind": "writes"
+    },
+    {
+      "id": "hub-worker--serves--hub-agents",
+      "from": "hub-worker",
+      "to": "hub-agents",
+      "kind": "serves"
+    }
   ],
-  "counts": { "systems": 7, "public": 5, "private": 2, "containers": 3, "relationships": 6 }
+  "counts": {
+    "systems": 7,
+    "public": 5,
+    "private": 2,
+    "containers": 4,
+    "relationships": 7
+  },
+  "flows": [
+    {
+      "id": "sample-life",
+      "name": "A sample's life",
+      "description": "An invented walk over the hub.",
+      "steps": [
+        {
+          "relationship": "hub-worker--serves--hub-agents",
+          "toward": "hub-worker",
+          "text": "Posted: a sample caller posts to the hub.",
+          "lights": [
+            "hub-db"
+          ]
+        },
+        {
+          "relationship": "hub-tick--writes--hub-db",
+          "toward": "hub-db",
+          "text": "Swept: the tick writes the sample down."
+        }
+      ]
+    }
+  ]
 }

@@ -71,7 +71,7 @@ export async function publicBuildTick(env: Env, now: Date, readers: PublicBuildR
   const c = doc.counts;
   return {
     ran: true,
-    note: `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s); visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}, ${stats.jobs.completed_30d} job(s) finished in 30 days`,
+    note: `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s), ${doc.flows?.length ?? 0} of ${model.flows?.length ?? 0} flow(s) whole; visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}, ${stats.jobs.completed_30d} job(s) finished in 30 days`,
   };
 }
 

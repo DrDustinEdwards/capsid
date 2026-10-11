@@ -208,7 +208,7 @@ export function systemPage(model, id, asOf) {
 <p class="lead">${s.private ? (s.domain ? "Private: its name and address only." : "Private: its name only.") : escapeHtml(s.description ?? "")}</p>
 <dl class="facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("")}</dl>
 <p class="out"><a href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a></p>
-${parts.length ? `<p><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${parts.length} parts and how they connect</a></p>` : ""}
+${parts.length ? `<p><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${ownParts(parts).length} parts and how they connect</a></p>` : ""}
 <section aria-labelledby="links-title"><h2 id="links-title">Connections</h2>
 ${links.length ? `<ul>${links.map((c) => `<li>${escapeHtml(c.verb)} <a href="${systemPath(c.id)}">${escapeHtml(c.name)}</a></li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
@@ -223,11 +223,20 @@ ${links.length ? `<ul>${links.map((c) => `<li>${escapeHtml(c.verb)} <a href="${s
   });
 }
 
+/**
+ * A system's own parts, inside its boundary; its `external` containers (Agents, GitHub) are
+ * what it works with outside it (Dustin, 2026-10-11: external boxes, outside the boundary).
+ * @param {any[]} parts
+ */
+const ownParts = (parts) => parts.filter((c) => c.kind !== "external");
+
 /** @param {any} model @param {string} id @param {string} asOf */
 export function containersPage(model, id, asOf) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   const parts = model.containers.filter((/** @type {any} */ c) => c.system === id);
   if (!s || s.private || parts.length === 0) throw new Error(`no containers page for ${id}`);
+  const own = ownParts(parts);
+  const outside = parts.filter((/** @type {any} */ c) => c.kind === "external");
   const byId = new Map(parts.map((/** @type {any} */ c) => [c.id, c]));
   const wires = model.relationships.filter((/** @type {any} */ r) => byId.has(r.from) && byId.has(r.to));
   // Capsomer's map draws the core's insides only, so another system's parts are the table and
@@ -236,10 +245,13 @@ export function containersPage(model, id, asOf) {
   const map = drawn ? systemMapHtml(mapData(model), { id: "family", label: `Inside ${s.name}`, headingLevel: 3 }) : "";
   const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${systemPath(id)}">${escapeHtml(s.name)}</a> / <span aria-current="page">Inside</span></nav>
 <h1>Inside ${escapeHtml(s.name)}</h1>
-<p class="lead">Its ${parts.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary.</p>
+<p class="lead">Its ${own.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary${outside.length ? `, and the ${outside.length} it works with outside it` : ""}.</p>
 ${scroller("parts", `<table class="cap-table"><caption>The parts of ${escapeHtml(s.name)}</caption>
 <thead><tr><th scope="col">Part</th><th scope="col">Kind</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
-<tbody>${parts.map((/** @type {any} */ c) => `<tr><th scope="row">${escapeHtml(c.name)}</th><td>${escapeHtml(c.kind)}</td><td>${escapeHtml(c.technology)}</td><td>${escapeHtml(c.description ?? "")}</td></tr>`).join("")}</tbody></table>`, `The parts of ${s.name}`)}
+<tbody>${own.map((/** @type {any} */ c) => `<tr><th scope="row">${escapeHtml(c.name)}</th><td>${escapeHtml(c.kind)}</td><td>${escapeHtml(c.technology)}</td><td>${escapeHtml(c.description ?? "")}</td></tr>`).join("")}</tbody></table>`, `The parts of ${s.name}`)}
+${outside.length ? `<section aria-labelledby="outside-title"><h2 id="outside-title">Outside it</h2>
+<ul>${outside.map((/** @type {any} */ c) => `<li><strong>${escapeHtml(c.name)}</strong> (${escapeHtml(c.technology)})${c.description ? `: ${escapeHtml(c.description)}` : ""}</li>`).join("")}</ul>
+</section>` : ""}
 <section aria-labelledby="wires-title"><h2 id="wires-title">How they connect</h2>
 ${wires.length ? `<ul>${wires.map((/** @type {any} */ r) => `<li>${escapeHtml(byId.get(r.from).name)} ${escapeHtml(VERB[/** @type {keyof typeof VERB} */ (r.kind)]?.[0] ?? r.kind)} ${escapeHtml(byId.get(r.to).name)}</li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
