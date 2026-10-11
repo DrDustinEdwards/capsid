@@ -11,7 +11,7 @@ import { logEvent } from "./log";
 //   - registration grants nothing: it writes a client record and no grant or token. The
 //     client still meets the per-client consent page on its first /authorize (the
 //     approval is bound to the client id and its redirect set, src/approval.ts) and the
-//     Access sign-in that admits ADMIN_EMAIL only;
+//     Access sign-in that admits ADMIN_EMAIL and CO_OWNER_EMAILS only;
 //   - registration is rate limited per caller, and fails closed when the limit cannot
 //     be read.
 //

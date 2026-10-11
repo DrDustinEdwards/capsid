@@ -18,7 +18,7 @@ Capsid is a single-user Cloudflare Worker that serves a knowledge base over MCP 
 
 Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints. Every caller resolves to an agent, and `checkScope` in `src/scope.ts` is the one place a grant is checked. Detail: [docs/auth.md](docs/auth.md), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
 
-- **`/mcp`, OAuth, for the single admin.** OAuth 2.1 with PKCE through `workers-oauth-provider`. A client identifies itself by a Client ID Metadata Document (CIMD): its client id is the URL of a JSON document naming its redirect URIs. Grok and Gemini, which cannot, use a tightened dynamic registration at `/register` that admits only exact, allowlisted connector callbacks and grants nothing on its own (`src/dcr.ts`). Every token is bound to this server's resource (RFC 8707). Sign-in goes upstream to Cloudflare Access for SaaS (OIDC), and the verified email must equal `ADMIN_EMAIL` exactly, a check that runs again on every `/mcp` request.
+- **`/mcp`, OAuth, for the single admin.** OAuth 2.1 with PKCE through `workers-oauth-provider`. A client identifies itself by a Client ID Metadata Document (CIMD): its client id is the URL of a JSON document naming its redirect URIs. Grok and Gemini, which cannot, use a tightened dynamic registration at `/register` that admits only exact, allowlisted connector callbacks and grants nothing on its own (`src/dcr.ts`). Every token is bound to this server's resource (RFC 8707). Sign-in goes upstream to Cloudflare Access for SaaS (OIDC), and the verified email must equal `ADMIN_EMAIL` or a `CO_OWNER_EMAILS` entry exactly, a check that runs again on every `/mcp` request.
 - **`/ops/mcp`, bearer keys, for agents and cron.** A key is matched by its sha256. Scopes have five axes (namespaces, repos, tools, grants, blast-radius flags), and a new agent gets read on its named namespaces and no flags.
 - **Per-namespace driver keys.** `scripts/mint-agents.mjs` mints one driver agent per namespace and writes its key to a local file without printing it. A driver's `repos` axis is set from its namespace's live repo mapping.
 - **Per-job runner keys.** A session that the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job (`src/runner-key.ts`). The token's claims are checked against the repo's own seat-session workflow, the `seat` environment and a GitHub-hosted runner. The key reaches a short list of tools, works only its own job, stops resolving when that job leaves its live states, and is issued once per start.
@@ -57,7 +57,7 @@ An optional loop that proposes one scoped change at a time to a roster of reposi
 
 ## The Capsid Portal
 
-The Portal is the administrator's view of Capsid, one app served at `/portal/`, and on its own host when `PORTAL_HOST` in `src/portal-host.ts` names one (this deployment's is portal.dustinedwards.info, where the Portal is the whole host). It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
+The Portal is the administrator's view of Capsid, one app served at `/portal/`, and on its own host when `PORTAL_HOST` in `src/portal-host.ts` names one (this deployment's is portal.dustinedwards.info, where the Portal is the whole host). It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` and `CO_OWNER_EMAILS` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
 
 ![Health](docs/images/health-light.png)
 
@@ -99,6 +99,8 @@ Optional panels stay hidden until they are configured. Which sites the watcher p
 ![Health on a phone, dark](docs/images/phone-health-dark.png)
 
 ## Security model
+
+**Co-owner.** A second person can hold the same access as the administrator. Her email goes in the optional Worker secret `CO_OWNER_EMAILS` (comma separated for more than one; each entry trimmed, empty entries ignored, exact match, no case folding, the same timing-safe compare as `ADMIN_EMAIL`). Unset or empty means no co-owners. She is admitted to `/mcp`, `/mcp/admin` and the Portal like the administrator, and every audit row, actor and "signed in as" carries the email Access verified for her, `access:<her email>`, never `ADMIN_EMAIL`. The step-up applies to her exactly as to the administrator, on her own sign-in and her own idle clock. `ADMIN_EMAIL` stays the primary owner and is set only in Cloudflare: no Capsid tool, Portal action or sync can change it, `CO_OWNER_EMAILS` or who is admitted, so a co-owner cannot remove or demote the primary owner from inside Capsid. The push alerts' VAPID subject stays `ADMIN_EMAIL`. To add her: in the Cloudflare dashboard, Workers & Pages, capsid, Settings, Variables and Secrets, add `CO_OWNER_EMAILS` as a Secret (Type: Secret, not Text) holding her email. The Access policies that admit the admin (the Capsid app and the apps behind Access) must list her email too, or Access refuses her before Capsid is asked.
 
 **One enforcement point.** Every caller resolves to an agent with its own key, scopes and audit identity. `checkScope` in `src/scope.ts` is the only grant check. The registrar wraps every tool before any handler runs, and `TOOL_GRANTS` states what each tool requires (read, write, per-action, or admin). A tool with no entry requires write, so an omission fails closed. Scopes have five axes: `namespaces`, `repos`, `tools`, `grants` and `flags`. The flags are the blast radius: `can_merge`, `can_direct_write`, `can_dispatch`, `can_write_workflows`, `can_touch_protected`, `money_paths` and `can_comment_pr`. The minted roles each hold at most one of them, and `test/roles.test.ts` fails the build if a role names a second. Two project drivers hold a flag by a recorded exception; the Portal and `capsid_run_improve` action `status` list what each agent actually holds. Detail: [docs/auth.md](docs/auth.md).
 
@@ -146,7 +148,7 @@ A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md]
 
 1. Create the D1 database, two separate KV namespaces (`APP_KV`, `OAUTH_KV`) and the R2 bucket(s), then copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored) and fill in the ids.
 2. Apply the migrations with `npx wrangler d1 migrations apply capsid --remote`. The deploy job fails if the live database is behind.
-3. Set secrets with `npx wrangler secret put <NAME>`. Required for the logins and repo access: `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`, `COOKIE_ENCRYPTION_KEY`, `GITHUB_APP_PRIVATE_KEY` (with `GITHUB_APP_CLIENT_ID` as a var). `IMPROVE_SCORE_SECRET` signs jobs and score reports; without it the work queue refuses to post a job. `OPERATOR_KEY_HASH` bootstraps the first agents and is then removed. Optional: `ANTHROPIC_API_KEY` (the loop's api mode), `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read), `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"), and the `R2_*` credential-minting secrets for the holdout and backup mirror.
+3. Set secrets with `npx wrangler secret put <NAME>`. Required for the logins and repo access: `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`, `COOKIE_ENCRYPTION_KEY`, `GITHUB_APP_PRIVATE_KEY` (with `GITHUB_APP_CLIENT_ID` as a var). `IMPROVE_SCORE_SECRET` signs jobs and score reports; without it the work queue refuses to post a job. `OPERATOR_KEY_HASH` bootstraps the first agents and is then removed. Optional: `CO_OWNER_EMAILS` (a co-owner, see Security model), `ANTHROPIC_API_KEY` (the loop's api mode), `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read), `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"), and the `R2_*` credential-minting secrets for the holdout and backup mirror.
 4. Create a Cloudflare Access for SaaS (OIDC) app with redirect URLs `/callback` and `/portal/callback`, plus `https://<your Portal host>/callback` if the Portal has its own host, limited to your email ([docs/auth.md](docs/auth.md)).
 
 Before a push, run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `npm run deploy` builds the Portal first and stops if the build or its size budget fails; `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
@@ -204,7 +206,7 @@ Optional parts stay hidden or inert until configured. With no row in `ops_sites`
    npx wrangler secret put ACCESS_TEAM_DOMAIN          # https://<team>.cloudflareaccess.com
    npx wrangler secret put ACCESS_SAAS_CLIENT_ID
    npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
-   npx wrangler secret put ADMIN_EMAIL                 # the one email both logins admit, exactly
+   npx wrangler secret put ADMIN_EMAIL                 # the primary owner, the one email both logins admit first, exactly
    npx wrangler secret put COOKIE_ENCRYPTION_KEY       # openssl rand -hex 32
    ```
 
@@ -231,7 +233,7 @@ Optional parts stay hidden or inert until configured. With no row in `ops_sites`
    npm run deploy
    ```
 
-9. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity gets in (docs/auth.md).
+9. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md).
 
    Or test the flow first with the MCP Inspector:
 
@@ -303,7 +305,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 
 ## What Capsid is not
 
-- **Not multi-user.** It admits one identity, `ADMIN_EMAIL`, for both logins. Agents are credentials that person mints, not other users.
+- **Not multi-user.** It admits the owner, `ADMIN_EMAIL`, and any co-owners in `CO_OWNER_EMAILS`, for both logins. Agents are credentials an owner mints, not other users.
 - **Not a hosted service.** Each install is its own Worker on its own Cloudflare account. The deployment this repo runs is for its author.
 - **Not a general agent framework.** It stores memory, issues scoped keys, runs a job queue and relays GitHub operations through a GitHub App. It does not run models itself except in the optional loop's api mode.
 - **Not a replacement for code review.** Drivers open pull requests and never merge them. Merges are made by the seat, or, for namespaces a signed auto-merge policy lists, by the Worker when that policy's checks pass. The signed policy (version 5) lists dustinedwards, capsid, carrel and capsomer. A pull request merges itself only when every check passes: an allowed author, a driver's job that handed the pull request on, the job's own recorded pull request, green CI with the repo's required steps run, and no changed path on the refused list. What always waits for the seat: the judges and policy sources, job transitions, auth, migrations, workflows, lockfiles, `package.json`, wrangler configuration and the live gate ([docs/autonomy.md](docs/autonomy.md)). A capsid merge is a production deploy. CI and the hidden holdout tests measure changes; they do not review intent.

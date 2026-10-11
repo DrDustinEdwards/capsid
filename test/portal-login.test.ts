@@ -274,3 +274,36 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
   // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
   assert.equal(seen.length, 12);
 });
+
+test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {
+  const e = env({ CO_OWNER_EMAILS: " other@example.com , co@example.com " });
+  const { state, cookie, location } = await started(e);
+  stubAccess(location, { email: "co@example.com" });
+  const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+  assert.equal(res.status, 302);
+  const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
+  assert.deepEqual(session, { email: "co@example.com" });
+  // The same cookie stops verifying when she is taken off the list.
+  const removed = await readPortalSession(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+    env({ CO_OWNER_EMAILS: "other@example.com" }),
+    new Date()
+  );
+  assert.equal(removed, null);
+});
+
+test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refused and gets no session", async () => {
+  for (const [claims, overrides] of [
+    [{ email: "Co@example.com" }, { CO_OWNER_EMAILS: "co@example.com" }],
+    [{ email: "co@example.com" }, {}],
+    [{ email: "co@example.com" }, { CO_OWNER_EMAILS: "" }],
+  ] as const) {
+    const e = env(overrides);
+    const { state, cookie, location } = await started(e);
+    stubAccess(location, claims);
+    const res = await handlePortalCallback(callback(state, cookie), e, new Date());
+    assert.equal(res.status, 403);
+    assert.match(await res.text(), /not its administrator/);
+    assert.equal(res.headers.get("Set-Cookie"), null);
+  }
+});

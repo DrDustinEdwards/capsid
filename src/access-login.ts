@@ -10,7 +10,7 @@ import type { Env } from "./env";
 // stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding its
 // digest, and used once. PKCE and an OIDC nonce are kept in the stored state, and the
 // ID token is verified in src/access-jwt.ts. The person is the email in the token,
-// admitted only when it equals ADMIN_EMAIL exactly.
+// admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
 //
 // Every endpoint derives from the team domain and the client id, as the SaaS app's
 // discovery document states them (measured 2026-09-27).

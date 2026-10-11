@@ -80,7 +80,9 @@ function readEverythingScopes(): AgentScopes {
 }
 
 // The admin, as the MCP and Portal logins know it: the email Access verified, already
-// checked against ADMIN_EMAIL at sign-in and on every request.
+// checked against ADMIN_EMAIL and CO_OWNER_EMAILS at sign-in and on every request. A
+// co-owner is this same agent under her own email, so her actor is `access:<her email>`
+// and her step-up clock (src/scope.ts) is her own.
 export function adminAgentForEmail(email: string, signedInAt?: number | null): Agent {
   const actor = `access:${email}`;
   return {
