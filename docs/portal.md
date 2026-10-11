@@ -36,10 +36,10 @@ Browser tests: dashboard/e2e/needs.spec.ts, and the attention list's in dashboar
 
 ## The pages
 
-Eight pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09), and Settings:
+The pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09), with Shared code and the Library added since, and Settings:
 - **Now:** Needs you (above) and Health;
 - **Work:** Queue and Pull requests;
-- **Records:** Activity, Agents, Packages (only while a package is configured) and Shared code.
+- **Records:** Activity, Agents, Packages (only while a package is configured), Shared code and Library.
 
 Each old view's content moved whole, so nothing it showed was lost (conventions 1.3). An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
 
@@ -107,6 +107,7 @@ These read more when they open, and not on every poll:
 - **Agents**, in its Claims tab, reads `GET /portal/api/claims` (and exports the aggregate on screen as three CSV files, by agent, waits and usage, under the filter in force; a cell a spreadsheet would read as a formula is prefixed with an apostrophe): what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 - **Shared code** reads `GET /portal/api/shared-code` when it opens (below).
+- **Library** reads `GET /portal/api/library` when it opens, searches and opens a document (below).
 
 ## Scheduled tasks
 
@@ -134,6 +135,16 @@ A pass costs up to nine requests per package. No rate limit is published for npm
 **Exact times** in a panel or a detail field are shown in the viewer's own time zone with UTC beside it, in a `<time>` element, and need no hover. Rows keep relative times.
 
 **Relative times** ("2m ago") are measured on the server's clock: the app takes the skew between its clock and the feed's `generated` time when each feed arrives, and never measures a row against a time earlier than the read that returned it. A timestamp with no zone is read as UTC, since every time the Worker writes is.
+
+## Library
+
+The knowledge store, read-only (capsid/decisions.md 2026-10-09: Portal review item 4, and experience review answer 11). Writing stays in chat and with drivers, so the page has one button, Search. `GET /portal/api/library` (`src/portal-library.ts`) answers one of three ways, by its query string:
+
+- **No argument:** the shelves, over every namespace. Decisions are documents of type `decision`; Rulings are paths under `rulings/`; Research is paths under `research/`. Nothing under `archive/` is shelved. One statement ordered by namespace and path, so it walks the unique index and stops at 500 rows; past that the page says to search.
+- **`?q=`:** full text search over every namespace, the best 25 by bm25, with the matched words marked. A query FTS5 refuses (a hyphen, a quote) is retried as a phrase.
+- **`?ns=&path=`:** one document, its text as written, and the typed edges declared on it and pointing at it. Every job id in the text opens that job's drawer over the page.
+
+Search, the document read and the edges go through `src/doc-reads.ts`, the same readers `capsid_find_docs` action `search` and `capsid_read_doc` actions `read` and `links` use, so the Library and chat cannot disagree. The route writes nothing, not even the conventions-read row (that row records an agent loading the rules). The page's own state is in its address: `?q=` for a search and `?doc=<namespace>/<path>` for a document, so either can be reloaded or shared. Tests: test-integration/portal-library.test.ts, dashboard/e2e/library.spec.ts.
 
 ## Shared code
 
@@ -266,7 +277,7 @@ Until the key is set the panel says so and the `push` step sends nothing. The im
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.
 - **Keyboard:**
   - `Ctrl K` or `/` opens the command menu. It jumps to any site, job, agent or view, copies a blocked job's command, and reaches every stop: typing "stop" or "pause" lists Turn seat start off, Turn the improve loop off, Pause each running namespace and Revoke each live agent, each only while there is something to stop (capsid/decisions.md 2026-09-30, "admin panels review adopted", item 4). A stop runs its own control and writes nothing itself: a switch's stop goes to Settings' Automation and namespaces section and presses that switch, so its reason field opens and Undo follows as from a click; Revoke opens the same confirm dialog as the agent drawer. There is no pause-all, which the Worker refuses.
-  - `g` then a letter goes to a page: `y` Needs you, `q` queue, `p` pull requests, `h` health, `l` activity, `a` agents, `k` packages, `x` shared code, `e` settings. With no package configured, `k` does nothing. The old views' letters (`o`, `s`, `i`, `d`, `b`, `c`, `n`, `v`) were retired with them (job_d62abdbfc270 PR 7).
+  - `g` then a letter goes to a page: `y` Needs you, `q` queue, `p` pull requests, `h` health, `l` activity, `a` agents, `k` packages, `x` shared code, `b` library, `e` settings. With no package configured, `k` does nothing. The old views' letters (`o`, `s`, `i`, `d`, `b`, `c`, `n`, `v`) were retired with them (job_d62abdbfc270 PR 7); `b` has since been given to the Library.
   - `j` and `k` move keyboard focus through a list's rows, from the focused row, so the selection is the focused row. Enter opens it. The detail panel is a modal dialog: Tab stays inside it, Esc or a click beside it closes it, and focus goes back to the row.
   - `f` goes to the Queue's text filter. A namespace filter belongs to its page and lives in the address (`?ns=sample`); a list the filter empties says so, with "Show all".
   - `r` refreshes and `t` switches light and dark. The top bar's theme button is named "Dark theme" and is pressed while dark is in effect. **Settings, Display** chooses System, Light or Dark: System removes the saved choice (localStorage `wf-theme`), so the device's setting applies.

@@ -22,6 +22,7 @@ import {
 import { PORTAL_ACTIONS } from "../src/controls.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
+import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
@@ -779,6 +780,7 @@ const ROUTES = [
   [PORTAL_ACTIVITY_PATH, "GET", (r: Request, e: never) => handlePortalActivity(r, e, NOW)],
   [PORTAL_CLAIMS_PATH, "GET", (r: Request, e: never) => handlePortalClaims(r, e, NOW)],
   [PORTAL_STALE_PATH, "GET", (r: Request, e: never) => handlePortalStale(r, e, NOW)],
+  [PORTAL_LIBRARY_PATH, "GET", (r: Request, e: never) => handlePortalLibrary(r, e, NOW)],
   [PORTAL_PLAN_PATH, "GET", (r: Request, e: never) => handlePortalPlan(r, e, NOW)],
   [PORTAL_DIGEST_PATH, "GET", (r: Request, e: never) => handlePortalDigest(r, e, NOW)],
   [PORTAL_MAINTENANCE_PATH, "GET", (r: Request, e: never) => handlePortalMaintenance(r, e, NOW)],
@@ -787,8 +789,8 @@ const ROUTES = [
   ["/portal/api/not-a-route", "GET", (r: Request, e: never) => handlePortalApiNotFound(r, e, NOW)],
 ] as const;
 
-test("all twelve routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
-  assert.equal(ROUTES.length, 12);
+test("all thirteen routes refuse a bearer with 403 and send an anonymous caller to sign in", async () => {
+  assert.equal(ROUTES.length, 13);
   for (const [path, method, handler] of ROUTES) {
     const session = (await portalSessionCookie({ email: EMAIL }, SECRET, NOW)).split(";")[0];
     const headers = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": "same-origin" };

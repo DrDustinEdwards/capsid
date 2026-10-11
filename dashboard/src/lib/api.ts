@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, SharedCodeView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -13,6 +13,7 @@ export const ACTIVITY_URL = `${BASE}/api/activity`;
 export const CLAIMS_URL = `${BASE}/api/claims`;
 export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 export const SHARED_CODE_URL = `${BASE}/api/shared-code`;
+export const LIBRARY_URL = `${BASE}/api/library`;
 export const STALE_URL = `${BASE}/api/stale`;
 export const PLAN_URL = `${BASE}/api/plan`;
 export const DIGEST_URL = `${BASE}/api/digest`;
@@ -248,6 +249,13 @@ export type PushOp = { op: "on"; subscription: PushSubscriptionJSON; label: stri
 
 export function postPush(csrf: string, body: PushOp): Promise<Answer<PortalPush>> {
   return post<PortalPush>(PUSH_URL, csrf, body);
+}
+
+// GET /portal/api/library: the knowledge store's shelves with no argument, a search with
+// q, or one document with ns and path (src/portal-library.ts). Read-only.
+export function fetchLibrary(args: { q: string } | { ns: string; path: string } | null): Promise<Answer<PortalLibrary>> {
+  const qs = args ? `?${new URLSearchParams(args).toString()}` : "";
+  return get<PortalLibrary>(`${LIBRARY_URL}${qs}`);
 }
 
 // GET /portal/api/stale: the jobs that look stuck, each with the rule it met and why,

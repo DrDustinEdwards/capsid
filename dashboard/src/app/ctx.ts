@@ -16,6 +16,7 @@ export const VIEWS = [
   { id: "agents", label: "Agents", key: "a" },
   { id: "packages", label: "Packages", key: "k" },
   { id: "shared", label: "Shared code", key: "x" },
+  { id: "library", label: "Library", key: "b" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 

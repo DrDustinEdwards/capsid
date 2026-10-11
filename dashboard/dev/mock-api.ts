@@ -33,6 +33,8 @@ import type {
   OpsSiteConfig,
   PortalAction,
   PortalActivity,
+  PortalLibrary,
+  LibraryEntry,
   PortalPackageHistory,
   PortalStale,
   PortalPush,
@@ -211,6 +213,67 @@ function sharedCode() {
       },
     ],
   };
+}
+
+// The Library's answers (src/portal-library.ts), in sample names: a decision record that
+// names a job in the sample feed, a ruling linked to it, a research note, and a search
+// that matches two of them.
+// Relative to the mock's clock, so "updated 2d ago" reads the same on every run.
+const daysAgo = (n: number) => new Date(mockNow() - n * 86_400_000).toISOString();
+const LIBRARY_DOCS: Array<LibraryEntry & { body: string }> = [
+  {
+    namespace: "sample",
+    path: "decisions.md",
+    title: "Sample decisions log",
+    type: "decision",
+    status: "published",
+    updated_at: daysAgo(2),
+    body: "# Sample decisions log\n\n- **Quokka layout** (2026-10-09). The pages follow the quokka layout. Built in job_7c1e44b0a912.\n- **Two themes** (2026-10-08). Every page is checked in light and dark.",
+  },
+  {
+    namespace: "sample",
+    path: "rulings/quokka-layout.md",
+    title: "The quokka layout",
+    type: "note",
+    status: "published",
+    updated_at: daysAgo(3),
+    body: "# The quokka layout\n\nThree columns on a wide screen, one on a phone.",
+  },
+  {
+    namespace: "sample-b",
+    path: "research/layouts.md",
+    title: "Layouts compared",
+    type: "reference",
+    status: "published",
+    updated_at: daysAgo(17),
+    body: "# Layouts compared\n\nThe quokka layout against two others, measured on example.com.",
+  },
+];
+
+function mockLibrary(url: URL): { status: number; body: PortalLibrary | { error: string } } {
+  const generated = new Date(mockNow()).toISOString();
+  const strip = ({ body: _b, ...e }: LibraryEntry & { body: string }): LibraryEntry => e;
+  const ns = url.searchParams.get("ns")?.trim();
+  const path = url.searchParams.get("path")?.trim();
+  if (ns || path) {
+    const doc = LIBRARY_DOCS.find((d) => d.namespace === ns && d.path === path);
+    if (!doc) return { status: 404, body: { error: `No document ${ns}/${path}.` } };
+    const incoming = doc.path === "decisions.md" ? [{ type: "implements", from_ns: "sample", from_path: "rulings/quokka-layout.md" }] : [];
+    const outgoing = doc.path === "rulings/quokka-layout.md" ? [{ type: "implements", to_ns: "sample", to_path: "decisions.md" }] : [];
+    return { status: 200, body: { kind: "document", generated, doc: { ...doc, tags: null, created_at: doc.updated_at }, outgoing, incoming } };
+  }
+  const q = url.searchParams.get("q")?.trim();
+  if (q) {
+    const rows = LIBRARY_DOCS.filter((d) => `${d.title} ${d.body}`.toLowerCase().includes(q.toLowerCase())).map((d) => ({
+      ...strip(d),
+      snippet: d.body.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `\u0002${m}\u0003`).slice(0, 160),
+    }));
+    return { status: 200, body: { kind: "search", generated, query: q, rows, truncated: false } };
+  }
+  const shelf = (d: LibraryEntry) => (d.type === "decision" ? "decisions" : d.path.startsWith("rulings/") ? "rulings" : "research");
+  const shelves: Record<"decisions" | "rulings" | "research", LibraryEntry[]> = { decisions: [], rulings: [], research: [] };
+  for (const d of LIBRARY_DOCS) shelves[shelf(d)].push(strip(d));
+  return { status: 200, body: { kind: "shelves", generated, shelves, truncated: false } };
 }
 
 function mockHistory(p: OpsPackageConfig): PortalPackageHistory {
@@ -1181,7 +1244,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/library", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1247,6 +1310,11 @@ export function mockOpsApi(): Plugin {
           const rows = (id !== null ? st.activity.filter((r) => r.id === id) : st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor))).slice(0, ACTIVITY_LIMIT);
           const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor, id }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
+        }
+        if (path === "/portal/api/library") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const out = mockLibrary(url);
+          return send(res, out.status, out.body);
         }
         if (path === "/portal/api/shared-code") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

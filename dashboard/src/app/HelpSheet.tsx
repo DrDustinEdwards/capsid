@@ -13,6 +13,7 @@ const ABOUT: Partial<Record<ViewId, string>> = {
   agents: "Every credential and when it was last seen; Claims sets what each agent said beside what the Worker verified.",
   packages: "Each package configured in Settings: its versions, downloads, dependents and repository.",
   shared: "Each shared package, the tag each app pins, who is behind, and the local copies left.",
+  library: "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
   settings: "The sites and packages, then the automation switches and each roster namespace. Every change is previewed first.",
 };
 import { Switch } from "../ui/Switch";
