@@ -25,6 +25,7 @@ import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
 import { PORTAL_PUSH_PATH } from "../src/push.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
+import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { RUNNER_KEY_PATH } from "../src/runner-key.ts";
@@ -139,6 +140,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SHARED_CODE_PATH,
   PORTAL_LIBRARY_PATH,
+  PORTAL_TRENDS_PATH,
   PORTAL_PUSH_PATH,
   PORTAL_SIGN_OUT_PATH,
   PORTAL_API_PREFIX,

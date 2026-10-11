@@ -145,9 +145,13 @@ export async function executeApproval(
   return { done: "merged", merge_sha: mergeSha, why };
 }
 
+// The reason on the approved-merged audit row closeAsAutoMerged writes. The same merge
+// also has its auto-merged row, so src/trends.ts reads this to count the merge once.
+export const AUTO_MERGED_APPROVAL_REASON = "the signed policy merged it on its own";
+
 /** A pull request the policy merged on its own: its open approval is closed as merged. */
 export async function closeAsAutoMerged(env: Env, namespace: string, facts: PrFacts, approval: OpenApproval, mergeSha: string | null, now: Date): Promise<void> {
-  await close(env, namespace, approval, facts, "merged", "the signed policy merged it on its own", now, mergeSha);
+  await close(env, namespace, approval, facts, "merged", AUTO_MERGED_APPROVAL_REASON, now, mergeSha);
 }
 
 /** Every approval older than 7 days, on any pull request, open or not: expired. The tick
