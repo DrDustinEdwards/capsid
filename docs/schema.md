@@ -102,6 +102,16 @@ Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/c
 - **Instruction-shaped lines are flagged, never rejected.** An added line that opens (after its list marker, quote, heading or bold) with "you must", "you should", "you will", "you are to", "always", "never", "ignore", "disregard", "forget", "do not", "don't", "from now on", "agents must", "agents should", "the agent must", "drivers must", "a driver must", "every session must" or "sessions must", or with "call", "run", "use" or "invoke" followed by a served tool's name, is stored on the proposal and shown first in the approval preview. Rulings are themselves instructions to agents, so an automatic reject would refuse the seat's own canon.
 - **The admin's and the seat's own writes are not queued.**
 
+## Rule documents are held to their cap and to served tool names
+
+A rule document is one sessions follow as rules rather than read as a record: every namespace's `core.md` (cap 8 KB, conventions 10.2), `decisions.md` and its live volumes, and in capsid `conventions*.md`, `repo-structure.md`, `schema.md`, `seat-operations.md` and each document directly under `rulings/` (cap 20 KB, conventions 10.3). Dated records (`archive/`, `research/`, `reports/`, `audits/`, `jobs/`) are not. `ruleDocCap` in `src/rule-docs.ts` is the list (job_c13dc0d4f22f).
+
+- **A write may not make a rule document worse.** `capsid_write_doc` (write, restore, and a move onto a rule path) refuses a body over the cap that is larger than the stored one, or one naming a tool or action the Worker does not serve that the stored body did not name. A cut that leaves a document still over its cap passes, so an over-cap document can be fixed in steps. A move from one rule path to another (decisions.md to a volume) and a restore that recreates a deleted document put back what was held, and pass. Checked before the canon branch, so a proposal that could never be applied is refused too.
+- **A stale name** is an old tool name (the MCP 4 regroup's mapping, `scripts/tool-names-lib.mjs`) in a backtick span, a call or, for a name with an underscore, anywhere outside backticks; or a `capsid_*` name that is not in `TOOL_GRANTS`, or one given an action its tool does not take.
+- **The lint report and the daily maintenance pass list what is already wrong**: the report's `rule_doc_caps` and `stale_tool_names` checks over its namespace, and the pass's `rule-doc` rule over every namespace (docs/work-queue.md).
+
+test/rule-docs.test.ts plants both kinds, through the write tool too; test-integration/maintenance.test.ts sees the pass list them from a real D1.
+
 ## Deleting a namespace
 
 Deleting a namespace is `capsid_admin_manage_namespaces`, admin only, in two calls. `action: "delete_preview"` writes
@@ -200,10 +210,11 @@ and write tools.
 ### report
 
 A third mode measures the store instead of compiling it, and writes what it found
-to `<namespace>/reports/lint-<date>.md`. Six checks: contradictions (prose
+to `<namespace>/reports/lint-<date>.md`. Eight checks: contradictions (prose
 asserting a number the artifact disagrees with), stale decisions, unbound specs,
-broken links, unconsolidated documents, and doc-vs-code drift, where a repository
-path named in the canon is no longer in the repository. Documents by type is
+broken links, unconsolidated documents, doc-vs-code drift, where a repository
+path named in the canon is no longer in the repository, and the two rule document
+checks, a rule document over its cap and one naming a tool the Worker does not serve. Documents by type is
 counted and reported beside the checks rather than being one of them.
 
 It produces one integrity percentage: subjects in good standing over subjects

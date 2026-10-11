@@ -1,3 +1,4 @@
+import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
 export interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
@@ -288,6 +289,34 @@ export function buildTruthReport(input: TruthInput): TruthReport {
             },
           ]
         : [],
+  });
+
+  // 7 and 8. The rule documents (src/rule-docs.ts): each under its cap, and naming only
+  //    tools and actions the Worker serves. The subjects are the rule documents in this
+  //    namespace, so a namespace with none has nothing judged here.
+  const ruleDocs = standing.filter((d) => ruleDocCap(namespace, d.path) !== null);
+  const problems = ruleDocs.map((d) => ruleDocProblem(namespace, d.path, d.body ?? "")).filter((p): p is RuleDocProblem => p !== null);
+  const oversize = problems.filter((p) => p.oversize);
+  checks.push({
+    check: "rule_doc_caps",
+    subjects: ruleDocs.length,
+    ok: ruleDocs.length - oversize.length,
+    findings: oversize.map((p) => ({
+      check: "rule_doc_caps",
+      subject: `${namespace}/${p.path}`,
+      detail: `${p.bytes} bytes, over its ${p.cap}-byte cap (conventions 10.2 and 10.3)`,
+    })),
+  });
+  const stale = problems.filter((p) => p.stale.length > 0);
+  checks.push({
+    check: "stale_tool_names",
+    subjects: ruleDocs.length,
+    ok: ruleDocs.length - stale.length,
+    findings: stale.map((p) => ({
+      check: "stale_tool_names",
+      subject: `${namespace}/${p.path}`,
+      detail: `names ${staleSummary(p.stale)}`,
+    })),
   });
 
   const judged = checks.filter((c) => c.subjects > 0);

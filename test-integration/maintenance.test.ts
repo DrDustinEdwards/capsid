@@ -14,6 +14,7 @@ import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
 import { gatherModelDriftItems, UNLISTED_DOC } from "../src/model-drift";
 import type { SystemModel } from "../src/system-model";
+import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
 
 // The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
 // one at a time beside a clean job each must leave alone.
@@ -168,6 +169,35 @@ describe("gatherModelDriftItems", () => {
     ]);
     expect(mine[0].line).toContain("example-org/sample-docs is mapped to drift-sample");
     expect(out.read).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("rule documents", () => {
+  it("PLANT: lists an over-cap rule document and one naming a stale tool, and leaves records and clean ones alone", async () => {
+    const planted: Array<[string, string, string]> = [
+      ["sample", "decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
+      ["capsid", "schema.md", "Use the `register_namespace` tool."],
+      ["sample", "core.md", "Ask `capsid_find_docs` action `namespaces`."],
+      ["capsid", "research/old-design.md", "manage_pr ".repeat(3000)],
+      ["sample", "archive/decisions-vol-1.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)],
+    ];
+    for (const [ns, path, body] of planted) {
+      await env.DB.prepare("INSERT OR REPLACE INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, 't', ?3, 'note', 'published')").bind(ns, path, body).run();
+    }
+    try {
+      const out = await gatherRuleDocItems(env.DB);
+      const mine = out.items.filter((i) => i.namespace === "sample" || i.namespace === "capsid");
+      expect(mine.map((i) => [i.rule, i.namespace, i.line.split(":")[0]])).toEqual([
+        ["rule-doc", "capsid", "capsid/schema.md"],
+        ["rule-doc", "sample", "sample/decisions.md"],
+      ]);
+      expect(mine[0].line).toContain("register_namespace");
+      expect(mine[1].line).toContain("over its 20480-byte cap");
+      // Three rule documents were read; the research note and the archived volume are records.
+      expect(out.read).toBeGreaterThanOrEqual(3);
+    } finally {
+      for (const [ns, path] of planted) await env.DB.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = ?2").bind(ns, path).run();
+    }
   });
 });
 
