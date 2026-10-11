@@ -58,6 +58,10 @@ export interface Agent {
   // than a session; null for a session whose grant recorded no sign-in time, which is
   // stale.
   signedInAt?: number | null;
+  // When this admin last completed a step-up action successfully, read from KV where the
+  // session's agent is built and updated by the registrar (src/scope.ts STEP_UP). Absent
+  // when there is none, or when KV could not say.
+  lastStepUpAt?: number;
 }
 
 function flagsAll(value: boolean): Record<ScopeFlag, boolean> {

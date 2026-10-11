@@ -1,6 +1,7 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
+import { readLastStepUp } from "./scope";
 import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
 import { runBackup } from "./backup";
 import { defaultHandler } from "./routes";
@@ -42,6 +43,10 @@ const apiHandler = {
     const props = (ctx as ExecutionContext & { props?: Props }).props;
     const signedInAt = typeof props?.signed_in_at === "number" ? props.signed_in_at : null;
     const admin = adminAgentForEmail(email, signedInAt);
+    // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
+    // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
+    const adminRoute = new URL(request.url).pathname === ADMIN_MCP_ROUTE;
+    if (adminRoute && signedInAt !== null) admin.lastStepUpAt = await readLastStepUp(env.APP_KV, admin.actor, signedInAt);
     // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
     // acts through. It never refuses on what the client says.
     await recordAdminInitialize(env.DB, admin.actor, request);
@@ -49,7 +54,7 @@ const apiHandler = {
     // Capsid Admin on its own route (capsid/rulings/mcp-2026-10-10.md, amendment answer
     // 2): the eight administrator tools, never on /mcp. Only the administrator's grant
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
-    if (new URL(request.url).pathname === ADMIN_MCP_ROUTE) {
+    if (adminRoute) {
       return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe));
     }
     return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe));

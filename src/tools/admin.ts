@@ -56,7 +56,7 @@ export function defineAdminOperations(_server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "set_site_key",
     {
-      description: `Mint a new key for the namespace's site API and set it as a secret on both sides: the site's Worker as ${SITE_SECRET}, and Carrel as SITE_<NAMESPACE>_KEY. The value is never returned, logged or audited. The site first, then Carrel; when only the site takes it, the answer says the two differ and that calling again mints a fresh key and sets both. Needs CF_SECRETS_TOKEN with Workers Scripts Edit, and from a signed-in session a sign-in in the last 15 minutes.`,
+      description: `Mint a new key for the namespace's site API and set it as a secret on both sides: the site's Worker as ${SITE_SECRET}, and Carrel as SITE_<NAMESPACE>_KEY. The value is never returned, logged or audited. The site first, then Carrel; when only the site takes it, the answer says the two differ and that calling again mints a fresh key and sets both. Needs CF_SECRETS_TOKEN with Workers Scripts Edit, and from a signed-in session a sign-in or step-up action in the last 2 hours (at most 12 hours after the sign-in).`,
       inputSchema: { namespace: nsName },
     },
     ({ namespace }) => run(() => setSiteKey(env, ctx.actor, namespace))
