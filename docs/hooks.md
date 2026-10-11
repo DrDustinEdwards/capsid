@@ -1,6 +1,6 @@
 # Session hooks
 
-Claude Code can post each hook event to a URL. Capsid receives six of them at `POST /ops/hooks` (`src/ops-hooks.ts`) and keeps a summary of every session: the job it works, its last event, whether it is waiting on a person, its last failure and whether it has ended. Capsid Portal shows these as Live sessions on the Queue view, and a session that stopped on a failure a person must fix, or that has waited on input for more than ten minutes, as an incident.
+Claude Code can post each hook event to a URL. Capsid receives eight of them at `POST /ops/hooks` (`src/ops-hooks.ts`) and keeps a summary of every session: the job it works, its last event, whether it is waiting on a person, its last failure and whether it has ended. Capsid Portal shows these as Live sessions on the Queue view, and a session that stopped on a failure a person must fix, or that has waited on input for more than ten minutes, as an incident.
 
 ## What is kept, and what never is
 
@@ -14,8 +14,12 @@ Only named fields are read off a hook body. Everything else in it is ignored, so
 | `ConfigChange` | `source`, and `file_path` capped at 300 characters |
 | `SessionEnd` | `reason` |
 | `Stop` | the event and its time |
+| `PostToolUse` | `tool_name`; for `Edit`, `Write` and `MultiEdit` the `file_path` capped at 300 characters; for `Bash` the first word of the command, reduced to its basename, and the exit code `0` |
+| `PostToolUseFailure` | the same, and for `Bash` the exit code from an `Exit code N` first line of `error`; `interrupted` when `is_interrupt` is true |
 
-Never kept: a prompt, a response, `last_assistant_message` on any other event, tool input or output, the transcript path or its contents, the session title, the working directory. A test plants content in each of those fields for all six events and fails if any of it reaches a D1 statement (`test/ops-hooks.test.ts`).
+The tool events are the two that fire after a tool ran. `PreToolUse` is not taken: it would double the rows and fires before the exit code exists. A tool name outside `[A-Za-z][A-Za-z0-9_-]{0,127}` is stored as `unknown`, so the call is still counted. A `Bash` command whose first word is not a plain program name (an env assignment such as `TOKEN=abc npm test`) keeps no command. Tool rows are shared with the anomaly rules: an agent's busiest tool-call hour over three times its busiest baseline hour, and at least 600 calls, is a watcher finding (`src/anomaly.ts`, `toolRateFindings`).
+
+Never kept: a prompt, a response, `last_assistant_message` on any other event, tool input or output beyond the fields named above, `tool_use_id`, `duration_ms`, the transcript path or its contents, the session title, the working directory. A test plants content in each of those fields for all eight events and fails if any of it reaches a D1 statement (`test/ops-hooks.test.ts`).
 
 A session waits on a person after a `Notification` of type `agent_needs_input`, `permission_prompt`, `idle_prompt`, `elicitation_dialog` or `elicitation_url_dialog`. A later event of any other kind, or a `Notification` of type `agent_completed`, clears it. A `StopFailure` records its error until a `Stop` shows a turn ending normally. The errors shown as incidents are `rate_limit`, `billing_error`, `authentication_failed`, `account_on_hold` and `oauth_org_not_allowed`. Incidents are decided when the feed is read, and no job is posted for one.
 
@@ -28,7 +32,7 @@ The request carries the session's own key as `Authorization: Bearer <key>`. Caps
 - a runner key: the one job it was minted for
 - a driver key: the one job it holds claimed, or no job when it holds none or more than one
 
-A session keeps the job it was first bound to. Only the key that first reported a session can add to it; another key gets 409. The body is capped at 64KB (413 over that). An event other than the six gets 400. A recorded event gets 200 with an empty body, so Claude Code counts the hook a success and reads no decision from it. Any refusal is a non-blocking error in Claude Code: the session carries on.
+A session keeps the job it was first bound to. Only the key that first reported a session can add to it; another key gets 409. The body is capped at 64KB (413 over that). An event other than the eight gets 400. A recorded event gets 200 with an empty body, so Claude Code counts the hook a success and reads no decision from it. Any refusal is a non-blocking error in Claude Code: the session carries on.
 
 ## Settings for a driver repo
 
@@ -42,7 +46,9 @@ In the driver repo's `.claude/settings.json`. The key is read from the environme
     "StopFailure": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
     "ConfigChange": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
     "SessionEnd": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }]
+    "Stop": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "http", "url": "https://mcp.dustinedwards.info/ops/hooks", "headers": { "Authorization": "Bearer $CAPSID_HOOK_KEY" }, "allowedEnvVars": ["CAPSID_HOOK_KEY"], "timeout": 5 }] }]
   },
   "allowedHttpHookUrls": ["https://mcp.dustinedwards.info/ops/hooks"]
 }
@@ -68,7 +74,7 @@ The change it would take, in `seat-session.yml`:
 
 2. The sandbox's `credentials.envVars` gains `{ "name": "CAPSID_HOOK_KEY", "mode": "deny" }`, so no Bash command the session runs can read the key.
 
-3. In `claude_args`, `--settings '{"disableAllHooks":true}'` becomes the six hooks above plus `"allowedHttpHookUrls"`, all on one line, with `"disableAllHooks"` removed.
+3. In `claude_args`, `--settings '{"disableAllHooks":true}'` becomes the eight hooks above plus `"allowedHttpHookUrls"`, all on one line, with `"disableAllHooks"` removed.
 
 4. The tripwire step goes, or changes to plant an HTTP hook instead of a command hook.
 

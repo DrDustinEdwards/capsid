@@ -18,7 +18,7 @@ import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
 import { externalFence } from "./provenance";
-import { anomalyFindings, readActionHours } from "./anomaly";
+import { anomalyFindings, readActionHours, readToolHours, toolRateFindings } from "./anomaly";
 import { archiveRevokedAgents } from "./agents-archive";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
 import { deployFindings, readDeployOutcomes } from "./deploy-outcomes";
@@ -532,6 +532,7 @@ export const WATCHER_CHECKS = [
   "live checks",
   "site repairs",
   "agent anomalies",
+  "tool anomalies",
   "domains",
   "deploys",
 ] as const;
@@ -553,6 +554,8 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^site-errors-/, "cloudflare"],
   [/^live-/, "live checks"],
   [/^site-(health|weekly)-/, "site repairs"],
+  // Before the audit rule's prefix, which would otherwise claim these too.
+  [/^anomaly-tool-/, "tool anomalies"],
   [/^anomaly-/, "agent anomalies"],
   [/^domain-expiry-/, "domains"],
   [/^deploy-(rolled-back|rollback-failed)-/, "deploys"],
@@ -1227,10 +1230,20 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
   // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
-  const actionHours = await attempt("agent anomalies", () => readActionHours(env.DB, now, WATCHER_ACTOR));
+  // The hook receiver's tool-use rows, on their own series, rule and check (D1 of
+  // 2026-10-03), so a failed read of one never holds the other's findings open. The two
+  // reads are independent and run together.
+  const [actionHours, toolHours] = await Promise.all([
+    attempt("agent anomalies", () => readActionHours(env.DB, now, WATCHER_ACTOR)),
+    attempt("tool anomalies", () => readToolHours(env.DB, now, WATCHER_ACTOR)),
+  ]);
   if (actionHours) {
     ran.add("agent anomalies");
     out.push(...anomalyFindings(actionHours, now));
+  }
+  if (toolHours) {
+    ran.add("tool anomalies");
+    out.push(...toolRateFindings(toolHours, now));
   }
 
   // Each configured site's domain registration, by RDAP (src/domain-expiry.ts): a
