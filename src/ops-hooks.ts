@@ -9,9 +9,13 @@ import { resolveSessionCaller } from "./ops-session-auth";
 // What is kept is an allowlist, never a denylist: every stored value is named below,
 // read off the body by key, checked against a pattern or capped in length. A hook body
 // also carries the prompt, the last assistant message, tool input and output, and the
-// transcript path; none of those is read, so none can reach D1. The one exception is
+// transcript path; none of those is read, so none can reach D1. Two exceptions. One is
 // StopFailure's last_assistant_message, which on that event is the API error string,
-// kept capped at 300 characters.
+// kept capped at 300 characters. The other is the tool events (PostToolUse and
+// PostToolUseFailure, Dustin's D1 of 2026-10-03), which keep the tool's name; for Edit,
+// Write and MultiEdit the file path; for Bash the first word of the command, reduced to
+// its basename, and the exit code. Never the tool's input or output otherwise, its error
+// text, its id or its duration.
 //
 // The answer is 200 with an empty body, so Claude Code counts the hook a success and
 // never parses a decision out of it. Every refusal is non-2xx, which Claude Code shows
@@ -32,10 +36,24 @@ export const HOOK_MAX_BYTES = 65_536;
 const EVENT_RETENTION_DAYS = 30;
 const PRUNE_BATCH = 50;
 
-// The six events docs/hooks.md configures. Any other event is refused with 400, so a
+// The eight events docs/hooks.md configures. Any other event is refused with 400, so a
 // hook pointed here by mistake is visible instead of silently dropped.
-export const HOOK_EVENTS = ["SessionStart", "Notification", "StopFailure", "ConfigChange", "SessionEnd", "Stop"] as const;
+//
+// The tool events are the two that fire AFTER a tool ran: PostToolUse (it succeeded) and
+// PostToolUseFailure (it failed). PreToolUse is not taken: it would double the rows for
+// every call, and it fires before the exit code exists.
+export const HOOK_EVENTS = [
+  "SessionStart",
+  "Notification",
+  "StopFailure",
+  "ConfigChange",
+  "SessionEnd",
+  "Stop",
+  "PostToolUse",
+  "PostToolUseFailure",
+] as const;
 export type HookEventName = (typeof HOOK_EVENTS)[number];
+const TOOL_EVENTS: ReadonlySet<HookEventName> = new Set(["PostToolUse", "PostToolUseFailure"]);
 
 // A Notification of one of these types means the session is waiting on a person.
 export const NEEDS_INPUT_TYPES: readonly string[] = [
@@ -63,6 +81,16 @@ export const NEEDS_INPUT_INCIDENT_MS = 10 * 60_000;
 const TOKEN = /^[a-z][a-z0-9_]{0,39}$/;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const PERMISSION_MODE = /^[A-Za-z]{1,32}$/;
+// A tool name. MCP names fit, a hyphenated server's too (mcp__claude-in-chrome__navigate);
+// one that does not is stored as "unknown" so the call is still counted.
+const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,127}$/;
+// The tools whose input carries the one path this receiver keeps.
+const FILE_TOOLS: readonly string[] = ["Edit", "Write", "MultiEdit"];
+// A Bash command's first word, kept only when it is a plain program name or path. An
+// env assignment (TOKEN=abc npm test) holds "=", so it fails and nothing is kept.
+const COMMAND_WORD = /^[A-Za-z0-9._+\/-]{1,64}$/;
+// The first line of a failed Bash call's error when the command ran and exited.
+const EXIT_LINE = /^Exit code (-?\d{1,4})$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:\/[\]-]{0,99}$/;
 
 export interface ParsedHook {
@@ -173,6 +201,29 @@ export function parseHook(raw: string): HookParse {
     case "Stop":
       hook.clears_failure = true;
       break;
+    case "PostToolUse":
+    case "PostToolUseFailure": {
+      const tool = matching(input.tool_name, TOOL_NAME);
+      hook.subtype = tool ?? "unknown";
+      const toolInput = input.tool_input && typeof input.tool_input === "object" && !Array.isArray(input.tool_input) ? (input.tool_input as Record<string, unknown>) : {};
+      const failed = event === "PostToolUseFailure";
+      let exitCode: string | null = null;
+      if (tool === "Bash") {
+        const word = typeof toolInput.command === "string" ? toolInput.command.trim().split(/\s+/)[0] : null;
+        const program = matching(word, COMMAND_WORD)?.split("/").pop() || null;
+        // A call that failed without running (a denied or interrupted one) has no
+        // "Exit code N" line, and keeps no exit code.
+        if (failed) exitCode = typeof input.error === "string" ? (EXIT_LINE.exec(input.error.split("\n")[0].trim())?.[1] ?? null) : null;
+        else exitCode = "0";
+        hook.detail = detailJson({ command: program, exit_code: exitCode, interrupted: failed && input.is_interrupt === true ? "true" : null });
+      } else {
+        hook.detail = detailJson({
+          file_path: tool !== null && FILE_TOOLS.includes(tool) ? capped(toolInput.file_path, 300) : null,
+          interrupted: failed && input.is_interrupt === true ? "true" : null,
+        });
+      }
+      break;
+    }
   }
   return { ok: true, hook };
 }
@@ -271,8 +322,12 @@ export async function handleOpsHooks(request: Request, env: Env, ctx: ExecutionC
   if ((session.results ?? []).length === 0) {
     return textResponse(`session ${parsed.hook.session_id} was first reported by another key, so this event was not recorded`, 409);
   }
-  // last_seen is not part of authorizing; see handleOperatorMcp.
-  if (ctx) ctx.waitUntil(caller.touch());
-  else await caller.touch();
+  // last_seen is not part of authorizing; see handleOperatorMcp. A tool event skips it:
+  // tool calls come by the hundred an hour, and the Stop that ends every turn keeps
+  // last_seen current at a fraction of the writes.
+  if (!TOOL_EVENTS.has(parsed.hook.event)) {
+    if (ctx) ctx.waitUntil(caller.touch());
+    else await caller.touch();
+  }
   return new Response(null, { status: 200 });
 }

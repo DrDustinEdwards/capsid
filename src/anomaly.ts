@@ -18,13 +18,21 @@ import { sessionKeyDriver } from "./job-session-key";
 // The window is a day so a hit stays a finding for a day, then clears itself.
 //
 // What audit_log cannot see, it cannot judge: a read that writes no audit row is not
-// counted. The hook receiver's session rows (job_5ac1139641e0, D1) are the place to
-// widen it when they exist.
+// counted. The hook receiver's tool rows (session_events, PostToolUse and
+// PostToolUseFailure; Dustin's D1 of 2026-10-03 shares them with these rules) cover that,
+// on a series of their own: tool calls run at hundreds an hour, so mixed into the audit
+// read they would trip the rate rule and the new-action rule on the first day. One rule
+// reads them, toolRateFindings: the same spike test against the agent's own tool baseline,
+// at TOOL_RATE_FLOOR. There is no first-use or new-tool rule for tools, so the first day
+// of tool reporting pages nobody.
 
 const BASELINE_DAYS = 14;
 const RECENT_HOURS = 24;
 const RATE_FACTOR = 3;
 export const RATE_FLOOR = 30;
+// Tool calls come in hundreds an hour in ordinary work, so the floor is far above the
+// audit rows' 30.
+export const TOOL_RATE_FLOOR = 600;
 const OFF_HOURS_END = 6;
 
 /** One row of the grouped read: an actor's rows of one action in one UTC hour. */
@@ -53,6 +61,38 @@ export async function readActionHours(db: D1Database, now: Date, except: string)
     )
     .bind(anomalySince(now), except)
     .all<ActionHour>();
+  return results ?? [];
+}
+
+/** The window's start for readToolHours, in session_events' ISO format
+ *  (YYYY-MM-DDTHH:MM:SS.sssZ, unlike audit_log's space-separated datetime). */
+function toolSince(now: Date): string {
+  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * 3600_000).toISOString();
+}
+
+/** One row of the tool read: an actor's tool calls in one UTC hour. */
+export interface ToolHour {
+  actor: string;
+  // "YYYY-MM-DDTHH", UTC.
+  hour: string;
+  n: number;
+}
+
+/** Every minted agent's tool-use rows of the last BASELINE_DAYS plus one days, counted
+ *  per actor and hour, the watcher (`except`) left out. session_events is indexed on
+ *  (session_id, id) and (job_id, id) only, so this is a scan, not an index range. It is
+ *  bounded by the 30-day prune the hook receiver runs (src/ops-hooks.ts), which keeps
+ *  the table to a month of rows; an index would need a migration and is not worth one. */
+export async function readToolHours(db: D1Database, now: Date, except: string): Promise<ToolHour[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT agent AS actor, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n
+       FROM session_events
+       WHERE event IN ('PostToolUse', 'PostToolUseFailure') AND at >= ?1 AND agent LIKE 'agent:%' AND agent <> ?2
+       GROUP BY agent, hour`
+    )
+    .bind(toolSince(now), except)
+    .all<ToolHour>();
   return results ?? [];
 }
 
@@ -121,6 +161,33 @@ export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding
     const [peakHour, peak] = [...perHour(recent)].sort((x, y) => y[1] - x[1])[0];
     if (peak >= RATE_FLOOR && peak > RATE_FACTOR * baseMax) {
       out.push(mk(`anomaly-rate-${slug(actor)}`, `${actor} wrote ${peak} audit rows in one hour, over ${RATE_FACTOR} times its busiest`, [`${peak} rows in the hour ${peakHour}:00Z`, `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`]));
+    }
+  }
+  return out;
+}
+
+/** The rate rule on tool calls: an agent's busiest hour in the last day over RATE_FACTOR
+ *  times its busiest baseline hour, and at least TOOL_RATE_FLOOR calls. An agent with no
+ *  tool baseline is skipped: tool reporting starts as nobody's baseline, and a first-use
+ *  rule would page for every agent on its first day. */
+export function toolRateFindings(rows: readonly ToolHour[], now: Date): Finding[] {
+  const recentFrom = new Date(now.getTime() - RECENT_HOURS * 3600_000).toISOString().slice(0, 13);
+  const byActor = new Map<string, { base: Map<string, number>; recent: Map<string, number> }>();
+  for (const r of rows) {
+    // Session keys are judged as the driver they were minted for, as in anomalyFindings.
+    const as = sessionKeyDriver(r.actor);
+    const a = byActor.get(as) ?? { base: new Map<string, number>(), recent: new Map<string, number>() };
+    const side = r.hour >= recentFrom ? a.recent : a.base;
+    side.set(r.hour, (side.get(r.hour) ?? 0) + r.n);
+    byActor.set(as, a);
+  }
+  const out: Finding[] = [];
+  for (const [actor, { base, recent }] of [...byActor].sort(([x], [y]) => x.localeCompare(y))) {
+    if (recent.size === 0 || base.size === 0) continue;
+    const baseMax = Math.max(...base.values());
+    const [peakHour, peak] = [...recent].sort((x, y) => y[1] - x[1])[0];
+    if (peak >= TOOL_RATE_FLOOR && peak > RATE_FACTOR * baseMax) {
+      out.push(mk(`anomaly-tool-rate-${slug(actor)}`, `${actor} made ${peak} tool calls in one hour, over ${RATE_FACTOR} times its busiest`, [`${peak} tool calls in the hour ${peakHour}:00Z`, `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`]));
     }
   }
   return out;

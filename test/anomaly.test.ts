@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RATE_FLOOR, anomalyFindings, chicagoHour, type ActionHour } from "../src/anomaly.ts";
+import { RATE_FLOOR, TOOL_RATE_FLOOR, anomalyFindings, chicagoHour, readToolHours, toolRateFindings, type ActionHour, type ToolHour } from "../src/anomaly.ts";
 import { owningCheck } from "../src/watcher.ts";
 
 // The anomaly rules (OWASP item 6), each on its own planted case, and the quiet cases
@@ -49,4 +49,55 @@ test("PLANT: a new key first used at 03:00 Chicago is a finding; one first used 
 test("activity older than the last day is baseline, never a finding of its own", () => {
   const rows = [...steady("agent:sample-driver"), { actor: "agent:sample-driver", action: "delete_namespace", hour: hour(30), n: 1 }];
   assert.deepEqual(anomalyFindings(rows, NOW), []);
+});
+
+// ---- the tool-use rate rule (session_events, on its own series) ----------------------
+
+// A steady tool baseline: 100 calls an hour, every sixth hour, 14 days.
+function steadyTools(actor: string): ToolHour[] {
+  const out: ToolHour[] = [];
+  for (let h = 30; h < 14 * 24; h += 6) out.push({ actor, hour: hour(h), n: 100 });
+  return out;
+}
+
+test("PLANT: a tool-call hour over the floor and over three times the baseline is a finding, owned by the tool anomaly check", () => {
+  const rows = [...steadyTools("agent:sample-driver"), { actor: "agent:sample-driver", hour: hour(1), n: TOOL_RATE_FLOOR }];
+  const found = toolRateFindings(rows, NOW);
+  assert.deepEqual(found.map((f) => f.fingerprint), ["anomaly-tool-rate-sample-driver"]);
+  assert.match(found[0].title, /made 600 tool calls in one hour, over 3 times its busiest/);
+  // Its own check, so a failed tool read never holds the audit findings open, or the reverse.
+  assert.equal(owningCheck(found[0].fingerprint), "tool anomalies");
+  assert.equal(owningCheck("anomaly-rate-sample-driver"), "agent anomalies");
+  // An ordinary busy hour, the baseline's own size, is quiet.
+  assert.deepEqual(toolRateFindings([...steadyTools("agent:sample-driver"), { actor: "agent:sample-driver", hour: hour(1), n: 100 }], NOW), []);
+  // Over the factor but exactly at three times is not over it.
+  assert.deepEqual(toolRateFindings([{ actor: "agent:sample-driver", hour: hour(100), n: 200 }, { actor: "agent:sample-driver", hour: hour(1), n: 600 }], NOW), []);
+});
+
+test("a tool-call spike under the floor is quiet, and so is an agent with no tool baseline", () => {
+  const under = [{ actor: "agent:sample-quiet", hour: hour(100), n: 10 }, { actor: "agent:sample-quiet", hour: hour(1), n: TOOL_RATE_FLOOR - 1 }];
+  assert.deepEqual(toolRateFindings(under, NOW), []);
+  // The first day of tool reporting: rows only in the last day, however many.
+  assert.deepEqual(toolRateFindings([{ actor: "agent:sample-new", hour: hour(1), n: 5000 }], NOW), []);
+});
+
+test("a session key's tool calls are judged as its driver, against the driver's baseline", () => {
+  const driver = "agent:sample-driver";
+  const session = "agent:sample-driver@job_00000000abcd.a1b2c3";
+  const rows: ToolHour[] = [...steadyTools(driver), { actor: session, hour: hour(2), n: 700 }];
+  const found = toolRateFindings(rows, NOW);
+  assert.deepEqual(found.map((f) => f.fingerprint), ["anomaly-tool-rate-sample-driver"]);
+});
+
+test("readToolHours reads tool events only, from the ISO window start, the watcher left out", async () => {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const db = {
+    prepare: (sql: string) => ({
+      bind: (...params: unknown[]) => ({ all: async () => (calls.push({ sql, params }), { results: [{ actor: "agent:x", hour: "2026-10-10T17", n: 2 }] }) }),
+    }),
+  } as unknown as D1Database;
+  const rows = await readToolHours(db, NOW, "agent:capsid-watcher");
+  assert.equal(rows.length, 1);
+  assert.match(calls[0].sql, /event IN \('PostToolUse', 'PostToolUseFailure'\)/);
+  assert.deepEqual(calls[0].params, ["2026-09-25T18:00:00.000Z", "agent:capsid-watcher"]);
 });

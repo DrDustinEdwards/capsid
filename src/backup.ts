@@ -105,8 +105,9 @@ export const TABLES = [
   "job_evaluations",
   "job_touches",
   // The watcher's memory of each finding across jobs (migrations/0024_watcher_findings.sql),
-  // and what Claude Code sessions reported by hook and telemetry (0025): small, and
-  // session_events is pruned at 30 days in code.
+  // and what Claude Code sessions reported by hook and telemetry (0025). session_events
+  // holds a row per tool call since the tool events (docs/hooks.md), the largest table
+  // here, and is pruned at 30 days in code.
   "watcher_findings",
   "agent_sessions",
   "session_events",

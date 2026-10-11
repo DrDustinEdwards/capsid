@@ -103,7 +103,61 @@ test("a body that is not an event this receiver records is refused with the reas
   assert.match(refuse(JSON.stringify({ hook_event_name: "Stop" })), /session_id/);
   assert.match(refuse(JSON.stringify({ session_id: "../etc", hook_event_name: "Stop" })), /session_id/);
   assert.match(refuse(JSON.stringify({ session_id: SESSION, hook_event_name: "PreToolUse" })), /SessionStart, Notification/);
-  assert.equal(HOOK_EVENTS.length, 6);
+  assert.equal(HOOK_EVENTS.length, 8);
+});
+
+const tool = (body: Record<string, unknown>) => parsed({ hook_event_name: "PostToolUse", tool_use_id: "toolu_01", duration_ms: 12, ...body });
+const detailOf = (hook: ParsedHook) => JSON.parse(hook.detail ?? "null") as Record<string, string> | null;
+
+test("tool events: Edit, Write and MultiEdit keep the file path, capped, and no other tool keeps one", () => {
+  for (const name of ["Edit", "Write", "MultiEdit"]) {
+    const hook = tool({ tool_name: name, tool_input: { file_path: "/home/sample/src/a.ts", content: MARKER } });
+    assert.equal(hook.subtype, name);
+    assert.deepEqual(detailOf(hook), { file_path: "/home/sample/src/a.ts" });
+    assert.equal(hook.needs_input, 0);
+    assert.equal(hook.end_mode, "keep");
+    assert.equal(hook.clears_failure, false);
+    assert.equal(hook.failure, null);
+  }
+  assert.equal(detailOf(tool({ tool_name: "Edit", tool_input: { file_path: "/a/" + "x".repeat(400) } }))?.file_path.length, 300);
+  const read = tool({ tool_name: "Read", tool_input: { file_path: "/home/sample/secret.txt" } });
+  assert.equal(read.subtype, "Read");
+  assert.equal(read.detail, null);
+  assert.equal(tool({ tool_name: "mcp__capsid__capsid_read_doc", tool_input: { path: "x" } }).subtype, "mcp__capsid__capsid_read_doc");
+});
+
+test("tool events: Bash keeps the basename of the first word and the exit code, and never an env assignment", () => {
+  assert.deepEqual(detailOf(tool({ tool_name: "Bash", tool_input: { command: "npm test -- --token abc" } })), { command: "npm", exit_code: "0" });
+  assert.deepEqual(detailOf(tool({ tool_name: "Bash", tool_input: { command: "/usr/bin/git status" } })), { command: "git", exit_code: "0" });
+  assert.deepEqual(detailOf(tool({ tool_name: "Bash", tool_input: { command: "TOKEN=abc npm test" } })), { exit_code: "0" });
+  assert.deepEqual(detailOf(tool({ tool_name: "Bash", tool_input: { command: '"quoted" x' } })), { exit_code: "0" });
+  assert.deepEqual(detailOf(tool({ tool_name: "Bash", tool_input: {} })), { exit_code: "0" });
+});
+
+test("tool events: a failure keeps the exit code from the first line of error, and is_interrupt", () => {
+  const fail = (body: Record<string, unknown>) => parsed({ hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: { command: "npm test" }, ...body });
+  assert.deepEqual(detailOf(fail({ error: `Exit code 2\nstderr ${MARKER}` })), { command: "npm", exit_code: "2" });
+  assert.deepEqual(detailOf(fail({ error: "Exit code -1" })), { command: "npm", exit_code: "-1" });
+  // No Exit code line: the command did not run to an exit, so no exit_code is kept.
+  assert.deepEqual(detailOf(fail({ error: `Permission denied ${MARKER}` })), { command: "npm" });
+  assert.deepEqual(detailOf(fail({ error: `the line before\nExit code 2` })), { command: "npm" });
+  assert.deepEqual(detailOf(fail({})), { command: "npm" });
+  assert.deepEqual(detailOf(fail({ error: "Exit code 130", is_interrupt: true })), { command: "npm", exit_code: "130", interrupted: "true" });
+  assert.deepEqual(detailOf(fail({ is_interrupt: false })), { command: "npm" });
+  // is_interrupt is read on a failure only.
+  assert.equal(detailOf(tool({ tool_name: "Bash", tool_input: { command: "ls" }, is_interrupt: true }))?.interrupted, undefined);
+  assert.equal(parsed({ hook_event_name: "PostToolUseFailure", tool_name: "Read", is_interrupt: true }).detail, JSON.stringify({ interrupted: "true" }));
+});
+
+test("tool events: a tool name outside the pattern is stored as unknown, so the call is still counted", () => {
+  for (const name of ["has space", "9lives", "-a", "a/b", "x".repeat(129), "", 7, null]) {
+    const hook = tool({ tool_name: name, tool_input: { file_path: "/a" } });
+    assert.equal(hook.subtype, "unknown", String(name));
+    assert.equal(hook.detail, null);
+  }
+  assert.equal(tool({}).subtype, "unknown");
+  // An MCP tool on a hyphenated server keeps its name.
+  assert.equal(tool({ tool_name: "mcp__claude-in-chrome__navigate" }).subtype, "mcp__claude-in-chrome__navigate");
 });
 
 // ---- the allowlist, through the handler -----------------------------------------
@@ -194,6 +248,9 @@ test("PLANT: a prompt, a last_assistant_message, tool input or output and transc
     // StopFailure's last_assistant_message is the API error string, which is kept: it
     // is planted with no marker there, and asserted present and capped below.
     if (event === "StopFailure") body.last_assistant_message = "API Error: 429 rate limited";
+    // On the tool events the tool's name is a kept field, so it is planted plain there;
+    // the marker stays in the command after its first word and in the tool's output.
+    if (event === "PostToolUse" || event === "PostToolUseFailure") body.tool_name = "Bash";
     const response = await handleOpsHooks(post(body), env, null, new Date("2026-09-29T12:00:00.000Z"));
     assert.equal(response.status, 200, `${event}: ${await response.clone().text()}`);
     assert.equal(await response.text(), "", "the answer must be empty so Claude Code parses no decision");
@@ -204,7 +261,54 @@ test("PLANT: a prompt, a last_assistant_message, tool input or output and transc
     if (event === "StopFailure") assert.ok(everything.includes("API Error: 429 rate limited"), "StopFailure's API error string was not kept");
     checked++;
   }
-  assert.equal(checked, 6);
+  assert.equal(checked, 8);
+});
+
+test("a tool event leaves last_seen alone; any other event touches it", async () => {
+  const touched = async (event: Record<string, unknown>) => {
+    const { env, writes } = await recordingEnv();
+    const response = await handleOpsHooks(post({ session_id: SESSION, ...event }), env, null, new Date("2026-09-29T12:00:00.000Z"));
+    assert.equal(response.status, 200);
+    return writes.some((w) => /UPDATE agents SET last_seen/i.test(w.sql));
+  };
+  assert.equal(await touched({ hook_event_name: "Stop" }), true, "a Stop must touch last_seen, or this test proves nothing");
+  assert.equal(await touched({ hook_event_name: "PostToolUse", tool_name: "Read" }), false);
+  assert.equal(await touched({ hook_event_name: "PostToolUseFailure", tool_name: "Bash", error: "Exit code 1" }), false);
+});
+
+test("PLANT: content in every tool field but the kept ones never reaches D1, on both tool events", async () => {
+  const kept: Record<string, string> = { PostToolUse: "/home/sample/kept.ts", PostToolUseFailure: "/home/sample/kept.ts" };
+  const cases: Array<Record<string, unknown>> = [
+    { tool_name: "Write", tool_input: { file_path: kept.PostToolUse, content: `${MARKER} body`, command: MARKER } },
+    { tool_name: "MultiEdit", tool_input: { file_path: kept.PostToolUse, edits: [{ old_string: MARKER, new_string: MARKER }] } },
+    { tool_name: "Edit", tool_input: { file_path: kept.PostToolUse, old_string: MARKER, new_string: MARKER } },
+    { tool_name: "Bash", tool_input: { command: `npm test --token ${MARKER}` } },
+    { tool_name: "Bash", tool_input: { command: `TOKEN=${MARKER} npm test` } },
+    { tool_name: "Read", tool_input: { file_path: `/home/sample/${MARKER}` } },
+    { tool_name: `bad name ${MARKER}`, tool_input: { command: MARKER } },
+  ];
+  let checked = 0;
+  for (const event of ["PostToolUse", "PostToolUseFailure"]) {
+    for (const c of cases) {
+      const { env, writes } = await recordingEnv();
+      const body = {
+        ...plantedBody(event),
+        ...c,
+        tool_use_id: `toolu_${MARKER}`,
+        duration_ms: 4242,
+        tool_response: { stdout: MARKER, content: MARKER },
+        error: `Exit code 1\n${MARKER}`,
+        is_interrupt: false,
+      };
+      const response = await handleOpsHooks(post(body), env, null, new Date("2026-09-29T12:00:00.000Z"));
+      assert.equal(response.status, 200, `${event} ${String(c.tool_name)}`);
+      const everything = JSON.stringify(writes);
+      assert.ok(!everything.includes(MARKER), `${event} ${String(c.tool_name)}: planted content reached D1: ${everything.slice(Math.max(0, everything.indexOf(MARKER) - 80), everything.indexOf(MARKER) + 40)}`);
+      assert.ok(!everything.includes("4242") && !everything.includes("toolu_"), `${event}: duration or tool_use_id reached D1`);
+      checked++;
+    }
+  }
+  assert.equal(checked, 14);
 });
 
 test("PLANT: the statements bind only named values, whatever the parsed hook holds", () => {
