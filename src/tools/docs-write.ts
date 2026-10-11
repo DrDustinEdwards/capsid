@@ -12,6 +12,7 @@ import { assembleBody } from "../write-modes";
 import { improveWriteRefusal } from "../improve-scores";
 import { concurrentEditWarning } from "../server";
 import { canonGuarded, canonRefusal, proposeCanon } from "../canon";
+import { ruleDocCap, ruleDocWriteRefusal } from "../rule-docs";
 import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouching } from "./docs";
 
 // The document tools that change the store: write, restore, delete and move.
@@ -170,6 +171,12 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         { path, before: prior?.body ?? null, after: body as string },
       ]);
       if (improveRefusal) return fail(improveRefusal);
+
+      // A rule document (src/rule-docs.ts) may not be made worse: over its cap and
+      // larger than before, or naming a tool the Worker does not serve. Checked before
+      // the canon branch, so a proposal that could never be applied is refused too.
+      const ruleRefusal = ruleDocWriteRefusal(namespace, path, prior?.body ?? null, body as string);
+      if (ruleRefusal) return fail(ruleRefusal);
 
       // Canon write-protection (src/canon.ts). A driver's write to a canon document is
       // stored as a proposal for the seat or Dustin to approve, never applied here. It
@@ -381,6 +388,11 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         { path, before: prior?.body ?? null, after: version.body ?? "" },
       ]);
       if (restoreImproveRefusal) return fail(restoreImproveRefusal);
+      // A rule document is held to the same checks as a write (src/rule-docs.ts). A restore
+      // that recreates a deleted document puts back what was there, so it is judged
+      // against the version itself and passes.
+      const restoreRuleRefusal = ruleDocWriteRefusal(namespace, path, prior ? (prior.body ?? "") : (version.body ?? ""), version.body ?? "");
+      if (restoreRuleRefusal) return fail(restoreRuleRefusal);
       // The same protocol capsid_write_doc action write runs, with restore's wordings. On the
       // recreate path the guard is the ABSENCE of a row: the snapshot statement is
       // only added when the pre-read saw one, so a racing create would otherwise be
@@ -586,6 +598,12 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         { path: new_path, before: null, after: movedBody },
       ]);
       if (moveImproveRefusal) return fail(moveImproveRefusal);
+      // Moving a document onto a rule path makes it a rule document, held to the same
+      // checks as a write that creates one (src/rule-docs.ts). Moving one away is free, and
+      // so is moving a rule document to another rule path (decisions.md to a volume): the
+      // body is the one already held to the checks.
+      const moveRuleRefusal = ruleDocWriteRefusal(namespace, new_path, ruleDocCap(namespace, path) !== null ? movedBody : null, movedBody);
+      if (moveRuleRefusal) return fail(moveRuleRefusal);
       // move needs confirmation: it repoints every edge and, unlike delete, leaves no
       // snapshot of the old path, only an audit row.
       const moveRefusal = await requireConfirmation(server, confirm, {

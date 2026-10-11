@@ -319,7 +319,7 @@ test("report mode STORES the report, so the trend is a document", async () => {
     assert.match(payload.stored, /^capsid\/reports\/lint-\d{4}-\d{2}-\d{2}\.md$/);
     assert.deepEqual(
       payload.checks.map((c) => c.check).sort(),
-      ["broken_links", "contradictions", "doc_vs_code_drift", "stale_decisions", "unbound_specs", "unconsolidated"]
+      ["broken_links", "contradictions", "doc_vs_code_drift", "rule_doc_caps", "stale_decisions", "stale_tool_names", "unbound_specs", "unconsolidated"]
     );
 
     // The write path, from the statements the handler issued. The fake records SQL

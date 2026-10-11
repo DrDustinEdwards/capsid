@@ -948,7 +948,9 @@ export type MaintenanceRule =
   | "undeployed-merge"
   | "deploys-not-checked"
   | "model-drift"
-  | "model-not-checked";
+  | "model-not-checked"
+  | "rule-doc"
+  | "rule-docs-not-checked";
 
 export interface OpsMaintenanceItem {
   /** Which rule found it. */

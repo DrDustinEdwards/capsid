@@ -262,3 +262,12 @@ The ruling settled sign-in, layers, owners, expiry and the members page. Still o
 6. **Where lab managers edit protocols** (open since PR #304). The KB editor in `/lab` with draft-only saves and
    publishing in `/admin/kb`, or Carrel with its procedure handler kept. **Recommend the KB editor in `/lab`**, per
    the 2026-10-07 ruling that procedures are structured, not writing.
+
+## Answered (Dustin, 2026-10-09)
+
+1. Capsid is the only holder of the Cloudflare sync token; apps ask Capsid.
+2. Allow lists are Access groups, pinned by id; admin policies list Dustin's emails directly.
+3. An account-wide session of one month; admin apps keep shorter sessions of their own.
+4. Dustin's admin second factor is an authenticator app (no hardware security key).
+5. Yes: an Owner enters each app's term end dates once a year, and reviews open three weeks before.
+6. Lab managers edit protocols in `/lab` with the KB form editor, draft-only saves that Dustin approves, not in Carrel.
