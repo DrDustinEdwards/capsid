@@ -47,6 +47,26 @@ The driver is the `/improve work` command in Claude Code: it resumes a cleared g
 }
 ```
 
+## A body a session can act on
+
+A session that claims a job has no conversation to ask in, and a question mid-task costs 4 to 6 hours, so the body has to carry what the session needs. Write it with five headed parts:
+
+- **GOAL**: what and why, in a sentence or two.
+- **DO**: the steps, in order.
+- **OUT OF SCOPE**: what the session must leave alone.
+- **DONE WHEN**: the checks that say it is finished.
+- **DECIDED** or **RULES**: choices already made, and the rules that bind the session.
+
+`post` and `edit` from a caller (src/job-body-check.ts) refuse a title or body holding an unfilled placeholder: `<ID>` or `<id>`, `<...>`, `{{...}}`, `TODO:` or `TBD`. The refusal names the placeholder and its line. Text inside a code block or an external fence is exempt, so a body may quote a template. A body missing any of the five parts is accepted, and the result carries a `warnings` entry naming what is missing. The watcher's, the skills refresh's and the finalize step's posts, and jobs already queued, are not checked.
+
+Rules for the session:
+
+1. Ask every question at the start, each with a recommended default, before any work.
+2. For a reversible choice, proceed on the default and note it in the pull request.
+3. Block only for money, deletion, secrets or anything public-facing.
+
+The source is "Ask or Assume?" (arXiv 2603.26233): calibrated asking recovers most of the success lost to underspecified tasks. A mid-task question here costs hours, so asking early and assuming on the reversible is the cheaper policy.
+
 ## Claims
 
 `complete`, `fail` and `block` take an optional `claim`, an object or its JSON string, that states what the driver says it did: `prs_opened` and `prs_merged` (up to 10 URLs each), `tests` (`run`, `passed`, `failed`, `result` of `pass`, `fail`, `partial` or `not_run`), `deploy_state` (`none`, `pending`, `deployed`, `verified` or `failed`), `files_touched` (up to 500 paths), `usage` (`cost_usd`, `active_seconds` and `tokens` of `input`, `output`, `cache_read`, `cache_creation`; non-negative, finite, tokens whole numbers; this session's own total, not a running one), and `versions` (`model_id`, `client_name`, `client_version`, `permission_mode`). A string that does not parse, or a key the claim does not know, is refused rather than dropped. `usage` and `versions` are self-reported and recorded only; nothing authorizes on them.

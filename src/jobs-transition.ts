@@ -137,6 +137,9 @@ export interface JobResult {
   jobs?: Array<JobListRow | JobRow>;
   truncated?: boolean;
   note?: string;
+  // post and edit: what the body lacks that a session acts best with (src/job-body-check.ts).
+  // A warning never refuses.
+  warnings?: string[];
   refusal?: string;
   // The outcome row this transition wrote, returned so the driver sees what the
   // Worker checked rather than assuming its own numbers were taken. `notes` names
