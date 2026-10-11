@@ -198,12 +198,14 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .fleet tbody tr.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--accent-line); }
 .fleet .site b { font-weight: 700; display: block; }
 .fleet .site span { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.ticks { display: flex; gap: 1px; height: 22px; align-items: stretch; }
-.ticks i { flex: 1; min-width: 2px; border-radius: 1px; background: var(--ok); opacity: 0.85; position: relative; }
-.ticks i.p { background: linear-gradient(to top, var(--crit) var(--f), var(--ok) var(--f)); }
-.ticks i.d { background: var(--crit); }
-.ticks i.n { background: repeating-linear-gradient(135deg, var(--nodata) 0 2px, transparent 2px 4px); opacity: 0.7; }
-.ticks i:hover { opacity: 1; outline: 1px solid var(--text); }
+/* Enarratio's primitives (ui/Enar.tsx): its variables mapped to the Portal's tokens, so
+   both themes follow; ci-strip turns the heat strip's two ends into green and red. */
+:root { --enarratio-text: var(--text); --enarratio-text-muted: var(--muted); --enarratio-grid: var(--line); --enarratio-background: var(--surface); --enarratio-series-1: var(--accent); --enarratio-status-good: var(--ok); --enarratio-status-warning: var(--warn); --enarratio-status-bad: var(--crit); --enarratio-status-unknown: var(--nodata); --enarratio-font: inherit; --enarratio-font-numeric: var(--mono); }
+.enar { margin: 0; }
+.ci-strip { --enarratio-sequential-1: var(--ok); --enarratio-sequential-5: var(--crit); }
+.enar-table { font-size: 12px; color: var(--muted); }
+.slot-head { font-size: 12px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.minutes-tile { margin: 0 0 16px; max-width: 460px; }
 .upct { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; margin-top: 3px; }
 .backupbar { width: 84px; height: 6px; border-radius: 3px; background: var(--sunken); position: relative; overflow: hidden; margin-top: 4px; }
 .backupbar i { position: absolute; inset: 0 auto 0 0; background: var(--ok); }

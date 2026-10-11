@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -16,6 +16,10 @@ import { St } from "../ui/icons";
 // the Portal and chat cannot disagree. Neither changes anything.
 
 type Load<T> = { data: T | null; loading: boolean; error: string | null };
+
+// Chart 4, Tonight as a timeline, loads with the Queue that shows it, not with the digest
+// strip Needs you takes from this file.
+const TonightTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.TonightTimeline })));
 
 function useRead<T>(read: () => Promise<Answer<T>>, key: string): Load<T> {
   const { feed, signOut } = useApp();
@@ -79,6 +83,11 @@ export function Tonight() {
         </div>
       ) : plan && (planned || plan.skipped.length) ? (
         <>
+          {planned > 0 && (
+            <Suspense fallback={null}>
+              <TonightTimeline plan={plan} />
+            </Suspense>
+          )}
           {plan.lanes.map((lane) => (
             <div className="qgroup" key={lane.repo} data-lane={lane.repo}>
               <h3>

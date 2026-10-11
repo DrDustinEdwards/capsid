@@ -4,20 +4,25 @@
 //
 //   initial JS (the entry and its static imports)  <= 105 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   all CSS                                         <=  13 KB gzip
+//   all CSS                                         <=  15 KB gzip
 //   fonts                                           reported, not budgeted
 //
 // Raised on 2026-10-07 from 100 KB JS and 12 KB CSS (Dustin, after capsid #261): the shell is
 // Capsomer's AdminShell, which carries the strip of apps and tools, the account panel and the
 // phone sheet, beside the command menu the entry already held. The first AdminShell build was
 // 102.8 KB JS and 12.6 KB CSS; the new limits leave room above that, not for more.
+//
+// CSS raised on 2026-10-11 from 13 KB to 15 KB (Dustin: "raise the CSS budget in that PR as
+// needed", job_d62abdbfc270 PR 6): the charts are Enarratio's, and its base stylesheet
+// (enarratio/base.css, 2.1 KB gzip) comes with them, beside the variables that map it to the
+// Portal's tokens. Master was 13.0 KB; this build is 14.3 KB. The JS limits are unchanged.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 105 * KB, lazyChunk: 40 * KB, css: 13 * KB };
+const BUDGET = { initialJs: 105 * KB, lazyChunk: 40 * KB, css: 15 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");

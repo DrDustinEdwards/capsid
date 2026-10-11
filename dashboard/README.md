@@ -44,9 +44,9 @@ contract lacks, a missing field or a value outside a union fails the typecheck.
 
 | What | Budget (gzip) |
 | --- | --- |
-| Initial JS: the entry and its static imports | 100 KB |
+| Initial JS: the entry and its static imports | 105 KB |
 | Each lazy chunk | 40 KB |
-| All CSS | 12 KB |
+| All CSS | 15 KB |
 | Fonts | reported, not budgeted |
 
 A missing `dist/` or manifest is a failure, not a pass.

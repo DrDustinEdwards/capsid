@@ -32,6 +32,9 @@ const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
 // The digest strip loads after first paint, so the home's first screen is not held up by
 // its read, and its code stays out of the initial bundle.
 const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default: m.SinceLastLooked })));
+// Chart 1, minutes of Dustin per week, loads the same way: its Enarratio primitives stay
+// out of the initial bundle.
+const MinutesTile = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MinutesTile })));
 
 export function NeedsYou() {
   const { feed } = useApp();
@@ -39,6 +42,9 @@ export function NeedsYou() {
     <div className="page">
       <Anchors />
       <PageHead title="Needs you" />
+      <Suspense fallback={null}>
+        <MinutesTile />
+      </Suspense>
       <ByApp />
       <Suspense fallback={null}>
         <SinceLastLooked />

@@ -34,6 +34,7 @@ import type {
   PortalAction,
   PortalActivity,
   PortalLibrary,
+  PortalTrends,
   LibraryEntry,
   PortalPackageHistory,
   PortalStale,
@@ -274,6 +275,59 @@ function mockLibrary(url: URL): { status: number; body: PortalLibrary | { error:
   const shelves: Record<"decisions" | "rulings" | "research", LibraryEntry[]> = { decisions: [], rulings: [], research: [] };
   for (const d of LIBRARY_DOCS) shelves[shelf(d)].push(strip(d));
   return { status: 200, body: { kind: "shelves", generated, shelves, truncated: false } };
+}
+
+// The trends route's answer (src/trends.ts), sample numbers on the mock's clock: eight weeks
+// of minutes falling, a backup gap two days ago and an unfilled month, one repo red for two
+// days, one green, one never run and one that could not be read.
+function mockTrends(weeks: number): PortalTrends {
+  const now = mockNow();
+  const DAYMS = 86_400_000;
+  const day = (n: number) => new Date(now - n * DAYMS).toISOString().slice(0, 10);
+  const today = Date.parse(`${day(0)}T00:00:00Z`);
+  const monday = today - ((new Date(today).getUTCDay() + 6) % 7) * DAYMS;
+  const minutes = [72, 81, 66, 58, 61, 49, 52, 41, 38, 35, 30, 34];
+  const weekRows = Array.from({ length: weeks }, (_, i) => {
+    const start = new Date(monday - (weeks - 1 - i) * 7 * DAYMS).toISOString().slice(0, 10);
+    const m = minutes[(minutes.length - weeks + i + minutes.length) % minutes.length]!;
+    return { start, week: `${start.slice(0, 4)}-W${String(30 + i).padStart(2, "0")}`, m };
+  });
+  const days = Array.from({ length: 14 }, (_, i) => day(13 - i));
+  const ciRepo = (namespace: string, red: number, none = false) => ({
+    namespace,
+    repo: `example-org/${namespace}`,
+    truncated: false,
+    days: days.map((d, i) => ({ day: d, runs: none ? 0 : 1, failed: !none && i >= 14 - red ? 1 : 0, state: (none ? "none" : i >= 14 - red ? "red" : "green") as "none" | "red" | "green" })),
+  });
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - (5 - i), 1)).toISOString().slice(0, 7);
+  });
+  return {
+    generated: new Date(now).toISOString(),
+    weeks,
+    minutes: {
+      weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, minutes: w.m, sessions: 4 + (i % 3), decisions: 9 + i })),
+      truncated: false,
+      note: "An estimate: the administrator's own writes and job touches, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
+    },
+    queue: days.map((d, i) => ({ day: d, posted: 3 + (i % 4), ended: 4 + (i % 3), open: 30 - i })),
+    merges: { weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, auto: 4 + i, approved: 3, seat: Math.max(0, 6 - i), closed: 1 })), rollbacks: [] },
+    backups: {
+      runs: 27,
+      error: null,
+      slots: {
+        daily: days.map((d, i) => ({ key: d, filled: i !== 11 })),
+        weekly: weekRows.slice(-8).map((w) => ({ key: w.start, filled: true })),
+        monthly: months.map((m, i) => ({ key: m, filled: i !== 0 })),
+      },
+    },
+    ci: {
+      read_at: new Date(now - 10 * 60_000).toISOString(),
+      repos: [ciRepo("sample", 0), ciRepo("sample-b", 2), ciRepo("sample-c", 0, true)],
+      not_read: [{ namespace: "sample-d", error: "GitHub answered 404 for example-org/sample-d's runs" }],
+    },
+  };
 }
 
 function mockHistory(p: OpsPackageConfig): PortalPackageHistory {
@@ -1259,7 +1313,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/library", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1325,6 +1379,11 @@ export function mockOpsApi(): Plugin {
           const rows = (id !== null ? st.activity.filter((r) => r.id === id) : st.activity.filter((r) => (!namespace || r.namespace === namespace) && (!actor || r.actor === actor))).slice(0, ACTIVITY_LIMIT);
           const out: PortalActivity = { generated: new Date(mockNow()).toISOString(), filter: { namespace, actor, id }, rows, limit: ACTIVITY_LIMIT };
           return send(res, 200, out);
+        }
+        if (path === "/portal/api/trends") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const weeks = Number(url.searchParams.get("weeks") ?? 8);
+          return send(res, 200, mockTrends(Number.isInteger(weeks) && weeks >= 1 && weeks <= 26 ? weeks : 8));
         }
         if (path === "/portal/api/library") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
