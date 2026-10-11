@@ -1,13 +1,15 @@
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
+import { LOOP_ROSTER } from "./improve-schema";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher";
 
 // THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each
-// watcher pass reads, for every roster repo, its newest completed default-branch push runs,
-// finds the job named "live gate" (capsid's in .github/workflows/ci.yml, and the shared
-// deploy-verify-rollback workflow's once a repo adopts it), and records what became of the
-// deploy in deploy_outcomes (migrations/0039). A rollback, or one that did not take effect,
+// watcher pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push
+// runs, finds the job named "live gate", or "<caller job> / live gate" when the gate runs in
+// a called workflow (capsid's in .github/workflows/ci.yml; carrel's, "deploy / live gate",
+// in devkit's reusable worker-deploy.yml), and records what became of the deploy in
+// deploy_outcomes (migrations/0039). A rollback, or one that did not take effect,
 // is a watcher finding, so it reaches Needs you and the queue; the push is PR 7.
 //
 // GitHub serves no step summary through its API, so the outcome is read from what it does
@@ -17,6 +19,16 @@ import type { Finding } from "./watcher";
 // already reads CI.
 
 const LIVE_JOB = "live gate";
+const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
+// The namespaces the deploy watcher reads. carrel's live gate runs in devkit's reusable
+// worker-deploy.yml; carrel is merge-only for the improve loop, so not on LOOP_ROSTER.
+export const DEPLOY_ROSTER = [...LOOP_ROSTER, "carrel"] as const;
+
+/** A live gate job: "live gate", or a called workflow's "<caller job> / live gate". */
+export function isLiveGateJob(name: string): boolean {
+  return name === LIVE_JOB || name.endsWith(LIVE_JOB_SUFFIX);
+}
+
 const ROLLBACK_STEP = /^Roll back/i;
 const RUNS_READ = 3;
 
@@ -125,7 +137,7 @@ export async function readDeployOutcomes(env: Env, namespace: string): Promise<D
     if (!row) {
       const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
       if (!jobsResp.ok) throw new Error(`the jobs of run ${run.id} returned ${jobsResp.status}`);
-      const job = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).find((j) => j.name === LIVE_JOB);
+      const job = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).find((j) => isLiveGateJob(j.name));
       let annotations: string[] = [];
       if (job && job.conclusion !== "success" && job.conclusion !== "skipped") {
         const notes = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`);

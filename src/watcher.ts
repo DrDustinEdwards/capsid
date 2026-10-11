@@ -21,7 +21,7 @@ import { externalFence } from "./provenance";
 import { anomalyFindings, readActionHours, readToolHours, toolRateFindings } from "./anomaly";
 import { archiveRevokedAgents } from "./agents-archive";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
-import { deployFindings, readDeployOutcomes } from "./deploy-outcomes";
+import { DEPLOY_ROSTER, deployFindings, readDeployOutcomes } from "./deploy-outcomes";
 import {
   buildSnapshot,
   probeSite,
@@ -1090,14 +1090,14 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
   // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
-  for (const namespace of LOOP_ROSTER) {
+  for (const namespace of DEPLOY_ROSTER) {
     // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
     const read = await attempt(`deploys ${namespace}`, async () => ({ newest: await readDeployOutcomes(env, namespace) }));
     if (!read) continue;
     deploysRead++;
     if (read.newest) out.push(...deployFindings(namespace, read.newest));
   }
-  if (deploysRead === LOOP_ROSTER.length) ran.add("deploys");
+  if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
 
   // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
   // check below cannot run this pass: nothing is probed on a guess, and an open site

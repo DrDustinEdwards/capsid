@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deployFindings, outcomeFrom, type DeployRow } from "../src/deploy-outcomes.ts";
+import { DEPLOY_ROSTER, deployFindings, isLiveGateJob, outcomeFrom, type DeployRow } from "../src/deploy-outcomes.ts";
 import { owningCheck } from "../src/watcher.ts";
 
 // The memory of a rollback (docs/design/design-merge-pipeline.md section 6, PR 6): what a
@@ -59,4 +59,13 @@ test("a rollback and a failed rollback are findings the deploys check owns; the 
   assert.equal(owningCheck("deploy-rollback-failed-capsid"), "deploys");
   // deploy-drift stays the master-head check's.
   assert.equal(owningCheck("deploy-drift-capsid"), "master head");
+});
+
+test("isLiveGateJob takes the bare name and a called workflow's \"<caller> / live gate\", nothing looser", () => {
+  for (const ok of ["live gate", "deploy / live gate"]) assert.equal(isLiveGateJob(ok), true, ok);
+  for (const no of ["live gate 2", "deploy/live gate", "live gates", "xlive gate", "deploy", ""]) assert.equal(isLiveGateJob(no), false, no);
+});
+
+test("the deploy roster is the improve loop's five plus carrel", () => {
+  assert.deepEqual([...DEPLOY_ROSTER], ["capsid", "dustinedwards", "foxhound", "foxing", "germomics", "carrel"]);
 });
