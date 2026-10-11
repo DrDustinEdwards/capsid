@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "capsid": {
+      "type": "http",
+      "url": "https://mcp.dustinedwards.info/ops/mcp"
+    }
+  }
+}
