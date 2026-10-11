@@ -53,8 +53,9 @@ import { pendingProposals } from "./canon";
 //        one batch (src/task-runs.ts, TASKS)
 //     2  gatherInbox (src/inbox.ts): the blocked jobs and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 10 gets plus one per LOOP_ROSTER namespace (5 today, so 15): gatherInbox's own
-//     reads of ops:snapshot and the awaiting-seat set, then ops:snapshot, the
+//   KV, 11 gets plus one per LOOP_ROSTER namespace (5 today, so 16): gatherInbox's own
+//     reads of ops:snapshot, the awaiting-seat set and the merge units' report
+//     (src/merge-units.ts), then ops:snapshot, the
 //     awaiting-seat set, the refresh stamp, the improve mode, the budget caps,
 //     seatStartState's two keys, the overnight switch's mode (its decision record is
 //     read only while the mode is subscription), and each namespace's pause key.
@@ -65,7 +66,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 10 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 11 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a

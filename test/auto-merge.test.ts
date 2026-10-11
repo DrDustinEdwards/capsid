@@ -22,6 +22,7 @@ import {
 } from "../src/auto-merge-policy.ts";
 import { FILES_LIMIT } from "../src/github/pr-files.ts";
 import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import { SUSPENDED_KEY } from "../src/merge-units.ts";
 import { LOOP_ROSTER, ROSTER, onLoopRoster, onRoster, scheduledFor } from "../src/improve-schema.ts";
 import { signTaskBody } from "../src/improve-task.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
@@ -899,6 +900,7 @@ test("the merge audit row names the policy version, the job, the driver and both
   const row = mergeParams("1", facts, verdict.merge ? verdict.passed : [], "f852780aabbccddeeff0011223344556677889900", new Date("2026-09-12T03:00:00Z"));
   assert.deepEqual(row, {
     policy_version: "1",
+    path_class: null,
     repo: "DrDustinEdwards/capsid-mcp",
     pr: 23,
     head_sha: "bfae8ca9012345678901234567890123456789ab",
@@ -1743,4 +1745,41 @@ test("with the approvals table missing the tick runs as the policy alone", async
   const { outcome, merges } = await tickWith(env, tickRoutes(SRC));
   assert.equal(outcome.merged, false);
   assert.equal(merges, 0);
+});
+
+// Suspended merge units (docs/design/design-merge-pipeline.md section 7, PR 9;
+// src/merge-units.ts): a rollback of an unattended merge suspends its unit, and the tick
+// then holds back what the policy would merge in that unit. It only narrows.
+
+async function suspendedTick(files: string[], suspended: string | null) {
+  const env = await enabledEnv();
+  if (suspended !== null) await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(SUSPENDED_KEY, suspended);
+  return tickWith(env, tickRoutes(files));
+}
+
+test("PLANT: a suspended unit holds back a PR the policy would merge, as class approve", async () => {
+  const { outcome, merges } = await suspendedTick(["docs/autonomy.md"], JSON.stringify([{ unit: "capsid/docs", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  assert.equal(merges, 0, "a PR in a suspended unit was merged unattended");
+  assert.equal(outcome.merged, false);
+  assert.equal(outcome.failed, "unit_suspended");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.match(outcome.merge_class?.reasons[0] ?? "", /capsid\/docs is suspended/);
+});
+
+test("a suspension of another unit leaves the PR to merge", async () => {
+  const { outcome, merges } = await suspendedTick(["docs/autonomy.md"], JSON.stringify([{ unit: "capsid/dashboard-css", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  assert.equal(merges, 1);
+  assert.equal(outcome.merged, true, outcome.why ?? "");
+});
+
+test("a suspension list that cannot be read holds every unit back this tick", async () => {
+  const { outcome, merges } = await suspendedTick(["docs/autonomy.md"], "not json");
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "unit_suspended");
+  assert.match(outcome.why ?? "", /could not be read/);
+});
+
+test("the merge audit row carries the PR's path class, so a rollback can find its unit", () => {
+  const params = mergeParams("6", { repo: "o/r", number: 1, headSha: "a".repeat(40), jobId: "job_x", jobClaimedBy: "agent:d" } as never, [], "b".repeat(40), new Date("2026-10-11T00:00:00Z"), "docs");
+  assert.equal(params.path_class, "docs");
 });

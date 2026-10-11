@@ -1,3 +1,4 @@
+import { readSuspended, unitKey } from "./merge-units";
 import type { Env } from "./env";
 import { mergeClass, type Classification, type MergeClass, type PathClass } from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
@@ -144,8 +145,9 @@ export function declineParams(
   policyVersion: string,
   // Only the PR and head, so a PR declined before its facts were read is audited alike.
   facts: Pick<PrFacts, "repo" | "number" | "headSha">,
-  // A policy refusal, or "head_moved" when GitHub refused the pinned merge.
-  verdict: { failed: PolicyCheck | "head_moved"; why: string; passed: PolicyCheck[] },
+  // A policy refusal, "head_moved" when GitHub refused the pinned merge, or
+  // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts).
+  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended"; why: string; passed: PolicyCheck[] },
   now: Date
 ): Record<string, unknown> {
   return {
@@ -165,10 +167,14 @@ export function mergeParams(
   facts: PrFacts,
   passed: PolicyCheck[],
   mergeSha: string | null,
-  now: Date
+  now: Date,
+  // The merge unit's path class (src/merge-units.ts), so a later rollback of this merge
+  // can be traced to its unit.
+  pathClass: string | null = null
 ): Record<string, unknown> {
   return {
     policy_version: policyVersion,
+    path_class: pathClass,
     repo: facts.repo,
     pr: facts.number,
     head_sha: facts.headSha,
@@ -215,6 +221,9 @@ async function auditDeclineOnChange(
     logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` });
   }
 }
+
+// The merge units held back this tick (src/merge-units.ts).
+type Suspended = ReadonlySet<string> | "all";
 
 export interface AutoMergeOutcome {
   namespace: string;
@@ -268,6 +277,16 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   }
 
   const outcomes: AutoMergeOutcome[] = [];
+
+  // The merge units a rollback suspended (src/merge-units.ts). A suspension only narrows,
+  // so a list that cannot be read holds every unit back this tick rather than none.
+  let suspended: Suspended;
+  try {
+    suspended = new Set((await readSuspended(env.APP_KV)).map((s) => s.unit));
+  } catch (err) {
+    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` });
+    suspended = "all";
+  }
 
   for (const namespace of policy.namespaces) {
     let owner: string;
@@ -329,7 +348,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
-        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null);
+        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended);
       } catch (err) {
         const why = err instanceof Error ? err.message : String(err);
         logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
@@ -407,15 +426,29 @@ async function judgeOnePr(
   outcomes: AutoMergeOutcome[],
   now: Date,
   // The pull request's open approval (src/pr-approvals.ts), or null.
-  approval: OpenApproval | null = null
+  approval: OpenApproval | null = null,
+  // The merge units a rollback suspended, or "all" when they could not be read.
+  suspended: Suspended = new Set()
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   const verdict = evaluatePolicy(facts, allowedAuthors);
-  const merge_class = mergeClass(facts, verdict, pr.draft === true);
+  let merge_class = mergeClass(facts, verdict, pr.draft === true);
+  // A suspended unit (src/merge-units.ts): the policy would merge it, but a rollback of an
+  // unattended merge in the same unit holds it back, so it falls to class approve.
+  const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
+  const held = verdict.merge && (suspended === "all" || (unit !== null && suspended.has(unit)));
+  if (held) {
+    merge_class = {
+      class: "approve",
+      path_class: merge_class.path_class,
+      reasons: [suspended === "all" ? "the suspended merge units could not be read, so nothing merges unattended this tick" : `the merge unit ${unit} is suspended after a rollback`],
+    };
+  }
+  const merges = verdict.merge && !held;
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
   // policy leaves open but Dustin approved merges here once CI is green on the approved
   // sha, or its approval is voided, expired or refused, and the PR is judged as before.
-  if (!verdict.merge && approval) {
+  if (!merges && approval) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
       outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: done.why, passed: verdict.passed, merge_class });
@@ -439,6 +472,12 @@ async function judgeOnePr(
       verdict.failed,
       improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now))
     );
+    return;
+  }
+  if (held) {
+    const hold = { failed: "unit_suspended" as const, why: merge_class.reasons[0]!, passed: verdict.passed };
+    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...hold, merge_class });
+    await auditDeclineOnChange(env, facts, hold.failed, improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, hold, now)));
     return;
   }
   // merge_method "merge", because a squash would not keep the audited head sha. Pinned
@@ -471,7 +510,7 @@ async function judgeOnePr(
       env.DB,
       "auto-merged",
       namespace,
-      mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now)
+      mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now, merge_class.path_class)
     ),
   ]);
 }

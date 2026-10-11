@@ -4,6 +4,7 @@ import { readSiteConfig } from "./ops-sites";
 import { readSnapshot } from "./ops-snapshot";
 import { prUrlsFromJob } from "./outcome-prs";
 import { readReports } from "./inbox-report";
+import { unitInboxItems } from "./merge-units";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -31,7 +32,7 @@ import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;
-const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set(["blocked-job", "question", "pr", "report"]);
+const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set(["blocked-job", "question", "pr", "report", "proposal"]);
 
 /** The worst severity of a set of items. */
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
@@ -97,6 +98,10 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
       add(site.namespace, { title: `${site.name} is down${site.error ? ` (${site.error})` : ""}`, kind: "site-down", link: site.origin, since: site.checked_at });
     }
   }
+
+  // The merge units' proposals and suspensions (src/merge-units.ts): a widening or a
+  // narrowing only Dustin signs.
+  for (const { namespace, item } of await unitInboxItems(env.APP_KV)) add(namespace, item);
 
   // What each app last reported about itself, while it is under 6 hours old.
   for (const [namespace, items] of await readReports(env.APP_KV, now)) {

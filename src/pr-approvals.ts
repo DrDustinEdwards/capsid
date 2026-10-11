@@ -44,6 +44,9 @@ interface Target {
   number: number;
   head_sha: string;
   class: string;
+  // The tick's path class for it (src/merge-class.ts), the unit promotion counts in
+  // (src/merge-units.ts). Null on an undo, which writes no row.
+  path_class: string | null;
   open: OpenApproval | null;
 }
 
@@ -101,7 +104,7 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   if (undo) {
     const missing = nums.filter((n) => !openBy.has(n));
     if (missing.length) return refused(`${missing.map((n) => `#${n}`).join(", ")} ${missing.length === 1 ? "has" : "have"} no open approval to undo: it was merged, voided or never approved.`);
-    const targets = nums.map((n) => ({ number: n, head_sha: openBy.get(n)!.head_sha, class: "", open: openBy.get(n)! }));
+    const targets = nums.map((n) => ({ number: n, head_sha: openBy.get(n)!.head_sha, class: "", path_class: null, open: openBy.get(n)! }));
     return {
       ok: true,
       repo: full,
@@ -133,7 +136,7 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
     if (!row || !cls) return void problems.push(`#${n} has no class: the tick has not classed it into the awaiting-seat set yet, so nothing says what kind of approval it needs.`);
     if (cls === "seat") return void problems.push(`#${n} is class seat (${(row.class_reasons ?? []).join("; ") || "a step outside a merge"}): it stays with the seat.`);
     if (cls === "wait") return void problems.push(`#${n} is class wait (${(row.class_reasons ?? []).join("; ") || "CI or draft"}): nobody acts yet.`);
-    targets.push({ number: n, head_sha: head.sha, class: cls, open: openBy.get(n) ?? null });
+    targets.push({ number: n, head_sha: head.sha, class: cls, path_class: row.path_class ?? null, open: openBy.get(n) ?? null });
   });
   if (problems.length) return refused(`${nums.length > 1 ? "Nothing in the batch was approved. " : ""}${problems.join(" ")}`);
   const typed = targets.filter((t) => t.class === "typed");
@@ -182,9 +185,9 @@ export async function performApproval(env: Env, actor: string, plan: Extract<App
     for (const t of plan.targets) {
       statements.push(
         env.DB.prepare(
-          `INSERT INTO pr_approvals (repo, pr, head_sha, class, status, approved_by, surface, batch_id, reason, approved_at)
-           VALUES (?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8, ?9)`
-        ).bind(plan.repo, t.number, t.head_sha, t.class, actor, plan.surface, batchId, reason, at),
+          `INSERT INTO pr_approvals (repo, pr, head_sha, class, status, approved_by, surface, batch_id, reason, approved_at, namespace, path_class)
+           VALUES (?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+        ).bind(plan.repo, t.number, t.head_sha, t.class, actor, plan.surface, batchId, reason, at, plan.namespace, t.path_class),
         auditStatement(env.DB, actor, "pr-approved", plan.namespace, null, { repo: plan.repo, pr: t.number, head_sha: t.head_sha, class: t.class, surface: plan.surface, batch_id: batchId })
       );
     }
