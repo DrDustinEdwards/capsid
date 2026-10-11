@@ -261,6 +261,22 @@ To set it up, the seat, one step at a time:
 
 Until the key is set the panel says so and the `push` step sends nothing. The improve loop's attempt code cannot see the key (`AttemptEnv`).
 
+## Daily digest
+
+Everything that is not urgent enough for a phone alert waits for one email a day (`src/digest.ts`; docs/design/design-merge-pipeline.md section 5, DECIDE 5). Once a UTC day after 12:00 the tick's `digest` step mails `ALERT_EMAIL`: the pull requests waiting on Dustin by class (a typed one says to approve it by typing its number), questions, blocked jobs, rollbacks, and what finished or became ready since the last digest that was sent. It reads the same reader as `capsid_work_jobs` action `list` view `digest`, so the mail and the Portal agree. A send Cloudflare refuses is recorded for the day (KV `digest:last`) and shown in Settings, and the next day's digest covers both days.
+
+**It does nothing until Email Routing is on.** Cloudflare sends from a Worker only from a domain with Email Routing turned on and only to a verified destination address, and turning it on is an account setting only Dustin can change. So the digest needs the `send_email` binding `EMAIL`, `ALERT_EMAIL`, `ALERT_FROM` and the var `EMAIL_ROUTING` set to `"on"`. Until all four are set, every tick returns at once, and Settings, **Daily digest**, says which is missing.
+
+Turning it on, one step at a time:
+1. **Dustin:** at dash.cloudflare.com open the dustinedwards.info zone, then **Email**, **Email Routing**. If it says the domain already receives mail through another provider (existing MX records), stop and tell the seat: turning Email Routing on would move that mail.
+2. **Dustin:** press **Get started** (or **Enable Email Routing**), then **Add records and enable**. Cloudflare adds the MX and SPF records itself.
+3. **Dustin:** on **Destination addresses**, **Add destination address**: the address the digest should go to.
+4. **Dustin:** open the verification email Cloudflare sends there and press **Verify email address**. The address shows **Verified**.
+5. **The seat:** in the real `wrangler.jsonc` (never committed), add `"send_email": [{ "name": "EMAIL", "destination_address": "<the verified address>" }]` and the vars `ALERT_EMAIL` (the verified address), `ALERT_FROM` (`capsid@dustinedwards.info`) and `EMAIL_ROUTING: "on"`. Then `npm run deploy`.
+6. **Dustin:** Settings, **Daily digest**, now says **On**. The first email arrives after 12:00 UTC.
+
+The same binding and addresses also turn on the watcher's site health mail (above, "Site repairs").
+
 ## Using it
 
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.
@@ -330,7 +346,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
 - **`GET /portal/api/maintenance`** (`src/portal-maintenance.ts`) returns `PortalMaintenance`, uncached: the list the daily maintenance pass stored, the one `capsid_run_improve` action `status` serves, with `generated` null before the first pass, and `read`, the open pull requests, branches, repos, compared deploys and driver disk readings the pass read. It reads KV only.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `capsid_admin_read_claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
-- **`GET /portal/api/push`** and **`POST /portal/api/push`** (`src/push.ts`), the phone alerts above. The GET returns `PortalPush`: the VAPID public key (null, with the reason, when the key is not set) and the devices with alerts on, never an endpoint. The POST takes `{op: "on", subscription, label}`, `{op: "off", id}` or `{op: "test"}` behind the preview's checks (same-origin, the body cap, CSRF), and returns `PortalPush`. Refusals: 400 a bad subscription or op, 409 a device already off or ten already on, 503 no key.
+- **`GET /portal/api/push`** and **`POST /portal/api/push`** (`src/push.ts`), the phone alerts above. The GET returns `PortalPush`: the VAPID public key (null, with the reason, when the key is not set), the devices with alerts on (never an endpoint), and `digest`, the daily digest's state ("Daily digest", above). The POST takes `{op: "on", subscription, label}`, `{op: "off", id}` or `{op: "test"}` behind the preview's checks (same-origin, the body cap, CSRF), and returns `PortalPush`. Refusals: 400 a bad subscription or op, 409 a device already off or ten already on, 503 no key.
 - **`POST /portal/api/sign-out`**, above.
 - **Any other `/portal/api/` path** is a JSON 404 behind the gate, never the app's page.
 - **`/portal/`** and everything under it serves the built app from the `ASSETS` binding, only after the gate. The page gets `no-store` and its own CSP (scripts, styles and fetches from this origin only); hashed files under `/portal/assets/` are cached privately for a year. A browser loading an unknown path as a page gets the app's page, so the app's own routes load; a missing file stays a 404. With no `ASSETS` binding the admin gets a 503 saying the Portal is not deployed.
