@@ -304,7 +304,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     findings: oversize.map((p) => ({
       check: "rule_doc_caps",
       subject: `${namespace}/${p.path}`,
-      detail: `${p.bytes} bytes, over its ${p.cap}-byte cap (conventions 10.2 and 10.3)`,
+      detail: `${p.bytes} bytes, over its ${p.cap}-byte cap (capsid/conventions.md, Capsid section)`,
     })),
   });
   const stale = problems.filter((p) => p.stale.length > 0);

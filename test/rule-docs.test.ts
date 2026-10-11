@@ -8,7 +8,7 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
 // The rule documents' two checks (src/rule-docs.ts, job_c13dc0d4f22f): the cap
-// (conventions 10.2 and 10.3) and stale tool names. Each is planted and seen red here; the
+// (capsid/conventions.md, Capsid section) and stale tool names. Each is planted and seen red here; the
 // maintenance query runs against real D1 in test-integration/maintenance.test.ts.
 
 test("which documents are rule documents, and their caps", () => {

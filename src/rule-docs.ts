@@ -1,5 +1,5 @@
 // The rule documents: the ones sessions follow as rules rather than read as records
-// (conventions 10.2 and 10.3; job_c13dc0d4f22f). Two checks hold them:
+// (capsid/conventions.md, the Capsid section; job_c13dc0d4f22f). Two checks hold them:
 //
 //   - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB.
 //   - stale tool names. A rule document names no tool or action the Worker does not
@@ -168,7 +168,7 @@ export function ruleDocWriteRefusal(namespace: string, path: string, before: str
   if (!problem) return null;
   const reasons: string[] = [];
   if (problem.oversize && (before === null || byteLength(after) > byteLength(before))) {
-    const next = path === "core.md" ? "Rewrite it shorter: current facts only (conventions 10.2)." : DECISIONS.test(path) ? "Open the next volume (decisions-vol-<n>.md) or fold rulings into the rules they changed." : "Cut it, or split it by subject (conventions 10.3).";
+    const next = path === "core.md" ? "Rewrite it shorter: current facts only (capsid/conventions.md, Capsid section)." : DECISIONS.test(path) ? "Open the next volume (decisions-vol-<n>.md) or fold rulings into the rules they changed." : "Cut it, or split it by subject (capsid/conventions.md, Capsid section).";
     reasons.push(`it would be ${problem.bytes} bytes, over the ${problem.cap}-byte cap for this rule document${before === null ? "" : ` and larger than the ${byteLength(before)} bytes stored`}. ${next}`);
   }
   const had = multiset(before === null ? [] : staleToolNames(before).map((s) => s.text));
