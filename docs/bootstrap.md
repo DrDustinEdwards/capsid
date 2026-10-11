@@ -46,7 +46,7 @@ npx wrangler secret put ACCESS_TEAM_DOMAIN       # https://<team>.cloudflareacce
 npx wrangler secret put ACCESS_SAAS_CLIENT_ID    # the Access for SaaS app "Capsid"
 npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
-npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (README, Co-owner)
+npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
 npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys
@@ -486,3 +486,56 @@ node scripts/schedule-drivers.mjs --remove --namespace capsid --apply
 
 A namespace with no `~/.capsid/agent-<ns>-driver.key` is skipped by name rather than
 scheduled on whatever credential happens to be configured.
+
+## 11. A fresh install, step by step
+
+The sections above explain each part. This is the order to do them in. The host names in `src/mcp-host.ts` (`MCP_HOST`) and `src/portal-host.ts` (`PORTAL_HOST`) are this deployment's own; the examples below use a workers.dev address.
+
+1. Install dependencies with `npm install`.
+2. Create your own Cloudflare resources:
+
+   ```
+   npx wrangler d1 create capsid
+   npx wrangler kv namespace create APP_KV
+   npx wrangler kv namespace create OAUTH_KV
+   npx wrangler r2 bucket create capsid-media
+   npx wrangler r2 bucket create capsid-improve-holdout   # only if you run the self-improvement loop
+   ```
+
+3. Copy `wrangler.jsonc.example` to `wrangler.jsonc` and fill in the ids from step 2. **`APP_KV` and `OAUTH_KV` must be different namespace ids.** The real `wrangler.jsonc` is gitignored. Never commit it.
+4. Apply the migrations (idempotent, `IF NOT EXISTS` everywhere) with `npx wrangler d1 migrations apply capsid --remote`.
+5. Generate an operator key and store its sha256 hash with `npx wrangler secret put OPERATOR_KEY_HASH`. Keep the raw key safe; headless clients send it as the bearer token on `/ops/mcp`. The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (section 8), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.mjs` authenticates with `CAPSID_OPERATOR_KEY` and nothing else (see "Minting once no operator key exists").
+6. Create a Cloudflare Access for SaaS application for the logins, in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
+   - Redirect URLs, all spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow, `https://capsid.<your-subdomain>.workers.dev/portal/callback` for Capsid Portal, and `https://<your Portal host>/callback` if the Portal has its own host.
+   - Scopes openid, email and profile, PKCE on, and a policy that allows your email only (and any co-owner's).
+   - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
+7. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
+8. Optional, for the self-improvement loop: `IMPROVE_SCORE_SECRET` (the root of the per-repo score-report keys) and, for `api` mode, `ANTHROPIC_API_KEY`. The loop stays off until `improve_mode` is set. `IMPROVE_SCORE_SECRET` also signs jobs: without it the work queue refuses to post one.
+9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `CF_ACCESS_SYNC_TOKEN` (`POST /ops/access-sync`); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the holdout and the backup mirror.
+10. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
+11. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
+
+MCP clients cache the tool list at connect time. After deploying new tools, reconnect the connector or start a new chat to see them.
+
+Optional parts stay hidden or inert until configured:
+
+- With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
+- Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
+- The telemetry receiver (`/ops/otlp/v1/*`, docs/telemetry.md) and the hook receiver (`/ops/hooks`, docs/hooks.md) are live but store nothing until a Claude Code session is configured to send to them with a key.
+- The improve loop, auto-merge and the nightly driver are each off by default (section 12).
+
+## 12. Switches
+
+Three switches, all off by default. Each is turned on separately.
+
+- **The improve loop** runs only when `improve_mode` in `APP_KV` is `subscription` or `api`, set by `capsid_admin_control_improve` action `mode`. Anything unreadable or unexpected falls back to `off`.
+- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **The nightly driver** exists only after `node scripts/schedule-drivers.mjs --install --namespace <ns> --apply`. The task it creates is disabled until it is enabled by hand (section 10).
+
+Seat-started sessions have a fourth switch, `seat_start:enabled` in `APP_KV`, which reads on only for the value `on` (docs/seat-start.md).
+
+Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16; the loop is still off.
+
+## 13. Checks before a push
+
+Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.

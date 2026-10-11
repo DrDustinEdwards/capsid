@@ -62,6 +62,13 @@ The hardened run must also show that:
 - the `runner-key-minted` audit row lists the claim names the token carried, including whether it carries `job_workflow_ref`
 - the `SESSION_DIAG` line, printed by the step after the Action, shows the `capsid` MCP server connected, `capsid_jobs_loaded: true`, `hooks_fired: false`, and no denied tools. That step prints only server names and statuses, denied tool names, booleans, and in `denied_bash` the first two words of each denied Bash command, each word replaced by `<redacted>` unless it looks like a command or flag word. The Action's own log hides the transcript.
 
+What the pair of runs cannot show:
+
+- `oidc_request_in_env` reads `false` in both runs (the weakened job has no id-token permission), so the hardened `false` for it is not evidence the probe could have seen it.
+- `github_curl` reads `true` in the hardened run by design: Bash can reach `github.com`, the one host it needs for `git push`.
+- The canary measures only what the probe checks, from inside a Bash command, on one pinned Claude Code version. MCP calls, file tools and WebFetch run outside the Bash sandbox and are bounded by harden-runner, the tool allowlist and the job-bound key, not by the probe's checks.
+- It does not test what a session does with the access it is meant to have, such as the content of the pull request it opens.
+
 The session runs with `ENABLE_TOOL_SEARCH: "false"`, so its MCP tools load at startup. Left unset, Claude Code defers every MCP tool behind `ToolSearch`, which the allowed tools do not name. The first hardened run (actions run 36286555290) logged in to Capsid and never claimed its job for that reason.
 
 The first passing hardened run (actions run 36296347138) ran harden-runner in `audit`. Its post-step log lists every host the run reached and the process that reached it, and that list, less two hosts, is now `allowed-endpoints` with the policy in `block`:

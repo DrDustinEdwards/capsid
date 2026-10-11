@@ -1,84 +1,57 @@
 # Capsid
 
-## What Capsid is
+Capsid is a Cloudflare Worker that serves a knowledge base over MCP and coordinates AI coding agents working across a set of GitHub repositories. It has one owner (`ADMIN_EMAIL`), plus optional co-owners named in `CO_OWNER_EMAILS`. It is not a multi-user service.
 
-Capsid is a single-user Cloudflare Worker that serves a knowledge base over MCP and coordinates AI coding agents working across a set of GitHub repositories. Documents, versions, jobs, agents and the audit log live in D1 (with FTS5 search), backups and the loop's hidden test suites live in R2, and caches and OAuth state live in two separate KV namespaces. On top of that store it runs a signed work queue, issues scoped credentials per namespace and per job, records what an agent claims it did apart from what GitHub confirms, snapshots every overwrite and delete into `document_versions` and appends to `audit_log`, and serves the Capsid Portal, an admin app at `/portal/`. The repository was renamed from `capsid-mcp` to `DrDustinEdwards/capsid` on 2026-09-12; the code names itself by that name in `SELF_REPO`.
+## Why it exists
+
+AI agents forget between sessions, and each repository has its own rules. Capsid keeps one shared store of decisions, rules and jobs that every agent reads, gives each agent only the access its job needs, and records what happened. The record keeps what an agent says it did apart from what GitHub confirms.
+
+## How it is different
+
+- **Scoped credentials.** Every caller is an agent with its own key and scopes, and one function, `checkScope`, is the only place a grant is checked.
+- **A signed work queue.** Jobs carry a signed body, a lease and gates that stop at a push, a deploy, a secret or a merge until a person approves.
+- **Claims and verified outcomes.** The driver's own statement is stored beside what GitHub shows, so the two can be compared.
+- **Every overwrite and delete is kept.** Each one snapshots the old version and writes an audit row.
+- **Off by default.** The improve loop, auto-merge and the nightly driver each need to be turned on.
 
 ## Stack
 
-- Cloudflare Worker (TypeScript), stateless MCP via `createMcpHandler` from the Agents SDK
-- [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) wrapping the handler: OAuth 2.1 with PKCE, clients known by their Client ID Metadata Document (no dynamic registration), tokens in KV
-- Cloudflare Access for SaaS (OIDC) for the MCP and Capsid Portal logins, locked to one admin email (docs/auth.md)
-- A separate GitHub App for repo access, minting short-lived installation tokens
-- D1 for documents, versions, namespaces, jobs, agents and the audit log, with FTS5 search
-- R2: `MEDIA` for backups, the markdown mirror and CSP reports (the binding name is historical; nothing stores or serves media, and the Worker never reads this bucket back); `HOLDOUT` for the loop's hidden test suites, bound separately so attempt code cannot reach it
-- KV, two separate namespaces: `APP_KV` for the Worker's caches, `OAUTH_KV` for the provider's clients, grants and tokens. They must not be the same namespace (see Clone setup)
+- Cloudflare Worker (TypeScript), stateless MCP through the Agents SDK, wrapped by [workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider) (OAuth 2.1 with PKCE)
+- Cloudflare Access for SaaS (OIDC) for the MCP and Portal logins, and a separate GitHub App for repo access
+- D1 for documents, versions, jobs, agents and the audit log, with FTS5 search
+- R2 for backups and the loop's hidden test suites (two buckets), and two KV namespaces (`APP_KV` for caches, `OAUTH_KV` for OAuth state)
+
+## Quick start
+
+A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstrap.md) is written for that reader, and its section 11 ([a fresh install, step by step](docs/bootstrap.md#11-a-fresh-install-step-by-step)) lists the commands in order. Copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored), fill in your ids, apply the migrations, set the secrets and run `npm run deploy`. Never commit `wrangler.jsonc`, `.dev.vars`, a key or real vault content.
 
 ## How agents connect
 
-Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints. Every caller resolves to an agent, and `checkScope` in `src/scope.ts` is the one place a grant is checked. Detail: [docs/auth.md](docs/auth.md), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
+Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints.
 
-- **`/mcp`, OAuth, for the single admin.** OAuth 2.1 with PKCE through `workers-oauth-provider`. A client identifies itself by a Client ID Metadata Document (CIMD): its client id is the URL of a JSON document naming its redirect URIs. Grok and Gemini, which cannot, use a tightened dynamic registration at `/register` that admits only exact, allowlisted connector callbacks and grants nothing on its own (`src/dcr.ts`). Every token is bound to this server's resource (RFC 8707). Sign-in goes upstream to Cloudflare Access for SaaS (OIDC), and the verified email must equal `ADMIN_EMAIL` or a `CO_OWNER_EMAILS` entry exactly, a check that runs again on every `/mcp` request.
-- **`/ops/mcp`, bearer keys, for agents and cron.** A key is matched by its sha256. Scopes have five axes (namespaces, repos, tools, grants, blast-radius flags), and a new agent gets read on its named namespaces and no flags.
-- **Per-namespace driver keys.** `scripts/mint-agents.mjs` mints one driver agent per namespace and writes its key to a local file without printing it. A driver's `repos` axis is set from its namespace's live repo mapping.
-- **Per-job runner keys.** A session that the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job (`src/runner-key.ts`). The token's claims are checked against the repo's own seat-session workflow, the `seat` environment and a GitHub-hosted runner. The key reaches a short list of tools, works only its own job, stops resolving when that job leaves its live states, and is issued once per start.
-- **Protocol version.** MCP 2026-07-28, stateless, through `@modelcontextprotocol/server` 2.0.0 and `agents` 0.24.0, the stack Carrel runs (`src/mcp-handler.ts`). A client that still opens with `initialize` is served 2025-11-25 by a shim, `src/legacy-era.ts`, which states when it is deleted. Cacheable results carry `ttlMs` and `cacheScope` from the SDK's own `cacheHints` option (`src/cache-hints.ts`).
-- **Two servers.** Capsid (14 tools) is the working surface, on `/mcp` and `/ops/mcp`. Capsid Admin (8 tools) holds what changes who may do what or reads across every namespace (namespaces, agents, claims, ops state, the Portal's controls, the improve loop's controls, site keys and "what needs me"), on `/mcp/admin` for the admin's OAuth session and `/ops/mcp/admin` for the admin's operator key. Every Capsid Admin tool is admin only. Its risky actions (registering, re-mapping or deleting a namespace, minting, re-scoping or revoking an agent, performing a control, any improve loop control, setting a site key) need an Access sign-in or a successful step-up action in the last 2 hours (and never more than 12 hours after the sign-in) from an OAuth session; a key holder is not stepped up, because its key is the credential (`STEP_UP` in `src/scope.ts`).
-- **Tools.** 22 tools. The count is not written down anywhere: `src/counts.ts` derives it from the keys of `TOOL_GRANTS` in `src/scope.ts`, and tests hold that table to the tools actually registered. Every tool in `tools/list` carries all four annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) from `src/tool-annotations.ts`. They are hints to the client and enforce nothing.
+- **Capsid** (14 tools) is the working surface, on `/mcp` for the owner's OAuth login and `/ops/mcp` for agents and cron that hold a bearer key.
+- **Capsid Admin** (8 tools) holds what changes who may do what or reads across every namespace. It is on `/mcp/admin` and `/ops/mcp/admin`, for the owner only, and its risky actions need a recent sign-in.
+- **22 tools in all.** `src/counts.ts` derives the count from `TOOL_GRANTS` in `src/scope.ts`, and tests hold that table to the tools actually registered.
+- **Clients.** Claude and ChatGPT identify themselves by a Client ID Metadata Document. Grok and Gemini use a tightened dynamic registration at `/register` that admits only allowlisted callbacks and grants nothing on its own (`src/dcr.ts`).
+- **Job keys.** A session the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job.
 
-## The work queue and its gates
+Detail: [docs/auth.md](docs/auth.md) (including the full endpoint list), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
 
-A job is a title and a signed body; the body is the prompt a driver runs. The table is the source of truth for status, and every job is mirrored to `<namespace>/jobs/<id>.md` in the same batch as each transition, so `capsid_start_session` and `capsid_find_docs` action `search` see the queue. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md).
+## The work queue and claims
 
-- **post.** The body is signed. `claim` verifies it first, and a job edited after signing is marked failed. `post` can require blast-radius flags (`required_flags`), a track record (`min_record`) and a reviewer (`review_required`).
-- **claim and heartbeat.** A claim is a four-hour lease, and each held job keeps its own. A caller holds one claimed job unless the admin raised its `max_claims` on the `capsid_admin_manage_agents` tool, and never two jobs on the same repo (a design job is the exception). `claim` also returns the model Capsid picked for the job. `heartbeat` extends the lease, and a five-minute tick returns an expired lease to the queue.
-- **block.** A job that reaches a push, a deploy, a secret, a live migration or a merge stops with the exact command a person must run. With `question: true` it stops with a question instead, marked in `capsid_run_improve` action `status` and the Portal, and the seat answers in a resume note. A `block` or `complete` that names a pull request also reports any other open pull request in the repo that changes the same files.
-- **resume and the gate policy.** `resume` returns a blocked job with a fresh lease. A driver cannot approve its own gate with a plain resume. The signed gate policy defines three classes (`push_branch`, `open_pr`, `additive_migration`). A driver may resume its own job under the policy only when every class matched is a branch push or a pull request. An additive migration stays the seat's to approve, a list of never-approvable commands is checked first, and everything else waits on a person. Two corrections per job, then the admin must decide.
-- **review_required.** The driver cannot complete, block or fail a job carrying a pull request until a `REVIEW:` comment posted through Capsid by a `can_comment_pr` holder ends in `APPROVE`, `CHANGES` or `BLOCK`. An `APPROVE` counts only if it quotes the pull request's current head sha.
-- **edit and stale.** `edit` (the admin or a `can_merge` caller, never a driver) changes the title, body, priority or gate of a queued or blocked job. The body is signed again, the replaced version is kept and shown by `list` for that job, and an audit row is written. `list` with `stale: true` returns blocked or claimed jobs that look stuck: unchanged for three days, resumed by the merge-resume step and not finished in 24 hours, or blocked on pull requests that have all settled.
-- **supersede, release, record and admin fail.** `supersede` ends a job replaced before any work was done and writes no outcome row. `release` returns another credential's claimed job to the queue. `record` lets the seat write the outcome of work done on a queued job without claiming it, with the evidence verified against GitHub as for `complete`. The admin or a `can_merge` caller may `fail` a job someone else holds, which writes the holder's outcome row.
-
-## Claims and verified outcomes
-
-Capsid keeps what an agent says apart from what it can check. Detail: [docs/work-queue.md](docs/work-queue.md) ("Claims"), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
-
-- **`job_outcomes`** is one row per finished job, written once at `complete` or `fail`. Each pull request named in the evidence is read from GitHub, so the merge, commit and file counts are GitHub's, and a per-field `verified` flag says which numbers were checked.
-- **`job_claims`** records the driver's own statement (pull requests, tests, deploy state, files touched, self-reported versions) exactly as sent, in the same batch as the transition and before any verification runs.
-- **`job_evaluations`** holds one row per check, with the claimed and verified values side by side and whether they agree. The columns follow OpenTelemetry's `gen_ai.evaluation.result` event (`name`, `score_value`, `score_label`, `explanation`).
-- **`job_touches`** logs each human or seat touch (gate, resume, approval, correction, release, supersede, seat fail, acted-on review), with how long the job waited where the touch ended a wait.
-- **Export.** The admin-only `capsid_admin_read_claims` tool reads one job, aggregates agreement per agent and namespace, or pages a table. `scripts/export-claims.mjs --out <dir>` writes the four tables as JSONL with a hashed manifest, and `--verify <dir>` checks the hashes.
-- **Cost.** Claude Code's OpenTelemetry export, received at `/ops/otlp/v1/metrics`, is summed per job onto the outcome row as `cost_usd`, token counts and `active_seconds`.
-
-A field nobody reported is `NULL`, not `0`. That holds for evidence the driver did not give, for a claim field it did not state, and for a cost column whose metric never arrived.
+A job is a title and a signed body, and the body is the prompt a driver runs. A driver claims a job on a four-hour lease and works it. It opens a pull request and completes the job, and a job that reaches a push, a deploy, a secret, a live migration or a merge blocks with the exact command a person must run. Capsid stores the driver's claim and the evidence it can read from GitHub in separate tables (`job_claims`, `job_outcomes`, `job_evaluations`, `job_touches`). A field nobody reported is `NULL`, not `0`. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
 
 ## The improve loop
 
-An optional loop that proposes one scoped change at a time to a roster of repositories, has each repository's own CI score it against a hidden holdout suite, and opens a pull request only when no pinned anchor metric regressed and the weighted secondary score strictly improved. It never merges. It is off by default: `improve_mode` in KV defaults to `off`, and an unset, unreadable or unrecognised value also reads as `off`. The holdout suite is in its own R2 binding. Only `src/improve-scorer.ts` uses that binding, and the environment type handed to attempt code leaves it out. The CI score job reads it with a one-hour, read-only credential. A deterministic path guard keeps attempts off tests, CI and lint config, lockfiles, manifests, migrations, the agent steering layer and the loop's own files. In `subscription` mode the Worker writes a signed task document and a Claude Code session, the driver, runs it under a six-hour per-namespace lease. In `api` mode the Worker calls the model itself. Detail: [docs/improve.md](docs/improve.md).
+An optional loop proposes one scoped change at a time to a roster of repositories. Each repository's own CI scores the change against a hidden holdout suite, and the loop opens a pull request only when no anchor metric regressed and the weighted score improved. It never merges, and it is off by default. Detail: [docs/improve.md](docs/improve.md).
 
 ## The Capsid Portal
 
-The Portal is the administrator's view of Capsid, one app served at `/portal/`, and on its own host when `PORTAL_HOST` in `src/portal-host.ts` names one (this deployment's is portal.dustinedwards.info, where the Portal is the whole host). It signs in through the same Cloudflare Access for SaaS app and the same `ADMIN_EMAIL` and `CO_OWNER_EMAILS` check as the MCP login, then keeps a signed twelve-hour cookie. The email check runs again on every request. A request carrying any `Authorization` header gets a 403, so an agent or operator key cannot use it. Detail: [docs/portal.md](docs/portal.md).
+The Portal is the owner's admin app, served at `/portal/` and on its own host. It shows what needs the owner, the health of each site, the job queue, agents, activity and the knowledge store, and it runs the controls for the automation switches. It signs in through the same Access app as the MCP login. Detail: [docs/portal.md](docs/portal.md).
 
 ![Health](docs/images/health-light.png)
 
 ![Health, dark](docs/images/health-dark.png)
-
-The menu groups the pages by task (`GROUPS` in `dashboard/src/app/App.tsx`):
-
-- **Now**
-  - **Needs you**, the home: what waits on Dustin per app, from `/ops/inbox`, then every problem worst first.
-  - **Health**: "is anything broken" on one page. Summary tiles and the daily maintenance list, then a section each for the sites (each configured site, its probe results and a 7-day uptime ring, shown only while at least one site is configured), incidents (the watcher's findings and its last pass), deploys (a timeline per site, read from Cloudflare), backups (Capsid's own D1 backup and the off-account mirror) and the default branches' CI.
-- **Work**
-  - **Queue**: every open job and every job that ended in the last day, by namespace, with the stale jobs, seat-started sessions and live Claude Code sessions.
-  - **Pull requests**: pull requests from the last seven days, and what auto-merge left for the seat.
-- **Records**
-  - **Activity**: the last 50 audit rows, filtered by namespace and actor.
-  - **Agents**: the roster with each agent's record (last seen, jobs done, failed and blocked, pull requests merged, CI green, median job), and a Claims tab: what each agent said about its work beside what the Worker verified against GitHub, and every human touch of a job.
-  - **Packages**: each configured npm package's versions, downloads, dependents and repository. Shown only while at least one package is configured.
-  - **Shared code**: each shared package, the tag each app pins, who is behind, and the local copies left.
-  - **Library**: the knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and the jobs it names.
-
-Settings (the sites, the packages, and the automation switches with each namespace as `capsid_run_improve` action `status` reports it) is not in the menu: it is under the avatar's account panel as "Portal settings". An old address, such as `/portal/sites`, opens the page and section that hold it now.
 
 ![Health, at its Sites section](docs/images/health-sites-light.png)
 
@@ -90,202 +63,32 @@ Settings (the sites, the packages, and the automation switches with each namespa
 
 ![Agents, its Claims tab](docs/images/claims-light.png)
 
-The Portal's controls are the registry in `src/controls.ts` (`PORTAL_ACTIONS`); the same controls are available in chat through the admin-only `capsid_admin_run_controls` tool, and the audit row says which door a change came through. They are the automation switches (pause and unpause a namespace, the improve loop's mode, seat start, the overnight run), resetting a namespace's circuit breaker, resuming, failing or releasing a job, revoking an agent, and adding, editing or removing a site or a package. Each one is two requests. The preview reads current state, writes nothing, and returns what will change, the audit rows the perform will write, and a token signed with a key derived from `COOKIE_ENCRYPTION_KEY` (token version 2). The token carries the action, its parameters and the admin's email, and expires after five minutes. The perform takes only that token, so what runs is what the dialog showed. A confirmation is single-use: the perform spends the token's id in KV before the control runs, and a second perform of the same token is refused with a 409. A token is spent even when the control then refuses, because the refusal is about state and the next preview shows it again. Every transition is also guarded on the state it moves from. Both requests need the `X-Capsid-CSRF` header to match the `capsid_portal_csrf` cookie and refuse a cross-site `Sec-Fetch-Site`. The Portal cannot merge a pull request or mint a credential, and `test/portal-actions.test.ts` asserts that both are refused.
-
-Optional panels stay hidden until they are configured. Which sites the watcher probes is configuration in the D1 table `ops_sites`, edited in Settings. With no row that has an origin, the watcher probes nothing and reads nothing from Cloudflare, and the Portal hides Health's Sites section and its site tile. Deploy and error columns need `CF_OPS_TOKEN`; until it is set they read "Cloudflare read not configured" rather than zero. A value the feed does not have is shown as "No data" with its reason. The Portal works at phone width.
-
 ![Health on a phone](docs/images/phone-health-light.png)
 
 ![Health on a phone, dark](docs/images/phone-health-dark.png)
 
 ## Security model
 
-**Co-owner.** A second person can hold the same access as the administrator. Her email goes in the optional Worker secret `CO_OWNER_EMAILS` (comma separated for more than one; each entry trimmed, empty entries ignored, exact match, no case folding, the same timing-safe compare as `ADMIN_EMAIL`). Unset or empty means no co-owners, and while `ADMIN_EMAIL` is unset nobody is admitted, a co-owner included. She is admitted to `/mcp`, `/mcp/admin` and the Portal like the administrator, and every audit row, actor and "signed in as" carries the email Access verified for her, `access:<her email>`, never `ADMIN_EMAIL`. The step-up applies to her exactly as to the administrator, on her own sign-in and her own idle clock. `ADMIN_EMAIL` stays the primary owner and is set only in Cloudflare: no Capsid tool, Portal action or sync can change it, `CO_OWNER_EMAILS` or who is admitted, so a co-owner cannot remove or demote the primary owner from inside Capsid. The push alerts' VAPID subject stays `ADMIN_EMAIL`. To add her: in the Cloudflare dashboard, Workers & Pages, capsid, Settings, Variables and Secrets, add `CO_OWNER_EMAILS` as a Secret (Type: Secret, not Text) holding her email. The Access policies that admit the admin (the Capsid app and the apps behind Access) must list her email too, or Access refuses her before Capsid is asked.
+- **One enforcement point.** `checkScope` in `src/scope.ts` is the only grant check, and `TOOL_GRANTS` states what each tool requires. A tool with no entry requires write, so an omission fails closed.
+- **Repo writes.** Every write to GitHub goes through `guardedWrite`, which checks the repo the call reaches and then writes an audit row.
+- **Snapshots.** Every overwrite and delete of a document snapshots the prior version to `document_versions` and writes `audit_log`.
+- **Co-owner.** A second person can hold the same access as the owner through the `CO_OWNER_EMAILS` secret. She cannot change `ADMIN_EMAIL` from inside Capsid.
+- **Seat-started sessions.** The seat can start a Claude Code session on GitHub's runners for one queued job. It is off by default, runs on a public repo only, and has a network allowlist, a per-job key, no deploy rights and a canary test.
+- **Limits.** [docs/auth.md](docs/auth.md) lists what Capsid cannot control, such as the owner's own shell.
 
-**One enforcement point.** Every caller resolves to an agent with its own key, scopes and audit identity. `checkScope` in `src/scope.ts` is the only grant check. The registrar wraps every tool before any handler runs, and `TOOL_GRANTS` states what each tool requires (read, write, per-action, or admin). A tool with no entry requires write, so an omission fails closed. Scopes have five axes: `namespaces`, `repos`, `tools`, `grants` and `flags`. The flags are the blast radius: `can_merge`, `can_direct_write`, `can_dispatch`, `can_write_workflows`, `can_touch_protected`, `money_paths` and `can_comment_pr`. The minted roles each hold at most one of them, and `test/roles.test.ts` fails the build if a role names a second. Two project drivers hold a flag by a recorded exception; the Portal and `capsid_run_improve` action `status` list what each agent actually holds. Detail: [docs/auth.md](docs/auth.md).
-
-**Admin-only tools.** Every Capsid Admin tool requires the admin identity, not only the write grant, and is served only on `/mcp/admin` and `/ops/mcp/admin`: `capsid_admin_manage_namespaces` (the namespace-to-repo mapping is the authorization boundary), `capsid_admin_manage_agents` (minting, revoking and re-scoping credentials), `capsid_admin_read_claims`, `capsid_admin_read_ops`, `capsid_admin_whats_next`, `capsid_admin_run_controls` (the Portal's buttons, previewed then performed with a single-use token), `capsid_admin_control_improve` (the improve loop's mode, pause, budget, operator keys and signed policies) and `capsid_admin_set_site_key`. The risky actions among them also need a step-up from an OAuth session: an Access sign-in or step-up action in the last 2 hours, at most 12 hours after the sign-in. A driver's part of the loop stays on Capsid as `capsid_run_improve` (status, claim, run).
-
-**Repo mutations.** Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`). It resolves the repo the call actually reaches, asks `checkScope` about that repo with the flags the call's intent needs, runs the write, and then writes an `audit_log` row. GitHub cannot join a D1 transaction, so if that audit insert fails after the write landed, the result reports the write as done with an `audit_warning` rather than as a failure. `test/blast-radius.test.ts` covers the rule. Detail: [docs/repo-access.md](docs/repo-access.md).
-
-**Snapshots and audit.** Every overwrite and delete of a document snapshots the prior version to `document_versions` and writes `audit_log` (`test/invariants.test.ts`, `test/write-invariants.test.ts`). These tables are not kept forever in D1: after each daily backup, `document_versions` rows older than 90 days and `audit_log` rows older than 180 days are pruned, and they survive only in retained dumps.
-
-**Log redaction.** `capsid_inspect_repo` action `ci` relays CI log text from GitHub to callers, including drivers. Every log text it returns, and every GitHub error body it echoes, passes through `src/redact.ts` first, which replaces private keys, JWTs, GitHub, Slack and AWS tokens, auth headers, secret-named assignments and high-entropy values with `[REDACTED:<kind>]`. It errs toward over-redacting. A read-only caller gets no log text at all. This applies to relayed CI logs; it is not a filter on everything the Worker logs.
-
-**Seat-started sessions.** The seat can start a Claude Code session on GitHub's runners for one queued job, only on a public repo, only while a switch in KV reads `on` (it ships off). `.github/workflows/seat-session.yml` runs on `repository_dispatch` only. Its guards, in brief ([docs/seat-start.md](docs/seat-start.md) has all of them):
-
-- **Network egress.** `step-security/harden-runner` runs in `block` with an explicit endpoint list recorded from an audit-mode run. Inside the session, Bash runs in Claude Code's sandbox, which is required (`failIfUnavailable`), has no unsandboxed retry, and allows network to `github.com` only (`strictAllowlist`).
-- **Per-job keys.** No long-lived runner key exists. The runner trades its GitHub OIDC token at `/ops/runner-key` for a key bound to that one job, pinned to the repo, workflow, ref, `seat` environment and GitHub-hosted runner. The key holds read and write on one namespace and repo, the few tools a job needs (docs/seat-start.md), and no flags, and is revoked when the job completes, fails or blocks.
-- **Never deploy.** The job's `GITHUB_TOKEN` has `contents: write`, no Cloudflare secret is passed, and deploy commands, `wrangler` and `gh` are refused tools. The session opens a pull request and blocks the job for the seat to merge.
-- **Hooks off, with a tripwire.** The session runs with `--settings '{"disableAllHooks":true}'`, which outranks a repo's own settings, because repo hooks run outside the sandbox. A local hook of our own is planted after checkout; if it fires, the run fails.
-- **Lockdown.** Before the session, a step removes sudo, Docker and containerd and checks they are gone.
-
-**The canary, and what it does not prove.** `test/canary/probe.canary.ts` tries what a hostile test file run through `npm test` would try (reach an arbitrary host, read tokens from the environment or `/proc`, read the Capsid key file, write `.git/config` or `.git/hooks`, use sudo or Docker) and prints only booleans. The weakened control, `.github/workflows/seat-session-canary-weakened.yml`, runs the same probe with no sandbox, no lockdown, harden-runner in audit and fake credentials, and fails unless every exposure reads `true`. That shows the probe can see each exposure, so a `false` in the hardened run is a block rather than a blind spot. What the pair cannot show:
-
-- `oidc_request_in_env` reads `false` in both runs (the weakened job has no id-token permission), so the hardened `false` for it is not evidence the probe could have seen it.
-- `github_curl` reads `true` in the hardened run by design: Bash can reach `github.com`, the one host it needs for `git push`.
-- It measures only what the probe checks, from inside a Bash command, on one pinned Claude Code version. MCP calls, file tools and WebFetch run outside the Bash sandbox and are bounded by harden-runner, the tool allowlist and the job-bound key, not by the probe's checks.
-- It does not test what a session does with the access it is meant to have, such as the content of the pull request it opens.
-
-**Not controllable from Capsid.**
-
-- The admin's own session. The OAuth admin is a synthetic agent with every scope, so a client holding that login on Dustin's machine is not narrowed by `checkScope`, and his own shell can push, deploy or run `wrangler` without going through Capsid at all.
-- The legacy operator key, on any deployment where `OPERATOR_KEY_HASH` is still set: a plain entry has the admin grant. This deployment deleted it on 2026-09-12.
-- Client-side tool caching. MCP clients cache the tool list at connect time; claude.ai's handling of the cache hints is unknown. A deploy is verified by calling the Worker directly.
-- Tool annotations such as `readOnlyHint` are hints to the client and enforce nothing.
-- Portal sign-out ends the Portal cookie only. The Access session is Cloudflare's, and a copied cookie stays valid until it expires.
-- Hooks and telemetry from a session are reported by that session. A session that sends no key records nothing.
-
-**Audits.** Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, the scorer isolated so attempt code never runs beside a credential, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Two further audits on 2026-09-13, one on the source and one on the test suite, closed four more criticals, each one a check a call path did not reach rather than a rule nobody had written. Each fix ships with a test observed failing against the code it replaced. Private audits live in Capsid. A 2026-09-16 source audit of this Worker is `AUDIT-2026-09-16.md`; it is a snapshot, not canon.
+Detail: [docs/auth.md](docs/auth.md), [docs/repo-access.md](docs/repo-access.md), [docs/seat-start.md](docs/seat-start.md), [docs/hooks.md](docs/hooks.md). A 2026-09-16 source audit is [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md); it is a snapshot, not canon.
 
 ## Backups
 
-A daily cron at 09:00 UTC dumps every D1 table to the `MEDIA` R2 bucket as JSON, using [`@dustinedwards/d1-dump`](https://github.com/DrDustinEdwards/d1-dump), with a markdown mirror of every document body. A run is complete only when its `_complete.json` marker is written last. Retention is graduated (d1-dump's default): the newest complete run of each of the last 14 days, 8 weeks and 6 months, about 25 runs reaching back six months. The private repo `DrDustinEdwards/capsid-backups` mirrors the dumps off-account; this repo only mints that job's credential, and the watcher raises a finding when the newest mirrored dump is older than 36 hours. `restore-rehearsal.yml` runs d1-dump's restore drill on the newest dump every Monday: it restores into a local SQLite database, checks counts, FTS5 and a search, and deletes it. It holds no Cloudflare credential. `wrangler d1 export` of the whole database fails because of the FTS5 table, so restore is per table, `documents` first, never exporting `documents_fts`. D1 Time Travel covers the last 30 days. Detail and the three restore paths: [docs/backups.md](docs/backups.md).
-
-## Install and configuration
-
-A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstrap.md) is written for that reader. In short:
-
-1. Create the D1 database, two separate KV namespaces (`APP_KV`, `OAUTH_KV`) and the R2 bucket(s), then copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored) and fill in the ids.
-2. Apply the migrations with `npx wrangler d1 migrations apply capsid --remote`. The deploy job fails if the live database is behind.
-3. Set secrets with `npx wrangler secret put <NAME>`. Required for the logins and repo access: `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL`, `COOKIE_ENCRYPTION_KEY`, `GITHUB_APP_PRIVATE_KEY` (with `GITHUB_APP_CLIENT_ID` as a var). `IMPROVE_SCORE_SECRET` signs jobs and score reports; without it the work queue refuses to post a job. `OPERATOR_KEY_HASH` bootstraps the first agents and is then removed. Optional: `CO_OWNER_EMAILS` (a co-owner, see Security model), `ANTHROPIC_API_KEY` (the loop's api mode), `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read), `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"), and the `R2_*` credential-minting secrets for the holdout and backup mirror.
-4. Create a Cloudflare Access for SaaS (OIDC) app with redirect URLs `/callback` and `/portal/callback`, plus `https://<your Portal host>/callback` if the Portal has its own host, limited to your email ([docs/auth.md](docs/auth.md)).
-
-Before a push, run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `npm run deploy` builds the Portal first and stops if the build or its size budget fails; `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
-
-Optional parts stay hidden or inert until configured. With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section. Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured. The telemetry receiver (`/ops/otlp/v1/*`, [docs/telemetry.md](docs/telemetry.md)) and the hook receiver (`/ops/hooks`, [docs/hooks.md](docs/hooks.md)) are live but store nothing until a Claude Code session is configured to send to them with a key. The improve loop, auto-merge and the nightly driver are each off by default (see Switches below).
-
-### Full setup, step by step
-
-1. Install dependencies:
-
-   ```
-   npm install
-   ```
-
-2. Create your own Cloudflare resources:
-
-   ```
-   npx wrangler d1 create capsid
-   npx wrangler kv namespace create APP_KV
-   npx wrangler kv namespace create OAUTH_KV
-   npx wrangler r2 bucket create capsid-media
-   npx wrangler r2 bucket create capsid-improve-holdout   # only if you run the self-improvement loop
-   ```
-
-3. Copy the config template and fill in your IDs from step 2. **`APP_KV` and `OAUTH_KV` must be different namespace ids.**
-
-   ```
-   cp wrangler.jsonc.example wrangler.jsonc
-   ```
-
-   The real `wrangler.jsonc` is gitignored. Never commit it.
-
-4. Apply the migrations (idempotent, `IF NOT EXISTS` everywhere):
-
-   ```
-   npx wrangler d1 migrations apply capsid --remote
-   ```
-
-5. Generate an operator key and store its sha256 hash as a secret. Keep the raw key safe; headless clients send it as the bearer token on `/ops/mcp`:
-
-   ```
-   npx wrangler secret put OPERATOR_KEY_HASH
-   ```
-
-   The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (`docs/bootstrap.md`), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.mjs` authenticates with `CAPSID_OPERATOR_KEY` and nothing else. `docs/bootstrap.md` carries that sequence under "Minting once no operator key exists".
-
-6. Create a Cloudflare Access for SaaS application (for login) in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
-
-   - Redirect URLs, both of them, spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow and `https://capsid.<your-subdomain>.workers.dev/portal/callback` for Capsid Portal.
-   - Scopes openid, email and profile, PKCE on, and a policy that allows your email only.
-
-   Then set the secrets:
-
-   ```
-   npx wrangler secret put ACCESS_TEAM_DOMAIN          # https://<team>.cloudflareaccess.com
-   npx wrangler secret put ACCESS_SAAS_CLIENT_ID
-   npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
-   npx wrangler secret put ADMIN_EMAIL                 # the primary owner, the one email both logins admit first, exactly
-   npx wrangler secret put COOKIE_ENCRYPTION_KEY       # openssl rand -hex 32
-   ```
-
-7. For repo access, create a GitHub **App**. Permissions: Repository contents read and write, Pull requests read and write, Metadata read, Actions read and write, Workflows write (confirmed by probe 2026-09-07: a pull request authoring a workflow file succeeded, and was closed immediately; that probe proves write and says nothing about read, so read is not claimed here). The last two are what let the Worker dispatch a workflow and write under `.github/workflows/`; both are gated behind agent flags (`can_dispatch` and `can_write_workflows`), so the App holding the permission does not mean a caller can use it. Install it on the repositories you want reachable. Note its Client ID, generate a private key (`.pem`), then:
-
-   ```
-   # put the App client id in wrangler.jsonc vars as GITHUB_APP_CLIENT_ID
-   npx wrangler secret put GITHUB_APP_PRIVATE_KEY        # paste the .pem contents
-   ```
-
-   Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
-
-   Optional, only for the self-improvement loop: `IMPROVE_SCORE_SECRET` (the root of the per-repo score-report keys) and, for `api` mode, `ANTHROPIC_API_KEY`. The loop stays off until `improve_mode` is set.
-
-   ```
-   npx wrangler secret put IMPROVE_SCORE_SECRET
-   npx wrangler secret put ANTHROPIC_API_KEY        # api mode only
-   ```
-
-8. Type check and deploy:
-
-   ```
-   npm run check
-   npm run deploy
-   ```
-
-9. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md).
-
-   Or test the flow first with the MCP Inspector:
-
-   ```
-   npx @modelcontextprotocol/inspector
-   ```
-
-   Set transport to Streamable HTTP, URL to `https://capsid.<your-subdomain>.workers.dev/mcp`, open the Auth tab, and run Quick OAuth Flow.
-
-MCP clients cache the tool list at connect time. After deploying new tools, reconnect the connector or start a new chat to see them.
-
-### Switches
-
-Three switches, all off by default. Each is turned on separately.
-
-The loop runs only when `improve_mode` in `APP_KV` is set to `subscription` or `api`, by `capsid_admin_control_improve` action `mode`. Anything unreadable or unexpected falls back to `off`.
-
-Auto-merge and pre-approved gates run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing.
-
-The nightly driver exists only after `node scripts/schedule-drivers.mjs --install --namespace <ns> --apply`. The task it creates is disabled until it is enabled by hand.
-
-Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16; the loop is still off.
-
-## Endpoints
-
-- `POST /mcp` MCP over Streamable HTTP, requires an OAuth access token (admin only)
-- `POST /ops/mcp` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`
-- `POST /ops/otlp/v1/metrics`, `POST /ops/otlp/v1/logs` Claude Code's OpenTelemetry as OTLP/HTTP JSON, gzip or plain, at most 1MB. A driver key, a runner key or the admin key as `Authorization: Bearer <key>` (401 without one, 403 for a read-only key). Keeps usage totals per session and a count of api_error events; never a prompt, a response or tool content (docs/telemetry.md)
-- `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, the admin sees every app, and the response carries no CORS headers (docs/portal.md)
-- `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
-- `POST /ops/access-sync` an app's members page makes its Cloudflare Access group hold exactly its current members, with the app's own key and the write grant on its namespace. The group is the one the seat pinned for that namespace in `access_sync_groups`, its name checked before every write; removed people's Zero Trust seats are freed; every call is audited. Capsid holds the only write token, `CF_ACCESS_SYNC_TOKEN` (docs/portal.md)
-- `POST /ops/runner-key` a seat-started session trades its GitHub OIDC token for a key bound to one job (docs/seat-start.md)
-- `POST /ops/hooks` Claude Code HTTP hook events, requires a driver or runner key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, a response or a tool's input or output beyond its name, an edited file's path and a Bash command's first word and exit code (docs/hooks.md)
-- `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
-- `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
-- `GET /portal/`, `GET /portal/callback`, `GET /portal/api/ops`, `POST /portal/api/ops/refresh`, `POST /portal/api/actions/preview`, `POST /portal/api/actions/perform`, `GET /portal/api/namespaces`, `GET /portal/api/activity`, `GET /portal/api/claims`, `GET /portal/api/stale`, `GET /portal/api/packages/history`, `GET /portal/api/trends`, `POST /portal/api/sign-out` Capsid Portal: the app's files, its sign-in return, its feed, an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes), the controls as a preview and a perform (header `X-Capsid-CSRF`), the namespaces, activity, claims, stale jobs, package history and trends reads, and sign out. Admin session only; a bearer token is refused with 403 (docs/portal.md). Nothing answers under `/console`
-- `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, per-IP rate limited, and refused with a 503 when the limiter cannot read its counters
-- `POST /improve/score` the signed score report a roster repo's CI posts back
-- `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
-- `POST /backup/credential` mints the credential the off-account backup writes with
-- `POST /token` token exchange (served by the library). There is no `/register`: a client's id is the URL of its metadata document (CIMD)
-- `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
-- `GET /health` no auth. Reports deploy provenance (git sha, whether the tree was dirty, build time) and probes the store: `SELECT 1` against D1 plus an FTS5 MATCH pinned to one known document. Either probe failing returns 503 with `status: "degraded"` and a `store` object naming which one. A Worker whose bindings resolved to nothing starts normally and would otherwise answer `ok` while every read tool errors.
-- `GET /public/model/v1.json` no auth. The public system model the explorer and the dustinedwards.info map are built from: what the daily build stored after the privacy filter, never computed per request. Private systems appear as a name and domain only. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
-- `GET /public/stats/v1.json` no auth. Counts, rates and medians across every namespace, agent and site, over whole UTC days, computed once a day by the same build: never a name, a title or a time of day; a rate over fewer than ten rows is null. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
+A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mirror of every document. A private repo mirrors the dumps off-account, and a weekly job rehearses a restore. `wrangler d1 export` fails on the FTS5 table, so restore is per table. Detail: [docs/backups.md](docs/backups.md), [docs/rollback.md](docs/rollback.md).
 
 ## Documentation
 
-- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the two gated endpoints, and the tool hints and list cache fields clients receive
+- [docs/bootstrap.md](docs/bootstrap.md) minting agents, removing the operator key, the full setup, the switches and the checks to run before a push
+- [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the endpoint list, the co-owner, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
 - [docs/routines.md](docs/routines.md) how Capsid starts a Claude Code cloud session for a queued job by firing its namespace's routine
-- [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, and its guards
+- [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, its guards and its canary
 - [docs/telemetry.md](docs/telemetry.md) Claude Code's OpenTelemetry into Capsid: per-session usage, per-job cost on the outcome row, and the settings that turn it on
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records
 - [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes, the nightly driver and the watcher
@@ -296,25 +99,25 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - [docs/backups.md](docs/backups.md) what the daily dump contains, and three restore paths in the order to try them
 - [docs/rollback.md](docs/rollback.md) serving the previous Worker version when a deploy shipped a bad one
 - [docs/schema.md](docs/schema.md) the knowledge model, the document types and the tables
-- [docs/bootstrap.md](docs/bootstrap.md) minting agents and removing the operator key
-- [docs/hooks.md](docs/hooks.md) Claude Code session hooks: what `/ops/hooks` keeps, who may post, the settings for driver repos and Dustin's machine, and what enabling them for seat-started sessions would take
-- [docs/health-format.md](docs/health-format.md) The one health body every site answers with (status and sha), which the live `sha` check reads
-- [docs/live-checks.md](docs/live-checks.md) The watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages, from a document in the store
-- [explorer/README.md](explorer/README.md) The system explorer at capsid.dustinedwards.info: pages built daily from the public documents, its checks, and its deploy
-- [docs/overnight.md](docs/overnight.md) The overnight run: the plan per repo, the morning digest, and the scheduler switch with its Runs on choice (API key or subscription, the subscription decision recorded with it)
+- [docs/hooks.md](docs/hooks.md) Claude Code session hooks: what `/ops/hooks` keeps, who may post, and the settings for driver repos and Dustin's machine
+- [docs/health-format.md](docs/health-format.md) the one health body every site answers with (status and sha), which the live `sha` check reads
+- [docs/live-checks.md](docs/live-checks.md) the watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages
+- [docs/public-data.md](docs/public-data.md) the public system model and stats documents served without auth
+- [docs/overnight.md](docs/overnight.md) the overnight run: the plan per repo, the morning digest, and the scheduler switch with its Runs on choice
+- [explorer/README.md](explorer/README.md) the system explorer at capsid.dustinedwards.info: pages built daily from the public documents, its checks, and its deploy
 
 ## What Capsid is not
 
 - **Not multi-user.** It admits the owner, `ADMIN_EMAIL`, and any co-owners in `CO_OWNER_EMAILS`, for both logins. Agents are credentials an owner mints, not other users.
 - **Not a hosted service.** Each install is its own Worker on its own Cloudflare account. The deployment this repo runs is for its author.
 - **Not a general agent framework.** It stores memory, issues scoped keys, runs a job queue and relays GitHub operations through a GitHub App. It does not run models itself except in the optional loop's api mode.
-- **Not a replacement for code review.** Drivers open pull requests and never merge them. Merges are made by the seat, or, for namespaces a signed auto-merge policy lists, by the Worker when that policy's checks pass. The signed policy (version 5) lists dustinedwards, capsid, carrel and capsomer. A pull request merges itself only when every check passes: an allowed author, a driver's job that handed the pull request on, the job's own recorded pull request, green CI with the repo's required steps run, and no changed path on the refused list. What always waits for the seat: the judges and policy sources, job transitions, auth, migrations, workflows, lockfiles, `package.json`, wrangler configuration and the live gate ([docs/autonomy.md](docs/autonomy.md)). A capsid merge is a production deploy. CI and the hidden holdout tests measure changes; they do not review intent.
-- **The improve loop does not merge,** does not edit tests, CI or its own scoring, and does not touch a project that is not on the roster ([docs/improve.md](docs/improve.md)).
+- **Not a replacement for code review.** Drivers open pull requests and never merge them. Merges are made by the seat or, for namespaces a signed auto-merge policy allows, by the Worker when every check passes. A signed policy decides which namespaces may auto-merge ([docs/policy/auto-merge.md](docs/policy/auto-merge.md)). Paths such as migrations, workflows, lockfiles, auth and the policy sources always wait for the seat ([docs/autonomy.md](docs/autonomy.md)). A capsid merge is a production deploy.
+- **The improve loop does not merge,** does not edit tests, CI or its own scoring, and does not touch a project that is not on the roster.
 - **The Portal does not merge or mint.**
 - **Not listed in an MCP directory.** It has not been submitted to any MCP directory or registry.
 
 ## Status and licence
 
-MIT ([LICENSE](LICENSE)). Maintained by one person, Dustin Edwards. A push or merge to `master` deploys to production, docs included, so every merge to `master` is a deploy.
+MIT ([LICENSE](LICENSE)). Maintained by one person, Dustin Edwards. A push or merge to `master` deploys to production, docs included, so every merge to `master` is a deploy. The repository was named `capsid-mcp` until 2026-09-12.
 
-What's next: The experiment scheduler, once the loop has real nights behind it. Nothing else is planned.
+Plans for what comes next are not kept here. They are in the Capsid store, namespace `capsid`, in the document `research/refactor-plan-2026-10-10.md` ("Capsid improvement list, 2026-10-11").
