@@ -148,16 +148,15 @@ test("the improve loop turns on with the chosen Runs on, and Runs on while it is
   await expect(loop(page)).toHaveAttribute("aria-checked", "false");
 });
 
-test("Queue and Agents show the state as a word that links to Settings' automation section, with no control of their own", async ({ page }) => {
+test("Queue and Agents have no automation control of their own, and Agents links to Settings' automation section", async ({ page }) => {
   await visit(page, "queue");
   await expect(page.getByRole("button", { name: /^Turn (on|off)$/ })).toHaveCount(0);
+  await visit(page, "agents");
+  await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Change it in Settings" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page).toHaveURL(/\/settings#automation$/);
   await expect(page.getByRole("heading", { level: 2, name: "Automation and namespaces" })).toBeVisible();
-  await visit(page, "agents");
-  await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Change it in Settings" })).toBeVisible();
 });
 
 // The overnight run's switch (docs/overnight.md): the same pattern with its own "Runs on"

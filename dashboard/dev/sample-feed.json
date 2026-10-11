@@ -2187,8 +2187,8 @@
         ]
       },
       {
-        "id": "skill-cycle",
-        "label": "Skill evaluation cycle",
+        "id": "merge-resume",
+        "label": "Stale-job merge resume",
         "period_ms": null,
         "flag": "never",
         "recent": []
