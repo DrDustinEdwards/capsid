@@ -27,7 +27,8 @@ export type TaskId =
   | "site-repair"
   | "public-build"
   | "push"
-  | "digest";
+  | "digest"
+  | "merge-units";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -62,6 +63,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The daily email digest (src/digest.ts), on the tick; off until Email Routing is on,
   // so a quiet spell means nothing by itself and only a refusal is flagged.
   { id: "digest", label: "Daily email digest", period_ms: null },
+  // Merge unit promotion and demotion (src/merge-units.ts), on the tick; recorded only
+  // when its report or a suspension changed.
+  { id: "merge-units", label: "Merge unit proposals", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

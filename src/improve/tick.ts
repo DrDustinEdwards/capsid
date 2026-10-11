@@ -11,6 +11,7 @@ import { maintenanceTick } from "../maintenance";
 import { publicBuildTick } from "../public-data";
 import { pushTick } from "../push";
 import { digestTick } from "../digest";
+import { unitsTick } from "../merge-units";
 import { proposeChange, pushAttempt } from "../improve-attempt";
 import { pathMonitor } from "../improve-gates";
 import {
@@ -139,6 +140,22 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false }
+  );
+
+  // Merge units (src/merge-units.ts): after the watcher, which records rollbacks in
+  // deploy_outcomes. It proposes promotions and demotions and suspends a unit whose
+  // unattended merge was rolled back; the suspension only narrows, and the auto-merge
+  // step reads it on the next tick. Recorded only when something changed.
+  await runTask(
+    env,
+    "merge-units",
+    () => unitsTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent(report.newly_suspended.length ? "error" : "log", "MERGE_UNITS", { message: `MERGE_UNITS ${report.note}` });
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "MERGE_UNITS_THREW:", rethrow: false }
   );
 
   // Stale jobs: a blocked job whose named pull requests have all merged goes back to its

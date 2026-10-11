@@ -172,7 +172,8 @@ test("approving again at a new head voids the open approval and writes both rows
   assert.deepEqual(recorded[0]!.params, [7, NOW.toISOString(), "replaced"]);
   assert.ok(sql.some((s) => s.startsWith("INSERT INTO pr_approvals")), "no approval row was written");
   const insert = recorded.find((r) => r.sql.includes("INSERT INTO pr_approvals"))!;
-  assert.deepEqual(insert.params, ["owner/repo", 41, HEAD_B, "approve", ACTOR, "portal", null, "reviewed the diff", NOW.toISOString()]);
+  // The unit it counts toward (src/merge-units.ts): the namespace and the tick's path class.
+  assert.deepEqual(insert.params, ["owner/repo", 41, HEAD_B, "approve", ACTOR, "portal", null, "reviewed the diff", NOW.toISOString(), "capsid", "src-routine"]);
 });
 
 test("Undo voids the open approval with 'undone', and is refused where there is none", async () => {

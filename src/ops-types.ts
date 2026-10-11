@@ -393,7 +393,8 @@ export interface SharedCodeView {
 // What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_run_improve action
 // status's needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";
-export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
+// "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
+export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report" | "proposal";
 
 export interface InboxItem {
   title: string;
