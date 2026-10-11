@@ -14,7 +14,7 @@ import { PageHead } from "./shared";
 // job_d62abdbfc270 PR 2): "is anything broken" on one page. The Overview's tiles and the
 // maintenance list first, then the sections that were their own views: Sites (only while
 // one is configured), Incidents, Deploys, Backups, and CI's default branches. Each view
-// renders embedded, so nothing it showed is lost (conventions 1.4); the one namespace
+// renders embedded, so nothing it showed is lost (conventions 1.3); the one namespace
 // filter in the address (?ns=) narrows every section at once.
 
 // label: the section's name in the anchor bar, when the heading is longer.

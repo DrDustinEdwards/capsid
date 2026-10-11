@@ -15,6 +15,8 @@ import { fakeD1, fakeEnv, fakeKv, type DocRow } from "./fakes.ts";
 // The allowed paths as they exist in the store on 2026-10-08, plus capsid's core.
 const ALLOWED = [
   "conventions.md",
+  "conventions-web.md",
+  "conventions-store.md",
   "core.md",
   "decisions.md",
   "decisions-vol-4.md",
@@ -31,6 +33,8 @@ const DENIED = [
   "research/design-seat-session-hardening.md",
   "jobs/job_0123456789ab.md",
   "repo-structure.md",
+  "conventions-improve.md",
+  "conventions-capsid.md",
   "rulings-secret/plan.md",
   "rulings/deeper/nested.md",
   "archive/decisions-notes.md",
@@ -90,7 +94,7 @@ const paths = (r: Result): string[] => (JSON.parse(r.text) as { documents: Array
 test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
   assert.deepEqual(PORTFOLIO_DOCS, {
     namespace: "capsid",
-    documents: ["conventions.md", "core.md", "decisions.md"],
+    documents: ["conventions.md", "conventions-web.md", "conventions-cloudflare.md", "conventions-testing.md", "conventions-routing.md", "conventions-cloud.md", "conventions-names.md", "conventions-store.md", "core.md", "decisions.md"],
     volumes: ["decisions-vol-", "archive/decisions-vol-"],
     folders: ["rulings/"],
     tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
@@ -240,6 +244,13 @@ test("capsid_start_session for any namespace names the portfolio documents to re
   assert.deepEqual(out.portfolio_documents.read_first, [...ALLOWED].sort());
   assert.deepEqual(out.portfolio_documents.allowlist, [
     "conventions.md",
+    "conventions-web.md",
+    "conventions-cloudflare.md",
+    "conventions-testing.md",
+    "conventions-routing.md",
+    "conventions-cloud.md",
+    "conventions-names.md",
+    "conventions-store.md",
     "core.md",
     "decisions.md",
     "decisions-vol-<n>.md",

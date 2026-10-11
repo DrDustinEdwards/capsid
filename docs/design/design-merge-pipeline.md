@@ -204,7 +204,7 @@ capsid is included in one-tap approval. Its protection is the live gate and the 
 - Immediate effect: the tick suspends that unit (a KV flag, so its PRs fall to `approve`). This only narrows, so it needs no human, and the inbox shows it with Undo.
 - What it raises: a proposal to remove the unit from the signed list, approved the same way.
 
-The learning table proposes and never applies (conventions 11.3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
+The learning table proposes and never applies (conventions-routing.md rule 3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
 
 ## 8. The permanent exception
 

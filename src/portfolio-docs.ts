@@ -12,8 +12,9 @@
 // test/portfolio-docs.test.ts pins this constant.
 export const PORTFOLIO_DOCS = {
   namespace: "capsid",
-  // Exact paths.
-  documents: ["conventions.md", "core.md", "decisions.md"],
+  // Exact paths. The conventions topic files hold the rules conventions.md sends a session
+  // to before work they cover (job_c13dc0d4f22f); conventions-improve.md is Capsid's own.
+  documents: ["conventions.md", "conventions-web.md", "conventions-cloudflare.md", "conventions-testing.md", "conventions-routing.md", "conventions-cloud.md", "conventions-names.md", "conventions-store.md", "core.md", "decisions.md"],
   // A decisions volume: the prefix, then a volume number, then ".md". The live log
   // opens decisions-vol-<n>.md when decisions.md reaches its cap, and a closed volume
   // moves to archive/decisions-vol-<n>.md.

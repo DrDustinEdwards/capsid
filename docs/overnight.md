@@ -28,7 +28,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 - budget-minutes 480
 ```
 
-(Which repos run heavy suites locally is Dustin's to say; the list above is a guess from conventions 5.5, which puts private repos' integration and browser suites on his machine.)
+(Which repos run heavy suites locally is Dustin's to say; the list above is a guess from capsid/conventions-testing.md rule 3, which puts private repos' integration and browser suites on his machine.)
 
 ## The morning digest
 

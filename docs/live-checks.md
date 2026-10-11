@@ -10,7 +10,7 @@ The watcher's fourth kind of read: what the deployed sites actually serve. Dusti
 | `beacon <path>` | a CSP header on that page does not let the beacon report (`'self'` on a site proxied through Cloudflare, `cloudflareinsights.com` on any other) | `live-csp-report-<site>-<path>` |
 | `analytics` | the site's host has no Web Analytics site in the account, or its automatic setup (`auto_install`) is off, or its ruleset is switched off | `live-analytics-missing-<site>`, `live-analytics-off-<site>` |
 | `analytics` | Cloudflare could not be read (no token, a 403 for the missing permission) | `live-analytics-unread-<site>` |
-| `nobeacon <path>` | the page carries a beacon (conventions 7.9: private and signed-in pages stay out of analytics) | `live-beacon-present-<site>-<path>` |
+| `nobeacon <path>` | the page carries a beacon (conventions-web.md rule 11: private and signed-in pages stay out of analytics) | `live-beacon-present-<site>-<path>` |
 | `headers <path>` | the page lacks a header of the OWASP standard set, or its enforced CSP fails the package's policy checks (no enforced policy, `'unsafe-inline'` or `'unsafe-eval'` in scripts, no `object-src 'none'`, no report sink) | `live-headers-<site>-<path>` |
 | `sha` | the site's health route reports a sha that is not the default branch head, and the head was committed more than 45 minutes ago | `live-sha-drift-<site>-<head7>` |
 | `sha` | the site's health route reports no sha | `live-sha-unreported-<site>` |
