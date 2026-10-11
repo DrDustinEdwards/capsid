@@ -136,6 +136,8 @@ export const TABLES = [
   // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
   // configuration the seat writes by hand. Nothing prunes it.
   "access_sync_groups",
+  // The devices that get a phone alert (migrations/0041_push_subscriptions.sql).
+  "push_subscriptions",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

@@ -44,6 +44,7 @@ export type {
   PortalPerformed,
   PortalPreview,
   PortalStale,
+  PortalPush,
   PortalPlan,
   PortalDigest,
   PortalMaintenance,

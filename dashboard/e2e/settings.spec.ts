@@ -179,3 +179,20 @@ test.describe("on a phone, with no site configured", () => {
     await expect(page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ })).toBeVisible();
   });
 });
+
+// Phone alerts (src/push.ts): the panel loads on its own after Settings, lists the
+// devices with alerts on, sends a test and turns a device off. The mock never sends.
+test.describe.serial("phone alerts", () => {
+  test("the panel lists the device, sends a test and turns the device off", async ({ page }) => {
+    await visit(page, "settings");
+    const panel = page.locator("section.cap-panel", { has: page.getByRole("heading", { name: "Phone alerts" }) });
+    await expect(panel).toContainText("Chrome on Android");
+    await expect(panel).toContainText("it has no Approve button");
+    await panel.getByRole("button", { name: "Send a test alert", exact: true }).click();
+    await expect(panel.getByRole("status")).toHaveText("Test alert sent to each device.");
+    await panel.getByRole("button", { name: "Turn off", exact: true }).click();
+    await expect(panel.getByRole("status")).toHaveText("Alerts are off for Chrome on Android.");
+    await expect(panel).not.toContainText("turned on");
+    await expect(panel.getByRole("button", { name: "Send a test alert", exact: true })).toBeDisabled();
+  });
+});

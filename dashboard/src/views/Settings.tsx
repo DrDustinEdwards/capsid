@@ -12,6 +12,8 @@ import { PackageSettings } from "./SettingsPackages";
 
 // The Namespaces panel loads on its own, after Settings' first paint (it reads its own route).
 const Namespaces = lazy(() => import("./Namespaces").then((m) => ({ default: m.Namespaces })));
+// Phone alerts load on their own too: the panel is used once per device.
+const PhoneAlerts = lazy(() => import("./PhoneAlerts").then((m) => ({ default: m.PhoneAlerts })));
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
 // with an origin is a site the watcher probes; a row with no origin records that the
@@ -282,6 +284,9 @@ export function Settings() {
         )}
       </Panel>
       <PackageSettings />
+      <Suspense fallback={null}>
+        <PhoneAlerts />
+      </Suspense>
       <Display />
       {/* The automation switches and the roster, which were the Namespaces view
           (design-portal-evaluation.md section 2: "Namespaces: it is settings"). */}

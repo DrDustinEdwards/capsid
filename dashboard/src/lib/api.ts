@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, SharedCodeView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -19,6 +19,7 @@ export const DIGEST_URL = `${BASE}/api/digest`;
 export const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 export const CONVERGENCE_URL = `${BASE}/api/convergence`;
 export const SIGN_OUT_URL = `${BASE}/api/sign-out`;
+export const PUSH_URL = `${BASE}/api/push`;
 export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
 
@@ -235,6 +236,18 @@ export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageH
 // the local copies left (src/shared-code.ts), cached by the Worker for an hour.
 export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
   return get<SharedCodeView>(SHARED_CODE_URL);
+}
+
+// GET /portal/api/push: the key a browser subscribes with and the devices with phone
+// alerts on. POST turns this browser on, a device off, or sends a test (src/push.ts).
+export function fetchPush(): Promise<Answer<PortalPush>> {
+  return get<PortalPush>(PUSH_URL);
+}
+
+export type PushOp = { op: "on"; subscription: PushSubscriptionJSON; label: string } | { op: "off"; id: number } | { op: "test" };
+
+export function postPush(csrf: string, body: PushOp): Promise<Answer<PortalPush>> {
+  return post<PortalPush>(PUSH_URL, csrf, body);
 }
 
 // GET /portal/api/stale: the jobs that look stuck, each with the rule it met and why,

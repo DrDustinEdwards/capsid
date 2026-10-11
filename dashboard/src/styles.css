@@ -482,6 +482,8 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
 .detailrow td { background: var(--raised); }
 .prefrow { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.device-list .prefrow { flex-wrap: wrap; }
 .radios { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
 .radios label { display: flex; gap: 8px; align-items: center; }
 .when .faint { white-space: nowrap; }

@@ -527,6 +527,8 @@ export interface OpsFeed {
 //   GET  /portal/api/digest?since=                                -> PortalDigest
 //   GET  /portal/api/maintenance                                  -> PortalMaintenance
 //   GET  /portal/api/convergence                                  -> PortalConvergence
+//   GET  /portal/api/push                                         -> PortalPush
+//   POST /portal/api/push   body { op: "on", subscription, label } | { op: "off", id } | { op: "test" } -> PortalPush
 //   POST /portal/api/sign-out           body {}                  -> 204, the Portal's cookies expired
 // A refusal is text/plain: 400 refused or invalid, 403 CSRF or cross-site, 410 the
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
@@ -884,6 +886,18 @@ export interface WebAnalyticsSite {
   auto_install: boolean | null;
   // The site's ruleset switch, where Cloudflare reports one.
   enabled: boolean | null;
+}
+
+// GET /portal/api/push -> PortalPush. Phone alerts (src/push.ts): the VAPID public key a
+// browser subscribes with (null, with the problem, when the key is not set), and the
+// devices with alerts on. Never an endpoint.
+export interface PortalPush {
+  generated: string;
+  public_key: string | null;
+  problem: string | null;
+  devices: { id: number; label: string | null; created_at: string; last_sent_at: string | null; last_status: number | null }[];
+  // Present after op "test": each device's push service answer (0 when unreachable).
+  results?: { id: number; status: number }[];
 }
 
 // GET /portal/api/stale -> PortalStale. The jobs that look stuck, from the reader behind

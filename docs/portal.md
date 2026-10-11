@@ -242,6 +242,25 @@ Under **Account Resources**, choose this one account. Then **Continue to summary
 
 Each app's group is pinned by hand in `access_sync_groups` (`migrations/0040_access_sync_groups.sql`): the namespace, the group's id and its name. The caller never names a group. Before every write the group is read, and the sync refuses with a 409 and writes nothing when the name differs from the pin, or when the group holds an include rule that is not a single email (a rule the sync would erase). A Cloudflare refusal answers 502, so the app shows "Waiting for Cloudflare" and retries. Every call, refused or not, is one `audit_log` row with action `access-sync`.
 
+## Phone alerts
+
+Settings has a **Phone alerts** panel (`dashboard/src/views/PhoneAlerts.tsx`, loaded on its own). **Turn on for this device** asks the browser for notification permission, registers the Portal's service worker (`dashboard/public/sw.js`, which shows an alert and opens the Portal on a tap, and caches nothing), subscribes with the VAPID public key and stores the subscription in `push_subscriptions` (`migrations/0041_push_subscriptions.sql`). Each device can be turned off from the list, and **Send a test alert** sends one alert to every device and shows each push service's answer.
+
+The five-minute tick's `push` step (`src/push.ts`) sends an alert for four things only (docs/design/design-merge-pipeline.md section 5; Dustin, 2026-10-09, DECIDE 5 and 6):
+1. a `typed` pull request (a money path) waiting more than 2 hours, counted from the first tick that saw it typed;
+2. a rollback or a failed rollback recorded in `deploy_outcomes` in the last day;
+3. a job blocked at the correction cap in the last day;
+4. a question over 4 hours old on a job with priority 70 or more.
+
+Each item is sent once (KV `push:state` keeps what was sent for 30 days), at most three items a tick, and an item no device received is tried again on the next tick. An alert names the repo and the pull request number, or the namespace and job id, and its class. It never carries a title and never an Approve button: a typed pull request is approved only by typing its number, and the other three are not pull requests, so there is no approve-from-push route. Every alert opens https://portal.dustinedwards.info/. The Worker encrypts each alert to the browser's own keys (RFC 8291) and signs the request with the VAPID key (RFC 8292), with WebCrypto only (`src/web-push.ts`), so the push service (Google's, for Chrome on Android) sees neither the text nor a third-party account. A subscription whose endpoint is not on a known push service is refused before it is stored, and one the push service answers 404 or 410 for is marked `gone`. Audit rows: `push-device-on`, `push-device-off`, `push-test`, `push-sent` and `push-device-gone`.
+
+To set it up, the seat, one step at a time:
+1. Apply the migration: `npx wrangler d1 migrations apply capsid --remote`. It is additive: one table, one index.
+2. Make and store the key: `node scripts/vapid-keys.mjs`. It puts `VAPID_PRIVATE_KEY` with wrangler and prints only the public half. Running it again replaces the key, and every device must turn alerts on again.
+3. Deploy, open Settings on the phone, and press **Turn on for this device**, then **Send a test alert**.
+
+Until the key is set the panel says so and the `push` step sends nothing. The improve loop's attempt code cannot see the key (`AttemptEnv`).
+
 ## Using it
 
 - **Where:** https://portal.dustinedwards.info, signed in through Cloudflare Access as `ADMIN_EMAIL`. The old address, capsid.dustin-edwards.workers.dev/portal, is retired: every path under it is the plain 404, and capsid-login no longer lists its sign-in callback. **Settings** is the top bar's Settings button, after the theme button, not a view in the left menu; `g` then `e` and the command menu still reach it. **Sign out**, in the top bar, ends the Portal session in this browser. It works at phone width, with a bottom tab bar: Needs you, Queue, Health and More, which lists every other page with its count, Settings among them.
@@ -311,6 +330,7 @@ Every route but the callback answers to one gate, `portalGate`: the Access sessi
 - **`GET /portal/api/maintenance`** (`src/portal-maintenance.ts`) returns `PortalMaintenance`, uncached: the list the daily maintenance pass stored, the one `capsid_run_improve` action `status` serves, with `generated` null before the first pass, and `read`, the open pull requests, branches, repos, compared deploys and driver disk readings the pass read. It reads KV only.
 - **`GET /portal/api/claims`** (`src/portal-claims.ts`) returns the per-agent aggregate, filtered by `namespace`, `agent`, `since` and `until` (ISO times; anything else is a text 400), or with `?job=<id>` one job's claims, checks and touches, and a JSON 404 for a job that does not exist. It reads through the `capsid_admin_read_claims` tool's readers and writes nothing.
 - **`GET /portal/api/packages/history?name=`** (`src/portal-packages.ts`) returns one configured package's daily downloads, joined to its former name's, and its weekly GitHub rows (`PortalPackageHistory`). A name that is not configured is a 404, so the route cannot fetch an arbitrary package from npm.
+- **`GET /portal/api/push`** and **`POST /portal/api/push`** (`src/push.ts`), the phone alerts above. The GET returns `PortalPush`: the VAPID public key (null, with the reason, when the key is not set) and the devices with alerts on, never an endpoint. The POST takes `{op: "on", subscription, label}`, `{op: "off", id}` or `{op: "test"}` behind the preview's checks (same-origin, the body cap, CSRF), and returns `PortalPush`. Refusals: 400 a bad subscription or op, 409 a device already off or ten already on, 503 no key.
 - **`POST /portal/api/sign-out`**, above.
 - **Any other `/portal/api/` path** is a JSON 404 behind the gate, never the app's page.
 - **`/portal/`** and everything under it serves the built app from the `ASSETS` binding, only after the gate. The page gets `no-store` and its own CSP (scripts, styles and fetches from this origin only); hashed files under `/portal/assets/` are cached privately for a year. A browser loading an unknown path as a page gets the app's page, so the app's own routes load; a missing file stays a 404. With no `ASSETS` binding the admin gets a 503 saying the Portal is not deployed.
