@@ -981,6 +981,68 @@ export type PortalLibrary =
       incoming: Array<{ type: string; from_ns: string; from_path: string }>;
     };
 
+// GET /portal/api/trends?weeks= -> PortalTrends (src/trends.ts, src/portal-trends.ts). The
+// series the Portal's charts need and the feed does not carry (design-portal-evaluation.md
+// section 3, ruled 2026-10-09). Read-only; every time is UTC; weeks start on Monday.
+export interface TrendMinutesWeek {
+  week: string; // ISO week, "2026-W41"
+  start: string; // its Monday, YYYY-MM-DD
+  minutes: number;
+  sessions: number;
+  decisions: number;
+}
+
+export interface TrendQueueDay {
+  day: string;
+  posted: number;
+  ended: number;
+  // Open (queued, claimed, blocked or parked) at the day's end.
+  open: number;
+}
+
+export interface TrendMergeWeek {
+  week: string;
+  start: string;
+  auto: number; // merged by the signed policy on its own
+  approved: number; // merged by the executor on an approval
+  seat: number; // merged by the seat through capsid_close_pr
+  closed: number; // closed without merging, from chat or the Portal
+}
+
+export interface TrendBackupSlot {
+  key: string; // a day, a week's Monday, or a month (YYYY-MM)
+  filled: boolean;
+}
+
+export interface TrendCiDay {
+  day: string;
+  runs: number;
+  failed: number;
+  // The default branch at the day's end: the last completed run that day, carried over a
+  // day with none; "none" before the first run in the window.
+  state: "green" | "red" | "none";
+}
+
+export interface TrendCiRepo {
+  namespace: string;
+  repo: string;
+  days: TrendCiDay[];
+  // More runs than one page (100) in the window: the earliest days may be missing runs.
+  truncated: boolean;
+}
+
+export interface PortalTrends {
+  generated: string;
+  weeks: number;
+  minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
+  queue: TrendQueueDay[];
+  merges: { weeks: TrendMergeWeek[]; rollbacks: Array<{ at: string; repo: string; pr: number | null; outcome: "rolled_back" | "rollback_failed" }> };
+  // null slots and runs, with error set, when the bucket could not be listed.
+  backups: { slots: { daily: TrendBackupSlot[]; weekly: TrendBackupSlot[]; monthly: TrendBackupSlot[] } | null; runs: number | null; error: string | null };
+  // Read from GitHub and kept an hour; a repo that could not be read is in not_read.
+  ci: { read_at: string; repos: TrendCiRepo[]; not_read: Array<{ namespace: string; error: string }> };
+}
+
 // GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
 // (src/maintenance.ts), as stored by its last run: what the pass found that it did not act
 // on, and what it acted on (an auto-resume, a pruned branch). A "-not-checked" rule is a

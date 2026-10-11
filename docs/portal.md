@@ -146,6 +146,20 @@ The knowledge store, read-only (capsid/decisions.md 2026-10-09: Portal review it
 
 Search, the document read and the edges go through `src/doc-reads.ts`, the same readers `capsid_find_docs` action `search` and `capsid_read_doc` actions `read` and `links` use, so the Library and chat cannot disagree. The route writes nothing, not even the conventions-read row (that row records an agent loading the rules). The page's own state is in its address: `?q=` for a search and `?doc=<namespace>/<path>` for a document, so either can be reloaded or shared. Tests: test-integration/portal-library.test.ts, dashboard/e2e/library.spec.ts.
 
+## Trends
+
+`GET /portal/api/trends?weeks=` (`src/trends.ts`, `src/portal-trends.ts`; DECIDE 5 of docs/design/design-portal-evaluation.md, ruled 2026-10-09) serves the series the charts need and the feed does not carry. Admin only (portalGate), read-only. `weeks` is 1 to 26, default 8; every time is UTC and weeks start on Monday.
+
+| Series | Chart | Read from |
+|---|---|---|
+| `minutes`: per ISO week, minutes, sessions and decisions | 1, minutes of Dustin per week | `audit_log` rows by an `access:` actor and human `job_touches`, split into sessions at a 5-minute gap, each its span plus 1 minute. Decisions are human touches other than notes, plus approvals by an `access:` actor. An estimate, and it says so: reading the Portal writes nothing, so it is not counted |
+| `queue`: per day for 14 days, posted, ended, open at the day's end | 3, is the queue growing or draining | `jobs`: created, ended (done, failed, superseded; such a job never moves again, so its last update is when), and the open count when the window starts |
+| `merges`: per week, auto, approved, seat, closed; and each rollback | 7, how much merges with no human | `audit_log` actions `auto-merged`, `approved-merged`, `manage_pr` (a merge or a close) and `pr-closed`; `deploy_outcomes` rolled back or failed to roll back. A policy merge that also closed an approval writes both `auto-merged` and `approved-merged`; it is counted once, as auto |
+| `backups`: 14 daily, 8 weekly and 6 monthly slots, filled or not | 10, is every retention slot filled | the complete runs (`_complete.json`) under `backups/json/` in the backup bucket |
+| `ci`: per roster repo and day for 14 days, green, red or none | 11, which repos are red, and for how long | GitHub, each repo's default branch runs; a day is red when any workflow's last completed run up to then failed and green when every one passed, carried over a day with none. Kept in KV for an hour (`portal:trends-ci:v1`) only when every repo was read; a repo that could not be read is in `not_read`, never drawn green |
+
+Charts 2, 5 and 6 (waits, claim agreement, cost) read `GET /portal/api/claims`, which serves them already; 4 reads the Tonight plan; 8 and 9 read the feed. Tests: test/trends.test.ts, test-integration/portal-trends.test.ts.
+
 ## Shared code
 
 How far the centralization has got (job_584b4e7f2824; ruling capsid/rulings/shared-homes-2026-10-06.md). One panel per shared package in configuration, the `shared_packages` table (`migrations/0036_shared_packages.sql`, seeded with Capsomer, site-api, d1-dump, Prelum, site-runtime and devkit, each with its repo's earlier names and the known local copies it replaces). Each panel shows the package's newest release tag, every app that pins it with the tag and how many releases behind it is ("Current", "2 releases behind", "Unpinned" for a branch or a bare preset), whether it is pinned through the repo's old name, and each known local copy as still there or removed.
