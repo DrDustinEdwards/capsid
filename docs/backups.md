@@ -55,6 +55,26 @@ Three paths, in the order to try them. Path 2 has been executed end to end again
 
 The drill replaces `scripts/restore-rehearsal.mjs`. Like it, the drill holds no Cloudflare credential: it restores into a local SQLite file, and the workflow sets no Cloudflare secret. That is a ruling (Dustin, 2026-10-05): a D1 Edit token covers every database in the account and cannot be limited to scratch databases, so a compromised action or a later workflow edit could delete production. What the sqlite backend cannot prove (D1's remote bound-value cap, its request limits, any difference between D1's SQLite build and Node's) is listed in d1-dump's README; capsid's values are bound, never literals, and every row in a dump was accepted by D1 when written. The same drill against a real D1 database is run by hand from the seat's machine, quarterly and after a change to the restore: `CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... npx d1-dump drill --dir <downloaded run> --backend d1`. A d1 drill killed before its cleanup leaves a database named `restore-drill-*`: list with `npx wrangler d1 list` and delete with `npx wrangler d1 delete <name>`.
 
+## Drill every site
+
+One command proves every site's backups from Dustin's machine, with his own wrangler login and no token in env, arguments or output:
+
+```
+npx wrangler login
+node scripts/drill-all.mjs            # every site
+node scripts/drill-all.mjs --site carrel --site foxhound
+```
+
+Run it after 04:00 UTC on a night both the foxhound and carrel crons have run, so each bucket holds a fresh run and the 26 hour check can pass (the script checks the age itself and runs the drill with `--max-age-hours off`, so the printed age and the verdict read one clock). `wrangler r2 object` cannot list, so the script opens each site's bucket (`SITES` in `scripts/drill-all.mjs`: foxhound, carrel, germomics) through wrangler's `getPlatformProxy` with a remote R2 binding, finds the newest run that carries `_complete.json`, downloads it to a temp directory, runs `d1-dump drill --backend sqlite` on it, and deletes the directory. A run with no marker is skipped, as `latestDump` skips it. It prints one line per site:
+
+```
+<site> run=<run id> age_hours=<n> tables=<n> rows=<n> PASS
+<site> run=<run id> age_hours=<n> tables=<n> rows=<n> FAIL (<first failing check>)
+<site> FAIL (<reason>)
+```
+
+`run` is the run drilled, `age_hours` is the marker's `exported_at` to now, `tables` and `rows` come from the marker. `PASS` means the drill exited 0. `FAIL (counts: ...)` and the other check names are the drill's own, listed above. A line with no run id means no complete run was found or the bucket could not be opened or read (the reason follows). The exit code is 1 when any site failed, and 2 for an unknown argument or site (nothing is drilled). txasm, dustinedwards and foxing join `SITES` as their backup jobs land.
+
 Checks the old rehearsal made and where each lives now:
 
 | Old check | Now |

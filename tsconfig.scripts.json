@@ -39,6 +39,8 @@
     "scripts/overnight-guard.d.mts",
     "scripts/improve-derive-key.mjs",
     "scripts/export-claims.mjs",
-    "scripts/export-claims.d.mts"
+    "scripts/export-claims.d.mts",
+    "scripts/drill-all.mjs",
+    "scripts/drill-all.d.mts"
   ]
 }
