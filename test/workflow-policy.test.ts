@@ -388,11 +388,14 @@ test("attempt code runs only inside a network-less, read-only, digest-pinned con
   assert.match(WORKFLOW, /--network none/, "no network: nothing the attempt learns can leave");
   assert.match(WORKFLOW, /--read-only/, "read-only root: bind mounts stay immutable");
   assert.match(WORKFLOW, /--tmpfs \/work:rw/, "the only writable surface is scratch that dies with the run");
-  assert.match(
-    WORKFLOW,
-    /node:24\.14\.1-bookworm@sha256:[0-9a-f]{64}/,
-    "the image must be pinned by digest, not by tag"
-  );
+  assert.match(WORKFLOW, /node:[\d.]+-bookworm@sha256:[0-9a-f]{64}/, "the image must be pinned by digest, not by tag");
+  // The SAME Node as the runner. The container mounts node_modules the runner built
+  // with the .nvmrc Node, so the image tag is derived from .nvmrc, not written here:
+  // a .nvmrc bump with the image left behind fails this test (seen 2026-10-11, when
+  // .nvmrc was on 26 and the image still on 24.14.1).
+  const nvmrc = readFileSync(join(ROOT, ".nvmrc"), "utf8").trim();
+  const image = WORKFLOW.match(/node:([\d.]+)-bookworm@sha256:/)?.[1];
+  assert.equal(image, nvmrc, `the holdout image runs Node ${image}, but .nvmrc says ${nvmrc}`);
   // The full image, not slim, because it carries git: tests that shell out to git
   // need it, and apt-get cannot run behind --network none.
   assert.ok(!/node:[\d.]+-bookworm-slim/.test(EXECUTABLE), "slim carries no git, and a test that shells out to it fails for the environment");
