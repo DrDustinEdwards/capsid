@@ -240,11 +240,11 @@ describe("a refused call writes no claim", () => {
   });
 
   it("PLANT: a transition the guard aborts leaves no claim row either", async () => {
-    // The tick requeues the job while GitHub is being read; the batch aborts, and the
+    // A release requeues the job while GitHub is being read; the batch aborts, and the
     // claim in it goes with the transition.
     const id = await claimed("raced by the tick");
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-      await env.DB.prepare("UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2 WHERE id = ?1")
+      await env.DB.prepare("UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, updated_at = ?2 WHERE id = ?1")
         .bind(id, "2026-09-29T12:30:00.000Z")
         .run();
       return new Response("unavailable", { status: 503 });

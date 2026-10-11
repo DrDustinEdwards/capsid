@@ -210,7 +210,7 @@ export function resultKindOf(resultRef: string | null | undefined): OutcomeResul
 
 // Whole minutes from the first claim, including time blocked at a gate; resume does
 // not reset claimed_at (migrations/0011's comment describes an earlier rule). A job the
-// lease sweep requeued is measured from its new claim. null with no claim timestamp,
+// seat released keeps its first claim time. null with no claim timestamp,
 // and null rather than negative if the clocks disagree.
 export function durationMinutes(claimedAt: string | null, now: Date): number | null {
   if (!claimedAt) return null;
@@ -482,7 +482,7 @@ export async function verifyEvidence(
 export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills, usage: JobUsage = NO_USAGE, actualModel: string | null = null): JobOutcomeRow {
   return {
     job_id: job.id,
-    // Copied, not joined, because a later lease expiry clears claimed_by.
+    // Copied, not joined, because a release clears claimed_by.
     // "unattributed" only keeps the NOT NULL column satisfied.
     agent: job.claimed_by ?? "unattributed",
     namespace: job.namespace,

@@ -7,7 +7,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
-import { claimJob, completeJob, expireJobLeases, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
+import { claimJob, completeJob, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
@@ -336,7 +336,6 @@ const MOVED_JOB = {
   priority: 0,
   posted_by: "github:DrDustinEdwards",
   claimed_at: null,
-  lease_expires: null,
   result_ref: null,
   result_summary: null,
   gate_required: 0,
@@ -381,41 +380,6 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
   assert.equal(out.ok, false);
   assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
   assert.match(out.refusal ?? "", /now failed/);
-});
-
-test("PLANT: expireJobLeases requeues the later jobs when an earlier job's batch throws", async () => {
-  // Each expired job is requeued in its own batch with its mirror and audit row. A
-  // throw on the first leaves it claimed and must not stop the second.
-  const expired = { id: "job_aaaaaaaaaaaa", namespace: "capsid", title: "a", body: "b", status: "claimed", priority: 0, posted_by: "github:x", claimed_by: "agent:gone", claimed_at: "2026-09-25T00:00:00Z", lease_expires: "2026-09-25T04:00:00Z", result_ref: null, result_summary: null, gate_required: 0, required_scopes: null, min_record: null, blocked_count: 0, resumed_count: 0, corrections_count: 0, review_required: 0, created_at: "2026-09-25T00:00:00Z", updated_at: "2026-09-25T00:00:00Z" };
-  const rows = [expired, { ...expired, id: "job_bbbbbbbbbbbb", title: "b" }];
-  const batches: string[][] = [];
-  const stmt = (sql: string): unknown => {
-    const s = {
-      sql,
-      bind: () => s,
-      all: async () => (/FROM jobs WHERE status = 'claimed' AND lease_expires/.test(sql) ? { results: rows } : { results: [] }),
-      first: async () => null,
-      run: async () => ({}),
-    };
-    return s;
-  };
-  const db = {
-    prepare: (sql: string) => stmt(sql),
-    batch: async (statements: Array<{ sql: string }>) => {
-      batches.push(statements.map((x) => x.sql));
-      if (batches.length === 1) throw new Error("D1_ERROR: database is locked");
-      return [];
-    },
-  };
-  const out = await expireJobLeases(fakeEnv({ DB: db as never }), new Date("2026-09-25T10:00:00Z"));
-  assert.equal(batches.length, 2, "the second job was never attempted");
-  assert.deepEqual(out.requeued, ["job_bbbbbbbbbbbb"], "a job whose batch threw was reported as requeued");
-  // Each batch is the guard, the requeue and its records together.
-  for (const sqls of batches) {
-    assert.match(sqls[0], /WHERE NOT EXISTS \(SELECT 1 FROM jobs/);
-    assert.match(sqls[1], /UPDATE jobs SET status = 'queued'/);
-    assert.ok(sqls.some((sql) => /INSERT INTO audit_log/.test(sql)));
-  }
 });
 
 test("PLANT: post into a namespace that is not registered is refused and writes nothing", async () => {

@@ -147,7 +147,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
           ? "Set the overnight run to run on the SUBSCRIPTION. The scheduler may then start the per-namespace drivers on your machine overnight, billed against your Max plan. This records your decision, its date and its reasoning where the switch is set."
           : "Set the overnight run to run on the API key. The scheduler refuses to start unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use. Billed per token to your Console account.";
     case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver is at its claim limit or holds a job on the same repo, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
+      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, and that driver continues it. It does not move to you. If the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
       return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
@@ -334,7 +334,7 @@ async function performAction(
           };
         }
         // resume_job's note is the full approval when it is longer than a line (stale jobs
-        // D6): the driver reads it as resume_note.note on its next claim, heartbeat or list.
+        // D6): the driver reads it as resume_note.note on its next claim or list.
         const note = action === "resume_job" ? (required(params, "note") ?? undefined) : undefined;
         const result =
           action === "resume_job"
@@ -795,7 +795,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           changes: [
             toQueue
               ? `${label}: blocked -> queued, claimed by nobody. The resume records why: ${toQueue}`
-              : `${label}: blocked -> claimed by ${holder}, with a fresh lease. ${holder} continues it; it does not move to you.`,
+              : `${label}: blocked -> claimed by ${holder}. ${holder} continues it; it does not move to you.`,
             `resumed_count: ${job.resumed_count} -> ${job.resumed_count + 1}.`,
             `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${p.note.length} character${p.note.length === 1 ? "" : "s"} in full` : ""}.`,
           ],
@@ -811,7 +811,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           ok: true,
           changes: [
             `${label}: claimed by ${job.claimed_by} -> queued, claimed by nobody.`,
-            `${job.claimed_by}'s lease${job.lease_expires ? ` (until ${job.lease_expires})` : ""} ends, any key bound to ${job.id} is revoked, and no outcome is recorded against ${job.claimed_by}.`,
+            `${job.claimed_by}'s claim ends, any key bound to ${job.id} is revoked, and no outcome is recorded against ${job.claimed_by}.`,
           ],
           audit: [`job-released by ${actor}`, click],
         };
@@ -1127,8 +1127,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         return refused(archived ? `'${p.name}' was revoked at ${archived.revoked_at} and archived at ${archived.archived_at}.` : `no agent named '${p.name}'.`);
       }
       if (agent.revoked_at) return refused(`'${p.name}' was already revoked at ${agent.revoked_at}.`);
-      // Bounded: a live agent holds at most its claim limit (4 at the most) plus its
-      // blocked jobs, so the limit is a guard, not a page.
+      // Bounded: the limit is a guard, not a page.
       const { results } = await env.DB.prepare(
         `SELECT id, title, namespace, status FROM jobs WHERE claimed_by = ?1 AND status IN ('claimed', 'blocked') ORDER BY id LIMIT 50`
       )

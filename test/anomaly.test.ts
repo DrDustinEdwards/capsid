@@ -9,10 +9,10 @@ import { owningCheck } from "../src/watcher.ts";
 const NOW = new Date("2026-10-10T18:00:00.000Z");
 const hour = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3600_000).toISOString().slice(0, 13);
 
-// A steady driver: claim, heartbeat and write, a few rows an hour, every day for 14 days.
+// A steady driver: claim, read and write, a few rows an hour, every day for 14 days.
 function steady(actor: string): ActionHour[] {
   const out: ActionHour[] = [];
-  for (let h = 30; h < 14 * 24; h += 6) for (const action of ["jobs-claimed", "heartbeat", "write"]) out.push({ actor, action, hour: hour(h), n: 3 });
+  for (let h = 30; h < 14 * 24; h += 6) for (const action of ["jobs-claimed", "read", "write"]) out.push({ actor, action, hour: hour(h), n: 3 });
   return out;
 }
 

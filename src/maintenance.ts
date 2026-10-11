@@ -3,7 +3,6 @@ import type { OpsMaintenanceItem } from "./ops-types";
 import { ROSTER } from "./improve-schema";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
-import { gatherDiskItems } from "./maintenance-disk";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
 import { gatherModelDriftItems } from "./model-drift";
 import { bundledModel } from "./public-data";
@@ -24,8 +23,7 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 //
 // The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
 // and the branch rules (src/maintenance-branches.ts) read GitHub for every roster
-// namespace. The disk rule (src/maintenance-disk.ts) reads the free-disk lines drivers
-// send on heartbeat; the undeployed-merge rule (src/maintenance-deploys.ts) reads the
+// namespace. The undeployed-merge rule (src/maintenance-deploys.ts) reads the
 // watcher's snapshot and each site's default branch.
 
 const MAINTENANCE_KEY = "maintenance:list";
@@ -54,8 +52,6 @@ interface MaintenanceList {
   /** Branches read per namespace, the same way: missing means not read, and a
    *  branches-not-checked item says why. */
   branches_read: Record<string, number>;
-  /** Current driver disk readings read (48 hours or newer). */
-  disk_read: number;
   /** Sites whose live deploy was compared with their default branch, per namespace. */
   deploys_read: Record<string, number>;
   /** Facts compared with system/model.json: mapped repos, App repos and watched sites. */
@@ -170,10 +166,6 @@ export async function gatherMaintenance(
   const branches = await gatherBranchItems(env, ROSTER, branchReaders, now);
   items.push(...branches.items);
 
-  // A driver whose last free-disk reading is under 30 GB, or that stopped claiming.
-  const disk = await gatherDiskItems(env, now);
-  items.push(...disk.items);
-
   // A live Worker older than its default branch's last commit.
   const deploys = await gatherDeployItems(deployReaders, now);
   items.push(...deploys.items);
@@ -191,7 +183,6 @@ export async function gatherMaintenance(
     items,
     prs_read: prs.read,
     branches_read: branches.read,
-    disk_read: disk.read,
     deploys_read: deploys.read,
     model_read: drift.read,
     rule_docs_read: ruleDocs.read,
@@ -224,7 +215,7 @@ export async function maintenanceTick(
   const deploySites = Object.keys(list.deploys_read).length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${list.disk_read} driver disk reading(s); ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
     list,
   };
 }
@@ -240,9 +231,10 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
     const counts = (v: unknown): Record<string, number> => (v && typeof v === "object" ? (v as Record<string, number>) : {});
     return {
       ...parsed,
+      // The disk rule was removed; a list stored before then may still carry its items.
+      items: parsed.items.filter((i) => !i.rule.startsWith("disk-")),
       prs_read: counts(parsed.prs_read),
       branches_read: counts(parsed.branches_read),
-      disk_read: typeof parsed.disk_read === "number" ? parsed.disk_read : 0,
       deploys_read: counts(parsed.deploys_read),
       model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
       rule_docs_read: typeof parsed.rule_docs_read === "number" ? parsed.rule_docs_read : 0,

@@ -253,11 +253,6 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       group: { key: "blocked", facet: "" },
     });
   }
-  for (const j of live.jobs) {
-    if (j.status === "claimed" && j.lease_expires && ms(j.lease_expires) < now) {
-      out.push({ sev: "warn", kind: "Queue", title: `Lease expired: ${j.title}`, sub: `${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"} · expired ${ago(ms(j.lease_expires), now)}`, at: ms(j.lease_expires), open: `job:${j.id}`, group: { key: "lease", facet: j.namespace } });
-    }
-  }
   // An agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6): the watcher's
   // finding, raised here as well, since Dustin ruled a hit is a finding plus an attention
   // item and nothing more (D4, 2026-10-03). A warning, never critical: no rule has been
@@ -325,7 +320,7 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
 // warning. The tier follows from the severity, so any new row lands in the right one.
 
 export type Tier = "problem" | "notice";
-export type GroupKey = "blocked" | "pr-seat" | "lease" | "silent";
+export type GroupKey = "blocked" | "pr-seat" | "silent";
 
 export function tierOf(a: { sev: Sev }): Tier {
   return a.sev === "nodata" ? "notice" : "problem";
@@ -341,7 +336,6 @@ const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; lab
   // The blocked row is already one row (attentionItems); the group gives it children.
   blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Queue" },
   "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "prs", label: "Pull requests" },
-  lease: { title: (n) => `${n} running jobs have an expired lease`, view: "queue", label: "Queue" },
   silent: { title: (n) => `${n} drivers have been silent for over 7 days`, view: "agents", label: "Agents" },
 };
 

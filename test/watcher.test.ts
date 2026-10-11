@@ -71,7 +71,7 @@ test("the in-Worker watcher is the SAME authority as the mintable role, not a co
 test("the watcher can post a job and cannot claim, complete or resume one", () => {
   const agent = watcherAgent();
   assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action: "post", namespace: "capsid", grant: "write" }), null);
-  for (const action of ["claim", "complete", "fail", "block", "resume", "heartbeat"]) {
+  for (const action of ["claim", "complete", "fail", "block", "resume"]) {
     assert.match(
       String(checkScope(agent, { tool: "capsid_work_jobs", action, namespace: "capsid", grant: "write" })),
       new RegExp(`'capsid_work_jobs\\.${action}'`),

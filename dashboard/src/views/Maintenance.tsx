@@ -18,7 +18,6 @@ import { St } from "../ui/icons";
 // then what the pass did on its own, and last what it could not read.
 const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }> = {
   "pr-red": { kind: "crit", label: "Red PR", order: 0 },
-  "disk-low": { kind: "crit", label: "Low disk", order: 1 },
   "undeployed-merge": { kind: "warn", label: "Not deployed", order: 2 },
   "pr-awaiting-seat": { kind: "warn", label: "PR waiting", order: 3 },
   "shipped-elsewhere": { kind: "warn", label: "Shipped", order: 4 },
@@ -32,7 +31,6 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "branch-pruned": { kind: "ok", label: "Pruned", order: 10 },
   "prs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "branches-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
-  "disk-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "deploys-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "model-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "rule-docs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
@@ -70,7 +68,7 @@ export function Maintenance() {
   const hidden = items.length - shown.length;
   const open = new Set(feed.live.jobs.map((j) => j.id));
   const r = data?.read;
-  const readLine = r ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys, ${r.disk} driver disk readings read` : "";
+  const readLine = r ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys read` : "";
   return (
     <Panel
       flush

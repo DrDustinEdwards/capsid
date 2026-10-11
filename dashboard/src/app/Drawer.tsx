@@ -321,12 +321,6 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
                 <dd className="mono">{j.claimed_by}</dd>
               </>
             )}
-            {j.lease_expires && (
-              <>
-                <dt>Lease</dt>
-                <dd>{ms(j.lease_expires) < now ? <St kind="warn">expired {ago(ms(j.lease_expires), now)}</St> : `expires ${ago(ms(j.lease_expires), now)}`}</dd>
-              </>
-            )}
             <dt>Blocked / resumed</dt>
             <dd className="num">
               {j.blocked_count} / {j.resumed_count}

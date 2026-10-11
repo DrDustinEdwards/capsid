@@ -267,7 +267,7 @@ describe("job outcomes", () => {
     expect(posted.job!.min_record).toBe(JSON.stringify({ prs_merged: 2 }));
 
     // This driver has no record, so it is refused and the job stays queued rather
-    // than being failed or parked on a lease.
+    // than being failed or handed out.
     const refused = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/at least 2 merged pull requests/);
@@ -290,8 +290,8 @@ describe("job outcomes", () => {
     expect(refused.refusal).toMatch(/has 0/);
   });
 
-  it("PLANT: the bar is enforced at a RESUME that hands the lease to a new holder, too", async () => {
-    // Resume with take hands a caller a lease exactly as a claim does, so a driver
+  it("PLANT: the bar is enforced at a RESUME that hands the claim to a new holder, too", async () => {
+    // Resume with take hands a caller a claim exactly as a claim does, so a driver
     // that could not have claimed the job must not acquire it by resuming it.
     const OTHER_ACTOR = "agent:driver-dddd";
     const OTHER = legacyAgent("write", OTHER_ACTOR);
@@ -476,13 +476,13 @@ describe("a holder transition commits with every record of it, or not at all", (
   });
 
   it("PLANT: a state change while GitHub is being read aborts the whole batch, and nothing is written", async () => {
-    // The lease tick (or anything else) moving the row between the read and the batch.
+    // A release (or anything else) moving the row between the read and the batch.
     // Simulated inside the GitHub call, which is the window the verification opens.
     const id = await claimed("raced by the tick");
     await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
     const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       await env.DB.prepare(
-        "UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2 WHERE id = ?1"
+        "UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, updated_at = ?2 WHERE id = ?1"
       )
         .bind(id, "2026-09-10T12:30:00.000Z")
         .run();

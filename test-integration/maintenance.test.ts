@@ -1,11 +1,10 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { claimJob, heartbeatJob, postJob } from "../src/jobs";
+import { postJob } from "../src/jobs";
 import { gatherMaintenance, maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
 import { legacyAgent } from "../src/agents";
 import type { PrReaders } from "../src/maintenance-prs";
 import { PRUNE_AUDIT_ACTION, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches";
-import { DISK_PREFIX } from "../src/maintenance-disk";
 import type { DeployReaders } from "../src/maintenance-deploys";
 import worker from "../src/index";
 import type { Env } from "../src/env";
@@ -68,7 +67,6 @@ beforeEach(async () => {
     .run();
   await env.APP_KV.delete("maintenance:list");
   await env.APP_KV.delete(MAINTENANCE_LAST_KEY);
-  for (const key of (await env.APP_KV.list({ prefix: DISK_PREFIX })).keys) await env.APP_KV.delete(key.name);
 });
 
 describe("gatherMaintenance", () => {
@@ -115,25 +113,6 @@ describe("gatherMaintenance", () => {
     await touch(old, "2026-10-01T06:00:00.000Z");
     const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
     expect(list.items.filter((i) => i.rule === "auto-resumed").map((i) => i.job)).toEqual([recent]);
-  });
-
-  it("lists a driver whose heartbeat reported under 30 GB free, and stores nothing from a refused heartbeat", async () => {
-    const DRIVER = legacyAgent("write", "agent:driver-disk");
-    const OTHER = legacyAgent("write", "agent:driver-other");
-    const id = await post("Work with a full disk");
-    expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
-    const beat = await heartbeatJob(jobsEnv(), DRIVER, NOW, id, "ok: 12.5 GB free");
-    expect(beat.ok).toBe(true);
-    expect(beat.disk).toEqual({ recorded: true, free_gb: 12.5, stop: false });
-    const refused = await heartbeatJob(jobsEnv(), OTHER, NOW, id, "ok: 1 GB free");
-    expect(refused.ok).toBe(false);
-    expect(refused.disk).toBeUndefined();
-
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
-    const low = list.items.filter((i) => i.rule === "disk-low");
-    expect(low.map((i) => [i.namespace, i.job])).toEqual([["sample", id]]);
-    expect(low[0].line).toContain("agent:driver-disk reported 12.5 GB free");
-    expect(list.disk_read).toBe(1);
   });
 
   it("stays quiet on a clean queue", async () => {
@@ -272,6 +251,6 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     expect(after.cache).toBe("no-store");
     expect(after.body.generated).toBe(NOW.toISOString());
     expect(after.body.items.map((i) => i.rule)).toEqual(["later-passed"]);
-    expect(after.body.read).toEqual({ prs: 0, branches: 7, repos: 7, roster: 7, deploys: 0, disk: 0 });
+    expect(after.body.read).toEqual({ prs: 0, branches: 7, repos: 7, roster: 7, deploys: 0 });
   });
 });

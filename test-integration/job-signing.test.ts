@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { blockJob, claimJob, heartbeatJob, jobsSummary, postJob, resumeJob } from "../src/jobs";
+import { blockJob, claimJob, jobsSummary, listJobs, postJob, resumeJob } from "../src/jobs";
 import { latestResumeNote } from "../src/jobs-mirror";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
@@ -44,12 +44,10 @@ async function blockedBy(holder: Agent, command = "git push -u origin feat/x"): 
   return id;
 }
 
-// A blocked job resumed to the queue (its driver holds another claim), so the next
-// claim is the one that reads the note.
+// A blocked job resumed to the queue (it was blocked by a shared identity, so no
+// driver gets it back), so the next claim is the one that reads the note.
 async function resumedToQueue(note = "run it from the feature branch"): Promise<string> {
-  const driver = driverAgent();
-  const id = await blockedBy(driver);
-  expect((await claimJob(jobsEnv(), driver, NOW, { id: await post() })).ok).toBe(true);
+  const id = await blockedBy(ADMIN);
   const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, id, "push approved", { note });
   expect(resumed.ok, resumed.refusal).toBe(true);
   return id;
@@ -112,12 +110,12 @@ describe("resume notes", () => {
     expect(claimed.resume_note).toMatchObject({ reason: "push approved", signature: "legacy-unsigned" });
   });
 
-  it("a heartbeat hands on the checked note too", async () => {
+  it("list for one id hands on the checked note too", async () => {
     const driver = driverAgent();
     const id = await blockedBy(driver);
     // The seat's resume returns the job to its driver.
     expect((await resumeJob(jobsEnv(), seatAgent(), LATER, id, "push approved")).ok).toBe(true);
-    const beat = await heartbeatJob(jobsEnv(), driver, LATER, id);
+    const beat = await listJobs(jobsEnv(), { namespace: "capsid", id });
     expect(beat.ok, beat.refusal).toBe(true);
     expect(beat.resume_note?.signature).toBe("verified");
   });

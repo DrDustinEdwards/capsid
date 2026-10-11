@@ -379,13 +379,12 @@ function landTouch(params: unknown[], rows: FakeD1Rows): WriteResult {
   return { changes: 1, returning: [] };
 }
 
-// The column defaults migrations 0006 to 0042 give a jobs row.
+// The column defaults migrations 0006 to 0044 give a jobs row.
 const jobDefaults = (): Row => ({
   priority: 0,
   status: "queued",
   claimed_by: null,
   claimed_at: null,
-  lease_expires: null,
   result_ref: null,
   result_summary: null,
   gate_required: 0,

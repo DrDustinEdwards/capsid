@@ -147,7 +147,6 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
     `- gate required: ${job.gate_required ? "yes" : "no"}`,
     `- posted by: ${job.posted_by}`,
     `- claimed by: ${job.claimed_by ?? "(unclaimed)"}`,
-    `- lease expires: ${job.lease_expires ?? "(no lease)"}`,
   ];
   // The started label (src/jobs-begin.ts), once somebody began the job.
   if (job.started_by) lines.push(`- started by: ${job.started_by} at ${job.started_at ?? "(no time recorded)"}`);

@@ -257,13 +257,13 @@ pull request re-verification in `src/outcome-prs.ts`).
 
 | column | what it is |
 | --- | --- |
-| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later lease expiry clears that column |
+| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column |
 | `prs_opened`, `prs_merged` | GitHub's answer whenever the driver named any pull request |
 | `commits`, `files_changed` | the pull requests' own counts when there are any, the driver's otherwise |
 | `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgement about a diff, not a property of it |
 | `ci_green` | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed" |
 | `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand |
-| `duration_minutes` | claimed to recorded. The final working stretch: `resume` takes a fresh lease, so time spent blocked waiting on a human is excluded |
+| `duration_minutes` | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
 | `result_kind` | `pr`, `doc` or `none`, derived from `result_ref` rather than declared |
 | `verified` | a JSON object of booleans saying which of the above this Worker checked itself |
 
@@ -448,7 +448,7 @@ said `APPROVE` has changed its mind.
 
 | verdict | what happens |
 | --- | --- |
-| none yet | the job stays claimed and its lease keeps running |
+| none yet | the job stays claimed |
 | `APPROVE` | the hand-off proceeds exactly as it would with no reviewer |
 | `CHANGES` | back to the driver, and it spends a correction from the budget above |
 | `BLOCK` | blocked for the seat, with the objection as the reason |

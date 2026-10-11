@@ -130,19 +130,17 @@ function utcMillis(at: string): number {
   return Date.parse(at.includes("T") ? at : `${at.replace(" ", "T")}Z`);
 }
 
-// A bound key lives exactly as long as its job is live for it: claimed by it under an
-// unexpired lease, or queued within the pending-start window before the runner's first
-// claim. Blocked, done, failed, superseded, claimed by another, or a lapsed lease all
-// end it, so no revocation has to be remembered for the key to stop working.
+// A bound key lives exactly as long as its job is live for it: claimed by it, or queued
+// within the pending-start window before the runner's first claim. Blocked, done,
+// failed, superseded or claimed by another all end it, so no revocation has to be
+// remembered for the key to stop working.
 async function boundJobLive(db: D1Database, row: AgentRow, now: Date): Promise<boolean> {
   const job = await db
-    .prepare("SELECT status, claimed_by, lease_expires FROM jobs WHERE id = ?1")
+    .prepare("SELECT status, claimed_by FROM jobs WHERE id = ?1")
     .bind(row.job_id)
-    .first<{ status: string; claimed_by: string | null; lease_expires: string | null }>();
+    .first<{ status: string; claimed_by: string | null }>();
   if (!job) return false;
-  if (job.status === "claimed") {
-    return job.claimed_by === agentActor(row.name) && job.lease_expires !== null && utcMillis(job.lease_expires) > now.getTime();
-  }
+  if (job.status === "claimed") return job.claimed_by === agentActor(row.name);
   if (job.status === "queued") {
     return now.getTime() - utcMillis(row.created_at) < PENDING_START_MINUTES * 60_000;
   }

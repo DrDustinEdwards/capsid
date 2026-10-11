@@ -30,7 +30,6 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
     posted_by: "github:DrDustinEdwards",
     claimed_by: "agent:capsid-driver",
     claimed_at: "2026-09-11T10:00:00.000Z",
-    lease_expires: null,
     result_ref: null,
     result_summary: "did the thing",
     gate_required: 0,

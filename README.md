@@ -39,7 +39,7 @@ Detail: [docs/auth.md](docs/auth.md) (including the full endpoint list), [docs/b
 
 ## The work queue and claims
 
-A job is a title and a signed body, and the body is the prompt a driver runs. A driver claims a job on a four-hour lease and works it. It opens a pull request and completes the job, and a job that reaches a push, a deploy, a secret, a live migration or a merge blocks with the exact command a person must run. Capsid stores the driver's claim and the evidence it can read from GitHub in separate tables (`job_claims`, `job_outcomes`, `job_evaluations`, `job_touches`). A field nobody reported is `NULL`, not `0`. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
+A job is a title and a signed body, and the body is the prompt a driver runs. A driver claims a job and works it, with no lease: a claim never expires, and the seat releases a holder that is gone. It opens a pull request and completes the job, and a job that reaches a push, a deploy, a secret, a live migration or a merge blocks with the exact command a person must run. Capsid stores the driver's claim and the evidence it can read from GitHub in separate tables (`job_claims`, `job_outcomes`, `job_evaluations`, `job_touches`). A field nobody reported is `NULL`, not `0`. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
 
 ## The improve loop
 
@@ -90,8 +90,8 @@ A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mi
 - [docs/routines.md](docs/routines.md) how Capsid starts a Claude Code cloud session for a queued job by firing its namespace's routine
 - [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, its guards and its canary
 - [docs/telemetry.md](docs/telemetry.md) Claude Code's OpenTelemetry into Capsid: per-session usage, per-job cost on the outcome row, and the settings that turn it on
-- [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records
-- [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes, the nightly driver and the watcher
+- [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, gates, evidence and agent records
+- [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes and the watcher
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts
 - [docs/skills.md](docs/skills.md) how an idea abstracted from work that landed is offered to other projects
 - [docs/portal.md](docs/portal.md) Capsid Portal: its views and data, what "no data" means, who gets in, its routes and controls, the Cloudflare token, and building it
@@ -103,7 +103,7 @@ A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mi
 - [docs/health-format.md](docs/health-format.md) the one health body every site answers with (status and sha), which the live `sha` check reads
 - [docs/live-checks.md](docs/live-checks.md) the watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages
 - [docs/public-data.md](docs/public-data.md) the public system model and stats documents served without auth
-- [docs/overnight.md](docs/overnight.md) the overnight run: the plan per repo, the morning digest, and the scheduler switch with its Runs on choice
+- [docs/overnight.md](docs/overnight.md) the overnight run: the plan per repo, the morning digest, and the overnight switch with its Runs on choice
 - [explorer/README.md](explorer/README.md) the system explorer at capsid.dustinedwards.info: pages built daily from the public documents, its checks, and its deploy
 
 ## What Capsid is not

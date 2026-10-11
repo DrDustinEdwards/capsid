@@ -38,14 +38,14 @@ async function envWith(job: Record<string, unknown> | null, row: Record<string, 
         ...row,
       },
     ],
-    jobs: job ? [{ id: JOB, namespace: "capsid", title: "t", body: "b", status: "claimed", claimed_by: `agent:${NAME}`, lease_expires: "2026-09-27T15:00:00.000Z", ...job }] : [],
+    jobs: job ? [{ id: JOB, namespace: "capsid", title: "t", body: "b", status: "claimed", claimed_by: `agent:${NAME}`, ...job }] : [],
   });
   return fakeEnv({ DB: d1.db, ...env });
 }
 
 const bearer = () => new Request("https://capsid.example/ops/mcp", { headers: { Authorization: `Bearer ${KEY}` } });
 
-test("a bound key resolves while its job is claimed by it under a live lease, and carries the binding", async () => {
+test("a bound key resolves while its job is claimed by it, and carries the binding", async () => {
   const resolved = await resolveAgent(bearer(), await envWith({}), NOW);
   assert.ok(resolved, "a bound key on a live claim did not resolve");
   assert.equal(resolved.agent.job, JOB);
@@ -53,11 +53,10 @@ test("a bound key resolves while its job is claimed by it under a live lease, an
 
 test("a bound key stops resolving when its job is no longer live for it", async () => {
   const dead: Array<[string, Record<string, unknown> | null]> = [
-    ["lease expired", { lease_expires: "2026-09-27T11:59:59.000Z" }],
     ["claimed by another agent", { claimed_by: "agent:capsid-driver" }],
-    ["blocked", { status: "blocked", lease_expires: null }],
-    ["done", { status: "done", lease_expires: null }],
-    ["failed", { status: "failed", lease_expires: null }],
+    ["blocked", { status: "blocked" }],
+    ["done", { status: "done" }],
+    ["failed", { status: "failed" }],
     ["job missing", null],
   ];
   for (const [why, job] of dead) {
@@ -66,14 +65,14 @@ test("a bound key stops resolving when its job is no longer live for it", async 
 });
 
 test("a bound key on a queued job resolves only within the pending-start window", async () => {
-  const queued = { status: "queued", claimed_by: null, lease_expires: null };
+  const queued = { status: "queued", claimed_by: null };
   assert.ok(await resolveAgent(bearer(), await envWith(queued), NOW), "a fresh key on a queued job did not resolve");
   const stale = await envWith(queued, { created_at: "2026-09-27 11:30:00" });
   assert.equal(await resolveAgent(bearer(), stale, NOW), null, "a key minted 30 minutes ago still resolved on a queued job");
 });
 
 test("a dead bound key does not fall through to the operator tier", async () => {
-  const env = await envWith({ status: "done", lease_expires: null }, {}, { OPERATOR_KEY_HASH: await sha256Hex(KEY) });
+  const env = await envWith({ status: "done" }, {}, { OPERATOR_KEY_HASH: await sha256Hex(KEY) });
   assert.equal(await resolveAgent(bearer(), env, NOW), null);
 });
 
@@ -85,7 +84,7 @@ function bound(job: string | null): Agent {
 
 test("a bound key may work its own job and no other", () => {
   const agent = bound(JOB);
-  for (const action of ["claim", "heartbeat", "complete", "fail", "block", "resume"]) {
+  for (const action of ["claim", "complete", "fail", "block", "resume"]) {
     assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action, jobId: JOB }), null, `${action} on its own job was refused`);
     assert.match(checkScope(agent, { tool: "capsid_work_jobs", action, jobId: OTHER }) ?? "", /bound to job/, `${action} on another job was allowed`);
   }
@@ -148,7 +147,7 @@ async function callJobs(agent: Agent, args: Record<string, unknown>): Promise<st
 }
 
 test("through the server, a bound key's own job passes the binding on every work action", async () => {
-  for (const action of ["claim", "heartbeat", "complete", "fail", "block"]) {
+  for (const action of ["claim", "complete", "fail", "block"]) {
     const text = await callJobs(bound(JOB), { action, id: JOB, result_summary: "s", reason: "r", command: "c" });
     assert.doesNotMatch(text, /bound to job/, `${action} on its own job was refused by the binding: ${text.slice(0, 160)}`);
   }

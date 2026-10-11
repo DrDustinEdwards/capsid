@@ -457,12 +457,19 @@ test("a resume preview says the job goes back to its claimant, naming it", async
   assert.match(body.changes[0], /blocked -> claimed by agent:capsid-driver/);
 });
 
-test("a resume preview says the job goes to the queue, and why, when its claimant holds another claim", async () => {
+test("a resume preview says the job goes to the queue, and why, when its claimant is a shared identity", async () => {
+  const w = world();
+  w.d1.rows.jobs[0].claimed_by = "access:admin@example.com";
+  const body = await previewOk(w, "resume_job", { id: "job_blocked00001", reason: "ran the push" });
+  assert.match(body.changes[0], /blocked -> queued/);
+  assert.match(body.changes[0], /access:admin@example.com is a shared identity/);
+});
+
+test("a resume preview no longer sends the job to the queue because its claimant holds another claim", async () => {
   const w = world();
   w.d1.rows.jobs.push({ ...w.d1.rows.jobs[1], id: "job_claimed00002", title: "another", claimed_by: "agent:capsid-driver" });
   const body = await previewOk(w, "resume_job", { id: "job_blocked00001", reason: "ran the push" });
-  assert.match(body.changes[0], /blocked -> queued/);
-  assert.match(body.changes[0], /agent:capsid-driver holds job_claimed00002/);
+  assert.match(body.changes[0], /blocked -> claimed by agent:capsid-driver/);
 });
 
 test("a revoke preview lists the jobs the agent holds", async () => {

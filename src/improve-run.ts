@@ -36,7 +36,7 @@ import {
 } from "./improve-state";
 import { breakerState, type BreakerState } from "./job-breaker";
 import { verifyTaskDoc } from "./improve-task";
-import { SCOPE_FLAGS, claimLimit, parseScopes } from "./agents-schema";
+import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
 import { loadAgentRecords, type AgentRecord } from "./agent-record";
 import { jobsSummary, type JobsSummary } from "./jobs";
 import { integrityOf, REPORTS_PREFIX } from "./truth-report";
@@ -243,8 +243,6 @@ export interface AgentSummary {
   namespaces: "*" | string[];
   grants: string[];
   flags: string[];
-  // How many jobs it may hold claimed at once (claimLimit, src/agents-schema.ts).
-  max_claims: number;
   last_seen: string | null;
   revoked_at: string | null;
   // When the watcher pass moved it to agents_archive (src/agents-archive.ts), or null
@@ -282,7 +280,6 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       namespaces: scopes.namespaces,
       grants: scopes.grants,
       flags: SCOPE_FLAGS.filter((flag) => scopes.flags[flag]),
-      max_claims: claimLimit(scopes),
       last_seen: row.last_seen,
       revoked_at: row.revoked_at,
       archived_at: row.archived_at,

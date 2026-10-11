@@ -256,7 +256,7 @@ export interface ScopeNeed {
 // What a key bound to one job may do with the queue. The work actions need that job's
 // id; list may read the queue but not name another job; everything else, including an
 // action added later, is refused, so a new action is closed to a runner until listed.
-const BOUND_WORK_ACTIONS: readonly string[] = ["claim", "heartbeat", "complete", "fail", "block", "resume"];
+const BOUND_WORK_ACTIONS: readonly string[] = ["claim", "complete", "fail", "block", "resume"];
 
 // The work queue's tool, named once: the job binding and the handlers' re-checks
 // (src/tools/jobs.ts, src/jobs-schema.ts, src/ops-session-auth.ts) all ask about it.

@@ -76,9 +76,8 @@ describe("the four cron expressions", () => {
     await fire(IMPROVE_TICK_CRON);
     const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
     expect(runs?.n).toBe(0);
-    // The tick's own row, and none for a step with nothing to do: no lease to return.
+    // The tick's own row, and none for a step with nothing to do.
     expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "no improve run to advance" }]);
-    expect(await ledger("lease-sweep")).toEqual([]);
   });
 
   // The skills refresh fires daily and gates on its weekday inside the handler, so

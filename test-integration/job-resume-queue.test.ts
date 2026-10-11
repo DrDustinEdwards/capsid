@@ -2,12 +2,12 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent, type Agent } from "../src/agents";
-import { defaultScopes, serializeScopes } from "../src/agents-schema";
+import { defaultScopes } from "../src/agents-schema";
 
-// Resume when the job cannot go back to the credential that blocked it: that driver
-// holds another claim, or the credential is shared (the admin identity every chat tab
-// connects as, or a legacy operator key) and so names no particular session. The job
-// goes back to the queue with its approval, and the next free session claims it.
+// Resume when the job cannot go back to the credential that blocked it: the credential
+// is shared (the admin identity every chat tab connects as, or a legacy operator key)
+// and so names no particular session. The job goes back to the queue with its approval,
+// and the next free session claims it. A driver that holds other claims is no reason.
 
 const SECRET = "test-root-secret";
 const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
@@ -64,26 +64,19 @@ beforeEach(async () => {
 });
 
 describe("resume to the queue", () => {
-  it("a job whose driver holds another claim goes back to the queue, and the next claim gets the approval", async () => {
+  it("a driver that holds another claim still gets its blocked job back: there is no claim limit", async () => {
     const driver = driverAgent();
     const blocked = await blockedBy(driver, "waiting on its driver");
     expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("the driver moved on") })).ok).toBe(true);
 
     const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved", { note: "run it from the feature branch" });
     expect(resumed.ok, resumed.refusal).toBe(true);
-    expect(resumed.note).toMatch(/agent:capsid-driver holds/);
+    expect(resumed.note).toBeUndefined();
     const r = await row(blocked);
-    expect(r?.status).toBe("queued");
-    expect(r?.claimed_by).toBeNull();
-    expect(r?.lease_expires).toBeNull();
+    expect(r?.status).toBe("claimed");
+    expect(r?.claimed_by).toBe("agent:capsid-driver");
     expect(r?.resumed_count).toBe(1);
-    expect(await resumedAudit(blocked)).toMatchObject({ approved: "push approved", returned_to: "queued", previous_holder: "agent:capsid-driver" });
-
-    const next = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, { id: blocked });
-    expect(next.ok, next.refusal).toBe(true);
-    expect(next.resume_note).toMatchObject({ reason: "push approved", note: "run it from the feature branch", by: "agent:seat" });
-    // Measured from the first claim, not from this one.
-    expect((await row(blocked))?.claimed_at).toBe(NOW.toISOString());
+    expect(await resumedAudit(blocked)).toMatchObject({ approved: "push approved", held_by: "agent:capsid-driver" });
   });
 
   it("a job blocked by the shared admin identity goes back to the queue, not to that identity", async () => {
@@ -92,6 +85,13 @@ describe("resume to the queue", () => {
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await row(blocked))?.status).toBe("queued");
     expect(resumed.note).toMatch(/shared/);
+    expect(await resumedAudit(blocked)).toMatchObject({ approved: "approved", returned_to: "queued", previous_holder: ADMIN.actor });
+
+    const next = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, { id: blocked });
+    expect(next.ok, next.refusal).toBe(true);
+    expect(next.resume_note).toMatchObject({ reason: "approved", by: ADMIN.actor });
+    // Measured from the first claim, not from this one.
+    expect((await row(blocked))?.claimed_at).toBe(NOW.toISOString());
   });
 
   it("a free minted driver gets its job back, as before", async () => {
@@ -103,14 +103,14 @@ describe("resume to the queue", () => {
     expect((await row(blocked))?.claimed_by).toBe("agent:capsid-driver");
   });
 
-  it("take by a caller that already holds a claim is still refused", async () => {
+  it("take by a caller that already holds a claim is allowed: there is no claim limit", async () => {
     const blocked = await blockedBy(driverAgent(), "someone wants to take it");
     const taker = driverAgent("agent:capsid-driver-2");
     expect((await claimJob(jobsEnv(), taker, NOW, { id: await post("the taker is busy") })).ok).toBe(true);
-    const refused = await resumeJob(jobsEnv(), taker, LATER, blocked, "approved", { take: true });
-    expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/already holds/);
-    expect((await row(blocked))?.status).toBe("blocked");
+    const taken = await resumeJob(jobsEnv(), taker, LATER, blocked, "approved", { take: true });
+    expect(taken.ok, taken.refusal).toBe(true);
+    expect((await row(blocked))?.status).toBe("claimed");
+    expect((await row(blocked))?.claimed_by).toBe("agent:capsid-driver-2");
   });
 
   it("the driver's own gate still cannot be cleared by that driver with a plain resume", async () => {
@@ -120,47 +120,5 @@ describe("resume to the queue", () => {
     const refused = await resumeJob(jobsEnv(), driver, LATER, blocked, "I approve myself");
     expect(refused.ok).toBe(false);
     expect((await row(blocked))?.status).toBe("blocked");
-  });
-});
-
-// A driver whose limit the admin raised (max_claims 2) can take its job back while it
-// holds another, unless that other job is on the same repo.
-describe("resume to a driver with room", () => {
-  const ACTOR = "agent:roomy-driver";
-
-  beforeEach(async () => {
-    await env.DB.prepare("DELETE FROM agents WHERE name = 'roomy-driver'").run();
-    const scopes = { ...defaultScopes(["capsid", "germomics"]), grants: ["read", "write"] as ("read" | "write")[], max_claims: 2 };
-    await env.DB.prepare("INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at) VALUES (?1, ?2, 'driver', ?3, ?4, 'test', ?5)")
-      .bind("agent_r00my0000000", "roomy-driver", "f".repeat(64), serializeScopes(scopes), NOW.toISOString())
-      .run();
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-      .bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }]))
-      .run();
-  });
-
-  function roomy(): Agent {
-    const agent = driverAgent(ACTOR);
-    return { ...agent, scopes: { ...agent.scopes, namespaces: ["capsid", "germomics"], max_claims: 2 } };
-  }
-
-  it("holding a job on another repo, the driver gets its blocked job back", async () => {
-    const blocked = await blockedBy(roomy(), "back to a driver with room");
-    const other = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "germomics", title: "elsewhere", body: "do the thing" });
-    expect((await claimJob(jobsEnv(), roomy(), NOW, { id: other.job!.id })).ok).toBe(true);
-    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved");
-    expect(resumed.ok, resumed.refusal).toBe(true);
-    expect((await row(blocked))?.status).toBe("claimed");
-    expect((await row(blocked))?.claimed_by).toBe(ACTOR);
-  });
-
-  it("holding a job on the same repo, the blocked job goes back to the queue, naming the repo", async () => {
-    const blocked = await blockedBy(roomy(), "same repo as the held one");
-    const held = await post("held on capsid");
-    expect((await claimJob(jobsEnv(), roomy(), NOW, { id: held })).ok).toBe(true);
-    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved");
-    expect(resumed.ok, resumed.refusal).toBe(true);
-    expect(resumed.note).toContain(`${ACTOR} holds ${held} ('held on capsid' in capsid) on example/capsid`);
-    expect((await row(blocked))?.status).toBe("queued");
   });
 });

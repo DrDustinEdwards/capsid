@@ -17,7 +17,6 @@ export type TaskId =
   | "improve-open"
   | "skills-refresh"
   | "tick"
-  | "lease-sweep"
   | "auto-merge"
   | "skill-cycle"
   | "watcher"
@@ -49,7 +48,6 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "improve-open", label: "Improve opener", period_ms: 24 * 3_600_000 },
   { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * 24 * 3_600_000 },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
-  { id: "lease-sweep", label: "Job lease sweep", period_ms: null },
   { id: "skill-cycle", label: "Skill evaluation cycle", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },

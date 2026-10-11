@@ -63,7 +63,7 @@ function workText(job: Pick<JobRow, "title" | "body">): string {
 /**
  * The offer for a claim. The first claim decides it and returns the audit statement
  * that records it, to ride in the claim's guarded batch. A later claim (after a
- * resume, a release or an expired lease) returns the recorded skills and records
+ * resume, or a release) returns the recorded skills and records
  * nothing, so a job keeps its first offer when it changes hands.
  */
 export async function offerForClaim(

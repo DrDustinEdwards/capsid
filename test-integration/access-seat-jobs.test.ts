@@ -7,9 +7,9 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 
 // THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
 // against a real D1. Since the MCP login moved to Cloudflare Access (#185), the admin reaches the
-// queue as `access:<email>`. The queue recorded leases only for github:, opkey: and
+// queue as `access:<email>`. The queue recorded claims only for github:, opkey: and
 // agent: actors, so the seat's resume of job_195c11e2667b was refused on 2026-09-28:
-// "'access:...' is not a caller identity this queue can hold a lease for". Each seat
+// "'access:...' is not a caller identity this queue can hold a claim for". Each seat
 // action is driven here as that identity.
 
 const SECRET = "test-root-secret";
@@ -83,7 +83,7 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
     expect((await row(String(result.job?.id)))?.posted_by).toBe(SEAT_ACTOR);
   });
 
-  it("claim: the seat can hold a lease as access:<email>", async () => {
+  it("claim: the seat can hold a claim as access:<email>", async () => {
     const id = await driverJob();
     const result = await jobsTool(SEAT, { action: "claim", id });
     expect(result.ok, result.refusal).toBe(true);
@@ -97,7 +97,7 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
     expect((await row(id))?.status).toBe("claimed");
   });
 
-  it("resume with take: the seat takes the lease as access:<email>", async () => {
+  it("resume with take: the seat takes the claim as access:<email>", async () => {
     const id = await blockedByDriver();
     const result = await jobsTool(SEAT, { action: "resume", id, reason: "the seat takes it", take: true });
     expect(result.ok, result.refusal).toBe(true);

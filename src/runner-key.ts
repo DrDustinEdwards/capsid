@@ -24,7 +24,7 @@ export const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const OIDC_AUDIENCE = "capsid";
 const SEAT_SESSION_WORKFLOW = ".github/workflows/seat-session.yml";
 
-// What a runner may call. Enough to claim, read, heartbeat, open its pull request and
+// What a runner may call. Enough to claim, read, open its pull request and
 // hand the job on; nothing that writes a document or touches a repo directly. The
 // qualified entries narrow a tool to those actions (allowsToolAction): reading a
 // document but not its versions, opening a pull request but not commenting, the loop's

@@ -252,7 +252,7 @@ const CASES: Record<string, Case> = {
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("claimed");
-      expect(stored?.claimed_by, "the lease goes back to the driver that blocked it").toBe("agent:capsid-driver");
+      expect(stored?.claimed_by, "the claim goes back to the driver that blocked it").toBe("agent:capsid-driver");
       const resumed = (await auditRows()).filter((r) => r.action === "job-resumed").map((r) => JSON.parse(r.params));
       expect(resumed.some((p) => p.note === "Pushed at abc1234.\nConfirm the deploy, then complete."), "the note did not reach the resume").toBe(true);
     },

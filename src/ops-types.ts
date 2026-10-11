@@ -212,7 +212,6 @@ export interface OpsJob {
   created_at: string;
   // The last transition: there is no blocked_at or done_at column.
   updated_at: string;
-  lease_expires: string | null;
   blocked_count: number;
   resumed_count: number;
   gate_required: boolean;
@@ -1090,8 +1089,6 @@ export type MaintenanceRule =
   | "branch-pruned"
   | "branch-stale"
   | "branches-not-checked"
-  | "disk-low"
-  | "disk-not-checked"
   | "undeployed-merge"
   | "deploys-not-checked"
   | "model-drift"
@@ -1117,8 +1114,8 @@ export interface PortalMaintenance {
   items: OpsMaintenanceItem[];
   /** What the pass read, so an empty list can be told from one that read nothing: open
    *  pull requests, branches and compared site deploys summed over the repos read, the
-   *  repos read of the roster, and the current driver disk readings. */
-  read: { prs: number; branches: number; repos: number; roster: number; deploys: number; disk: number };
+   *  repos read of the roster. */
+  read: { prs: number; branches: number; repos: number; roster: number; deploys: number };
 }
 
 // GET /portal/api/convergence -> PortalConvergence (src/site-convergence.ts). Per site

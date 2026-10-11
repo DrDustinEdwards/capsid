@@ -53,14 +53,14 @@ describe("required_scopes on the real queue transitions", () => {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   });
 
-  it("PLANT: a job naming a flag is not leased to a driver without it, and STAYS QUEUED", async () => {
+  it("PLANT: a job naming a flag is not handed to a driver without it, and STAYS QUEUED", async () => {
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
     const id = posted.job!.id;
 
     const refused = await claimJob(jobsEnv(), driver(), NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/can_merge/);
-    // Not failed, not parked on a four-hour lease: queued, for a driver that can do it.
+    // Not failed, not claimed by a driver that cannot do it: queued, for a driver that can do it.
     expect(await statusOf(id)).toBe("queued");
   });
 
@@ -72,7 +72,7 @@ describe("required_scopes on the real queue transitions", () => {
   });
 
   it("PLANT: a blocked job naming a flag is not RESUMED by a driver without it", async () => {
-    // Resume is a claim: the caller ends up holding the lease and doing the rest of
+    // Resume is a claim: the caller ends up holding the claim and doing the rest of
     // the work, so a driver that could not have claimed this job must not acquire it
     // by resuming it.
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
@@ -119,7 +119,7 @@ describe("required_scopes on the real queue transitions", () => {
 });
 
 // A garbled requirement is not the same as none: a row whose requirement cannot be
-// read must not be leased to any driver. Corrupted here by a raw splice, because post
+// read must not be handed to any driver. Corrupted here by a raw splice, because post
 // validates both fields before it writes them.
 describe("a corrupt job requirement fails closed at the claim", () => {
   beforeEach(async () => {
@@ -143,7 +143,7 @@ describe("a corrupt job requirement fails closed at the claim", () => {
       await env.DB.prepare(`UPDATE jobs SET ${field} = ?1 WHERE id = ?2`).bind(value, id).run();
 
       const refused = await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
-      expect(refused.ok, `a job with a corrupt ${field} was leased`).toBe(false);
+      expect(refused.ok, `a job with a corrupt ${field} was handed out`).toBe(false);
       expect(refused.refusal).toContain(id);
       expect(refused.refusal).toContain(field);
       // FAILED, not left queued: a claim with no id takes the top queued job, so a

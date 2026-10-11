@@ -105,7 +105,7 @@ The network secret used to hold `capsid-driver`'s key, which was scoped to capsi
 - namespaces `*`, so repos `*` follows from the mint
 - grants `read` and `write`
 - no flags: no `can_merge`, no `can_direct_write`, no `can_dispatch`, no `can_write_workflows`, no `can_touch_protected`, no `money_paths`
-- `max_claims` left at 1. Routine sessions never claim.
+- Routine sessions never claim.
 
 It can read and write every namespace's documents and jobs and open pull requests, and it cannot merge, push to a default branch, dispatch a workflow or touch a protected path. Firing stays the seat's act, so a session cannot start another session.
 

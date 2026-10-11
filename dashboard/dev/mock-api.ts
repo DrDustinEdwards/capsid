@@ -585,7 +585,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           `jobs.${j.id}.resumed_count: ${j.resumed_count} -> ${j.resumed_count + 1}`,
           ...(params.note ? [`The resume note carries your note of ${params.note.length} characters in full.`] : []),
         ],
-        apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, lease_expires: null, resumed_count: j.resumed_count + 1, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, resumed_count: j.resumed_count + 1, updated_at: now }),
       };
     }
     case "close_shipped": {
@@ -596,7 +596,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Close ${j.id} (${j.title}) as shipped.`,
         done: `Closed ${j.id} as shipped; the outcome is credited to ${j.claimed_by ?? "its holder"}.`,
         changes: [`jobs.${j.id}.status: blocked -> done`, `The outcome row credits ${j.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you.`],
-        apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, lease_expires: null, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, updated_at: now }),
       };
     }
     case "supersede_job": {
@@ -608,7 +608,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Supersede ${j.id} (${j.title}).`,
         done: `Superseded ${j.id}.`,
         changes: [`jobs.${j.id}.status: ${j.status} -> superseded`, "No outcome row is written against anybody."],
-        apply: (st) => void st.jobs.set(j.id, { status: "superseded", claimed_by: null, lease_expires: null, updated_at: now, waits_on: `Superseded: ${reason}` }),
+        apply: (st) => void st.jobs.set(j.id, { status: "superseded", claimed_by: null, updated_at: now, waits_on: `Superseded: ${reason}` }),
       };
     }
     case "park_job": {
@@ -656,14 +656,14 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Release ${j.id} from ${j.claimed_by ?? "its holder"}.`,
         done: `Released ${j.id}; it is queued.`,
         changes: [`jobs.${j.id}.status: claimed -> queued`, `jobs.${j.id}.claimed_by: ${j.claimed_by ?? "none"} -> none`],
-        apply: (st) => void st.jobs.set(j.id, { status: "queued", claimed_by: null, lease_expires: null, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "queued", claimed_by: null, updated_at: now }),
       };
     }
     case "fail_job": {
       const j = job();
       need(params, "reason", "A reason");
       if (!["queued", "claimed", "blocked"].includes(j.status)) throw new Refusal(400, `Job ${j.id} is ${j.status}; only an open job can be marked failed.`);
-      return { summary: `Mark ${j.id} failed.`, done: `Marked ${j.id} failed.`, changes: [`jobs.${j.id}.status: ${j.status} -> failed`], apply: (st) => void st.jobs.set(j.id, { status: "failed", claimed_by: null, lease_expires: null, updated_at: now }) };
+      return { summary: `Mark ${j.id} failed.`, done: `Marked ${j.id} failed.`, changes: [`jobs.${j.id}.status: ${j.status} -> failed`], apply: (st) => void st.jobs.set(j.id, { status: "failed", claimed_by: null, updated_at: now }) };
     }
     case "revoke_agent": {
       const name = need(params, "name", "The agent name");
@@ -674,7 +674,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       return {
         summary: `Revoke the agent ${name}.`,
         done: `Revoked ${name}.`,
-        changes: [`agents.${name}.revoked_at: none -> now`, "Its token stops working on the next request.", ...held.map((j) => `Job ${j.id} it holds stays claimed until its lease runs out.`)],
+        changes: [`agents.${name}.revoked_at: none -> now`, "Its token stops working on the next request.", ...held.map((j) => `Job ${j.id} it holds stays claimed until the seat releases it.`)],
         apply: (st) => void st.revoked.set(name, now),
       };
     }
@@ -957,7 +957,7 @@ function convergence(st: MockState): PortalConvergence {
 // before the first pass.
 function maintenance(f: OpsFeed): PortalMaintenance {
   const now = mockNow();
-  if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0, disk: 0 } };
+  if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 } };
   // The sample feed has both; a feed without one fails here, not with a made-up id.
   const queued = f.live.jobs.find((j) => j.status === "queued")!.id;
   const blocked = f.live.jobs.find((j) => j.status === "blocked")!.id;
@@ -968,13 +968,12 @@ function maintenance(f: OpsFeed): PortalMaintenance {
       { rule: "auto-resumed", namespace: "sample", job: blocked, line: `${blocked} was resumed because its pull requests merged: its holder confirms the deploy and completes it.` },
       { rule: "pr-awaiting-seat", namespace: "sample", job: blocked, pr, line: `${pr} (${blocked}) is green and has been open 2.1 days: merge it or say why it waits.` },
       { rule: "undeployed-merge", namespace: "sample-b", job: null, line: "sample-b was last deployed 2026-10-04 09:00 UTC, 4.0 days before example-org/sample-b's last commit on main (1a2b3c4): deploy it, or say why it waits." },
-      { rule: "disk-low", namespace: "sample", job: queued, line: `agent:sample-driver reported 22.5 GB free at ${new Date(now - 5 * 3_600_000).toISOString().slice(0, 16).replace("T", " ")} UTC, under 30 GB: run disk-guard cleanup or free space on that machine.` },
       { rule: "later-passed", namespace: "sample", job: queued, line: `${queued} is queued as LATER 2026-10-01, a date that has passed: re-title it or work it.` },
       { rule: "branch-merged", namespace: "sample", job: null, line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune is off, so none was deleted." },
       { rule: "branch-stale", namespace: "sample-c", job: null, line: "example-org/sample-c branch feat/old-idea has had no commit for 41 days (no pull request): delete it, open its pull request, or keep-list it." },
       { rule: "deploys-not-checked", namespace: "sample-c", job: null, line: "Deploys in sample-c were not checked (Cloudflare was not read for it (CF_OPS_TOKEN is not set)): what is missing is not a clean result." },
     ],
-    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2, disk: 2 },
+    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2 },
   };
 }
 

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { blockJob, claimJob, completeJob, expireJobLeases, failJob, heartbeatJob, postJob, releaseJob, supersedeJob } from "../src/jobs";
+import { blockJob, claimJob, completeJob, failJob, postJob, releaseJob, supersedeJob } from "../src/jobs";
 import { legacyAgent, resolveAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { b64urlEncode, b64urlFromBytes } from "../src/encoding";
@@ -261,7 +261,7 @@ describe("a minted key works its job through the capsid_work_jobs tool", () => {
     return { isError: result.isError === true, text: result.content[0]?.text ?? "" };
   }
 
-  it("claims and heartbeats its own job, and is refused another", async () => {
+  it("claims and lists its own job, and is refused another", async () => {
     github();
     const id = await startedJob("through the tool");
     const minted = await exchange(id, await signJwt(goodClaims()));
@@ -273,8 +273,8 @@ describe("a minted key works its job through the capsid_work_jobs tool", () => {
     const row = await env.DB.prepare("SELECT status, claimed_by FROM jobs WHERE id = ?1").bind(id).first<{ status: string; claimed_by: string }>();
     expect(row).toEqual({ status: "claimed", claimed_by: agent.actor });
 
-    const beat = await jobsTool(agent, { action: "heartbeat", id });
-    expect(beat.isError, beat.text.slice(0, 200)).toBe(false);
+    const listed = await jobsTool(agent, { action: "list", id });
+    expect(listed.isError, listed.text.slice(0, 200)).toBe(false);
 
     const other = await jobsTool(agent, { action: "claim", id: "job_000000000000" });
     expect(other.isError).toBe(true);
@@ -295,7 +295,7 @@ describe("revoked when the job's run ends", () => {
   const revokedAt = async (id: string) =>
     (await env.DB.prepare("SELECT revoked_at FROM agents WHERE job_id = ?1").bind(id).first<{ revoked_at: string | null }>())?.revoked_at ?? null;
 
-  // Seat review of #174: a job put back to the queue, by release or by an expired lease,
+  // Seat review of #174: a job put back to the queue by release
   // is queued again, and the resolver accepts a bound key on a queued job for 20
   // minutes after the key was minted. So the key has to be revoked by the move itself.
   it("is revoked when the job is released, inside the pending window", async () => {
@@ -306,20 +306,11 @@ describe("revoked when the job's run ends", () => {
     expect(await resolveAgent(bearer(released.key), env, NOW), "a released job's key still resolves").toBeNull();
   });
 
-  it("is revoked when the job's lease expires, inside the pending window", async () => {
+  it("stays live while its job is claimed, with no lease to renew", async () => {
     github();
-    const expired = await claimedBound("expired");
-    await env.DB.prepare("UPDATE jobs SET lease_expires = ?2 WHERE id = ?1").bind(expired.id, new Date(NOW.getTime() - 1000).toISOString()).run();
-    const { requeued } = await expireJobLeases(jobsEnv(), NOW);
-    expect(requeued).toContain(expired.id);
-    expect(await revokedAt(expired.id), "an expired lease left the key live").not.toBeNull();
-    expect(await resolveAgent(bearer(expired.key), env, NOW), "an expired job's key still resolves").toBeNull();
-  });
-
-  it("stays live across a heartbeat", async () => {
-    github();
-    const { id, agent } = await claimedBound("heartbeat");
-    expect((await heartbeatJob(jobsEnv(), agent, NOW, id)).ok).toBe(true);
+    const { id, key } = await claimedBound("no lease");
+    const later = new Date(NOW.getTime() + 24 * 3_600_000);
+    expect(await resolveAgent(bearer(key), env, later), "a claimed job's key lapsed without a lease").not.toBeNull();
     expect(await revokedAt(id)).toBeNull();
   });
 

@@ -125,7 +125,6 @@ export interface JobFeedRow {
   claimed_by: string | null;
   created_at: string;
   updated_at: string;
-  lease_expires: string | null;
   blocked_count: number;
   resumed_count: number;
   gate_required: number;
@@ -164,7 +163,6 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     claimed_by: row.claimed_by,
     created_at: isoTime(row.created_at),
     updated_at: isoTime(row.updated_at),
-    lease_expires: isoTime(row.lease_expires),
     blocked_count: row.blocked_count,
     resumed_count: row.resumed_count,
     gate_required: row.gate_required === 1,
@@ -305,7 +303,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
   // vanish from the Queue a day after it was parked.
   const { results, meta } = await db
     .prepare(
-      `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
+      `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at,
               j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
               j.started_by, j.started_at,
               wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
