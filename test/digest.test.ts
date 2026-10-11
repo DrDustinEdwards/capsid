@@ -42,7 +42,7 @@ const awaiting = [
   { namespace: "capsid", repo: "owner/capsid", number: 9, failed: "ci", why: "", at: "", class: "wait" },
 ];
 
-function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) => Promise<void>; last?: object; deploys?: Row[] } = {}) {
+function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) => Promise<void>; last?: object; deploys?: Row[]; findings?: Row[] } = {}) {
   const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
   const kv = fakeKv({ seed: { [AWAITING_SEAT_KEY]: JSON.stringify(awaiting), ...(opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {}) } });
   const deploys = opts.deploys ?? [];
@@ -51,7 +51,7 @@ function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) =>
       let params: unknown[] = [];
       const st = {
         bind: (...p: unknown[]) => ((params = p), st),
-        all: async () => ({ results: selectRows(deploys, sql, params) }),
+        all: async () => ({ results: selectRows(/FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys, sql, params) }),
       };
       return st;
     },
@@ -161,4 +161,41 @@ test("a digest covers the time since the last one sent, or the last day", async 
   await digestTick(world().env, NOON, spy as never);
   await digestTick(world({ last: { at: "2026-10-10T12:00:00.000Z", outcome: "failed", note: "" } }).env, NOON, spy as never);
   assert.deepEqual(seen, ["2026-10-09T12:00:00.000Z", "2026-10-10T12:05:00.000Z", "2026-10-10T12:05:00.000Z"]);
+});
+
+const FINDING = (fingerprint: string, namespace: string, headline: string, job_id: string | null = null): Row => ({
+  fingerprint,
+  namespace,
+  title: `Watcher: ${headline} [${fingerprint}]`,
+  state: "open",
+  job_id,
+  first_seen_at: "2026-10-05T10:00:00.000Z",
+  last_seen_at: "2026-10-12T11:00:00.000Z",
+  seen_count: 4,
+  evidence: "[]",
+});
+const MONDAY = new Date("2026-10-12T12:05:00.000Z");
+
+test("on Monday the mail lists the open digest-class findings per site; other days and other classes do not", async () => {
+  const findings = [
+    FINDING("live-csp-script-sample-home", "sample", "Sample's CSP blocks the beacon script"),
+    FINDING("live-headers-sample-home", "sample", "Sample is missing security headers"),
+    FINDING("live-headers-other-home", "other", "Other is missing security headers"),
+    FINDING("anomaly-rate-sample-driver", "capsid", "an agent is busy"),
+    FINDING("site-down-sample", "sample", "Sample is down", "job_x"),
+  ];
+  const monday = world({ findings });
+  await digestTick(monday.env, MONDAY, read(EMPTY));
+  const text = monday.sent[0]!.text;
+  assert.match(text, /Weekly digest \(3 open/);
+  assert.match(text, /sample\n- Sample's CSP blocks the beacon script \(since 2026-10-05\)\n- Sample is missing security headers/);
+  assert.match(text, /other\n- Other is missing security headers/);
+  assert.doesNotMatch(text, /busy/, "an attention-class finding was in the weekly digest");
+  assert.doesNotMatch(text, /is down/, "a job-class finding was in the weekly digest");
+  const sunday = world({ findings });
+  await digestTick(sunday.env, NOON, read(EMPTY));
+  assert.doesNotMatch(sunday.sent[0]!.text, /Weekly digest/);
+  const none = world();
+  await digestTick(none.env, MONDAY, read(EMPTY));
+  assert.doesNotMatch(none.sent[0]!.text, /Weekly digest/);
 });

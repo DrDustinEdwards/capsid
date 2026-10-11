@@ -204,6 +204,7 @@ const FEED: OpsFeedData = {
     store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
     inbox: { generated: NOW.toISOString(), count: 0, severity: "none", apps: [] },
     canon_proposals: [],
+    findings: [],
     jobs: [],
     agents: [],
     prs: [],

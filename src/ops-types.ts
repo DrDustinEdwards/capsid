@@ -465,6 +465,21 @@ export interface OpsLive {
   // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
   // (src/inbox.ts), unrestricted: the Portal is the admin's.
   inbox: Inbox;
+  // The watcher's open findings that post no job (src/watcher.ts, findingClass): class
+  // digest feeds the weekly digest per site, class attention the attention list.
+  findings: OpsFinding[];
+}
+
+export interface OpsFinding {
+  fingerprint: string;
+  namespace: string;
+  class: "digest" | "attention";
+  headline: string;
+  first_seen: string;
+  last_seen: string;
+  seen_count: number;
+  // The newest sighting's evidence lines, at most three.
+  evidence: string[];
 }
 
 // One pending canon proposal, measured against the document as it is now. stale: the

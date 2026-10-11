@@ -3,6 +3,7 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-plan";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types";
+import { weeklyDigestLines } from "./watcher-digest";
 
 // THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5; Dustin's DECIDE
 // 5 of 2026-10-09: Web Push for the four urgent things, and everything else in a daily
@@ -101,6 +102,9 @@ async function composeDigest(env: Env, now: Date, since: string, read: DigestRea
   section(`Rollbacks (${rollbacks.length})`, list(rollbacks, (r) => `${r.repo} at ${r.head_sha.slice(0, 7)}: ${r.outcome === "rollback_failed" ? "the rollback failed" : "rolled back"}`));
   section(`Pull requests ready (${digest.pull_requests_ready.length})`, list(digest.pull_requests_ready, (p) => `${p.namespace} ${p.job_id}: ${p.url}`));
   section(`Finished (${digest.finished.length}), ${digest.pull_requests_merged} pull request(s) merged`, list(digest.finished, (j) => `${j.namespace} ${j.id}: ${j.title} (${j.result_kind ?? j.status})`));
+  // Mondays UTC only: the watcher's hygiene findings, per site (src/watcher-digest.ts).
+  const weekly = await weeklyDigestLines(env.DB, now);
+  if (weekly.length) text.push(...weekly, "");
   if (waiting === 0 && rollbacks.length === 0 && digest.finished.length === 0 && digest.pull_requests_ready.length === 0) text.push("Nothing waits on you and nothing happened.", "");
   if (digest.truncated.length) text.push(`Some lists were cut: ${digest.truncated.join("; ")}.`, "");
   text.push(`Open the Portal: ${PORTAL_URL}`);

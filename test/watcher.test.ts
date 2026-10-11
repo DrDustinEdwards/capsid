@@ -388,7 +388,7 @@ test("every fingerprint the checks produce has an owning check", () => {
 test("A HEALTHY PASS POSTS NOTHING AND CLOSES NOTHING", async () => {
   const h = harness([], new Map());
   const result = await runPass(h.readers, NOW);
-  assert.deepEqual(result, { posted: [], cleared: [], held: [] });
+  assert.deepEqual(result, { posted: [], cleared: [], held: [], routed: [] });
 });
 
 test("clearing runs BEFORE posting, so a finding that flickers is not refused as its own duplicate", async () => {

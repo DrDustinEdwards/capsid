@@ -253,14 +253,21 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       group: { key: "blocked", facet: "" },
     });
   }
-  // An agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6): the watcher's
-  // finding, raised here as well, since Dustin ruled a hit is a finding plus an attention
-  // item and nothing more (D4, 2026-10-03). A warning, never critical: no rule has been
-  // measured yet.
-  for (const j of live.jobs) {
-    if (j.finding?.fingerprint.startsWith("anomaly-") && isOpen(j)) {
-      out.push({ sev: "warn", kind: "Agent", title: j.title.replace(/^Watcher: /, "").replace(/\s*\[[^\]]+\]$/, ""), sub: "Out of its usual pattern · a finding only, nothing suspended", at: ms(j.updated_at), open: `job:${j.id}` });
-    }
+  // The watcher's attention-class findings (src/watcher.ts, findingClass), which post no
+  // job: an agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6; Dustin
+  // ruled a hit is a finding plus an attention item and nothing more, D4, 2026-10-03), and
+  // the improve loop's pauses, budgets and open breakers. Warnings, never critical.
+  for (const f of live.findings) {
+    if (f.class !== "attention") continue;
+    const agent = f.fingerprint.startsWith("anomaly-");
+    out.push({
+      sev: "warn",
+      kind: agent ? "Agent" : "Loop",
+      title: f.headline,
+      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "The improve loop is held"),
+      at: ms(f.last_seen),
+      open: agent ? "view:incidents" : "view:agents",
+    });
   }
   // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
   // lines read as instructions to agents is a warning like the rest: it is never
