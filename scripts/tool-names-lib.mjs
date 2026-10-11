@@ -51,7 +51,7 @@ export const RENAMED = {
 // The actions (lint: modes) of each renamed tool, so `jobs.claimed_by`, a column, is not
 // read as an action. test/tool-names-lib.test.ts holds these to src.
 export const RENAMED_ACTIONS = {
-  jobs: ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "begin", "edit", "park", "unpark"],
+  jobs: ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "begin", "fire", "routine", "edit", "park", "unpark"],
   lint: ["gather", "finalize", "report"],
   agents: ["mint", "list", "revoke", "update_scopes"],
   claims: ["job", "aggregate", "export"],

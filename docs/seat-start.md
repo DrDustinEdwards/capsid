@@ -2,6 +2,8 @@
 
 The seat (a chat acting only through Capsid) can start a Claude Code session on GitHub's runners to work one queued job, with no laptop and no pasted prompt. The session runs on Dustin's Claude subscription through a long-lived OAuth token. The design, and the rulings behind it, are in Capsid at `capsid/research/design-seat-start.md`.
 
+Routine-started sessions (`docs/routines.md`, `capsid_work_jobs` action `fire`) replace this. Seat-start is retired once a routine-started session has completed one real job (job_a7d6f6009242).
+
 ## How a session starts
 
 1. The seat calls `capsid_work_jobs` action `start` with a job id. It is refused unless the caller is the seat (admin or `can_merge`), the switch is on, the job is queued and its signature verifies, its namespace is `capsid` or `dustinedwards` (`SEAT_START_NAMESPACES` in `src/seat-start.ts`), the namespace's primary repo is PUBLIC as GitHub reports it at that moment, no session for that repo is in flight, and the cap has room.

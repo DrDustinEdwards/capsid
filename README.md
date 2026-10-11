@@ -16,7 +16,7 @@ Capsid is a single-user Cloudflare Worker that serves a knowledge base over MCP 
 
 ## How agents connect
 
-Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints. Every caller resolves to an agent, and `checkScope` in `src/scope.ts` is the one place a grant is checked. Detail: [docs/auth.md](docs/auth.md), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md).
+Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints. Every caller resolves to an agent, and `checkScope` in `src/scope.ts` is the one place a grant is checked. Detail: [docs/auth.md](docs/auth.md), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
 
 - **`/mcp`, OAuth, for the single admin.** OAuth 2.1 with PKCE through `workers-oauth-provider`. A client identifies itself by a Client ID Metadata Document (CIMD): its client id is the URL of a JSON document naming its redirect URIs. Grok and Gemini, which cannot, use a tightened dynamic registration at `/register` that admits only exact, allowlisted connector callbacks and grants nothing on its own (`src/dcr.ts`). Every token is bound to this server's resource (RFC 8707). Sign-in goes upstream to Cloudflare Access for SaaS (OIDC), and the verified email must equal `ADMIN_EMAIL` exactly, a check that runs again on every `/mcp` request.
 - **`/ops/mcp`, bearer keys, for agents and cron.** A key is matched by its sha256. Scopes have five axes (namespaces, repos, tools, grants, blast-radius flags), and a new agent gets read on its named namespaces and no flags.
@@ -282,6 +282,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 
 - [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the two gated endpoints, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
+- [docs/routines.md](docs/routines.md) how Capsid starts a Claude Code cloud session for a queued job by firing its namespace's routine
 - [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, and its guards
 - [docs/telemetry.md](docs/telemetry.md) Claude Code's OpenTelemetry into Capsid: per-session usage, per-job cost on the outcome row, and the settings that turn it on
 - [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records

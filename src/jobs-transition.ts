@@ -176,6 +176,12 @@ export interface JobResult {
   // heartbeat with a reason: whether the driver's free-disk line was stored
   // (src/maintenance-disk.ts), or why not.
   disk?: DiskRecord;
+  // fire: the session the routine started (src/routine-fire.ts). Either field is null
+  // when Anthropic's answer did not carry it in the expected shape.
+  session?: { id: string | null; url: string | null };
+  // routine: a namespace's routine as Capsid holds it. The token is never returned, only
+  // the secret's name and whether it is set.
+  routine?: { namespace: string; routine_id: string | null; token_secret: string; token_set: boolean };
 }
 
 export function refuse(action: string, refusal: string): JobResult {
