@@ -1,3 +1,4 @@
+import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { placePath, useApp } from "../app/ctx";
@@ -212,9 +213,9 @@ function Roster() {
           </dl>
         </div>
       </Panel>
-      <Suspense fallback={null}>
+      <ChartSlot>
         <CostChart />
-      </Suspense>
+      </ChartSlot>
     </div>
   );
 }

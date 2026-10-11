@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { ErrorBoundary } from "../app/ErrorBoundary";
 
 // An Enarratio primitive in the page (capsid/decisions.md 2026-10-09, Portal review item 7:
 // "Enarratio in the browser for the Portal's charts", option a of
@@ -24,5 +25,15 @@ export function EnarChart({ draw, className, children }: { draw: () => { svg: st
       {children}
       {out.table && <div className="enar-table" dangerouslySetInnerHTML={{ __html: out.table }} />}
     </figure>
+  );
+}
+
+// A lazy chart's place: nothing while its chunk loads, and a small message, not a blank
+// Portal, when the chunk fails to load or the chart fails to render.
+export function ChartSlot({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary fallback={<p className="faint enar-refused">This chart could not be loaded. Reload the page to try again.</p>}>
+      <Suspense fallback={null}>{children}</Suspense>
+    </ErrorBoundary>
   );
 }

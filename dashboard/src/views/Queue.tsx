@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { ChartSlot } from "../ui/Enar";
+import { lazy, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Spinner } from "capsomer/react/empty";
 import { placePath, useApp } from "../app/ctx";
@@ -249,9 +250,9 @@ export function Queue() {
     <div className="page">
       <Anchors />
       <PageHead title="Queue" />
-      <Suspense fallback={null}>
+      <ChartSlot>
         <QueueChart />
-      </Suspense>
+      </ChartSlot>
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />

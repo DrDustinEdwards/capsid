@@ -1,4 +1,5 @@
-import { Fragment, Suspense, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { ChartSlot } from "../ui/Enar";
+import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import type { OpsAgent, OpsJob, PortalActivityRow, SiteSnapshot } from "../types";
@@ -61,9 +62,9 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
         </div>
         <div>
           <p className="section-title">Requests and error rate, 24 hours</p>
-          <Suspense fallback={null}>
+          <ChartSlot>
             <ErrorRate site={s} />
-          </Suspense>
+          </ChartSlot>
         </div>
         <div>
           <p className="section-title">Probe</p>

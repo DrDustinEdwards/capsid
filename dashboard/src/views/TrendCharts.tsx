@@ -5,11 +5,11 @@ import { lineChart } from "enarratio/lite/line";
 import { useEffect, useState } from "react";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchClaimsAggregate } from "../lib/api";
+import { fetchClaimsAggregate, type Answer } from "../lib/api";
 import { cfNoData, cfOk } from "../lib/derive";
-import { DAY, HOUR, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { DAY, HOUR, MIN, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import { useTrends } from "../lib/trends";
-import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
+import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalClaimsAggregate, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
 import { EnarChart } from "../ui/Enar";
 import { EnarFigure } from "../ui/EnarFigure";
 import { errorTotals } from "../ui/charts";
@@ -80,7 +80,6 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
 
-const HOUR_MS = 3_600_000;
 const MOST_CLASSES = 10;
 
 const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 60)} min`);
@@ -88,42 +87,57 @@ const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 6
 /** Total ended waiting per gate class, split by who ended it, longest first. A median
  *  cannot be combined across namespaces and says nothing of how often a gate waits; the
  *  total adds up, so the longest bar is where the hours went. */
-export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; endedBy: string; hours: number }>; classes: number; shown: number } {
+export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; endedBy: string; hours: number }>; classes: number; shown: number; allHours: number } {
   const byClass = new Map<string, Map<string, number>>();
   for (const w of waits) {
     const ends = byClass.get(w.gate_class) ?? new Map<string, number>();
-    ends.set(w.ended_by, (ends.get(w.ended_by) ?? 0) + w.waited_ms_total / HOUR_MS);
+    ends.set(w.ended_by, (ends.get(w.ended_by) ?? 0) + w.waited_ms_total / HOUR);
     byClass.set(w.gate_class, ends);
   }
   const sum = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
   const ranked = [...byClass].sort(([, a], [, b]) => sum(b) - sum(a)).slice(0, MOST_CLASSES);
   const rows = ranked.flatMap(([gate, ends]) => [...ends].map(([endedBy, h]) => ({ gate, endedBy, hours: Math.round(h * 100) / 100 })));
-  return { rows, classes: byClass.size, shown: ranked.length };
+  return { rows, classes: byClass.size, shown: ranked.length, allHours: [...byClass.values()].reduce((a, m) => a + sum(m), 0) };
 }
 
 /** The header chart on Needs you: one bar per gate class, stacked by who ended the wait,
  *  over the last 14 days. Reads the claims aggregate once when the page opens. */
+// The claims read behind chart 2, shared and kept for ten minutes like useTrends: the page can
+// be left and reopened without reading the aggregate again. A failed read is not kept.
+const KEEP_MS = 10 * 60_000;
+let keptWaits: { at: number; read: Promise<Answer<PortalClaimsAggregate>> } | null = null;
+
+function readWaits(now: number): Promise<Answer<PortalClaimsAggregate>> {
+  if (keptWaits && Date.now() - keptWaits.at < KEEP_MS) return keptWaits.read;
+  const since = new Date(now - 14 * DAY).toISOString();
+  const reading = fetchClaimsAggregate({ namespace: "", agent: "", since, until: "" }).then((r) => {
+    if (r.kind !== "ok" && keptWaits?.read === reading) keptWaits = null;
+    return r;
+  });
+  keptWaits = { at: Date.now(), read: reading };
+  return reading;
+}
+
 export function WaitingChart() {
-  const { signOut } = useApp();
-  const [load, setLoad] = useState<{ waits: ClaimsWaitRow[] | null; error: string | null; loading: boolean }>({ waits: null, error: null, loading: true });
+  const { signOut, now } = useApp();
+  const [load, setLoad] = useState<{ waits: ClaimsWaitRow[] | null; cut: boolean; error: string | null; loading: boolean }>({ waits: null, cut: false, error: null, loading: true });
   useEffect(() => {
     let alive = true;
-    const since = new Date(Date.now() - 14 * DAY).toISOString().slice(0, 10);
-    void fetchClaimsAggregate({ namespace: "", agent: "", since, until: "" }).then((r) => {
+    void readWaits(now).then((r) => {
       if (!alive) return;
-      if (r.kind === "ok") return setLoad({ waits: r.value.waits, error: null, loading: false });
+      if (r.kind === "ok") return setLoad({ waits: r.value.waits, cut: r.value.truncated.includes("waits"), error: null, loading: false });
       if (r.kind === "signed-out") return signOut();
-      setLoad({ waits: null, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message, loading: false });
+      setLoad({ waits: null, cut: false, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message, loading: false });
     });
     return () => {
       alive = false;
     };
+    // The window is fixed when the read is made; a later tick of now must not read again.
   }, [signOut]);
   if (load.loading) return null;
   if (!load.waits) return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
-  const { rows, classes, shown } = waitRows(load.waits);
+  const { rows, classes, shown, allHours } = waitRows(load.waits);
   if (!rows.length) return <p className="faint wait-none">No wait ended in the last 14 days.</p>;
-  const total = rows.reduce((a, r) => a + r.hours, 0);
   const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
   const opts = {
     data: rows,
@@ -137,7 +151,7 @@ export function WaitingChart() {
     formatValue: hours,
     width: 560,
     height: 56 + shown * 30,
-    alt: `Waiting that ended in the last 14 days, by gate class and who ended it: ${hours(total)} in all, ${hours(top)} of it at ${rows[0]!.gate}.`,
+    alt: `Waiting that ended in the last 14 days, by gate class and who ended it: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate}.`,
     dataTable: "details",
   } as const;
   return (
@@ -147,7 +161,7 @@ export function WaitingChart() {
       </div>
       <EnarFigure draw={() => barChart(opts)}>
         <p className="d">
-          Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.
+          Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.{load.cut ? " Cut at the read's row limit, so the figure is low." : ""}
         </p>
       </EnarFigure>
     </div>
@@ -225,7 +239,8 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     layout: "grouped",
     xLabel: null,
     yLabel: "Checks",
-    width: Math.max(560, 150 * agents),
+    // Capped, so the drawing is not scaled down to unreadable text; Enarratio's frame scrolls past it.
+    width: Math.min(900, Math.max(560, 150 * agents)),
     height: 260,
     alt: `Claims against what the Worker verified, for ${agents} ${agents === 1 ? "agent" : "agents"}: ${sum("agree")} agree, ${sum("disagree")} disagree, ${sum("unclaimed")} unclaimed, ${sum("unchecked")} unchecked.`,
     dataTable: "details",
@@ -273,7 +288,7 @@ export function CostChart() {
         <Stale error={error} />
         <EnarFigure draw={() => lineChart(opts)}>
           <p className="d">
-            ${spent.toFixed(2)} of ${cap} spent this month. A week with no job outcome carrying a cost is a gap, not a free week.
+            {cap ? `$${spent.toFixed(2)} of $${cap} spent this month.` : `$${spent.toFixed(2)} spent this month; no monthly cap is set.`} A week with no job outcome carrying a cost is a gap, not a free week.
           </p>
         </EnarFigure>
       </div>
@@ -374,8 +389,6 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
-
-const MIN = 60_000;
 
 /** Tonight's plan as a timeline, one lane per repo, as if it started when the plan was read:
  *  the plan holds estimates, not a start time, and Enarratio's axis is a UTC clock. Light

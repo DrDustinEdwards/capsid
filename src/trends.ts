@@ -202,12 +202,12 @@ async function readMerges(db: D1Database, mondays: string[]): Promise<{ weeks: T
 
 /** Model spend per week from outcome rows summed by day (cost_usd, rows that carried one).
  *  A week with no costed outcome is null, never 0: no telemetry is not a free week. */
-export function costWeeks(rows: Array<{ day: string; usd: number | null; n: number }>, mondays: string[]): TrendCostWeek[] {
+export function costWeeks(rows: Array<{ day: string; usd: number; n: number }>, mondays: string[]): TrendCostWeek[] {
   const weeks = new Map<string, { usd: number; jobs: number }>(mondays.map((m) => [m, { usd: 0, jobs: 0 }]));
   for (const r of rows) {
     const w = weeks.get(mondayOf(r.day));
-    if (!w || !r.n) continue;
-    w.usd += r.usd ?? 0;
+    if (!w) continue;
+    w.usd += r.usd;
     w.jobs += r.n;
   }
   return mondays.map((m) => {
@@ -220,7 +220,7 @@ async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWee
   const rows = await db
     .prepare("SELECT substr(recorded_at, 1, 10) AS day, SUM(cost_usd) AS usd, COUNT(cost_usd) AS n FROM job_outcomes WHERE recorded_at >= ?1 AND cost_usd IS NOT NULL GROUP BY day")
     .bind(mondays[0])
-    .all<{ day: string; usd: number | null; n: number }>();
+    .all<{ day: string; usd: number; n: number }>();
   return costWeeks(rows.results, mondays);
 }
 

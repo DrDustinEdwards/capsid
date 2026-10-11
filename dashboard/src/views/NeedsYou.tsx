@@ -1,3 +1,4 @@
+import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy, useState } from "react";
 import { Link } from "wouter";
 import { isView, placePath, useApp } from "../app/ctx";
@@ -45,12 +46,12 @@ export function NeedsYou() {
       <Anchors />
       <PageHead title="Needs you" />
       <div className="chart-row">
-        <Suspense fallback={null}>
+        <ChartSlot>
           <MinutesTile />
-        </Suspense>
-        <Suspense fallback={null}>
+        </ChartSlot>
+        <ChartSlot>
           <WaitingChart />
-        </Suspense>
+        </ChartSlot>
       </div>
       <ByApp />
       <Suspense fallback={null}>

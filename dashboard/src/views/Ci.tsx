@@ -1,3 +1,4 @@
+import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
@@ -83,9 +84,9 @@ export function PullRequests() {
   return (
     <div className="page">
       <PageHead title="Pull requests" />
-      <Suspense fallback={null}>
+      <ChartSlot>
         <MergesChart />
-      </Suspense>
+      </ChartSlot>
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x">
           <table className="list">
