@@ -19,3 +19,10 @@ wrangler.dryrun.jsonc
 
 # Per-user Claude Code settings (conventions 6.3): never committed.
 .claude/settings.local.json
+
+# The explorer's build output and the browser spec's (explorer/README.md): generated from
+# Capsid's public documents, never committed.
+explorer/dist/
+explorer/.e2e-dist*
+explorer/test-results/
+explorer/playwright-report/

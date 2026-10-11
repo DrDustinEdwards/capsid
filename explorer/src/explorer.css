@@ -1,0 +1,123 @@
+/* The explorer's page layout, on Capsomer's tokens (assets/capsomer.css). The map, the table
+   and the buttons are Capsomer's own; this file only places them. */
+.skip {
+  position: absolute;
+  inset-inline-start: -999px;
+}
+.skip:focus {
+  inset-inline-start: var(--space-4);
+  inset-block-start: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+}
+
+.top,
+.foot,
+main {
+  max-width: 64rem;
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block: var(--space-5);
+  border-block-end: 1px solid var(--line);
+}
+
+.home {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a {
+  color: var(--accent-text);
+}
+
+h1 {
+  margin-block: var(--space-6) var(--space-3);
+  font: 600 2rem / 1.2 var(--prose);
+}
+
+h2 {
+  margin-block: var(--space-7) var(--space-3);
+  font-size: 1.25rem;
+}
+
+.lead {
+  max-width: var(--measure);
+  color: var(--muted);
+}
+
+.crumbs {
+  margin-block-start: var(--space-5);
+  color: var(--muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+}
+.facts dt {
+  color: var(--muted);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+/* The weekly bars take the whole row, so all eight weeks show; the rings share the row below. */
+.charts > :first-child {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.numbers-table {
+  margin-block-start: var(--space-5);
+}
+
+.foot {
+  margin-block-start: var(--space-8);
+  padding-block: var(--space-5);
+  border-block-start: 1px solid var(--line);
+  color: var(--muted);
+}
+
+@media (max-width: 40rem) {
+  .top,
+  .foot,
+  main {
+    padding-inline: var(--space-4);
+  }
+}
+
+.scroller {
+  overflow-x: auto;
+}
+.scroller:focus-visible {
+  outline: 2px solid var(--ring);
+}
+
+.ring {
+  margin: 0;
+}
+.ring h3 {
+  margin-block: 0 var(--space-3);
+  font-size: 1rem;
+}
+.ring figcaption {
+  margin-block-start: var(--space-3);
+  color: var(--muted);
+}

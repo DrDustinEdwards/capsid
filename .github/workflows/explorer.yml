@@ -1,0 +1,166 @@
+name: Explorer
+
+# capsid.dustinedwards.info, the system explorer (explorer/README.md): prerendered pages from
+# Capsid's public model and numbers, served by an assets-only Worker of its own
+# (capsid/rulings/system-explorer-2026-10-10.md, answers 4 and 8).
+#
+# A pull request that touches the explorer, or a Capsid module its build loads, is checked from
+# the fixtures: typecheck, the build tests and the browser spec. On master, daily and by hand,
+# the deploy job builds from the live documents and deploys only when the build differs from
+# what capsid.dustinedwards.info serves (build.json's content hash): a new day's numbers or new
+# explorer code. A day the public build did not run deploys nothing.
+
+on:
+  pull_request:
+    branches: [master, main]
+    # Every Capsid module build.mjs loads at run time, held to the import graph by
+    # explorer/test/explorer.test.mjs.
+    paths:
+      - "explorer/**"
+      - "src/system-model.ts"
+      - "src/public-stats.ts"
+      - "src/limits.ts"
+      - "src/ops-snapshot.ts"
+      - "src/health-format.ts"
+      - "src/log.ts"
+      - "src/html.ts"
+      - "test/resolve-ts.mjs"
+      - "package-lock.json"
+      - ".github/workflows/explorer.yml"
+  # The explorer's own files only. A schema change reaches it at the next daily build: the
+  # live documents keep their old shape until the public build runs again after midnight UTC,
+  # so a deploy on that merge would parse yesterday's documents with today's schemas.
+  push:
+    branches: [master, main]
+    paths:
+      - "explorer/**"
+      - ".github/workflows/explorer.yml"
+  # Hours after the public build, which runs on the first tick of each UTC day (src/public-data.ts).
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref: master's pushes, schedule and dispatches queue behind each other and never
+# cancel a deploy mid-flight; a pull request's newer push cancels its older run.
+concurrency:
+  group: explorer-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Actions pinned by commit sha, as in ci.yml (the same two, the same shas).
+jobs:
+  # Not on the daily schedule, which only brings new numbers: the code it would test has not
+  # changed since the push that ran it. The build's schema check still guards the new data.
+  checks:
+    name: explorer checks
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            explorer/package-lock.json
+
+      # The root install brings zod for Capsid's schemas, TypeScript and wrangler.
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix explorer
+
+      - name: Typecheck
+        run: npm --prefix explorer run check
+
+      - name: Build tests
+        run: npm --prefix explorer test
+
+      - name: Install the browser
+        run: npx --prefix explorer playwright install --with-deps chromium
+
+      # Served by wrangler dev with the deploy's own config and _headers (explorer/playwright.config.mjs).
+      - name: Browser spec
+        run: npm --prefix explorer run e2e
+
+  # Turned on by the repository variable EXPLORER_DEPLOY=on, which Dustin sets once his two
+  # account steps are done (ruling answer 13: the deploy token as the EXPLORER_CLOUDFLARE_API_TOKEN
+  # secret, and capsid.dustinedwards.info). That is a switch, not a guard on the secrets: with it
+  # on, a missing or wrong token fails this job loudly, as ci.yml's deploy does.
+  deploy:
+    name: explorer deploy
+    needs: checks
+    if: >-
+      always() && (needs.checks.result == 'success' || (github.event_name == 'schedule' && needs.checks.result == 'skipped'))
+      && github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+      && vars.EXPLORER_DEPLOY == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            explorer/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix explorer
+
+      # The live documents, checked against Capsid's schemas before a page is written
+      # (explorer/build.mjs). A 503 before the first public build fails here.
+      - name: Build from the live documents
+        run: npm --prefix explorer run build
+
+      - name: Compare with what is live
+        id: compare
+        run: |
+          set -euo pipefail
+          built=$(node -p 'require("./explorer/dist/build.json").content')
+          # Before the first deploy there is no live build.json; anything but a JSON answer
+          # with a hash counts as different.
+          live=$(curl -fsS --max-time 20 https://capsid.dustinedwards.info/build.json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).content' 2>/dev/null || echo none)
+          echo "built $built, live $live"
+          if [ "$built" = "$live" ]; then
+            echo "::notice::the explorer is already serving this build; nothing to deploy"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "content=$built" >> "$GITHUB_OUTPUT"
+
+      # The config is generated, never committed (CLAUDE.md, public repo rule).
+      - name: Deploy
+        if: steps.compare.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          node explorer/wrangler-config.mjs explorer/dist > "$RUNNER_TEMP/explorer.wrangler.json"
+          npx wrangler deploy --config "$RUNNER_TEMP/explorer.wrangler.json"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.EXPLORER_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Deployed is what the domain serves, not what wrangler said: poll until the live
+      # build.json carries this build's hash.
+      - name: Verify the live build
+        if: steps.compare.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          want='${{ steps.compare.outputs.content }}'
+          for i in $(seq 1 40); do
+            live=$(curl -fsS --max-time 10 -H 'cache-control: no-cache' "https://capsid.dustinedwards.info/build.json?v=$want" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).content' 2>/dev/null || echo none)
+            if [ "$live" = "$want" ]; then echo "live: $live"; exit 0; fi
+            sleep 3
+          done
+          echo "::error::capsid.dustinedwards.info still serves $live, not $want" >&2
+          exit 1
