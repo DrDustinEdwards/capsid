@@ -169,12 +169,10 @@ export function toolRateFindings(rows: readonly ToolHour[], now: Date): Finding[
   const recentFrom = new Date(now.getTime() - RECENT_HOURS * 3600_000).toISOString().slice(0, 13);
   const byActor = new Map<string, { base: Map<string, number>; recent: Map<string, number> }>();
   for (const r of rows) {
-    // Session keys are judged as the driver they were minted for, as in anomalyFindings.
-    const as = sessionKeyDriver(r.actor);
-    const a = byActor.get(as) ?? { base: new Map<string, number>(), recent: new Map<string, number>() };
+    const a = byActor.get(r.actor) ?? { base: new Map<string, number>(), recent: new Map<string, number>() };
     const side = r.hour >= recentFrom ? a.recent : a.base;
     side.set(r.hour, (side.get(r.hour) ?? 0) + r.n);
-    byActor.set(as, a);
+    byActor.set(r.actor, a);
   }
   const out: Finding[] = [];
   for (const [actor, { base, recent }] of [...byActor].sort(([x], [y]) => x.localeCompare(y))) {

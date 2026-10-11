@@ -351,7 +351,7 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
   return { mode, budget: { month: budget.month, caps: budget.caps, spend: budget.spend, exceeded: budget.exceeded } };
 }
 
-export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
+async function opsLive(env: Env, now: Date): Promise<OpsLive> {
   const [jobRead, agents, prs, awaitingRaw, mergeSafety, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox, findings] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),

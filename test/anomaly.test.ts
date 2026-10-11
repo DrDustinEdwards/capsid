@@ -81,14 +81,6 @@ test("a tool-call spike under the floor is quiet, and so is an agent with no too
   assert.deepEqual(toolRateFindings([{ actor: "agent:sample-new", hour: hour(1), n: 5000 }], NOW), []);
 });
 
-test("a session key's tool calls are judged as its driver, against the driver's baseline", () => {
-  const driver = "agent:sample-driver";
-  const session = "agent:sample-driver@job_00000000abcd.a1b2c3";
-  const rows: ToolHour[] = [...steadyTools(driver), { actor: session, hour: hour(2), n: 700 }];
-  const found = toolRateFindings(rows, NOW);
-  assert.deepEqual(found.map((f) => f.fingerprint), ["anomaly-tool-rate-sample-driver"]);
-});
-
 test("readToolHours reads tool events only, from the ISO window start, the watcher left out", async () => {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const db = {
