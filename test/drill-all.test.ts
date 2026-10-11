@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import type { R2Like } from "@dustinedwards/d1-dump";
-import { SITES, drillSite, firstFailure, selectSites } from "../scripts/drill-all.mjs";
+import { SITES, drillSite, firstFailure, onlySearchUnavailable, selectSites } from "../scripts/drill-all.mjs";
 
 // scripts/drill-all.mjs: the drill over a site's newest complete backup. The bucket is an
 // in-memory R2Like and the drill is the REAL d1-dump CLI on its sqlite backend, so
@@ -22,6 +22,8 @@ const SCHEMA = [
     sql: "CREATE VIRTUAL TABLE documents_fts USING fts5(path, body, content='documents', content_rowid='id')",
   },
 ];
+// A site like txasm: the same table, no FTS5 index over it.
+const SCHEMA_NO_FTS = [SCHEMA[0]];
 
 class FakeBucket {
   objects = new Map<string, string>();
@@ -49,13 +51,13 @@ class FakeBucket {
 }
 
 // Writes a run the way d1-dump does: <table>.json, _schema.json, then _complete.json
-// (last, and only when `complete`).
-function plant(bucket: FakeBucket, exportedAt: string, rows: Array<Record<string, unknown>>, complete = true): string {
+// (last, and only when `complete`). `withFts` false plants a site with no FTS5 table.
+function plant(bucket: FakeBucket, exportedAt: string, rows: Array<Record<string, unknown>>, complete = true, withFts = true): string {
   const id = runIdOf(exportedAt);
   const prefix = `backups/json/${id}/`;
   const docKey = `${prefix}documents.json`;
   bucket.objects.set(docKey, JSON.stringify({ exported_at: exportedAt, table: "documents", rows }));
-  bucket.objects.set(`${prefix}_schema.json`, JSON.stringify({ exported_at: exportedAt, schema: SCHEMA }));
+  bucket.objects.set(`${prefix}_schema.json`, JSON.stringify({ exported_at: exportedAt, schema: withFts ? SCHEMA : SCHEMA_NO_FTS }));
   if (complete) {
     const tables = [{ name: "documents", rows: rows.length, key: docKey }];
     bucket.objects.set(
@@ -64,7 +66,7 @@ function plant(bucket: FakeBucket, exportedAt: string, rows: Array<Record<string
         exported_at: exportedAt,
         keys: [docKey, `${prefix}_schema.json`],
         tables,
-        fts: [{ name: "documents_fts", mode: "external", content: "documents" }],
+        fts: withFts ? [{ name: "documents_fts", mode: "external", content: "documents" }] : [],
         excluded: [],
       }),
     );
@@ -78,11 +80,12 @@ const DOCS = [
   { id: 3, path: "sample/gamma.md", body: "Third entry on bridges" },
 ];
 
-test("SITES lists foxhound, carrel and germomics with their backup buckets", () => {
+test("SITES lists foxhound, carrel, germomics and txasm with their backup buckets", () => {
   assert.deepEqual(SITES, [
     { name: "foxhound", bucket: "foxhound-backups" },
     { name: "carrel", bucket: "carrel-backups" },
     { name: "germomics", bucket: "germomics-backups" },
+    { name: "txasm", bucket: "txasm-books", noSearch: true },
   ]);
 });
 
@@ -181,4 +184,40 @@ test("the verdict reads the same clock as the printed age, not the wall clock", 
   plant(bucket, hoursAgo(3), DOCS);
   const { line } = await drillSite("sample", bucket.asR2(), { now: NOW });
   assert.match(line, /age_hours=3.0 tables=1 rows=3 PASS$/);
+});
+
+test("a site with no FTS5 table fails on search without noSearch, and reports it n/a with it", async () => {
+  const bucket = new FakeBucket();
+  const id = plant(bucket, hoursAgo(3), DOCS, true, false);
+  const strict = await drillSite("sample", bucket.asR2(), { now: NOW });
+  assert.match(strict.line, new RegExp(`^sample run=${id} age_hours=3.0 tables=1 rows=3 FAIL \\(search: .*no FTS5 table`));
+  assert.equal(strict.ok, false);
+  const flagged = await drillSite("sample", bucket.asR2(), { now: NOW, noSearch: true });
+  assert.equal(flagged.line, `sample run=${id} age_hours=3.0 tables=1 rows=3 PASS (search n/a: no FTS5 table)`);
+  assert.equal(flagged.ok, true);
+});
+
+test("noSearch excuses nothing else: an empty table still fails its counts check", async () => {
+  const bucket = new FakeBucket();
+  plant(bucket, hoursAgo(3), [], true, false);
+  const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW, noSearch: true });
+  assert.match(line, /rows=0 FAIL \(counts: /);
+  assert.equal(ok, false);
+});
+
+test("noSearch does not excuse a stale run", async () => {
+  const bucket = new FakeBucket();
+  plant(bucket, hoursAgo(40), DOCS, true, false);
+  const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW, noSearch: true });
+  assert.match(line, /FAIL \(dump: .*over 26h old\)$/);
+  assert.equal(ok, false);
+});
+
+test("onlySearchUnavailable excuses only a lone search failure for want of an FTS5 table", () => {
+  const noFts = "  ok   dump: fine\n  FAIL search: no FTS5 table held a word to search for\n";
+  assert.equal(onlySearchUnavailable(noFts), true);
+  assert.equal(onlySearchUnavailable("  FAIL search: lanterns not found through documents_fts\n"), false);
+  assert.equal(onlySearchUnavailable(`  FAIL counts: a has 0\n${noFts}`), false);
+  assert.equal(onlySearchUnavailable("FAIL drill: stopped by SIGTERM (timeout 15 min)\n"), false);
+  assert.equal(onlySearchUnavailable(""), false);
 });
