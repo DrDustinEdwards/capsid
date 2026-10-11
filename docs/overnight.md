@@ -8,7 +8,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 
 ## The plan
 
-`jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the queued jobs in priority order that fit about eight hours.
+`capsid_work_jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the queued jobs in priority order that fit about eight hours.
 
 - **Eligible:** queued, no required flags, no `min_record`, a title that does not begin `LATER`, and a namespace that maps to a repo. Everything else is in `skipped` with its reason. A parked job is not queued, so it is never planned and never listed as skipped.
 - **Gated jobs are planned** (conventions 2.3: gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. The scheduled run's prompt says so for each gated job (`jobPrompt` in `scripts/overnight-guard.mjs`). test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
@@ -32,7 +32,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 
 ## The morning digest
 
-`jobs` action `list` with `view: "digest"` and an optional `since` (ISO time; default the last 24 hours). Read-only.
+`capsid_work_jobs` action `list` with `view: "digest"` and an optional `since` (ISO time; default the last 24 hours). Read-only.
 
 - **finished:** each job recorded in the window, with its usage.
 - **blocked:** each job blocked in the window, the reason and command as the driver wrote them (cut to 600 characters), and any pull request named in them.
@@ -42,7 +42,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 
 ## The scheduler switch
 
-APP_KV `overnight:mode`: `off` (default), `api` or `subscription`, the improve loop's three values. Set in the Portal's Settings, Automation and namespaces section, Automation panel, **Overnight run**, with its own "Runs on" choice of API or Subscription, or by an admin with `improve_run` action `overnight`. A reason is required in both directions and recorded in the audit rows (`overnight-set`, `portal-overnight`); an Undo is its own row.
+APP_KV `overnight:mode`: `off` (default), `api` or `subscription`, the improve loop's three values. Set in the Portal's Settings, Automation and namespaces section, Automation panel, **Overnight run**, with its own "Runs on" choice of API or Subscription, or by an admin with `capsid_admin_control_improve` action `overnight`. A reason is required in both directions and recorded in the audit rows (`overnight-set`, `portal-overnight`); an Undo is its own row.
 
 **Choosing the subscription records Dustin's decision.** The switch stores, beside the mode, who decided (Dustin Edwards), the date (2026-10-04), the ruling, the reasoning and who set the switch, when, and why (`overnight:decision`). The Portal's confirm step shows it and the panel shows it after. Leaving the subscription deletes the record, so a later choice records its own date and reason. A subscription mode with no readable record reads as `off`.
 

@@ -47,7 +47,7 @@ describe("delete records its edges inside the batch", () => {
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
     const result = (await client.callTool({
-      name: "delete",
+      name: "capsid_delete_doc",
       arguments: { namespace: "sample", path: "gone.md", confirm: true },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     await client.close();
@@ -85,7 +85,7 @@ describe("delete records its edges inside the batch", () => {
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
     const result = (await client.callTool({
-      name: "delete",
+      name: "capsid_delete_doc",
       arguments: { namespace: "sample", path: "alone.md", confirm: true },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     await client.close();

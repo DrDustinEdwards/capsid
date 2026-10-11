@@ -5,7 +5,7 @@ import type { AuditChange, AuditDetail, AuditField } from "./ops-types";
 // adopted", item 2). The reason typed with a change, a field-by-field before and after
 // where the row carries both, and the row's other fields by name.
 //
-// NAMED FIELDS, NEVER RAW PARAMS. The same rule cloudflare_config follows ("copies
+// NAMED FIELDS, NEVER RAW PARAMS. The same rule capsid_admin_read_ops follows ("copies
 // named fields only"): a document write's params carry a content hash, and a signed
 // row a signature, neither of which belongs on a page. Those, and any nested value,
 // are counted in `withheld` and not shown.

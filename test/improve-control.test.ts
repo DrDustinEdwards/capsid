@@ -46,7 +46,7 @@ test('pause "all" pauses every roster namespace with the default reason', async 
   const { env, kv } = harness();
   const r = await improveControl(env, "pause", { namespace: "all" });
   assert.ok(LOOP_ROSTER.length > 1, "the roster is empty or one entry, so 'all' is not tested");
-  for (const ns of LOOP_ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via improve_run");
+  for (const ns of LOOP_ROSTER) assert.equal(kv.store.get(pausedKey(ns)), "paused via capsid_admin_control_improve");
   if (r.action !== "pause") assert.fail(`pause answered as ${r.action}`);
   assert.deepEqual(r.namespaces.slice().sort(), [...LOOP_ROSTER].sort());
 });

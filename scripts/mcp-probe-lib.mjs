@@ -6,19 +6,23 @@
 // metadata, /register, the consent page and the Access redirect, and then broke every
 // tool call, passed them all (job_bb06c9be24c4, found in the #331 rollback report).
 // This gate makes the calls a client makes, through /ops/mcp with the live-probe agent's
-// key (scripts/mint-agents.mjs, role live-probe: read grant on capsid, the read tool
+// key (scripts/mint-agents.mjs, role live-probe: read grant on capsid, the capsid_read_doc tool
 // only), in both protocol eras Capsid serves:
 //
-//   2025-11-25  initialize, notifications/initialized, tools/list, tools/call read
-//   2026-07-28  server/discover, tools/list, tools/call read, each with the _meta envelope
+//   2025-11-25  initialize, notifications/initialized, tools/list, tools/call capsid_read_doc
+//   2026-07-28  server/discover, tools/list, tools/call capsid_read_doc, each with the _meta envelope
 //
 // When src/legacy-era.ts is deleted, 2025-11-25 leaves ERAS in the same pull request.
 
 export const ERAS = ["2025-11-25", "2026-07-28"];
 
-// What tools/list must return. test/mcp-probe.test.ts holds it to TOOL_GRANTS in
-// src/scope.ts, so a change to the served surface changes this in the same commit.
-export const EXPECTED_TOOLS = 37;
+// What tools/list must return on /mcp: Capsid's tools, not Capsid Admin's.
+// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS in src/tools/surface.ts, so a
+// change to the served surface changes this in the same commit.
+export const EXPECTED_TOOLS = 14;
+
+// The tool the probe reads with.
+export const READ_TOOL = "capsid_read_doc";
 
 // The read: the document /health already depends on (CLAUDE.md, health probe rule), in
 // the one namespace the probe agent is scoped to.
@@ -56,7 +60,7 @@ export function eraSteps(era) {
   const params = (p = {}) => (modern ? { ...p, _meta: envelope(era) } : p);
   const headers = (method, name) =>
     modern ? { "mcp-method": method, "mcp-protocol-version": era, ...(name ? { "mcp-name": name } : {}) } : method === "initialize" ? {} : { "mcp-protocol-version": era };
-  const read = { name: "read", arguments: { namespace: PROBE_READ.namespace, path: PROBE_READ.path } };
+  const read = { name: READ_TOOL, arguments: { namespace: PROBE_READ.namespace, path: PROBE_READ.path } };
   const steps = modern
     ? [{ label: "server/discover", method: "server/discover", params: params(), headers: headers("server/discover") }]
     : [
@@ -64,7 +68,7 @@ export function eraSteps(era) {
         { label: "notifications/initialized", method: "notifications/initialized", notification: true, headers: headers("notifications/initialized") },
       ];
   steps.push({ label: "tools/list", method: "tools/list", params: params(), headers: headers("tools/list") });
-  steps.push({ label: "tools/call read", method: "tools/call", params: params(read), headers: headers("tools/call", "read") });
+  steps.push({ label: `tools/call ${READ_TOOL}`, method: "tools/call", params: params(read), headers: headers("tools/call", READ_TOOL) });
   return steps.map((s, i) => ({ ...s, id: s.notification ? undefined : i + 1, era }));
 }
 
@@ -103,7 +107,7 @@ export function stepProblem(step, status, text) {
     case "tools/list": {
       const tools = Array.isArray(result.tools) ? result.tools : [];
       if (tools.length !== EXPECTED_TOOLS) return `${where}: ${tools.length} tools, expected ${EXPECTED_TOOLS}`;
-      if (!tools.some((t) => t?.name === "read")) return `${where}: no read tool in the list`;
+      if (!tools.some((t) => t?.name === READ_TOOL)) return `${where}: no ${READ_TOOL} tool in the list`;
       // Claude Code refuses a 2026-07-28 tools/list without its cache fields.
       if (step.era !== "2025-11-25" && (typeof result.ttlMs !== "number" || typeof result.cacheScope !== "string")) {
         return `${where}: no ttlMs/cacheScope on a ${step.era} list, which Claude Code refuses`;

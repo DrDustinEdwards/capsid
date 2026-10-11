@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 describe("conventions-read", () => {
   it("a direct read of capsid/conventions.md writes one row, addressed to no document", async () => {
-    await call("read", { namespace: "capsid", path: "conventions.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
     const out = await rows();
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ actor: "test:reader", namespace: "capsid", path: null });
@@ -46,22 +46,22 @@ describe("conventions-read", () => {
   });
 
   it("a brief writes one row, naming the namespace it was for", async () => {
-    await call("brief", { namespace: "sample" });
+    await call("capsid_start_session", { namespace: "sample" });
     const out = await rows();
     expect(out).toHaveLength(1);
     expect(JSON.parse(out[0].params)).toEqual({ via: "brief", for_namespace: "sample" });
   });
 
   it("a second read by the same caller inside the hour writes none, whichever tool it came by", async () => {
-    await call("brief", { namespace: "sample" });
-    await call("read", { namespace: "capsid", path: "conventions.md" });
-    await call("brief", { namespace: "sample" });
+    await call("capsid_start_session", { namespace: "sample" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
+    await call("capsid_start_session", { namespace: "sample" });
     expect(await rows()).toHaveLength(1);
   });
 
   it("another caller's read is its own row", async () => {
-    await call("read", { namespace: "capsid", path: "conventions.md" }, "agent:one");
-    await call("read", { namespace: "capsid", path: "conventions.md" }, "agent:two");
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" }, "agent:one");
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" }, "agent:two");
     expect((await rows()).map((r) => r.actor)).toEqual(["agent:one", "agent:two"]);
   });
 
@@ -69,29 +69,29 @@ describe("conventions-read", () => {
     await env.DB.prepare(
       "INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES ('test:reader', 'conventions-read', 'capsid', NULL, '{}', datetime('now', '-61 minutes'))"
     ).run();
-    await call("read", { namespace: "capsid", path: "conventions.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
     expect(await rows("test:reader")).toHaveLength(2);
     await env.DB.prepare("UPDATE audit_log SET at = datetime('now', '-59 minutes') WHERE action = 'conventions-read'").run();
-    await call("read", { namespace: "capsid", path: "conventions.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
     expect(await rows("test:reader")).toHaveLength(2);
   });
 
   it("a read of any other document writes none, in capsid or elsewhere", async () => {
-    await call("read", { namespace: "capsid", path: "repo-structure.md" });
-    await call("read", { namespace: "sample", path: "core.md" });
-    await call("read", { namespace: "sample", path: "notes.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "repo-structure.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "sample", path: "core.md" });
+    await call("capsid_read_doc", { action: "read", namespace: "sample", path: "notes.md" });
     expect(await rows()).toEqual([]);
   });
 
   it("a brief for a namespace with no core.md still counts, because it still carries the rules", async () => {
-    await call("brief", { namespace: "empty" });
+    await call("capsid_start_session", { namespace: "empty" });
     expect(await rows()).toHaveLength(1);
   });
 
   it("does not make the reader the document's last_actor", async () => {
     await env.DB.prepare("INSERT INTO audit_log (namespace, path, action, actor) VALUES ('capsid', 'conventions.md', 'write', 'access:dustin')").run();
-    const first = await call("read", { namespace: "capsid", path: "conventions.md" });
-    const second = await call("brief", { namespace: "sample" }, "agent:other");
+    const first = await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "conventions.md" });
+    const second = await call("capsid_start_session", { namespace: "sample" }, "agent:other");
     expect(first.last_actor).toBe("access:dustin");
     expect(second.conventions.last_actor).toBe("access:dustin");
   });

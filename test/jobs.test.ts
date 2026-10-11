@@ -101,7 +101,7 @@ test("every action the schema advertises is one the tool handles", async () => {
   const unhandled: string[] = [];
   assert.ok(JOB_ACTIONS.length > 0, "JOB_ACTIONS is empty, so no action was called");
   for (const action of JOB_ACTIONS) {
-    const result = (await client.callTool({ name: "jobs", arguments: { action, namespace: "capsid" } })) as {
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action, namespace: "capsid" } })) as {
       content: Array<{ text: string }>;
     };
     if (/unknown jobs action/.test(result.content[0]?.text ?? "")) unhandled.push(action);
@@ -170,7 +170,7 @@ test("every parameter name the guard knows is one the tool serves", async () => 
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  const served = Object.keys(tools.find((tool) => tool.name === "jobs")?.inputSchema.properties ?? {});
+  const served = Object.keys(tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ?? {});
   const missing = JOB_PARAM_NAMES.filter((name) => !served.includes(name));
   assert.deepEqual(missing, [], `the jobs tool serves no parameter named: ${missing.join(", ")}`);
 });
@@ -184,7 +184,7 @@ test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RES
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  const props = (tools.find((tool) => tool.name === "jobs")?.inputSchema.properties ?? {}) as Record<string, { maxLength?: number }>;
+  const props = (tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ?? {}) as Record<string, { maxLength?: number }>;
   assert.equal(props.note?.maxLength, MAX_RESUME_NOTE, "the jobs tool serves no note bounded by MAX_RESUME_NOTE");
   assert.equal(props.reason?.maxLength, MAX_TITLE, "reason's bound moved");
   assert.ok(MAX_RESUME_NOTE > MAX_TITLE * 10, "the note is not bounded well above the reason");
@@ -269,7 +269,7 @@ test("a jobs refusal comes back with isError set, and a caller still reads the r
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name: "jobs", arguments: { action: "complete", id: "job_abc123abc123" } })) as {
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "complete", id: "job_abc123abc123" } })) as {
       isError?: boolean;
       content: Array<{ text: string }>;
     };

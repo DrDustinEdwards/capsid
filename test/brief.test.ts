@@ -15,7 +15,7 @@ async function brief(opts: FakeD1Options) {
   const client = new Client({ name: "brief-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const result = (await client.callTool({ name: "brief", arguments: { namespace: "capsid" } })) as {
+  const result = (await client.callTool({ name: "capsid_start_session", arguments: { namespace: "capsid" } })) as {
     content: Array<{ text: string }>;
   };
   await client.close();

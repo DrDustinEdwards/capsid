@@ -23,6 +23,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // Unset, the deploy and error columns show no data and say why.
   CF_OPS_TOKEN?: string;
   CF_ACCOUNT_ID?: string;
+  // Capsid Admin's capsid_admin_set_site_key (src/site-key.ts): a token with Workers Scripts Edit, to
+  // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
+  // because it writes. Unset, capsid_admin_set_site_key mints nothing and says why.
+  CF_SECRETS_TOKEN?: string;
   // The dashboard app's built files (dashboard/dist), served under /portal/ only
   // after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;
@@ -70,4 +74,9 @@ export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_C
 // check, and the client signs in again once.
 export interface Props extends Record<string, unknown> {
   email: string;
+  // When Access verified that email, in milliseconds since the epoch, set at /callback.
+  // The admin server's step-up reads it (src/scope.ts STEP_UP): a risky admin action
+  // needs a sign-in this recent. A grant made before it was recorded carries none and
+  // reads as stale.
+  signed_in_at?: number;
 }

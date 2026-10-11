@@ -7,11 +7,11 @@ import { MAX_ROWS } from "./limits";
 // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
 // a raw request handler is not a registration, so these handlers check scope here.
 // Without it, an agent bearer on /ops/mcp could read every document by URI and list
-// every prompt while the `read` tool refused it.
-// They are checked as the `read` tool, so an agent narrowed away from `read` loses
+// every prompt while capsid_read_doc refused it.
+// They are checked as capsid_read_doc action read, so an agent narrowed away from it loses
 // both and the two surfaces cannot disagree.
 export function resourceRefusal(agent: Agent, namespace: string): string | null {
-  return checkScope(agent, { tool: "read", grant: "read", namespace });
+  return checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read", namespace });
 }
 
 // A listing filters rather than refusing, which would leak that there is more.
@@ -28,7 +28,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
   const visibleNamespaces = agent.scopes.namespaces;
 
   // Resources: every document is addressable context at capsid://<namespace>/<path>.
-  // Read-only, same visibility as the read tool.
+  // Read-only, same visibility as capsid_read_doc.
   server.registerResource(
     "document",
     new ResourceTemplate("capsid://{namespace}/{+path}", {

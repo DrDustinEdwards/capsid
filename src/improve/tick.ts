@@ -195,7 +195,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
   // written, because the driver blocks and the seat merges afterwards. The merge path
   // corrects the rows it can see; this catches the rest (a merge done with gh rather
-  // than manage_pr, and rows written before the join table existed). Bounded per
+  // than capsid_close_pr action merge, and rows written before the join table existed). Bounded per
   // sweep, so the cost is fixed however far behind it is.
   await runTask(
     env,

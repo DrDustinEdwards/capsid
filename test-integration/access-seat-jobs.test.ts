@@ -5,8 +5,8 @@ import { buildServer } from "../src/server";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 
-// THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real jobs tool, against a
-// real D1. Since the MCP login moved to Cloudflare Access (#185), the admin reaches the
+// THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
+// against a real D1. Since the MCP login moved to Cloudflare Access (#185), the admin reaches the
 // queue as `access:<email>`. The queue recorded leases only for github:, opkey: and
 // agent: actors, so the seat's resume of job_195c11e2667b was refused on 2026-09-28:
 // "'access:...' is not a caller identity this queue can hold a lease for". Each seat
@@ -23,13 +23,14 @@ function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as never;
 }
 
-// One call to the jobs tool, as `agent`, through an MCP client on the real server.
+// One call to the capsid_work_jobs tool, as `agent`, through an MCP client on the real
+// server.
 async function jobsTool(agent: Agent, args: Record<string, unknown>): Promise<{ ok: boolean; refusal?: string; job?: Record<string, unknown> }> {
   const server = buildServer(jobsEnv(), agent);
   const client = new Client({ name: "access-seat", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name: "jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
   await client.close();
   const text = result.content[0]?.text ?? "";
   try {
@@ -70,7 +71,7 @@ beforeEach(async () => {
 
 const row = (id: string) => env.DB.prepare("SELECT status, claimed_by, posted_by FROM jobs WHERE id = ?1").bind(id).first<Record<string, string>>();
 
-describe(`the seat as ${SEAT_ACTOR}, through the jobs tool`, () => {
+describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
   it("the admin agent speaks access:<email>", () => {
     expect(SEAT.actor).toBe(SEAT_ACTOR);
     expect(SEAT.admin).toBe(true);

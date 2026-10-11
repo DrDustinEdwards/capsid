@@ -19,7 +19,7 @@ import { verifySignedBody } from "./improve-task";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
-import { commandFromSummary, completeAsSeat, completeJob, failJob } from "./jobs-holder";
+import { commandFromSummary, completeAsSeat, completeJob, failJob, recordAsSeat } from "./jobs-holder";
 import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
 import type { JobSkills } from "./job-outcomes";
@@ -119,7 +119,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   return { ok: true, action: "admin-fail", job };
 }
 
-// fail through the jobs tool. The holder failing its own job is an ordinary fail. The
+// fail through the capsid_work_jobs tool. The holder failing its own job is an ordinary fail. The
 // seat failing a job somebody else holds, or nobody holds, is adminFailJob. Anyone else
 // gets failJob's own refusal for a job it does not hold.
 //
@@ -183,7 +183,23 @@ async function adminCompleteJob(
   return completeAsSeat(env, agent, now, id, args);
 }
 
-// complete through the jobs tool. The holder completing its own job is an ordinary
+// record through the work queue tool: the seat writing the outcome of work done on a
+// queued job without a claim (capsid/rulings/mcp-2026-10-10.md, amendment answer 2,
+// "recording a job outcome without claiming"). The seat only, as for completing a job
+// somebody else blocked, because an outcome credits work and a driver could otherwise
+// record work it did not do. The evidence is verified against GitHub as for a complete.
+export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: string, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
+  if (!callerIsSeat(agent)) {
+    return refuse("record", `${agent.actor} may not record an outcome without a claim. That is the seat's act (the admin identity or can_merge); a driver claims the job and completes it.`);
+  }
+  const current = await readJob(env.DB, id);
+  if (!current) return refuse("record", `no job ${id}.`);
+  const outside = outsideJobNamespace(agent, current.namespace);
+  if (outside) return refuse("record", `${agent.actor} cannot record ${id} ('${current.title}'): ${outside}`);
+  return recordAsSeat(env, agent, now, id, args);
+}
+
+// complete through the capsid_work_jobs tool. The holder completing its own job is an ordinary
 // complete. The seat completing a job somebody else holds is adminCompleteJob. Anyone
 // else gets completeJob's own refusal for a job it does not hold.
 export async function completeAsCaller(

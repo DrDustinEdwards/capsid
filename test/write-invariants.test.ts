@@ -107,34 +107,40 @@ const shaOf = async (s: string) => (await import("node:crypto")).createHash("sha
 
 const sqlFor = (recorded: Recorded[]) => recorded.map((r) => r.sql.replace(/\s+/g, " ")).join("\n");
 
-// The four tools that overwrite, remove or rename a document, and what each must issue.
-// Adding a mutating tool without adding it here is the gap the source guard in
-// invariants.test.ts covers from the other side.
-const MUTATORS: Array<{ tool: string; args: Record<string, unknown>; requires: RegExp[]; refusesUnregisteredWith?: RegExp }> = [
+// The tools and actions that overwrite, remove or rename a document, and what each must
+// issue. `label` names the tool and action in a failure. Adding a mutating tool or
+// action without adding it here is the gap the source guard in invariants.test.ts
+// covers from the other side.
+const MUTATORS: Array<{ label: string; tool: string; args: Record<string, unknown>; requires: RegExp[]; refusesUnregisteredWith?: RegExp }> = [
   {
-    tool: "write",
-    args: { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
+    label: "capsid_write_doc.write",
+    tool: "capsid_write_doc",
+    args: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
     requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
   },
   {
-    tool: "delete",
+    label: "capsid_delete_doc",
+    tool: "capsid_delete_doc",
     args: { namespace: "capsid", path: "doc.md", confirm: true },
     requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
   },
   {
-    tool: "restore",
-    args: { namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
+    label: "capsid_write_doc.restore",
+    tool: "capsid_write_doc",
+    args: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
     requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
   },
   {
-    tool: "move",
-    args: { namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true },
+    label: "capsid_write_doc.move",
+    tool: "capsid_write_doc",
+    args: { action: "move", namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true },
     // A rename has no body to snapshot; the audit row is the record.
     requires: [/INSERT INTO audit_log/],
   },
   {
     // lint finalize is the widest mutation: one call renames every consumed document.
-    tool: "lint",
+    label: "capsid_lint_namespace.finalize",
+    tool: "capsid_lint_namespace",
     args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true },
     // Archiving is a rename, so the audit row is the record, as for move.
     requires: [/INSERT INTO audit_log/],
@@ -144,21 +150,21 @@ const MUTATORS: Array<{ tool: string; args: Record<string, unknown>; requires: R
   },
 ];
 
-for (const { tool, args, requires } of MUTATORS) {
-  test(`${tool} issues its snapshot and audit statements`, async () => {
+for (const { label, tool, args, requires } of MUTATORS) {
+  test(`${label} issues its snapshot and audit statements`, async () => {
     const { client, recorded, close } = await connect("write");
     const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
-    assert.ok(!result.isError, `${tool} returned an error: ${result.content?.[0]?.text}`);
+    assert.ok(!result.isError, `${label} returned an error: ${result.content?.[0]?.text}`);
     // Vacuity guard: the handler has to have written something at all.
-    assert.ok(recorded.length > 0, `${tool} issued no statements`);
+    assert.ok(recorded.length > 0, `${label} issued no statements`);
     const sql = sqlFor(recorded);
     for (const re of requires) {
-      assert.match(sql, re, `${tool} did not issue ${re}. Statements issued:\n${sql}`);
+      assert.match(sql, re, `${label} did not issue ${re}. Statements issued:\n${sql}`);
     }
   });
 
-  test(`${tool} lands its mutation and its audit row in ONE batch`, async () => {
+  test(`${label} lands its mutation and its audit row in ONE batch`, async () => {
     // A separate .run() after the batch is two transactions, so the mutation and its
     // audit record could disagree.
     const { client, recorded, close } = await connect("write");
@@ -168,29 +174,29 @@ for (const { tool, args, requires } of MUTATORS) {
     assert.deepEqual(
       direct.map((r) => r.sql.replace(/\s+/g, " ").slice(0, 60)),
       [],
-      `${tool} issued statements outside the batch`
+      `${label} issued statements outside the batch`
     );
   });
 }
 
 test("a read-only key cannot reach any mutating tool, and writes nothing", async () => {
-  for (const { tool, args } of MUTATORS) {
+  for (const { label, tool, args } of MUTATORS) {
     const { client, recorded, close } = await connect("read");
     const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
-    assert.equal(result.isError, true, `${tool} did not refuse a read-only key`);
+    assert.equal(result.isError, true, `${label} did not refuse a read-only key`);
     // The refusal names the missing scope (src/scope.ts).
     assert.match(result.content[0].text, /requires the write grant/);
     // The refusal has to come BEFORE any statement, not after the work is done.
-    assert.deepEqual(recorded, [], `${tool} wrote ${recorded.length} statement(s) while refusing a read-only key`);
+    assert.deepEqual(recorded, [], `${label} wrote ${recorded.length} statement(s) while refusing a read-only key`);
   }
 });
 
 test("write refuses when if_match does not describe the stored body", async () => {
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
-    name: "write",
-    arguments: { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: "0".repeat(64) },
+    name: "capsid_write_doc",
+    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: "0".repeat(64) },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.equal(result.isError, true, "a stale if_match was accepted");
@@ -206,8 +212,8 @@ test("write accepts the if_match it just handed out", async () => {
   const sha = createHash("sha256").update("prior body").digest("hex");
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
-    name: "write",
-    arguments: { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha },
+    name: "capsid_write_doc",
+    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha },
   })) as { isError?: boolean };
   await close();
   assert.ok(!result.isError, "a correct if_match was refused");
@@ -217,16 +223,16 @@ test("write accepts the if_match it just handed out", async () => {
 test("write, delete and move all refuse an unregistered namespace, and write nothing", async () => {
   // A typo in `namespace` must not open a shadow namespace: documents the namespaces list
   // cannot see, the lint loop never counts, and brief will never assemble.
-  for (const { tool, args, refusesUnregisteredWith } of MUTATORS) {
+  for (const { label, tool, args, refusesUnregisteredWith } of MUTATORS) {
     const { client, recorded, close } = await connect("write", { namespaceExists: false });
     const result = (await client.callTool({
       name: tool,
       arguments: { ...args, namespace: "typoed-ns" },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
-    assert.equal(result.isError, true, `${tool} accepted an unregistered namespace`);
+    assert.equal(result.isError, true, `${label} accepted an unregistered namespace`);
     assert.match(result.content[0].text, refusesUnregisteredWith ?? /unknown namespace/);
-    assert.deepEqual(recorded, [], `${tool} wrote statements for an unregistered namespace`);
+    assert.deepEqual(recorded, [], `${label} wrote statements for an unregistered namespace`);
   }
 });
 
@@ -238,8 +244,8 @@ test("mode meta leaves the body byte-identical, wide dash and all", async () => 
   const dashed = `a body with an em ${EM_DASH} dash in it`;
   const { client, recorded, close } = await connect("write", { body: dashed });
   const result = (await client.callTool({
-    name: "write",
-    arguments: { namespace: "capsid", path: "doc.md", mode: "meta", status: "closed" },
+    name: "capsid_write_doc",
+    arguments: { action: "write", namespace: "capsid", path: "doc.md", mode: "meta", status: "closed" },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.ok(!result.isError, `meta write failed: ${result.content?.[0]?.text}`);
@@ -264,8 +270,8 @@ const recently = (minutesAgo: number) =>
 async function writeAndRead(opts: Record<string, unknown>, args: Record<string, unknown> = {}) {
   const { client, close } = await connect("write", opts);
   const result = (await client.callTool({
-    name: "write",
-    arguments: { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, ...args },
+    name: "capsid_write_doc",
+    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, ...args },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   return JSON.parse(result.content[0].text) as { concurrency_warning?: string };
@@ -296,8 +302,8 @@ test("a guarded write never warns, however recent", async () => {
 test("the warning NEVER refuses the write", async () => {
   const { client, recorded, close } = await connect("write", { updatedAt: recently(5) });
   const result = (await client.callTool({
-    name: "write",
-    arguments: { namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
+    name: "capsid_write_doc",
+    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
   })) as { isError?: boolean };
   await close();
   assert.ok(!result.isError, "the warning turned into a refusal");
@@ -330,7 +336,8 @@ test("PREDICATE: a body that changes after the pre-read is refused at commit, no
       live.body = "body written by someone else";
     },
   });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha,
   });
   await close();
@@ -347,7 +354,8 @@ test("PREDICATE: an overwrite with no confirm is refused before any commit", asy
   // The pre-elicitation arm. The in-memory client advertises no elicitation capability,
   // so the handler refuses rather than waiting.
   const { client, recorded, close } = await connect("write", { body: "prior body" });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
   });
   await close();
@@ -359,7 +367,8 @@ test("PREDICATE: an overwrite with no confirm is refused before any commit", asy
 test("PREDICATE: an unguarded update still lands, so the guard is not a blanket refusal", async () => {
   // Without this, a predicate that refused everything would pass every test above.
   const { client, recorded, close } = await connect("write", { body: "prior body" });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true,
   });
   await close();
@@ -378,7 +387,8 @@ test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is
       live.body = "the winner body";
     },
   });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "new-doc.md", title: "Loser", body: "the loser body",
   });
   await close();
@@ -388,8 +398,8 @@ test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is
   assert.deepEqual(recorded, [], "the losing create still wrote statements");
 });
 
-// Which guard write and restore arm, shown by staging the race each guard exists for
-// and asserting the outcome, for both tools:
+// Which guard capsid_write_doc's write and restore actions arm, shown by staging the
+// race each guard exists for and asserting the outcome, for both actions:
 //
 //   create: a racing create wins and the handler is refused. write: "CREATE COLLISION:
 //     exactly one of two racing creates wins" above; restore: "restore recreating a
@@ -403,13 +413,13 @@ test("RACE: a confirmed write and restore with no if_match both land over a body
     live.body = "body written by someone else";
   };
   const w = await connect("write", { body: "prior body", raceAfterPreRead: race });
-  const wRes = await call(w.client, "write", { namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true });
+  const wRes = await call(w.client, "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true });
   await w.close();
   assert.ok(!wRes.isError, `a plain write was refused by a guard it did not ask for: ${wRes.content?.[0]?.text}`);
   assert.match(sqlFor(w.recorded), /INSERT INTO documents/);
 
   const r = await connect("write", { body: "prior body", raceAfterPreRead: race });
-  const rRes = await call(r.client, "restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID, confirm: true });
+  const rRes = await call(r.client, "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID, confirm: true });
   await r.close();
   assert.ok(!rRes.isError, `a plain restore was refused by a guard it did not ask for: ${rRes.content?.[0]?.text}`);
   assert.match(sqlFor(r.recorded), /INSERT INTO documents/);
@@ -417,7 +427,8 @@ test("RACE: a confirmed write and restore with no if_match both land over a body
 
 test("CREATE COLLISION: an uncontested create still succeeds", async () => {
   const { client, recorded, close } = await connect("write", { exists: false });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "new-doc.md", title: "T", body: "b",
   });
   await close();
@@ -435,8 +446,8 @@ test("CREATE COLLISION: an uncontested create still succeeds", async () => {
 test("restore writes the VERSION body, and snapshots the LIVE one", async () => {
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
-    name: "restore",
-    arguments: { namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
+    name: "capsid_write_doc",
+    arguments: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.ok(!result.isError, `restore failed: ${result.content?.[0]?.text}`);
@@ -460,12 +471,12 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
   // SQLite in test-integration/live-snapshot.test.ts.
 });
 
-// history. Namespace and path are part of the lookup, so an id alone cannot walk every
-// snapshot in the store.
+// capsid_read_doc action versions (history). Namespace and path are part of the
+// lookup, so an id alone cannot walk every snapshot in the store.
 
-test("history lists the versions of the document asked for", async () => {
+test("capsid_read_doc versions lists the versions of the document asked for", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "history", { namespace: "capsid", path: "doc.md" });
+  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "doc.md" });
   await close();
   assert.ok(!result.isError, `history failed: ${result.content?.[0]?.text}`);
   const out = JSON.parse(result.content[0].text) as { versions: Array<{ id: number }>; live: unknown };
@@ -473,9 +484,9 @@ test("history lists the versions of the document asked for", async () => {
   assert.ok(out.live, "history did not report the live document");
 });
 
-test("history returns nothing for a path with no snapshots", async () => {
+test("capsid_read_doc versions returns nothing for a path with no snapshots", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "history", { namespace: "capsid", path: "ep.md" });
+  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "ep.md" });
   await close();
   const out = JSON.parse(result.content[0].text) as { versions: unknown[] };
   assert.deepEqual(out.versions, [], "a document's history leaked another document's snapshots");
@@ -484,7 +495,7 @@ test("history returns nothing for a path with no snapshots", async () => {
 test("fetching a version by id is scoped to its own document", async () => {
   // The same id, asked for under a path it does not belong to.
   const { client, close } = await connect("write");
-  const wrongPath = await call(client, "history", { namespace: "capsid", path: "ep.md", version_id: 42 });
+  const wrongPath = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "ep.md", version_id: 42 });
   await close();
   assert.equal(wrongPath.isError, true, "a snapshot was readable through a document it does not belong to");
   assert.match(wrongPath.content[0].text, /no version 42/);
@@ -492,7 +503,7 @@ test("fetching a version by id is scoped to its own document", async () => {
 
 test("fetching a version by id returns that version's body", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "history", { namespace: "capsid", path: "doc.md", version_id: 42 });
+  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "doc.md", version_id: 42 });
   await close();
   assert.ok(!result.isError, `history by id failed: ${result.content?.[0]?.text}`);
   const out = JSON.parse(result.content[0].text) as { id: number; body: string; bytes: number };
@@ -506,7 +517,8 @@ test("fetching a version by id returns that version's body", async () => {
 
 test("a version id that does not exist is refused, not silently substituted", async () => {
   const { client, recorded, close } = await connect("write");
-  const result = await call(client, "restore", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "doc.md", version_id: 99, confirm: true,
   });
   await close();
@@ -519,7 +531,8 @@ test("a version belonging to another document is not reachable by id", async () 
   // namespace and path are part of the version lookup on purpose: an id alone would let a
   // caller walk every snapshot in the store by incrementing a number.
   const { client, close } = await connect("write");
-  const result = await call(client, "restore", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "some-other-doc.md", version_id: 42, confirm: true,
   });
   await close();
@@ -530,7 +543,7 @@ test("a version belonging to another document is not reachable by id", async () 
 test("a document that does not exist is not found at a path that does", async () => {
   // delete reads the row before it does anything, and a missing row stops it.
   const { client, recorded, close } = await connect("write");
-  const result = await call(client, "delete", {
+  const result = await call(client, "capsid_delete_doc", {
     namespace: "capsid", path: "never-existed.md", confirm: true,
   });
   await close();
@@ -541,7 +554,8 @@ test("a document that does not exist is not found at a path that does", async ()
 
 test("restore accepts if_match and refuses a stale one", async () => {
   const stale = await connect("write", { body: "prior body" });
-  const staleRes = await call(stale.client, "restore", {
+  const staleRes = await call(stale.client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: "0".repeat(64),
   });
   await stale.close();
@@ -551,7 +565,8 @@ test("restore accepts if_match and refuses a stale one", async () => {
   assert.deepEqual(stale.recorded, [], "a refused restore still wrote statements");
 
   const good = await connect("write", { body: "prior body" });
-  const okRes = await call(good.client, "restore", {
+  const okRes = await call(good.client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: await shaOf("prior body"),
   });
   await good.close();
@@ -566,7 +581,8 @@ test("restore refuses at the PREDICATE when the live body changes after its pre-
       live.body = "changed under the restore";
     },
   });
-  const result = await call(client, "restore", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: await shaOf("prior body"),
   });
   await close();
@@ -583,7 +599,8 @@ test("restore recreating a deleted document refuses a racing create", async () =
       live.body = "recreated by someone else";
     },
   });
-  const result = await call(client, "restore", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "restore",
     namespace: "capsid", path: "doc.md", version_id: 42, confirm: true,
   });
   await close();
@@ -602,7 +619,8 @@ test("the concurrency warning is read at COMMIT time, not from the pre-read", as
       live.updatedAt = fresh;
     },
   });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true,
   });
   await close();
@@ -636,7 +654,8 @@ test("an accepted elicitation reaches the commit, so the arm is really reachable
   // The harness check: if this path reverted to "unsupported" the wording tests below
   // would pass by refusing early for a different reason.
   const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
   });
   await close();
@@ -650,12 +669,12 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
   // Consent given through elicitation is bound to the body it was about, in all three
   // tools. No call passes confirm or if_match, so the elicited signal is the only thing
   // that can arm the body guard.
-  const calls: Array<[string, Record<string, unknown>]> = [
-    ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
-    ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
-    ["delete", { namespace: "capsid", path: "doc.md" }],
+  const calls: Array<[string, string, Record<string, unknown>]> = [
+    ["capsid_write_doc.write", "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
+    ["capsid_write_doc.restore", "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    ["capsid_delete_doc", "capsid_delete_doc", { namespace: "capsid", path: "doc.md" }],
   ];
-  for (const [tool, args] of calls) {
+  for (const [label, tool, args] of calls) {
     const { client, recorded, prompts, close } = await connectEliciting({
       body: "prior body",
       raceAfterPreRead: (live) => {
@@ -664,9 +683,9 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
     });
     const result = await call(client, tool, args);
     await close();
-    assert.equal(prompts.length, 1, `${tool} did not elicit, so the elicited arm was not exercised`);
-    assert.equal(result.isError, true, `${tool} landed on a body that changed under an open prompt`);
-    assert.deepEqual(recorded, [], `${tool} committed statements after its guard should have fired`);
+    assert.equal(prompts.length, 1, `${label} did not elicit, so the elicited arm was not exercised`);
+    assert.equal(result.isError, true, `${label} landed on a body that changed under an open prompt`);
+    assert.deepEqual(recorded, [], `${label} committed statements after its guard should have fired`);
   }
   // The delete refusal says why, since a delete has no if_match to blame.
   const { client, close } = await connectEliciting({
@@ -675,25 +694,25 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
       live.body = "body written while the prompt was up";
     },
   });
-  const refused = await call(client, "delete", { namespace: "capsid", path: "doc.md" });
+  const refused = await call(client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md" });
   await close();
   assert.match(refused.content[0].text, /changed or was removed while the confirmation was open/);
 });
 
 test("RACE: after an elicitation with no race, write, restore and delete each land", async () => {
   // The innocent direction: a body guard that fired on every call would pass the test above.
-  const calls: Array<[string, Record<string, unknown>]> = [
-    ["write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
-    ["restore", { namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
-    ["delete", { namespace: "capsid", path: "doc.md" }],
+  const calls: Array<[string, string, Record<string, unknown>]> = [
+    ["capsid_write_doc.write", "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
+    ["capsid_write_doc.restore", "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    ["capsid_delete_doc", "capsid_delete_doc", { namespace: "capsid", path: "doc.md" }],
   ];
-  for (const [tool, args] of calls) {
+  for (const [label, tool, args] of calls) {
     const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
     const result = await call(client, tool, args);
     await close();
-    assert.equal(prompts.length, 1, `${tool} did not elicit`);
-    assert.ok(!result.isError, `${tool} was refused: ${result.content?.[0]?.text}`);
-    assert.ok(recorded.length > 0, `${tool} committed nothing`);
+    assert.equal(prompts.length, 1, `${label} did not elicit`);
+    assert.ok(!result.isError, `${label} was refused: ${result.content?.[0]?.text}`);
+    assert.ok(recorded.length > 0, `${label} committed nothing`);
   }
 });
 
@@ -707,7 +726,7 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
       live.body = "body written by someone else";
     },
   });
-  const landed = await call(changed.client, "delete", { namespace: "capsid", path: "doc.md", confirm: true });
+  const landed = await call(changed.client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
   await changed.close();
   assert.ok(!landed.isError, `a confirmed delete was refused over a body change: ${landed.content?.[0]?.text}`);
   assert.match(sqlFor(changed.recorded), /DELETE FROM documents/);
@@ -718,7 +737,7 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
       live.exists = false;
     },
   });
-  const refused = await call(removed.client, "delete", { namespace: "capsid", path: "doc.md", confirm: true });
+  const refused = await call(removed.client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
   await removed.close();
   assert.equal(refused.isError, true, "a delete of a row removed in flight reported success");
   assert.match(refused.content[0].text, /no longer exists/);
@@ -727,7 +746,8 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
 
 test("a declined elicitation refuses, and writes nothing", async () => {
   const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" }, "decline");
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
   });
   await close();
@@ -746,7 +766,8 @@ test("STALE CONFIRMATION is named as itself, not as an if_match mismatch", async
       live.body = "body written while the prompt was up";
     },
   });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body",
   });
   await close();
@@ -771,7 +792,8 @@ test("IF_MATCH MISMATCH keeps its own wording, and no pending clause", async () 
       live.body = "body written by someone else";
     },
   });
-  const result = await call(client, "write", {
+  const result = await call(client, "capsid_write_doc", {
+    action: "write",
     namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha,
   });
   await close();
@@ -789,12 +811,13 @@ test("the two refusals are DIFFERENT strings for the same underlying conflict", 
     live.body = "the racer";
   };
   const stale = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
-  const staleText = (await call(stale.client, "write", { namespace: "capsid", path: "doc.md", title: "T", body: "b" })).content[0].text;
+  const staleText = (await call(stale.client, "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" })).content[0].text;
   await stale.close();
 
   const mismatch = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
   const mismatchText = (
-    await call(mismatch.client, "write", {
+    await call(mismatch.client, "capsid_write_doc", {
+      action: "write",
       namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true, if_match: await shaOf("prior body"),
     })
   ).content[0].text;
@@ -819,34 +842,34 @@ async function connectExploding(sql: RegExp) {
 }
 
 const F30_CASES = [
-  { tool: "write", args: { namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true } },
-  { tool: "restore", args: { namespace: "capsid", path: "doc.md", version_id: 42, confirm: true } },
-  { tool: "delete", args: { namespace: "capsid", path: "doc.md", confirm: true } },
-  { tool: "move", args: { namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true } },
-  { tool: "lint", args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true } },
+  { label: "capsid_write_doc.write", tool: "capsid_write_doc", args: { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true } },
+  { label: "capsid_write_doc.restore", tool: "capsid_write_doc", args: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true } },
+  { label: "capsid_delete_doc", tool: "capsid_delete_doc", args: { namespace: "capsid", path: "doc.md", confirm: true } },
+  { label: "capsid_write_doc.move", tool: "capsid_write_doc", args: { action: "move", namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true } },
+  { label: "capsid_lint_namespace.finalize", tool: "capsid_lint_namespace", args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true } },
 ];
 
-for (const { tool, args } of F30_CASES) {
-  test(`${tool} returns a clean failure when the batch throws`, async () => {
+for (const { label, tool, args } of F30_CASES) {
+  test(`${label} returns a clean failure when the batch throws`, async () => {
     const { client, close } = await connectExploding(/INSERT INTO document_versions|UPDATE documents|INSERT INTO documents|DELETE FROM documents/);
     let result: { isError?: boolean; content: Array<{ text: string }> };
     try {
       result = (await client.callTool({ name: tool, arguments: args })) as typeof result;
     } catch (err) {
       await close();
-      assert.fail(`${tool} threw out of the handler instead of returning a failure: ${err instanceof Error ? err.message : String(err)}`);
+      assert.fail(`${label} threw out of the handler instead of returning a failure: ${err instanceof Error ? err.message : String(err)}`);
     }
     await close();
-    assert.equal(result.isError, true, `${tool} reported success on a failed batch`);
+    assert.equal(result.isError, true, `${label} reported success on a failed batch`);
     const text = result.content?.[0]?.text ?? "";
-    assert.match(text, /database is locked/, `${tool} lost the reason: ${text}`);
-    assert.match(text, /nothing (was written|changed|archived)/i, `${tool} did not say the store is unchanged: ${text}`);
+    assert.match(text, /database is locked/, `${label} lost the reason: ${text}`);
+    assert.match(text, /nothing (was written|changed|archived)/i, `${label} did not say the store is unchanged: ${text}`);
   });
 }
 
 // A landed GitHub write is not reported as a failure.
 
-test("write_repo_file reports success with a warning when the audit insert fails", async () => {
+test("capsid_change_repo write_file reports success with a warning when the audit insert fails", async () => {
   // guardedWrite commits to GitHub and then writes its audit row, and the two cannot share
   // a transaction. Reporting a failure would invite a retry, which is a second commit.
   const { db } = fakeD1(connectOptions({}));
@@ -880,8 +903,8 @@ test("write_repo_file reports success with a warning when the audit insert fails
 
   try {
     const result = (await client.callTool({
-      name: "write_repo_file",
-      arguments: { namespace: "capsid", path: "doc.md", content: "hi", message: "m", mode: "direct" },
+      name: "capsid_change_repo",
+      arguments: { action: "write_file", namespace: "capsid", path: "doc.md", content: "hi", message: "m", mode: "direct" },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.ok(!result.isError, `the landed write was reported as a failure: ${result.content?.[0]?.text}`);
     const payload = JSON.parse(result.content[0].text) as { commitSha?: string; audit_warning?: string };
@@ -946,8 +969,8 @@ test("a pr-mode write whose commit landed but whose PR open failed is audited an
 
   try {
     const result = (await client.callTool({
-      name: "write_repo_file",
-      arguments: { namespace: "capsid", path: "doc.md", content: "hi", message: "m" },
+      name: "capsid_change_repo",
+      arguments: { action: "write_file", namespace: "capsid", path: "doc.md", content: "hi", message: "m" },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.ok(!result.isError, `the landed commit was reported as a failure: ${result.content?.[0]?.text}`);
     const payload = JSON.parse(result.content[0].text) as { commitSha?: string; pr?: unknown; pr_error?: string; branch?: string };
@@ -965,11 +988,13 @@ test("a pr-mode write whose commit landed but whose PR open failed is audited an
   }
 });
 
-for (const { label, args } of [
-  { label: "a comment action with no comment", args: { namespace: "capsid", number: 7, action: "comment" } },
-  { label: "a comment on a merge", args: { namespace: "capsid", number: 7, action: "merge", comment: "lgtm" } },
+// manage_pr's comment is capsid_open_pr action comment, and its merge is capsid_close_pr
+// action merge, which takes no comment.
+for (const { label, tool, args } of [
+  { label: "a comment action with no comment", tool: "capsid_open_pr", args: { namespace: "capsid", number: 7, action: "comment" } },
+  { label: "a comment on a merge", tool: "capsid_close_pr", args: { namespace: "capsid", number: 7, action: "merge", comment: "lgtm" } },
 ]) {
-  test(`manage_pr refuses ${label} as an error with no audit row`, async () => {
+  test(`${tool} refuses ${label} as an error with no audit row`, async () => {
     // A refusal returned from inside guardedWrite would be filed as a landed result.
     const { client, audits } = await connectAuditRecording();
     const original = globalThis.fetch;
@@ -979,7 +1004,7 @@ for (const { label, args } of [
       return new Response("unexpected", { status: 500 });
     }) as typeof fetch;
     try {
-      const result = (await client.callTool({ name: "manage_pr", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+      const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
       assert.equal(result.isError, true, `the refusal read as success: ${result.content?.[0]?.text}`);
       assert.match(result.content[0].text, /comment/);
       assert.equal(audits.length, 0, "a refused call wrote an audit row");
@@ -991,14 +1016,15 @@ for (const { label, args } of [
   });
 }
 
-// Patch uniqueness, through the write tool. test/write-modes.test.ts proves the rule on
+// Patch uniqueness, through capsid_write_doc. test/write-modes.test.ts proves the rule on
 // `assembleBody` directly; these prove the handler applies it. A handler that treated
 // patch as replace would keep every helper test green. The assertion that matters is
 // refused and nothing written.
 
 test("PLANT: a patch whose find occurs ZERO times is refused by the tool and writes nothing", async () => {
   const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     ...DOC,
     mode: "patch",
     find: "no such text",
@@ -1018,7 +1044,8 @@ test("PLANT: a patch whose find occurs ZERO times is refused by the tool and wri
 test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes nothing", async () => {
   // The ambiguous case, the dangerous one.
   const { client, recorded, close } = await connect("write", { body: "repeat once, repeat twice" });
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     ...DOC,
     mode: "patch",
     find: "repeat",
@@ -1038,7 +1065,8 @@ test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes n
 test("THE INNOCENT DIRECTION: a patch matching exactly once lands through the tool", async () => {
   // Without this, the two plants above pass against a handler that refuses every patch.
   const { client, recorded, close } = await connect("write", { body: "alpha beta gamma" });
-  const out = await call(client, "write", {
+  const out = await call(client, "capsid_write_doc", {
+    action: "write",
     ...DOC,
     mode: "patch",
     find: "beta",

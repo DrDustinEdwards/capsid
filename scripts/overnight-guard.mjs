@@ -228,7 +228,7 @@ export async function prepareRun(client, ns, env) {
   /** @type {OvernightState | null} */
   let state = null;
   try {
-    const status = JSON.parse(await client.tool("improve_status", { namespace: ns }));
+    const status = JSON.parse(await client.tool("capsid_run_improve", { action: "status", namespace: ns }));
     state = status && typeof status === "object" && status.overnight ? status.overnight : null;
   } catch (err) {
     return { run: false, why: `could not read the overnight switch: ${err instanceof Error ? err.message : String(err)}`, benign: false };
@@ -239,7 +239,7 @@ export async function prepareRun(client, ns, env) {
   /** @type {Plan} */
   let plan;
   try {
-    plan = JSON.parse(await client.tool("jobs", { action: "list", view: "plan", namespace: ns }));
+    plan = JSON.parse(await client.tool("capsid_work_jobs", { action: "list", view: "plan", namespace: ns }));
   } catch (err) {
     return { run: false, why: `could not read the overnight plan: ${err instanceof Error ? err.message : String(err)}`, benign: false };
   }

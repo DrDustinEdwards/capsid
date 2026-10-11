@@ -106,7 +106,7 @@ export function outcomeOf(review: Review | null): ReviewOutcome {
 }
 
 /** Every comment on a pull request. Issue comments, not review comments, because
- *  manage_pr action `comment` posts there. */
+ *  capsid_open_pr action `comment` posts there. */
 export async function readReviewComments(
   env: Env,
   pr: PrUrl
@@ -157,7 +157,7 @@ const REVIEWER_AUDIT_SCAN = 500;
 /** The issue-comment ids Capsid posted for an actor allowed to review, in a namespace.
  *
  *  The identity half of the gate, read from audit_log rather than off the comment:
- *  `manage_pr` action `comment` posts through the App installation, so every comment
+ *  `capsid_open_pr` action `comment` posts through the App installation, so every comment
  *  Capsid writes has the same author login and the login cannot separate a reviewer's
  *  verdict from a driver's. What does separate them is who asked Capsid to post it,
  *  which the audit row records beside the comment_id.

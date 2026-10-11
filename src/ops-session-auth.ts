@@ -1,5 +1,5 @@
 import { resolveAgent, type Agent } from "./agents";
-import { checkScope } from "./scope";
+import { checkScope, JOBS_TOOL } from "./scope";
 
 // Who is reporting on a Claude Code session, and which job that session is working.
 // The one caller check for the receivers a session posts to on its own: the hook
@@ -39,7 +39,7 @@ export function sessionCallerRefusal(agent: Agent): string | null {
   if (!agent.row || (agent.kind !== "driver" && agent.kind !== "session")) {
     return `forbidden: ${agent.actor} is not a driver or a runner. Hooks and telemetry are posted with the session's own driver or runner key (docs/hooks.md, docs/telemetry.md).`;
   }
-  return checkScope(agent, { tool: "jobs", grant: "write" });
+  return checkScope(agent, { tool: JOBS_TOOL, grant: "write" });
 }
 
 /** The job a caller's session is working: a runner key's bound job, or the one job a

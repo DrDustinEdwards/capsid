@@ -148,7 +148,7 @@ export function guardedCommit(opts: {
   };
 }
 
-// The document upsert, one spelling, shared by `write` and `lint` mode `report`.
+// The document upsert, one spelling, shared by `capsid_write_doc` and `capsid_lint_namespace` mode `report`.
 // COALESCE on every optional column, so an omitted argument leaves the stored value
 // alone. The improve loop's writer sets every column and is not folded in.
 //

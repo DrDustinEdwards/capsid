@@ -8,7 +8,7 @@ import type { Env } from "./env";
 import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
 import { LOOP_ROSTER } from "./improve-schema";
 import { pausedReason, readMode } from "./improve-state";
-import { commandFromSummary, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
+import { commandFromSummary, isQuestionSummary, resumeMarkerIn } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
@@ -146,7 +146,7 @@ const FINGERPRINT = /\[([^\]]+)\]\s*$/;
 export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | null = null): OpsJob {
   const blocked = row.status === "blocked";
   const summary = row.result_summary;
-  const marker = summary === null ? -1 : summary.indexOf(RESUME_MARKER);
+  const marker = summary === null ? -1 : (resumeMarkerIn(summary)?.at ?? -1);
   const waitsOn = !blocked || summary === null ? null : (marker === -1 ? summary : summary.slice(0, marker)).trim() || null;
   const print = row.posted_by === WATCHER_ACTOR ? FINGERPRINT.exec(row.title) : null;
   return {
@@ -174,7 +174,7 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
   };
 }
 
-/** One credential as the feed shows it: the inventory improve_status serves, with its
+/** One credential as the feed shows it: the inventory capsid_run_improve action status serves, with its
  *  record. Grants are left out; the contract carries flags only. */
 export function opsAgentFrom(agent: AgentSummary): OpsAgent {
   const r = agent.record;

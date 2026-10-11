@@ -1,5 +1,6 @@
 import { fail, ok, type ToolCtx } from "./docs";
 import { repoWriteFlags } from "../scope";
+import { surfaceOf } from "./surface";
 import { resolveRepo } from "../github/client";
 import { auditStatement } from "../store-guards";
 import { logEvent } from "../log";
@@ -18,16 +19,17 @@ export function repoGuards(ctx: ToolCtx) {
   // axis would bind nothing on the default call path: an admin remap of a namespace's
   // primary would silently redirect every driver scoped to the old repo. It costs one
   // D1 read per repo call.
-  const scopedRepo = async (tool: string, namespace: string, selector: string | undefined) => {
+  // `op` is the operation; the check names the served tool and action that run it.
+  const scopedRepo = async (op: string, namespace: string, selector: string | undefined) => {
     const resolved = await resolveRepo(env, namespace, selector);
-    return { resolved, refusal: ctx.scope({ tool, namespace, repo: resolved.full }) };
+    return { resolved, refusal: ctx.scope({ ...surfaceOf(op), namespace, repo: resolved.full }) };
   };
 
   // The read tools' wrapper: resolve, check the axis, then run. Reads are open to any
   // admitted client by grant, and the axis is what says WHICH repo they may read.
-  const guardedRead = async (tool: string, namespace: string, selector: string | undefined, fn: () => Promise<unknown>) => {
+  const guardedRead = async (op: string, namespace: string, selector: string | undefined, fn: () => Promise<unknown>) => {
     try {
-      const { refusal } = await scopedRepo(tool, namespace, selector);
+      const { refusal } = await scopedRepo(op, namespace, selector);
       if (refusal) return fail(refusal);
       return ok(await fn());
     } catch (err) {
@@ -47,7 +49,7 @@ export function repoGuards(ctx: ToolCtx) {
     // registrar has already checked the tool, the grant, the namespace and the repo
     // selector by now; a wrapper could not have checked these, because `mode:
     // "direct"` needs can_direct_write and `mode: "pr"` does not.
-    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean; repo?: string } = {}
+    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean; repo?: string; surface?: { tool: string; action?: string } } = {}
   ) => {
     // Every repo mutation passes through here, so the flag check is here and not in
     // each tool. test/scope-coverage.test.ts derives that no repo write tool reaches
@@ -60,17 +62,19 @@ export function repoGuards(ctx: ToolCtx) {
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }
+    // `action` is the operation (the audit row's action); the check names the served
+    // tool and action that run it (src/tools/surface.ts surfaceOf), which is what the
+    // tools axis narrows on. Without the action a reviewer minted
+    // ["capsid_open_pr", "capsid_open_pr.comment"] could open a pull request. The
+    // registrar checks it too; this is the one place every repo mutation passes through.
+    const served = intent.surface ?? surfaceOf(action, intent.action);
     const refusal = ctx.scope({
-      tool: action,
+      tool: served.tool,
       namespace,
       repo: resolvedRepo,
-      // What this call is asking to do, which is what the tools axis narrows on.
-      // Without it a reviewer minted ["manage_pr", "manage_pr.comment"] could close a
-      // pull request. The registrar populates it too; this is the one place every repo
-      // mutation passes through.
-      action: intent.action,
+      action: served.action,
       grant: "write",
-      flags: repoWriteFlags(action, { ...intent, path: intent.path ?? path ?? undefined }),
+      flags: repoWriteFlags(served.tool, served.action, { ...intent, path: intent.path ?? path ?? undefined }),
     });
     if (refusal) return fail(refusal);
     let result: Record<string, unknown>;

@@ -4,7 +4,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types";
 import { portalGate } from "./portal-auth";
 
-// The Portal's Claims view: GET /portal/api/claims. The same readers the `claims` tool
+// The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims` tool
 // uses (src/job-claims-read.ts), so the view and the tool cannot disagree. A route, not
 // a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it
 // answers to portalGate, the administrator's Access session, and src/scope.ts lists it

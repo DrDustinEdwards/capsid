@@ -146,7 +146,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
   return jsonResponse(performed, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }
 
-/** GET /portal/api/namespaces: every roster namespace as improve_status reports it,
+/** GET /portal/api/namespaces: every roster namespace as capsid_run_improve action status reports it,
  *  from the same function, so the Portal and the tool agree (ruled 2026-09-11). */
 export async function handlePortalNamespaces(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);

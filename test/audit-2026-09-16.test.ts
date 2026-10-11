@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
 import { MAX_ROWS } from "../src/limits.ts";
 import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
-import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
+import { actionArgFor, defaultActionFor, requiredForAction } from "../src/scope.ts";
+import { surfaceOf } from "../src/tools/surface.ts";
 import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, reportPath } from "../src/truth-report.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
@@ -14,10 +15,12 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // cannot return unnoticed when its file is rewritten. The CSP rate-limit defect is
 // planted in test/csp-rate-limit.test.ts, beside the fail-open tests it reverses.
 
-async function connect(agent: Agent | "read" | "write", rows: Record<string, unknown[]> = {}) {
+// Capsid by default; Capsid Admin, which serves the admin tools, when asked.
+async function connect(agent: Agent | "read" | "write", rows: Record<string, unknown[]> = {}, surface: "capsid" | "admin" = "capsid") {
   const { db, batches, recorded } = fakeD1(rows);
   const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv });
-  const server = typeof agent === "string" ? buildServer(env, agent, "test:audit") : buildServer(env, agent);
+  const build = surface === "admin" ? buildAdminServer : buildServer;
+  const server = typeof agent === "string" ? build(env, agent, "test:audit") : build(env, agent);
   const client = new Client({ name: "audit-2026-09-16", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
@@ -35,9 +38,13 @@ test("PLANT: the driver mint instruction agrees with what register_namespace act
   // The two cannot be the same expression: src/scope.ts imports src/agents-schema.ts,
   // so the sentence importing TOOL_GRANTS would close a load-time cycle. This holds
   // them together instead, and fails if either the table or the sentence changes.
+  // register_namespace is the operation; the served tool and action that run it
+  // (capsid_admin_manage_namespaces, register) are what the registrar checks.
   const said = driverMintInstruction("capsid");
-  const required = requiredGrant("register_namespace");
-  assert.match(said, new RegExp(`register_namespace is itself ${required} only`), said);
+  const served = surfaceOf("register_namespace");
+  assert.deepEqual(served, { tool: "capsid_admin_manage_namespaces", action: "register" });
+  const required = requiredForAction(served.tool, served.action);
+  assert.match(said, new RegExp(`${served.tool} action ${served.action} is itself ${required} only`), said);
 });
 
 // the jobs description and the retry cap
@@ -48,8 +55,8 @@ test("PLANT: the jobs description states the correction cap rather than promisin
   const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
   try {
     const { tools } = await client.listTools();
-    const jobs = tools.find((t) => t.name === "jobs");
-    assert.ok(jobs, "jobs is not served");
+    const jobs = tools.find((t) => t.name === "capsid_work_jobs");
+    assert.ok(jobs, "capsid_work_jobs is not served");
     const description = jobs.description ?? "";
     assert.ok(
       description.includes(`capped at ${CORRECTION_CAP}`),
@@ -71,16 +78,16 @@ function narrowedTo(tools: string[]): Agent {
   return { id: "agent_narrow01", name: "narrow", kind: "session", actor: "agent:narrow", scopes, admin: false, row: null };
 }
 
-test("PLANT: an agent scoped to lint.gather may call lint with no mode at all", async () => {
-  // lint's handler reads an omitted mode as gather. Unless DEFAULT_ACTION agrees, the
+test("PLANT: an agent scoped to capsid_lint_namespace.gather may call it with no mode at all", async () => {
+  // capsid_lint_namespace's handler reads an omitted mode as gather. Unless DEFAULT_ACTION agrees, the
   // registrar passes no action and allowsToolAction refuses an unknown action on a
   // narrowed tool, so the caller is refused the one mode it was minted for.
-  const { client, close } = await connect(narrowedTo(["lint", "lint.gather"]), {
+  const { client, close } = await connect(narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]), {
     documents: [{ id: 1, namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core", status: "published", tags: null }],
     namespaces: [{ namespace: "capsid", repos: "[]" }],
   });
   try {
-    const result = await call(client, "lint", { namespace: "capsid" });
+    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid" });
     assert.notEqual(result.isError, true, `a gather-only caller was refused its own default mode: ${text(result)}`);
     const packet = JSON.parse(text(result)) as { mode: string; namespace: string; core: { body?: string } | null };
     assert.equal(packet.mode, "gather", "an omitted mode did not run gather");
@@ -94,11 +101,11 @@ test("PLANT: an agent scoped to lint.gather may call lint with no mode at all", 
 test("PLANT: the same caller with no mode is still refused finalize", async () => {
   // A default that widened the narrowing would pass the test above by handing the
   // caller the whole tool back.
-  const { client, close } = await connect(narrowedTo(["lint", "lint.gather"]));
+  const { client, close } = await connect(narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]));
   try {
-    const result = await call(client, "lint", { namespace: "capsid", mode: "finalize" });
+    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "finalize" });
     assert.equal(result.isError, true, "a gather-only caller ran finalize");
-    assert.match(text(result), /not scoped to the 'lint\.finalize' tool/, text(result));
+    assert.match(text(result), /not scoped to the 'capsid_lint_namespace\.finalize' tool/, text(result));
   } finally {
     await close();
   }
@@ -108,9 +115,17 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   // Derived from the served schemas. An optional action argument is a handler default,
   // and if the enforcement point does not know it, a narrowed caller is refused the
   // tool's own default.
-  const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const { tools } = await client.listTools();
-  await close();
+  // Both servers: the admin tools are served by Capsid Admin alone.
+  const tools = [];
+  for (const surface of ["capsid", "admin"] as const) {
+    const { client, close } = await connect(adminAgentForEmail("admin@example.com"), {}, surface);
+    tools.push(...(await client.listTools()).tools);
+    await close();
+  }
+  assert.ok(
+    tools.some((t) => t.name === "capsid_admin_read_claims"),
+    "the Capsid Admin tools were not listed, so half the surface went unread"
+  );
   const wired = tools.filter((t) => actionArgFor(t.name) !== undefined);
   assert.ok(wired.length >= 5, `only ${wired.length} action tools were found, so this is passing by reading nothing`);
   const missing = wired
@@ -190,10 +205,10 @@ function reportRows(withPrior: boolean) {
 
 test("PLANT: a second report the same day is REFUSED without confirmation", async () => {
   // One report per namespace per day means the second run overwrites the first, so it
-  // asks for the same confirmation `write` asks for on every other overwrite.
+  // asks for the same confirmation capsid_write_doc asks for on every other overwrite.
   const { client, batches, close } = await connect("write", reportRows(true));
   try {
-    const result = await call(client, "lint", { namespace: "capsid", mode: "report" });
+    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report" });
     assert.equal(result.isError, true, "a report overwrote today's report without asking");
     assert.match(text(result), /confirmation required/, text(result));
     assert.match(text(result), new RegExp(`capsid/${TODAY.replace(/[.\\/-]/g, "\\$&")}`), text(result));
@@ -206,7 +221,7 @@ test("PLANT: a second report the same day is REFUSED without confirmation", asyn
 test("the same call WITH confirm: true overwrites, snapshotting first", async () => {
   const { client, batches, recorded, close } = await connect("write", reportRows(true));
   try {
-    const result = await call(client, "lint", { namespace: "capsid", mode: "report", confirm: true });
+    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report", confirm: true });
     assert.ok(!result.isError, text(result));
     const flat = batches.flat().map((s) => s.replace(/\s+/g, " "));
     assert.ok(flat.some((s) => /INSERT INTO document_versions/.test(s)), "snapshot rule: the prior report was replaced without a snapshot");
@@ -224,7 +239,7 @@ test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation"
   // answer a prompt.
   const { client, batches, recorded, close } = await connect("write", reportRows(false));
   try {
-    const result = await call(client, "lint", { namespace: "capsid", mode: "report" });
+    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report" });
     assert.ok(!result.isError, text(result));
     assert.ok(batches.length > 0, "the first report of the day was not written at all");
     const written = recorded.find((r) => /INSERT INTO documents/.test(r.sql));
@@ -266,7 +281,7 @@ const CROWDED = {
 test("PLANT: a caller scoped past 502 rows it cannot see still gets its own documents", async () => {
   // A LIMIT applied before the scope filter would give this caller an empty page and
   // no cursor, leaving its own two documents unreachable.
-  const { client, close } = await connect(narrowedTo(["read"]), CROWDED);
+  const { client, close } = await connect(narrowedTo(["capsid_read_doc"]), CROWDED);
   try {
     const listed = await client.listResources();
     assert.equal(listed.resources.length, 2, `the scoped caller got ${listed.resources.length} resources, not its own two`);
@@ -300,5 +315,5 @@ test("THE ADMIN DIRECTION: an unscoped caller still sees every namespace, bounde
 
 // closing a pull request deletes a branch
 
-// A write-grant caller holding no flags is refused manage_pr close: driven through a
+// A write-grant caller holding no flags is refused capsid_close_pr close: driven through a
 // real MCP call, both directions, as a row of PLANTS in test/blast-radius.test.ts.

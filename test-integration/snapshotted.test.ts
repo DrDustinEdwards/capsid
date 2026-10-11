@@ -47,27 +47,28 @@ async function seed(path: string) {
     .run();
 }
 
-const write = (path: string) => ({ namespace: NS, path, title: "Lorem", body: "new lorem", confirm: true });
+const write = (path: string) => ({ action: "write", namespace: NS, path, title: "Lorem", body: "new lorem", confirm: true });
 
 describe("snapshotted is read from the batch", () => {
   it("write reports true when the snapshot was taken", async () => {
     await seed("snap-1.md");
-    expect((await callTool(env.DB, "write", write("snap-1.md"))).snapshotted).toBe(true);
+    expect((await callTool(env.DB, "capsid_write_doc", write("snap-1.md"))).snapshotted).toBe(true);
   });
 
   it("write reports false when the row was deleted before its batch", async () => {
     await seed("snap-2.md");
-    expect((await callTool(deletingDb(env.DB, "snap-2.md"), "write", write("snap-2.md"))).snapshotted).toBe(false);
+    expect((await callTool(deletingDb(env.DB, "snap-2.md"), "capsid_write_doc", write("snap-2.md"))).snapshotted).toBe(false);
   });
 
   it("restore reports false when the row was deleted before its batch", async () => {
     await seed("snap-3.md");
-    await callTool(env.DB, "write", write("snap-3.md"));
+    await callTool(env.DB, "capsid_write_doc", write("snap-3.md"));
     const version = await env.DB.prepare("SELECT id FROM document_versions WHERE namespace = ?1 AND path = ?2")
       .bind(NS, "snap-3.md")
       .first<{ id: number }>();
     expect(version).not.toBeNull();
-    const out = await callTool(deletingDb(env.DB, "snap-3.md"), "restore", {
+    const out = await callTool(deletingDb(env.DB, "snap-3.md"), "capsid_write_doc", {
+      action: "restore",
       namespace: NS,
       path: "snap-3.md",
       version_id: version!.id,

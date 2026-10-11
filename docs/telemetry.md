@@ -64,7 +64,7 @@ rows. A column whose metric never arrived is NULL, never 0: NULL means no teleme
 reached Capsid. Once tokens have arrived, a token type with no point is 0, because
 Claude Code exports no point for a counter that did not move.
 
-`job_outcomes` was NULL for every job through 2026-10-04 (347 rows, `session_usage` empty, measured through D1) because the exporter below was never turned on for the machines that run drivers. Until it is, an agent can state what its session used in `claim.usage` (docs/work-queue.md). The `claims` aggregate reports the two sources side by side and never adds them: a job with both would count twice. Telemetry stays the measured one.
+`job_outcomes` was NULL for every job through 2026-10-04 (347 rows, `session_usage` empty, measured through D1) because the exporter below was never turned on for the machines that run drivers. Until it is, an agent can state what its session used in `claim.usage` (docs/work-queue.md). The `capsid_admin_read_claims` aggregate reports the two sources side by side and never adds them: a job with both would count twice. Telemetry stays the measured one.
 
 The row is written once. Claude Code exports on an interval (60 seconds by default), so
 usage from the last interval before `complete` can arrive after it; it stays in
@@ -116,7 +116,7 @@ exactly one claimed job.
 
 ## The seat's sessions (Dustin's gate)
 
-`jobs` action `start` now sends a W3C `traceparent` in the dispatch's `client_payload`
+`capsid_work_jobs` action `start` now sends a W3C `traceparent` in the dispatch's `client_payload`
 beside `job_id`: version `00`, a trace id of the first 32 hex of sha256(job id), a span
 id of the first 16 hex of sha256(job id + ":" + the start's ISO time), flags `01`. The
 `job-seat-started` audit row records the same value. Claude Code reads `TRACEPARENT` in

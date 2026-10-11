@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { TOOL_GRANTS, TOOL_ACTION_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
@@ -10,14 +10,19 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // the registrar enforces, and checked against the descriptions the server serves, so
 // a change to either side fails this file.
 
+// Both servers: Capsid and Capsid Admin.
 async function servedDescriptions(): Promise<Map<string, string>> {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
-  const client = new Client({ name: "tool-grant-descriptions", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
-  return new Map(tools.map((t) => [t.name, t.description ?? ""]));
+  const out = new Map<string, string>();
+  for (const build of [buildServer, buildAdminServer]) {
+    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+    const client = new Client({ name: "tool-grant-descriptions", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { tools } = await client.listTools();
+    await client.close();
+    for (const tool of tools) out.set(tool.name, tool.description ?? "");
+  }
+  return out;
 }
 
 // The sentence a tool's description must contain, or null when the requirement is
@@ -28,19 +33,22 @@ function grantSentence(tool: string): string | null {
   if (requirement === "write") {
     // Flags a repo mutation needs whatever the arguments are. Flags that depend on
     // the arguments (mode, path, action) are described beside those arguments.
-    const flags = repoWriteFlags(tool, {});
+    const flags = repoWriteFlags(tool, undefined, {});
     if (flags.length === 0) return "needs the write grant";
     return `needs the write grant and the ${flags.join(" and the ")} flag`;
   }
-  if (requirement === "admin") return "admin only";
+  if (requirement === "admin" || requirement === "admin_read") return "admin only";
   if (requirement === "action" && Object.hasOwn(TOOL_ACTION_GRANTS, tool)) {
     const spec = TOOL_ACTION_GRANTS[tool];
     assert.equal(spec.default, "admin", `${tool}: the sentence below assumes unlisted actions are admin; rewrite it`);
+    const readActions = Object.entries(spec.actions)
+      .filter(([, req]) => req === "read")
+      .map(([action]) => action);
     const writeActions = Object.entries(spec.actions)
       .filter(([, req]) => req === "write")
       .map(([action]) => action);
-    assert.equal(writeActions.length, Object.keys(spec.actions).length, `${tool}: an action is neither write nor admin`);
-    return `${writeActions.join(" and ")} need the write grant; every other action is admin only`;
+    assert.equal(readActions.length + writeActions.length, Object.keys(spec.actions).length, `${tool}: an action is neither read nor write`);
+    return `${readActions.join(" and ")} needs the read grant; ${writeActions.join(" and ")} need the write grant`;
   }
   return null;
 }
@@ -70,9 +78,12 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
     if (TOOL_GRANTS[tool] === "write") {
       assert.ok(!text.includes("admin only"), `${tool} takes the write grant, and its description says admin only`);
     }
+    if (TOOL_GRANTS[tool] === "admin_read") {
+      assert.ok(!text.includes("needs the write grant"), `${tool} only reads, and its description says it needs the write grant`);
+    }
   }
-  // Count stated so a derivation that matched nothing does not pass: 11 write tools,
-  // 8 admin tools (claims the fourth, ops_snapshot the fifth, cloudflare_config the sixth,
-  // delete_namespace the seventh, controls the eighth) and improve_run.
-  assert.equal(stated, 20, `expected 20 tools with a grant sentence, found ${stated}`);
+  // Count stated so a derivation that matched nothing does not pass: six write tools
+  // (write_doc, delete_doc, change_repo, open_pr, close_pr, run_ci), the eight admin
+  // tools, and run_improve.
+  assert.equal(stated, 15, `expected 15 tools with a grant sentence, found ${stated}`);
 });

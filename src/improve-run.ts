@@ -149,7 +149,7 @@ export interface NamespaceStatus {
     note: string | null;
   } | null;
   totals: { runs: number; attempts: number; kept: number; reverts: number; cost_usd: number; ci_minutes: number };
-  // The latest `lint` report document under reports/. null means no report was ever
+  // The latest `capsid_lint_namespace` report document under reports/. null means no report was ever
   // run here, which is not an integrity of zero.
   latest_report: { path: string; integrity: number | null; generated: string } | null;
   // Counts for the open states and today's moves, plus the blocked jobs themselves with
@@ -315,7 +315,7 @@ async function seatStartStatus(env: Env): Promise<StatusReport["seat_start"]> {
 }
 
 // An item an app reported about itself is the app's words, and an agent reads
-// improve_status, so its title is relayed inside an external fence (src/provenance.ts,
+// capsid_run_improve action status, so its title is relayed inside an external fence (src/provenance.ts,
 // OWASP item 1; capsid/research/design-inbox-report.md, "Trust").
 function fenceReported(app: InboxApp): InboxApp {
   return { ...app, items: app.items.map((item) => (item.kind === "report" ? { ...item, title: externalFence("inbox-report", app.namespace, item.title) } : item)) };
@@ -440,7 +440,7 @@ export interface ManualResult {
   advanced: TickOutcome[];
 }
 
-// What Capsid:improve_run calls. dry_run reports exactly what a real run would do
+// What capsid_run_improve action run calls. dry_run reports exactly what a real run would do
 // and changes nothing: no branch, no dispatch, no row, no document.
 export async function improveRunManual(
   env: Env,
@@ -471,9 +471,10 @@ export async function improveRunManual(
   return { mode: summary.mode, mode_note: summary.modeNote, condition, dry_run: false, opened: summary.outcomes, advanced };
 }
 
-// improve_run's non-run verbs. Each KV write is audited and read back, so the caller
+// The improve loop's control actions (capsid_admin_control_improve, and claim on
+// capsid_run_improve). Each KV write is audited and read back, so the caller
 // sees the value that landed. The registrar gates each action by
-// TOOL_ACTION_GRANTS.improve_run in src/scope.ts: only run and claim take the write
+// TOOL_ACTION_GRANTS.capsid_run_improve in src/scope.ts: only run and claim take the write
 // grant; every other action is admin.
 export type ImproveControlResult =
   | { action: "mode"; requested: string; mode: ImproveMode; mode_note: string | null }
@@ -632,7 +633,7 @@ ${next.join(",")}`,
       throw new Error(`'${target}' is not on the improve roster (${LOOP_ROSTER.join(", ")}) and is not "all". Nothing was changed.`);
     }
     const namespaces = target === "all" ? [...LOOP_ROSTER] : [target];
-    const reason = opts.reason?.trim() || "paused via improve_run";
+    const reason = opts.reason?.trim() || "paused via capsid_admin_control_improve";
     const audits = [];
     for (const ns of namespaces) {
       if (action === "pause") await pauseNamespace(env.APP_KV, ns, reason);

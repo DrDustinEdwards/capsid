@@ -120,3 +120,22 @@ export function toolBlocks(): ToolBlock[] {
   }
   return blocks;
 }
+
+// Each operation's definition (src/tools/operations.ts), from its name to the start of
+// the next one in the same file. The served tools are one-line registrations in
+// src/tools/surface.ts that dispatch to these, so a property of what a handler DOES (its
+// SQL, its GitHub calls, its scope checks) is read here, and attributed to the tools
+// and actions that run it with servedAs().
+export function operationBlocks(): ToolBlock[] {
+  const marker = "ctx.ops.define(";
+  const blocks: ToolBlock[] = [];
+  for (const { name, text } of sourceFiles()) {
+    const starts: number[] = [];
+    for (let i = text.indexOf(marker); i !== -1; i = text.indexOf(marker, i + 1)) starts.push(i);
+    for (let i = 0; i < starts.length; i++) {
+      const body = text.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : text.length);
+      blocks.push({ file: name, body, name: body.match(/ops\.define\(\s*\n?\s*"([^"]+)"/)?.[1] ?? `${name}#${i}` });
+    }
+  }
+  return blocks;
+}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import {
@@ -259,15 +259,15 @@ test("the claims tool refuses a write-grant driver as admin only, before its han
     },
     batch: (statements: unknown[]) => d1.db.batch(statements as never),
   };
-  const server = buildServer(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }), driver());
+  const server = buildAdminServer(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }), driver());
   const client = new Client({ name: "claims-unit", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
     for (const args of [{}, { action: "job", id: "job_0123456789ab" }, { action: "export", table: "job_claims" }]) {
-      const result = (await client.callTool({ name: "claims", arguments: { namespace: "sample", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const result = (await client.callTool({ name: "capsid_admin_read_claims", arguments: { namespace: "sample", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
       assert.equal(result.isError, true, `a driver read claims: ${result.content[0].text}`);
-      assert.match(result.content[0].text, /'claims(\.[a-z]+)?' is admin only/);
+      assert.match(result.content[0].text, /'capsid_admin_read_claims(\.[a-z]+)?' is admin only/);
     }
     assert.equal(prepared, 0, "the handler reached D1 for a caller it should never have run for");
   } finally {

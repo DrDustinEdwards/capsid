@@ -16,8 +16,10 @@ import {
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { hintsFor } from "../src/tool-annotations.ts";
+import { MANAGE_NAMESPACES } from "../src/tools/surface.ts";
 
-// The pure half of delete_namespace: the refusals, the plan fingerprint and the
+// The pure half of capsid_admin_manage_namespaces's delete_preview and delete_perform
+// (the delete_namespace operation): the refusals, the plan fingerprint and the
 // confirmation token. The store half is test-integration/delete-namespace.test.ts,
 // against a real D1, because the batch is INSERT ... SELECT and json_each the node fake
 // does not evaluate.
@@ -70,10 +72,16 @@ const NONE = { cascade: false, allowImprovePaths: false };
 const ALL = { cascade: true, allowImprovePaths: true };
 
 test("the tool is admin, destructive, and its action argument is required with no default", () => {
-  assert.equal(requiredGrant("delete_namespace"), "admin");
-  assert.deepEqual(hintsFor("delete_namespace"), { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
-  assert.equal(actionArgFor("delete_namespace"), "action");
-  assert.equal(defaultActionFor("delete_namespace"), undefined, "an omitted action must never mean perform");
+  // Delete is two actions of capsid_admin_manage_namespaces (delete_preview,
+  // delete_perform). The tool also registers and updates, so it carries one set of
+  // hints for all four: not idempotent, because a register is not.
+  assert.equal(requiredGrant("capsid_admin_manage_namespaces"), "admin");
+  assert.deepEqual(hintsFor("capsid_admin_manage_namespaces"), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.equal(actionArgFor("capsid_admin_manage_namespaces"), "action");
+  assert.equal(defaultActionFor("capsid_admin_manage_namespaces"), undefined, "an omitted action must never mean perform");
+  assert.equal(MANAGE_NAMESPACES.defaultAction, undefined, "the served schema gives the action a default, so an omitted one could mean perform");
+  assert.deepEqual(MANAGE_NAMESPACES.actions.delete_perform.inject, { action: "perform" });
+  assert.deepEqual(MANAGE_NAMESPACES.actions.delete_preview.inject, { action: "preview" });
 });
 
 test("an empty registered namespace has no refusal", () => {
@@ -166,7 +174,7 @@ test("PLANT: one document over the cap is refused whatever cascade says, with th
   assert.equal(over.length, 1);
   assert.match(over[0], new RegExp(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`));
   assert.match(over[0], new RegExp(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`));
-  assert.match(over[0], /delete or move documents with the delete tool first, or ask the seat to rule a set-based helper/i);
+  assert.match(over[0], /delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/i);
   assert.deepEqual(deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS }), ALL), [], "exactly the cap is refused");
 });
 

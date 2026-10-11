@@ -35,7 +35,7 @@ import { tokenSet, toolRefusal } from "./site-operator";
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
 // admin control is, what it will do, the one dispatch to the shared mutators, and the
 // signed confirmation both surfaces use. It was the body of src/portal-actions.ts; the
-// Portal's routes there and the `controls` tool (src/tools/controls.ts) are its two
+// Portal's routes there and the `capsid_admin_run_controls` tool (src/tools/controls.ts) are its two
 // callers, so a control is implemented once and parity is a property of this file.
 
 export const TOKEN_TTL_SECONDS = 5 * 60;
@@ -155,7 +155,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
     case "unpark_job":
       return `Unpark job ${id}. It goes back to the queue at its priority, and the next free session may claim it.`;
     case "pr_close":
-      return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as manage_pr close deletes it. GitHub can reopen it; the Portal does not.`;
+      return `Close pull request #${params.number ?? ""} in ${ns}${params.repo ? ` (${params.repo})` : ""} without merging it. Its head branch is deleted as capsid_close_pr action close deletes it. GitHub can reopen it; the Portal does not.`;
     case "approve_pr":
       return params.undo === "true"
         ? `Void the open approval of pull request ${params.prs ?? ""} in ${ns}. The executor will not merge it.`
@@ -194,7 +194,7 @@ function required(params: ActionParams, field: string): string | null {
 
 // close_shipped's complete (stale jobs D4, ruled 2026-10-09: the existing admin_complete
 // path, crediting the holder). The pull requests the job names, from result_ref and the
-// summary, become the evidence the outcome verifies, at most the 10 the jobs tool takes.
+// summary, become the evidence the outcome verifies, at most the 10 the capsid_work_jobs tool takes.
 const CLOSE_SHIPPED_MAX_PRS = 10;
 function shippedEvidence(job: JobRow): { result_ref?: string; prs: string[]; more: number } {
   const all = prUrlsFromJob(job);
@@ -408,7 +408,7 @@ async function performAction(
         const result = (await managePr(env, namespace, number, "close", "squash", repo)) as { repo: string; head_branch: string | null; head_branch_deleted: boolean };
         committed = true;
         summary = `Closed ${result.repo}#${number}${result.head_branch_deleted ? `; its branch ${result.head_branch} was deleted` : ""}.`;
-        // managePr writes no audit row of its own (the manage_pr tool's guardedWrite does),
+        // managePr writes no audit row of its own (the guardedWrite behind capsid_close_pr action close does),
         // so the control writes the change's row beside the click row.
         await env.DB.batch([auditStatement(env.DB, actor, "pr-closed", namespace, null, { repo: result.repo, number, reason, head_branch: result.head_branch, head_branch_deleted: result.head_branch_deleted })]);
         await auditClick(env, actor, source, surface, action, namespace, { repo: result.repo, number, reason });
@@ -735,7 +735,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
       const label = `${job.id} ('${job.title}' in ${job.namespace})`;
       if (action === "resume_job") {
         if (p.note && p.note.length > MAX_RESUME_NOTE) {
-          return refused(`resume_job's note is at most ${MAX_RESUME_NOTE} characters, as for the jobs tool; this one is ${p.note.length}.`);
+          return refused(`resume_job's note is at most ${MAX_RESUME_NOTE} characters, as for the capsid_work_jobs tool; this one is ${p.note.length}.`);
         }
         if (job.status !== "blocked") {
           return refused(`${job.id} is ${job.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`);
@@ -885,7 +885,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [
           `${full}#${p.number}: open -> closed, not merged. GitHub refuses it at perform if it is already closed or merged, and nothing is written then.`,
-          "Its head branch is deleted as manage_pr close deletes it: never the default branch, a loop branch or a fork's.",
+          "Its head branch is deleted as capsid_close_pr action close deletes it: never the default branch, a loop branch or a fork's.",
         ],
         audit: [`pr-closed by ${actor}`, click],
       };

@@ -47,7 +47,7 @@ export async function seatStartState(env: Env): Promise<SeatStartState> {
   return { enabled, max_sessions: max };
 }
 
-/** Set the switch or the cap, audited, and read back. Admin only, through improve_run. */
+/** Set the switch or the cap, audited, and read back. Admin only, through capsid_admin_control_improve. */
 export async function setSeatStart(
   env: Env,
   actor: string,
@@ -133,14 +133,14 @@ export async function seatTraceparent(jobId: string, startedAt: Date): Promise<s
   return `00-${trace}-${span}-01`;
 }
 
-/** jobs action "start": dispatch a session for one queued job, after every check. */
+/** capsid_work_jobs action "start": dispatch a session for one queued job, after every check. */
 export async function startSeatSession(env: Env, agent: Agent, now: Date, id: string): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
     return refuse("start", `${agent.actor} cannot start a session. Starting work on Dustin's subscription is the seat's act, and this caller holds neither the admin identity nor can_merge.`);
   }
   const state = await seatStartState(env);
   if (!state.enabled) {
-    return refuse("start", `seat-started sessions are switched off (APP_KV ${SEAT_START_KEY} is not "on"). The admin turns them on with improve_run action "seat_start" or from Capsid Portal.`);
+    return refuse("start", `seat-started sessions are switched off (APP_KV ${SEAT_START_KEY} is not "on"). The admin turns them on with capsid_admin_control_improve action "seat_start" or from Capsid Portal.`);
   }
   const job: JobRow | null = await readJob(env.DB, id);
   if (!job) return refuse("start", `no job ${id}.`);

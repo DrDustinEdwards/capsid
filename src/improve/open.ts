@@ -130,7 +130,7 @@ export async function checkBudget(env: Env, now: Date): Promise<BudgetStatus> {
 // Returns the refusal reason when a cap is exceeded, after pausing every roster
 // namespace not already paused, so a five-minute tick does not rewrite the same KV
 // keys forever. The pause is deliberate double coverage: the opener and tick refuse
-// on their own, and the pause makes the stop visible in improve_status and holds
+// on their own, and the pause makes the stop visible in capsid_run_improve action status and holds
 // against a code path that forgets to ask.
 export async function enforceBudget(env: Env, now: Date): Promise<string | null> {
   const budget = await checkBudget(env, now);

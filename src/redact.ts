@@ -2,7 +2,7 @@
 //
 // A CI log carries whatever the workflow echoed: a token a step printed by accident, an
 // Authorization header from a verbose curl, a key file cat'd while debugging. GitHub
-// masks the secrets it knows about as ***, and nothing else. ci_status returns log text
+// masks the secrets it knows about as ***, and nothing else. capsid_inspect_repo action ci returns log text
 // to any write-grant caller, including a namespace's driver, so every log text it
 // returns passes through redact() first (src/github/actions.ts).
 //

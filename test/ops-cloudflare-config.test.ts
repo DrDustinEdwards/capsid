@@ -4,11 +4,11 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { CF_MAX_PAGES } from "../src/ops-cloudflare.ts";
 import { CF_PERMISSION, readCloudflareConfig } from "../src/ops-cloudflare-config.ts";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer } from "../src/server.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
-// The cloudflare_config tool's reads (src/ops-cloudflare-config.ts): Access apps and
-// policies, Email Routing rules and addresses. What matters is what does NOT come
+// The capsid_admin_read_ops tool's Cloudflare reads (src/ops-cloudflare-config.ts):
+// Access apps and policies, Email Routing rules and addresses. What matters is what does NOT come
 // back: every reader copies named fields, so a secret Cloudflare keeps beside the
 // settings (an Access for SaaS client secret, a SCIM credential, an aud tag) never
 // reaches the caller.
@@ -356,12 +356,12 @@ interface ToolResult {
 }
 
 async function callTool(caller: Agent, args: Record<string, unknown>, env: Record<string, unknown> = CREDS): Promise<ToolResult> {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv, ...env }), caller);
+  const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({}).kv, ...env }), caller);
   const client = new Client({ name: "cloudflare-config", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    return (await client.callTool({ name: "cloudflare_config", arguments: args })) as ToolResult;
+    return (await client.callTool({ name: "capsid_admin_read_ops", arguments: args })) as ToolResult;
   } finally {
     await client.close();
     await server.close();
@@ -384,7 +384,7 @@ test("END TO END: a driver with the write grant is refused as admin only, before
   await withFetch({}, async (calls) => {
     const result = await callTool(driver, { action: "access_apps" });
     assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /'cloudflare_config\.access_apps' is admin only/);
+    assert.match(result.content[0].text, /'capsid_admin_read_ops\.access_apps' is admin only/);
     assert.equal(calls.length, 0, "the handler ran for a refused caller");
   });
 });

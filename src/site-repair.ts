@@ -6,7 +6,7 @@ import { callLine, callOperator, toolRefusal, type FetchLike, type OperatorCall 
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 
-// ONE REPAIR, from the Portal, the controls tool or the watcher (job_09e5f6cbf782). The
+// ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher (job_09e5f6cbf782). The
 // site_repair control and the watcher's repair step both come here, so the allowlist, the
 // rate limit and the record are one implementation: an audit_log row (site-repair) and a
 // task_runs row (site-repair) for every call that left the Worker, and none for one

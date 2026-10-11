@@ -4,10 +4,11 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { operatorIdentity, sha256Hex } from "../src/auth.ts";
 import { improveControl } from "../src/improve-run.ts";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// improve_run's mint_operator_key action.
+// capsid_admin_control_improve's mint_operator_key action (improve_run's, as an
+// operation).
 
 function mintEnv(existing?: string) {
   return fakeEnv({
@@ -85,14 +86,24 @@ test("two mints are different keys", async () => {
 
 test("the mint is a control action on the existing tool, not a new tool", async () => {
   // The tool count is asserted in test/counts.test.ts; this checks the mint is an
-  // action of improve_run rather than a tool of its own.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
-  const client = new Client({ name: "improve-run-mint", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
-  assert.equal(tools.some((tool) => tool.name.includes("mint")), false, "the mint became a tool of its own");
-  const action = tools.find((tool) => tool.name === "improve_run")?.inputSchema.properties?.action as { enum?: string[] } | undefined;
-  assert.ok(action?.enum?.includes("mint_operator_key"), "improve_run does not serve the mint_operator_key action");
+  // action of capsid_admin_control_improve rather than a tool of its own, on either
+  // server, and that the driver's capsid_run_improve does not serve it.
+  const listed = async (build: typeof buildServer) => {
+    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+    const client = new Client({ name: "improve-run-mint", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { tools } = await client.listTools();
+    await client.close();
+    return tools;
+  };
+  const admin = await listed(buildAdminServer);
+  const capsid = await listed(buildServer);
+  assert.ok(admin.length > 0 && capsid.length > 0, "a server listed no tools, so this checked nothing");
+  assert.equal([...admin, ...capsid].some((tool) => tool.name.includes("mint")), false, "the mint became a tool of its own");
+  const actionsOf = (tools: typeof admin, name: string) => (tools.find((tool) => tool.name === name)?.inputSchema.properties?.action as { enum?: string[] } | undefined)?.enum;
+  assert.ok(actionsOf(admin, "capsid_admin_control_improve")?.includes("mint_operator_key"), "capsid_admin_control_improve does not serve the mint_operator_key action");
+  const driverActions = actionsOf(capsid, "capsid_run_improve");
+  assert.ok(driverActions && driverActions.length > 0, "capsid_run_improve lists no actions");
+  assert.equal(driverActions.includes("mint_operator_key"), false, "the driver's capsid_run_improve serves the mint");
 });

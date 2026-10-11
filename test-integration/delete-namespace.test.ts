@@ -6,9 +6,10 @@ import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
 import { bestKey, pausedKey } from "../src/improve-schema";
 import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan, signDeleteToken } from "../src/namespace-delete";
-import { buildServer } from "../src/server";
+import { buildAdminServer, buildServer } from "../src/server";
 
-// delete_namespace against a real D1 and KV: every refusal the preview gives, every way
+// capsid_admin_manage_namespaces delete_preview and delete_perform (Capsid Admin)
+// against a real D1 and KV: every refusal the preview gives, every way
 // a token is refused at perform, the one batch deleting exactly what the preview
 // listed with a snapshot per document, and the in-batch guard aborting on a change
 // that lands after the perform re-read its plan. The file shares one store, so every
@@ -40,12 +41,12 @@ interface Result {
 }
 
 async function callAs(caller: Agent, args: Record<string, unknown>, db?: D1Database): Promise<Result> {
-  const server = buildServer(workerEnv(db) as never, caller);
+  const server = buildAdminServer(workerEnv(db) as never, caller);
   const client = new Client({ name: "delete-namespace", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    return (await client.callTool({ name: "delete_namespace", arguments: args })) as Result;
+    return (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: args })) as Result;
   } finally {
     await client.close();
   }
@@ -62,7 +63,7 @@ interface Preview {
 }
 
 async function preview(ns: string, extra: Record<string, unknown> = {}): Promise<Preview> {
-  const result = await callAs(ADMIN, { namespace: ns, action: "preview", ...extra });
+  const result = await callAs(ADMIN, { namespace: ns, action: "delete_preview", ...extra });
   expect(result.isError, result.content[0].text).not.toBe(true);
   return JSON.parse(result.content[0].text) as Preview;
 }
@@ -107,9 +108,9 @@ async function auditRows(ns: string): Promise<number> {
   return n("SELECT COUNT(*) AS n FROM audit_log WHERE namespace = ?1", ns);
 }
 
-describe("delete_namespace preview refusals", () => {
+describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
   it("an unregistered namespace is refused as not found", async () => {
-    const result = await callAs(ADMIN, { namespace: fresh(), action: "preview" });
+    const result = await callAs(ADMIN, { namespace: fresh(), action: "delete_preview" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/namespace not found/);
   });
@@ -202,14 +203,14 @@ describe("delete_namespace preview refusals", () => {
   });
 });
 
-describe("delete_namespace is admin only", () => {
+describe("capsid_admin_manage_namespaces is admin only", () => {
   it("PLANT: a driver scoped to the namespace with the write grant is refused by checkScope, and nothing changes", async () => {
     const ns = fresh();
     await register(ns);
-    for (const action of ["preview", "perform"]) {
+    for (const action of ["delete_preview", "delete_perform"]) {
       const result = await callAs(driver(ns), { namespace: ns, action, cascade: true, token: "x.0" });
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toMatch(/'delete_namespace\.(preview|perform)' is admin only/);
+      expect(result.content[0].text).toMatch(/'capsid_admin_manage_namespaces\.(delete_preview|delete_perform)' is admin only/);
     }
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
@@ -217,17 +218,17 @@ describe("delete_namespace is admin only", () => {
   it("a read-only caller is refused the write grant", async () => {
     const ns = fresh();
     await register(ns);
-    const result = await callAs(legacyAgent("read", "opkey:readonly0000"), { namespace: ns, action: "preview" });
+    const result = await callAs(legacyAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/requires the write grant/);
   });
 });
 
-describe("delete_namespace perform refuses a token that does not match", () => {
+describe("capsid_admin_manage_namespaces delete_perform refuses a token that does not match", () => {
   it("a perform with no token is refused", async () => {
     const ns = fresh();
     await register(ns);
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform" });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/needs the token/);
   });
@@ -238,7 +239,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     await doc(ns, "a.md");
     const p = await preview(ns, { cascade: true });
     await doc(ns, "b.md");
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/changed since the preview/);
     expect(result.content[0].text).toMatch(/documents_live 1 -> 2/);
@@ -253,7 +254,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     const p = await preview(ns, { cascade: true });
     await env.DB.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = 'a.md'").bind(ns).run();
     await doc(ns, "c.md");
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/live_paths_sha256/);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path = 'c.md'", ns)).toBe(1);
@@ -266,7 +267,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     await register(a);
     await register(b);
     const p = await preview(a);
-    const result = await callAs(ADMIN, { namespace: b, action: "perform", token: p.token });
+    const result = await callAs(ADMIN, { namespace: b, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(new RegExp(`issued for namespace ${a}`));
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace IN (?1, ?2)", a, b)).toBe(2);
@@ -276,7 +277,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     const ns = fresh();
     await register(ns);
     const p = await preview(ns, { cascade: true });
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/issued with cascade true/);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
@@ -295,7 +296,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
       plan: planFingerprint(plan),
       exp: Math.floor(Date.now() / 1000) - 1,
     });
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/expired/);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
@@ -314,7 +315,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
       plan: planFingerprint(plan),
       exp: Math.floor(Date.now() / 1000) + 60,
     });
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/another caller/);
   });
@@ -327,7 +328,7 @@ describe("delete_namespace perform refuses a token that does not match", () => {
       { COOKIE_ENCRYPTION_KEY: "not-the-worker-key" },
       { v: 1, namespace: ns, cascade: false, allow_improve_paths: false, actor: ACTOR, plan: planFingerprint(plan), exp: Math.floor(Date.now() / 1000) + 60 }
     );
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/does not verify/);
   });
@@ -337,14 +338,14 @@ describe("delete_namespace perform refuses a token that does not match", () => {
     await register(ns);
     const p = await preview(ns);
     await job(ns, `job_${ns.slice(-12)}`, "queued");
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/open job/);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 });
 
-describe("delete_namespace perform", () => {
+describe("capsid_admin_manage_namespaces delete_perform", () => {
   it("deletes exactly what the preview listed, snapshots each document and keeps the history", async () => {
     const ns = fresh();
     const other = fresh();
@@ -377,7 +378,7 @@ describe("delete_namespace perform", () => {
     expect(p.counts.document_links_removed).toBe(3);
     expect(p.kv_keys.sort()).toEqual([bestKey(ns), pausedKey(ns)].sort());
 
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
     expect(result.isError, result.content[0].text).not.toBe(true);
     const done = JSON.parse(result.content[0].text) as {
       documents_deleted: number;
@@ -450,7 +451,7 @@ describe("delete_namespace perform", () => {
     const client = new Client({ name: "delete-namespace-read", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const read = (await client.callTool({ name: "read", arguments: { namespace: ns, path: "archive/old.md" } })) as Result;
+    const read = (await client.callTool({ name: "capsid_read_doc", arguments: { action: "read", namespace: ns, path: "archive/old.md" } })) as Result;
     await client.close();
     expect(read.isError, read.content[0].text).not.toBe(true);
     expect(read.content[0].text).toContain("old body");
@@ -460,9 +461,9 @@ describe("delete_namespace perform", () => {
     const ns = fresh();
     await register(ns);
     const p = await preview(ns);
-    const first = await callAs(ADMIN, { namespace: ns, action: "perform", token: p.token });
+    const first = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token: p.token });
     expect(first.isError, first.content[0].text).not.toBe(true);
-    const second = await callAs(ADMIN, { namespace: ns, action: "perform", token: p.token });
+    const second = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token: p.token });
     expect(second.isError).toBe(true);
     expect(second.content[0].text).toMatch(/namespace not found/);
   });
@@ -486,7 +487,7 @@ describe("delete_namespace perform", () => {
         return env.DB.batch(statements);
       },
     } as unknown as D1Database;
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token }, racing);
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token }, racing);
     expect(batches).toBe(2);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/aborted, nothing changed/);
@@ -506,11 +507,11 @@ describe("delete_namespace perform", () => {
         throw new Error(`kv refused ${key}`);
       },
     } as unknown as KVNamespace;
-    const server = buildServer({ ...workerEnv(), APP_KV: failingKv } as never, ADMIN);
+    const server = buildAdminServer({ ...workerEnv(), APP_KV: failingKv } as never, ADMIN);
     const client = new Client({ name: "delete-namespace-kv", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({ name: "delete_namespace", arguments: { namespace: ns, action: "perform", token: p.token } })) as Result;
+    const result = (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: { namespace: ns, action: "delete_perform", token: p.token } })) as Result;
     await client.close();
     expect(result.isError, result.content[0].text).not.toBe(true);
     const done = JSON.parse(result.content[0].text) as { kv_failed: Array<{ key: string }>; warning?: string };
@@ -528,7 +529,7 @@ async function docs(ns: string, count: number): Promise<void> {
   );
 }
 
-describe("delete_namespace batch cap", () => {
+describe("capsid_admin_manage_namespaces delete batch cap", () => {
   it("PLANT: a namespace over the batch cap is refused at preview, not half deleted", async () => {
     const ns = fresh();
     await register(ns);
@@ -539,7 +540,7 @@ describe("delete_namespace batch cap", () => {
     const refusal = p.refusals.join(" ");
     expect(refusal).toContain(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`);
     expect(refusal).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
-    expect(refusal).toMatch(/Delete or move documents with the delete tool first, or ask the seat to rule a set-based helper/);
+    expect(refusal).toMatch(/Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/);
 
     // A token signed over this very plan is refused at perform too, by the same rule.
     const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
@@ -552,7 +553,7 @@ describe("delete_namespace batch cap", () => {
       plan: planFingerprint(plan),
       exp: Math.floor(Date.now() / 1000) + 60,
     });
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS + 1);
@@ -566,7 +567,7 @@ describe("delete_namespace batch cap", () => {
     await docs(ns, NAMESPACE_DELETE_MAX_DOCUMENTS);
     const p = await preview(ns, { cascade: true });
     expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
-    const result = await callAs(ADMIN, { namespace: ns, action: "perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
     expect(result.isError, result.content[0].text).not.toBe(true);
     const done = JSON.parse(result.content[0].text) as { documents_deleted: number; snapshots: number };
     expect(done.documents_deleted).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);

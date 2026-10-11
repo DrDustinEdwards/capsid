@@ -12,6 +12,9 @@ const TOOLS = String(CAPSID.tools);
 // Deliberately not the current count, for the stale-claim fixtures. Derived, so it
 // can never accidentally become correct.
 const STALE_TOOLS = String(CAPSID.tools - 5);
+// A stale count above the current one, for the transition fixtures, where the resulting
+// state must be told from the pre-state.
+const AFTER_TOOLS = String(CAPSID.tools + 3);
 
 
 // src/counts.ts caches numbers that live elsewhere, so these tests derive each one
@@ -226,21 +229,21 @@ test("the one genuine hit still fires after all three fixes", () => {
 });
 
 test("a transition states the RESULTING count, not the pre-state", () => {
-  // "19 to 22" says the surface stopped being 19.
-  const doc = { path: "core.md", type: "core", body: "Expansion layer, tool surface 19 to 22 (links, brief, ci_status)." };
+  // "19 to N" says the surface stopped being 19.
+  const doc = { path: "core.md", type: "core", body: `Expansion layer, tool surface 19 to ${AFTER_TOOLS} (links, brief, ci_status).` };
   const claims = scanCountClaims([doc], "capsid");
   assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, "22", "the pre-state was reported instead of the resulting state");
+  assert.equal(claims[0].states, AFTER_TOOLS, "the pre-state was reported instead of the resulting state");
 
   // And when the resulting state is current, nothing fires.
-  assert.deepEqual(scanCountClaims([{ ...doc, body: `the surface went 22 to ${TOOLS} tools` }], "capsid"), []);
+  assert.deepEqual(scanCountClaims([{ ...doc, body: `the surface went ${AFTER_TOOLS} to ${TOOLS} tools` }], "capsid"), []);
 });
 
 test("a transition in a LIVE-STATE doc reports the resulting count", () => {
-  const doc = { path: "core.md", type: "core", body: "Expansion layer, tool surface 19 to 22." };
+  const doc = { path: "core.md", type: "core", body: `Expansion layer, tool surface 19 to ${AFTER_TOOLS}.` };
   const claims = scanCountClaims([doc], "capsid");
   assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, "22");
+  assert.equal(claims[0].states, AFTER_TOOLS);
 });
 
 test("a subset count is not a total", () => {
@@ -260,9 +263,9 @@ test("N of M: M is checked as the total, N is exempt", () => {
     []
   );
   // Stale M fires, and reports M rather than N.
-  const claims = scanCountClaims([{ path: "x.md", type: "concept", body: "Gated tools (11 of 22)." }], "capsid");
+  const claims = scanCountClaims([{ path: "x.md", type: "concept", body: `Gated tools (11 of ${AFTER_TOOLS}).` }], "capsid");
   assert.equal(claims.length, 1);
-  assert.equal(claims[0].states, "22");
+  assert.equal(claims[0].states, AFTER_TOOLS);
 });
 
 test("N of M is checked for internal consistency even when M is right", () => {

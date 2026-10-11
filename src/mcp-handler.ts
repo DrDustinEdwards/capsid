@@ -9,19 +9,21 @@ import { createLegacyEraHandler, isLegacyRequest } from "./legacy-era";
 // resolved before this runs and closed over by the factory, never read from the
 // request.
 //
-// Origins: /mcp has its own Origin rule before the OAuth provider
+// Origins: /mcp and /mcp/admin have their own Origin rule before the OAuth provider
 // (src/headers.ts mcpOriginProblem, which admits https://claude.ai), so the wrapper's
 // default list, which would refuse claude.ai, is not applied there a second time.
-// /ops/mcp is called by drivers with a bearer key and no browser, so it keeps the
-// wrapper's default: a present Origin must be localhost-class or the workers.dev host.
-export async function serveMcp(
-  request: Request,
-  env: Env,
-  ctx: ExecutionContext,
-  route: "/mcp" | "/ops/mcp",
-  build: () => McpServer
-): Promise<Response> {
-  const options: Omit<CreateMcpHandlerOptions, "legacy"> = route === "/mcp" ? { route, allowedOriginHostnames: "*" } : { route };
+// /ops/mcp and /ops/mcp/admin are called with a bearer key and no browser, so they keep
+// the wrapper's default: a present Origin must be localhost-class or the workers.dev host.
+// Capsid Admin's routes: the administrator's OAuth session, and an admin key for the
+// seat's scripts (src/routes.ts).
+export const ADMIN_MCP_ROUTE = "/mcp/admin";
+export const ADMIN_OPS_MCP_ROUTE = "/ops/mcp/admin";
+
+export type McpRoute = "/mcp" | "/ops/mcp" | typeof ADMIN_MCP_ROUTE | typeof ADMIN_OPS_MCP_ROUTE;
+
+export async function serveMcp(request: Request, env: Env, ctx: ExecutionContext, route: McpRoute, build: () => McpServer): Promise<Response> {
+  const browserFacing = route === "/mcp" || route === ADMIN_MCP_ROUTE;
+  const options: Omit<CreateMcpHandlerOptions, "legacy"> = browserFacing ? { route, allowedOriginHostnames: "*" } : { route };
   const factory = () => build();
 
   // --- the one legacy call site, deletable with src/legacy-era.ts ---------

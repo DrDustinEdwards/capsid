@@ -6,7 +6,7 @@ import { portalGate } from "./portal-auth";
 
 // The Portal's Tonight plan and its "since you last looked" strip
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09):
-// GET /portal/api/plan and GET /portal/api/digest. The readers behind `jobs` action list
+// GET /portal/api/plan and GET /portal/api/digest. The readers behind `capsid_work_jobs` action list
 // with view "plan" and view "digest" (src/overnight-plan.ts), over every namespace, so the
 // Portal and chat cannot disagree. Their own routes, read when the page that shows them
 // opens, since OPS_FEED_READS is pinned and the feed does not grow a read. Routes, not

@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
@@ -8,7 +7,7 @@ import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocume
 import { portfolioOnly } from "../scope";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
-// and search. registerDocTools in ./docs registers them in the published order.
+// and search. defineDocOperations in ./docs registers them in the published order.
 
 // Ask for one extra row so "exactly limit" is distinguishable from "there are more".
 function boundedRows<T>(rows: T[], limit: number, advice: string) {
@@ -23,13 +22,12 @@ function boundedRows<T>(rows: T[], limit: number, advice: string) {
   };
 }
 
-export function registerListTool(server: McpServer, ctx: ToolCtx): void {
+export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, agent } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "list",
     {
-      annotations: hintsFor("list"),
       description: `List documents with optional namespace, type, and status filters. Returns metadata rows without bodies under \`documents\`: id, namespace, path, title, type, status, tags and timestamps. Bounded to ${MAX_ROWS} rows; when there are more it sets truncated:true with a note.`,
       inputSchema: {
         namespace: nsName.optional(),
@@ -63,21 +61,20 @@ export function registerListTool(server: McpServer, ctx: ToolCtx): void {
           results,
           MAX_ROWS,
           namespace
-            ? "Narrow with type or status, or use find with a path glob."
-            : "Narrow with namespace (the usual case), type or status, or use find with a path glob."
+            ? "Narrow with type or status, or use capsid_find_docs action glob with a path glob."
+            : "Narrow with namespace (the usual case), type or status, or use capsid_find_docs action glob with a path glob."
         )
       );
     }
   );
 }
 
-export function registerReadTool(server: McpServer, ctx: ToolCtx): void {
+export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor, lastActor } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "read",
     {
-      annotations: hintsFor("read"),
       description:
         "Read a full document by namespace and path. The response carries last_actor, the actor of the most recent audit_log entry for this document, or null when there is none.",
       inputSchema: { namespace: nsName, path: docPath },
@@ -102,16 +99,15 @@ export function registerReadTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
+export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor, lastActor } = ctx;
 
   // One-call session start: assembles the read ritual so a session cannot skip a
   // piece of it. Pure assembly, no reasoning. Size-bounded so it stays loadable;
   // when trimmed it says so.
-  server.registerTool(
+  ctx.ops.define(
     "brief",
     {
-      annotations: hintsFor("brief"),
       description:
         `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions, repo-structure and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: { namespace: nsName },
@@ -216,7 +212,7 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
       type Row = { namespace: string; path: string; title: string | null; body: string | null; updated_at: string; last_actor?: string | null };
       const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
-        rows.map((r) => ({ namespace: r.namespace, path: r.path, title: r.title, updated_at: r.updated_at, last_actor: r.last_actor ?? null, body: `(trimmed for size: read ${r.namespace}/${r.path})` }));
+        rows.map((r) => ({ namespace: r.namespace, path: r.path, title: r.title, updated_at: r.updated_at, last_actor: r.last_actor ?? null, body: `(trimmed for size: read it with capsid_read_doc, ${r.namespace}/${r.path})` }));
       const sizes = {
         conventions: conventionsA?.body?.length ?? 0,
         repo_structure: repoStructureA?.body?.length ?? 0,
@@ -253,7 +249,7 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
           namespace: PORTFOLIO_DOCS.namespace,
           read_first: portfolio.map((r) => r.path),
           allowlist: describePortfolioDocs(),
-          note: `Read each with read(namespace: "${PORTFOLIO_DOCS.namespace}", path). Any namespace driver may read these, and nothing else in ${PORTFOLIO_DOCS.namespace}.`,
+          note: `Read each with capsid_read_doc(namespace: "${PORTFOLIO_DOCS.namespace}", path). Any namespace driver may read these, and nothing else in ${PORTFOLIO_DOCS.namespace}.`,
         },
         approx_chars: total,
         ...(coreA ? {} : { warning: `no core.md for namespace ${namespace}` }),
@@ -264,13 +260,12 @@ export function registerBriefTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerHistoryTool(server: McpServer, ctx: ToolCtx): void {
+export function defineHistoryOperation(server: McpServer, ctx: ToolCtx): void {
   const { db } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "history",
     {
-      annotations: hintsFor("history"),
       description:
         "List the retained versions of a document (newest first) from document_versions, or fetch one body by passing version_id. Every overwrite and delete writes a snapshot, so a deleted document's history is readable. Retention is 90 days. Read-only. A version records title and body only; changes to type, status or tags are in the audit log.",
       inputSchema: { namespace: nsName, path: docPath, version_id: z.number().int().positive().optional() },
@@ -315,15 +310,14 @@ export function registerHistoryTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerBacklinksTool(server: McpServer, ctx: ToolCtx): void {
+export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void {
   const { db } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "backlinks",
     {
-      annotations: hintsFor("backlinks"),
       description:
-        "Return the typed edges touching a document: outgoing (declared on this doc) and incoming (other docs pointing here). Edges are set by the write tool's links param. Endpoints may be Capsid documents or repo files addressed as namespace/path. Read-only.",
+        "Return the typed edges touching a document: outgoing (declared on this doc) and incoming (other docs pointing here). Edges are set by capsid_write_doc's links param. Endpoints may be Capsid documents or repo files addressed as namespace/path. Read-only.",
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
@@ -344,13 +338,12 @@ export function registerBacklinksTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerFindTool(server: McpServer, ctx: ToolCtx): void {
+export function defineFindOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, agent } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "find",
     {
-      annotations: hintsFor("find"),
       description: `Find documents whose path matches a glob pattern (SQLite GLOB, e.g. 'notes/*.md'). Optional namespace filter. Returns matches under \`documents\`, bounded to ${MAX_ROWS} rows; when there are more it sets truncated:true with a note.`,
       inputSchema: { namespace: nsName.optional(), glob: bounded(MAX_GLOB) },
     },
@@ -372,13 +365,12 @@ export function registerFindTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerSearchTool(server: McpServer, ctx: ToolCtx): void {
+export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, agent } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "search",
     {
-      annotations: hintsFor("search"),
       description: `Full text search across all documents (FTS5, ranked by bm25). Optional namespace and type filters. This is the cross-project search. Returns the top ${SEARCH_ROWS} matches under \`documents\`; when more matched it sets truncated:true.`,
       inputSchema: {
         query: bounded(MAX_QUERY),

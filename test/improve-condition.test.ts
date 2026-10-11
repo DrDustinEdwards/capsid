@@ -191,7 +191,7 @@ test("the manual result reports the condition it ran under, including on a dry r
   });
 });
 
-test("the improve_run tool serves condition, describes each value, and passes it through", async () => {
+test("capsid_run_improve serves condition, describes each value, and passes it through on action run", async () => {
   await withFetch({}, async () => {
     const { env } = await harness();
     const server = buildServer(env, adminAgentForEmail("admin@example.com"));
@@ -199,11 +199,11 @@ test("the improve_run tool serves condition, describes each value, and passes it
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const { tools } = await client.listTools();
-    const description = String((tools.find((t) => t.name === "improve_run")?.inputSchema.properties?.condition as { description?: string } | undefined)?.description ?? "");
+    const description = String((tools.find((t) => t.name === "capsid_run_improve")?.inputSchema.properties?.condition as { description?: string } | undefined)?.description ?? "");
     for (const condition of RUN_CONDITIONS) assert.match(description, new RegExp(condition), `the condition argument does not describe ${condition}`);
     const result = (await client.callTool({
-      name: "improve_run",
-      arguments: { namespace: "capsid", dry_run: true, condition: "no-transfer" },
+      name: "capsid_run_improve",
+      arguments: { action: "run", namespace: "capsid", dry_run: true, condition: "no-transfer" },
     })) as { isError?: boolean; content: Array<{ text: string }> };
     await client.close();
     assert.notEqual(result.isError, true, result.content[0]?.text);

@@ -6,7 +6,7 @@ import { logEvent } from "./log";
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
 // per dashboard request. Two modules import it (test/ops-cloudflare.test.ts):
-// src/watcher.ts, and src/ops-cloudflare-config.ts, the admin-only cloudflare_config
+// src/watcher.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops
 // tool's Access and Email Routing reads, which reuse this envelope and paging.
 //
 // The token, CF_OPS_TOKEN, is read-only and holds these permissions:
@@ -19,7 +19,7 @@ import { logEvent } from "./log";
 //   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
 //   Account Settings Read             GET /accounts/{id}/rum/site_info/list (the live checks'
 //                                     Web Analytics setting; developers.cloudflare.com/api/resources/rum/subresources/site_info/methods/list/)
-// The Access, Email Routing and Zone permissions are the cloudflare_config tool's. To add them to the existing token:
+// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's. To add them to the existing token:
 // dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add
 // Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read,
 // Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones
@@ -75,7 +75,7 @@ type CfEnvelope = { success?: unknown; errors?: unknown; result?: unknown; resul
 
 // The Cloudflare REST envelope. `success` false or a non-2xx is a failed read, with
 // Cloudflare's own messages as the reason. The token is never part of a reason.
-async function cfGet(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<unknown> {
+export async function cfGet(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<unknown> {
   return (await cfEnvelope(fetchImpl, token, url, what)).result;
 }
 

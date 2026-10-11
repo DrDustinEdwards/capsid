@@ -24,8 +24,8 @@ for (const era of [MODERN, LEGACY] as const) {
     try {
       assert.equal(client.getNegotiatedProtocolVersion(), era);
       const { tools } = await client.listTools();
-      assert.ok(tools.some((t) => t.name === "read"));
-      const result = (await client.callTool({ name: "read", arguments: { namespace: "sample", path: "notes/one.md" } })) as { content: Array<{ text: string }>; isError?: boolean };
+      assert.ok(tools.some((t) => t.name === "capsid_read_doc"));
+      const result = (await client.callTool({ name: "capsid_read_doc", arguments: { namespace: "sample", path: "notes/one.md" } })) as { content: Array<{ text: string }>; isError?: boolean };
       assert.notEqual(result.isError, true, result.content[0]?.text);
       assert.match(result.content[0].text, /"body":\s*"one"/);
     } finally {

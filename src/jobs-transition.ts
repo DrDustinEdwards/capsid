@@ -184,7 +184,7 @@ export const leaseUntil = (now: Date) => new Date(now.getTime() + JOB_LEASE_SECO
 // ones the resolver alone does not cover: it accepts a bound key on a queued job for
 // the pending-start window, so a key minted less than 20 minutes earlier would claim
 // its job again (seat review of #174). For the others this is the record of when the
-// key stopped, which `agents` action "list" shows.
+// key stopped, which `capsid_admin_manage_agents` action "list" shows.
 export function revokeBoundKeys(db: D1Database, jobId: string): D1PreparedStatement {
   return db.prepare("UPDATE agents SET revoked_at = datetime('now') WHERE job_id = ?1 AND revoked_at IS NULL").bind(jobId);
 }
@@ -256,7 +256,7 @@ export function movedBeforeFailing(action: string, id: string, current: JobRow |
 // outcome row, so making every claim pay for that read would put a table scan in
 // front of the queue's hottest path.
 //
-// It goes through recordFor, the same function improve_status and the Portal call,
+// It goes through recordFor, the same function capsid_run_improve action status and the Portal call,
 // so the bar a claim is measured against is the number a human can read on the page.
 // `null` for namespaces because the improve-loop columns play no part in this
 // comparison, and computing them here would attribute a namespace's attempts to

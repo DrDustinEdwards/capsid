@@ -6,8 +6,9 @@ import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-sc
 import { LOOP_ROSTER } from "../src/improve-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch } from "./fakes.ts";
 
-// improve_run and improve_status, over a real MCP connection. A read-only key must
-// not reach improve_run; its SQL lives in a helper the source scan in
+// capsid_run_improve's run and status actions (the improve_run and improve_status
+// operations), over a real MCP connection. A read-only key must not reach action
+// run; its SQL lives in a helper the source scan in
 // test/invariants.test.ts cannot see, so the gate is driven here.
 
 const SCORES = seedScoresDoc("capsid");
@@ -41,48 +42,49 @@ async function connect(grant: ToolGrant, opts: { seedToken?: boolean } = {}) {
 
 type ToolResult = { isError?: boolean; content: Array<{ text: string }> };
 
-test("A READ-ONLY KEY CANNOT REACH improve_run, and writes nothing while refusing", async () => {
+test("A READ-ONLY KEY CANNOT REACH capsid_run_improve action run, and writes nothing while refusing", async () => {
   await withFetch({}, async () => {
     const { client, d1, kv, close } = await connect("read");
-    const result = (await client.callTool({ name: "improve_run", arguments: { namespace: "capsid" } })) as ToolResult;
+    const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "run", namespace: "capsid" } })) as ToolResult;
     await close();
-    assert.equal(result.isError, true, "a read-only key reached improve_run");
+    assert.equal(result.isError, true, "a read-only key reached capsid_run_improve action run");
     // The refusal names the missing scope (src/scope.ts).
     assert.match(result.content[0].text, /requires the write grant/);
     // The refusal has to come before any statement.
-    assert.deepEqual(d1.recorded, [], "improve_run wrote statements while refusing a read-only key");
-    assert.deepEqual(kv.puts, [], "improve_run wrote to KV while refusing a read-only key");
+    assert.deepEqual(d1.recorded, [], "capsid_run_improve run wrote statements while refusing a read-only key");
+    assert.deepEqual(kv.puts, [], "capsid_run_improve run wrote to KV while refusing a read-only key");
   });
 });
 
-test("a read-only key CAN read improve_status, because it is a read tool", async () => {
+test("a read-only key CAN read capsid_run_improve action status, because it is a read action", async () => {
   await withFetch({}, async () => {
     const { client, close } = await connect("read");
-    const result = (await client.callTool({ name: "improve_status", arguments: { namespace: "capsid" } })) as ToolResult;
+    const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "status", namespace: "capsid" } })) as ToolResult;
     await close();
-    assert.ok(!result.isError, `improve_status refused a read-only key: ${result.content?.[0]?.text}`);
+    assert.ok(!result.isError, `capsid_run_improve status refused a read-only key: ${result.content?.[0]?.text}`);
     const parsed = JSON.parse(result.content[0].text) as { mode: string; namespaces: Array<{ namespace: string }> };
     assert.equal(parsed.mode, "api");
     assert.equal(parsed.namespaces[0].namespace, "capsid");
   });
 });
 
-test("improve_status NEVER WRITES, whatever grant it is called with", async () => {
+test("capsid_run_improve status NEVER WRITES, whatever grant it is called with", async () => {
   for (const grant of ["read", "write"] as const) {
     await withFetch({}, async () => {
       const { client, d1, kv, close } = await connect(grant);
-      await client.callTool({ name: "improve_status", arguments: {} });
+      const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "status" } })) as ToolResult;
       await close();
-      assert.deepEqual(d1.recorded, [], `improve_status wrote statements under the ${grant} grant`);
-      assert.deepEqual(kv.puts, [], `improve_status wrote to KV under the ${grant} grant`);
+      assert.notEqual(result.isError, true, `status was refused, so no write could have been observed: ${result.content?.[0]?.text}`);
+      assert.deepEqual(d1.recorded, [], `capsid_run_improve status wrote statements under the ${grant} grant`);
+      assert.deepEqual(kv.puts, [], `capsid_run_improve status wrote to KV under the ${grant} grant`);
     });
   }
 });
 
-test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE LOOP_ROSTER, and names the roster", async () => {
+test("capsid_run_improve run REFUSES A NAMESPACE THAT IS NOT ON THE LOOP_ROSTER, and names the roster", async () => {
   await withFetch({}, async () => {
     const { client, d1, close } = await connect("write");
-    const result = (await client.callTool({ name: "improve_run", arguments: { namespace: "julieedwards" } })) as ToolResult;
+    const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "run", namespace: "julieedwards" } })) as ToolResult;
     await close();
     assert.equal(result.isError, true, "an off-roster namespace was accepted");
     assert.match(result.content[0].text, /not on the improve roster/);
@@ -94,7 +96,7 @@ test("improve_run REFUSES A NAMESPACE THAT IS NOT ON THE LOOP_ROSTER, and names 
   });
 });
 
-test("improve_run with dry_run WRITES NOTHING through the tool surface either", async () => {
+test("capsid_run_improve run with dry_run WRITES NOTHING through the tool surface either", async () => {
   // The repo is reachable, so the preview really reads GitHub (the default branch and
   // its sha). What it must not do is write there: no branch, no dispatch.
   const routes = {
@@ -104,8 +106,8 @@ test("improve_run with dry_run WRITES NOTHING through the tool surface either", 
   await withFetch(routes, async (calls) => {
     const { client, d1, kv, close } = await connect("write", { seedToken: true });
     const result = (await client.callTool({
-      name: "improve_run",
-      arguments: { namespace: "capsid", dry_run: true },
+      name: "capsid_run_improve",
+      arguments: { action: "run", namespace: "capsid", dry_run: true },
     })) as ToolResult;
     await close();
     assert.ok(!result.isError, `dry_run errored: ${result.content?.[0]?.text}`);

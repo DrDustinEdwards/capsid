@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { CF_API, CfReadError, cfGetAll, cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
 
-// The cloudflare_config tool's reads: Access applications and policies, and Email
+// The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies, and Email
 // Routing rules and destination addresses. Ruled 2026-09-29, "Capsid MCP roadmap,
 // build or don't build" (capsid/decisions.md). Only src/tools/cloudflare.ts imports
 // this module (test/ops-cloudflare-config.test.ts), and that tool is admin only.

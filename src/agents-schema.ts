@@ -23,7 +23,7 @@ export const SCOPE_FLAGS = [
   "can_write_workflows",
   "can_touch_protected",
   "money_paths",
-  // Commenting goes through manage_pr, a write tool, so a reviewer holds the write
+  // Commenting goes through capsid_open_pr action comment, a write tool, so a reviewer holds the write
   // grant; without a flag of its own that grant would also let it merge and close.
   // This flag makes "may comment on this PR" smaller than "may decide this PR".
   "can_comment_pr",
@@ -168,7 +168,7 @@ export function allowsToolAction(list: ScopeList, tool: string, action: string |
   const qualified = list.some((entry) => entry.startsWith(prefix));
   if (!qualified) return true;
   // An unknown action on a narrowed tool is refused, not read as the whole tool:
-  // otherwise a reviewer minted ["manage_pr", "manage_pr.comment"] could close a pull
+  // otherwise a reviewer minted ["capsid_open_pr", "capsid_open_pr.comment"] could open a pull
   // request through a call path that names no action.
   //
   // It stays opt-in: a list with no qualified sibling for this tool is untouched.
@@ -203,7 +203,7 @@ export function agentActor(name: string): string {
   return `agent:${name}`;
 }
 
-// The driver bootstrap instruction. register_namespace returns the mint command
+// The driver bootstrap instruction. capsid_admin_manage_namespaces action register returns the mint command
 // rather than minting, so no credential crosses the tool boundary.
 // test/register-namespace-mint.test.ts asserts the script it names can parse it.
 export function driverAgentName(namespace: string): string {
@@ -220,6 +220,6 @@ export function driverMintInstruction(namespace: string): string {
     `The key is returned once and lands in ${driverKeyPath(namespace)} at mode 0600. ` +
     // Cannot import TOOL_GRANTS (src/scope.ts imports this module), so
     // test/audit-2026-09-16.test.ts holds the sentence and the table together.
-    `register_namespace does not mint it: minting is admin only, and register_namespace is itself admin only.`
+    `capsid_admin_manage_namespaces action register does not mint it: minting is admin only, and capsid_admin_manage_namespaces action register is itself admin only.`
   );
 }

@@ -130,8 +130,8 @@ export async function readSignedPolicy(
 }
 
 // Anti-rollback. A signature proves the Worker signed these bytes once, not that they
-// are current. Every signed version stays in document_versions, and `restore` or a
-// plain write can put an older one back with its signature still verifying. So APP_KV
+// are current. Every signed version stays in document_versions, and `capsid_write_doc`
+// action restore or a plain write can put an older one back with its signature still verifying. So APP_KV
 // records, under policyPinKey(path), the sha256 of the current signed body (plus its
 // `- version:` for the refusal text), and a load refuses any other signed body.
 // The pin is the hash, not the version, because a lower version signed on purpose (the

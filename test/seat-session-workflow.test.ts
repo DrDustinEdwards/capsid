@@ -70,6 +70,16 @@ test("the Capsid key comes from the OIDC exchange, before checkout, and no long-
   assert.match(step, /capsid-mcp\.json/);
 });
 
+test("the session pre-approves exactly the Capsid tools its runner key holds, and each is served", async () => {
+  const { RUNNER_TOOLS } = await import("../src/runner-key.ts");
+  const { CAPSID_TOOLS } = await import("../src/tools/surface.ts");
+  const capsid = allowedList("allowedTools").filter((e) => e.startsWith("mcp__capsid__")).map((e) => e.slice("mcp__capsid__".length));
+  const bare = RUNNER_TOOLS.filter((t) => !t.includes("."));
+  assert.deepEqual([...capsid].sort(), [...bare].sort());
+  for (const tool of bare) assert.ok((CAPSID_TOOLS as readonly string[]).includes(tool), `${tool} is not a Capsid tool`);
+  for (const entry of RUNNER_TOOLS.filter((t) => t.includes("."))) assert.ok(bare.includes(entry.split(".")[0] as (typeof bare)[number]), `${entry} narrows a tool the key does not hold`);
+});
+
 // An allowed interpreter runs any program, which reaches the network and the
 // environment, so it would make the refused list above decorative.
 const INTERPRETERS = ["node", "bash", "sh", "zsh", "dash", "python", "python3", "perl", "ruby", "deno", "bun", "pwsh", "powershell", "env", "xargs", "eval", "exec"];
@@ -327,7 +337,7 @@ test("the session sends no nonessential traffic, so nothing needs the metrics ho
 });
 
 test("the prompt stops the session at once when the Capsid jobs tool is missing", () => {
-  assert.match(actionStep(), /If the capsid `jobs` tool \(mcp__capsid__jobs\) is not available, stop at once/);
+  assert.match(actionStep(), /If the capsid `capsid_work_jobs` tool \(mcp__capsid__capsid_work_jobs\) is not available, stop at once/);
 });
 
 // capsid job_5765103c658f: the dustinedwards block-mode canary (actions run
@@ -393,7 +403,7 @@ test("the diagnostics step prints names, statuses and booleans only, from a tran
   writeFileSync(
     file,
     JSON.stringify([
-      { type: "system", subtype: "init", model: "m", apiKeySource: SECRET, cwd: `/home/${SECRET}`, tools: ["Read", "mcp__capsid__jobs"], mcp_servers: [{ name: "capsid", status: "connected", config: { headers: { Authorization: `Bearer ${SECRET}` } } }] },
+      { type: "system", subtype: "init", model: "m", apiKeySource: SECRET, cwd: `/home/${SECRET}`, tools: ["Read", "mcp__capsid__capsid_work_jobs"], mcp_servers: [{ name: "capsid", status: "connected", config: { headers: { Authorization: `Bearer ${SECRET}` } } }] },
       { type: "assistant", message: { content: [{ type: "text", text: SECRET }] } },
       {
         type: "result",

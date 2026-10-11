@@ -47,22 +47,22 @@ beforeEach(async () => {
 
 describe("portfolio documents", () => {
   it("list in capsid returns exactly the portfolio documents to a carrel driver", async () => {
-    const out = await ok("list", { namespace: "capsid" });
+    const out = await ok("capsid_find_docs", { action: "list", namespace: "capsid" });
     expect(out.documents.map((d: { path: string }) => d.path)).toEqual(ALLOWED);
   });
 
   it("search in capsid returns only portfolio documents, though every capsid document matches", async () => {
-    const out = await ok("search", { namespace: "capsid", query: "gatepost" });
+    const out = await ok("capsid_find_docs", { action: "search", namespace: "capsid", query: "gatepost" });
     expect(out.documents.map((d: { path: string }) => d.path).sort()).toEqual(ALLOWED);
   });
 
   it("brief names the same paths", async () => {
-    const out = await ok("brief", { namespace: "carrel" });
+    const out = await ok("capsid_start_session", { namespace: "carrel" });
     expect(out.portfolio_documents.read_first).toEqual(ALLOWED);
   });
 
   it("a read outside the list is refused", async () => {
-    const result = await call("read", { namespace: "capsid", path: "policy/gates.md" });
+    const result = await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "policy/gates.md" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/not scoped to the 'capsid' namespace/);
   });

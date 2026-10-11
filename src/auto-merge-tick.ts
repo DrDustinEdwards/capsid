@@ -244,7 +244,7 @@ export interface AutoMergeOutcome {
 // Where the awaiting-seat set lives. Rewritten whole on every tick rather than
 // appended to, because the tick recomputes the full set of open pull requests each
 // time: a PR a human merged or closed stops appearing, with no second mechanism needed
-// to expire it. improve_status reads this key rather than calling GitHub, so asking
+// to expire it. capsid_run_improve action status reads this key rather than calling GitHub, so asking
 // for status costs nothing.
 export const AWAITING_SEAT_KEY = "improve:awaiting-seat";
 

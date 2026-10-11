@@ -5,11 +5,12 @@ import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { CONTROLS, PORTAL_ACTIONS, performControl, previewControl } from "../src/controls.ts";
 import { MODE_KEY } from "../src/improve-schema.ts";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// The controls tool (src/tools/controls.ts) and the registry behind it (src/controls.ts):
-// the Portal's buttons as one admin tool, with one confirmation shared by both surfaces.
+// The controls tool, capsid_admin_run_controls (src/tools/controls.ts), and the
+// registry behind it (src/controls.ts): the Portal's buttons as one admin tool, with
+// one confirmation shared by both surfaces.
 // The Portal's own routes are test/portal-actions.test.ts and test-integration/.
 
 const EMAIL = "admin@example.com";
@@ -28,12 +29,12 @@ function world() {
 }
 
 async function connect(env: never, caller: Agent) {
-  const server = buildServer(env, caller);
+  const server = buildAdminServer(env, caller);
   const client = new Client({ name: "controls-tool", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return {
-    call: (args: Record<string, unknown>) => client.callTool({ name: "controls", arguments: args }) as Promise<ToolResult>,
+    call: (args: Record<string, unknown>) => client.callTool({ name: "capsid_admin_run_controls", arguments: args }) as Promise<ToolResult>,
     close: async () => {
       await client.close();
       await server.close();

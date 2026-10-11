@@ -92,12 +92,12 @@ export function breakerRefusal(state: BreakerState): string {
   return (
     `the circuit breaker for ${state.namespace} is open: ${state.failed} jobs failed by their holders since ${state.since} UTC, ` +
     `at or over the threshold of ${state.threshold}. Nothing in ${state.namespace} is handed out until the seat or Dustin resets it ` +
-    `(improve_run action breaker_reset, or Reset breaker in the Portal).`
+    `(capsid_admin_control_improve action breaker_reset, or Reset breaker in the Portal).`
   );
 }
 
 /**
- * The seat's or Dustin's control (improve_run action breaker_reset, admin only, and the
+ * The seat's or Dustin's control (capsid_admin_control_improve action breaker_reset, admin only, and the
  * Portal's reset_breaker): close one namespace's breaker, so failures before now stop
  * counting, and optionally set the threshold, which applies to every namespace. Audited
  * under the caller, and read back.

@@ -6,7 +6,7 @@ import { staleJobs } from "./stale-jobs";
 
 // The Portal's stale jobs: GET /portal/api/stale (capsid/research/design-stale-jobs.md,
 // settled: its own route, since OPS_FEED_READS is pinned and the feed does not grow a
-// read). The same reader as `jobs` action list with stale: true (src/stale-jobs.ts), so
+// read). The same reader as `capsid_work_jobs` action list with stale: true (src/stale-jobs.ts), so
 // the Portal and chat cannot disagree, over every namespace. It costs no GitHub reads:
 // the pull request states come from the cache the merge-resume step writes. A route, not
 // a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it answers

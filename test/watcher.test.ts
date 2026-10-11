@@ -70,17 +70,17 @@ test("the in-Worker watcher is the SAME authority as the mintable role, not a co
 
 test("the watcher can post a job and cannot claim, complete or resume one", () => {
   const agent = watcherAgent();
-  assert.equal(checkScope(agent, { tool: "jobs", action: "post", namespace: "capsid", grant: "write" }), null);
+  assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action: "post", namespace: "capsid", grant: "write" }), null);
   for (const action of ["claim", "complete", "fail", "block", "resume", "heartbeat"]) {
     assert.match(
-      String(checkScope(agent, { tool: "jobs", action, namespace: "capsid", grant: "write" })),
-      new RegExp(`jobs\\.${action}`),
+      String(checkScope(agent, { tool: "capsid_work_jobs", action, namespace: "capsid", grant: "write" })),
+      new RegExp(`'capsid_work_jobs\\.${action}'`),
       `the watcher was allowed to ${action} a job`
     );
   }
   // And nothing outside the queue at all.
-  assert.match(String(checkScope(agent, { tool: "write", namespace: "capsid", grant: "write" })), /not scoped to the 'write' tool/);
-  assert.match(String(checkScope(agent, { tool: "manage_pr", namespace: "capsid", grant: "write" })), /not scoped to the 'manage_pr' tool/);
+  assert.match(String(checkScope(agent, { tool: "capsid_write_doc", namespace: "capsid", grant: "write" })), /not scoped to the 'capsid_write_doc' tool/);
+  assert.match(String(checkScope(agent, { tool: "capsid_close_pr", action: "merge", namespace: "capsid", grant: "write" })), /not scoped to the 'capsid_close_pr\.merge' tool/);
 });
 
 // the cadence
@@ -626,8 +626,8 @@ test("DERIVED: every finding this module can produce carries a readable fingerpr
 
 test("allowsToolAction is what makes the watcher's narrowing real", () => {
   const agent = watcherAgent();
-  assert.equal(allowsToolAction(agent.scopes.tools, "jobs", "post"), true);
-  assert.equal(allowsToolAction(agent.scopes.tools, "jobs", "claim"), false);
+  assert.equal(allowsToolAction(agent.scopes.tools, "capsid_work_jobs", "post"), true);
+  assert.equal(allowsToolAction(agent.scopes.tools, "capsid_work_jobs", "claim"), false);
 });
 
 // The pieces the pass is built from, exported because they carry rules worth

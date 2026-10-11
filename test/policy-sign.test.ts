@@ -190,10 +190,18 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 // admin only
 
 test("sign_policy is admin only in the scope table, and the refusal says why", () => {
-  // Stated in TOOL_ACTION_GRANTS and enforced by the registrar.
-  assert.equal(requiredForAction("improve_run", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
+  // Served as capsid_admin_control_improve action "sign_policy", an admin tool in
+  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_run_improve does
+  // not list it in TOOL_ACTION_GRANTS, so it takes that tool's admin default there too.
+  assert.equal(requiredForAction("capsid_admin_control_improve", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
+  assert.equal(requiredForAction("capsid_run_improve", "sign_policy"), "admin", "the driver's improve tool would let a write-grant caller name sign_policy");
   const driver = { ...adminAgentForEmail("admin@example.com"), actor: "agent:capsid-driver", admin: false };
-  const refusal = checkScope(driver, { tool: "improve_run", action: "sign_policy", namespace: "capsid", ...needFor(requiredForAction("improve_run", "sign_policy")) });
+  const refusal = checkScope(driver, {
+    tool: "capsid_admin_control_improve",
+    action: "sign_policy",
+    namespace: "capsid",
+    ...needFor(requiredForAction("capsid_admin_control_improve", "sign_policy")),
+  });
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);
   assert.match(refusal, /widen/i, "the refusal should say why, not only that it refused");

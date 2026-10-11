@@ -94,29 +94,29 @@ Four invariants, each enforced in code rather than by discipline:
 
 ## Canon is written by proposal
 
-Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its volumes, live or archived. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `improve_status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
+Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its volumes, live or archived. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
 
-- **A driver's `write` to canon is not applied.** The caller is anyone who is not the admin and holds no `can_merge` (the seat test every seat-only job transition uses). The write is assembled as usual (mode, dash normalization, `if_match`), then stored in `canon_proposals` (migration 0034) with the sha256 of the body it was written against, and the response is `action: "pending_review"` with the proposal id. The document does not change. A `canon-proposed` audit row records it. `links` are refused on such a write, because a proposal does not carry them.
-- **`restore`, `delete` and `move` on canon are refused** for the same caller, and so is a `move` onto a canon path. A proposal carries a body; those three do not.
-- **The admin decides** with the `canon_approve` and `canon_reject` controls, in the Portal's Queue view or through `controls`, preview then perform. An approval is an ordinary write: the live row is snapshotted, the document is upserted, and a `write` audit row names the approver, the proposal and the proposer. It is guarded inside the batch on the body the proposal was written against and on the proposal still pending, so a proposal whose document moved is refused (reject it, and the proposer writes it again) and a proposal is decided once. A rejection needs a reason, which the proposal row keeps for the proposer.
+- **A driver's write to canon (`capsid_write_doc`) is not applied.** The caller is anyone who is not the admin and holds no `can_merge` (the seat test every seat-only job transition uses). The write is assembled as usual (mode, dash normalization, `if_match`), then stored in `canon_proposals` (migration 0034) with the sha256 of the body it was written against, and the response is `action: "pending_review"` with the proposal id. The document does not change. A `canon-proposed` audit row records it. `links` are refused on such a write, because a proposal does not carry them.
+- **`capsid_write_doc` actions `restore` and `move`, and `capsid_delete_doc`, on canon are refused** for the same caller, and so is a `move` onto a canon path. A proposal carries a body; those three do not.
+- **The admin decides** with the `canon_approve` and `canon_reject` controls, in the Portal's Queue view or through `capsid_admin_run_controls`, preview then perform. An approval is an ordinary write: the live row is snapshotted, the document is upserted, and a `write` audit row names the approver, the proposal and the proposer. It is guarded inside the batch on the body the proposal was written against and on the proposal still pending, so a proposal whose document moved is refused (reject it, and the proposer writes it again) and a proposal is decided once. A rejection needs a reason, which the proposal row keeps for the proposer.
 - **Instruction-shaped lines are flagged, never rejected.** An added line that opens (after its list marker, quote, heading or bold) with "you must", "you should", "you will", "you are to", "always", "never", "ignore", "disregard", "forget", "do not", "don't", "from now on", "agents must", "agents should", "the agent must", "drivers must", "a driver must", "every session must" or "sessions must", or with "call", "run", "use" or "invoke" followed by a served tool's name, is stored on the proposal and shown first in the approval preview. Rulings are themselves instructions to agents, so an automatic reject would refuse the seat's own canon.
 - **The admin's and the seat's own writes are not queued.**
 
 ## Deleting a namespace
 
-`delete_namespace` is admin only and takes two calls. `action: "preview"` writes
+Deleting a namespace is `capsid_admin_manage_namespaces`, admin only, in two calls. `action: "delete_preview"` writes
 nothing. It counts everything that names the namespace and returns a verdict, and
 when nothing refuses, a token bound to the namespace, `cascade`,
 `allow_improve_paths`, those counts and the caller, valid for five minutes.
-`action: "perform"` takes the same arguments and the token, reads the counts again,
+`action: "delete_perform"` takes the same arguments and the token, reads the counts again,
 and refuses if any of them moved. Then it commits one batch whose first statement
 aborts it unless the store still matches the plan.
 
 It refuses, whatever `cascade` says:
 
 - while any job in the namespace is queued, claimed or blocked. End each with the
-  `jobs` tool (`supersede` for a queued job, `fail` for a claimed or blocked one).
-- while any live agent names the namespace in its scopes. Use the `agents` tool
+  `capsid_work_jobs` tool (`supersede` for a queued job, `fail` for a claimed or blocked one).
+- while any live agent names the namespace in its scopes. Use the `capsid_admin_manage_agents` tool
   (`revoke`, or `update_scopes` to drop the namespace).
 - while the namespace is on the improve roster, which is a list in code.
 
@@ -139,14 +139,14 @@ named in the response, not dropped.
 The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
 ones plus two per document. So a namespace with more than 47 live documents is
 refused at preview and at perform, never half deleted. Delete or move documents
-with the `delete` tool first, or ask the seat to rule a set-based helper.
+with the `capsid_delete_doc` tool first, or ask the seat to rule a set-based helper.
 
 What it keeps, because it is history: archived documents and the edges between
 them, `document_versions`, `audit_log`, finished jobs, `job_outcomes`,
 `job_claims`, `job_touches`, the skill records, every `improve_*` row, revoked
 agents, the nightly backups and the holdout bucket. The kept archived documents
-still carry the deleted name. `read`, `list`, `search`, `brief` and `history`
-return them under it. `write`, `delete`, `move` and `restore` refuse there until
+still carry the deleted name. `capsid_read_doc`, `capsid_find_docs` and
+`capsid_start_session` return them under it. `capsid_write_doc` and `capsid_delete_doc` refuse there until
 the name is registered again, and registering it again brings them back into
 scope.
 
@@ -292,7 +292,7 @@ seat's `fail` of another credential's job, since that agent made no claim.
 | `deploy_state` | what the agent says about deployment |
 | `files_touched` | a JSON array of the paths the agent says it touched |
 | `model_id`, `client_name`, `client_version`, `permission_mode` | self-reported, recorded and never used to authorize anything |
-| `raw` `claim.usage` | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
+| `raw` `claim.usage` | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `capsid_admin_read_claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
 | `capsid_sha` | the Worker's own deployed commit, not the agent's word |
 
 `job_evaluations` holds one row per check, named for OpenTelemetry's
@@ -320,7 +320,7 @@ difference of two times.
 ### A swallowed parameter tag is refused
 
 `complete`, `fail` and `post` refuse a `result_summary`, `reason` or `body` that
-contains the literal text `</name>` for one of the `jobs` tool's own parameter
+contains the literal text `</name>` for one of the `capsid_work_jobs` tool's own parameter
 names, and the refusal names both the field and the tag.
 
 This is a measured failure, twice on 2026-09-11, not a hypothetical. A caller that
@@ -342,7 +342,7 @@ stored text of the first job it happened to.
 ### agent_record
 
 `src/agent-record.ts` aggregates those rows into one record per credential, served
-in `improve_status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
+in `capsid_run_improve` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
 blocked, gates hit, resumes, pull requests opened and merged, a merge rate, a CI
 green rate with `ci_checked` as its stated denominator, a median duration, and for
 drivers the loop's kept and reverted counts.
@@ -355,7 +355,7 @@ credential scoring its own work. A rate with no denominator is `null`, because
 reporting `0%` for an agent that has opened no pull requests puts it below one that
 opened ten and merged one.
 
-`jobs.post` can require a record with `min_record` (`{prs_merged: n}`), checked at
+`capsid_work_jobs.post` can require a record with `min_record` (`{prs_merged: n}`), checked at
 the claim against this same function, so the bar a claim is measured against is the
 number a human can read on the page.
 
@@ -366,13 +366,13 @@ than a bundle. `scripts/mint-agents.mjs` holds them and a test fails the build i
 role names a second blast-radius flag. A role that accumulates flags is still a driver.
 
 A reviewer never writes code. Commenting on a pull request goes through
-`manage_pr`, which is a write tool, so the reviewer needs the write grant. `can_comment_pr`
-is what stops that grant also being merge and close. It is the smallest write this
+`capsid_open_pr` action `comment`, which is a write tool, so the reviewer needs the write grant. `can_comment_pr`
+is what stops that grant also being merge and close (`capsid_close_pr`). It is the smallest write this
 Worker makes, kept separate from the largest.
 
-The tools axis can name an action. `jobs` is one tool with a read action and seven
-write ones, and "may post a job" and "may claim, complete and resume one" are different
-authorities the tool name cannot separate. So an entry may be qualified, `jobs.post`,
+The tools axis can name an action. `capsid_work_jobs` is one tool with a read action and
+several write ones, and "may post a job" and "may claim, complete and resume one" are different
+authorities the tool name cannot separate. So an entry may be qualified, `capsid_work_jobs.post`,
 and the rule is stated once in `allowsToolAction`:
 
 - `*` allows everything, so every agent minted before this is untouched.
@@ -381,8 +381,8 @@ and the rule is stated once in `allowsToolAction`:
   opted into, never inherited.
 - A qualified entry narrows only its own tool.
 
-The two tools whose action decides what they do, `jobs` and `lint`, pass the action to
-`checkScope` where it is known. That is the same shape the grant check already used and
+Every tool whose action decides what it does (`capsid_work_jobs`, `capsid_lint_namespace`
+and every composite tool) passes the action to `checkScope` where it is known. That is the same shape the grant check already used and
 not a second enforcement point.
 
 ## Two corrections, then a human
@@ -528,10 +528,10 @@ body is exactly what an attacker controls.
 Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
 functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
 feed, `OpsFeed` in `src/ops-types.ts`. `GET /portal/api/namespaces` returns each
-roster namespace from `improveStatus()`, the function behind `improve_status`.
+roster namespace from `improveStatus()`, the function behind `capsid_run_improve` action `status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
 filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
-`staleJobs()`, the function behind `jobs` list with `stale: true`. All four are admin
+`staleJobs()`, the function behind `capsid_work_jobs` action `list` with `stale: true`. All four are admin
 session only.
 
 **A click in the Portal writes two audit rows:** the shared mutator's own row (for
@@ -551,8 +551,8 @@ WHERE action LIKE 'portal-%' OR action LIKE 'console-%'
 ORDER BY id DESC LIMIT 50;
 ```
 
-**Reads of the rules are audited.** A `read` of `capsid/conventions.md`, or a `brief` (which
-carries it), writes one `conventions-read` row under the caller's actor, at most one per
+**Reads of the rules are audited.** A `capsid_read_doc` read of `capsid/conventions.md`, or a
+`capsid_start_session` (which carries it), writes one `conventions-read` row under the caller's actor, at most one per
 caller per hour (`src/conventions-read.ts`, `test-integration/conventions-read.test.ts`).
 The row is in namespace `capsid` with no path, because a row addressed to the document
 would make the reader its `last_actor`. `params` are `{"via": "read" | "brief",

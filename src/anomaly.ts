@@ -74,7 +74,7 @@ const mk = (fingerprint: string, headline: string, evidence: string[]): Finding 
     "An agent acted out of its usual pattern (OWASP item 6, anomaly rules). A finding only:",
     "nothing was suspended or revoked (Dustin, D4 of 2026-10-03). Confirm whether the",
     "activity was expected; if it was, fail this job saying so, which counts toward the",
-    "false-positive measure. If it was not, revoke the key with the agents tool.",
+    "false-positive measure. If it was not, revoke the key with capsid_admin_manage_agents action revoke.",
     "",
     "## Evidence",
     "",

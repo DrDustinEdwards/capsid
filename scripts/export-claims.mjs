@@ -137,7 +137,7 @@ export async function fetchTable(tool, table) {
     /** @type {{ action: string, table: string, limit: number, after?: number }} */
     const args = { action: "export", table, limit: PAGE_LIMIT };
     if (after !== undefined) args.after = after;
-    const page = parsePage(await tool("claims", args), table);
+    const page = parsePage(await tool("capsid_admin_read_claims", args), table);
     for (const row of page.rows) rows.push(row);
     if (page.next_after === null) return rows;
     if (page.rows.length === 0) {
@@ -343,7 +343,8 @@ export async function run({ argv, env, fetchImpl = fetch, log = console.log, err
     const origin = requireHttps(env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT);
     // Before any request, so a refused directory costs nothing.
     ensureEmptyDir(outDir);
-    const client = capsidClient(origin, key, "export-claims", fetchImpl);
+    // The claims are a Capsid Admin tool, served on /ops/mcp/admin.
+    const client = capsidClient(origin, key, "export-claims", fetchImpl, "/ops/mcp/admin");
     const capsidSha = await fetchCapsidSha(origin, fetchImpl);
     const manifest = await exportClaims({ tool: client.tool, origin, capsidSha, outDir });
     out(`exported to ${outDir} from ${origin} at capsid ${capsidSha}:`);

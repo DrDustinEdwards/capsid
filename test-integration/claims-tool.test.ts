@@ -3,15 +3,16 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { buildServer } from "../src/server";
+import { buildAdminServer } from "../src/server";
 import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types";
 import type { ClaimsExportPage } from "../src/job-claims-read";
 
-// The `claims` tool against a real D1 with migrations/0023 applied: what the admin
-// reads back from rows planted here, what a driver and a read-only caller are refused,
-// and the export's paging. The three tables are append-only (their triggers refuse
-// DELETE on a row), so nothing here cleans up: each test plants rows under its own
-// namespace and job ids, and filters by them.
+// The capsid_admin_read_claims tool (Capsid Admin) against a real D1 with
+// migrations/0023 applied: what the admin reads back from rows planted here, what a
+// driver and a read-only caller are refused, and the export's paging. The three
+// tables are append-only (their triggers refuse DELETE on a row), so nothing here
+// cleans up: each test plants rows under its own namespace and job ids, and filters
+// by them.
 
 const ADMIN = adminAgentForEmail("admin@example.com");
 const READ_ONLY = legacyAgent("read", "opkey:readonly0000");
@@ -38,12 +39,12 @@ interface Result {
 }
 
 async function callAs(caller: Agent, args: Record<string, unknown>): Promise<Result> {
-  const server = buildServer(env as never, caller);
+  const server = buildAdminServer(env as never, caller);
   const client = new Client({ name: "claims-tool", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    return (await client.callTool({ name: "claims", arguments: args })) as Result;
+    return (await client.callTool({ name: "capsid_admin_read_claims", arguments: args })) as Result;
   } finally {
     await client.close();
   }
@@ -103,7 +104,7 @@ async function plantJob(ns: string, job: string): Promise<void> {
   ]);
 }
 
-describe("the claims tool, as the admin", () => {
+describe("the capsid_admin_read_claims tool, as the admin", () => {
   it("aggregate: per agent and namespace, the claims, each check's agreement, and the touches with their waits", async () => {
     const { ns, job } = fresh("claims-agg");
     await plantJob(ns, job);
@@ -261,9 +262,12 @@ describe("the claims tool, as the admin", () => {
   });
 });
 
-describe("the claims tool, refused", () => {
-  // scanner-rule: CLAUDE.md, one enforcement point rule. claims is admin only in
-  // TOOL_GRANTS; the refusal must be checkScope's, before the handler reads anything.
+describe("the capsid_admin_read_claims tool, refused", () => {
+  // scanner-rule: CLAUDE.md, one enforcement point rule. capsid_admin_read_claims is
+  // admin_read in TOOL_GRANTS (the admin identity with the read grant); the refusal
+  // must be checkScope's, before the handler reads anything. The route serves Capsid
+  // Admin to the administrator alone, and the registrar refuses a non-admin again, which
+  // is what these calls on buildAdminServer prove.
   it("PLANT: a non-admin caller is refused claims", async () => {
     const { ns, job } = fresh("claims-refuse");
     await plantJob(ns, job);
@@ -275,12 +279,12 @@ describe("the claims tool, refused", () => {
     for (const args of calls) {
       const byDriver = await callAs(driver(), args);
       expect(byDriver.isError, `a write-grant driver read claims: ${byDriver.content[0].text}`).toBe(true);
-      expect(byDriver.content[0].text).toMatch(/'claims\.[a-z]+' is admin only and agent:sample-driver is not the admin/);
+      expect(byDriver.content[0].text).toMatch(/'capsid_admin_read_claims\.[a-z]+' is admin only and agent:sample-driver is not the admin/);
       expect(byDriver.content[0].text).not.toContain(job);
 
       const byReader = await callAs(READ_ONLY, args);
       expect(byReader.isError, `a read-only caller read claims: ${byReader.content[0].text}`).toBe(true);
-      expect(byReader.content[0].text).toMatch(/'claims' requires the write grant/);
+      expect(byReader.content[0].text).toMatch(/'capsid_admin_read_claims\.[a-z]+' is admin only and opkey:readonly0000 is not the admin/);
       expect(byReader.content[0].text).not.toContain(job);
     }
     // The admin reads the same job, so the refusals above were about the caller.

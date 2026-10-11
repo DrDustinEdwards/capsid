@@ -6,7 +6,8 @@ import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { sourceFile, toolBlocks } from "./source-files.ts";
+import { operationBlocks, sourceFile, toolBlocks } from "./source-files.ts";
+import { servedOperations } from "./served.ts";
 
 // The blast-radius suite. One plant per flag, driven through a real MCP connection
 // against a scoped caller, in both directions: the agent without the flag is refused,
@@ -57,68 +58,80 @@ async function callAs(caller: Agent, tool: string, args: Record<string, unknown>
 const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknown>; what: string }> = [
   {
     flag: "can_direct_write",
-    tool: "write_repo_file",
-    args: { namespace: "capsid", path: "src/thing.ts", content: "x", message: "m", mode: "direct" },
+    tool: "capsid_change_repo",
+    args: { action: "write_file", namespace: "capsid", path: "src/thing.ts", content: "x", message: "m", mode: "direct" },
     what: "a direct-mode commit, which lands on the default branch with no review",
   },
   {
     flag: "can_direct_write",
-    tool: "delete_repo_file",
-    args: { namespace: "capsid", path: "src/thing.ts", message: "m", mode: "direct" },
+    tool: "capsid_change_repo",
+    args: { action: "delete_file", namespace: "capsid", path: "src/thing.ts", message: "m", mode: "direct" },
     what: "a direct-mode delete, same branch and same absence of review",
   },
   {
     flag: "can_write_workflows",
-    tool: "write_repo_file",
-    args: { namespace: "capsid", path: ".github/workflows/ci.yml", content: "x", message: "m", allow_workflow_write: true },
+    tool: "capsid_change_repo",
+    args: { action: "write_file", namespace: "capsid", path: ".github/workflows/ci.yml", content: "x", message: "m", allow_workflow_write: true },
     what: "a workflow write, which edits what MEASURES the code",
   },
   {
     flag: "can_merge",
-    tool: "manage_pr",
-    args: { namespace: "capsid", number: 7, action: "merge" },
+    tool: "capsid_close_pr",
+    args: { action: "merge", namespace: "capsid", number: 7 },
     what: "a merge, which can trigger a deploy on a repo that deploys on push",
   },
   {
     flag: "can_merge",
-    tool: "manage_pr",
-    args: { namespace: "capsid", number: 7, action: "close" },
+    tool: "capsid_close_pr",
+    args: { action: "close", namespace: "capsid", number: 7 },
     what: "a pull request close, which deletes the head branch the way a merge does",
   },
   {
     flag: "can_merge",
-    tool: "delete_branch",
-    args: { namespace: "capsid", branch: "feature/other-agent", force: true },
+    tool: "capsid_close_pr",
+    args: { action: "tag", namespace: "capsid", tag: "v1.0.0" },
+    what: "a tag, which can start a deploy the way a merge does",
+  },
+  {
+    flag: "can_merge",
+    tool: "capsid_close_pr",
+    args: { action: "release", namespace: "capsid", tag: "v1.0.0" },
+    what: "a published release, which can start a deploy the way a merge does",
+  },
+  {
+    flag: "can_merge",
+    tool: "capsid_close_pr",
+    args: { action: "delete_branch", namespace: "capsid", branch: "feature/other-agent", force: true },
     what: "a forced branch delete, which lifts the open-PR refusal and so can delete another agent's PR head",
   },
   {
     flag: "can_comment_pr",
-    tool: "manage_pr",
-    args: { namespace: "capsid", number: 7, action: "comment", comment: "REVIEW: looks fine. APPROVE" },
+    tool: "capsid_open_pr",
+    args: { action: "comment", namespace: "capsid", number: 7, comment: "REVIEW: looks fine. APPROVE" },
     what: "a comment on a pull request, which is the one write a reviewer makes and is not a merge",
   },
   {
     flag: "can_dispatch",
-    tool: "ci_dispatch",
+    tool: "capsid_run_ci",
     args: { namespace: "capsid", workflow: "verify.yml", ref: "master" },
     what: "a workflow dispatch, which spends CI minutes and runs code with the repo's secrets in scope",
   },
   {
     flag: "can_touch_protected",
-    tool: "write_repo_file",
-    args: { namespace: "capsid", path: "package.json", content: "{}", message: "m" },
+    tool: "capsid_change_repo",
+    args: { action: "write_file", namespace: "capsid", path: "package.json", content: "{}", message: "m" },
     what: "a write to a protected path, which is what the improve loop may never touch at all",
   },
   {
     flag: "can_touch_protected",
-    tool: "write_repo_file",
-    args: { namespace: "capsid", path: "test/thing.test.ts", content: "x", message: "m" },
+    tool: "capsid_change_repo",
+    args: { action: "write_file", namespace: "capsid", path: "test/thing.test.ts", content: "x", message: "m" },
     what: "a write to a test, which is the measurement rather than the code",
   },
   {
     flag: "money_paths",
-    tool: "write_repo_file",
-    args: { namespace: "foxhound", path: "app/billing/charge.server.ts", content: "x", message: "m" },
+    tool: "capsid_change_repo",
+    args: { action: "write_file", namespace: "foxhound", path: "app/billing/charge.server.ts", content: "x", message: "m" },
     what: "a write to a billing path in foxhound, which is where a mistake costs real money",
   },
 ];
@@ -154,7 +167,8 @@ for (const plant of PLANTS) {
 test("PLANT: a driver IS allowed the pull-request path, which is the whole point of scoping it this way", async () => {
   // The shape docs/bootstrap.md prescribes has to work. A pr-mode write needs no flag.
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver(), "write_repo_file", {
+    const result = await callAs(driver(), "capsid_change_repo", {
+      action: "write_file",
       namespace: "capsid",
       path: "src/thing.ts",
       content: "x",
@@ -172,17 +186,18 @@ test("PLANT: a driver IS allowed a branch delete without force, which still refu
   // needs no flag. Holding it to can_merge would take branch cleanup away from every
   // driver.
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver(), "delete_branch", { namespace: "capsid", branch: "feature/mine" });
+    const result = await callAs(driver(), "capsid_close_pr", { action: "delete_branch", namespace: "capsid", branch: "feature/mine" });
     const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(text, /needs the .* flag/, `an unforced delete_branch was refused a flag for a driver: ${text}`);
-    assert.doesNotMatch(text, /unauthorized:/, `an unforced delete_branch was refused for a driver: ${text}`);
+    assert.doesNotMatch(text, /needs the .* flag/, `an unforced capsid_close_pr delete_branch was refused a flag for a driver: ${text}`);
+    assert.doesNotMatch(text, /unauthorized:/, `an unforced capsid_close_pr delete_branch was refused for a driver: ${text}`);
     assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the guard");
   });
 });
 
 test("PLANT: a driver cannot reach a namespace it was not minted for", async () => {
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver("capsid"), "write_repo_file", {
+    const result = await callAs(driver("capsid"), "capsid_change_repo", {
+      action: "write_file",
       namespace: "foxing",
       path: "src/thing.ts",
       content: "x",
@@ -195,9 +210,9 @@ test("PLANT: a driver cannot reach a namespace it was not minted for", async () 
 });
 
 test("PLANT: a namespace-scoped caller that omits the namespace is refused, not silently given all of them", async () => {
-  // `list` and `search` treat an omitted namespace as every namespace, so a narrowed
+  // capsid_find_docs (list, search) treats an omitted namespace as every namespace, so a narrowed
   // caller that left it out would read the whole store.
-  const result = await callAs(driver(), "list", {});
+  const result = await callAs(driver(), "capsid_find_docs", {});
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /must name a namespace/);
 
@@ -208,7 +223,7 @@ test("PLANT: a namespace-scoped caller that omits the namespace is refused, not 
   const client = new Client({ name: "blast-radius", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const allowed = (await client.callTool({ name: "list", arguments: { namespace: "capsid" } })) as ToolResult;
+  const allowed = (await client.callTool({ name: "capsid_find_docs", arguments: { namespace: "capsid" } })) as ToolResult;
   await client.close();
   await server.close();
   assert.notEqual(allowed.isError, true, allowed.content[0]?.text);
@@ -217,11 +232,11 @@ test("PLANT: a namespace-scoped caller that omits the namespace is refused, not 
 
 test("PLANT: an unscoped tool is refused even when the grant and the namespace are fine", async () => {
   const narrow = driver();
-  narrow.scopes.tools = ["read", "search", "write"];
-  const result = await callAs(narrow, "manage_pr", { namespace: "capsid", number: 7, action: "close" });
+  narrow.scopes.tools = ["capsid_read_doc", "capsid_find_docs", "capsid_write_doc"];
+  const result = await callAs(narrow, "capsid_close_pr", { action: "close", namespace: "capsid", number: 7 });
   assert.equal(result.isError, true);
   // The refusal names the action, which shows the registrar populates need.action.
-  assert.match(result.content[0].text, /not scoped to the 'manage_pr\.close' tool/);
+  assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.close' tool/);
 });
 
 // The derived half.
@@ -230,18 +245,28 @@ test("PLANT: an unscoped tool is refused even when the grant and the namespace a
 // registration, including tools added later.
 test("DERIVED: every write tool is on the enforcement point's path", () => {
   // The registrations are walked, and each write tool must be covered by the
-  // registrar (its requirement is stated) or carry its own check.
+  // registrar (its requirement is stated) or carry its own check. A served tool is a
+  // one-line registration that dispatches to operations (src/tools/surface.ts), so a
+  // tool's own check lives in the operation blocks it runs, and every one of them must
+  // carry it.
+  const ops = new Map(operationBlocks().map((b) => [b.name, b.body]));
+  const served = servedOperations();
+  const ownCheck = (tool: string): boolean => {
+    const bodies = served.filter((s) => s.tool === tool).map((s) => ops.get(s.op));
+    return bodies.length > 0 && bodies.every((body) => body !== undefined && /ctx\.scope\(/.test(body));
+  };
   const uncovered = toolBlocks()
     .filter((b) => TOOL_GRANTS[b.name] !== "read")
     .filter(
       (b) =>
         !Object.hasOwn(TOOL_GRANTS, b.name) ||
-        (TOOL_GRANTS[b.name] === "action" && !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) && !/ctx\.scope\(/.test(b.body))
+        (TOOL_GRANTS[b.name] === "action" && !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) && !ownCheck(b.name))
     )
     .map((b) => b.name);
   assert.deepEqual(uncovered, [], `these write tools are not covered by checkScope: ${uncovered.join(", ")}`);
-  // Vacuity: the walk found a real surface.
-  assert.ok(toolBlocks().length >= 30, "the tool walk collapsed");
+  // Vacuity: the walk found a real surface, and the operations it dispatches to.
+  assert.ok(toolBlocks().length >= 20, "the tool walk collapsed");
+  assert.ok(ops.size >= 30, "the operation walk collapsed");
 });
 
 // scanner-rule: CLAUDE.md, one enforcement point rule: a repo mutation carries its flags through guardedWrite.
@@ -251,7 +276,7 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
   // runs. A tool calling a github.ts mutation directly would skip the flag check
   // while still being write-gated at the registrar.
   const repo = sourceFile("tools/repo.ts");
-  const MUTATIONS = ["writeRepoFile(", "deleteRepoFile(", "createBranch(", "openPr(", "managePr(", "deleteBranch(", "ciDispatch("];
+  const MUTATIONS = ["writeRepoFile(", "deleteRepoFile(", "createBranch(", "openPr(", "managePr(", "deleteBranch(", "pruneMergedBranches(", "ciDispatch(", "tagRelease("];
   for (const mutation of MUTATIONS) {
     let from = 0;
     let seen = 0;
@@ -260,7 +285,7 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
       if (at === -1) break;
       from = at + mutation.length;
       // Skip the import list at the top of the file, which names each of them once.
-      if (at < repo.indexOf("export function registerRepoTools")) continue;
+      if (at < repo.indexOf("export function defineRepoOperations")) continue;
       seen += 1;
       const block = repo.slice(Math.max(0, at - 800), at);
       assert.match(
@@ -278,7 +303,8 @@ test("every flag is required by some path, so none of them is decoration", () =>
   // repoWriteFlags for some call, or be named by the document-side override.
   const produced = new Set<ScopeFlag>();
   for (const plant of PLANTS) {
-    for (const flag of repoWriteFlags(plant.tool, plant.args as { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean })) {
+    const action = typeof plant.args.action === "string" ? plant.args.action : undefined;
+    for (const flag of repoWriteFlags(plant.tool, action, plant.args as { path?: string; mode?: string; allow_workflow_write?: boolean; force?: boolean })) {
       produced.add(flag);
     }
   }

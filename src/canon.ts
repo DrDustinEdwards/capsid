@@ -9,11 +9,11 @@ import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged
 //
 // Canon is what every agent is told to trust: the portfolio rules, the layer model, each
 // namespace's core.md and its decisions log (capsid/repo-structure.md, layers 2 to 6
-// minus the typed docs). A driver's `write` to one is not applied. It becomes a row in
+// minus the typed docs). A driver's `capsid_write_doc` to one is not applied. It becomes a row in
 // canon_proposals (migrations/0034) and the write answers pending_review. The admin
 // approves it, applied as an ordinary write guarded on the body it was written against,
 // or rejects it, through the `canon_approve` and `canon_reject` controls (src/controls.ts,
-// the Portal and the controls tool). restore, delete and move on a canon path are
+// the Portal and capsid_admin_run_controls). restore, delete and move on a canon path are
 // refused for such a caller: a proposal carries a body, and those three do not.
 //
 // The admin's and the seat's own writes are not queued (callerIsSeat: admin or
@@ -49,7 +49,7 @@ export function canonGuarded(agent: Agent, namespace: string, path: string): boo
   return !callerIsSeat(agent) && isCanonPath(namespace, path);
 }
 
-/** The list as improve_status serves it, beside protected_paths. */
+/** The list as capsid_run_improve action status serves it, beside protected_paths. */
 export function servedCanonPaths(): Array<{ namespace: string; source: string; label: string }> {
   return CANON_RULES.map((r) => ({ namespace: r.namespace, source: r.pattern.source, label: r.label }));
 }
@@ -58,8 +58,8 @@ export function servedCanonPaths(): Array<{ namespace: string; source: string; l
 export function canonRefusal(tool: "restore" | "delete" | "move", namespace: string, path: string): string {
   return (
     `${namespace}/${path} is canon (capsid/repo-structure.md), and a ${tool} of it by a driver is refused. Nothing changed. ` +
-    `Canon changes by proposal: write the body you want with \`write\` and it is queued for the seat or Dustin to approve` +
-    (tool === "restore" ? " (read the version with `history` to get its body)." : ".")
+    `Canon changes by proposal: write the body you want with \`capsid_write_doc\` and it is queued for the seat or Dustin to approve` +
+    (tool === "restore" ? " (read the version with `capsid_read_doc` action `versions` to get its body)." : ".")
   );
 }
 
@@ -89,7 +89,7 @@ const DIRECTIVE_OPENERS: readonly string[] = [
   "every session must",
   "sessions must",
 ];
-// Or an imperative naming a served tool: "call write ...", "run `jobs` ...".
+// Or an imperative naming a served tool: "call capsid_write_doc ...", "run `capsid_work_jobs` ...".
 const TOOL_IMPERATIVE = /^(call|run|use|invoke)\s+`?([a-z_]+)`?(\s|$)/;
 
 function stripLead(line: string): string {

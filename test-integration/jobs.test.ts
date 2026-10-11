@@ -1613,7 +1613,7 @@ describe("edit", () => {
     const client = new Client({ name: "jobs-edit", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({ name: "jobs", arguments: { action: "list", id } })) as { content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", id } })) as { content: Array<{ text: string }> };
     await client.close();
     const listed = JSON.parse(result.content[0].text) as { versions?: Array<Record<string, unknown>>; jobs: Array<Record<string, unknown>> };
     expect(listed.jobs[0].title).toBe("second title");

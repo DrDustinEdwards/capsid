@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
 import type { OpsStaleJob, StaleRule } from "./ops-types";
 
-// The stale view (capsid/research/design-stale-jobs.md, D5): `jobs` action list with
+// The stale view (capsid/research/design-stale-jobs.md, D5): `capsid_work_jobs` action list with
 // stale: true. Three rules, each a fact the Worker already holds, so reading the view
 // costs no GitHub reads:
 //   unchanged: a blocked or claimed job whose row has not changed in 3 days;
@@ -149,7 +149,7 @@ export interface StaleJobsResult {
 
 /**
  * The stale view. The caller's namespace scope is checked before this runs, as for
- * every jobs list (src/tools/jobs.ts); a caller scoped to one namespace must name it
+ * every capsid_work_jobs action list (src/tools/jobs.ts); a caller scoped to one namespace must name it
  * (the registrar's namespaceRefusal), and an omitted namespace means every namespace.
  */
 export async function staleJobs(env: Env, now: Date, opts: { namespace?: string } = {}): Promise<StaleJobsResult> {

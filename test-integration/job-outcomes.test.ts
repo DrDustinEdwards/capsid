@@ -157,7 +157,7 @@ describe("job outcomes", () => {
         const id = (await post({ title: `evidence as ${form}` })).job!.id;
         expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
         const result = (await client.callTool({
-          name: "jobs",
+          name: "capsid_work_jobs",
           arguments: { action: "complete", namespace: "capsid", id, result_summary: "done", evidence: sent },
         })) as { isError?: boolean; content: Array<{ text: string }> };
         expect(result.isError, `${form}: ${result.content[0]?.text}`).toBeFalsy();

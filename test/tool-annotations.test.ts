@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hintsFor, TOOL_HINTS } from "../src/tool-annotations.ts";
-import { requiredGrant } from "../src/scope.ts";
-import { sourceFile, sourceFiles, toolBlocks } from "./source-files.ts";
+import { operationBlocks, sourceFile, sourceFiles, type ToolBlock } from "./source-files.ts";
+import { servedOperations } from "./served.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { buildServer } from "../src/server.ts";
+import { buildAdminServer, buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -12,17 +12,30 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 //
 // An annotation is a hint a client acts on, so a wrong one is worse than a missing
 // one: `readOnlyHint: true` on a tool that writes tells a client it need not ask.
-// src/tool-annotations.ts is a cache of two facts that live in the handlers, and
-// this file checks it against them.
+// src/tool-annotations.ts is a cache of facts that live in the handlers, and this file
+// checks it against them. A served tool dispatches to operations (src/tools/surface.ts),
+// so a tool's facts are the union of what its actions' operations do.
 //
 // Every scan below fails in both directions and carries a count guard, because
 // "0 tools disagreed" and "0 tools were read" are otherwise indistinguishable.
 
-// A tool is write-gated iff src/scope.ts says a call needs the write grant.
-// TOOL_GRANTS is what the registrar enforces at runtime, and test/invariants.test.ts
-// separately proves TOOL_GRANTS against the handlers (every mutating tool is
-// write-gated, and nothing marked read contains mutating SQL).
-const isWriteGated = (tool: string) => requiredGrant(tool) !== "read";
+// A tool is write-gated iff some action of it needs more than the read grant
+// (src/scope.ts TOOL_GRANTS and TOOL_ACTION_GRANTS; "admin_read" is the admin identity
+// with the read grant). test/invariants.test.ts separately proves those tables against
+// the operations (every mutating action is write-gated, and nothing marked read runs
+// mutating SQL).
+const SERVED = servedOperations();
+const READ_ONLY = ["read", "admin_read"];
+const isWriteGated = (tool: string) => SERVED.some((s) => s.tool === tool && !READ_ONLY.includes(s.requirement));
+
+// The operation blocks each served tool runs, through all its actions.
+const BLOCKS = new Map(operationBlocks().map((b) => [b.name, b]));
+function toolOps(tool: string, opts: { except?: Record<string, string> } = {}): ToolBlock[] {
+  return SERVED.filter((s) => s.tool === tool && !Object.hasOwn(opts.except ?? {}, `${s.tool}.${s.action}`))
+    .map((s) => BLOCKS.get(s.op))
+    .filter((b): b is ToolBlock => b !== undefined);
+}
+const TOOLS = [...new Set(SERVED.map((s) => s.tool))];
 
 // A write-gated handler is destructive iff it can overwrite or remove state that
 // already exists. Matched by what the handler does, never by its name, so the next
@@ -55,20 +68,37 @@ const DESTRUCTIVE = [
   // The controls' perform: it can revoke an agent, fail a job or remove a site, through
   // the mutators src/controls.ts calls.
   /\bperformControl\(/,
+  // set_site_key replaces a site's key on its Worker and on Carrel (src/site-key.ts).
+  /\bsetSiteKey\(/,
 ];
 
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
 
+// Tool actions that run an operation the scan reads as destructive, and are not, with
+// the reason. The operation is shared with an action that is: manage_pr merges and
+// closes under capsid_close_pr, and only comments under capsid_open_pr.
+const NOT_DESTRUCTIVE: Record<string, string> = {
+  "capsid_open_pr.comment": "manage_pr with action comment posts a comment and changes nothing else",
+};
+
+// A tool is destructive iff some action of it runs a destructive operation.
+const destructiveTool = (tool: string) => isWriteGated(tool) && toolOps(tool, { except: NOT_DESTRUCTIVE }).some((b) => matches(b.body, DESTRUCTIVE));
+
 // The annotations a client receives, read from tools/list rather than from the
 // registration source.
+// Both servers: Capsid and Capsid Admin.
 async function servedAnnotations(): Promise<Map<string, Record<string, unknown> | undefined>> {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
-  const client = new Client({ name: "tool-annotations", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const { tools } = await client.listTools();
-  await client.close();
-  return new Map(tools.map((t) => [t.name, t.annotations as Record<string, unknown> | undefined]));
+  const out = new Map<string, Record<string, unknown> | undefined>();
+  for (const build of [buildServer, buildAdminServer]) {
+    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+    const client = new Client({ name: "tool-annotations", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { tools } = await client.listTools();
+    await client.close();
+    for (const t of tools) out.set(t.name, t.annotations as Record<string, unknown> | undefined);
+  }
+  return out;
 }
 
 test("PLANT: every served tool carries exactly its hint table entry, and the table names only served tools", async () => {
@@ -96,22 +126,29 @@ test("PLANT: the served readOnlyHint is exactly the negation of the write gate",
 // mutators test/write-invariants.test.ts drives are also checked by name below.
 test("PLANT: every mutating tool is served with destructiveHint true", async () => {
   const served = await servedAnnotations();
-  const mutating = toolBlocks().filter((b) => isWriteGated(b.name) && matches(b.body, DESTRUCTIVE));
+  const mutating = TOOLS.filter(destructiveTool);
   assert.ok(mutating.length >= 10, `the destructive scan found only ${mutating.length} mutating tools; it is broken`);
-  const understated = mutating.filter((b) => served.get(b.name)?.destructiveHint !== true).map((b) => b.name);
+  const understated = mutating.filter((name) => served.get(name)?.destructiveHint !== true);
   assert.deepEqual(understated, [], `these tools can overwrite or remove and do not say so: ${understated.join(", ")}`);
-  for (const tool of ["write", "delete", "restore", "move", "lint"]) {
+  for (const tool of ["capsid_write_doc", "capsid_delete_doc", "capsid_lint_namespace"]) {
     assert.equal(served.get(tool)?.destructiveHint, true, `${tool} overwrites or removes a document and is not served as destructive`);
+  }
+});
+
+test("each not-destructive override still names an action whose operation the scan reads as destructive", () => {
+  for (const [key, reason] of Object.entries(NOT_DESTRUCTIVE)) {
+    const [tool, action] = key.split(".");
+    const served = SERVED.find((s) => s.tool === tool && s.action === action);
+    assert.ok(served, `${key} is an override with no served action (${reason})`);
+    const block = BLOCKS.get(served.op);
+    assert.ok(block && matches(block.body, DESTRUCTIVE), `${key} no longer runs a destructive operation; drop its override (${reason})`);
   }
 });
 
 test("PLANT: no read-only tool is served as destructive, and no additive tool overstates", async () => {
   // The negative direction: a tool that mutates nothing must not claim to be destructive.
   const served = await servedAnnotations();
-  const overstated = toolBlocks()
-    .filter((b) => !matches(b.body, DESTRUCTIVE))
-    .filter((b) => served.get(b.name)?.destructiveHint === true)
-    .map((b) => b.name);
+  const overstated = TOOLS.filter((name) => !destructiveTool(name)).filter((name) => served.get(name)?.destructiveHint === true);
   assert.deepEqual(overstated, [], `these tools claim to be destructive and mutate nothing: ${overstated.join(", ")}`);
   for (const [name, hints] of served) {
     if (hints?.readOnlyHint) assert.equal(hints.destructiveHint, false, `${name} is read-only and cannot be destructive`);
@@ -158,7 +195,9 @@ test("PLANT: every hint table entry states idempotent and openWorld explicitly",
 test("PLANT: every read-only tool is served as idempotent", async () => {
   const served = await servedAnnotations();
   const readOnly = [...served].filter(([, hints]) => hints?.readOnlyHint === true);
-  assert.ok(readOnly.length >= 10, `only ${readOnly.length} read-only tools served; the split is broken`);
+  // Eight of the 22: find, read, start a session, read and inspect a repo, and the three
+  // admin reads.
+  assert.ok(readOnly.length >= 6, `only ${readOnly.length} read-only tools served; the split is broken`);
   const wrong = readOnly.filter(([, hints]) => hints?.idempotentHint !== true).map(([name]) => name);
   assert.deepEqual(wrong, [], `these read-only tools are not served as idempotent: ${wrong.join(", ")}`);
 });
@@ -180,8 +219,9 @@ const NOT_NETWORK: Record<string, string> = {
   resolveRepo: "reads the namespaces table in D1",
 };
 
-// Tools that reach GitHub through another module. `via` is the call the block makes,
-// and `evidence` is where that module reaches GitHub, so a stale entry fails.
+// Operations that reach GitHub, Cloudflare or a site through another module. `via` is the
+// call the block makes, and `evidence` is where that module makes the request, so a
+// stale entry fails.
 const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence: Array<{ file: string; pattern: RegExp }> }> = {
   jobs: {
     reason: "complete and fail check their evidence against GitHub, and start_seat sends a repository dispatch",
@@ -199,6 +239,31 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
       { file: "improve-run.ts", pattern: /\btickRuns\(/ },
       { file: "improve/tick.ts", pattern: /\bdispatchWorkflow\(/ },
     ],
+  },
+  whats_next: {
+    reason: "reads every mapped repo's open pull requests, their check runs and their mergeability",
+    via: /\bwhatsNext\(/,
+    evidence: [{ file: "whats-next.ts", pattern: /\bghFetch\(/ }],
+  },
+  workers_builds: {
+    reason: "reads the account's Worker scripts and a Worker's builds from the Cloudflare API",
+    via: /\blistBuilds\(/,
+    evidence: [{ file: "workers-builds.ts", pattern: /\bcfGet\(/ }],
+  },
+  workers_build_logs: {
+    reason: "reads a build's log from the Cloudflare API",
+    via: /\bbuildLogs\(/,
+    evidence: [{ file: "workers-builds.ts", pattern: /\bcfGet\(/ }],
+  },
+  set_site_key: {
+    reason: "sets a secret on two Workers through the Cloudflare API",
+    via: /\bsetSiteKey\(/,
+    evidence: [{ file: "site-key.ts", pattern: /\bfetchImpl\(/ }],
+  },
+  site_check: {
+    reason: "fetches the site's health route, a page and the 401 probe path",
+    via: /\bsiteCheck\(/,
+    evidence: [{ file: "site-check.ts", pattern: /\bfetchImpl\(/ }],
   },
 };
 
@@ -224,11 +289,12 @@ function callsOutsideDirectly(block: { body: string; file: string }): boolean {
 
 test("PLANT: openWorldHint is served true exactly for the tools that reach GitHub or Cloudflare", async () => {
   const served = await servedAnnotations();
-  const blocks = toolBlocks();
+  const blocks = [...BLOCKS.values()];
   const direct = blocks.filter(callsOutsideDirectly).map((b) => b.name);
-  // Vacuity: the thirteen repo tools and lint call GitHub directly.
-  assert.ok(direct.length >= 14, `the direct scan found only ${direct.length} open-world tools; it is broken`);
-  const expected = new Set([...direct, ...Object.keys(OPEN_WORLD_THROUGH)]);
+  // Vacuity: the repo operations and lint call GitHub directly.
+  assert.ok(direct.length >= 14, `the direct scan found only ${direct.length} open-world operations; it is broken`);
+  const openOps = new Set([...direct, ...Object.keys(OPEN_WORLD_THROUGH)]);
+  const expected = new Set(SERVED.filter((s) => openOps.has(s.op)).map((s) => s.tool));
   const understated = [...served].filter(([name, h]) => expected.has(name) && h?.openWorldHint !== true).map(([n]) => n);
   const overstated = [...served].filter(([name, h]) => !expected.has(name) && h?.openWorldHint !== false).map(([n]) => n);
   assert.deepEqual(understated, [], `these tools reach GitHub or Cloudflare and are not served as open world: ${understated.join(", ")}`);
@@ -238,10 +304,10 @@ test("PLANT: openWorldHint is served true exactly for the tools that reach GitHu
 });
 
 test("PLANT: each open-world override is still needed and still true", () => {
-  const blocks = new Map(toolBlocks().map((b) => [b.name, b]));
+  const blocks = BLOCKS;
   for (const [tool, { reason, via, evidence }] of Object.entries(OPEN_WORLD_THROUGH)) {
     const block = blocks.get(tool);
-    assert.ok(block, `${tool} is an override with no registration`);
+    assert.ok(block, `${tool} is an override with no operation`);
     assert.equal(callsOutsideDirectly(block), false, `${tool} now calls GitHub directly; drop its override (${reason})`);
     assert.match(block.body, via, `${tool} no longer makes the call its override names (${reason})`);
     for (const { file, pattern } of evidence) {
@@ -267,28 +333,20 @@ test("PLANT: every name exempted as not network is defined in an outside module 
 // idempotent by the test above; every tool behind the write gate is here, and the
 // served hint must match.
 const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }> = {
-  write: { idempotent: false, reason: "append adds again, and every overwrite snapshots a new version" },
-  delete: { idempotent: true, reason: "a repeat finds nothing to delete and is refused" },
-  move: { idempotent: true, reason: "a repeat finds nothing at the source path and is refused" },
-  restore: { idempotent: false, reason: "each restore snapshots the live body first, adding a version" },
-  lint: { idempotent: false, reason: "a second report the same day snapshots the first" },
-  register_namespace: { idempotent: false, reason: "a repeat is refused, but the create is an INSERT the scan below cannot tell from a repeating one" },
-  update_namespace: { idempotent: true, reason: "sets the mapping to the value given; a repeat sets the same mapping" },
-  delete_namespace: { idempotent: true, reason: "a repeat finds no namespace and is refused" },
-  write_repo_file: { idempotent: false, reason: "every call is a new commit, or a new pull request in pr mode" },
-  create_branch: { idempotent: true, reason: "GitHub refuses a branch that exists" },
-  open_pr: { idempotent: false, reason: "after the first is closed or merged, a repeat opens another" },
-  delete_repo_file: { idempotent: true, reason: "a repeat finds the file gone and is refused" },
-  manage_pr: { idempotent: false, reason: "comment posts a new comment on every call" },
-  delete_branch: { idempotent: true, reason: "a repeat finds the branch gone and is refused" },
-  ci_dispatch: { idempotent: false, reason: "every call starts a new workflow run" },
-  improve_run: { idempotent: false, reason: "run advances runs a step; mint_operator_key issues a new key" },
-  jobs: { idempotent: false, reason: "post creates a job on every call" },
-  agents: { idempotent: false, reason: "mint issues a new credential on every call" },
-  claims: { idempotent: true, reason: "the handler only reads" },
-  ops_snapshot: { idempotent: true, reason: "the handler only reads one KV value" },
-  cloudflare_config: { idempotent: true, reason: "the handler only reads Cloudflare configuration" },
-  controls: { idempotent: false, reason: "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated" },
+  capsid_write_doc: { idempotent: false, reason: "append adds again, every overwrite snapshots a new version, and each restore snapshots the live body first" },
+  capsid_delete_doc: { idempotent: true, reason: "a repeat finds nothing to delete and is refused" },
+  capsid_lint_namespace: { idempotent: false, reason: "a second report the same day snapshots the first" },
+  capsid_change_repo: { idempotent: false, reason: "every file write is a new commit, or a new pull request in pr mode" },
+  capsid_open_pr: { idempotent: false, reason: "a comment posts a new comment on every call, and after a close a repeat open opens another" },
+  capsid_close_pr: { idempotent: false, reason: "a merge or close of a reopened pull request is not a no-op" },
+  capsid_run_ci: { idempotent: false, reason: "every call starts a new workflow run" },
+  capsid_work_jobs: { idempotent: false, reason: "post creates a job on every call" },
+  capsid_run_improve: { idempotent: false, reason: "run advances runs a step" },
+  capsid_admin_manage_namespaces: { idempotent: false, reason: "register creates one on every call it is not refused" },
+  capsid_admin_manage_agents: { idempotent: false, reason: "mint issues a new credential on every call" },
+  capsid_admin_run_controls: { idempotent: false, reason: "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated" },
+  capsid_admin_control_improve: { idempotent: false, reason: "mint_operator_key issues a new key on every call" },
+  capsid_admin_set_site_key: { idempotent: false, reason: "every call mints a different key" },
 };
 
 // What creates something new on every call, matched in the block by what it does. An
@@ -322,8 +380,8 @@ test("PLANT: every write-gated tool has an idempotence entry with a reason, and 
 
 test("PLANT: no tool that creates something new on every call is served as idempotent", async () => {
   const served = await servedAnnotations();
-  const creators = toolBlocks().filter((b) => matches(b.body, NEW_EACH_CALL) || insertsFresh(b.body));
-  assert.ok(creators.length >= 8, `the scan found only ${creators.length} tools that create on every call; it is broken`);
-  const overstated = creators.filter((b) => served.get(b.name)?.idempotentHint !== false).map((b) => b.name);
+  const creators = TOOLS.filter((tool) => toolOps(tool).some((b) => matches(b.body, NEW_EACH_CALL) || insertsFresh(b.body)));
+  assert.ok(creators.length >= 6, `the scan found only ${creators.length} tools that create on every call; it is broken`);
+  const overstated = creators.filter((name) => served.get(name)?.idempotentHint !== false);
   assert.deepEqual(overstated, [], `these tools create something on every call and claim to be idempotent: ${overstated.join(", ")}`);
 });

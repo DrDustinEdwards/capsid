@@ -224,7 +224,7 @@ export interface OpsJob {
   // "mismatch" withholds it (command is null), "legacy-unsigned" is a block from before
   // signing. Null for a job that is not blocked.
   command_signature: "verified" | "legacy-unsigned" | "mismatch" | "unconfigured" | null;
-  // A blocked job that asks something (jobs block with question: true), answered by a
+  // A blocked job that asks something (capsid_work_jobs action block with question: true), answered by a
   // resume note, rather than one waiting on a command to be run. Optional so a feed written
   // before it, and the app's sample data, stay valid.
   question?: boolean;
@@ -386,8 +386,8 @@ export interface SharedCodeView {
   packages: SharedCodePackage[];
 }
 
-// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, improve_status's
-// needs_dustin, and the Portal's Needs you page all carry this one shape.
+// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_run_improve action
+// status's needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";
 export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report";
 
@@ -581,7 +581,7 @@ export type PortalAction =
 //   unpark_job    { id, reason?, undo? }  a parked job goes back to the queue; the reason
 //                 is recorded in the click row only (unpark itself takes none)
 //   pr_close      { namespace, number, reason, repo? }   reason required; closes an open
-//                 pull request as manage_pr close does, head branch cleanup included
+//                 pull request as capsid_close_pr action close does, head branch cleanup included
 //   approve_pr    { namespace, prs, shas, repo?, confirm?, reason?, undo? }   prs and shas
 //                 comma-separated, in the same order: each pull request at the head sha
 //                 that was reviewed. Records approvals (src/pr-approvals.ts) and never
@@ -705,8 +705,8 @@ export interface PortalActivity {
 }
 
 // ---------------------------------------------------------------------------
-// Claims apart from verified outcomes (migrations/0023_job_claims.sql). The `claims`
-// tool and GET /portal/api/claims return these, from the same readers
+// Claims apart from verified outcomes (migrations/0023_job_claims.sql). The
+// `capsid_admin_read_claims` tool and GET /portal/api/claims return these, from the same readers
 // (src/job-claims-read.ts). Every column is as stored: JSON columns stay JSON text,
 // and NULL stays null, because NULL is not zero.
 
@@ -887,7 +887,7 @@ export interface WebAnalyticsSite {
 }
 
 // GET /portal/api/stale -> PortalStale. The jobs that look stuck, from the reader behind
-// `jobs` action list with stale: true (src/stale-jobs.ts), over every namespace. rule is
+// `capsid_work_jobs` action list with stale: true (src/stale-jobs.ts), over every namespace. rule is
 // which test the job met, the most actionable first: prs-settled (blocked, and every pull
 // request it names is merged or closed), resumed-not-completed (the merge-resume step
 // resumed it 24 hours or more ago and it is not done), unchanged (blocked or claimed, and
@@ -1003,7 +1003,7 @@ export interface PortalConvergence {
   sites: ConvergenceSite[];
 }
 
-// THE OVERNIGHT PLAN AND THE MORNING DIGEST (src/overnight-plan.ts): the `jobs` list views
+// THE OVERNIGHT PLAN AND THE MORNING DIGEST (src/overnight-plan.ts): the `capsid_work_jobs` action list views
 // "plan" and "digest", and the Portal's GET /portal/api/plan and GET /portal/api/digest,
 // which serve the same readers.
 

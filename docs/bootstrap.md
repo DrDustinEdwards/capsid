@@ -144,11 +144,11 @@ waiting.
 
 ## 7. Minting a read-only key
 
-`improve_run` has an action for it, so the derivation and the hashing are not done
+`capsid_admin_control_improve` has an action for it (on Capsid Admin, with a recent sign-in from an OAuth session), so the derivation and the hashing are not done
 by hand:
 
 ```
-improve_run(action: "mint_operator_key")
+capsid_admin_control_improve(action: "mint_operator_key")
 ```
 
 It returns the key once, prints the hash, and prints the exact command to
@@ -165,12 +165,13 @@ its own audit identity, its own revocation. `OPERATOR_KEY_HASH` still works and
 keeps every authority it has today. Agents replace it, one credential at
 a time. The old key is removed when nothing needs it any more.
 
-Mint one as the admin (an OAuth session on `/mcp`, or a write-grant operator key
-on `/ops/mcp`). A minted agent cannot mint another. An agent that can
+Mint one as the admin with Capsid Admin's `capsid_admin_manage_agents` (an OAuth
+session on `/mcp/admin`, which needs a sign-in in the last 15 minutes, or the admin's
+key on `/ops/mcp/admin`). A minted agent cannot mint another. An agent that can
 widen itself has no scope.
 
 ```
-agents(action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"],
+capsid_admin_manage_agents(action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"],
        grants: ["read", "write"])
 ```
 
@@ -227,11 +228,11 @@ it to what the work actually needs and no further:
 | `money_paths` | no | no |
 
 **`repos` is derived, not typed.** The script reads the namespace mapping from the
-live `namespaces` tool and sets the axis from it, so a driver reaches its own repos
+live `capsid_find_docs` action `namespaces` and sets the axis from it, so a driver reaches its own repos
 and nothing else. It refuses to mint a driver for a namespace that maps to no repos
 rather than falling back to the `*` wildcard, because a wildcard can never refuse
 and a mint is the wrong place to discover that. Mapping a namespace is admin-only
-(`register_namespace` and `update_namespace`), so the boundary and the axis are set
+(`capsid_admin_manage_namespaces` action `register` and `capsid_admin_manage_namespaces` action `update`), so the boundary and the axis are set
 by different calls and neither is editable by the credential they bind.
 
 **The two exceptions are named rather than left as a general no**, because a table
@@ -240,7 +241,7 @@ The seat granted them on 2026-09-11, each for a stated reason: in both repos the
 protected paths are the subject of the driver's jobs rather than something near
 them, since tests, CI and `scripts/` are what that work edits, and in claude-skills
 a skill's workflow is part of the artifact being shipped. Every other driver holds
-none. `improve_status` and Capsid Portal list what each agent actually holds, so the
+none. `capsid_run_improve` action `status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
 A driver opens pull requests and never merges them. A driver's pull request is
@@ -250,8 +251,8 @@ driver `can_merge` would bypass both. `can_direct_write` is off even for the sea
 direct commit to a default branch on a repo that deploys on push is a deploy, and a
 deploy is a gate.
 
-Widen one later with `agents(action: "update_scopes", ...)`, which names the axes it
-changes and leaves the rest. Revoke with `agents(action: "revoke", name: ...)`: the
+Widen one later with `capsid_admin_manage_agents(action: "update_scopes", ...)`, which names the axes it
+changes and leaves the rest. Revoke with `capsid_admin_manage_agents(action: "revoke", name: ...)`: the
 row stays, so the audit rows that agent wrote still resolve to what it was allowed
 to do, and its key stops working immediately.
 
@@ -263,7 +264,7 @@ be cut over in one sitting. The order that works:
 
 1. Mint the six agents below, as the admin. Each returns its key once; write each
    into `~/.capsid/agent-<name>.key` on the machine that will use it.
-2. Point one driver at its key and let it work a job. `improve_status` shows
+2. Point one driver at its key and let it work a job. `capsid_run_improve` action `status` shows
    `last_seen` moving, which is how to know the agent is the credential in use and
    not the operator key underneath it.
 3. When every machine has an agent and `last_seen` proves it, remove the operator
@@ -279,9 +280,9 @@ changes once it is gone is how you mint, and that is the next section.
 ### Minting once no operator key exists
 
 `scripts/mint-agents.mjs` authenticates only with `CAPSID_OPERATOR_KEY` as a bearer
-on `/ops/mcp` and exits 2 without it, so with the secret deleted the script cannot
-run at all. The OAuth admin session on `/mcp` is then the only admin, and `agents`
-action `mint` works there, but it returns the key in its response, which puts a live
+on `/ops/mcp` and `/ops/mcp/admin` (where it mints) and exits 2 without it, so with the secret deleted the script cannot
+run at all. The OAuth admin session on `/mcp/admin` is then the only admin, and
+`capsid_admin_manage_agents` action `mint` works there, but it returns the key in its response, which puts a live
 credential in a chat transcript or a client log. That is the thing the script exists
 to avoid: it writes the key straight to `~/.capsid/agent-<name>.key` at mode 0600
 and reports only a 12-hex fingerprint.
@@ -296,13 +297,13 @@ CAPSID_OPERATOR_KEY=<the key> node scripts/mint-agents.mjs --namespace <ns> --ap
 npx wrangler secret delete OPERATOR_KEY_HASH
 ```
 
-**`improve_run` action `mint_operator_key` is not a shortcut for this.** It issues a
+**`capsid_admin_control_improve` action `mint_operator_key` is not a shortcut for this.** It issues a
 `ro:` entry, and a read-only key is not admin (`admin` is `grant === "write"` in
 `src/agents.ts`), so a key minted that way cannot mint an agent. It exists for the
 read-only tier and nothing else.
 
 **What it would take to mint over OAuth instead**, stated rather than built: the
-`agents` tool would need a mode that writes the key somewhere other than its
+`capsid_admin_manage_agents` tool would need a mode that writes the key somewhere other than its
 response, and there is nowhere good. Capsid Portal is admin-gated and would be the
 natural home, but it never mints by ruling, and a browser download is not mode 0600
 on the machine that needs it. A device-code flow in `scripts/mint-agents.mjs` that
@@ -334,12 +335,12 @@ quietly having no driver agent and no key file.
 The six, as calls:
 
 ```
-agents(action: "mint", name: "capsid-driver",        kind: "driver", namespaces: ["capsid"],        grants: ["read", "write"])
-agents(action: "mint", name: "dustinedwards-driver", kind: "driver", namespaces: ["dustinedwards"], grants: ["read", "write"])
-agents(action: "mint", name: "foxhound-driver",      kind: "driver", namespaces: ["foxhound"],      grants: ["read", "write"])
-agents(action: "mint", name: "foxing-driver",        kind: "driver", namespaces: ["foxing"],        grants: ["read", "write"])
-agents(action: "mint", name: "germomics-driver",     kind: "driver", namespaces: ["germomics"],     grants: ["read", "write"])
-agents(action: "mint", name: "seat",                 kind: "seat",   namespaces: ["*"],             grants: ["read", "write"], flags: { can_merge: true })
+capsid_admin_manage_agents(action: "mint", name: "capsid-driver",        kind: "driver", namespaces: ["capsid"],        grants: ["read", "write"])
+capsid_admin_manage_agents(action: "mint", name: "dustinedwards-driver", kind: "driver", namespaces: ["dustinedwards"], grants: ["read", "write"])
+capsid_admin_manage_agents(action: "mint", name: "foxhound-driver",      kind: "driver", namespaces: ["foxhound"],      grants: ["read", "write"])
+capsid_admin_manage_agents(action: "mint", name: "foxing-driver",        kind: "driver", namespaces: ["foxing"],        grants: ["read", "write"])
+capsid_admin_manage_agents(action: "mint", name: "germomics-driver",     kind: "driver", namespaces: ["germomics"],     grants: ["read", "write"])
+capsid_admin_manage_agents(action: "mint", name: "seat",                 kind: "seat",   namespaces: ["*"],             grants: ["read", "write"], flags: { can_merge: true })
 ```
 
 Five drivers, one per namespace, each with write on its own namespace and no
@@ -352,7 +353,7 @@ stay off for all six until something concrete needs one, at which point
 
 ### Jobs can say what they need
 
-`jobs(action: "post", ..., required_flags: ["can_merge"])` records the blast radius
+`capsid_work_jobs(action: "post", ..., required_flags: ["can_merge"])` records the blast radius
 the work needs. The claim refuses a driver that does not hold those flags and
 leaves the job queued for one that does, so the mismatch surfaces at the claim
 rather than four hours later when the lease expires.
@@ -367,7 +368,7 @@ Each item exists because of something that went wrong when it was not checked.
 - [ ] **A scores document exists for every project on the roster**, with an
       Anchors section and a Secondary section. A project without one is refused;
       there is no opt-in by existing.
-- [ ] **Every anchor block is pinned.** `improve_status` reports `anchor_pinned`
+- [ ] **Every anchor block is pinned.** `capsid_run_improve` action `status` reports `anchor_pinned`
       per project. An unpinned project refuses every run.
 - [ ] **Every declared secondary metric is one something actually reports.** Two
       were declared everywhere and emitted as null on every run for weeks.
@@ -387,15 +388,15 @@ Each item exists because of something that went wrong when it was not checked.
       the literal run id `shakedown`: the expected terminal answer is a refusal of
       the unknown run, which proves the signature verified end to end.
 - [ ] **The budget caps are set** for CI minutes and model spend, and
-      `improve_status` shows them.
+      `capsid_run_improve` action `status` shows them.
 - [ ] **No project is paused for a reason nobody has read.** A pause key has no
       expiry on purpose.
 
 ### Switching it on
 
 ```
-improve_run(action: "mode", value: "subscription")   # a human session drives it
-improve_run(action: "mode", value: "api")            # the Worker drives it
+capsid_admin_control_improve(action: "mode", value: "subscription")   # a human session drives it
+capsid_admin_control_improve(action: "mode", value: "api")            # the Worker drives it
 ```
 
 Start with the human-driven mode. It does everything except talk to a model: it
@@ -405,8 +406,8 @@ document. Nothing is spent, and the signed task document is there to read.
 ### Switching it off
 
 ```
-improve_run(action: "mode", value: "off")
-improve_run(action: "pause", namespace: "all", reason: "why")
+capsid_admin_control_improve(action: "mode", value: "off")
+capsid_admin_control_improve(action: "pause", namespace: "all", reason: "why")
 ```
 
 `off` is also what an unset key, an unrecognised value or an unreadable store
@@ -476,9 +477,9 @@ node scripts/schedule-drivers.mjs --remove --namespace capsid --apply
   to answer a prompt, so a driver started without flags is denied its first tool call;
   every nightly run did nothing until 2026-09-23. `driverArgs()` passes
   `--permission-mode auto` and `--permission-prompts none`, pre-approves the Capsid
-  read tools plus `jobs` and `improve_run`, and denies `npm run ship`, `npm run deploy`,
-  `wrangler deploy`, any force push, and the claude.ai Capsid connector, which reaches
-  `/mcp` as the admin. It adds `C:\Users\email\dev\worktrees` as a working directory,
+  read tools plus `capsid_work_jobs` and `capsid_run_improve`, and denies `npm run ship`, `npm run deploy`,
+  `wrangler deploy`, any force push, and the claude.ai Capsid and Capsid Admin connectors, which
+  reach `/mcp` and `/mcp/admin` as the admin. It adds `C:\Users\email\dev\worktrees` as a working directory,
   because a read outside the working directory is denied in a `-p` run. The scheduled
   task's command did not change; the task picks this up from the checkout it runs.
 

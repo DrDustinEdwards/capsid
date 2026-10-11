@@ -6,8 +6,8 @@ import { runBackup } from "./backup";
 import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
 import type { Env, Props } from "./env";
-import { buildServer } from "./server";
-import { serveMcp } from "./mcp-handler";
+import { buildAdminServer, buildServer } from "./server";
+import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";
 import { gateRegistration, REGISTER_PATH } from "./dcr";
 import { chicagoHour } from "./improve-schema";
 import { openRuns, tickRuns } from "./improve-run";
@@ -39,11 +39,19 @@ const apiHandler = {
       });
     }
     // The admin agent holds every scope; the email Access verified is the audit actor.
-    const admin = adminAgentForEmail(email);
+    const props = (ctx as ExecutionContext & { props?: Props }).props;
+    const signedInAt = typeof props?.signed_in_at === "number" ? props.signed_in_at : null;
+    const admin = adminAgentForEmail(email, signedInAt);
     // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
     // acts through. It never refuses on what the client says.
     await recordAdminInitialize(env.DB, admin.actor, request);
     const observe = adminWriteObserver(env.DB, admin.actor, request.headers.get("User-Agent"));
+    // Capsid Admin on its own route (capsid/rulings/mcp-2026-10-10.md, amendment answer
+    // 2): the eight administrator tools, never on /mcp. Only the administrator's grant
+    // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
+    if (new URL(request.url).pathname === ADMIN_MCP_ROUTE) {
+      return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe));
+    }
     return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe));
   },
 };
@@ -105,7 +113,7 @@ export default {
     const refused = hostRefusal(request);
     if (refused) return withSecurityHeaders(withCacheDefault(refused, new URL(request.url).pathname));
     const pathname = new URL(request.url).pathname;
-    if (pathname === "/mcp") {
+    if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
       const originProblem = mcpOriginProblem(request);
       if (originProblem) {
         return withSecurityHeaders(withCacheDefault(new Response(originProblem, { status: 403 }), pathname));

@@ -1,4 +1,5 @@
-// The one JSON-RPC client the operator scripts use to reach /ops/mcp with a key. A tool
+// The one JSON-RPC client the operator scripts use to reach /ops/mcp (Capsid) or
+// /ops/mcp/admin (Capsid Admin, the admin key only) with a key. A tool
 // refusal (isError) throws rather than reading as success.
 //
 // The key goes into the Authorization header and nowhere else. It is never printed.
@@ -44,15 +45,16 @@ export function parseRpcBody(text, method) {
  * @param {string} key
  * @param {string} clientName
  * @param {typeof fetch} [fetchImpl]
+ * @param {"/ops/mcp" | "/ops/mcp/admin"} [route]
  */
-export function capsidClient(origin, key, clientName, fetchImpl = fetch) {
+export function capsidClient(origin, key, clientName, fetchImpl = fetch, route = "/ops/mcp") {
   requireHttps(origin);
   let id = 0;
   let initialized = false;
 
   /** @param {object} message */
   const post = (message) =>
-    fetchImpl(`${origin}/ops/mcp`, {
+    fetchImpl(`${origin}${route}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

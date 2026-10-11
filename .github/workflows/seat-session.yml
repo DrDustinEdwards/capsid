@@ -293,7 +293,7 @@ jobs:
             --mcp-config ${{ runner.temp }}/capsid-mcp.json
             --max-turns 200
             --settings '{"disableAllHooks":true}'
-            --allowedTools "mcp__capsid__jobs,mcp__capsid__read,mcp__capsid__list,mcp__capsid__search,mcp__capsid__brief,mcp__capsid__open_pr,mcp__capsid__improve_status,Read,Edit,Write,Glob,Grep,Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit -m:*),Bash(git switch -c:*),Bash(git push origin:*),Bash(git rev-parse:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
+            --allowedTools "mcp__capsid__capsid_work_jobs,mcp__capsid__capsid_read_doc,mcp__capsid__capsid_find_docs,mcp__capsid__capsid_start_session,mcp__capsid__capsid_open_pr,mcp__capsid__capsid_run_improve,Read,Edit,Write,Glob,Grep,Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit -m:*),Bash(git switch -c:*),Bash(git push origin:*),Bash(git rev-parse:*),Bash(npm ci),Bash(npm test:*),Bash(npm run check:*),Bash(npm run lint:*),Bash(npx vitest:*)"
             --disallowedTools "Bash(npm run deploy:*),Bash(npx wrangler:*),Bash(wrangler:*),Bash(gh:*),Bash(curl:*),Bash(git -c:*),Bash(git config:*),Bash(git -C:*),Bash(git push * --force*),Bash(git push * -f*),Bash(git push * +*),Bash(git push * --delete*)"
           prompt: |
             You are a Capsid driver session the seat started on GitHub's runners, for the
@@ -301,20 +301,20 @@ jobs:
             This runner checkout is your own clone. It is not the main checkout that
             CLAUDE.md or a ruling reserves for another session; work here, on a new branch.
 
-            0. If the capsid `jobs` tool (mcp__capsid__jobs) is not available, stop at once
+            0. If the capsid `capsid_work_jobs` tool (mcp__capsid__capsid_work_jobs) is not available, stop at once
                and do nothing else: the job cannot be claimed without it.
-            1. Call the capsid MCP tool `jobs` with action "claim", namespace "capsid" and
+            1. Call the capsid MCP tool `capsid_work_jobs` with action "claim", namespace "capsid" and
                id "${{ steps.job.outputs.id }}". If the claim is refused, stop.
             2. Read CLAUDE.md and follow it. Read the job body the claim returned, and any
                offered_skills whose trigger fits the work.
-            3. Heartbeat the job (`jobs` action "heartbeat") every 15 minutes.
+            3. Heartbeat the job (`capsid_work_jobs` action "heartbeat") every 15 minutes.
             4. Do the work on a new branch named for the job. Run the repo's checks. Push
                that branch with `git push origin <branch>` (not -u: the repo's git config
                is read-only in this session). Never push the default branch, never
                force-push, never deploy, never touch a secret, never print a key or token.
-            5. Open the pull request with the capsid `open_pr` tool, which opens it
+            5. Open the pull request with the capsid `capsid_open_pr` tool (action "open"), which opens it
                through Capsid's App so CI runs on it.
-            6. Block the job (`jobs` action "block") with a summary of what landed, and
+            6. Block the job (`capsid_work_jobs` action "block") with a summary of what landed, and
                the command "Merge <the PR URL>". Never merge. Report skills.used with
                only ids from offered_skills.
             7. If the work cannot be done, `fail` the job with the reason.
@@ -353,7 +353,7 @@ jobs:
             for (const m of Array.isArray(messages) ? messages : []) {
               if (m && m.type === "system" && m.subtype === "init") {
                 out.init_seen = true;
-                out.capsid_jobs_loaded = Array.isArray(m.tools) && m.tools.includes("mcp__capsid__jobs");
+                out.capsid_jobs_loaded = Array.isArray(m.tools) && m.tools.includes("mcp__capsid__capsid_work_jobs");
                 out.mcp_servers = (Array.isArray(m.mcp_servers) ? m.mcp_servers : []).map((s) => ({ name: name(s.name), status: name(s.status) }));
               }
               if (m && m.type === "result") {

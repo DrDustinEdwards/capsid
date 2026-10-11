@@ -5,8 +5,8 @@
 // and the decisions log, but a driver minted for one namespace was refused all of
 // them, so it worked from its repo's CLAUDE.md and the job bodies alone. This is the
 // one statement of what crosses that boundary. checkScope (src/scope.ts) admits a read
-// of a path matched here, the list, find and search handlers drop every other capsid
-// row for such a caller, and brief names the documents that exist. Nothing else in
+// of a path matched here, the list, glob and search handlers drop every other capsid
+// row for such a caller, and the session start names the documents that exist. Nothing else in
 // capsid (research, policy, jobs, reports, episodics) is reachable, and no write is.
 //
 // test/portfolio-docs.test.ts pins this constant.
@@ -20,10 +20,10 @@ export const PORTFOLIO_DOCS = {
   volumes: ["decisions-vol-", "archive/decisions-vol-"],
   // One document directly inside the folder, no deeper.
   folders: ["rulings/"],
-  // The tools that may reach capsid for such a caller. Each requires only the read
-  // grant (TOOL_GRANTS). history and backlinks stay out: a version list or an edge can
-  // name a capsid path that is not on this list.
-  tools: ["read", "list", "find", "search"],
+  // The tool actions that may reach capsid for such a caller, as tool.action. Each
+  // requires only the read grant (TOOL_GRANTS). A document's versions and links stay
+  // out: a version list or an edge can name a capsid path that is not on this list.
+  tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
 } as const;
 
 // A path is matched against this before anything else: lowercase letters, digits, dot,
@@ -51,9 +51,9 @@ export function isPortfolioPath(path: string): boolean {
   return false;
 }
 
-/** Whether a tool may reach the portfolio documents for a caller outside capsid. */
-export function isPortfolioTool(tool: string): boolean {
-  return (PORTFOLIO_DOCS.tools as readonly string[]).includes(tool);
+/** Whether a tool action may reach the portfolio documents for a caller outside capsid. */
+export function isPortfolioTool(tool: string, action: string | undefined): boolean {
+  return action !== undefined && (PORTFOLIO_DOCS.tools as readonly string[]).includes(`${tool}.${action}`);
 }
 
 /** The allowlist as a reader sees it, for a refusal and for brief. */

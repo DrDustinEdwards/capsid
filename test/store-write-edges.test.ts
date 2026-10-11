@@ -24,7 +24,7 @@ async function connect(opts: FakeD1Options) {
 }
 
 const call = async (client: Client, args: Record<string, unknown>) =>
-  (await client.callTool({ name: "write", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({ name: "capsid_write_doc", arguments: { action: "write", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
 
 // documentUpsert binds (namespace, path, title, body, ...), so the body is params[3].
 function storedBody(recorded: Array<{ sql: string; params: unknown[] }>): string {

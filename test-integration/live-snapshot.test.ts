@@ -61,7 +61,8 @@ async function versionBodies(path: string): Promise<Array<string | null>> {
 describe("the snapshot holds the row the table held at commit", () => {
   it("write snapshots a body written after its pre-read", async () => {
     await seed("live-1.md");
-    await callTool(racingDb(env.DB, "live-1.md"), "write", {
+    await callTool(racingDb(env.DB, "live-1.md"), "capsid_write_doc", {
+      action: "write",
       namespace: NS,
       path: "live-1.md",
       title: "Lorem",
@@ -73,7 +74,7 @@ describe("the snapshot holds the row the table held at commit", () => {
 
   it("delete snapshots a body written after its pre-read", async () => {
     await seed("live-2.md");
-    await callTool(racingDb(env.DB, "live-2.md"), "delete", { namespace: NS, path: "live-2.md", confirm: true });
+    await callTool(racingDb(env.DB, "live-2.md"), "capsid_delete_doc", { namespace: NS, path: "live-2.md", confirm: true });
     expect(await versionBodies("live-2.md")).toEqual([RACED]);
   });
 
@@ -84,7 +85,8 @@ describe("the snapshot holds the row the table held at commit", () => {
     )
       .bind(id, NS, "live-3.md")
       .first<{ id: number }>();
-    await callTool(racingDb(env.DB, "live-3.md"), "restore", {
+    await callTool(racingDb(env.DB, "live-3.md"), "capsid_write_doc", {
+      action: "restore",
       namespace: NS,
       path: "live-3.md",
       version_id: version!.id,
@@ -108,7 +110,7 @@ describe("history is bounded", () => {
     )
       .bind(id, NS, "live-4.md", HISTORY_ROWS + 1)
       .run();
-    const out = (await callTool(env.DB, "history", { namespace: NS, path: "live-4.md" })) as { versions: Array<{ id: number }> };
+    const out = (await callTool(env.DB, "capsid_read_doc", { action: "versions", namespace: NS, path: "live-4.md" })) as { versions: Array<{ id: number }> };
     expect(out.versions).toHaveLength(HISTORY_ROWS);
     const ids = out.versions.map((v) => v.id);
     expect(ids).toEqual([...ids].sort((a, b) => b - a));

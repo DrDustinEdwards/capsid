@@ -154,7 +154,7 @@ export function renderLog(ns, { exitCode, output, started, finished }) {
  * @param {string} day
  */
 export async function postLog(ns, client, body, day) {
-  return client.tool("write", {
+  return client.tool("capsid_write_doc", {
     namespace: ns,
     path: logPath(day),
     title: `Nightly driver run, ${ns}, ${day}`,
@@ -173,33 +173,25 @@ export async function postLog(ns, client, body, day) {
 
 // Capsid tools pre-approved for the driver: every tool whose TOOL_GRANTS entry in
 // src/scope.ts is "read", plus the two whose requirement is per action and which the
-// /improve loop drives (jobs, improve_run). The Worker still enforces the driver's own
-// scope on each call, so this list removes a prompt and grants nothing. Every other
-// Capsid tool, the document and repo write tools included, goes to the classifier.
+// /improve loop drives (capsid_work_jobs, capsid_run_improve). The Worker still enforces
+// the driver's own scope on each call, so this list removes a prompt and grants nothing.
+// Every other Capsid tool, the document and repo write tools included, goes to the
+// classifier. No Capsid Admin tool is ever pre-approved.
 export const DRIVER_CAPSID_TOOLS = [
-  "list",
-  "read",
-  "brief",
-  "backlinks",
-  "find",
-  "search",
-  "namespaces",
-  "history",
-  "list_repo_tree",
-  "read_repo_file",
-  "search_code",
-  "repo_refs",
-  "repo_history",
-  "ci_status",
-  "improve_status",
-  "improve_run",
-  "jobs",
+  "capsid_start_session",
+  "capsid_find_docs",
+  "capsid_read_doc",
+  "capsid_read_repo",
+  "capsid_inspect_repo",
+  "capsid_work_jobs",
+  "capsid_run_improve",
 ];
 
 // Blocked outright, in every mode: deploys are the human's gate, and a force push can
 // rewrite a branch someone else is on. Listed for both shell tools, and with and
-// without `git -C <dir>`. The claude.ai Capsid connector is denied whole: it reaches
-// /mcp as the OAuth admin, and a driver must reach Capsid only as its own agent.
+// without `git -C <dir>`. The claude.ai Capsid and Capsid Admin connectors are denied
+// whole: they reach /mcp and /mcp/admin as the OAuth admin, and a driver must reach
+// Capsid only as its own agent.
 const DENIED_COMMANDS = [
   "npm run ship*",
   "npm run deploy*",
@@ -226,6 +218,7 @@ const DENIED_COMMANDS = [
 export const DRIVER_DENIED = [
   ...DENIED_COMMANDS.flatMap((c) => [`Bash(${c})`, `PowerShell(${c})`]),
   "mcp__claude_ai_Capsid",
+  "mcp__claude_ai_Capsid_Admin",
 ];
 
 // Where the claude-skills and dustinedwards drivers do their work (improve.md). A read
@@ -291,7 +284,7 @@ export function sessionMcpConfig(origin, key) {
 export async function claimForSession(client, id) {
   let answer;
   try {
-    answer = JSON.parse(await client.tool("jobs", { action: "claim", id, session_key: true }));
+    answer = JSON.parse(await client.tool("capsid_work_jobs", { action: "claim", id, session_key: true }));
   } catch (err) {
     return { ok: false, why: err instanceof Error ? err.message : String(err) };
   }

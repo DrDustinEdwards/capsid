@@ -1,7 +1,7 @@
 import { bytesToHex } from "./encoding";
 import { SCOPE_FLAGS, type ScopeFlag } from "./agents-schema";
 import type { Agent } from "./agents";
-import { checkScope } from "./scope";
+import { checkScope, JOBS_TOOL } from "./scope";
 
 // The work queue's vocabulary, in one place so the table, the tool and the driver
 // cannot disagree about it.
@@ -29,7 +29,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "fail", "block", "resume", "supersede", "release", "start", "edit", "park", "unpark"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "edit", "park", "unpark"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
 
 // Four hours. Long enough for a driver to do a real job without heartbeating on a
@@ -181,13 +181,13 @@ export function missingForJob(agent: Agent, namespace: string, requiredScopes: s
   const required = parseRequiredScopes(requiredScopes);
   // Fails closed for a caller that skipped the claim's corrupt check.
   if (!required.ok) return `this job's ${required.problem}, so nothing can be checked against it.`;
-  return checkScope(agent, { tool: "jobs", namespace, grant: "write", flags: required.value.flags });
+  return checkScope(agent, { tool: JOBS_TOOL, namespace, grant: "write", flags: required.value.flags });
 }
 
 /** The namespace half of missingForJob, for a resume that returns a job to its own
  *  claimant: the caller acquires nothing but still moves the job. */
 export function outsideJobNamespace(agent: Agent, namespace: string): string | null {
-  return checkScope(agent, { tool: "jobs", namespace, grant: "write" });
+  return checkScope(agent, { tool: JOBS_TOOL, namespace, grant: "write" });
 }
 
 // job_<12 hex>, random rather than sequential so an id quoted in chat cannot be used

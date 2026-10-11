@@ -45,7 +45,7 @@ export async function readRepoFile(env: Env, namespace: string, path: string, re
   const data = (await resp.json()) as
     | { type: string; content?: string; encoding?: string; size: number; sha: string }
     | unknown[];
-  if (Array.isArray(data)) throw new Error(`${path} is a directory; use list_repo_tree`);
+  if (Array.isArray(data)) throw new Error(`${path} is a directory; use capsid_read_repo action tree`);
   if (data.type !== "file") throw new Error(`${path} is not a file (type: ${data.type})`);
   let content: string;
   if (data.encoding === "base64" && data.content) {
@@ -396,13 +396,13 @@ async function commitOnBranch<R>(
   // round trip.
   if (`${owner}/${repo}` === SELF_REPO && mode === "direct" && !branch) {
     throw new Error(
-      `refuses: a direct commit with no branch lands on the default branch of this server's own repo (${SELF_REPO}) and redeploys the Worker. Name a work branch, or use mode "pr" and merge through manage_pr.`
+      `refuses: a direct commit with no branch lands on the default branch of this server's own repo (${SELF_REPO}) and redeploys the Worker. Name a work branch, or use mode "pr" and merge through capsid_close_pr action merge.`
     );
   }
   const defaultBranch = await getDefaultBranch(env, owner, repo);
   if (`${owner}/${repo}` === SELF_REPO && branch === defaultBranch) {
     throw new Error(
-      `refuses: ${defaultBranch} is the default branch of this server's own repo (${SELF_REPO}), and a commit landing there redeploys the Worker. Use mode "pr" with a work branch and merge through manage_pr, or name a non-default branch.`
+      `refuses: ${defaultBranch} is the default branch of this server's own repo (${SELF_REPO}), and a commit landing there redeploys the Worker. Use mode "pr" with a work branch and merge through capsid_close_pr action merge, or name a non-default branch.`
     );
   }
   // PR mode never commits to the default branch, on any repo. can_direct_write is
@@ -489,7 +489,7 @@ async function commitOnBranch<R>(
       pr: null,
       pr_error:
         `THE COMMIT LANDED on ${target} of ${owner}/${repo}, but the pull request could not be opened: ${reason}. ` +
-        `Do not retry this write; open the pull request with open_pr (head ${target}).`,
+        `Do not retry this write; open the pull request with capsid_open_pr action open (head ${target}).`,
     };
   }
 }

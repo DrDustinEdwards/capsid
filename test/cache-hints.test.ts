@@ -6,7 +6,7 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { CACHE_HINTS, LIST_TTL_MS, PRIVATE_LIST, PUBLIC_LIST } from "../src/cache-hints.ts";
-import { TOOL_HINTS } from "../src/tool-annotations.ts";
+import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { httpClient, LEGACY, MODERN } from "./mcp-http.ts";
 
@@ -121,7 +121,7 @@ test("PLANT: the tool list is served in registration order", async () => {
   } finally {
     McpServer.prototype.registerTool = original;
   }
-  assert.equal(registered.length, Object.keys(TOOL_HINTS).length, `the spy saw ${registered.length} registrations`);
+  assert.equal(registered.length, CAPSID_TOOLS.length, `the spy saw ${registered.length} registrations`);
   const client = await connect(server);
   try {
     const { tools } = await client.listTools();

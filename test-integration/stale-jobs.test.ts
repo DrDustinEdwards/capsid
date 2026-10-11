@@ -72,7 +72,7 @@ async function callJobs(agent: Agent, args: Record<string, unknown>): Promise<{ 
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
   try {
-    const result = (await client.callTool({ name: "jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
     return { isError: result.isError, text: result.content[0].text };
   } finally {
     await client.close();

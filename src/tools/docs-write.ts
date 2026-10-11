@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
+import { surfaceOf } from "./surface";
 import { sha256Hex } from "../auth";
 import { auditStatement, documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
@@ -15,7 +15,7 @@ import { canonGuarded, canonRefusal, proposeCanon } from "../canon";
 import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouching } from "./docs";
 
 // The document tools that change the store: write, restore, delete and move.
-// registerDocTools in ./docs registers them in the published order.
+// defineDocOperations in ./docs registers them in the published order.
 
 async function requireRegisteredNamespace(db: D1Database, namespace: string): Promise<string | null> {
   const row = await db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(namespace).first();
@@ -23,7 +23,7 @@ async function requireRegisteredNamespace(db: D1Database, namespace: string): Pr
   return (
     `unknown namespace '${namespace}'. Nothing was written. Documents can only live in a registered namespace, ` +
     `because an unregistered one is invisible to the namespaces list, the lint loop and every repo tool. ` +
-    `Check the spelling against the namespaces tool, or create it with register_namespace.`
+    `Check the spelling against capsid_find_docs action namespaces, or have the admin create it with capsid_admin_manage_namespaces action register.`
   );
 }
 
@@ -42,7 +42,7 @@ async function improvePathsRefusal(
 ): Promise<string | null> {
   const allow = allowImprovePaths === true;
   if (allow) {
-    const overrideRefusal = ctx.scope({ tool, namespace, flags: IMPROVE_OVERRIDE_FLAGS });
+    const overrideRefusal = ctx.scope({ ...surfaceOf(tool), namespace, flags: IMPROVE_OVERRIDE_FLAGS });
     if (overrideRefusal) return overrideRefusal;
   }
   for (const change of changes) {
@@ -52,13 +52,12 @@ async function improvePathsRefusal(
   return null;
 }
 
-export function registerWriteTool(server: McpServer, ctx: ToolCtx): void {
+export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "write",
     {
-      annotations: hintsFor("write"),
       description:
         "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"decisions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, capsid/repo-structure.md, any namespace's core.md, or decisions.md and its volumes, by a caller that is not the seat or the admin, is NOT applied: it is stored as a proposal for the seat or Dustin to approve and returns action 'pending_review' with the proposal id (links are refused on such a write). Needs the write grant.",
       inputSchema: {
@@ -218,7 +217,7 @@ export function registerWriteTool(server: McpServer, ctx: ToolCtx): void {
         const refusal = await requireConfirmation(server, confirm, {
           prompt: `Overwrite ${namespace}/${path}? The current version will be snapshotted to document_versions first.`,
           declined: `overwrite of ${namespace}/${path} declined`,
-          unsupported: `confirmation required: ${namespace}/${path} already exists. Re-run write with confirm: true to overwrite it. The current version will be snapshotted to document_versions first.`,
+          unsupported: `confirmation required: ${namespace}/${path} already exists. Re-run capsid_write_doc with confirm: true to overwrite it. The current version will be snapshotted to document_versions first.`,
         });
         if (!refusal.ok) return fail(refusal.message);
         elicited = refusal.elicited;
@@ -344,15 +343,14 @@ export function registerWriteTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
+export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "restore",
     {
-      annotations: hintsFor("restore"),
       description:
-        "Restore a document's title and body from one of its retained versions (see history). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a caller that is not the seat or the admin (see write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
+        "Restore a document's title and body from one of its retained versions (see capsid_read_doc action versions). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a caller that is not the seat or the admin (see capsid_write_doc action write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -383,7 +381,7 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
         { path, before: prior?.body ?? null, after: version.body ?? "" },
       ]);
       if (restoreImproveRefusal) return fail(restoreImproveRefusal);
-      // The same protocol the write tool runs, with restore's wordings. On the
+      // The same protocol capsid_write_doc action write runs, with restore's wordings. On the
       // recreate path the guard is the ABSENCE of a row: the snapshot statement is
       // only added when the pre-read saw one, so a racing create would otherwise be
       // overwritten with nothing kept.
@@ -402,7 +400,7 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
           deletedInFlight: `conflict on ${namespace}/${path}: the document was deleted while this restore was in flight. Nothing was written.`,
           bodyChanged: (currentSha) =>
             `conflict on ${namespace}/${path}: the live body changed after this restore read it. Nothing was written. ` +
-            `Current sha256 is ${currentSha}. Re-read history and retry.`,
+            `Current sha256 is ${currentSha}. Re-read the versions with capsid_read_doc action versions and retry.`,
           batchFailed: (reason) => `restore failed, nothing was written: ${reason}`,
         },
       });
@@ -411,7 +409,7 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
       const restoreRefusal = await requireConfirmation(server, confirm, {
         prompt: `Restore ${namespace}/${path} to the version snapshotted at ${version.snapshot_at}? The current body will be snapshotted first.`,
         declined: `restore of ${namespace}/${path} declined`,
-        unsupported: `confirmation required: re-run restore with confirm: true to overwrite ${namespace}/${path} with version ${version_id} (snapshotted ${version.snapshot_at}). The current body will be snapshotted first.`,
+        unsupported: `confirmation required: re-run capsid_write_doc action restore with confirm: true to overwrite ${namespace}/${path} with version ${version_id} (snapshotted ${version.snapshot_at}). The current body will be snapshotted first.`,
       });
       if (!restoreRefusal.ok) return fail(restoreRefusal.message);
       const elicited = restoreRefusal.elicited;
@@ -463,14 +461,13 @@ export function registerRestoreTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerDeleteTool(server: McpServer, ctx: ToolCtx): void {
+export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "delete",
     {
-      annotations: hintsFor("delete"),
-      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a caller that is not the seat or the admin (see write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a caller that is not the seat or the admin (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, confirm, allow_improve_paths }) => {
@@ -494,7 +491,7 @@ export function registerDeleteTool(server: McpServer, ctx: ToolCtx): void {
       const deleteRefusal = await requireConfirmation(server, confirm, {
         prompt: `Delete ${namespace}/${path}? It will be snapshotted to document_versions first, so it can be recovered.`,
         declined: `delete of ${namespace}/${path} declined`,
-        unsupported: `confirmation required: re-run delete with confirm: true to remove ${namespace}/${path}. It will be snapshotted to document_versions first.`,
+        unsupported: `confirmation required: re-run capsid_delete_doc with confirm: true to remove ${namespace}/${path}. It will be snapshotted to document_versions first.`,
       });
       if (!deleteRefusal.ok) return fail(deleteRefusal.message);
       const elicited = deleteRefusal.elicited;
@@ -548,14 +545,13 @@ export function registerDeleteTool(server: McpServer, ctx: ToolCtx): void {
   );
 }
 
-export function registerMoveTool(server: McpServer, ctx: ToolCtx): void {
+export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
-  server.registerTool(
+  ctx.ops.define(
     "move",
     {
-      annotations: hintsFor("move"),
-      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a caller that is not the seat or the admin (see write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a caller that is not the seat or the admin (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, new_path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
@@ -595,7 +591,7 @@ export function registerMoveTool(server: McpServer, ctx: ToolCtx): void {
       const moveRefusal = await requireConfirmation(server, confirm, {
         prompt: `Rename ${namespace}/${path} to ${namespace}/${new_path}? Edges pointing at the old path are repointed.`,
         declined: `move of ${namespace}/${path} declined`,
-        unsupported: `confirmation required: re-run move with confirm: true to rename ${namespace}/${path} to ${new_path}.`,
+        unsupported: `confirmation required: re-run capsid_write_doc action move with confirm: true to rename ${namespace}/${path} to ${new_path}.`,
       });
       if (!moveRefusal.ok) return fail(moveRefusal.message);
       const { results: movingEdges } = await edgesTouching(db, namespace, path).all();

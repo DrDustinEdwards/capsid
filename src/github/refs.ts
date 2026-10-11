@@ -90,7 +90,8 @@ export async function openPr(
 //   1. Never the default branch. A PR whose head is the default branch is a
 //      cross-fork PR or a misconfiguration.
 //   2. Never an improve-loop branch. The loop may still need the attempt and its own
-//      lifecycle owns those refs; delete_branch refuses them without force too.
+//      lifecycle owns those refs; capsid_close_pr action delete_branch refuses them
+//      without force too.
 //   3. Never fails the PR action. The merge or close already succeeded, and failing
 //      the call because a branch delete failed would misreport it. Same rule as
 //      invalidateRepoReads. The outcome is reported in head_branch_deleted.

@@ -18,7 +18,7 @@ Read `capsid/conventions.md` (the portfolio rules) and `capsid/core.md` in Capsi
 
 Code comments cite these by name ("CLAUDE.md, snapshot rule"), not by number.
 
-1. **Tool surface.** Every served tool has an entry in `TOOL_GRANTS` in `src/scope.ts`, and `src/counts.ts` derives the count from it. Adding a tool needs a ruling in `capsid/decisions.md` first.
+1. **Tool surface.** Every served tool has an entry in `TOOL_GRANTS` in `src/scope.ts`, and `src/counts.ts` derives the count from it. `src/tools/surface.ts` names each tool and its actions, on Capsid (`/mcp`, `/ops/mcp`) or Capsid Admin (`/mcp/admin`, `/ops/mcp/admin`). Adding a tool needs a ruling in `capsid/decisions.md` first.
 2. **Public repo.** Never commit `wrangler.jsonc`, `.dev.vars`, `.env`, a key, or real vault content. Fixtures use fake data (example.com, namespace "sample"). Never print a token.
 3. **Snapshot.** Every overwrite and delete snapshots to `document_versions` and writes `audit_log`. Lint finalize archives and never deletes. (test/invariants.test.ts, test/write-invariants.test.ts)
 4. **One enforcement point.** `checkScope` in `src/scope.ts` is the only grant check. Every served tool refuses a caller without that tool, and every write refuses a read-only caller, with `checkScope`'s refusal and before its handler runs (test/scope.test.ts, the two SWEEP tests). Every repo mutation goes through `guardedWrite` (test/blast-radius.test.ts).
@@ -26,7 +26,7 @@ Code comments cite these by name ("CLAUDE.md, snapshot rule"), not by number.
 6. **Improve loop.** The improve loop stays off unless Dustin turns it on. Only `src/improve-scorer.ts` names `HOLDOUT`. (test/improve-holdout.test.ts)
 7. **No AI trailer.** No commit or pull request carries an AI trailer or footer. `.claude/settings.json` turns attribution off, and CI's `scripts/check-commit-trailers.mjs` refuses a commit that carries one (test/commit-trailers.test.ts).
 8. **Health probe.** `/health` and the backup preflight search `capsid/conventions.md` for the word "conventions" (`src/store-probe.ts`). That document must keep the word, or Capsid reports itself degraded and the backup refuses to prune.
-9. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker on `/ops/mcp` with this project's driver key (the Authorization header in `.mcp.json`): `initialize`, `notifications/initialized`, `tools/list`, then a read tool. Never read `~/.claude/.credentials.json`: its `mcpOAuth` entry is the admin login, and a driver acts only as its own agent. An admin-only tool is verified by the seat. Never print a key.
+9. **Verify a deploy directly.** MCP clients cache the tool list when they connect. To verify a deploy, call the Worker on `/ops/mcp` with this project's driver key (the Authorization header in `.mcp.json`): `initialize`, `notifications/initialized`, `tools/list`, then a read tool. Never read `~/.claude/.credentials.json`: its `mcpOAuth` entry is the admin login, and a driver acts only as its own agent. An admin-only tool (Capsid Admin, served only on `/mcp/admin` and `/ops/mcp/admin`) is verified by the seat. Never print a key.
 
 The other portfolio rules that used to be restated here (a check trusted only after it fails, no swallowed error, D1 `meta.changes`) are in `capsid/conventions.md`.
 

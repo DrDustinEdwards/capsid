@@ -87,13 +87,13 @@ async function connect(caller: Agent, opts: { ftsRows?: number } = {}) {
 
 const paths = (r: Result): string[] => (JSON.parse(r.text) as { documents: Array<{ path: string }> }).documents.map((d) => d.path);
 
-test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tools this test names", () => {
+test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
   assert.deepEqual(PORTFOLIO_DOCS, {
     namespace: "capsid",
     documents: ["conventions.md", "core.md", "decisions.md"],
     volumes: ["decisions-vol-", "archive/decisions-vol-"],
     folders: ["rulings/"],
-    tools: ["read", "list", "find", "search"],
+    tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
   });
 });
 
@@ -129,7 +129,7 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
 test("a namespace driver reads every portfolio document in capsid", async () => {
   const { call, close } = await connect(driver("carrel"));
   for (const path of ALLOWED) {
-    const r = await call("read", { namespace: "capsid", path });
+    const r = await call("capsid_read_doc", { namespace: "capsid", path });
     assert.ok(!r.isError, `${path} was refused: ${r.text}`);
     assert.equal(JSON.parse(r.text).body, `ALLOWED ${path}`);
   }
@@ -139,7 +139,7 @@ test("a namespace driver reads every portfolio document in capsid", async () => 
 test("PLANT: a namespace driver is refused every capsid path outside the portfolio allowlist", async () => {
   const { call, close } = await connect(driver("carrel"));
   for (const path of DENIED) {
-    const r = await call("read", { namespace: "capsid", path });
+    const r = await call("capsid_read_doc", { namespace: "capsid", path });
     assert.equal(r.isError, true, `${path} was read by a carrel driver`);
     assert.match(r.text, /not scoped to the 'capsid' namespace/, `${path}: ${r.text}`);
     assert.doesNotMatch(r.text, /SECRET/);
@@ -158,7 +158,7 @@ test("traversal, case and encoded paths are refused and leak nothing, whichever 
     "conventions.md/",
     "rulings\\..\\policy\\gates.md",
   ]) {
-    const r = await call("read", { namespace: "capsid", path });
+    const r = await call("capsid_read_doc", { namespace: "capsid", path });
     assert.equal(r.isError, true, `${path} was not refused`);
     assert.doesNotMatch(r.text, /SECRET|ALLOWED/, `${path} leaked a body: ${r.text}`);
   }
@@ -169,52 +169,49 @@ test("no write, edge or history tool reaches a portfolio document for a namespac
   const { call, writes, close } = await connect(driver("carrel"));
   const path = "conventions.md";
   const calls: Array<[string, Record<string, unknown>]> = [
-    ["write", { namespace: "capsid", path, body: "rewritten", confirm: true }],
-    ["delete", { namespace: "capsid", path, confirm: true }],
-    ["move", { namespace: "capsid", path, new_path: "moved.md", confirm: true }],
-    ["restore", { namespace: "capsid", path, version_id: 1, confirm: true }],
-    ["history", { namespace: "capsid", path }],
-    ["backlinks", { namespace: "capsid", path }],
-    ["brief", { namespace: "capsid" }],
+    ["capsid_write_doc", { namespace: "capsid", path, body: "rewritten", confirm: true }],
+    ["capsid_delete_doc", { namespace: "capsid", path, confirm: true }],
+    ["capsid_write_doc", { action: "move", namespace: "capsid", path, new_path: "moved.md", confirm: true }],
+    ["capsid_write_doc", { action: "restore", namespace: "capsid", path, version_id: 1, confirm: true }],
+    ["capsid_read_doc", { action: "versions", namespace: "capsid", path }],
+    ["capsid_read_doc", { action: "links", namespace: "capsid", path }],
+    ["capsid_start_session", { namespace: "capsid" }],
   ];
   for (const [name, args] of calls) {
+    const label = args.action === undefined ? name : `${name} action ${String(args.action)}`;
     const r = await call(name, args);
-    assert.equal(r.isError, true, `${name} on capsid/${path} was not refused: ${r.text}`);
-    assert.match(r.text, /not scoped to the 'capsid' namespace/, `${name}: ${r.text}`);
+    assert.equal(r.isError, true, `${label} on capsid/${path} was not refused: ${r.text}`);
+    assert.match(r.text, /not scoped to the 'capsid' namespace/, `${label}: ${r.text}`);
   }
   assert.equal(writes.length, 0, "a refused call wrote something");
   await close();
 });
 
-test("PLANT: list, find and search in capsid return only the portfolio documents to a namespace driver", async () => {
+test("PLANT: list, glob and search in capsid return only the portfolio documents to a namespace driver", async () => {
   const { call, close } = await connect(driver("carrel"), { ftsRows: 3 });
-  const listed = await call("list", { namespace: "capsid" });
+  const listed = await call("capsid_find_docs", { action: "list", namespace: "capsid" });
   assert.ok(!listed.isError, listed.text);
   assert.deepEqual(paths(listed), [...ALLOWED].sort());
 
-  const found = await call("find", { namespace: "capsid", glob: "*" });
+  const found = await call("capsid_find_docs", { action: "glob", namespace: "capsid", glob: "*" });
   assert.ok(!found.isError, found.text);
   assert.deepEqual(paths(found), [...ALLOWED].sort());
 
-  const foundNear = await call("find", { namespace: "capsid", glob: "rulings*" });
+  const foundNear = await call("capsid_find_docs", { action: "glob", namespace: "capsid", glob: "rulings*" });
   assert.deepEqual(paths(foundNear), ALLOWED.filter((p) => p.startsWith("rulings/")).sort(), "rulings-secret/ matched rulings/");
 
   // The fake's FTS answers conventions.md, hit-1.md and hit-2.md whatever the query.
-  const searched = await call("search", { namespace: "capsid", query: "anything" });
+  const searched = await call("capsid_find_docs", { action: "search", namespace: "capsid", query: "anything" });
   assert.ok(!searched.isError, searched.text);
   assert.deepEqual(paths(searched), ["conventions.md"]);
   await close();
 });
 
-test("a narrowed driver still cannot list, find or search with no namespace", async () => {
+test("a narrowed driver still cannot list, glob or search with no namespace", async () => {
   const { call, close } = await connect(driver("carrel"));
-  for (const [name, args] of [
-    ["list", {}],
-    ["find", { glob: "*" }],
-    ["search", { query: "anything" }],
-  ] as Array<[string, Record<string, unknown>]>) {
-    const r = await call(name, args);
-    assert.equal(r.isError, true, `${name} with no namespace was answered`);
+  for (const args of [{ action: "list" }, {}, { action: "glob", glob: "*" }, { action: "search", query: "anything" }] as Array<Record<string, unknown>>) {
+    const r = await call("capsid_find_docs", args);
+    assert.equal(r.isError, true, `capsid_find_docs ${JSON.stringify(args)} with no namespace was answered`);
     assert.match(r.text, /must name a namespace/);
   }
   await close();
@@ -222,21 +219,21 @@ test("a narrowed driver still cannot list, find or search with no namespace", as
 
 test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in capsid, and carrel's driver its own namespace", async () => {
   const own = await connect(driver("capsid"));
-  const all = await own.call("list", { namespace: "capsid" });
+  const all = await own.call("capsid_find_docs", { namespace: "capsid" });
   assert.equal(paths(all).length, ALLOWED.length + DENIED.length, "the filter reached a caller scoped to capsid");
-  const policy = await own.call("read", { namespace: "capsid", path: "policy/gates.md" });
+  const policy = await own.call("capsid_read_doc", { namespace: "capsid", path: "policy/gates.md" });
   assert.ok(!policy.isError, policy.text);
   await own.close();
 
   const carrel = await connect(driver("carrel"));
-  const mine = await carrel.call("read", { namespace: "carrel", path: "core.md" });
+  const mine = await carrel.call("capsid_read_doc", { namespace: "carrel", path: "core.md" });
   assert.equal(JSON.parse(mine.text).body, "carrel's own");
   await carrel.close();
 });
 
-test("brief for any namespace names the portfolio documents to read first", async () => {
+test("capsid_start_session for any namespace names the portfolio documents to read first", async () => {
   const { call, close } = await connect(driver("carrel"));
-  const r = await call("brief", { namespace: "carrel" });
+  const r = await call("capsid_start_session", { namespace: "carrel" });
   assert.ok(!r.isError, r.text);
   const out = JSON.parse(r.text) as { portfolio_documents: { namespace: string; read_first: string[]; allowlist: string[]; note: string } };
   assert.equal(out.portfolio_documents.namespace, "capsid");

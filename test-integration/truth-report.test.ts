@@ -19,7 +19,7 @@ async function connect() {
 }
 
 async function callLint(client: Client, args: Record<string, unknown>) {
-  const result = (await client.callTool({ name: "lint", arguments: args })) as {
+  const result = (await client.callTool({ name: "capsid_lint_namespace", arguments: args })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };

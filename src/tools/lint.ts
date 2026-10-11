@@ -1,5 +1,4 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { hintsFor } from "../tool-annotations";
 import { z } from "zod";
 import { repoBlobPaths, resolveRepo } from "../github";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireExists, snapshotLive } from "../store-guards";
@@ -9,25 +8,27 @@ import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
 import { improveWriteRefusal } from "../improve-scores";
 import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./docs";
 
+// The tool this operation is served as (src/tools/surface.ts), for its own scope checks.
+const LINT_TOOL = "capsid_lint_namespace";
+
 // Exported so test/lint-description.test.ts can derive the check list from a real
 // buildTruthReport response and assert this names every id.
 export const LINT_DESCRIPTION =
-  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs via write, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type and returns one integrity percentage, which excludes a check that could not run. It stores the result as <namespace>/reports/lint-<date>.md. lint reads only what the caller is scoped to, except capsid/schema.md and capsid/conventions.md, which every caller gets. An edge whose other end is in an out-of-scope namespace is left out of gather and report, and report skips the repo drift check when the namespace's repo is outside the caller's repo scope. finalize and report need the write grant. finalize, and a report that would overwrite one for the same date, need confirmation: elicited when the client supports it, otherwise pass confirm: true.";
+  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs with capsid_write_doc, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs six checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo) and `unconsolidated` (the episodic and source backlog). It also counts documents by type and returns one integrity percentage, which excludes a check that could not run. It stores the result as <namespace>/reports/lint-<date>.md. capsid_lint_namespace reads only what the caller is scoped to, except capsid/schema.md and capsid/conventions.md, which every caller gets. An edge whose other end is in an out-of-scope namespace is left out of gather and report, and report skips the repo drift check when the namespace's repo is outside the caller's repo scope. finalize and report need the write grant. finalize, and a report that would overwrite one for the same date, need confirmation: elicited when the client supports it, otherwise pass confirm: true.";
 
-export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
+export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
 
   // Consolidation loop (the LLM Wiki maintenance step). The Worker does no reasoning:
-  // a capable client calls gather, synthesizes the update with the read and write
-  // tools, then calls finalize to archive what it consumed.
+  // a capable client calls gather, synthesizes the update with capsid_read_doc and
+  // capsid_write_doc, then calls finalize to archive what it consumed.
   //
   // The report's checks are named by their response ids, not paraphrased, so a test
   // can derive this list from the report itself. A description that miscounts what
   // sits beside it is the defect the count lint exists for.
-  server.registerTool(
+  ctx.ops.define(
     "lint",
     {
-      annotations: hintsFor("lint"),
       description: LINT_DESCRIPTION,
       inputSchema: {
         namespace: nsName,
@@ -45,7 +46,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
       // checkScope with this call's action before it is read or returned. capsid's
       // schema and conventions are exempt: see the rules query in gather.
       const action = mode ?? "gather";
-      const reaches = (other: string) => ctx.scope({ tool: "lint", action, namespace: other }) === null;
+      const reaches = (other: string) => ctx.scope({ tool: LINT_TOOL, action, namespace: other }) === null;
       const withinScope = <T extends { from_ns: unknown; to_ns: unknown }>(rows: T[]) =>
         rows.filter((e) => reaches(String(e.from_ns)) && reaches(String(e.to_ns)));
       if (action === "gather") {
@@ -53,7 +54,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         // no grant and leaves it to the handler, where the mode is known, and gather
         // returns before the write-grant check below. Without this, gather would ask
         // for no grant at all.
-        const gatherRefusal = ctx.scope({ tool: "lint", action: "gather", grant: "read", namespace });
+        const gatherRefusal = ctx.scope({ tool: LINT_TOOL, action: "gather", grant: "read", namespace });
         if (gatherRefusal) return fail(gatherRefusal);
         const core = await db
           .prepare("SELECT namespace, path, title, type, status, body, updated_at FROM documents WHERE namespace = ?1 AND path = 'core.md'")
@@ -118,7 +119,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         const sumChars = (rows: unknown[]) => rows.reduce<number>((sum, r) => sum + bodyChars(r), 0);
         const toStub = (row: unknown) => {
           const r = row as PacketRow;
-          return { ...(row as object), body: `(trimmed for size: read ${String(r.namespace)}/${String(r.path)})` };
+          return { ...(row as object), body: `(trimmed for size: read it with capsid_read_doc, ${String(r.namespace)}/${String(r.path)})` };
         };
 
         const trimmed: string[] = [];
@@ -126,7 +127,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         let wikiOut: unknown[] = wiki.results;
         if (fixed + sumChars(wiki.results) + sumChars(raw.results) > GATHER_BUDGET) {
           wikiOut = wiki.results.map(toStub);
-          trimmed.push(`${wiki.results.length} wiki bodies (concept and decision docs; read them individually by path)`);
+          trimmed.push(`${wiki.results.length} wiki bodies (concept and decision docs; read them individually by path with capsid_read_doc)`);
         }
 
         // Keep whole documents, never half a body: a truncated markdown document is
@@ -181,7 +182,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
 
       // report and finalize both write documents, so the write grant is checked here,
       // where the mode is known.
-      const modeRefusal = ctx.scope({ tool: "lint", grant: "write", namespace });
+      const modeRefusal = ctx.scope({ tool: LINT_TOOL, grant: "write", namespace });
       if (modeRefusal) return fail(modeRefusal);
 
       // mode "report" measures the store and stores the result, so the trend is a
@@ -230,7 +231,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         let repoPaths: Set<string> | undefined;
         try {
           const { full } = await resolveRepo(env, namespace);
-          if (ctx.scope({ tool: "lint", action, namespace, repo: full }) === null) {
+          if (ctx.scope({ tool: LINT_TOOL, action, namespace, repo: full }) === null) {
             repoPaths = (await repoBlobPaths(env, namespace, full)) ?? undefined;
           }
         } catch {
@@ -256,7 +257,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace, path)
           .first<{ id: number; title: string | null; body: string | null }>();
         const title = `Truth report - ${namespace} - ${path.slice("reports/lint-".length, -3)}`;
-        // The same confirmation `write` asks for, since a second run the same date
+        // The same confirmation `capsid_write_doc` asks for, since a second run the same date
         // overwrites the first. The prior body is snapshotted either way, but without
         // asking, the caller gets no say and the response never mentions that a report
         // was replaced. A first report for the date needs none.
@@ -264,7 +265,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
           const overwrite = await requireConfirmation(server, confirm, {
             prompt: `Overwrite the truth report at ${namespace}/${path}? The current version will be snapshotted to document_versions first.`,
             declined: `report for ${namespace}/${path} declined; nothing was written`,
-            unsupported: `confirmation required: ${namespace}/${path} already exists. Re-run lint report with confirm: true to overwrite it. The current version will be snapshotted to document_versions first.`,
+            unsupported: `confirmation required: ${namespace}/${path} already exists. Re-run capsid_lint_namespace mode report with confirm: true to overwrite it. The current version will be snapshotted to document_versions first.`,
           });
           if (!overwrite.ok) return fail(overwrite.message);
         }
@@ -272,7 +273,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
         if (prior) {
           statements.push(snapshotLive(db, namespace, path));
         }
-        // The same upsert the `write` tool issues, from the one helper both call.
+        // The same upsert `capsid_write_doc` issues, from the one helper both call.
         statements.push(documentUpsert(db, namespace, path, title, body, "reference", null, "published"));
         statements.push(
           auditStatement(db, actor, "lint_report", namespace, path, { integrity: report.integrity, findings: report.findings.length })
@@ -314,7 +315,7 @@ export function registerLintTools(server: McpServer, ctx: ToolCtx): void {
       const finalizeRefusal = await requireConfirmation(server, confirm, {
         prompt: `Archive ${paths.length} document(s) in ${namespace} by moving them under archive/?`,
         declined: `finalize of ${namespace} declined`,
-        unsupported: `confirmation required: re-run lint finalize with confirm: true to archive ${paths.length} document(s) in ${namespace}.`,
+        unsupported: `confirmation required: re-run capsid_lint_namespace mode finalize with confirm: true to archive ${paths.length} document(s) in ${namespace}.`,
       });
       if (!finalizeRefusal.ok) return fail(finalizeRefusal.message);
       // Archiving is a rename to archive/<path>, so it goes through the same helper as
