@@ -331,6 +331,12 @@ test("the session loads its MCP tools at startup, so the Capsid tools need no To
   assert.match(step, /^ {8}env:\n {10}ENABLE_TOOL_SEARCH: "false"$/m, "ENABLE_TOOL_SEARCH is not false on the Action step");
 });
 
+// job_a7d6f6009242: the repo now commits a keyless .mcp.json for cloud sessions. The runner
+// loads only the config it wrote from the OIDC exchange, never that second capsid server.
+test("the session loads only its own MCP config, never the repo's committed .mcp.json", () => {
+  assert.match(CODE, /--mcp-config \$\{\{ runner\.temp \}\}\/capsid-mcp\.json\n\s+--strict-mcp-config\n/);
+});
+
 // PR 5b: the metrics host is off the egress list, so the session must not need it.
 test("the session sends no nonessential traffic, so nothing needs the metrics host", () => {
   assert.match(actionStep(), /^ {8}env:\n(?: {10}.*\n)*? {10}CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"$/m);

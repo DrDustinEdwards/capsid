@@ -17,5 +17,3 @@ wrangler.dryrun.jsonc
 # 16MB of it, in the working tree of a public repo. Nothing reads it from here.
 .improve-build/
 
-# Project MCP config: carries a driver bearer token
-.mcp.json
