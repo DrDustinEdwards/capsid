@@ -21,6 +21,87 @@ Run one on demand with the admin credential, a write-grant `OPERATOR_KEY_HASH` k
 curl -X POST https://capsid.<your-subdomain>.workers.dev/ops/backup -H "Authorization: Bearer <key>"
 ```
 
+## Bucket locks on the dumps
+
+Each bucket that holds d1-dump runs gets one R2 bucket lock rule on `backups/json/` with a 13 day age, so no delete or overwrite (a buggy prune, a leaked R2 token, a Worker gone wrong) can remove a dump in its first 13 days. Older dumps are protected by the off-account mirror, not by the lock. Nothing else in a bucket is locked: in `capsid-media` the rule never covers `backups/markdown/` (the mirror rewrites and prunes it every night) or media, and in `txasm-books` it never covers the generated books.
+
+### What R2 does
+
+Facts from Cloudflare's documentation, read from its source (cloudflare/cloudflare-docs, commit 0d35c2c, 2026-10-11) because the docs site was not reachable from the session that wrote this:
+
+- A lock rule prevents the deletion and overwriting of objects for a period or indefinitely. A rule has an id, `enabled`, an optional `prefix` (no prefix means every object in the bucket) and a `condition` that is one of `Age` with `maxAgeSeconds`, `Date` (retain until a date), or `Indefinite`. A bucket takes up to 1,000 rules; where several cover one object, the longest retention wins. Rules apply to existing objects as well as new ones. Source: https://developers.cloudflare.com/r2/buckets/bucket-locks/
+- A refused delete is an error, not a silent no-op: R2 error 10069, `ObjectLockedByBucketPolicy`, HTTP 403, "Object is protected by a bucket lock rule and cannot be modified or deleted." Source: https://developers.cloudflare.com/r2/api/error-codes/ . The Workers binding's `delete` takes up to 1000 keys per call and resolves only once the delete succeeds (https://developers.cloudflare.com/r2/api/workers/workers-api-reference/), so a refusal throws out of the call. The docs do not say whether the other keys in a refused bulk call are deleted.
+- Rules are set three ways: the dashboard (R2 object storage, the bucket, Settings, Bucket lock rules), Wrangler (`wrangler r2 bucket lock add`, `remove`, `list`, and `set` from a JSON file, which replaces every rule), and the API (`PUT /accounts/<account>/r2/buckets/<bucket>/lock` with the whole rule list; a rule is removed by leaving it out). Sources: https://developers.cloudflare.com/r2/buckets/bucket-locks/ , https://developers.cloudflare.com/workers/wrangler/commands/r2/#r2-bucket-lock-add , https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/locks/methods/update/
+- `wrangler r2 bucket lock add <bucket> --name <rule> --prefix <prefix>` takes exactly one of `--retention-days <n>` (stored as an `Age` condition of n times 86,400 seconds), `--retention-date <YYYY-MM-DD>` or `--retention-indefinite`. `--name` has the alias `--id`. With all three given it asks nothing. `wrangler r2 bucket lock remove <bucket> --name <rule>` reads the rules, drops that one and writes the rest back. Checked in Wrangler's own source, `src/r2/lock.ts` in the 4.107.0 this repo pins, against https://developers.cloudflare.com/workers/wrangler/commands/r2/#r2-bucket-lock-add
+- Lock rules outrank lifecycle rules, and a bucket cannot be emptied while any lock rule is configured: remove the rules first. Sources: https://developers.cloudflare.com/r2/buckets/bucket-locks/ , https://developers.cloudflare.com/r2/buckets/delete-buckets/
+- Nothing in the docs makes a rule irremovable. A token that can edit the bucket's configuration can remove the rule and then delete, so the lock guards against object-level access (a Worker's R2 binding, an R2 object token), not against the account.
+
+### What pruneDumps does with a refusal
+
+In d1-dump v0.4.1 (`src/runs.ts`, the tag every site pins), `pruneDumps` lists the runs, picks the stale ones with `selectStaleRuns`, and passes every key of every stale run to one `deleteInChunks` call, 1000 keys a call. Nothing catches an error. One refused key therefore throws out of `pruneDumps`: no stale run after that chunk is deleted, and the throw reaches the caller's nightly run. In Capsid that is `pruneR2` inside `exportAndPrune` (`src/backup.ts`): the marker and the markdown mirror are already written, but the CSP report prune, the `document_versions` and `audit_log` prune and the `backup:last-ok` stamp are skipped, so the run reports an error and `/health` warns once the stamp is 26 hours old. The same young run is stale again the next night, so the failure repeats every night until that run is older than the lock.
+
+The fix is in d1-dump pull request #17 (branch `claude/prune-skip-locked`, not yet released): each stale run is deleted on its own, `_complete.json` first and then the rest, so a partly deleted run never looks complete. A refusal with error 10069 skips that run, counts it in the result's new `locked` field (`kept + pruned + locked` is every run), and the prune goes on to the other runs. Any other delete failure still throws. A later prune selects the skipped run again and deletes it once the lock has aged off it.
+
+### Why 13 days
+
+`pruneDumps`'s default policy (capsid/rulings/shared-homes-2026-10-06.md) keeps the newest complete run of each of the last 14 UTC days, counting today, so a run made on day D is inside the daily window for prunes on days D through D+13. These are every delete it can make, by age:
+
+- A second complete run on one UTC day (a manual `/ops/backup` after the cron, a retried run) makes the older run of that day stale at the next prune, minutes or hours after it was written. No lock age above zero allows this delete, so the lock refuses it. This is the one delete the lock refuses in normal operation, and it is why the d1-dump fix must come first.
+- An incomplete run holds no slot and is kept while its day is in the daily window, so it is deleted at the first prune on day D+14 or later.
+- A complete run that is the newest of its day is kept while its day is in the daily window. It leaves the window at the same boundary and is then kept or deleted by the weekly and monthly slots, so its delete, if any, comes on day D+14 or later.
+- The newest complete run is never deleted.
+
+So apart from same-day duplicates, the youngest object `pruneDumps` deletes was written on day D and is deleted no earlier than 00:00 UTC on day D+14. A run id is at most 23:59:59 on day D, so that object is more than 13 days old. 13 days is the longest whole-day lock that never refuses those deletes. A 14 day lock would not: the cron writes a run at about 09:00 UTC and the prune fourteen days later runs at about 09:00 too, so the two are minutes apart and the outcome would depend on how long each night's dump took. With the cron at 09:00 the real margin under a 13 day lock is about a day. The only way to get closer is a run started just before midnight and a prune just after midnight fourteen days on, where the run's later objects can be a few minutes short of 13 days; with the fix that run is skipped one night and deleted the next.
+
+A site that passes its own policy agrees with 13 days while its `daily` is at least 14; a site on the flat rule agrees while its `retentionDays` is at least 14 (the default is 90). Capsid passes only `prefix` and `now`, so it runs the default. The sites' calls are not visible from this repository: before locking a site's bucket, check that its `pruneDumps` call passes no `policy` with `daily` under 14 and no `retentionDays` under 14.
+
+What a refused delete costs, once the fix is in: one run's objects stay up to 13 days longer than retention wanted, and that night's result reports `locked` above zero. A same-day duplicate is deleted at the first prune after it is 13 days old. Without the fix it costs a failed nightly run every night for up to 13 days, with every other stale run kept meanwhile.
+
+### Order
+
+1. Merge d1-dump pull request #17 and tag a release.
+2. Bump every site that calls `pruneDumps` to that tag and deploy it. Capsid's bump should also carry the new `locked` count into its backup summary, beside `json_backups_kept` and `json_backups_pruned`.
+3. Only then add the lock to that site's bucket. A bucket locked while its site still runs v0.4.1 fails its nightly run on any day a same-day duplicate is pruned.
+
+Safe to lock first, before any bump: `dustinedwards-backups`, because the dustinedwards site runs no d1-dump today (`src/offaccount.ts`), so nothing prunes there (if its d1-dump job, job_e40ec706c10a, lands first, it must pin the fixed release before this lock); and `carrel-backups` if Carrel's Worker does not call `pruneDumps` (check before locking it). The other five wait for their site's bump.
+
+### Steps, one bucket at a time
+
+Run each from a machine where `npx wrangler login` is signed in to the account that owns the buckets. Do one bucket, run its verify, and let one nightly run pass on that site (its backup result with `locked` at 0 or a small number, and no error) before the next. If a bucket was created with a jurisdiction, add `--jurisdiction <name>` to each command for it.
+
+The rule name is `backups-json-13d` on every bucket. `wrangler r2 bucket lock add` appends a rule, so running it twice on one bucket adds a duplicate; list first.
+
+1. `dustinedwards-backups`
+   - Add: `npx wrangler r2 bucket lock add dustinedwards-backups --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list dustinedwards-backups` shows `backups-json-13d`, prefix `backups/json/`, 13 days, enabled.
+   - Undo: `npx wrangler r2 bucket lock remove dustinedwards-backups --name backups-json-13d`
+2. `carrel-backups` (first only if Carrel runs no `pruneDumps`; otherwise after its bump)
+   - Add: `npx wrangler r2 bucket lock add carrel-backups --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list carrel-backups`
+   - Undo: `npx wrangler r2 bucket lock remove carrel-backups --name backups-json-13d`
+3. `capsid-media` (after Capsid runs the fixed d1-dump). The prefix keeps `backups/markdown/` and media unlocked.
+   - Add: `npx wrangler r2 bucket lock add capsid-media --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list capsid-media`, then the next nightly backup finishes without error.
+   - Undo: `npx wrangler r2 bucket lock remove capsid-media --name backups-json-13d`
+4. `germomics-backups` (after Germomics runs the fixed d1-dump)
+   - Add: `npx wrangler r2 bucket lock add germomics-backups --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list germomics-backups`
+   - Undo: `npx wrangler r2 bucket lock remove germomics-backups --name backups-json-13d`
+5. `txasm-books` (after txasm runs the fixed d1-dump). The prefix keeps the generated books unlocked.
+   - Add: `npx wrangler r2 bucket lock add txasm-books --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list txasm-books`
+   - Undo: `npx wrangler r2 bucket lock remove txasm-books --name backups-json-13d`
+6. `foxing-backups` (after Foxing runs the fixed d1-dump)
+   - Add: `npx wrangler r2 bucket lock add foxing-backups --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list foxing-backups`
+   - Undo: `npx wrangler r2 bucket lock remove foxing-backups --name backups-json-13d`
+7. `foxhound-backups` (after Foxhound runs the fixed d1-dump)
+   - Add: `npx wrangler r2 bucket lock add foxhound-backups --name backups-json-13d --prefix backups/json/ --retention-days 13`
+   - Verify: `npx wrangler r2 bucket lock list foxhound-backups`
+   - Undo: `npx wrangler r2 bucket lock remove foxhound-backups --name backups-json-13d`
+
+Do not test a lock by writing a probe object under `backups/json/`: `pruneDumps` reads any folder there as a run, finds it stale, and tries to delete it every night for 13 days. The list output and a clean nightly run are the check.
+
 ## Restore
 
 Three paths, in the order to try them. Path 2 has been executed end to end against a scratch database: all table counts matched the source and search worked on the restored copy. `restore-rehearsal.yml` runs d1-dump's restore drill on the newest R2 dump every Monday (see "The weekly drill" below).
