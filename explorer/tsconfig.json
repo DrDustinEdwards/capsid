@@ -1,0 +1,13 @@
+{
+  // The explorer's node side, checked as JavaScript by its JSDoc types (npm run check), so a
+  // wrong option to Enarratio or Capsomer fails before a page is built. On capsid's test config
+  // because build.mjs imports Capsid's schemas from ../src. src/explorer.js and e2e/ run in the
+  // browser, whose DOM types clash with Workers types; the browser spec runs both.
+  "extends": "../tsconfig.test.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "files": ["../worker-configuration.d.ts", "../src/generated-env.d.ts"],
+  "include": ["build.mjs", "wrangler-config.mjs", "playwright.config.mjs", "src/pages.mjs", "src/headers.mjs", "test"]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "capsid-explorer",
+  "private": true,
+  "type": "module",
+  "description": "capsid.dustinedwards.info: the system explorer, prerendered from Capsid's public model and numbers (capsid/research/design-system-explorer.md, section 4).",
+  "scripts": {
+    "build": "node --import ../test/resolve-ts.mjs build.mjs",
+    "check": "tsc -p .",
+    "test": "node --import ../test/resolve-ts.mjs --test \"test/*.test.mjs\"",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.7.0",
+    "enarratio": "0.1.0-alpha.8"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0"
+  }
+}

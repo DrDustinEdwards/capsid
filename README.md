@@ -298,6 +298,7 @@ Those are a clone's defaults. On this deployment the pre-approved gates were ena
 - [docs/hooks.md](docs/hooks.md) Claude Code session hooks: what `/ops/hooks` keeps, who may post, the settings for driver repos and Dustin's machine, and what enabling them for seat-started sessions would take
 - [docs/health-format.md](docs/health-format.md) The one health body every site answers with (status and sha), which the live `sha` check reads
 - [docs/live-checks.md](docs/live-checks.md) The watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages, from a document in the store
+- [explorer/README.md](explorer/README.md) The system explorer at capsid.dustinedwards.info: pages built daily from the public documents, its checks, and its deploy
 - [docs/overnight.md](docs/overnight.md) The overnight run: the plan per repo, the morning digest, and the scheduler switch with its Runs on choice (API key or subscription, the subscription decision recorded with it)
 
 ## What Capsid is not
