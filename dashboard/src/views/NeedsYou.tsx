@@ -58,6 +58,7 @@ export function NeedsYou() {
         <SinceLastLooked />
       </Suspense>
       <NeedsAttention sitesOn={hasSites(feed)} />
+      <WeeklyDigest />
     </div>
   );
 }
@@ -133,6 +134,45 @@ function InboxRow({ item }: { item: InboxItem }) {
       </span>
       <span className="when">{ago(ms(item.since), now)}</span>
     </li>
+  );
+}
+
+// ---- Weekly digest ----------------------------------------------------------------------
+
+// The watcher's digest-class findings (src/watcher.ts, findingClass): CSP, security
+// headers, analytics and beacon settings, scorer drift. They post no job; one block per
+// site lists what is open, and the Monday email carries the same list. Hidden while none
+// is open, so a quiet week adds nothing to the page.
+function WeeklyDigest() {
+  const { feed, now } = useApp();
+  const open = feed.live.findings.filter((f) => f.class === "digest");
+  if (open.length === 0) return null;
+  const sites = [...new Set(open.map((f) => f.namespace))].sort();
+  return (
+    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length} src="watcher findings that post no job">
+      <div className="inbox-apps">
+        {sites.map((site) => (
+          <section className="inbox-app" key={site} aria-label={`Weekly digest, ${site}`} data-digest-site={site}>
+            <h3>
+              {site}
+              <span className="num faint"> {open.filter((f) => f.namespace === site).length} open</span>
+            </h3>
+            <ul className="inbox-items">
+              {open
+                .filter((f) => f.namespace === site)
+                .map((f) => (
+                  <li className="inbox-item" key={f.fingerprint} title={f.evidence.join("\n")}>
+                    <span className="what">
+                      <b>{f.headline}</b>
+                    </span>
+                    <span className="when">since {ago(ms(f.first_seen), now)}</span>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Panel>
   );
 }
 

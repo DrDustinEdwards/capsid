@@ -2,7 +2,6 @@ import type { Env } from "./env";
 import { ciStatus } from "./github";
 import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
-import type { RunSignal } from "./skills-lifecycle";
 
 // One outcome row per finished job, written once, carrying counts.
 //
@@ -53,11 +52,6 @@ export interface JobOutcomeRow {
   duration_minutes: number | null;
   result_kind: OutcomeResultKind;
   verified: string;
-  // The skills this job was offered and used, as JSON arrays. NULL, not an empty
-  // array, when the job named none: capsid_run_improve action status sums json_array_length and SUM
-  // skips NULL, so such a job counts toward neither total.
-  skill_ids_offered: string | null;
-  skill_ids_used: string | null;
   recorded_at: string;
   // What the job's Claude Code sessions reported by OpenTelemetry (migrations/0025),
   // summed from session_usage when the row is written. NULL when no telemetry for the
@@ -142,57 +136,6 @@ export async function readJobUsage(db: D1Database, jobId: string): Promise<JobUs
   return usageFromTotals(results ?? []);
 }
 
-/** The skills a driver reports for one finished job. Names only; the credit comes
- *  from what the Worker verified on GitHub, never from this. */
-export interface JobSkills {
-  offered?: readonly string[];
-  used?: readonly string[];
-}
-
-const skillColumn = (ids: readonly string[] | undefined): string | null =>
-  ids && ids.length > 0 ? JSON.stringify([...ids]) : null;
-
-/**
- * What one finished job says about the skills it used, as a signal attribute() reads.
- * The direction comes only from what this Worker read off GitHub: every named pull
- * request merged, and CI green on the head of the last one. An unverified job is
- * "environment-failure", which earns nothing either way, so a GitHub outage cannot
- * retire a skill.
- */
-export function signalFor(verdict: EvidenceVerdict): RunSignal {
-  // prs_opened is verified only when every named pull request was read. A partly read
-  // run is not judged: a pull request the Worker could not read is never counted as a
-  // loss, and never as a win either.
-  const checked = verdict.verified.prs_opened && verdict.verified.prs_merged && verdict.verified.ci_green;
-  if (!checked || verdict.prs_opened === null || verdict.prs_opened === 0) return "environment-failure";
-  const allMerged = verdict.prs_merged !== null && verdict.prs_merged === verdict.prs_opened;
-  return allMerged && verdict.ci_green === 1 ? "verified-success" : "verified-failure";
-}
-
-/** signalFor over a stored outcome row, for the evaluation cycle, which reads rows
- *  rather than live verdicts. It builds the verdict fields the row kept and calls
- *  signalFor, so the two cannot disagree. A verified column that does not parse
- *  verified nothing, which earns no credit either way. */
-export function signalForRow(row: Pick<JobOutcomeRow, "prs_opened" | "prs_merged" | "ci_green" | "verified">): RunSignal {
-  let verified: VerifiedFields = NOTHING_VERIFIED;
-  try {
-    const parsed = JSON.parse(row.verified) as Partial<VerifiedFields>;
-    verified = { ...NOTHING_VERIFIED, ...parsed };
-  } catch {
-    verified = NOTHING_VERIFIED;
-  }
-  return signalFor({
-    prs_opened: row.prs_opened,
-    prs_merged: row.prs_merged,
-    ci_green: row.ci_green,
-    commits: null,
-    files_changed: null,
-    tests_added: null,
-    verified,
-    notes: [],
-  });
-}
-
 const NOTHING_VERIFIED: VerifiedFields = {
   prs_opened: false,
   prs_merged: false,
@@ -210,7 +153,7 @@ export function resultKindOf(resultRef: string | null | undefined): OutcomeResul
 
 // Whole minutes from the first claim, including time blocked at a gate; resume does
 // not reset claimed_at (migrations/0011's comment describes an earlier rule). A job the
-// lease sweep requeued is measured from its new claim. null with no claim timestamp,
+// seat released keeps its first claim time. null with no claim timestamp,
 // and null rather than negative if the clocks disagree.
 export function durationMinutes(claimedAt: string | null, now: Date): number | null {
   if (!claimedAt) return null;
@@ -427,7 +370,7 @@ export async function verifyEvidence(
   // were read and is marked verified, as the re-verification sweep already does.
   // prs_opened stays the number named and UNVERIFIED, so no reader takes the merged
   // count for a total: the agent record's merge rate reads only rows whose prs_opened
-  // is verified, and signalFor leaves the run unjudged. Commits and files stay the
+  // is verified, and the run goes unjudged. Commits and files stay the
   // driver's, since a sum over some of the pull requests is not the job's total.
   if (facts.length !== urls.length) {
     if (facts.length > 0) {
@@ -479,10 +422,10 @@ export async function verifyEvidence(
 
 // usage: the job's telemetry totals (readJobUsage). Omitted is no telemetry: NULL.
 // actualModel: the model_id the session reported in its claim, or null when it reported none.
-export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, skills?: JobSkills, usage: JobUsage = NO_USAGE, actualModel: string | null = null): JobOutcomeRow {
+export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, usage: JobUsage = NO_USAGE, actualModel: string | null = null): JobOutcomeRow {
   return {
     job_id: job.id,
-    // Copied, not joined, because a later lease expiry clears claimed_by.
+    // Copied, not joined, because a release clears claimed_by.
     // "unattributed" only keeps the NOT NULL column satisfied.
     agent: job.claimed_by ?? "unattributed",
     namespace: job.namespace,
@@ -497,8 +440,6 @@ export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, sk
     duration_minutes: durationMinutes(job.claimed_at, now),
     result_kind: resultKindOf(job.result_ref),
     verified: JSON.stringify(verdict.verified),
-    skill_ids_offered: skillColumn(skills?.offered),
-    skill_ids_used: skillColumn(skills?.used),
     recorded_at: now.toISOString(),
     cost_usd: usage.cost_usd,
     tokens_input: usage.tokens_input,
@@ -519,9 +460,9 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
     .prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed,
          tests_added, ci_green, blocked_count, resumed_count, duration_minutes, result_kind, verified,
-         skill_ids_offered, skill_ids_used, recorded_at, cost_usd, tokens_input, tokens_output,
+         recorded_at, cost_usd, tokens_input, tokens_output,
          tokens_cache_read, tokens_cache_creation, active_seconds, job_kind, model_chosen, model_actual)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
        ON CONFLICT(job_id) DO NOTHING`
     )
     .bind(
@@ -539,8 +480,6 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.duration_minutes,
       row.result_kind,
       row.verified,
-      row.skill_ids_offered,
-      row.skill_ids_used,
       row.recorded_at,
       row.cost_usd,
       row.tokens_input,

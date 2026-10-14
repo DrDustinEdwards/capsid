@@ -6,6 +6,7 @@ import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from
 import { verifySignedBody } from "./improve-task";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
+import { redactText } from "./redact";
 
 // CAPSID STARTS A SESSION ITSELF (job_a7d6f6009242, docs/routines.md). One Claude Code
 // routine serves every namespace, created by Dustin at claude.ai/code/routines on Opus,
@@ -82,8 +83,87 @@ const FIRE_TIMEOUT_MS = 15_000;
 // so ROUTINE_<NS>_TOKEN, which turns each dash into an underscore, names one namespace.
 const ROUTINE_NAMESPACE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-const SESSION_ID = /^session_[A-Za-z0-9]{8,64}$/;
-const SESSION_URL = /^https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]{8,64}$/;
+// What a fire's answer may name (Anthropic documents {"type":"routine_fire",
+// "claude_code_session_id":"session_01...","claude_code_session_url":"https://claude.ai/code/session_01..."}).
+// The id's charset is wider than the documented example, because the real answer failed
+// the strict one. Whatever is stored or returned matches one of these two shapes.
+const SESSION_ID = /^session_[A-Za-z0-9_-]{8,128}$/;
+const SESSION_URL = /^https:\/\/(?:[a-z0-9-]+\.)*claude\.ai(?:\/[A-Za-z0-9_.-]+)*\/session_[A-Za-z0-9_-]{8,128}\/?$/;
+const SESSION_SEGMENT = /^session_[A-Za-z0-9_-]{8,128}$/;
+const ANSWER_MAX_CHARS = 64 * 1024;
+const DIAG_FIELD_CHARS = 200;
+const DIAG_MAX_KEYS = 20;
+const DIAG_MAX_STRINGS = 10;
+
+/** A session URL as the answer names it, reduced to origin and path, or null when it is not a claude.ai session URL. */
+function readSessionUrl(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length > 2048) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.port !== "") return null;
+  if (url.hostname !== "claude.ai" && !url.hostname.endsWith(".claude.ai")) return null;
+  if (!url.pathname.split("/").some((segment) => SESSION_SEGMENT.test(segment))) return null;
+  const clean = `https://${url.hostname}${url.pathname}`;
+  return SESSION_URL.test(clean) ? clean : null;
+}
+
+/** A session id as the answer names it, or null. */
+function readSessionId(raw: unknown): string | null {
+  return typeof raw === "string" && SESSION_ID.test(raw) ? raw : null;
+}
+
+/**
+ * The session an answer names. The id and the URL each stand alone: a good id with no
+ * readable URL gets the URL built from it, and a good URL with no readable id gives its
+ * id back, so a session is recorded whenever either one reads.
+ */
+function readSession(answer: unknown): { id: string | null; url: string | null; mismatch: string | null } {
+  const body = answer !== null && typeof answer === "object" && !Array.isArray(answer) ? (answer as Record<string, unknown>) : {};
+  let id = readSessionId(body.claude_code_session_id);
+  let url = readSessionUrl(body.claude_code_session_url);
+  if (id === null && url !== null) id = url.split("/").find((segment) => SESSION_SEGMENT.test(segment)) ?? null;
+  if (url === null && id !== null) url = `https://claude.ai/code/${id}`;
+  // Both read but naming different sessions: the id is trusted and the URL rebuilt from it.
+  let mismatch: string | null = null;
+  const named = url?.split("/").find((segment) => SESSION_SEGMENT.test(segment)) ?? null;
+  if (id !== null && named !== null && named !== id) {
+    mismatch = named;
+    url = `https://claude.ai/code/${id}`;
+  }
+  return { id, url, mismatch };
+}
+
+// Printable ASCII only, redacted, bounded: what is kept of an answer nothing could read.
+const keepText = (value: string, token: string, max: number) => {
+  const scrubbed = token ? value.split(token).join("[REDACTED:token]") : value;
+  return redactText(scrubbed.slice(0, max * 2))
+    .replace(/[^\x20-\x7e]/g, "?")
+    .slice(0, max);
+};
+
+/** What an unreadable answer looked like: its top-level keys, its type, and the head of each string field. Bounded, redacted, never the token. */
+function describeAnswer(text: string, answer: unknown, token: string): Record<string, unknown> {
+  if (answer === null || typeof answer !== "object" || Array.isArray(answer)) {
+    return { json: false, head: keepText(text, token, DIAG_FIELD_CHARS) };
+  }
+  const body = answer as Record<string, unknown>;
+  const keys = Object.keys(body);
+  const strings: Record<string, string> = {};
+  for (const key of keys) {
+    const value = body[key];
+    if (typeof value === "string" && Object.keys(strings).length < DIAG_MAX_STRINGS) strings[keepText(key, token, 40)] = keepText(value, token, DIAG_FIELD_CHARS);
+  }
+  return {
+    json: true,
+    keys: keys.slice(0, DIAG_MAX_KEYS).map((key) => keepText(key, token, 40)),
+    type: typeof body.type === "string" ? keepText(body.type, token, 64) : null,
+    strings,
+  };
+}
 
 /** The routine id a fire URL names, or null when the URL is not a fire URL. */
 function routineIdOf(url: string): string | null {
@@ -245,12 +325,19 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
 
   // A 2xx means a session exists. Record it even when the answer is unreadable, so a
   // second fire is still refused and the session is not lost.
-  const body = (await res.json().catch(() => null)) as { claude_code_session_id?: unknown; claude_code_session_url?: unknown } | null;
-  const sessionId = typeof body?.claude_code_session_id === "string" && SESSION_ID.test(body.claude_code_session_id) ? body.claude_code_session_id : null;
-  const sessionUrl = typeof body?.claude_code_session_url === "string" && SESSION_URL.test(body.claude_code_session_url) ? body.claude_code_session_url : null;
+  const answerText = (await res.text().catch(() => "")).slice(0, ANSWER_MAX_CHARS);
+  let answer: unknown = null;
+  try {
+    answer = JSON.parse(answerText);
+  } catch {
+    answer = null;
+  }
+  const { id: sessionId, url: sessionUrl, mismatch } = readSession(answer);
+  // Nothing readable: keep what the answer looked like, so the next failure can be diagnosed.
+  const unreadable = sessionId === null && sessionUrl === null ? { answer: describeAnswer(answerText, answer, token) } : {};
   let unrecorded = "";
   try {
-    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl, token_secret: tokenSecret })]);
+    await env.DB.batch([jobAudit(env.DB, agent.actor, "job-routine-fired", job, { routine_id: routineId, session_id: sessionId, session_url: sessionUrl, token_secret: tokenSecret, ...(mismatch ? { session_url_mismatch: mismatch } : {}), ...unreadable })]);
   } catch (err) {
     // The session exists whatever D1 says, so the answer still returns it; the reservation
     // row holds off a second fire for RESERVE_MINUTES.
@@ -268,7 +355,7 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
     note:
       (sessionUrl
         ? `${routineId} started ${sessionUrl} for ${job.id}. The job stays queued: the session works it without a claim and completes it naming its pull request.`
-        : `${routineId} answered ${res.status}, so a session started for ${job.id}, but its answer named no readable session URL. Find it at claude.ai/code.`) +
+        : `${routineId} answered ${res.status}, so a session started for ${job.id}, but its answer named no readable session id or URL. What the answer looked like is in the job-routine-fired audit row. Find the session at claude.ai/code.`) +
       unrecorded +
       marked.note,
   };

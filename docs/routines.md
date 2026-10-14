@@ -1,6 +1,6 @@
 # Routine-started sessions
 
-Capsid starts a Claude Code cloud session for one queued job itself, by firing its namespace's routine (job_a7d6f6009242, step 5 of `capsid/research/plan-lean-capsid.md`). Until now Dustin relayed every prompt and every report by hand. This replaces seat-start (`docs/seat-start.md`), which runs sessions on GitHub's runners; seat-start is retired once a routine-started session has completed one real job.
+Capsid starts a Claude Code cloud session for one queued job itself, by firing that namespace's routine (job_a7d6f6009242, step 5 of `capsid/research/plan-lean-capsid.md`). Until now Dustin relayed every prompt and every report by hand. This replaced seat-start, which ran sessions on GitHub's runners with a per-job runner key. Seat-start is retired (job_2c92174d5bff, 2026-10-11): its action `start`, its switch and cap, the `seat-session` workflows, `/ops/runner-key` and the bound runner keys are gone from the code.
 
 A routine is a saved Claude Code configuration on Dustin's claude.ai account: a prompt, a repository, an environment and triggers (code.claude.com/docs/en/routines). Its API trigger is a per-routine URL and bearer token. A POST to the URL starts a new cloud session and answers with its id and URL. Runs count against the subscription like any session, each routine accepts 30 fires an hour and the account 100, and the endpoint has no idempotency key, so every accepted fire is a new session.
 
@@ -73,13 +73,23 @@ Step 7 is claimless complete (job_e68de044f8a4, "The PR is the claim"): a caller
 
 `capsid_work_jobs` action `fire` with a job `id` (`src/routine-fire.ts`, tests in `test-integration/routine-fire.test.ts` against a fake endpoint):
 
-1. Only the seat (the admin or a `can_merge` caller) may fire, and only within its namespaces. A runner key bound to a job cannot.
+1. Only the seat (the admin or a `can_merge` caller) may fire, and only within its namespaces.
 2. The job must be queued and its signature must verify.
 3. The namespace's fire URL must be set, and a token must resolve for it (above).
 4. A job somebody already began (the started label) is refused as `already_started`, naming who and when.
 5. The fire reserves itself with one D1 statement that writes a `job-routine-firing` audit row only while the job has no fire in the last 30 minutes and no reservation in the last 2. Two fires racing for one job cannot both post, and a job fired in the last 30 minutes is refused, naming that session, because every fire is a new session. A refused fire (a 401, say) leaves its reservation, so a retry waits 2 minutes.
 6. Capsid POSTs the fire text (`job_id`, `namespace`, `model_recommended`, one per line) with the token, `anthropic-version: 2023-06-01` and the beta header `experimental-cc-routine-2026-04-01`, and gives up after 15 seconds.
 7. On any 2xx it writes a `job-routine-fired` audit row with the routine id, session id, session URL and token secret name, and returns the session. The row is written even when the answer is unreadable, since a 2xx means a session exists, and if D1 fails then, the answer still carries the session URL and says it was not recorded. The job stays queued: the session works it without a claim. In a second guarded batch it then marks the job started, as action `begin` does (`started_by` the seat, `started_at`, the mirror, and a `job-started` audit row carrying the session URL). If the job moved meanwhile, the answer says it was not marked, and the session still runs.
+
+**Reading the answer** (`src/routine-fire.ts`). Anthropic documents it as `{"type":"routine_fire","claude_code_session_id":"session_01...","claude_code_session_url":"https://claude.ai/code/session_01..."}`. The first real fire answered 200 and was not read, so the answer is now read leniently and what is kept is still checked:
+
+- The body is read once as text and parsed as JSON. A body that is not a JSON object has its head recorded (below).
+- A session id is `session_` and 8 to 128 letters, digits, dashes or underscores.
+- A session URL must parse, be `https`, have no port, sit on `claude.ai` or a subdomain of it, and hold a `session_...` path segment. Only its origin and path are kept: a query string and a fragment are dropped.
+- A good id with a missing or unreadable URL gets `https://claude.ai/code/<id>`. A good URL with an unreadable id gives its id back.
+- When neither reads, the `job-routine-fired` row also carries `answer`: whether the body was a JSON object, its top-level keys (at most 20), the `type` value, and the first 200 characters of up to 10 string fields, each passed through `src/redact.ts` with the token and any non-printable character removed. A body that is not JSON records its first 200 characters the same way. The answer carries no secret, but the record is bounded and redacted anyway. The returned note says the answer named no readable session id or URL, so the next failure can be read from that row.
+
+Whatever is stored or returned matches the id and URL shapes above, so nothing else from the answer reaches the audit row except the bounded `answer` description.
 
 Each refusal is named in its first word. None writes a `job-routine-fired` row except `routine_unreachable`: with no answer the session may exist, so it is recorded with `outcome: "unknown"` and a second fire waits out the 30 minutes.
 
@@ -95,7 +105,7 @@ Each refusal is named in its first word. None writes a `job-routine-fired` row e
 | `routine_refused` | any other status, with Anthropic's error type (a 400 is often a paused routine) |
 | `routine_unreachable` | no answer within 15 seconds, or the request failed |
 
-**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule are not carried over. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. With one routine for every namespace the 30 an hour is shared across them. The started label is what tells a second session, and a second fire, that a job is being worked: the fire sets it and refuses a job that carries it.
+**Not built, by choice.** Seat-start's switch, cap and one-session-per-repo rule were not carried over, and are gone with it. Firing is the seat's act one job at a time, Anthropic caps fires at 30 an hour per routine, and a routine session holds no claim Capsid could count. With one routine for every namespace the 30 an hour is shared across them. The started label is what tells a second session, and a second fire, that a job is being worked: the fire sets it and refuses a job that carries it.
 
 ## The cloud-driver agent
 
@@ -105,7 +115,7 @@ The network secret used to hold `capsid-driver`'s key, which was scoped to capsi
 - namespaces `*`, so repos `*` follows from the mint
 - grants `read` and `write`
 - no flags: no `can_merge`, no `can_direct_write`, no `can_dispatch`, no `can_write_workflows`, no `can_touch_protected`, no `money_paths`
-- `max_claims` left at 1. Routine sessions never claim.
+- Routine sessions never claim.
 
 It can read and write every namespace's documents and jobs and open pull requests, and it cannot merge, push to a default branch, dispatch a workflow or touch a protected path. Firing stays the seat's act, so a session cannot start another session.
 

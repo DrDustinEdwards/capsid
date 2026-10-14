@@ -47,7 +47,7 @@ function store(jobs: Array<Record<string, unknown>>) {
     prepare: (sql: string) => inner.prepare(sql),
     batch: (statements: Array<{ sql: string; params: unknown[] }>) =>
       inner.batch(
-        statements.map((s) => ({ ...s, sql: s.sql.replace(/summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?9 END/, "summary_sig = ?9") })) as unknown as D1PreparedStatement[]
+        statements.map((s) => ({ ...s, sql: s.sql.replace(/summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/, "summary_sig = ?8") })) as unknown as D1PreparedStatement[]
       ),
   } as unknown as D1Database;
   return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, IMPROVE_SCORE_SECRET: SECRET }) };

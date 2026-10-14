@@ -9,7 +9,7 @@ import { visit } from "./views.ts";
 
 const PREVIEW_URL = "**/portal/api/actions/preview";
 
-const seat = (page: Page) => page.getByRole("switch", { name: "Seat start", exact: true });
+const seat = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
 const loop = (page: Page) => page.getByRole("switch", { name: "Improve loop", exact: true });
 const nsSwitch = (page: Page, ns: string) => page.getByRole("switch", { name: `Improve loop for ${ns}`, exact: true });
 const message = (page: Page) => page.locator(".msg-region");
@@ -25,7 +25,7 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
   await visit(page, "namespaces");
   await expect(seat(page)).toHaveAttribute("aria-checked", "false");
   await seat(page).click();
-  const field = page.getByLabel("Turning seat start on. Reason:");
+  const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await expect(field).toBeFocused();
   // Not moved: the reason has not been applied.
   await expect(seat(page)).toHaveAttribute("aria-checked", "false");
@@ -43,7 +43,7 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
 test("PLANT: Esc cancels the reason and returns focus to the switch, which has not moved", async ({ page }) => {
   await visit(page, "namespaces");
   await seat(page).click();
-  const field = page.getByLabel("Turning seat start on. Reason:");
+  const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await field.fill("typed, then thought better of it");
   await page.keyboard.press("Escape");
   await expect(field).toHaveCount(0);
@@ -53,12 +53,12 @@ test("PLANT: Esc cancels the reason and returns focus to the switch, which has n
 
 test("PLANT: the switch's accessible name is the same in both states", async ({ page }) => {
   await visit(page, "namespaces");
-  await expect(seat(page)).toHaveAccessibleName("Seat start");
+  await expect(seat(page)).toHaveAccessibleName("Overnight run");
   await seat(page).click();
-  await page.getByLabel("Turning seat start on. Reason:").fill("checking the name");
+  await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("checking the name");
   await page.keyboard.press("Enter");
   await expect(seat(page)).toHaveAttribute("aria-checked", "true");
-  await expect(seat(page)).toHaveAccessibleName("Seat start");
+  await expect(seat(page)).toHaveAccessibleName("Overnight run");
   // Leave it as found.
   await message(page).getByRole("button", { name: "Undo" }).click();
   await expect(seat(page)).toHaveAttribute("aria-checked", "false");
@@ -68,16 +68,16 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await page.clock.install();
   await visit(page, "namespaces");
   await seat(page).click();
-  await page.getByLabel("Turning seat start on. Reason:").fill("queued jobs are waiting");
+  await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("queued jobs are waiting");
   await page.keyboard.press("Enter");
   await expect(seat(page)).toHaveAttribute("aria-checked", "true");
   await expect(seat(page)).toBeFocused();
   await expect(message(page)).toHaveAttribute("role", "status");
-  await expect(message(page)).toContainText("Seat start is on.");
-  expect(await newestActivity(page)).toBe("portal.seat_start");
+  await expect(message(page)).toContainText("The overnight run is now api.");
+  expect(await newestActivity(page)).toBe("portal.overnight");
   // It stays: no timer clears it.
   await page.clock.runFor(10_000);
-  await expect(message(page)).toContainText("Seat start is on.");
+  await expect(message(page)).toContainText("The overnight run is now api.");
   const undo = message(page).getByRole("button", { name: "Undo" });
   await expect(undo).toBeVisible();
 
@@ -86,19 +86,19 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await expect(seat(page)).toBeFocused();
   await expect(message(page)).toContainText("Undone.");
   await expect(message(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
-  expect(await newestActivity(page)).toBe("portal.undo-seat_start");
+  expect(await newestActivity(page)).toBe("portal.undo-overnight");
 
   await message(page).getByRole("button", { name: "Dismiss" }).click();
   await expect(message(page)).toHaveText("");
 });
 
 test("PLANT: a refusal from the Worker is shown beside the switch in plain words, and the switch does not move", async ({ page }) => {
-  await page.route(PREVIEW_URL, (route) => route.fulfill({ status: 400, contentType: "text/plain", body: "seat_start needs a reason: why seat-started sessions go on or off." }));
+  await page.route(PREVIEW_URL, (route) => route.fulfill({ status: 400, contentType: "text/plain", body: "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on." }));
   await visit(page, "namespaces");
   await seat(page).click();
-  await page.getByLabel("Turning seat start on. Reason:").fill("anything");
+  await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("anything");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".autoctl").getByRole("alert")).toContainText("seat_start needs a reason");
+  await expect(page.locator(".autoctl").getByRole("alert")).toContainText("overnight needs a reason");
   await expect(seat(page)).toHaveAttribute("aria-checked", "false");
   await expect(message(page)).toHaveText("");
 });
@@ -148,16 +148,15 @@ test("the improve loop turns on with the chosen Runs on, and Runs on while it is
   await expect(loop(page)).toHaveAttribute("aria-checked", "false");
 });
 
-test("Queue and Agents show the state as a word that links to Settings' automation section, with no control of their own", async ({ page }) => {
+test("Queue and Agents have no automation control of their own, and Agents links to Settings' automation section", async ({ page }) => {
   await visit(page, "queue");
   await expect(page.getByRole("button", { name: /^Turn (on|off)$/ })).toHaveCount(0);
+  await visit(page, "agents");
+  await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Change it in Settings" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page).toHaveURL(/\/settings#automation$/);
   await expect(page.getByRole("heading", { level: 2, name: "Automation and namespaces" })).toBeVisible();
-  await visit(page, "agents");
-  await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Change it in Settings" })).toBeVisible();
 });
 
 // The overnight run's switch (docs/overnight.md): the same pattern with its own "Runs on"

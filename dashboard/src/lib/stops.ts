@@ -24,7 +24,6 @@ export interface StopActions {
 export function stopCommands(feed: OpsFeed | null, a: StopActions): Command[] {
   if (!feed) return [];
   const out: Command[] = [];
-  if (feed.live.seat_start.enabled) out.push({ group: "Stop", text: "Turn seat start off", hint: "asks a reason", run: () => a.flip("sw-seat") });
   if (feed.live.overnight.mode !== "off") out.push({ group: "Stop", text: "Turn the overnight run off", hint: "asks a reason", run: () => a.flip("sw-overnight") });
   if (feed.live.loop.mode !== "off") out.push({ group: "Stop", text: "Turn the improve loop off", hint: "asks a reason", run: () => a.flip("sw-loop") });
   for (const n of feed.live.namespaces) {

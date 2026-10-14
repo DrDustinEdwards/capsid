@@ -5,7 +5,7 @@ import { logEvent } from "./log";
 
 // THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3, ruled
 // by Dustin 2026-10-04). A scheduled run of the per-namespace drivers on Dustin's own
-// machine (scripts/schedule-drivers.mjs), off unless he turns it on, with a "Runs on"
+// machine, off unless he turns it on, with a "Runs on"
 // choice of API key or subscription. It reuses the improve loop's three values
 // (IMPROVE_MODES: api, subscription, off) and its Portal pattern: a reason on every
 // change, an audit row, and the value read back.

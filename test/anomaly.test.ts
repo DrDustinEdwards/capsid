@@ -9,10 +9,10 @@ import { owningCheck } from "../src/watcher.ts";
 const NOW = new Date("2026-10-10T18:00:00.000Z");
 const hour = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3600_000).toISOString().slice(0, 13);
 
-// A steady driver: claim, heartbeat and write, a few rows an hour, every day for 14 days.
+// A steady driver: claim, read and write, a few rows an hour, every day for 14 days.
 function steady(actor: string): ActionHour[] {
   const out: ActionHour[] = [];
-  for (let h = 30; h < 14 * 24; h += 6) for (const action of ["jobs-claimed", "heartbeat", "write"]) out.push({ actor, action, hour: hour(h), n: 3 });
+  for (let h = 30; h < 14 * 24; h += 6) for (const action of ["jobs-claimed", "read", "write"]) out.push({ actor, action, hour: hour(h), n: 3 });
   return out;
 }
 
@@ -79,14 +79,6 @@ test("a tool-call spike under the floor is quiet, and so is an agent with no too
   assert.deepEqual(toolRateFindings(under, NOW), []);
   // The first day of tool reporting: rows only in the last day, however many.
   assert.deepEqual(toolRateFindings([{ actor: "agent:sample-new", hour: hour(1), n: 5000 }], NOW), []);
-});
-
-test("a session key's tool calls are judged as its driver, against the driver's baseline", () => {
-  const driver = "agent:sample-driver";
-  const session = "agent:sample-driver@job_00000000abcd.a1b2c3";
-  const rows: ToolHour[] = [...steadyTools(driver), { actor: session, hour: hour(2), n: 700 }];
-  const found = toolRateFindings(rows, NOW);
-  assert.deepEqual(found.map((f) => f.fingerprint), ["anomaly-tool-rate-sample-driver"]);
 });
 
 test("readToolHours reads tool events only, from the ISO window start, the watcher left out", async () => {

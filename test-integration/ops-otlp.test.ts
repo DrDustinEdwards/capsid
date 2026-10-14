@@ -15,7 +15,6 @@ const SECRET = "test-root-secret";
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 const DRIVER_KEY = "capsid_agent_" + "e".repeat(64);
 const READ_ONLY_DRIVER_KEY = "capsid_agent_" + "f".repeat(64);
-const RUNNER_KEY = "capsid_agent_" + "a".repeat(64);
 const OTHER_DRIVER_KEY = "capsid_agent_" + "b".repeat(64);
 const DRIVER_ACTOR = "agent:sample-driver";
 const SESSION = "5f1c2d3e-sample-session";
@@ -116,14 +115,6 @@ describe("who may send", () => {
     expect(await usageRows()).toEqual([
       { session_id: SESSION, job_id: null, metric: "claude_code.cost.usage", kind: "", model: "claude-sample-1", value: 0.5 },
     ]);
-  });
-
-  it("a runner key's usage is recorded against the one job it is bound to", async () => {
-    const id = await queued("a runner's job");
-    await seedAgent("agent_samplerun01", `runner-${id}-s1`, RUNNER_KEY, ["read", "write"], "session", id);
-    const response = await send(RUNNER_KEY, COST);
-    expect(response.status, await response.clone().text()).toBe(200);
-    expect((await usageRows())[0]).toMatchObject({ job_id: id });
   });
 
   it("PLANT: a key cannot add usage to another key's session", async () => {

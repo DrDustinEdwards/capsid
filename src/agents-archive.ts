@@ -47,8 +47,8 @@ interface DueRow {
   reason: ArchiveReason;
 }
 
-/** The revoked agents due to move: 7 days after revocation, or a one-job runner key
- *  whose job has ended (done, failed or superseded). Oldest revocation first. */
+/** The revoked agents due to move: 7 days after revocation, or a one-job key row
+ *  (job_id set, an old runner key) whose job has ended (done, failed or superseded). Oldest revocation first. */
 async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
   const { results } = await db
     .prepare(

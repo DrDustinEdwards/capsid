@@ -122,7 +122,7 @@ export async function recordSkill(
 
 // Other namespaces' skills this one has not tried, Laplace-smoothed win rate.
 // Candidate and live only, and only skills that claim this namespace or claim none,
-// on the same terms as offerSkills in ./skills-records.
+// the terms the skill list in docs/skills.md describes.
 export async function candidateSkills(
   db: D1Database,
   namespace: string,

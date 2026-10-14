@@ -143,7 +143,7 @@ const GUARD_SOURCES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/tools\/repo\.ts$/i, why: "guardedWrite, the one gate on repo mutations" },
   { pattern: /^src\/tools\/docs\.ts$/i, why: "pathMutation, the only way a path changes" },
   { pattern: /^src\/(access-jwt|access-login|ops-session-auth|portal-auth)\.ts$/i, why: "a login or session check" },
-  { pattern: /^src\/(runner-key|job-signing)\.ts$/i, why: "a key or a signature" },
+  { pattern: /^src\/(job-signing)\.ts$/i, why: "a key or a signature" },
   { pattern: /^src\/agents(-admin)?\.ts$/i, why: "the minting and grants of agent credentials" },
 ];
 

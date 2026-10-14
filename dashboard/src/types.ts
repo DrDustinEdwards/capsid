@@ -30,6 +30,7 @@ export type {
   OpsAwaitingSeat,
   OpsCanonProposal,
   OpsFeed,
+  OpsFinding,
   OpsJob,
   OpsJobStatus,
   OpsLive,

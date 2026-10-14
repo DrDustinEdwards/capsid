@@ -271,8 +271,6 @@ const IMPROVE_ADMIN_ACTIONS = [
   "mint_operator_key",
   "sign_policy",
   "register_skill",
-  "skill_transitions",
-  "seat_start",
   "breaker_reset",
   "overnight",
 ] as const;
@@ -280,7 +278,7 @@ const IMPROVE_ADMIN_ACTIONS = [
 const CONTROL_IMPROVE: CompositeSpec = {
   name: "capsid_admin_control_improve",
   title: "Control the improve loop",
-  summary: "Control the improve loop rather than run it: its mode, a namespace pause, the budget, operator keys, the signed policies, skills, a seat start, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
+  summary: "Control the improve loop rather than run it: its mode, a namespace pause, the budget, operator keys, the signed policies, skills, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
   actions: Object.fromEntries(IMPROVE_ADMIN_ACTIONS.map((a) => [a, { op: "improve_run", inject: { action: a }, summary: "" }])),
 };
 

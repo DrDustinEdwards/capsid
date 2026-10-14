@@ -39,7 +39,7 @@ The `headers` rule runs `checkSecurityHeaders` from `@dustinedwards/security-hea
 - `<path>` starts with `/` and holds letters, digits and `. _ ~ / % -`. No query, no host: the check fetches the site's configured origin plus this path and nothing else.
 - Up to 20 page rules, 20 analytics rules and 6 sha rules, because each is a fetch or a GitHub read inside one pass.
 - `sha` is for a site that deploys on merge and whose health route reports its sha in the standard format (docs/health-format.md). A site that ships by hand (dustinedwards deploys by dispatch) would be flagged on every merge, so it gets no `sha` line. `capsid` is refused: its own deploy is the `master head` check.
-- Reads only. Every finding is a job posted by the watcher, deduplicated and remembered like the others.
+- Reads only. A finding about the config itself (`live-config-invalid`, `live-config-unknown-site-<namespace>`) is a job posted by the watcher, deduplicated and remembered like the others. Every other live finding (headers, beacon, CSP, sha, analytics, unread pages) posts no job: it is remembered open with no job and listed in the weekly digest per site (the Portal's Needs you page, and the Monday email), because a hygiene finding is not something to drop everything for. See docs/autonomy.md, "The watcher".
 
 ## What it cannot see
 

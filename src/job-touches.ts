@@ -51,9 +51,8 @@ export function actorKind(actor: string, context: ActorContext = {}): ActorKind 
   if (actor.startsWith("opkey:") || SEAT_AGENTS.has(actor) || context.seat) return "seat";
   if (actor === "agent:reviewer") return "reviewer";
   if (SYSTEM_ACTORS.has(actor)) return "system";
-  // `<ns>-driver`, and a seat-started runner (`runner-<job>-s<n>`, src/runner-key.ts),
-  // which is a driver session with a key of its own. Any other minted agent that holds
-  // a job is working it, so it is a driver too.
+  // `<ns>-driver`. Any other minted agent that holds a job is working it, so it is a
+  // driver too.
   if (actor.startsWith("agent:")) return "driver";
   return "system";
 }

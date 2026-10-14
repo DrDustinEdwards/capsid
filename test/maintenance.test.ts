@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { laterPassed, namesPullRequest, promisesFollowUps } from "../src/maintenance.ts";
+import { laterPassed, namesPullRequest, promisesFollowUps, readMaintenance } from "../src/maintenance.ts";
 import { gatherPrItems, greenAwaitingSeat, redTooLong, type OpenPr, type PrCheck, type PrReaders } from "../src/maintenance-prs.ts";
 import { BRANCH_KEEP_KEY, gatherBranchItems, githubBranchReaders, PRUNE_AUDIT_ACTION, PRUNE_CAP, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches.ts";
-import { DISK_PREFIX, gatherDiskItems, parseDiskLine, recordDiskReading } from "../src/maintenance-disk.ts";
 import { gatherDeployItems, type DeployReaders } from "../src/maintenance-deploys.ts";
 import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types.ts";
 import type { Env } from "../src/env.ts";
@@ -258,47 +257,6 @@ test("a failed branch read or an unreadable keep list is listed as not checked, 
   });
 });
 
-// The disk rule (piece 4). A driver's heartbeat reason carries disk-guard's preflight line.
-
-test("the free-disk line is read from an ok or STOP reason, and nothing else", () => {
-  assert.deepEqual(parseDiskLine("ok: 41.2 GB free"), { free_gb: 41.2, stop: false, line: "ok: 41.2 GB free" });
-  assert.deepEqual(parseDiskLine("STOP: 12.3 GB free on D:\\work, below the 20 GB minimum")?.free_gb, 12.3);
-  assert.deepEqual(parseDiskLine("STOP: could not read free space on D:\\work: EPERM"), { free_gb: null, stop: true, line: "STOP: could not read free space on D:\\work: EPERM" });
-  assert.equal(parseDiskLine("still working on the tests"), null);
-});
-
-test("a reading under 30 GB or a STOP is listed, a healthy or old one is not, and the count says what was read", async () => {
-  const { kv, puts } = fakeKv({});
-  const env = { APP_KV: kv } as unknown as Env;
-  const at = (actor: string) => ({ actor, namespace: "sample", job: `job_${actor}` });
-  const recorded = await recordDiskReading(env, at("agent:low"), "ok: 22.5 GB free", NOW);
-  assert.deepEqual(recorded, { recorded: true, free_gb: 22.5, stop: false });
-  assert.equal(puts[0].ttl, 7 * 86_400, "a driver that stops reporting leaves no key behind for long");
-  await recordDiskReading(env, at("agent:full"), "STOP: 4 GB free on /work, below the 20 GB minimum", NOW);
-  await recordDiskReading(env, at("agent:fine"), "ok: 30 GB free", NOW);
-  await recordDiskReading(env, at("agent:old"), "ok: 3 GB free", new Date(NOW.getTime() - 49 * 3_600_000));
-  const none = await recordDiskReading(env, at("agent:quiet"), "heartbeat", NOW);
-  assert.equal(none.recorded, false, "a reason with no free-disk line stores nothing and says so");
-
-  const got = await gatherDiskItems(env, NOW);
-  assert.deepEqual(got.items.map((i) => [i.rule, i.job]), [["disk-low", "job_agent:full"], ["disk-low", "job_agent:low"]], "lowest first");
-  assert.match(got.items[0].line, /agent:full reported 4 GB free .* and stopped claiming/);
-  assert.match(got.items[1].line, /22\.5 GB free .*, under 30 GB/);
-  assert.equal(got.read, 3, "three current readings, the 49-hour-old one is not current");
-
-  const clean = fakeKv({});
-  const cleanEnv = { APP_KV: clean.kv } as unknown as Env;
-  await recordDiskReading(cleanEnv, at("agent:fine"), "ok: 80 GB free", NOW);
-  const quiet = await gatherDiskItems(cleanEnv, NOW);
-  assert.deepEqual(quiet, { items: [], read: 1 }, "quiet with one reading read, not quiet on nothing read");
-});
-
-test("a stored reading that does not parse is listed as not checked", async () => {
-  const { kv } = fakeKv({ seed: { [`${DISK_PREFIX}agent:broken`]: "{not json" } });
-  const got = await gatherDiskItems({ APP_KV: kv } as unknown as Env, NOW);
-  assert.deepEqual(got.items.map((i) => i.rule), ["disk-not-checked"]);
-});
-
 // The undeployed-merge rule (piece 5): the watcher snapshot's newest deployment against
 // the default branch's head.
 
@@ -355,4 +313,23 @@ test("a site whose deploys or default branch were not read, or no snapshot, is l
 
   const none = await gatherDeployItems({ snapshot: async () => null, defaultHead: async () => { throw new Error("not called"); } }, NOW);
   assert.deepEqual(none.items.map((i) => [i.rule, i.namespace]), [["deploys-not-checked", "capsid"]]);
+});
+
+test("a stored list from before the disk rule was removed drops its disk items instead of breaking the reader", async () => {
+  const stored = {
+    generated: "2026-10-10T12:00:00.000Z",
+    items: [
+      { rule: "disk-low", namespace: "sample", job: "job_a", line: "agent:x reported 22.5 GB free" },
+      { rule: "pr-red", namespace: "sample", job: null, line: "red for days" },
+    ],
+    prs_read: {},
+    branches_read: {},
+    disk_read: 2,
+    deploys_read: {},
+    model_read: 0,
+    rule_docs_read: 0,
+  };
+  const { kv } = fakeKv({ seed: { "maintenance:list": JSON.stringify(stored) } });
+  const got = await readMaintenance({ APP_KV: kv } as unknown as Env);
+  assert.deepEqual(got?.items.map((i) => i.rule), ["pr-red"]);
 });

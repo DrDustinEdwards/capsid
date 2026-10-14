@@ -32,7 +32,7 @@ below are set; the receiver is live either way and stores nothing it is not sent
 
 The bearer is resolved like every other key (`resolveAgent`). No key, or one that
 resolves to nobody, is 401 with `WWW-Authenticate: Bearer realm="capsid-hooks"`.
-Accepted: a minted driver, a runner key, or the admin key, holding the write grant
+Accepted: a minted driver or the admin key, holding the write grant
 (checked through `checkScope`). A read-only key or any other kind is 403.
 
 The hook receiver (`/ops/hooks`, docs/hooks.md) uses the same caller check.
@@ -47,7 +47,7 @@ why.
 The job a session's usage counts toward (`src/ops-session-auth.ts`):
 
 1. A session already bound (its `agent_sessions` row) keeps that job.
-2. Otherwise a runner key's one job, or the single job a driver holds claimed. A driver
+2. Otherwise the single job a driver holds claimed. A driver
    holding none, or several, records the usage against no job.
 3. The `capsid.job_id` resource attribute never picks a job. Where it disagrees with the
    binding, the point is recorded against the binding and the answer's `partialSuccess`
@@ -113,50 +113,3 @@ shows rows. A 401 or 403 from the exporter appears in Claude Code's debug log
 
 Usage from an interactive session counts toward a job only while that driver key holds
 exactly one claimed job.
-
-## The seat's sessions (Dustin's gate)
-
-`capsid_work_jobs` action `start` now sends a W3C `traceparent` in the dispatch's `client_payload`
-beside `job_id`: version `00`, a trace id of the first 32 hex of sha256(job id), a span
-id of the first 16 hex of sha256(job id + ":" + the start's ISO time), flags `01`. The
-`job-seat-started` audit row records the same value. Claude Code reads `TRACEPARENT` in
-`-p` and Agent SDK sessions only, which is how the seat's Action runs.
-
-Nothing in `.github/workflows/seat-session.yml` consumes it yet. Wiring it is Dustin's
-decision, and would take:
-
-1. **Validate the traceparent where the job id is validated.** In the "Validate the job
-   id" step, read `TRACEPARENT: ${{ github.event.client_payload.traceparent }}` as a
-   second env value, require `^00-[0-9a-f]{32}-[0-9a-f]{16}-01$`, and write it to
-   `$GITHUB_OUTPUT` as `traceparent`. `test/seat-session-workflow.test.ts` asserts the
-   payload is read exactly once; that count becomes two, both in that step.
-2. **The Action step's env**, beside the existing two lines:
-
-   ```yaml
-   env:
-     ENABLE_TOOL_SEARCH: "false"
-     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-     TRACEPARENT: ${{ steps.job.outputs.traceparent }}
-     CLAUDE_CODE_ENABLE_TELEMETRY: "1"
-     OTEL_METRICS_EXPORTER: otlp
-     OTEL_EXPORTER_OTLP_PROTOCOL: http/json
-     OTEL_EXPORTER_OTLP_ENDPOINT: https://mcp.dustinedwards.info/ops/otlp
-     OTEL_RESOURCE_ATTRIBUTES: capsid.job_id=${{ steps.job.outputs.id }}
-   ```
-
-3. **The header, without putting the runner key in the environment.** The key sits only
-   in `$RUNNER_TEMP/capsid-mcp.json`, which the sandbox keeps from Bash. An
-   `OTEL_EXPORTER_OTLP_HEADERS` env value would hand it to every command the session
-   runs. Use the `otelHeadersHelper` setting in the Action's user `settings` instead: a
-   command Claude Code itself runs, which reads the key from that file and prints
-   `{"Authorization": "Bearer <key>"}`. Confirm the setting's current name and contract
-   in code.claude.com/docs/en/monitoring-usage before relying on it.
-4. **Check `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` against telemetry.** That step sets
-   it on purpose (the Datadog host stays off the egress list). The env-vars reference
-   lists telemetry among what it disables; whether that includes a user-configured OTLP
-   exporter or only Anthropic's own metrics must be checked on a canary run before
-   concluding either way. If it does disable OTLP, the seat's sessions report nothing
-   and their outcome rows stay NULL, which is the honest answer.
-
-Egress needs no change: `mcp.dustinedwards.info:443` is already on the
-harden-runner list.

@@ -7,7 +7,6 @@ import { candidateSkills } from "../src/improve-skills.ts";
 import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { BUDGET_KEY, META_LAST_KEY } from "../src/improve-schema.ts";
 import type { RunRow } from "../src/improve-state.ts";
-import { runEvaluationCycle } from "../src/skills-evaluate.ts";
 import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { IMPROVE_ATTEMPT_DEFAULTS, IMPROVE_RUN_DEFAULTS, sseChange } from "./improve-fakes.ts";
@@ -135,34 +134,6 @@ test("candidateSkills offers only candidate or live skills that claim this names
   });
   const offered = await candidateSkills(d1.db, "capsid", 10);
   assert.deepEqual(offered.map((s) => s.id).sort(), ["anywhere", "capsid-too"]);
-});
-
-// A skill transition and its audit row.
-
-const negative = (day: string) => ({
-  skill: "fading", version: 1, namespace: "capsid", probe_set_version: "p1", delta: -0.1, runs: 5, verdict: "negative", evaluated_at: `2026-09-${day}`,
-});
-
-test("a skill transition whose audit row fails does not move the status, and the next pass records both", async () => {
-  const opts: FakeD1Options = { failBatchMatching: /INSERT INTO audit_log/ };
-  const d1 = fakeD1(opts);
-  d1.rows.improve_skills.push({ id: "fading", status: "live", version: 1, source_namespace: "capsid" });
-  d1.rows.skill_evaluations.push(negative("01"), negative("02"));
-  const kv = fakeKv({ seedToken: true }).kv;
-  // Transitions are held unless the switch says apply; this test is about applying one.
-  await kv.put("skills:transitions", "apply");
-  const env = fakeEnv({ DB: d1.db, APP_KV: kv });
-
-  await assert.rejects(() => runEvaluationCycle(env, NOW), /database is locked/);
-  assert.equal(d1.rows.improve_skills[0].status, "live", "the status moved although its audit row was never written");
-
-  opts.failBatchMatching = undefined;
-  const report = await runEvaluationCycle(env, NOW);
-  assert.deepEqual(report.transitions.map((t) => [t.skill, t.to]), [["fading", "retired"]]);
-  const audits = d1.rows.audit_log as unknown as Array<{ action?: string; params?: string }>;
-  const moved = audits.filter((a) => a.action === "skill-status-changed");
-  assert.equal(moved.length, 1, "the transition has no audit row");
-  assert.equal(JSON.parse(String(moved[0].params)).to, "retired");
 });
 
 // The budget refuses a dispatch after the push.

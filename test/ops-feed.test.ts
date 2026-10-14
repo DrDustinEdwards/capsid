@@ -16,12 +16,9 @@ import {
   type OpsFeedData,
   opsJobFrom,
   refreshAllowedAt,
-  seatRecentFrom,
   type JobFeedRow,
-  type SeatAuditRow,
 } from "../src/ops-feed.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
-import { runUrl } from "../src/runner-key.ts";
 import { openWatcherFingerprints, watcherTick, WATCHER_ACTOR, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
 import { agentRecord, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -42,7 +39,6 @@ const job = (over: Partial<JobFeedRow> = {}): JobFeedRow => ({
   claimed_by: null,
   created_at: "2026-09-28 10:00:00",
   updated_at: "2026-09-28T11:00:00.000Z",
-  lease_expires: null,
   blocked_count: 0,
   resumed_count: 0,
   gate_required: 0,
@@ -117,7 +113,6 @@ test("an agent is shown with the record improve_status computes for it, and with
     namespaces: ["sample"],
     grants: ["read", "write"],
     flags: ["can_merge"],
-    max_claims: 1,
     last_seen: "2026-09-28 11:00:00",
     revoked_at: null,
     archived_at: null,
@@ -142,31 +137,6 @@ test("an agent is shown with the record improve_status computes for it, and with
     attempts_kept: 5,
     attempts_reverted: 7,
   });
-});
-
-test("each seat start is joined to the runner-key mint that names it, newest first", () => {
-  const rows: SeatAuditRow[] = [
-    { id: 10, action: "job-seat-started", namespace: "sample", at: "2026-09-27 09:00:00", params: JSON.stringify({ job_id: "job_aaaaaaaaaaaa", repo: "sample-owner/sample" }) },
-    { id: 11, action: "runner-key-minted", namespace: "sample", at: "2026-09-27 09:02:00", params: JSON.stringify({ job_id: "job_aaaaaaaaaaaa", start_audit_id: 10, run_id: "123456789", run_url: "https://github.com/sample-owner/sample/actions/runs/123456789" }) },
-    // A mint written before run_url was recorded: the URL is built from the start's repo.
-    { id: 20, action: "job-seat-started", namespace: "sample", at: "2026-09-28 09:00:00", params: JSON.stringify({ job_id: "job_bbbbbbbbbbbb", repo: "sample-owner/sample" }) },
-    { id: 21, action: "runner-key-minted", namespace: "sample", at: "2026-09-28 09:02:00", params: JSON.stringify({ job_id: "job_bbbbbbbbbbbb", start_audit_id: 20, run_id: "987654321" }) },
-    // A start whose runner never presented its token.
-    { id: 30, action: "job-seat-started", namespace: "sample", at: "2026-09-28 11:00:00", params: JSON.stringify({ job_id: "job_cccccccccccc", repo: "sample-owner/sample" }) },
-  ];
-  assert.deepEqual(seatRecentFrom(rows), [
-    { job_id: "job_cccccccccccc", namespace: "sample", at: "2026-09-28T11:00:00Z", run_id: null, run_url: null },
-    { job_id: "job_bbbbbbbbbbbb", namespace: "sample", at: "2026-09-28T09:00:00Z", run_id: 987654321, run_url: "https://github.com/sample-owner/sample/actions/runs/987654321" },
-    { job_id: "job_aaaaaaaaaaaa", namespace: "sample", at: "2026-09-27T09:00:00Z", run_id: 123456789, run_url: "https://github.com/sample-owner/sample/actions/runs/123456789" },
-  ]);
-});
-
-test("a run URL is built only from a run id that is a positive integer", () => {
-  assert.equal(runUrl("sample-owner/sample", "42"), "https://github.com/sample-owner/sample/actions/runs/42");
-  assert.equal(runUrl("sample-owner/sample", 42), "https://github.com/sample-owner/sample/actions/runs/42");
-  for (const bad of [undefined, null, "", "0", "-1", "42/../../x", "1e9", "1234567890123456"]) {
-    assert.equal(runUrl("sample-owner/sample", bad), null, String(bad));
-  }
 });
 
 test("an awaiting-seat value that does not parse is logged, never passed through", () => {
@@ -234,12 +204,12 @@ const FEED: OpsFeedData = {
     store: { size_bytes: null, cap_bytes: 10 * 1024 ** 3 },
     inbox: { generated: NOW.toISOString(), count: 0, severity: "none", apps: [] },
     canon_proposals: [],
+    findings: [],
     jobs: [],
     agents: [],
     prs: [],
     awaiting_seat: [],
     merge_safety: null,
-    seat_start: { enabled: false, max_sessions: 1, in_flight: 0, recent: [] },
     overnight: { mode: "off", decision: null },
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },

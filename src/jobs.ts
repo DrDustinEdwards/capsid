@@ -1,10 +1,6 @@
 import type { Env } from "./env";
 import { isQuestionSummary } from "./jobs-holder";
-import type { JobRow } from "./jobs-schema";
 import { checkJobText, type SignatureCheck } from "./job-signing";
-import { jobAudit, mirrorStatements } from "./jobs-mirror";
-import { guardedTransition, revokeBoundKeys } from "./jobs-transition";
-import { logEvent } from "./log";
 
 // The work queue. The seat posts a job from a chat; a driver session on a machine
 // claims it, does it, and reports back.
@@ -13,7 +9,7 @@ import { logEvent } from "./log";
 // meta.changes. D1's meta.changes is inflated by the FTS5 triggers on documents, and
 // these batches carry a document write, so the count would be of the triggers as
 // much as the row. No row back means somebody else got there first. The holder
-// transitions (heartbeat, complete, fail, block) put the UPDATE in the same batch as
+// transitions (complete, fail, block) put the UPDATE in the same batch as
 // its records, behind requireJobUnchanged (src/store-guards.ts), which aborts the
 // whole batch when the row is not in the state the caller read.
 //
@@ -28,56 +24,16 @@ import { logEvent } from "./log";
 // jobs-edit.ts holds the seat's edit of a queued or blocked job, and jobs-park.ts its
 // parking of a queued one; jobs-begin.ts holds the started label any writer may set;
 // jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
-// what they share. This module is the one other modules import from, and it keeps the
-// lease sweep and the capsid_run_improve action status summary.
+// what they share. This module is the one other modules import from, and it keeps the capsid_run_improve
+// action status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
-export { blockJob, commandFromSummary, completeJob, failJob, heartbeatJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
+export { blockJob, commandFromSummary, completeJob, failJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
 export { adminFailJob, completeAsCaller, failAsCaller, recordAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
 export type { JobResult } from "./jobs-transition";
-
-// The lease sweep, run by the five-minute improve tick. A claim whose lease has
-// expired goes back to queued, so a driver that died holds a job for at most
-// JOB_LEASE_SECONDS rather than forever. The tick reports only the jobs whose batch
-// committed.
-//
-// The mirror documents are rewritten in the same batch as each job's requeue: a job
-// that reads "claimed by a session that is gone" in capsid_start_session is the state this sweep
-// exists to clear. Read, then one guarded batch per job, so a job whose records fail
-// is not left requeued with none, and a job whose driver heartbeat in between
-// (updated_at moved) is left alone.
-export async function expireJobLeases(env: Env, now: Date): Promise<{ requeued: string[] }> {
-  const stamp = now.toISOString();
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM jobs WHERE status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?1"
-  )
-    .bind(stamp)
-    .all<JobRow>();
-  const requeued: string[] = [];
-  // One job failing does not cost the others their requeue.
-  for (const read of results ?? []) {
-    try {
-      const job: JobRow = { ...read, status: "queued", claimed_by: null, claimed_at: null, lease_expires: null, updated_at: stamp };
-      const moved = await guardedTransition(env, read, [
-        env.DB.prepare(
-          `UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, lease_expires = NULL, updated_at = ?2
-           WHERE id = ?1 AND status = 'claimed' AND lease_expires IS NOT NULL AND lease_expires < ?2 RETURNING id`
-        ).bind(read.id, stamp),
-        ...(await mirrorStatements(env, job, "job-lease-expired", "improve-loop")),
-        jobAudit(env.DB, "improve-loop", "job-lease-expired", job, { returned_to: "queued" }),
-        // Back in the queue, a bound key would resolve again inside its pending window.
-        revokeBoundKeys(env.DB, read.id),
-      ]);
-      if (moved) requeued.push(read.id);
-    } catch (err) {
-      logEvent("error", "JOB_LEASE_REQUEUE_FAILED", { message: `JOB_LEASE_REQUEUE_FAILED ${read.id}: ${err instanceof Error ? err.message : String(err)}` });
-    }
-  }
-  return { requeued };
-}
 
 // The capsid_run_improve action status block. Counted per namespace, plus what a human has to look at:
 // the blocked jobs, with the command each is waiting on. Blocked is the only status
@@ -100,8 +56,8 @@ export interface JobsSummary {
   // (capsid_work_jobs action block with question: true); the seat answers it with a resume note.
   blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; question: boolean; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
   // The claimed jobs and who holds each, so the seat can see a claim whose holder is
-  // gone and release it rather than wait out the lease.
-  claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null; lease_expires: string | null }>;
+  // gone and release it.
+  claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null }>;
 }
 
 export async function jobsSummary(db: D1Database, namespace: string, now: Date, secret?: string): Promise<JobsSummary> {
@@ -136,11 +92,11 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date, 
   );
   const claimed = await db
     .prepare(
-      `SELECT id, title, claimed_by, claimed_at, lease_expires FROM jobs
+      `SELECT id, title, claimed_by, claimed_at FROM jobs
        WHERE namespace = ?1 AND status = 'claimed' ORDER BY updated_at DESC LIMIT 20`
     )
     .bind(namespace)
-    .all<{ id: string; title: string; claimed_by: string | null; claimed_at: string | null; lease_expires: string | null }>();
+    .all<{ id: string; title: string; claimed_by: string | null; claimed_at: string | null }>();
   return {
     queued: byStatus.get("queued") ?? 0,
     claimed: byStatus.get("claimed") ?? 0,
@@ -160,7 +116,6 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date, 
       title: r.title,
       held_by: r.claimed_by,
       claimed_at: r.claimed_at,
-      lease_expires: r.lease_expires,
     })),
   };
 }

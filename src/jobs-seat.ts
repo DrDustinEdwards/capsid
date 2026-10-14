@@ -1,6 +1,5 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
-import { claimLimit } from "./agents-schema";
 import {
   corruptRequirement,
   missingForJob,
@@ -20,27 +19,18 @@ import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./j
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
-import { isRunnerActor } from "./seat-start";
 import { actorKind, touchStatement } from "./job-touches";
-import type { JobSkills } from "./job-outcomes";
 import type { ClaimInput, ClaimRaw } from "./job-claims";
 import {
   actorShapeRefusal,
   callerIsSeat,
-  claimLimitOf,
-  claimRoom,
-  claimRoomClause,
   correctionsForWork,
   guardedTransition,
-  heldClaims,
-  type ClaimRoom,
-  leaseUntil,
   markJobFailed,
   movedBeforeFailing,
   readJob,
   recordShortfall,
   refuse,
-  revokeBoundKeys,
   type JobResult,
 } from "./jobs-transition";
 
@@ -77,15 +67,14 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   if (current.status !== "queued" && current.status !== "claimed" && current.status !== "blocked") {
     return refuse("admin-fail", `${id} is already ${current.status}; there is nothing to fail.`);
   }
-  const job: JobRow = { ...current, status: "failed", result_summary: reason, lease_expires: null, updated_at: now.toISOString() };
+  const job: JobRow = { ...current, status: "failed", result_summary: reason, updated_at: now.toISOString() };
   const statements = [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'failed', result_summary = ?3, summary_sig = NULL, lease_expires = NULL, updated_at = ?2
+      `UPDATE jobs SET status = 'failed', result_summary = ?3, summary_sig = NULL, updated_at = ?2
        WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
     ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env, job, "job-admin-fail", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
-    revokeBoundKeys(env.DB, id),
     // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
     // a gate a resume already answered is not this touch's wait.
     touchStatement(env.DB, {
@@ -107,7 +96,7 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
-    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, undefined, await readJobUsage(env.DB, job.id))));
+    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id))));
   }
   if (!(await guardedTransition(env, current, statements))) {
     const moved = await readJob(env.DB, id);
@@ -131,7 +120,6 @@ export async function failAsCaller(
   now: Date,
   id: string,
   reason: string,
-  skills?: JobSkills,
   said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
@@ -148,7 +136,7 @@ export async function failAsCaller(
     }
     return adminFailJob(env, agent, now, id, reason);
   }
-  return failJob(env, agent, now, id, reason, skills, said);
+  return failJob(env, agent, now, id, reason, said);
 }
 
 // The seat completing a job another credential blocked, the way it can fail one. The job
@@ -202,7 +190,7 @@ export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: stri
 // The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2). A
 // cloud session signs in as the admin login, which may hold one claim, so it works a job
 // without claiming it, the way Copilot, Codex and Claude Code Projects work a task: one
-// branch and one pull request, no lease. Any caller holding the write grant on the job's
+// branch and one pull request. Any caller holding the write grant on the job's
 // namespace completes the QUEUED job by naming that pull request, and the outcome credits
 // the caller. It runs the record path (completeWithoutClaim): the same review gate, GitHub
 // verification, outcome row and overlap check as a complete. record stays the seat's, for
@@ -258,9 +246,8 @@ export async function completeAsCaller(
 }
 
 // Release: the seat returning a claimed job to the queue when its holder is gone (the
-// session ended, the machine was turned off). Without it the job waits out its lease,
-// and the dead claim uses one of the driver's claim places (one, unless the admin
-// raised its limit) until then.
+// session ended, the machine was turned off). A claim has no lease and never expires,
+// so without it the job stays held by a holder that is gone.
 //
 // Not an ending, so no outcome row: the job is worked again and ends with a real one.
 // A job whose work already landed is released too, and the next session completes it
@@ -268,7 +255,7 @@ export async function completeAsCaller(
 // the work, so it does not report it done.
 //
 // claimed_at is kept, so the job's duration runs from its first claim. The UPDATE is
-// keyed on the holder read, so a lease that changed hands in between is not released
+// keyed on the holder read, so a claim that changed hands in between is not released
 // out from under the new holder.
 export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
@@ -295,16 +282,14 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
   if (current.claimed_by === agent.actor) {
     return refuse("release", `${id} is held by ${agent.actor} itself. A holder ends its own claim with fail or block.`);
   }
-  const job: JobRow = { ...current, status: "queued", claimed_by: null, lease_expires: null, updated_at: now.toISOString() };
+  const job: JobRow = { ...current, status: "queued", claimed_by: null, updated_at: now.toISOString() };
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'queued', claimed_by = NULL, lease_expires = NULL, updated_at = ?2
+      `UPDATE jobs SET status = 'queued', claimed_by = NULL, updated_at = ?2
        WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?3 RETURNING id`
     ).bind(id, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env, job, "job-released", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
-    // Back in the queue, a bound key would resolve again inside its pending window.
-    revokeBoundKeys(env.DB, id),
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -408,14 +393,14 @@ export async function supersedeJob(
   }
 
   const summary = replacedBy ? `Superseded by ${replacedBy}: ${reason}` : `Superseded: ${reason}`;
-  // ?4 is the holder read above, so a lease that expired and went to another driver
-  // between the read and this write is not superseded out from under the new one.
-  const job: JobRow = { ...current, status: "superseded", result_summary: summary, lease_expires: null, updated_at: now.toISOString() };
+  // ?4 is the holder read above, so a claim that went to another driver between the
+  // read and this write is not superseded out from under the new one.
+  const job: JobRow = { ...current, status: "superseded", result_summary: summary, updated_at: now.toISOString() };
   // The guard makes the mirror and audit row commit only with the UPDATE: a row that
   // changed since the read (a gate hit, a claim) aborts all three.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'superseded', result_summary = ?2, summary_sig = NULL, lease_expires = NULL, updated_at = ?3
+      `UPDATE jobs SET status = 'superseded', result_summary = ?2, summary_sig = NULL, updated_at = ?3
        WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
          AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
     ).bind(id, summary, now.toISOString(), current.claimed_by),
@@ -426,7 +411,6 @@ export async function supersedeJob(
       from: current.status,
       held_by: current.claimed_by,
     }),
-    revokeBoundKeys(env.DB, id),
     touchStatement(env.DB, {
       job_id: id,
       namespace: job.namespace,
@@ -472,17 +456,16 @@ export async function supersedeJob(
 // claimant may still resume its own job as the admin, with can_merge, or through
 // approved_by_policy for a branch push or a pull request.
 //
-// The lease goes back to the driver that blocked it, not to the caller that resumed
-// it: a blocked row keeps claimed_by. A seat that took the lease would hold a job it
+// The claim goes back to the driver that blocked it, not to the caller that resumed
+// it: a blocked row keeps claimed_by. A seat that took the claim would hold a job it
 // has no shell to finish. `take` is the explicit way for a resumer to acquire the job
 // instead, and it runs every check a claim runs.
 //
-// Unless that credential cannot take it back. A driver already at its claim limit, or
-// holding a job on the same repo, would make the approval wait on that job, one answer
-// at a time. A credential that is not a minted agent (the admin identity every chat
-// tab connects as, or a legacy operator key) names no particular session, so a lease given to it is worked by
-// nobody until the sweep. In both cases the job goes back to the queue with its
-// approval, and whichever session claims it next gets the resume note. The job's flags
+// Unless that credential cannot take it back. A credential that is not a minted agent
+// (the admin identity every chat tab connects as, or a legacy operator key) names no
+// particular session, so a claim given to it is worked by nobody. The same holds for a
+// runner whose session ended and a revoked agent. The job then goes back to the queue
+// with its approval, and whichever session claims it next gets the resume note. The job's flags
 // and record bar are asked at that claim, as for any queued job.
 export interface ResumeOptions {
   // The pre-approved gate. When set, this resume is approved on the signed gate policy
@@ -513,36 +496,21 @@ const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 // operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
-/** Where a resume sends a blocked job: back to `holder`, or to the queue with the
- *  reason. The same claim rules the claim path runs on (claimRoom: the holder's claim
- *  limit, and no second claim on the repo of a job it holds unless one is a design
- *  job), asked of whoever ends up holding the lease. Without take, a holder that cannot
- *  take the job back sends it to the queue instead; with take, resumeJob refuses on
- *  `room`. `limit` is the holder's claim limit when the caller already knows it (the
- *  holder is the caller); otherwise it is read from the holder's agent row. resumeJob
- *  acts on it and the Portal's preview (src/portal-actions.ts) states it, so the two agree. */
-export async function resumeDestination(
-  env: Env,
-  holder: string,
-  job: JobRow,
-  take: boolean,
-  limit?: number
-): Promise<{ room: ClaimRoom | null; toQueue: string | null }> {
+/** Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue
+ *  with the reason, when the holder cannot act on it. With take the resumer acquires the
+ *  job, so it never goes to the queue. resumeJob acts on it and the Portal's preview
+ *  (src/controls.ts) states it, so the two agree. */
+export async function resumeDestination(env: Env, holder: string, job: JobRow, take: boolean): Promise<{ toQueue: string | null }> {
   const id = job.id;
-  const room = await claimRoom(env, limit ?? (await claimLimitOf(env.DB, holder)), await heldClaims(env.DB, holder), job);
   const db = env.DB;
   const toQueue: string | null = take
     ? null
-    : room
-      ? `${claimRoomClause(holder, room, id)}, so ${id} went back to the queue for the next free session.`
-      : !isMintedActor(holder)
-        ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
-        : (await isRunnerActor(db, holder))
-          ? `${holder} is a seat-started runner, whose session ended when it blocked, so ${id} went back to the queue for the next session.`
-          : (await isRevokedActor(db, holder))
-            ? `${holder} is revoked and can no longer claim, so ${id} went back to the queue for the next session.`
-            : null;
-  return { room, toQueue };
+    : !isMintedActor(holder)
+      ? `${holder} is a shared identity rather than one driver's session, so ${id} went back to the queue for the next free session.`
+      : (await isRevokedActor(db, holder))
+        ? `${holder} is revoked and can no longer claim, so ${id} went back to the queue for the next session.`
+        : null;
+  return { toQueue };
 }
 
 /** A minted agent whose key was revoked: it can never act on a job handed back to it. */
@@ -624,20 +592,11 @@ export async function resumeJob(
     );
   }
 
-  // The claimant the lease goes to. A blocked row with no claimant (none should
+  // The claimant the claim goes to. A blocked row with no claimant (none should
   // exist, since block keys on claimed_by) goes to the caller.
   const holder = take || !current.claimed_by ? actor : current.claimed_by;
 
-  const { room, toQueue } = await resumeDestination(env, holder, current, take, holder === actor ? claimLimit(agent.scopes) : undefined);
-  if (room && !toQueue) {
-    const clause = claimRoomClause(holder, room, id, { lease: true });
-    return refuse(
-      "resume",
-      room.kind === "full"
-        ? `${clause.replace(`${holder} holds `, `${holder} already holds `)}. Finish ${room.held.length === 1 ? "it" : "one"} before resuming another.`
-        : `${clause}. ${id} stays blocked.`
-    );
-  }
+  const { toQueue } = await resumeDestination(env, holder, current, take);
   const acquiring = !toQueue && holder === actor;
 
   // A resume is a claim when the caller acquires the job, so it asks the same scope
@@ -689,7 +648,7 @@ export async function resumeJob(
     return refuse("resume", `${id} failed its signature check and has been marked failed: ${verdict.reason}`);
   }
 
-  // The policy check runs before the lease is taken, so a refusal leaves the job
+  // The policy check runs before the claim is given, so a refusal leaves the job
   // blocked as it was rather than claimed by a caller whose approval did not hold.
   let policyMatch: { klass: string; detail: string; version: string } | null = null;
   if (approvedByPolicy !== undefined) {
@@ -752,7 +711,6 @@ export async function resumeJob(
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
 
-  const expires = toQueue ? null : leaseUntil(now);
   // Only a correction spends the budget, and never an admin's. The 0 or 1 is bound
   // rather than interpolated for the same reason bumpBlocked is: the statement stays
   // one static string that the source guards can read and the query-plan test can
@@ -766,7 +724,6 @@ export async function resumeJob(
     ...current,
     status: toQueue ? "queued" : "claimed",
     claimed_by: toQueue ? null : holder,
-    lease_expires: expires,
     resumed_count: current.resumed_count + 1,
     corrections_count: current.corrections_count + spend,
     updated_at: now.toISOString(),
@@ -823,14 +780,14 @@ export async function resumeJob(
       : []),
   ];
   // One static statement for both returns, so the source guards and the query-plan
-  // test read one shape: ?6 is 'claimed' or 'queued', and ?2 and ?4 are NULL for the
+  // test read one shape: ?5 is 'claimed' or 'queued', and ?2 is NULL for the
   // queue.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
-      `UPDATE jobs SET status = ?6, claimed_by = ?2, lease_expires = ?4,
-         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
+      `UPDATE jobs SET status = ?5, claimed_by = ?2,
+         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?4, updated_at = ?3
        WHERE id = ?1 AND status = 'blocked' RETURNING id`
-    ).bind(id, job.claimed_by, now.toISOString(), expires, spend, job.status),
+    ).bind(id, job.claimed_by, now.toISOString(), spend, job.status),
     ...(await mirrorStatements(env, job, "job-resumed", actor, resumeNote)),
     jobAudit(env.DB, actor, "job-resumed", job, {
       approved: reason,
@@ -840,7 +797,6 @@ export async function resumeJob(
       ...(toQueue ? { returned_to: "queued", previous_holder: holder } : {}),
       ...(take ? { taken: true } : {}),
       ...(spend ? { correction: true } : {}),
-      lease_expires: expires,
       resumed_count: job.resumed_count,
       corrections_count: job.corrections_count,
       ...(agent.admin ? { cap_lifted_by_admin: true } : {}),
@@ -867,7 +823,7 @@ export const MERGE_RESUME_ACTOR = "system:merge-resume";
 
 /** Resume a BLOCKED job to its holder, or to the queue when the holder cannot act, on
  *  the strength of one fact the caller has read: every pull request the job names has
- *  merged. Never completes, never takes the lease, never approves a gate command; the
+ *  merged. Never completes, never takes the claim, never approves a gate command; the
  *  holder's own claim still finishes the job. Returns false when the job moved between
  *  the caller's read and this write, in which case nothing was written. */
 export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: string): Promise<{ resumed: boolean; to: "holder" | "queue" }> {
@@ -876,13 +832,11 @@ export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: stri
   // Without take, a holder that cannot take the job back already yields toQueue.
   const { toQueue } = await resumeDestination(env, holder, job, false);
   const queued = toQueue !== null;
-  const expires = queued ? null : leaseUntil(now);
   const reason = "every pull request this job names has merged";
   const next: JobRow = {
     ...job,
     status: queued ? "queued" : "claimed",
     claimed_by: queued ? null : holder,
-    lease_expires: expires,
     resumed_count: job.resumed_count + 1,
     updated_at: now.toISOString(),
   };
@@ -897,10 +851,10 @@ export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: stri
   const kind = actorKind(MERGE_RESUME_ACTOR);
   const won = await guardedTransition(env, job, [
     env.DB.prepare(
-      `UPDATE jobs SET status = ?6, claimed_by = ?2, lease_expires = ?4,
-         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?5, updated_at = ?3
+      `UPDATE jobs SET status = ?5, claimed_by = ?2,
+         resumed_count = resumed_count + 1, corrections_count = corrections_count + ?4, updated_at = ?3
        WHERE id = ?1 AND status = 'blocked' RETURNING id`
-    ).bind(job.id, next.claimed_by, now.toISOString(), expires, 0, next.status),
+    ).bind(job.id, next.claimed_by, now.toISOString(), 0, next.status),
     ...(await mirrorStatements(env, next, "job-resumed", MERGE_RESUME_ACTOR, resumeNote)),
     jobAudit(env.DB, MERGE_RESUME_ACTOR, "job-resumed", next, {
       approved: reason,
@@ -908,7 +862,6 @@ export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: stri
       ...(noteSig ? { sig: noteSig } : {}),
       held_by: next.claimed_by,
       ...(queued ? { returned_to: "queued", previous_holder: holder } : {}),
-      lease_expires: expires,
       resumed_count: next.resumed_count,
     }),
     touchStatement(env.DB, {

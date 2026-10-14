@@ -13,16 +13,12 @@ import {
 import { reviewGate, type GateOutcome, type Review } from "./review";
 import { outcomePrStatements } from "./outcome-prs";
 import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
-import { attributionStatements, failureNoteStatements } from "./skills-records";
-import { skillsForOutcome } from "./job-skill-offers";
 import {
   outcomeFrom,
   outcomeStatement,
   readJobUsage,
-  signalFor,
   namedPrUrls,
   verifyEvidence,
-  type JobSkills,
   type JobEvidence,
   type JobOutcomeRow,
 } from "./job-outcomes";
@@ -37,28 +33,25 @@ import {
   type ClaimRaw,
   type JobClaim,
 } from "./job-claims";
-import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
+import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
-import { callerIsSeat, correctionsForWork, guardedTransition, leaseUntil, readJob, refuse, revokeBoundKeys, type JobResult } from "./jobs-transition";
+import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 import { externalFence } from "./provenance";
-import { recordDiskReading, type DiskRecord } from "./maintenance-disk";
-import { logEvent } from "./log";
 
-// The transitions the driver holding a job makes: heartbeat, complete, fail and
-// block, and the review gate the last three consult.
+// The transitions the driver holding a job makes: complete, fail and block, and the
+// review gate they consult.
 
-// The transitions a holder makes. heartbeat, complete, fail and block are the same
-// shape: a keyed UPDATE that only fires for the claimed job this caller holds, so an
-// expired lease that the tick already returned to the queue cannot be completed out
-// from under its new owner.
+// The transitions a holder makes. complete, fail and block are the same shape: a keyed
+// UPDATE that only fires for the claimed job this caller holds, so a job the seat
+// released back to the queue cannot be completed out from under its new owner.
 function holderRefusal(action: string, id: string, actor: string, current: JobRow | null): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status !== "claimed") {
     return refuse(
       action,
-      `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "Its lease expired and the tick returned it to the queue; claim it again." : "It has already been finished."}`
+      `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "It is back in the queue (the seat released it); claim it again." : "It has already been finished."}`
     );
   }
   if (current.claimed_by !== actor) return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
@@ -102,13 +95,12 @@ async function holderTransition(
   env: Env,
   agent: Agent,
   now: Date,
-  action: "heartbeat" | "complete" | "fail" | "block",
+  action: "complete" | "fail" | "block",
   id: string,
   patch: {
     status: JobStatus;
     result_summary?: string | null;
     result_ref?: string | null;
-    lease_expires: string | null;
     // Only block bumps the gate counter. Bound as a number, not interpolated as a SQL
     // fragment: the statement stays one static string, so test/jobs.test.ts can read
     // that it is keyed and test-integration/query-plans.test.ts can reconstruct it and
@@ -117,15 +109,11 @@ async function holderTransition(
     // What the driver says this job produced. Verified against GitHub and written into
     // job_outcomes below, on the terminal transitions only.
     evidence?: JobEvidence;
-    // The skills the driver was offered and used. Names only: the credit direction
-    // comes from signalFor(), which reads what the Worker verified on GitHub.
-    skills?: JobSkills;
     // Human-touch rows (src/job-touches.ts) for this transition, built from the row as
     // the UPDATE leaves it, so they commit or abort with it. Only block writes any.
     touches?: (job: JobRow) => D1PreparedStatement[];
     // What the agent said on this complete, fail or block, as sent. Present, the
-    // transition writes one job_claims row; absent (heartbeat), it writes none, because
-    // the agent made no claim. `as` is the action the agent called, when the review
+    // transition writes one job_claims row. `as` is the action the agent called, when the review
     // gate turned it into another transition.
     said?: Said;
     // The seat completing a BLOCKED job another credential holds (completeAsSeat). The
@@ -168,7 +156,6 @@ async function holderTransition(
     status: patch.status,
     result_summary: patch.result_summary ?? read.result_summary,
     result_ref: patch.result_ref ?? read.result_ref,
-    lease_expires: patch.lease_expires,
     updated_at: now.toISOString(),
     blocked_count: read.blocked_count + (patch.bumpBlocked ? 1 : 0),
   };
@@ -199,15 +186,14 @@ async function holderTransition(
     requireJobUnchanged(env.DB, id, fromStatus, read.claimed_by, read.updated_at),
     env.DB.prepare(
       `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
-         summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?9 END,
-         lease_expires = ?5, updated_at = ?6, blocked_count = blocked_count + ?8, claimed_by = COALESCE(?11, claimed_by)
-       WHERE id = ?1 AND status = ?10 AND claimed_by IS ?7 RETURNING id`
+         summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?8 END,
+         updated_at = ?5, blocked_count = blocked_count + ?7, claimed_by = COALESCE(?10, claimed_by)
+       WHERE id = ?1 AND status = ?9 AND claimed_by IS ?6 RETURNING id`
     ).bind(
       id,
       patch.status,
       patch.result_summary ?? null,
       patch.result_ref ?? null,
-      patch.lease_expires,
       now.toISOString(),
       read.claimed_by,
       patch.bumpBlocked ? 1 : 0,
@@ -224,9 +210,6 @@ async function holderTransition(
       ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
     }),
   ];
-  // complete, fail and block all end the run that held the job, so a runner key bound
-  // to it stops here, in the same batch.
-  if (job.status === "done" || job.status === "failed" || job.status === "blocked") statements.push(revokeBoundKeys(env.DB, id));
   if (patch.touches) statements.push(...patch.touches(job));
   // The claim row is built here, BEFORE verifyEvidence runs, from the arguments as
   // sent, so nothing GitHub says can reach it (src/job-claims.ts). It rides in this
@@ -256,32 +239,13 @@ async function holderTransition(
     // Cost, tokens and active time from the job's sessions' telemetry, NULL when none
     // reached Capsid (src/ops-otlp.ts). Points exported after this read stay in
     // session_usage and are not added to the row, which is written once.
-    const row = outcomeFrom(job, verdict, now, patch.skills, await readJobUsage(env.DB, job.id), claimed?.model_id ?? null);
+    const row = outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id), claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, in the same batch as the outcome.
     // Without them the outcome keeps counts with no way back to what they counted, and
     // the merge state recorded at complete time could never be corrected.
     statements.push(...outcomePrStatements(env.DB, job.id, namedPrUrls(patch.evidence, job.result_ref), verdict.pr_states, now, verdict.pr_identity));
-    // The credit comes from the verified signal and nowhere else. The driver names
-    // offered and used; signalFor reads merge state and CI as this Worker read them off
-    // GitHub. An unverifiable job earns nothing in either direction.
-    const signal = signalFor(verdict);
-    statements.push(
-      ...attributionStatements(env.DB, {
-        offered: patch.skills?.offered ?? [],
-        used: patch.skills?.used ?? [],
-        signal,
-      })
-    );
-    // A failed job, or one the Worker verified as a loss, leaves a note on each skill
-    // the run used. offerSkills hands the newest notes out with the next offer; nothing
-    // reads them for status.
-    if (job.status === "failed" || signal === "verified-failure") {
-      statements.push(
-        ...failureNoteStatements(env.DB, job.namespace, { kind: "job", id: job.id }, patch.skills?.used ?? [], patch.result_summary ?? "")
-      );
-    }
   }
   try {
     await env.DB.batch(statements);
@@ -292,38 +256,13 @@ async function holderTransition(
     const gone = patch.seatCloses ? seatCloseRefusal(action, id, actor, current) : holderRefusal(action, id, actor, current);
     return gone ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
   }
-  // The driver a resume returned the job to is already holding it and learns of the
-  // resume by its next call, which is usually a heartbeat.
-  const heartbeatNotes = action === "heartbeat" ? await resumeNotes(env, job) : null;
-  const heartbeatNote = heartbeatNotes?.notes[0] ?? null;
   return {
     ok: true,
     action,
     job,
     ...(outcome ? { outcome } : {}),
     ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
-    ...(heartbeatNote ? { resume_note: heartbeatNote } : {}),
-    ...(heartbeatNotes && heartbeatNotes.notes.length > 0 ? { resume_notes: heartbeatNotes.notes } : {}),
-    ...(heartbeatNotes && heartbeatNotes.dropped > 0 ? { resume_notes_dropped: heartbeatNotes.dropped } : {}),
   };
-}
-
-/** Extends the lease. A reason, when sent, is the driver's free-disk line (claude-skills
- *  scripts/disk-guard.mjs), kept for the maintenance pass's disk rule only after the lease
- *  was extended, so a refused heartbeat stores nothing. A failed store is said in the
- *  reply and logged, and never fails the heartbeat: the lease is what the call is for. */
-export async function heartbeatJob(env: Env, agent: Agent, now: Date, id: string, reason?: string): Promise<JobResult> {
-  const result = await holderTransition(env, agent, now, "heartbeat", id, { status: "claimed", lease_expires: leaseUntil(now) });
-  if (!result.ok || reason === undefined || !result.job) return result;
-  let disk: DiskRecord;
-  try {
-    disk = await recordDiskReading(env, { actor: agent.actor, namespace: result.job.namespace, job: id }, reason, now);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "DISK_READING_NOT_STORED", { message: `heartbeat ${id}: the free-disk reading was not stored (${message})`, actor: agent.actor });
-    disk = { recorded: false, note: `the free-disk reading was not stored: ${message}` };
-  }
-  return { ...result, disk };
 }
 
 // The review gate, consulted by complete, fail and block alike.
@@ -402,7 +341,7 @@ async function reviewRefusal(
   if (outcome.kind === "proceed") return null;
 
   if (outcome.kind === "waiting") {
-    return refuse(action, `${id} is ${outcome.reason} The job stays claimed and its lease keeps running.`);
+    return refuse(action, `${id} is ${outcome.reason} The job stays claimed.`);
   }
 
   // CHANGES and BLOCK both move the job, so neither is a plain refusal: the row has to
@@ -514,38 +453,7 @@ function endedElsewhere(action: string, result: JobResult): JobResult {
   };
 }
 
-/**
- * Every skill id the caller named, checked against the table.
- *
- * Refused, not ignored. A skill that does not exist is a stale id or a typo, and
- * dropping it would record "offered nothing" for a run that was offered something.
- * That is how the offered-to-used rate could be wrong without anybody writing a wrong
- * number. Returns the refusal, or null.
- */
-async function unknownSkills(db: D1Database, skills: JobSkills | undefined): Promise<string | null> {
-  const named = [...new Set([...(skills?.offered ?? []), ...(skills?.used ?? [])])];
-  if (named.length === 0) return null;
-  const placeholders = named.map((_, i) => `?${i + 1}`).join(", ");
-  const found = await db
-    .prepare(`SELECT id FROM improve_skills WHERE id IN (${placeholders})`)
-    .bind(...named)
-    .all<{ id: string }>();
-  const have = new Set((found.results ?? []).map((r) => r.id));
-  const missing = named.filter((id) => !have.has(id));
-  if (missing.length === 0) return null;
-  return `no skill exists with id ${missing.join(", ")}. A named skill that does not exist is refused rather than dropped, because dropping it would record this run as having been offered nothing.`;
-}
-
-// The offered list is the Worker's record from the claim, not the driver's word, and
-// used must be within it (./job-skill-offers). A job this caller does not hold is left
-// to holderTransition to refuse, with no skills to credit.
-async function creditedSkills(env: Env, id: string, reported: JobSkills | undefined): Promise<{ skills: JobSkills } | { refusal: string }> {
-  const job = await readJob(env.DB, id);
-  if (!job) return { skills: reported ?? {} };
-  return skillsForOutcome(env.DB, job, reported);
-}
-
-type CompleteArgs = { result_summary: string; result_ref?: string; evidence?: JobEvidence; skills?: JobSkills; claim?: ClaimInput; raw?: ClaimRaw };
+type CompleteArgs = { result_summary: string; result_ref?: string; evidence?: JobEvidence; claim?: ClaimInput; raw?: ClaimRaw };
 
 export async function completeJob(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
   return completeWith(env, agent, now, id, args, false);
@@ -632,10 +540,6 @@ async function completeWith(
         said: { claim: claim.claim, raw: completeRaw, as: "complete", evidence: args.evidence },
       });
   if (review) return review;
-  const unknown = await unknownSkills(env.DB, args.skills);
-  if (unknown) return refuse("complete", unknown);
-  const credited = await creditedSkills(env, id, args.skills);
-  if ("refusal" in credited) return refuse("complete", credited.refusal);
   // Overlap warning (Track A D1): the pull requests this complete names, against every other
   // open one. The line rides in the summary the seat reads; the check cannot fail the call.
   const held = await readJob(env.DB, id);
@@ -648,9 +552,7 @@ async function completeWith(
 ${overlap}` : args.result_summary,
     overlaps,
     result_ref: args.result_ref ?? null,
-    lease_expires: null,
     evidence: args.evidence,
-    skills: credited.skills,
     said: { claim: claim.claim, raw: completeRaw },
     ...(records
       ? { records: true, recordVerb: records }
@@ -682,7 +584,6 @@ export async function failJob(
   now: Date,
   id: string,
   reason: string,
-  skills?: JobSkills,
   said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
 ): Promise<JobResult> {
   if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
@@ -694,15 +595,9 @@ export async function failJob(
   const failRaw: ClaimRaw = said.raw ?? { claim: said.claim, reason };
   const review = await reviewRefusal(env, agent, now, "fail", id, null, { said: { claim: failClaim.claim, raw: failRaw, as: "fail" } });
   if (review) return review;
-  const unknownOnFail = await unknownSkills(env.DB, skills);
-  if (unknownOnFail) return refuse("fail", unknownOnFail);
-  const creditedOnFail = await creditedSkills(env, id, skills);
-  if ("refusal" in creditedOnFail) return refuse("fail", creditedOnFail.refusal);
   return holderTransition(env, agent, now, "fail", id, {
     status: "failed",
     result_summary: reason,
-    lease_expires: null,
-    skills: creditedOnFail.skills,
     said: { claim: failClaim.claim, raw: failRaw },
   });
 }
@@ -728,7 +623,7 @@ export function resumeMarkerIn(summary: string): { at: number; length: number } 
 // A question block (Track A D4): a session that needs an answer rather than a command run
 // blocks with question: true. The reason is the question, the Worker fixes the command, and
 // the summary starts with this prefix, which is how every reader tells it from a gate. No new
-// status and no column: the seat answers with resume and a note, which claim, heartbeat and
+// status and no column: the seat answers with resume and a note, which claim and
 // list then hand to the driver permanently (resume_notes).
 const QUESTION_PREFIX = "QUESTION: ";
 const QUESTION_COMMAND = "Answer in a resume note";
@@ -794,7 +689,6 @@ ${overlap}` : base;
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
     overlaps,
-    lease_expires: null,
     bumpBlocked: true,
     // The gate is the start of a wait for someone else, which the resume that ends it
     // measures from. The reason and command as the driver gave them, before the cap

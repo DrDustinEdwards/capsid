@@ -61,10 +61,10 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
-const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "seat_start", "overnight"];
+const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "overnight"];
 
 // The click row's action name, as the Worker names it, in the mock's "portal." form.
 function clickName(action: PortalAction, params: Record<string, string>): string {
@@ -113,7 +113,6 @@ interface MockState {
   // Namespaces whose breaker was reset since the mock started.
   breakerReset: Set<string>;
   mode: string | null;
-  seat: boolean | null;
   overnight: "off" | "api" | "subscription" | null;
   // The reason typed when the overnight switch was last set, recorded with the decision.
   overnightReason: string;
@@ -425,7 +424,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   }
   for (const n of out.live.namespaces) if (st.paused.has(n.name)) n.paused = st.paused.get(n.name) ?? null;
   if (st.mode != null) out.live.loop.mode = st.mode;
-  if (st.seat != null) out.live.seat_start.enabled = st.seat;
   if (st.overnight != null) {
     out.live.overnight = {
       mode: st.overnight,
@@ -571,13 +569,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         },
       };
     }
-    case "seat_start": {
-      const value = need(params, "value", "The value");
-      if (value !== "on" && value !== "off") throw new Refusal(400, `seat_start must be on or off, not ${value}.`);
-      const on = value === "on";
-      if (on === f.live.seat_start.enabled) throw new Refusal(400, `Seat start is already ${value}.`);
-      return { summary: `Turn seat start ${value}.`, done: `Seat start is ${value}.`, changes: [`seat:start:enabled: ${f.live.seat_start.enabled ? "on" : "off"} -> ${value}`], apply: (st) => void (st.seat = on) };
-    }
     case "resume_job": {
       const j = job();
       need(params, "reason", "A reason");
@@ -590,7 +581,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           `jobs.${j.id}.resumed_count: ${j.resumed_count} -> ${j.resumed_count + 1}`,
           ...(params.note ? [`The resume note carries your note of ${params.note.length} characters in full.`] : []),
         ],
-        apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, lease_expires: null, resumed_count: j.resumed_count + 1, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "queued", waits_on: null, command: null, claimed_by: null, resumed_count: j.resumed_count + 1, updated_at: now }),
       };
     }
     case "close_shipped": {
@@ -601,7 +592,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Close ${j.id} (${j.title}) as shipped.`,
         done: `Closed ${j.id} as shipped; the outcome is credited to ${j.claimed_by ?? "its holder"}.`,
         changes: [`jobs.${j.id}.status: blocked -> done`, `The outcome row credits ${j.claimed_by ?? "nobody"}, who did the work. No claim is recorded for you.`],
-        apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, lease_expires: null, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "done", waits_on: null, command: null, updated_at: now }),
       };
     }
     case "supersede_job": {
@@ -613,7 +604,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Supersede ${j.id} (${j.title}).`,
         done: `Superseded ${j.id}.`,
         changes: [`jobs.${j.id}.status: ${j.status} -> superseded`, "No outcome row is written against anybody."],
-        apply: (st) => void st.jobs.set(j.id, { status: "superseded", claimed_by: null, lease_expires: null, updated_at: now, waits_on: `Superseded: ${reason}` }),
+        apply: (st) => void st.jobs.set(j.id, { status: "superseded", claimed_by: null, updated_at: now, waits_on: `Superseded: ${reason}` }),
       };
     }
     case "park_job": {
@@ -674,14 +665,14 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         summary: `Release ${j.id} from ${j.claimed_by ?? "its holder"}.`,
         done: `Released ${j.id}; it is queued.`,
         changes: [`jobs.${j.id}.status: claimed -> queued`, `jobs.${j.id}.claimed_by: ${j.claimed_by ?? "none"} -> none`],
-        apply: (st) => void st.jobs.set(j.id, { status: "queued", claimed_by: null, lease_expires: null, updated_at: now }),
+        apply: (st) => void st.jobs.set(j.id, { status: "queued", claimed_by: null, updated_at: now }),
       };
     }
     case "fail_job": {
       const j = job();
       need(params, "reason", "A reason");
       if (!["queued", "claimed", "blocked"].includes(j.status)) throw new Refusal(400, `Job ${j.id} is ${j.status}; only an open job can be marked failed.`);
-      return { summary: `Mark ${j.id} failed.`, done: `Marked ${j.id} failed.`, changes: [`jobs.${j.id}.status: ${j.status} -> failed`], apply: (st) => void st.jobs.set(j.id, { status: "failed", claimed_by: null, lease_expires: null, updated_at: now }) };
+      return { summary: `Mark ${j.id} failed.`, done: `Marked ${j.id} failed.`, changes: [`jobs.${j.id}.status: ${j.status} -> failed`], apply: (st) => void st.jobs.set(j.id, { status: "failed", claimed_by: null, updated_at: now }) };
     }
     case "revoke_agent": {
       const name = need(params, "name", "The agent name");
@@ -692,7 +683,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       return {
         summary: `Revoke the agent ${name}.`,
         done: `Revoked ${name}.`,
-        changes: [`agents.${name}.revoked_at: none -> now`, "Its token stops working on the next request.", ...held.map((j) => `Job ${j.id} it holds stays claimed until its lease runs out.`)],
+        changes: [`agents.${name}.revoked_at: none -> now`, "Its token stops working on the next request.", ...held.map((j) => `Job ${j.id} it holds stays claimed until the seat releases it.`)],
         apply: (st) => void st.revoked.set(name, now),
       };
     }
@@ -975,7 +966,7 @@ function convergence(st: MockState): PortalConvergence {
 // before the first pass.
 function maintenance(f: OpsFeed): PortalMaintenance {
   const now = mockNow();
-  if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0, disk: 0 } };
+  if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 } };
   // The sample feed has both; a feed without one fails here, not with a made-up id.
   const queued = f.live.jobs.find((j) => j.status === "queued")!.id;
   const blocked = f.live.jobs.find((j) => j.status === "blocked")!.id;
@@ -986,13 +977,12 @@ function maintenance(f: OpsFeed): PortalMaintenance {
       { rule: "auto-resumed", namespace: "sample", job: blocked, line: `${blocked} was resumed because its pull requests merged: its holder confirms the deploy and completes it.` },
       { rule: "pr-awaiting-seat", namespace: "sample", job: blocked, pr, line: `${pr} (${blocked}) is green and has been open 2.1 days: merge it or say why it waits.` },
       { rule: "undeployed-merge", namespace: "sample-b", job: null, line: "sample-b was last deployed 2026-10-04 09:00 UTC, 4.0 days before example-org/sample-b's last commit on main (1a2b3c4): deploy it, or say why it waits." },
-      { rule: "disk-low", namespace: "sample", job: queued, line: `agent:sample-driver reported 22.5 GB free at ${new Date(now - 5 * 3_600_000).toISOString().slice(0, 16).replace("T", " ")} UTC, under 30 GB: run disk-guard cleanup or free space on that machine.` },
       { rule: "later-passed", namespace: "sample", job: queued, line: `${queued} is queued as LATER 2026-10-01, a date that has passed: re-title it or work it.` },
       { rule: "branch-merged", namespace: "sample", job: null, line: "3 merged branch(es) in example-org/sample would be pruned; the auto-prune is off, so none was deleted." },
       { rule: "branch-stale", namespace: "sample-c", job: null, line: "example-org/sample-c branch feat/old-idea has had no commit for 41 days (no pull request): delete it, open its pull request, or keep-list it." },
       { rule: "deploys-not-checked", namespace: "sample-c", job: null, line: "Deploys in sample-c were not checked (Cloudflare was not read for it (CF_OPS_TOKEN is not set)): what is missing is not a clean result." },
     ],
-    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2, disk: 2 },
+    read: { prs: 6, branches: 48, repos: 7, roster: 7, deploys: 2 },
   };
 }
 
@@ -1007,14 +997,14 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
       last_run: { status: "done", started: iso(5 * H), attempts: 4, kept: 1, reverts: 3 },
       totals: { runs: 38, attempts: 152, kept: 14, reverts: 9, cost_usd: 11.2, ci_minutes: 140 },
       latest_report: { integrity: 0.93, generated: iso(26 * H) },
-      skills: { candidate: 2, live: 5, retired: 1, offered: 40, used: 23, use_rate: 0.575, last_evaluation: iso(50 * H) },
+      skills: { candidate: 2, live: 5, retired: 1, last_evaluation: iso(50 * H) },
     },
     "sample-b": {
       anchor_problem: "The anchor sha 9f8e7d6 is not on the default branch of example-org/sample-b.",
       best: { sha: "0f1e2d3c4b5a69788796", score: 0.71, recorded_at: iso(90 * H) },
       last_run: { status: "failed", started: iso(20 * H), attempts: 2, kept: 0, reverts: 2 },
       totals: { runs: 12, attempts: 40, kept: 6, reverts: 11, cost_usd: 4.9, ci_minutes: 52 },
-      skills: { candidate: 1, live: 2, retired: 0, offered: 6, used: 1, use_rate: 1 / 6, last_evaluation: null },
+      skills: { candidate: 1, live: 2, retired: 0, last_evaluation: null },
     },
     "sample-c": {
       anchor_pinned: true,
@@ -1033,7 +1023,7 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
     totals: { runs: 0, attempts: 0, kept: 0, reverts: 0, cost_usd: 0, ci_minutes: 0 },
     latest_report: null,
     jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
-    skills: { candidate: 0, live: 0, retired: 0, offered: 0, used: 0, use_rate: null, last_evaluation: null },
+    skills: { candidate: 0, live: 0, retired: 0, last_evaluation: null },
     breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
   };
   const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");
@@ -1282,7 +1272,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, seat: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();

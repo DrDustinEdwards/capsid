@@ -10,7 +10,6 @@ import {
   type AgentScopes,
   type ScopeFlag,
 } from "./agents-schema";
-import { PENDING_START_MINUTES } from "./jobs-schema";
 import { logEvent } from "./log";
 
 // A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
@@ -50,9 +49,6 @@ export interface Agent {
   admin: boolean;
   // A row-backed agent, as opposed to a synthetic one. What last_seen is written for.
   row: AgentRow | null;
-  // The one job a runner key may work (migrations/0021). Absent or null is an unbound
-  // agent. Only agentFromRow sets it, because only a row can carry a binding.
-  job?: string | null;
   // When this OAuth session's Access sign-in happened (Props.signed_in_at), for the admin
   // server's step-up (src/scope.ts STEP_UP). Absent for a caller that holds a key rather
   // than a session; null for a session whose grant recorded no sign-in time, which is
@@ -121,32 +117,7 @@ function agentFromRow(row: AgentRow): Agent {
     scopes: parseScopes(row.scopes),
     admin: false,
     row,
-    job: row.job_id ?? null,
   };
-}
-
-// D1's datetime('now') has no zone and a space; an ISO string has both.
-function utcMillis(at: string): number {
-  return Date.parse(at.includes("T") ? at : `${at.replace(" ", "T")}Z`);
-}
-
-// A bound key lives exactly as long as its job is live for it: claimed by it under an
-// unexpired lease, or queued within the pending-start window before the runner's first
-// claim. Blocked, done, failed, superseded, claimed by another, or a lapsed lease all
-// end it, so no revocation has to be remembered for the key to stop working.
-async function boundJobLive(db: D1Database, row: AgentRow, now: Date): Promise<boolean> {
-  const job = await db
-    .prepare("SELECT status, claimed_by, lease_expires FROM jobs WHERE id = ?1")
-    .bind(row.job_id)
-    .first<{ status: string; claimed_by: string | null; lease_expires: string | null }>();
-  if (!job) return false;
-  if (job.status === "claimed") {
-    return job.claimed_by === agentActor(row.name) && job.lease_expires !== null && utcMillis(job.lease_expires) > now.getTime();
-  }
-  if (job.status === "queued") {
-    return now.getTime() - utcMillis(row.created_at) < PENDING_START_MINUTES * 60_000;
-  }
-  return false;
 }
 
 export interface ResolvedAgent {
@@ -178,7 +149,6 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
 // A revoked agent does not fall through to OPERATOR_KEY_HASH: a key minted as an
 // agent is not an operator key, and falling through would make revocation depend on
 // the key never having matched anything else.
-// A bound key whose job is no longer live is refused the same way, for the same reason.
 export async function resolveAgent(
   request: Request,
   env: { DB: D1Database; OPERATOR_KEY_HASH?: string },
@@ -189,7 +159,6 @@ export async function resolveAgent(
   const hash = await sha256Hex(token);
   const row = await liveAgentByHash(env.DB, hash);
   if (row) {
-    if (row.job_id != null && !(await boundJobLive(env.DB, row, now))) return null;
     const agent = agentFromRow(row);
     return { agent, touch: () => touchLastSeen(env.DB, agent) };
   }

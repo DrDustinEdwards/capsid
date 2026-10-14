@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { ADMIN_URL, checkAdminExposure, classify, seatKeyPath } from "../scripts/admin-exposure-check.mjs";
-// @ts-expect-error a plain .mjs script with no type declarations, imported for its pure helper
-import { launchRefusal } from "../scripts/schedule-drivers.mjs";
 
 // job_e1973c5bcb69: a driver session must not be able to reach Capsid as the admin.
 // The check reads `claude mcp list`, so these tests feed it that output.
@@ -92,21 +88,4 @@ test("it fails closed: a claude that cannot run, exits non-zero, or lists nothin
 test("the result carries names and booleans, never a URL", () => {
   const r = checkAdminExposure({ cwd: ".", run: run(TODAY), exists: none });
   assert.ok(!JSON.stringify(r).includes("https://"));
-});
-
-// The scheduler refuses before it starts a driver.
-
-test("launchRefusal returns the reason when the check fails and null when it passes", () => {
-  const bad = launchRefusal("F", () => ({ ok: false, reasons: ["the admin connector is loaded: claude.ai Capsid"] }));
-  assert.match(bad, /^refused to launch the driver: .*claude\.ai Capsid/);
-  assert.equal(launchRefusal("F", () => ({ ok: true, reasons: [] })), null);
-});
-
-test("runOne checks the folder before it spawns the driver", () => {
-  const src = readFileSync(join(import.meta.dirname, "..", "scripts", "schedule-drivers.mjs"), "utf8");
-  const body = src.slice(src.indexOf("async function runOne"));
-  const check = body.indexOf("launchRefusal(folder)");
-  const spawn = body.indexOf('spawnSync("claude"');
-  assert.ok(check > 0, "runOne never calls launchRefusal");
-  assert.ok(spawn > check, "the driver is spawned before the exposure check");
 });

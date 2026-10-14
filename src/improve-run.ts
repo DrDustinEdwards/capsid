@@ -1,6 +1,4 @@
 import { overnightState, type OvernightState } from "./overnight";
-import { seatStartState, sessionsInFlight, type SeatStartState } from "./seat-start";
-import { TRANSITIONS_KEY, transitionMode, type TransitionMode } from "./skills-evaluate";
 import { sha256Hex } from "./auth";
 import { bytesToHex } from "./encoding";
 import type { Env } from "./env";
@@ -36,7 +34,7 @@ import {
 } from "./improve-state";
 import { breakerState, type BreakerState } from "./job-breaker";
 import { verifyTaskDoc } from "./improve-task";
-import { SCOPE_FLAGS, claimLimit, parseScopes } from "./agents-schema";
+import { SCOPE_FLAGS, parseScopes } from "./agents-schema";
 import { loadAgentRecords, type AgentRecord } from "./agent-record";
 import { jobsSummary, type JobsSummary } from "./jobs";
 import { integrityOf, REPORTS_PREFIX } from "./truth-report";
@@ -85,7 +83,7 @@ export async function verifyTaskDocument(
   return { path, namespace, ok: verdict.ok, actor, reason: verdict.ok ? null : verdict.reason };
 }
 
-// Skill counts by state, offered versus used, and the last evaluation, per namespace.
+// Skill counts by state and the last evaluation, per namespace.
 async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsSummary> {
   const counts = await db
     .prepare(
@@ -96,33 +94,15 @@ async function skillsSummary(db: D1Database, namespace: string): Promise<SkillsS
     .all<{ status: string; n: number }>();
   const by = new Map((counts.results ?? []).map((r) => [r.status, r.n]));
 
-  // Counted from the outcome rows so the numbers cannot drift from the jobs. SUM skips
-  // the NULL from json_array_length, so a job that recorded nothing counts in neither
-  // total. A superseded job attempted nothing, so its row is left out.
-  const gap = await db
-    .prepare(
-      `SELECT COALESCE(SUM(json_array_length(skill_ids_offered)), 0) AS offered,
-              COALESCE(SUM(json_array_length(skill_ids_used)), 0) AS used
-       FROM job_outcomes o
-       WHERE o.namespace = ?1
-         AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = o.job_id AND j.status = 'superseded')`
-    )
-    .bind(namespace)
-    .first<{ offered: number; used: number }>();
-
   const latest = await db
     .prepare("SELECT MAX(evaluated_at) AS last FROM skill_evaluations WHERE namespace = ?1")
     .bind(namespace)
     .first<{ last: string | null }>();
 
-  const offered = gap?.offered ?? 0;
   return {
     candidate: by.get("candidate") ?? 0,
     live: by.get("live") ?? 0,
     retired: by.get("retired") ?? 0,
-    offered,
-    used: gap?.used ?? 0,
-    use_rate: offered > 0 ? (gap?.used ?? 0) / offered : null,
     last_evaluation: latest?.last ?? null,
   };
 }
@@ -170,8 +150,7 @@ export interface NamespaceStatus {
   maintenance_prs_read: number | null;
   // Branches that pass read in this namespace, the same way: null when it read none.
   maintenance_branches_read: number | null;
-  // Counts by status, plus offered versus used: a skill offered often and used rarely
-  // has a trigger condition that does not describe the work.
+  // Counts by status and the last stored evaluation.
   skills: SkillsSummary;
   // What needs Dustin in this namespace's app (src/inbox.ts): blocked jobs and questions,
   // pull requests auto-merge declined, a failing CI run, a site that is down. The same
@@ -183,11 +162,6 @@ export interface SkillsSummary {
   candidate: number;
   live: number;
   retired: number;
-  // Across every finished job that recorded them; a job that recorded nothing counts in neither.
-  offered: number;
-  used: number;
-  // null, not zero, when nothing has been offered.
-  use_rate: number | null;
   // Lets a reader tell a quiet lifecycle from a stalled one.
   last_evaluation: string | null;
 }
@@ -216,11 +190,6 @@ export interface StatusReport {
   // whether it is on, never the body. Reported only when the policy loads (signature
   // verified, agreeing with the code); otherwise the reason it does not.
   policies: PolicyVersions;
-  // Whether the seat may start sessions on GitHub's runners, the cap, and how many are
-  // in flight now (src/seat-start.ts). Off unless switched on.
-  // in_flight is null while the switch is off: nothing new can start, and the count is
-  // read only when it decides something.
-  seat_start: SeatStartState & { in_flight: number | null };
   // The overnight run's switch and, when it runs on the subscription, the recorded
   // decision (src/overnight.ts). The scheduler reads this before it starts a session.
   overnight: OvernightState;
@@ -243,8 +212,6 @@ export interface AgentSummary {
   namespaces: "*" | string[];
   grants: string[];
   flags: string[];
-  // How many jobs it may hold claimed at once (claimLimit, src/agents-schema.ts).
-  max_claims: number;
   last_seen: string | null;
   revoked_at: string | null;
   // When the watcher pass moved it to agents_archive (src/agents-archive.ts), or null
@@ -257,8 +224,8 @@ export interface AgentSummary {
 
 // Exported for the Watch Floor feed (src/ops-feed.ts), which lists the same inventory
 // with the same records rather than a second reading of the agents table.
-// The archive is read newest move first and bounded: one runner key is archived per
-// seat-started job, so it grows with the queue. The full archive is agents list with
+// The archive is read newest move first and bounded: the archive grows as revoked agents
+// move out of the live table. The full archive is agents list with
 // archived: true.
 const SUMMARY_ARCHIVE_LIMIT = 50;
 
@@ -282,7 +249,6 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
       namespaces: scopes.namespaces,
       grants: scopes.grants,
       flags: SCOPE_FLAGS.filter((flag) => scopes.flags[flag]),
-      max_claims: claimLimit(scopes),
       last_seen: row.last_seen,
       revoked_at: row.revoked_at,
       archived_at: row.archived_at,
@@ -314,11 +280,6 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
     }
   };
   return { gates: await one(() => loadGatePolicy(env)), auto_merge: await one(() => loadMergePolicy(env)) };
-}
-
-async function seatStartStatus(env: Env): Promise<StatusReport["seat_start"]> {
-  const state = await seatStartState(env);
-  return { ...state, in_flight: state.enabled ? (await sessionsInFlight(env, new Date())).length : null };
 }
 
 // An item an app reported about itself is the app's words, and an agent reads
@@ -431,7 +392,6 @@ export async function improveStatus(
     protected_paths: servedProtectedPaths(),
     canon_paths: servedCanonPaths(),
     policies: await servedPolicies(env),
-    seat_start: await seatStartStatus(env),
     overnight: await overnightState(env),
     merge_safety: mergeSafety && allowed !== "*" ? { ...mergeSafety, namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)) } : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.
@@ -487,7 +447,6 @@ export async function improveRunManual(
 // grant; every other action is admin.
 export type ImproveControlResult =
   | { action: "mode"; requested: string; mode: ImproveMode; mode_note: string | null }
-  | { action: "skill_transitions"; requested: string; mode: TransitionMode }
   | { action: "pause" | "unpause"; namespaces: string[]; paused: Record<string, string | null> }
   | { action: "budget"; caps: BudgetCaps }
   | {
@@ -516,7 +475,7 @@ export type ImproveControlResult =
 
 export async function improveControl(
   env: Env,
-  action: "mode" | "pause" | "unpause" | "budget" | "mint_operator_key" | "claim" | "skill_transitions",
+  action: "mode" | "pause" | "unpause" | "budget" | "mint_operator_key" | "claim",
   opts: {
     value?: string;
     namespace?: string;
@@ -608,19 +567,6 @@ ${next.join(",")}`,
       expires_in_seconds: DRIVER_LEASE_TTL_SECONDS,
       reason: null,
     };
-  }
-
-  // Whether the skills evaluation cycle applies the status changes its evaluations
-  // decide, or holds them (the observation window). Admin only, audited, and read
-  // back through the resolver the cycle uses.
-  if (action === "skill_transitions") {
-    const value = (opts.value ?? "").trim().toLowerCase();
-    if (value !== "hold" && value !== "apply") {
-      throw new Error(`skill_transitions must be "hold" or "apply"; got '${opts.value ?? ""}'. Nothing was changed.`);
-    }
-    await env.APP_KV.put(TRANSITIONS_KEY, value);
-    await env.DB.batch([improveAudit(env.DB, "skill-transitions-set", null, { mode: value }, who)]);
-    return { action: "skill_transitions", requested: value, mode: await transitionMode(env) };
   }
 
   if (action === "mode") {

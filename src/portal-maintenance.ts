@@ -31,9 +31,8 @@ export async function handlePortalMaintenance(request: Request, env: Env, now: D
           repos: Object.keys(list.prs_read).length,
           roster: ROSTER.length,
           deploys: Object.keys(list.deploys_read).length,
-          disk: list.disk_read,
         },
       }
-    : { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length, deploys: 0, disk: 0 } };
+    : { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: ROSTER.length, deploys: 0 } };
   return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }

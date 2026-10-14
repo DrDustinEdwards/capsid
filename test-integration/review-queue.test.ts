@@ -68,7 +68,6 @@ async function claimedJob(overrides: Record<string, unknown> = {}) {
     posted_by: "github:DrDustinEdwards",
     claimed_by: "agent:capsid-driver",
     claimed_at: "2026-09-12T09:00:00.000Z",
-    lease_expires: "2026-09-12T13:00:00.000Z",
     result_ref: PR,
     result_summary: null,
     gate_required: 0,

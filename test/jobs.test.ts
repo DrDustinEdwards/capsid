@@ -7,7 +7,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
-import { claimJob, completeJob, expireJobLeases, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
+import { claimJob, completeJob, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
 import { legacyAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
@@ -239,29 +239,6 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
 // The innocent direction, a clean summary driven to a completed row, is in
 // test-integration/jobs.test.ts ("the tag guard is not a wall").
 
-// The skills a run names are checked before anything is written. These two refusals
-// keep the offered-to-used rate accurate, and both refuse before the transition.
-
-test("a skill id that does not exist is REFUSED, not dropped", async () => {
-  // Dropping it would record this run as having been offered nothing.
-  const d1 = fakeD1({ improveSkills: [{ id: "sk-real", status: "candidate", version: 1, source_namespace: "foxhound" }] });
-  const out = await completeJob(fakeEnv({ DB: d1.db }), legacyAgent("write", "agent:capsid-driver"), new Date(), "job_abc123abc123", {
-    result_summary: "done",
-    skills: { offered: ["sk-real", "sk-ghost"], used: ["sk-real"] },
-  });
-  assert.equal(out.ok, false, "a non-existent skill id was accepted");
-  assert.match(out.refusal ?? "", /sk-ghost/);
-  assert.match(out.refusal ?? "", /refused rather than dropped/);
-  const wrote = d1.recorded.some((r) => /INSERT INTO job_outcomes/i.test(r.sql));
-  assert.equal(wrote, false, "a refused complete still wrote an outcome row");
-});
-
-// A skill named as used but not offered is refused against the offer the Worker
-// recorded at claim, which lives in audit_log: test-integration/job-skill-offers.test.ts.
-
-// Naming no skills at all is not a refusal: test-integration/jobs.test.ts drives that
-// case to a completed row.
-
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
   // A client keying on isError must not read a refusal as success.
   const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
@@ -336,7 +313,6 @@ const MOVED_JOB = {
   priority: 0,
   posted_by: "github:DrDustinEdwards",
   claimed_at: null,
-  lease_expires: null,
   result_ref: null,
   result_summary: null,
   gate_required: 0,
@@ -381,41 +357,6 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
   assert.equal(out.ok, false);
   assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
   assert.match(out.refusal ?? "", /now failed/);
-});
-
-test("PLANT: expireJobLeases requeues the later jobs when an earlier job's batch throws", async () => {
-  // Each expired job is requeued in its own batch with its mirror and audit row. A
-  // throw on the first leaves it claimed and must not stop the second.
-  const expired = { id: "job_aaaaaaaaaaaa", namespace: "capsid", title: "a", body: "b", status: "claimed", priority: 0, posted_by: "github:x", claimed_by: "agent:gone", claimed_at: "2026-09-25T00:00:00Z", lease_expires: "2026-09-25T04:00:00Z", result_ref: null, result_summary: null, gate_required: 0, required_scopes: null, min_record: null, blocked_count: 0, resumed_count: 0, corrections_count: 0, review_required: 0, created_at: "2026-09-25T00:00:00Z", updated_at: "2026-09-25T00:00:00Z" };
-  const rows = [expired, { ...expired, id: "job_bbbbbbbbbbbb", title: "b" }];
-  const batches: string[][] = [];
-  const stmt = (sql: string): unknown => {
-    const s = {
-      sql,
-      bind: () => s,
-      all: async () => (/FROM jobs WHERE status = 'claimed' AND lease_expires/.test(sql) ? { results: rows } : { results: [] }),
-      first: async () => null,
-      run: async () => ({}),
-    };
-    return s;
-  };
-  const db = {
-    prepare: (sql: string) => stmt(sql),
-    batch: async (statements: Array<{ sql: string }>) => {
-      batches.push(statements.map((x) => x.sql));
-      if (batches.length === 1) throw new Error("D1_ERROR: database is locked");
-      return [];
-    },
-  };
-  const out = await expireJobLeases(fakeEnv({ DB: db as never }), new Date("2026-09-25T10:00:00Z"));
-  assert.equal(batches.length, 2, "the second job was never attempted");
-  assert.deepEqual(out.requeued, ["job_bbbbbbbbbbbb"], "a job whose batch threw was reported as requeued");
-  // Each batch is the guard, the requeue and its records together.
-  for (const sqls of batches) {
-    assert.match(sqls[0], /WHERE NOT EXISTS \(SELECT 1 FROM jobs/);
-    assert.match(sqls[1], /UPDATE jobs SET status = 'queued'/);
-    assert.ok(sqls.some((sql) => /INSERT INTO audit_log/.test(sql)));
-  }
 });
 
 test("PLANT: post into a namespace that is not registered is refused and writes nothing", async () => {

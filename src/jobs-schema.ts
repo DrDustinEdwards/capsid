@@ -29,20 +29,8 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "heartbeat", "complete", "record", "fail", "block", "resume", "supersede", "release", "start", "begin", "fire", "routine", "edit", "park", "unpark"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "fire", "routine", "edit", "park", "unpark"] as const;
 export type JobAction = (typeof JOB_ACTIONS)[number];
-
-// Four hours. Long enough for a driver to do a real job without heartbeating on a
-// timer, short enough that a dead session costs one afternoon rather than the queue.
-// The driver heartbeats every 15 minutes anyway, so the lease is the backstop for a
-// session that died, not the renewal path.
-export const JOB_LEASE_SECONDS = 4 * 60 * 60;
-
-// A seat start whose job has not been claimed by then no longer holds a place under the
-// cap, and a runner key bound to that job no longer resolves. Here rather than in
-// src/seat-start.ts so the resolver in src/agents.ts can read it without importing the
-// GitHub client.
-export const PENDING_START_MINUTES = 20;
 
 export const JOBS_ROWS_MAX = 100;
 
@@ -60,7 +48,6 @@ export interface JobRow {
   posted_by: string;
   claimed_by: string | null;
   claimed_at: string | null;
-  lease_expires: string | null;
   result_ref: string | null;
   result_summary: string | null;
   // The holder's signature over result_summary (migrations/0027, src/job-signing.ts),
@@ -89,7 +76,7 @@ export interface JobRow {
   effort_recommended?: string | null;
   routing_reason?: string | null;
   // The started label (migrations/0042, src/jobs-begin.ts): who marked a queued job
-  // started, and when. Not a lease: it never expires and refuses nothing. NULL until
+  // started, and when. It never expires and refuses nothing. NULL until
   // somebody begins the job.
   started_at?: string | null;
   started_by?: string | null;
@@ -110,7 +97,7 @@ export function startedNotice(job: Pick<JobRow, "started_at" | "started_by">): S
   return {
     by: job.started_by,
     at: job.started_at,
-    note: `${job.started_by} started this job at ${job.started_at}. A label, not a lease: nothing is refused, but that session may already have a branch or a pull request for it.`,
+    note: `${job.started_by} started this job at ${job.started_at}. A label: nothing is refused, but that session may already have a branch or a pull request for it.`,
   };
 }
 
@@ -146,7 +133,7 @@ export interface RequiredScopes {
   flags: ScopeFlag[];
 }
 
-// A requirement that cannot be read is corrupt, not absent. Failing open would lease a
+// A requirement that cannot be read is corrupt, not absent. Failing open would hand out a
 // job whose requirement had been damaged to any driver at all, and a garbled "needs
 // can_merge" is not the same statement as "needs nothing". post validates both fields
 // before it writes them, so an unreadable value only comes from a write that bypassed

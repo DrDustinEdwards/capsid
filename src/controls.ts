@@ -28,7 +28,6 @@ import { prUrlsFromJob } from "./outcome-prs";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
 import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
-import { SEAT_START_KEY, seatStartState, setSeatStart } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { approveProposal, checkProposal, lineChanges, rejectProposal } from "./canon";
 import { logEvent } from "./log";
@@ -50,7 +49,6 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "pause",
   "unpause",
   "mode",
-  "seat_start",
   "overnight",
   "resume_job",
   "fail_job",
@@ -83,11 +81,11 @@ export type ActionParams = Record<string, string | undefined>;
 // /portal say console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
 
-// The four automation switches (pause, unpause, mode, seat_start) take a reason in both
+// The automation switches (pause, unpause, mode, overnight) take a reason in both
 // directions, and an Undo from the Portal's result message sends the reverse change with
 // undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
 // own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
-const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "seat_start", "overnight"]);
+const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "overnight"]);
 const UNDO_INFIX = "undo-";
 
 // Which front door an action came in by. A click in the Portal and a call to the
@@ -116,7 +114,7 @@ function switchReasonRefusal(action: PortalAction): string {
     case "overnight":
       return "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded in the audit row with the change.";
     default:
-      return "seat_start needs a reason: why seat-started sessions go on or off. It is recorded in the audit row with the change.";
+      return `${action} needs a reason, recorded in the audit row with the change.`;
   }
 }
 
@@ -136,10 +134,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Unpause ${ns}. The loop will open a run for it on the next opener.`;
     case "mode":
       return `Set the improve mode to ${params.value ?? ""} for every namespace.`;
-    case "seat_start":
-      return params.value === "on"
-        ? "Turn seat-started sessions ON. The seat may then start Claude Code sessions on GitHub's runners for queued capsid and dustinedwards jobs, billed to your subscription, up to the cap. Confirm on the Anthropic billing page after the first run that nothing was billed as API usage."
-        : "Turn seat-started sessions OFF. No new session starts; one already running finishes.";
     case "overnight":
       return params.value === "off"
         ? "Turn the overnight run OFF. No scheduled run starts; one already running finishes."
@@ -147,7 +141,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
           ? "Set the overnight run to run on the SUBSCRIPTION. The scheduler may then start the per-namespace drivers on your machine overnight, billed against your Max plan. This records your decision, its date and its reasoning where the switch is set."
           : "Set the overnight run to run on the API key. The scheduler refuses to start unless it authenticates with ANTHROPIC_API_KEY and no subscription token is in use. Billed per token to your Console account.";
     case "resume_job":
-      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, with a fresh lease, and that driver continues it. It does not move to you. If that driver is at its claim limit or holds a job on the same repo, or the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
+      return `Resume blocked job ${id}. The job moves back to claimed under the driver that blocked it, and that driver continues it. It does not move to you. If the job was blocked by a shared identity such as your own admin session, it goes back to the queue with your approval instead, and the next free session claims it.`;
     case "release_job":
       return `Release job ${id} back to the queue. Whoever holds it loses the claim, the next free session claims it, and no outcome is recorded against the holder.`;
     case "fail_job":
@@ -155,7 +149,7 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
     case "close_shipped":
       return `Close blocked job ${id} as shipped. Its work landed, so the job moves to done, and the outcome is credited to the driver that did the work, not to you. The pull requests it names are read from GitHub for the outcome, and the close is recorded as yours.`;
     case "supersede_job":
-      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody, and any key bound to it is revoked.`;
+      return `Supersede job ${id}${params.replaced_by ? ` with ${params.replaced_by}` : ""}. It ends as superseded, replaced before any work was done: no outcome row is written against anybody.`;
     case "park_job":
       return `Park job ${id}. It stays listed but is never claimed or planned until somebody unparks it; the reason says when it comes back.`;
     case "unpark_job":
@@ -257,8 +251,8 @@ async function performAction(
   let summary = "";
   // The switches: a reason in both directions, checked again here because the token
   // binds the params and a token signed before this rule could lack one. The reason and
-  // whether this is an Undo go in the click row; the shared mutators for unpause, mode
-  // and seat_start record no reason, and their contract is left as it is.
+  // whether this is an Undo go in the click row; the shared mutators for unpause and mode
+  // record no reason, and their contract is left as it is.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason) return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
@@ -297,15 +291,6 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, namespace, result.state);
         break;
       }
-      case "seat_start": {
-        const value = required(params, "value");
-        if (!value) return { ok: false, refusal: "seat_start needs a value." };
-        const result = await setSeatStart(env, actor, { value });
-        committed = true;
-        summary = `Turned seat-started sessions ${result.enabled ? "on" : "off"}.`;
-        await auditClick(env, actor, source, surface, action, null, switchDetail(result), click);
-        break;
-      }
       case "overnight": {
         const value = required(params, "value");
         const bad = overnightValueRefusal(value ?? undefined);
@@ -334,7 +319,7 @@ async function performAction(
           };
         }
         // resume_job's note is the full approval when it is longer than a line (stale jobs
-        // D6): the driver reads it as resume_note.note on its next claim, heartbeat or list.
+        // D6): the driver reads it as resume_note.note on its next claim or list.
         const note = action === "resume_job" ? (required(params, "note") ?? undefined) : undefined;
         const result =
           action === "resume_job"
@@ -591,7 +576,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   pause: ["namespace", "reason", "undo"],
   unpause: ["namespace", "reason", "undo"],
   mode: ["value", "reason", "undo"],
-  seat_start: ["value", "reason", "undo"],
   overnight: ["value", "reason", "undo"],
   resume_job: ["id", "reason", "note"],
   release_job: ["id", "reason"],
@@ -735,20 +719,6 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         audit: [`improve-mode-set by ${actor}`, click],
       };
     }
-    case "seat_start": {
-      if (p.value !== "on" && p.value !== "off") return refused(`seat_start must be "on" or "off"; got '${p.value ?? ""}'.`);
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const state = await seatStartState(env);
-      const current = state.enabled ? "on" : "off";
-      return {
-        ok: true,
-        changes: [
-          current === p.value ? `${SEAT_START_KEY} is already ${p.value}; it is written again unchanged.` : `${SEAT_START_KEY}: ${current} -> ${p.value}.`,
-          `The cap stays at ${state.max_sessions} session${state.max_sessions === 1 ? "" : "s"} in flight.`,
-        ],
-        audit: [`seat-start-set by ${actor}`, click],
-      };
-    }
     case "overnight": {
       const bad = overnightValueRefusal(p.value);
       if (bad) return refused(bad);
@@ -795,7 +765,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           changes: [
             toQueue
               ? `${label}: blocked -> queued, claimed by nobody. The resume records why: ${toQueue}`
-              : `${label}: blocked -> claimed by ${holder}, with a fresh lease. ${holder} continues it; it does not move to you.`,
+              : `${label}: blocked -> claimed by ${holder}. ${holder} continues it; it does not move to you.`,
             `resumed_count: ${job.resumed_count} -> ${job.resumed_count + 1}.`,
             `Your approval "${p.reason}" is recorded in the resume note the next holder reads${p.note ? `, with your note of ${p.note.length} character${p.note.length === 1 ? "" : "s"} in full` : ""}.`,
           ],
@@ -811,7 +781,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
           ok: true,
           changes: [
             `${label}: claimed by ${job.claimed_by} -> queued, claimed by nobody.`,
-            `${job.claimed_by}'s lease${job.lease_expires ? ` (until ${job.lease_expires})` : ""} ends, any key bound to ${job.id} is revoked, and no outcome is recorded against ${job.claimed_by}.`,
+            `${job.claimed_by}'s claim ends, and no outcome is recorded against ${job.claimed_by}.`,
           ],
           audit: [`job-released by ${actor}`, click],
         };
@@ -824,8 +794,8 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         changes: [
           `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> failed, with the reason "${p.reason}".`,
           job.claimed_by
-            ? `An outcome row records the failure against ${job.claimed_by}, and any key bound to ${job.id} is revoked.`
-            : `Nobody held it, so no outcome row is written; any key bound to ${job.id} is revoked.`,
+            ? `An outcome row records the failure against ${job.claimed_by}.`
+            : `Nobody held it, so no outcome row is written.`,
         ],
         audit: [`job-admin-fail by ${actor}`, click],
       };
@@ -876,7 +846,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         ok: true,
         changes: [
           `${label}: ${job.status}${job.claimed_by ? ` (held by ${job.claimed_by})` : ""} -> superseded, with the summary "${p.replaced_by ? `Superseded by ${p.replaced_by}` : "Superseded"}: ${p.reason}".`,
-          `No outcome row is written against anybody; any key bound to ${job.id} is revoked, and one supersede touch records that you did it.`,
+          `No outcome row is written against anybody, and one supersede touch records that you did it.`,
         ],
         audit: [`job-superseded by ${actor}`, click],
       };
@@ -1127,8 +1097,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         return refused(archived ? `'${p.name}' was revoked at ${archived.revoked_at} and archived at ${archived.archived_at}.` : `no agent named '${p.name}'.`);
       }
       if (agent.revoked_at) return refused(`'${p.name}' was already revoked at ${agent.revoked_at}.`);
-      // Bounded: a live agent holds at most its claim limit (4 at the most) plus its
-      // blocked jobs, so the limit is a guard, not a page.
+      // Bounded: the limit is a guard, not a page.
       const { results } = await env.DB.prepare(
         `SELECT id, title, namespace, status FROM jobs WHERE claimed_by = ?1 AND status IN ('claimed', 'blocked') ORDER BY id LIMIT 50`
       )

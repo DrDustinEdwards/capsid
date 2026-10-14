@@ -2,9 +2,7 @@ import type { Env } from "../env";
 import { dispatchWorkflow } from "../github";
 import { autoMergeTick } from "../auto-merge-tick";
 import { mergeResumeTick } from "../merge-resume";
-import { runEvaluationCycle } from "../skills-evaluate";
 import { sweepIfDue } from "../outcome-prs";
-import { expireJobLeases } from "../jobs";
 import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
 import { maintenanceTick } from "../maintenance";
@@ -80,23 +78,6 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   // without rethrowing it, so one step's throw does not stop the rest of the tick. A
   // step that was not due returns null from its judge and records nothing.
   //
-  // The work queue's lease sweep: one keyed UPDATE. Gated on the budget, it would leave
-  // a job held by a dead session for as long as the caps stay exceeded, the state it
-  // exists to clear. Recorded only when it returned a job, so the ledger is not one
-  // empty sweep every five minutes.
-  await runTask(
-    env,
-    "lease-sweep",
-    () => expireJobLeases(env, now),
-    (expired): TaskResult => {
-      if (expired.requeued.length === 0) return null;
-      const line = `returned ${expired.requeued.length} job(s) to queued: ${expired.requeued.join(", ")}`;
-      logEvent("log", "JOB_LEASE_EXPIRED", { message: `JOB_LEASE_EXPIRED ${line}` });
-      return { outcome: "ok", reason: line };
-    },
-    { tag: "JOB_LEASE_SWEEP_THREW:", rethrow: false }
-  );
-
   // Auto-merge. It spends no model tokens and no CI minutes, and an exhausted improve
   // budget says nothing about whether a driver's finished pull request should land.
   // The policy document decides whether it does anything; it ships disabled, and a
@@ -113,20 +94,6 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
     },
     { tag: "AUTO_MERGE_THREW:", rethrow: false }
-  );
-
-  // The skill evaluation cycle, gated on its own fortnightly cadence: the tick runs every
-  // five minutes, so all but about one call in four thousand return after one KV read.
-  await runTask(
-    env,
-    "skill-cycle",
-    () => runEvaluationCycle(env, now),
-    (cycle): TaskResult => {
-      if (!cycle.ran) return null;
-      logEvent("log", "SKILL_CYCLE", { message: `SKILL_CYCLE ${cycle.note}` });
-      return { outcome: "ok", reason: cycle.note };
-    },
-    { tag: "SKILL_CYCLE_THREW:", rethrow: false }
   );
 
   // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
