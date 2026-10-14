@@ -6,6 +6,7 @@ import { ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot, PageHead } from "./shared";
+import type { OpsAwaitingSeat } from "../types";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
@@ -193,7 +194,10 @@ export function PullRequests() {
                   <td>
                     <St kind="warn">{a.failed}</St>
                   </td>
-                  <td className="muted">{a.why}</td>
+                  <td className="muted">
+                    {a.why}
+                    {a.visual && <VisualLook visual={a.visual} />}
+                  </td>
                   <td className="num">{ago(ms(a.at), now)}</td>
                   <td>
                     <span className="row-gap">
@@ -237,5 +241,27 @@ export function PullRequests() {
         </div>
       </Panel>
     </div>
+  );
+}
+
+// What a visual pull request shows before Dustin approves it (src/visual-pr.ts,
+// job_0368576da167): its live preview and its screenshots, read from the pull request. They
+// open in a new tab as links, since the Portal's CSP loads no image from another origin.
+function VisualLook({ visual }: { visual: NonNullable<OpsAwaitingSeat["visual"]> }) {
+  return (
+    <span className="visual-look">
+      <span>{visual.title}</span>
+      {visual.preview && (
+        <a href={visual.preview} target="_blank" rel="noopener noreferrer">
+          Open the preview
+        </a>
+      )}
+      {visual.shots.map((src, i) => (
+        <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+          Screenshot {i + 1}
+        </a>
+      ))}
+      {!visual.preview && !visual.shots.length && <span className="faint">The pull request names no preview or screenshots; open it on GitHub.</span>}
+    </span>
   );
 }

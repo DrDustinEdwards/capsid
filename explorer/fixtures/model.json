@@ -183,6 +183,31 @@
           "text": "Swept: the tick writes the sample down."
         }
       ]
+    },
+    {
+      "id": "sample-round",
+      "name": "A sample's round",
+      "description": "An invented round trip through the hub.",
+      "steps": [
+        {
+          "relationship": "hub-worker--serves--hub-agents",
+          "toward": "hub-agents",
+          "text": "Asked: a sample caller asks the hub for a page.",
+          "lights": [
+            "hub-db"
+          ]
+        },
+        {
+          "relationship": "hub-worker--writes--hub-db",
+          "toward": "hub-db",
+          "text": "Noted: the worker writes down what was asked."
+        },
+        {
+          "relationship": "hub-tick--writes--hub-db",
+          "toward": "hub-db",
+          "text": "Tidied: the tick tidies the sample's notes."
+        }
+      ]
     }
   ]
 }

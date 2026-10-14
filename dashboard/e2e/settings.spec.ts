@@ -140,7 +140,7 @@ test("with no site configured, Health has no Sites section and shows no site ite
   await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT);
   // Settings stays reachable: under the avatar, where the first site is added.
   await page.getByRole("button", { name: "Your account" }).click();
-  await expect(page.locator(".cap-admin-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
+  await expect(page.locator(".cap-site-header-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
   await page.keyboard.press("Escape");
   // Everything else is still there.
   await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
@@ -170,12 +170,12 @@ test("with no site configured, Health has no Sites section and shows no site ite
 test.describe("on a phone, with no site configured", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("the tabs are the same, and Settings is under More", async ({ page }) => {
+  test("the tabs are the same, and Settings is behind the menu button", async ({ page }) => {
     await withoutSites(page);
     await visit(page, "health");
-    const tabs = page.locator("nav.cap-admin-tabs > a, nav.cap-admin-tabs > button");
-    await expect(tabs).toHaveText([/^Needs you/, /^Queue/, /^Health/, /^More$/]);
-    await page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" }).tap();
+    const tabs = page.locator("nav.cap-site-tabs a");
+    await expect(tabs).toHaveText([/^Needs you/, /^Queue/, /^Health/]);
+    await page.locator("header.cap-site-header").getByRole("button", { name: "Menu" }).tap();
     await expect(page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ })).toBeVisible();
   });
 });

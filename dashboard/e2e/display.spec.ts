@@ -1,30 +1,32 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// Display (ruled 2026-09-30, DECIDE 8 and 13): the top bar's theme button says whether
-// dark is in effect; Settings offers System, Light and Dark, where System removes the
+// Display (ruled 2026-09-30, DECIDE 8 and 13; the button moved to the header with Capsomer
+// 0.9.0): the header's theme button names what it does, "Switch to dark theme" while light; Settings offers System, Light and Dark, where System removes the
 // saved choice so the device's setting applies; single-key shortcuts are a switch that
 // applies at once; and an exact time in the detail panel is the viewer's zone with UTC
 // beside it, in a <time> element.
 
-const themeButton = (page: Page) => page.locator(".cap-admin-bar").getByRole("button", { name: "Dark theme" });
+const themeButton = (page: Page) => page.locator("header.cap-site-header .cap-theme-button");
+const toDark = "Switch to dark theme";
+const toLight = "Switch to light theme";
 const dataTheme = (page: Page) => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
 const savedTheme = (page: Page) => page.evaluate(() => localStorage.getItem("wf-theme"));
 
 test.describe("with a light system setting", () => {
   test.use({ colorScheme: "light" });
 
-  test("PLANT: the theme button has a fixed name and aria-pressed that follows dark", async ({ page }) => {
+  test("PLANT: the header's theme button names what it does and follows the theme", async ({ page }) => {
     await visit(page, "health");
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(themeButton(page)).toHaveAccessibleName(toDark);
     await themeButton(page).click();
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "true");
-    await expect(themeButton(page)).toHaveAccessibleName("Dark theme");
+    await expect(themeButton(page)).toHaveAccessibleName(toLight);
     expect(await dataTheme(page)).toBe("dark");
+    expect(await savedTheme(page)).toBe("dark");
     // The t shortcut still switches it.
     await page.locator("main").focus();
     await page.keyboard.press("t");
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(themeButton(page)).toHaveAccessibleName(toDark);
   });
 
   test("PLANT: Display's System removes data-theme and the saved choice; Dark sets both, and the top bar follows", async ({ page }) => {
@@ -33,11 +35,11 @@ test.describe("with a light system setting", () => {
     await display.getByRole("radio", { name: /^Dark/ }).check();
     expect(await dataTheme(page)).toBe("dark");
     expect(await savedTheme(page)).toBe("dark");
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(themeButton(page)).toHaveAccessibleName(toLight);
     await display.getByRole("radio", { name: /^System/ }).check();
     expect(await dataTheme(page)).toBeNull();
     expect(await savedTheme(page)).toBeNull();
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(themeButton(page)).toHaveAccessibleName(toDark);
     await page.reload();
     await expect(display.getByRole("radio", { name: /^System/ })).toBeChecked();
     await display.getByRole("radio", { name: /^Light/ }).check();
@@ -59,7 +61,8 @@ test("PLANT: the single-key shortcuts switch applies at once, in Display and in 
   await page.keyboard.press("h");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   // The sheet shows the same state, and turning it on there applies at once.
-  await page.getByRole("button", { name: "Shortcuts" }).click();
+  await page.getByRole("button", { name: "Your account" }).click();
+  await page.getByRole("button", { name: "Help and shortcuts" }).click();
   const help = page.getByRole("dialog", { name: "Keyboard" });
   const inSheet = help.getByRole("switch", { name: "Single-key shortcuts" });
   await expect(inSheet).toHaveAttribute("aria-checked", "false");

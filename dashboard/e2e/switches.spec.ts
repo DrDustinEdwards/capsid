@@ -152,7 +152,8 @@ test("Queue and Agents have no automation control of their own, and Agents links
   await visit(page, "queue");
   await expect(page.getByRole("button", { name: /^Turn (on|off)$/ })).toHaveCount(0);
   await visit(page, "agents");
-  await expect(page.getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
+  // The header's theme button is "Switch to dark theme"; only the page is checked.
+  await expect(page.locator("main").getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Change it in Settings" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page).toHaveURL(/\/settings#automation$/);

@@ -49,8 +49,6 @@
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted);
 }
 .iconbtn { width: 32px; padding: 0; justify-content: center; }
-.btn.spin svg { animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* main is the containing block for anything absolutely positioned inside it (.sr-only
    text in a table header, say). Without it such an element is placed against the whole
@@ -135,6 +133,7 @@ main { min-width: 0; position: relative; }
 .inbox-item { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 5px 16px; min-height: 24px; }
 .inbox-item .what { min-width: 0; overflow-wrap: anywhere; }
 .inbox-item .what b { font-weight: 500; }
+.inbox-item .linkbtn { text-align: left; }
 .inbox-item .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
 @media (max-width: 820px) {
   .inbox-item { grid-template-columns: minmax(0, 1fr) auto; }
@@ -203,8 +202,16 @@ table.fleet { width: 100%; border-collapse: collapse; }
 :root { --enarratio-text: var(--text); --enarratio-text-muted: var(--muted); --enarratio-grid: var(--line); --enarratio-background: var(--surface); --enarratio-series-1: var(--series-1); --enarratio-series-2: var(--series-2); --enarratio-series-3: var(--series-3); --enarratio-series-4: var(--series-4); --enarratio-series-5: var(--series-5); --enarratio-series-6: var(--series-6); --enarratio-series-7: var(--series-7); --enarratio-series-8: var(--series-8); --enarratio-status-good: var(--ok); --enarratio-status-warning: var(--warn); --enarratio-status-bad: var(--crit); --enarratio-status-unknown: var(--nodata); --enarratio-font: inherit; --enarratio-font-numeric: var(--ui); }
 .enar { margin: 0; }
 .agree-chart { --enarratio-series-1: var(--ok); --enarratio-series-2: var(--crit); --enarratio-series-3: var(--nodata); --enarratio-series-4: var(--warn); }
-.chart-row { display: flex; flex-wrap: wrap; gap: 0 24px; align-items: flex-start; }
-.wait-chart { margin: 0 0 16px; max-width: 600px; flex: 1 1 360px; }
+/* Two charts side by side, each half the row, stacked when the row is narrow. */
+.chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 0 32px; align-items: start; }
+.wait-chart, .minutes-chart { margin: 0 0 16px; min-width: 0; }
+.wait-chart .t1 .l, .minutes-chart .t1 .l { font-size: 13px; font-weight: 600; }
+.minutes-now { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 2px; }
+.minutes-now .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.minutes-now .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.minutes-change { font-size: 12px; font-weight: 600; color: var(--muted); }
+/* More of your time is the worse direction. */
+.minutes-change.up { color: var(--warn); } .minutes-change.down { color: var(--ok); }
 /* Every chart is drawn at the width it is given (Enar.tsx), so a wide chart's 30rem floor
    would only make it scroll on a phone. */
 .enarratio-frame-wide > svg { min-width: 0; }
@@ -213,7 +220,6 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .ci-strip { --enarratio-sequential-1: var(--ok); --enarratio-sequential-5: var(--crit); }
 .enar-table { font-size: 12px; color: var(--muted); }
 .slot-head { font-size: 12px; margin-bottom: 4px; overflow-wrap: anywhere; }
-.minutes-tile { margin: 0 0 16px; max-width: 460px; }
 .upct { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; margin-top: 3px; }
 .backupbar { width: 84px; height: 6px; border-radius: 3px; background: var(--sunken); position: relative; overflow: hidden; margin-top: 4px; }
 .backupbar i { position: absolute; inset: 0 auto 0 0; background: var(--ok); }
@@ -517,3 +523,8 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
   .auto-row { grid-template-columns: minmax(0, 1fr); }
   .auto-row .runs { grid-column: 1; }
 }
+
+/* A visual pull request's preview and screenshots in Awaiting the seat (Ci.tsx). */
+.visual-look { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--text); }
+.visual-look > span:first-child { flex-basis: 100%; }
+.visual-look a { white-space: nowrap; }

@@ -96,7 +96,7 @@ for (const scheme of ["light", "dark"] as const) {
 
     test("a button's border reaches 3:1 against its background", async ({ page }) => {
       await visit(page, "health");
-      const r = await readPair(page, ".cap-admin-bar .btn", "border");
+      const r = await readPair(page, "main .btn", "border");
       expect(r).not.toBeNull();
       expect(r!.ratio, `${r!.fg} on ${r!.bg}`).toBeGreaterThanOrEqual(3);
     });

@@ -5,13 +5,10 @@ import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
-import { RAIL_PREF, readPref, setSingleKeys, toggleTheme, useDarkTheme, useSingleKeys, writePref } from "../lib/prefs";
-import { APPS } from "../lib/apps";
-import { BrandMark, NavIcon, RefreshIcon, ThemeIcon } from "../ui/icons";
+import { RAIL_PREF, THEME_PREF, readPref, setSingleKeys, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
+import { NavIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
 import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
-import { Drawer } from "./Drawer";
-import { CommandMenu, commands } from "./CommandMenu";
 import { NeedsYou } from "../views/NeedsYou";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -30,14 +27,18 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
   settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
 
+// Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
+// carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
+const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })));
+const CommandPalette = lazy(() => import("./CommandMenu").then((m) => ({ default: m.CommandPalette })));
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 // Loaded the first time it is opened, then kept: the initial bundle does not carry it.
 const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.HelpSheet })));
 
-// The phone tab bar (design-portal-evaluation.md section 2): Needs you, Queue, Health, then
-// More, which lists every other page. Settings is under More: on a wide screen it is the
-// top bar's Settings button, not a page in the left menu.
+// The phone tab bar (design-portal-evaluation.md section 2): Needs you, Queue, Health. The
+// header's menu button opens every other page (Capsomer 0.9.0 has no More tab); Settings is
+// under the avatar's menu.
 const TABS: ViewId[] = ["needs", "queue", "health"];
 
 // The menu's groups (design section 2: Needs you, Work, Health, Records; Needs you and Health
@@ -54,7 +55,6 @@ const GROUPS: Array<{ label: string; views: ViewId[] }> = [
 // status). Down, critical or a red CI run is red (a failure is never violet); paused is amber; what
 // waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
-  needs: "need",
   health: "crit",
   prs: "need",
 };
@@ -62,7 +62,6 @@ const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
-  needs: "waiting on you",
   health: "critical",
   prs: "awaiting the seat",
 };
@@ -161,7 +160,6 @@ export function App() {
     if (help) setHelpUsed(true);
   }, [help]);
   const singleKeys = useSingleKeys();
-  const dark = useDarkTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const nextMessage = useRef(1);
   const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
@@ -461,10 +459,15 @@ export function App() {
     },
     [go, say],
   );
-  const list = useMemo(
-    () => commands(feed, views, { go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }, now),
-    [feed, views, go, open, refresh, theme, copy, confirm, flip, now],
-  );
+  const paletteActions = useMemo(() => ({ go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }), [go, open, refresh, theme, copy, confirm, flip]);
+  const [paletteUsed, setPaletteUsed] = useState(false);
+  useEffect(() => {
+    if (palette) setPaletteUsed(true);
+  }, [palette]);
+  const [drawerUsed, setDrawerUsed] = useState(false);
+  useEffect(() => {
+    if (route.drawer) setDrawerUsed(true);
+  }, [route.drawer]);
 
   const onRowActivate = (e: ReactMouseEvent | ReactKeyboardEvent) => {
     const target = e.target as Element;
@@ -480,14 +483,13 @@ export function App() {
   };
 
   const c = feed ? counts(feed) : null;
-  // One number, one place (design-portal-evaluation.md section 2, "Badges"): Needs you
-  // counts what the inbox counts, the number the admin strip's badge shows; Health counts
+  // One number, one place (design-portal-evaluation.md section 2, "Badges"): what waits on you
+  // is the header inbox's number, so Needs you's menu entry carries none; Health counts
   // the critical problems, session incidents included (derive.ts); Pull requests counts
   // what waits on the seat. The Queue's blocked jobs are in Needs you's count already.
   const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
     ? {
-        needs: { n: feed.live.inbox.count, cls: "warm" },
         health: { n: critCount, cls: "hot" },
         prs: { n: feed.live.awaiting_seat.length, cls: "warm" },
       }
@@ -521,7 +523,6 @@ export function App() {
   };
   const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.filter((id) => views.some((v) => v.id === id)).map((id) => entryFor(id, g.label)));
   const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
-  const moreEntries = menu.filter((e) => !tabs.includes(e.id as ViewId)).map((e) => ({ ...e, group: undefined }));
 
   const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;
   const View = VIEW_COMPONENTS[route.view];
@@ -580,27 +581,26 @@ export function App() {
     );
   }
 
-  // Right of the tab bar: the page's own bar says how fresh the data is and holds its page-wide
-  // controls (Refresh and the theme). Everything of the owner's sits in the strip.
+  // Capsomer 0.9.0's owner shell (design-site-header.md): the header holds Search, the inbox,
+  // the theme button and the avatar, whose menu holds Help; the strip holds the family's apps.
+  // The top bar says how fresh the page is and holds Refresh.
   const shell = (
     <AdminShell
-      title="Capsid Portal"
-      mark={<BrandMark />}
-      apps={APPS}
+      app="portal"
+      page={signedOut ? "Signed out" : VIEWS.find((v) => v.id === route.view)?.label}
       nav={menu}
       tabs={tabEntries}
-      more={moreEntries}
       navLabel="Sections"
       onSearch={() => setPalette(true)}
+      inbox={feed ? { count: feed.live.inbox.count, countNote: "waiting on you", href: routePath("needs") } : undefined}
       onHelp={() => setHelp(true)}
+      themePrefKey={THEME_PREF}
       account={{
         // From the signed-in session; neutral only until the first feed arrives.
         name: feed?.user.name ?? "Account",
         initials: feed?.user.initials ?? "A",
-        appLinks: [
-          { label: "Portal settings", href: routePath("settings"), current: route.view === "settings" },
-          { label: "Keyboard shortcuts", onClick: () => setHelp(true) },
-        ],
+        appLabel: "Capsid Portal",
+        appLinks: [{ label: "Portal settings", href: routePath("settings"), current: route.view === "settings" }],
         onSignOut: signedOut ? undefined : () => void leave(),
         signOutDisabled: !feed || leaving,
       }}
@@ -614,21 +614,16 @@ export function App() {
           {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
         </>
       }
-      actions={
-        <>
-          <button type="button" className={`btn iconbtn${spinning ? " spin" : ""}`} data-tip="Refresh (r)" data-tip-side="below" aria-label="Refresh" onClick={() => void refresh()} disabled={signedOut}>
-            <RefreshIcon />
-          </button>
-          <button type="button" className="btn iconbtn" data-tip="Dark theme (t)" data-tip-side="below" aria-label="Dark theme" aria-pressed={dark} onClick={theme}>
-            <ThemeIcon />
-          </button>
-        </>
-      }
+      onRefresh={signedOut ? undefined : () => void refresh()}
+      refreshing={spinning}
+      refreshShortcut="R"
       jumpKeys={singleKeys}
       prefKey={RAIL_PREF}
       collapsed={railCollapsed}
       onCollapsedChange={setRail}
-      renderLink={(p) => <Link {...p} />}
+      // Another app's address (the strip, the logo) is another origin: a plain anchor, since
+      // wouter would put the Portal's base in front of it.
+      renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
     >
       {content}
@@ -640,12 +635,20 @@ export function App() {
       {ctx ? (
         <AppCtx.Provider value={ctx}>
           {shell}
-          <Drawer route={route.drawer} onClose={closeDrawer} />
+          {drawerUsed && (
+            <Suspense fallback={null}>
+              <Drawer route={route.drawer} onClose={closeDrawer} />
+            </Suspense>
+          )}
         </AppCtx.Provider>
       ) : (
         shell
       )}
-      <CommandMenu open={palette} onClose={() => setPalette(false)} list={list} />
+      {paletteUsed && (
+        <Suspense fallback={null}>
+          <CommandPalette open={palette} onClose={() => setPalette(false)} feed={feed} views={views} actions={paletteActions} now={now} />
+        </Suspense>
+      )}
       {helpUsed && (
         <Suspense fallback={null}>
           <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />

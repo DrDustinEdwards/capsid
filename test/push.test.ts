@@ -120,7 +120,7 @@ async function decrypt(body: Uint8Array): Promise<string> {
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
 
-// The five triggers
+// The six triggers
 
 test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
   const w = world({ awaiting: [typed(7)] });
@@ -143,6 +143,18 @@ test("an approve-class pull request never alerts, however long it waits", async 
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.equal(report.sent.length, 0);
   assert.equal(s.got.length, 0);
+});
+
+test("a visual pull request alerts at once, once per head, and names no title", async () => {
+  const visual = (sha: string) => ({ ...approve(9), failed: "visual_awaits_look", head_sha: sha, visual: { title: "Secret redesign", preview: "https://preview.example.com/", shots: [] } });
+  const w = world({ awaiting: [visual("aaa")] });
+  const s = service();
+  assert.deepEqual((await pushTick(w.env, NOW, s.fetcher)).sent, ["visual:owner/foxhound#9:aaa"]);
+  assert.equal(s.got[0]!.title, "Visual change to look at");
+  assert.doesNotMatch(s.got[0]!.body, /Secret redesign/, "an alert carries no title");
+  assert.equal((await pushTick(w.env, new Date(NOW.getTime() + 60_000), s.fetcher)).sent.length, 0, "sent twice for one head");
+  await w.kv.kv.put("improve:awaiting-seat", JSON.stringify([visual("bbb")]));
+  assert.deepEqual((await pushTick(w.env, new Date(NOW.getTime() + 120_000), s.fetcher)).sent, ["visual:owner/foxhound#9:bbb"], "a new push did not ask again");
 });
 
 test("a rollback and a failed rollback alert; a verified deploy and an old rollback do not", async () => {

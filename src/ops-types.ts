@@ -286,6 +286,9 @@ export interface OpsAwaitingSeat {
   class_reasons?: string[];
   // The head the tick judged; the Portal's Approve sends it as the sha approved.
   head_sha?: string;
+  // A pull request labelled visual (src/visual-pr.ts): its title, the live preview its
+  // description names, and its screenshots, all read from the pull request itself.
+  visual?: { title: string; preview: string | null; shots: string[] };
 }
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is
@@ -395,6 +398,9 @@ export interface InboxItem {
   link: string | null;
   /** When it started waiting, ISO. The shell shows the age. */
   since: string;
+  /** The job it is, for a blocked job or a question, so the Portal opens the job's panel
+   *  when there is no link. Absent on every other kind. */
+  job?: string;
 }
 
 export interface InboxApp {

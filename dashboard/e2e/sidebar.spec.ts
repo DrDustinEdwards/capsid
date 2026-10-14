@@ -2,13 +2,15 @@ import { expect, test, type Page } from "@playwright/test";
 import { RAIL_PREF } from "../src/lib/prefs.ts";
 import { RAIL_COUNT, RAIL_VIEWS, visit } from "./views.ts";
 
-// The shell's menu (Capsomer's AdminShell): a grouped menu beside the strip of apps and tools.
-// Collapsing folds the menu away and leaves the strip; the control is a real button in the same
-// place in both states, and the choice is remembered per browser.
+// The shell's menu (Capsomer 0.9.0's AdminShell, owner variant): a grouped menu beside the strip
+// of apps, under the site header that holds Search, the inbox, the theme and the avatar.
+// Collapsing folds the menu to icons; the control is a real button in the same place in both
+// states, and the choice is remembered per browser.
 
 const toggle = (page: Page) => page.locator("button[data-cap-part='menu-toggle']");
 const menu = (page: Page) => page.locator("nav.cap-admin-menu");
 const menuLinks = (page: Page) => page.locator("nav.cap-admin-menu a");
+const label = (page: Page, text: string) => menu(page).locator(".cap-admin-label", { hasText: new RegExp(`^${text}$`) });
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -16,7 +18,7 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
   await visit(page, "health");
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
   await expect(menuLinks(page)).toHaveCount(RAIL_COUNT);
-  for (const v of RAIL_VIEWS) await expect(menu(page).getByText(v.label, { exact: true })).toBeVisible();
+  for (const v of RAIL_VIEWS) await expect(label(page, v.label)).toBeVisible();
   const open = (await menu(page).boundingBox())!.width;
   const strip = page.locator("nav.cap-admin-strip");
   const stripOpen = await strip.boundingBox();
@@ -24,8 +26,10 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
   const places = () =>
     menuLinks(page).evaluateAll((els) =>
       els.map((a) => {
+        // Measured from the menu's top, so a scroll between the two readings changes nothing.
+        const top = a.closest("nav")!.getBoundingClientRect().top;
         const r = a.getBoundingClientRect();
-        return { name: a.getAttribute("aria-label") ?? a.textContent?.trim(), y: Math.round(r.top), h: Math.round(r.height) };
+        return { name: a.getAttribute("aria-label") ?? a.querySelector(".cap-admin-label")?.textContent?.trim(), y: Math.round(r.top - top), h: Math.round(r.height) };
       }),
     );
   const before = await places();
@@ -36,8 +40,9 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
   expect((await menu(page).boundingBox())!.width).toBeLessThan(open / 2);
   expect((await strip.boundingBox())?.width).toBeCloseTo(stripOpen!.width, 0);
   expect(await places()).toEqual(before);
-  for (const label of await menu(page).locator(".cap-admin-label").all()) await expect(label).toHaveCSS("opacity", "0");
-  for (const head of await menu(page).locator(".cap-admin-group-label").all()) await expect(head).toHaveCSS("opacity", "0");
+  // Labels keep their names for a screen reader but are clipped away; group headings become a divider.
+  for (const l of await menu(page).locator(".cap-admin-label").all()) await expect(l).toHaveCSS("clip-path", "inset(50%)");
+  for (const head of await menu(page).locator(".cap-admin-group-label").all()) await expect(head).toHaveCSS("color", "rgba(0, 0, 0, 0)");
   // Names kept, a badge on each icon that has a count, the current page still dark filled.
   for (const v of RAIL_VIEWS) await expect(menu(page).getByRole("link", { name: new RegExp(`^${v.label}`) })).toHaveCount(1);
   await expect(menu(page).locator(".cap-admin-count:not(:empty)").first()).toBeVisible();
@@ -50,27 +55,35 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
 test("a collapsed icon shows its label on hover and on keyboard focus", async ({ page }) => {
   await visit(page, "health");
   await toggle(page).click();
-  const sites = menu(page).getByRole("link", { name: /^Queue/ });
-  const label = sites.locator(".cap-admin-label");
-  await expect(label).toHaveCSS("opacity", "0");
-  await sites.hover();
-  await expect(label).toHaveCSS("opacity", "1");
-  await expect(label).toHaveText("Queue");
+  const queue = menu(page).getByRole("link", { name: /^Queue/ });
+  const tip = queue.locator(".cap-admin-tip");
+  await expect(tip).toBeHidden();
+  await queue.hover();
+  await expect(tip).toBeVisible();
+  await expect(tip).toHaveText("Queue");
   await page.mouse.move(900, 500);
+  await expect(tip).toBeHidden();
   // A key press first, so the focus that follows counts as keyboard focus (:focus-visible).
   await page.keyboard.press("Shift");
-  await menu(page).getByRole("link", { name: /^Queue/ }).focus();
-  await expect(menu(page).getByRole("link", { name: /^Queue/ }).locator(".cap-admin-label")).toHaveCSS("opacity", "1");
+  await queue.focus();
+  await expect(tip).toBeVisible();
 });
 
-test("the strip's controls each have an accessible name and show it, with the key, on hover and focus", async ({ page }) => {
+test("the header's controls each have an accessible name and show it, with the key, on hover and focus", async ({ page }) => {
   await visit(page, "health");
+  const header = page.locator("header.cap-site-header");
   const strip = page.locator("nav.cap-admin-strip");
-  for (const name of ["Search everything", "Help and shortcuts", "Your account"]) await expect(strip.getByRole("button", { name })).toHaveCount(1);
-  const search = strip.getByRole("button", { name: "Search everything" });
+  for (const name of ["Search everything", "Switch to dark theme", "Your account"]) await expect(header.getByRole("button", { name })).toHaveCount(1);
+  await expect(header.getByRole("link", { name: /^Inbox/ })).toHaveCount(1);
+  // Help is the avatar's menu's, not a control of its own.
+  await expect(header.getByRole("button", { name: "Help and shortcuts" })).toBeHidden();
+  await header.getByRole("button", { name: "Your account" }).click();
+  await expect(header.getByRole("button", { name: "Help and shortcuts" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  const search = header.getByRole("button", { name: "Search everything" });
   await search.hover();
-  await expect(search.locator(".cap-admin-tip")).toHaveCSS("opacity", "1");
-  await expect(search.locator(".cap-admin-tip")).toContainText("Ctrl K");
+  await expect(search.locator(".cap-site-header-tip")).toBeVisible();
+  await expect(search.locator(".cap-site-header-tip kbd")).toHaveText(["Ctrl", "K"]);
   await page.mouse.move(700, 500);
   await toggle(page).focus();
   await expect(toggle(page).locator(".cap-admin-tip")).toContainText("[");
@@ -85,7 +98,7 @@ test("a count on a menu entry says what it counts in the entry's name", async ({
   for (const v of RAIL_VIEWS) {
     const link = menuLinks(page).filter({ has: page.getByText(v.label, { exact: true }) });
     await expect(link, `${v.label} is in the menu once`).toHaveCount(1);
-    const name = await link.evaluate((el) => el.getAttribute("aria-label") ?? el.textContent ?? "");
+    const name = await link.evaluate((el) => el.getAttribute("aria-label") ?? el.querySelector(".cap-admin-label")?.textContent ?? "");
     expect(name.startsWith(v.label), `${v.label}: accessible name is "${name}"`).toBe(true);
     await expect(menu(page).getByRole("link", { name: name.trim() })).toHaveCount(1);
     const n = (await link.locator(".cap-admin-count").textContent())?.trim() ?? "";
@@ -94,7 +107,8 @@ test("a count on a menu entry says what it counts in the entry's name", async ({
       expect(name).toContain(`, ${n} `);
     }
   }
-  expect(counted).toBeGreaterThanOrEqual(3);
+  // Health and Pull requests; what waits on you is the header inbox's number, not the menu's.
+  expect(counted).toBeGreaterThanOrEqual(2);
 });
 
 test("the state survives a reload", async ({ page }) => {
@@ -170,8 +184,8 @@ test.describe("on a phone", () => {
     await visit(page, "health");
     await expect(menu(page)).toBeHidden();
     await expect(page.locator("nav.cap-admin-strip")).toBeHidden();
-    const tabs = page.locator("nav.cap-admin-tabs > a, nav.cap-admin-tabs > button");
-    await expect(tabs).toHaveCount(4);
+    const tabs = page.locator("nav.cap-site-tabs a");
+    await expect(tabs).toHaveCount(3);
     for (const t of await tabs.all()) await expect(t).toBeInViewport({ ratio: 1 });
   });
 });

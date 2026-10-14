@@ -37,7 +37,7 @@ import { pendingProposals } from "./canon";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 23 statements:
+//   D1, 15 statements plus one per TASKS entry (9 today, so 24):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -49,10 +49,11 @@ import { pendingProposals } from "./canon";
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
-//     2  gatherInbox (src/inbox.ts): the blocked jobs and the site configuration again,
+//     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
+//        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 10 gets plus one per LOOP_ROSTER namespace (5 today, so 15): gatherInbox's own
-//     reads of ops:snapshot, the awaiting-seat set and the merge units' report
+//   KV, 11 gets plus one per LOOP_ROSTER namespace (5 today, so 16): gatherInbox's own
+//     reads of the stale pull request cache (src/stale-jobs.ts), ops:snapshot, the awaiting-seat set and the merge units' report
 //     (src/merge-units.ts), then ops:snapshot, the
 //     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp, the improve mode, the budget caps,
 //     the overnight switch's mode (its decision record is
@@ -64,7 +65,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 11 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
