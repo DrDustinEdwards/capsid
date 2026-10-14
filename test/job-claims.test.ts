@@ -322,7 +322,7 @@ test("PLANT: complete, fail and block refuse a bad claim and write nothing", asy
   const completed = await completeJob(fakeEnv({}), agent, NOW, id, { result_summary: "landed", claim: "{not json" });
   assert.equal(completed.ok, false, "complete accepted an unparseable claim");
   assert.match(completed.refusal ?? "", /not JSON/);
-  const failed = await failJob(fakeEnv({}), agent, NOW, id, "broke", undefined, { claim: { tests: { run: 1, flaky: 2 } } as never });
+  const failed = await failJob(fakeEnv({}), agent, NOW, id, "broke", { claim: { tests: { run: 1, flaky: 2 } } as never });
   assert.equal(failed.ok, false, "fail accepted an unknown claim key");
   assert.match(failed.refusal ?? "", /flaky/);
   const blocked = await blockJob(fakeEnv({}), agent, NOW, id, { reason: "needs a push", claim: '{"deploy_state":"shipped"}' });

@@ -153,7 +153,7 @@ test("the watcher may post a job and cannot claim, complete or resume one", () =
   const tools = watcher.tools;
   assert.ok(tools, "a watcher with no tools axis is scoped to every tool its grant allows, which is the hole this role exists to close");
   assert.deepEqual(tools, ["capsid_work_jobs", "capsid_work_jobs.post"]);
-  for (const action of ["claim", "complete", "fail", "block", "resume", "heartbeat"]) {
+  for (const action of ["claim", "complete", "fail", "block", "resume"]) {
     assert.equal(allowsToolAction(tools, "capsid_work_jobs", action), false, `a watcher must not be able to ${action} a job`);
   }
   assert.equal(allowsToolAction(tools, "capsid_work_jobs", "post"), true);

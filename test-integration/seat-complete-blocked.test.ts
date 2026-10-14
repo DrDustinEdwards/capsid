@@ -110,7 +110,6 @@ describe("the seat completes a blocked job it does not hold", () => {
     const row = await job(id);
     expect(row?.status).toBe("done");
     expect(row?.claimed_by).toBe(DRIVER_ACTOR);
-    expect(row?.lease_expires).toBeNull();
 
     const out = await outcome(id);
     expect(out?.agent).toBe(DRIVER_ACTOR);

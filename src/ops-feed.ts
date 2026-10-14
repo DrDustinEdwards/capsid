@@ -16,12 +16,11 @@ import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSeatStart, OpsSession } from "./ops-types";
-import { runUrl } from "./runner-key";
+import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession } from "./ops-types";
 import { overnightState } from "./overnight";
-import { seatStartState, sessionsInFlight } from "./seat-start";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
+import { openQuietFindings } from "./watcher-digest";
 import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 import { logEvent } from "./log";
 import { pendingProposals } from "./canon";
@@ -38,13 +37,10 @@ import { pendingProposals } from "./canon";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 25 statements plus N:
+//   D1, 23 statements:
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
 //     1  job_outcome_prs in the last 7 days
-//     1  audit_log: seat starts and runner-key mints in the last 7 days
-//     2  sessionsInFlight: runner-held jobs, and starts inside the pending window,
-//        plus N = one readJob per such start not already held (at most the cap in use)
 //     1  checkBudget's month spend
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
@@ -52,13 +48,14 @@ import { pendingProposals } from "./canon";
 //     1  canon_proposals: the pending proposals joined to their documents, at most 50
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
+//     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
 //     2  gatherInbox (src/inbox.ts): the blocked jobs and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 12 gets plus one per LOOP_ROSTER namespace (5 today, so 17): gatherInbox's own
+//   KV, 10 gets plus one per LOOP_ROSTER namespace (5 today, so 15): gatherInbox's own
 //     reads of ops:snapshot, the awaiting-seat set and the merge units' report
 //     (src/merge-units.ts), then ops:snapshot, the
 //     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp, the improve mode, the budget caps,
-//     seatStartState's two keys, the overnight switch's mode (its decision record is
+//     the overnight switch's mode (its decision record is
 //     read only while the mode is subscription), and each namespace's pause key.
 // They run concurrently; the longest chain is agentSummaries' two steps.
 
@@ -67,7 +64,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 16 + TASKS.length, kv: 12 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -96,9 +93,6 @@ const OPS_REFRESH_HEADER_VALUE = "refresh";
 
 const DAY_MS = 24 * 3_600_000;
 const WEEK_MS = 7 * DAY_MS;
-// The seat-start read's bound. Starts are rare (a cap of one or two in flight), so a
-// week of them is far under this; the LIMIT is a guard, not a page.
-const SEAT_ROWS_LIMIT = 500;
 // The live-sessions read's bound.
 const SESSION_ROWS_LIMIT = 50;
 
@@ -125,7 +119,6 @@ export interface JobFeedRow {
   claimed_by: string | null;
   created_at: string;
   updated_at: string;
-  lease_expires: string | null;
   blocked_count: number;
   resumed_count: number;
   gate_required: number;
@@ -164,7 +157,6 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     claimed_by: row.claimed_by,
     created_at: isoTime(row.created_at),
     updated_at: isoTime(row.updated_at),
-    lease_expires: isoTime(row.lease_expires),
     blocked_count: row.blocked_count,
     resumed_count: row.resumed_count,
     gate_required: row.gate_required === 1,
@@ -203,57 +195,6 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
     attempts_kept: r.attempts_kept,
     attempts_reverted: r.attempts_reverted,
   };
-}
-
-export interface SeatAuditRow {
-  id: number;
-  action: string;
-  namespace: string | null;
-  params: string;
-  at: string;
-}
-
-function paramsOf(row: SeatAuditRow): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(row.params);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-    throw new Error("not an object");
-  } catch (err) {
-    // This Worker wrote the row, so a params that does not parse is a defect to see,
-    // not a start to hide: it is logged, and the start is listed with no run.
-    logEvent("error", "OPS_FEED_AUDIT_PARAMS_UNREADABLE", { message: `OPS_FEED_AUDIT_PARAMS_UNREADABLE audit_log ${row.id}: ${err instanceof Error ? err.message : String(err)}` });
-    return {};
-  }
-}
-
-/** Seat starts, newest first, each joined to the runner-key mint that names it
- *  (start_audit_id). A start whose runner never presented its token has no run. */
-export function seatRecentFrom(rows: SeatAuditRow[]): OpsSeatStart["recent"] {
-  const mints = new Map<number, Record<string, unknown>>();
-  for (const row of rows) {
-    if (row.action !== "runner-key-minted") continue;
-    const params = paramsOf(row);
-    if (typeof params.start_audit_id === "number") mints.set(params.start_audit_id, params);
-  }
-  return rows
-    .filter((row) => row.action === "job-seat-started")
-    .sort((a, b) => b.id - a.id)
-    .map((row) => {
-      const start = paramsOf(row);
-      const mint = mints.get(row.id);
-      const runId = mint ? Number(mint.run_id) : NaN;
-      const recorded = typeof mint?.run_url === "string" ? mint.run_url : null;
-      // A mint written before run_url was recorded: the URL is built the same way from
-      // the repo the start dispatched to.
-      const url = mint ? (recorded ?? (typeof start.repo === "string" ? runUrl(start.repo, mint.run_id) : null)) : null;
-      return {
-        job_id: typeof start.job_id === "string" ? start.job_id : "",
-        namespace: row.namespace,
-        at: isoTime(row.at),
-        run_id: Number.isSafeInteger(runId) && runId > 0 ? runId : null,
-        run_url: url,
-      };
-    });
 }
 
 /** The auto-merge tick's awaiting-seat set. A value that does not parse is logged and
@@ -305,7 +246,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
   // vanish from the Queue a day after it was parked.
   const { results, meta } = await db
     .prepare(
-      `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at, j.lease_expires,
+      `SELECT j.id, j.namespace, j.title, j.status, j.priority, j.posted_by, j.claimed_by, j.created_at, j.updated_at,
               j.blocked_count, j.resumed_count, j.gate_required, j.result_ref, j.result_summary, j.summary_sig,
               j.started_by, j.started_at,
               wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
@@ -342,18 +283,6 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
     merge_verified_at: isoTime(r.merge_verified_at),
     recorded_at: isoTime(r.recorded_at),
   }));
-}
-
-async function seatRows(db: D1Database, now: Date): Promise<SeatAuditRow[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT id, action, namespace, params, at FROM audit_log
-       WHERE action IN ('job-seat-started', 'runner-key-minted') AND at >= ?1
-       ORDER BY id DESC LIMIT ?2`
-    )
-    .bind(sqliteTime(new Date(now.getTime() - WEEK_MS)), SEAT_ROWS_LIMIT)
-    .all<SeatAuditRow>();
-  return results ?? [];
 }
 
 export interface SessionFeedRow {
@@ -422,16 +351,13 @@ async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
   return { mode, budget: { month: budget.month, caps: budget.caps, spend: budget.spend, exceeded: budget.exceeded } };
 }
 
-export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, seat, inFlight, rows, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox] = await Promise.all([
+async function opsLive(env: Env, now: Date): Promise<OpsLive> {
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox, findings] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
     env.APP_KV.get(AWAITING_SEAT_KEY),
     readSafetyReport(env.APP_KV),
-    seatStartState(env),
-    sessionsInFlight(env, now),
-    seatRows(env.DB, now),
     liveLoop(env, now),
     // Read as the loop reads it (pausedReason), so an unreadable key shows as a pause
     // with its reason, the way the loop treats it.
@@ -442,6 +368,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     overnightState(env),
     pendingProposals(env.DB),
     gatherInbox(env, now, null),
+    openQuietFindings(env.DB),
   ]);
   return {
     generated: now.toISOString(),
@@ -450,7 +377,6 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
     merge_safety: mergeSafety,
-    seat_start: { enabled: seat.enabled, max_sessions: seat.max_sessions, in_flight: inFlight.length, recent: seatRecentFrom(rows) },
     overnight,
     sessions,
     loop,
@@ -460,6 +386,7 @@ export async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
     canon_proposals: canonProposals,
     inbox,
+    findings,
   };
 }
 

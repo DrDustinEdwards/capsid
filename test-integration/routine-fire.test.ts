@@ -48,7 +48,7 @@ function anthropic(opts: { status?: number; body?: unknown; headers?: Record<str
     if (opts.throws) throw new Error("connection reset");
     fires.push({ url, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: JSON.parse(String(init?.body)) });
     const body = opts.body ?? { type: "routine_fire", claude_code_session_id: SESSION, claude_code_session_url: `https://claude.ai/code/${SESSION}` };
-    return new Response(JSON.stringify(body), { status: opts.status ?? 200, headers: { "Content-Type": "application/json", ...opts.headers } });
+    return new Response(typeof body === "string" ? body : JSON.stringify(body), { status: opts.status ?? 200, headers: { "Content-Type": "application/json", ...opts.headers } });
   });
   return fires;
 }
@@ -145,6 +145,96 @@ describe("a fire", () => {
     expect(await fireRows()).toHaveLength(1);
     await clearLabel(id);
     expect((await fireRoutine(jobsEnv(), seatAgent(), NOW, id)).refusal).toMatch(/^already_fired/);
+  });
+
+  // The documented answer is {"type":"routine_fire","claude_code_session_id":...,"claude_code_session_url":...}.
+  // What the first real fire returned failed the strict patterns, so each variation is read.
+  const answered = async (body: unknown) => {
+    anthropic({ body });
+    const fired = await fireRoutine(jobsEnv(), seatAgent(), NOW, await queued());
+    expect(fired.ok, fired.refusal).toBe(true);
+    return { fired, params: JSON.parse((await fireRows())[0].params) as Record<string, unknown> };
+  };
+
+  it("reads the documented answer", async () => {
+    const { fired, params } = await answered({ type: "routine_fire", claude_code_session_id: "session_01HJKLMNOPQRSTUVWXYZ", claude_code_session_url: "https://claude.ai/code/session_01HJKLMNOPQRSTUVWXYZ" });
+    expect(fired.session).toEqual({ id: "session_01HJKLMNOPQRSTUVWXYZ", url: "https://claude.ai/code/session_01HJKLMNOPQRSTUVWXYZ" });
+    expect(params.answer).toBeUndefined();
+  });
+
+  it("reads a session id with dashes or underscores", async () => {
+    const id = "session_01Hj_KL-mnOP_qrs-TUV";
+    const { fired } = await answered({ type: "routine_fire", claude_code_session_id: id, claude_code_session_url: `https://claude.ai/code/${id}` });
+    expect(fired.session).toEqual({ id, url: `https://claude.ai/code/${id}` });
+  });
+
+  it("keeps only origin and path of a URL that carries a query string, a fragment or a trailing slash", async () => {
+    const { fired, params } = await answered({ claude_code_session_id: SESSION, claude_code_session_url: `https://claude.ai/code/${SESSION}/?utm=1&token=abc#top` });
+    expect(fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}/` });
+    expect(params.session_url).toBe(`https://claude.ai/code/${SESSION}/`);
+    expect(JSON.stringify(params)).not.toContain("token=abc");
+  });
+
+  it("accepts a claude.ai subdomain and another path that holds the session segment", async () => {
+    const { fired } = await answered({ claude_code_session_url: `https://www.claude.ai/chat/code/${SESSION}` });
+    expect(fired.session).toEqual({ id: SESSION, url: `https://www.claude.ai/chat/code/${SESSION}` });
+  });
+
+  it("builds the URL from a good id when the URL is missing or unreadable", async () => {
+    const { fired } = await answered({ claude_code_session_id: SESSION });
+    expect(fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}` });
+    await env.DB.prepare("DELETE FROM audit_log").run();
+    await env.DB.prepare("DELETE FROM jobs").run();
+    const again = await answered({ claude_code_session_id: SESSION, claude_code_session_url: "https://evil.example.com/code/" + SESSION });
+    expect(again.fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}` });
+  });
+
+  it("trusts the id and rebuilds the URL when the two name different sessions, noting it in the audit row", async () => {
+    const other = "session_01ZZZZZZZZZZZZZZZZZZ";
+    const { fired, params } = await answered({ claude_code_session_id: SESSION, claude_code_session_url: `https://claude.ai/code/${other}` });
+    expect(fired.session).toEqual({ id: SESSION, url: `https://claude.ai/code/${SESSION}` });
+    expect(params.session_url).toBe(`https://claude.ai/code/${SESSION}`);
+    expect(params.session_url_mismatch).toBe(other);
+  });
+
+  it("refuses a URL on another host, another scheme or a look-alike host, and an id with a bad character", async () => {
+    for (const url of [`http://claude.ai/code/${SESSION}`, `https://claude.ai.evil.example/code/${SESSION}`, `https://evilclaude.ai/code/${SESSION}`, `https://claude.ai:8443/code/${SESSION}`, "https://claude.ai/code/not-a-session"]) {
+      await env.DB.prepare("DELETE FROM audit_log").run();
+      await env.DB.prepare("DELETE FROM jobs").run();
+      const { fired } = await answered({ claude_code_session_id: "session_bad id!<script>", claude_code_session_url: url });
+      expect(fired.session, url).toEqual({ id: null, url: null });
+    }
+  });
+
+  it("a garbage answer records no session and the answer's keys, type and redacted string heads, bounded and without the token", async () => {
+    const long = "x".repeat(500);
+    const { fired, params } = await answered({
+      type: "routine_fire",
+      session: { id: "nested" },
+      note: `Bearer ${TOKEN} and ${"ghp_" + "a".repeat(36)} ${long}`,
+      claude_code_session_url: 12345,
+    });
+    expect(fired.session).toEqual({ id: null, url: null });
+    expect(fired.note).toMatch(/named no readable session id or URL/);
+    expect(params).toMatchObject({ session_id: null, session_url: null });
+    const answer = params.answer as { json: boolean; keys: string[]; type: string; strings: Record<string, string> };
+    expect(answer.json).toBe(true);
+    expect(answer.keys).toEqual(["type", "session", "note", "claude_code_session_url"]);
+    expect(answer.type).toBe("routine_fire");
+    expect(Object.keys(answer.strings)).toEqual(["type", "note"]);
+    expect(answer.strings.note.length).toBeLessThanOrEqual(200);
+    expect(JSON.stringify(params)).not.toContain(TOKEN);
+    expect(JSON.stringify(params)).not.toContain("ghp_");
+  });
+
+  it("an answer that is not JSON records its redacted head", async () => {
+    anthropic({ body: `<html>gateway says no ${TOKEN}</html>` });
+    const fired = await fireRoutine(jobsEnv(), seatAgent(), NOW, await queued());
+    expect(fired.ok).toBe(true);
+    const params = JSON.parse((await fireRows())[0].params) as { answer: { json: boolean; head: string } };
+    expect(params.answer.json).toBe(false);
+    expect(params.answer.head).toContain("gateway says no");
+    expect(params.answer.head).not.toContain(TOKEN);
   });
 
   it("refuses a second fire for the same job inside the window, and allows one after it", async () => {

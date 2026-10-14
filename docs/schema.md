@@ -252,18 +252,18 @@ work was done on it, so there is nothing to record against a driver. The jobs th
 `migrations/0020_jobs_superseded.sql` relabelled from failed to superseded had
 already written a row when they were failed; those rows are kept, and every read
 that builds a record or a count from `job_outcomes` leaves out a row whose job is
-superseded (`src/agent-record.ts`, the skill totals in `src/improve-run.ts`, and the
+superseded (`src/agent-record.ts` and the
 pull request re-verification in `src/outcome-prs.ts`).
 
 | column | what it is |
 | --- | --- |
-| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later lease expiry clears that column |
+| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column |
 | `prs_opened`, `prs_merged` | GitHub's answer whenever the driver named any pull request |
 | `commits`, `files_changed` | the pull requests' own counts when there are any, the driver's otherwise |
 | `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgement about a diff, not a property of it |
 | `ci_green` | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed" |
 | `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand |
-| `duration_minutes` | claimed to recorded. The final working stretch: `resume` takes a fresh lease, so time spent blocked waiting on a human is excluded |
+| `duration_minutes` | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
 | `result_kind` | `pr`, `doc` or `none`, derived from `result_ref` rather than declared |
 | `verified` | a JSON object of booleans saying which of the above this Worker checked itself |
 
@@ -448,7 +448,7 @@ said `APPROVE` has changed its mind.
 
 | verdict | what happens |
 | --- | --- |
-| none yet | the job stays claimed and its lease keeps running |
+| none yet | the job stays claimed |
 | `APPROVE` | the hand-off proceeds exactly as it would with no reviewer |
 | `CHANGES` | back to the driver, and it spends a correction from the budget above |
 | `BLOCK` | blocked for the seat, with the objection as the reason |
@@ -514,22 +514,19 @@ that changes nothing measurable still resets the evidence. Rejected edits are st
 in `skill_edits` and handed to the next optimizer run, so a proposal that was already
 refused is not proposed again.
 
-Attribution separates three things a single counter conflated. A skill moves only
+Attribution (improve attempts only now) separates three things a single counter conflated. A skill moves only
 when it was used and the verifier reported on the work itself. A skill that was
 offered and ignored while the run succeeded anyway counts as nothing, because the
 success is not its. A run that died on the environment counts as nothing either,
 because charging a loss for a failed checkout would retire skills for being present
 during an outage.
 
-Offered and used are both stored, on `job_outcomes`. The gap between them is its
-own measurement: a skill offered fifty times and used twice is not a failing skill.
-It is a trigger condition that does not describe the work it is matched to, and those
-are different problems with different fixes.
-
-Failure notes are not a second score. `skill_failures` carries a note per reverted
-attempt and failed job, linked to the skills in use at the time, and the recommend
-step attaches the two most recent for each skill it offers. Nothing there moves a
-status; it exists so the next driver reads the failure rather than repeating it.
+Offered and used were once stored on `job_outcomes` (`skill_ids_offered`,
+`skill_ids_used`, migration 0013), from the claim-time offer and the driver's `skills`
+param. Both are removed from the claim, complete and fail path (docs/skills.md); the two
+columns stay, unused, with their old values. `skill_evaluations` and `skill_failures` stay
+as history with no writer, since the evaluation cycle and the failure notes read the same
+removed input.
 
 ## Why documents carry provenance
 
@@ -551,8 +548,8 @@ session only.
 
 **A click in the Portal writes two audit rows:** the shared mutator's own row (for
 example `improve-paused` by `improve-loop`, or `job-resumed`), then the click's row,
-`portal-<action>` under `access:<email>`. The five automation switches (`pause`,
-`unpause`, `mode`, `seat_start`, `overnight`) record the reason in that row, and an Undo from the
+`portal-<action>` under `access:<email>`. The four automation switches (`pause`,
+`unpause`, `mode`, `overnight`) record the reason in that row, and an Undo from the
 Portal's result message writes `portal-undo-<action>` instead, with `"undo": true`
 in its params. The Portal's on-demand watcher pass is
 `portal-ops-refresh`. Rows written before the Portal moved from `/console` to

@@ -175,11 +175,9 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/ops/access-sync":
     "an app's members list made its Cloudflare Access group (src/access-sync.ts): resolveAgent on the bearer (401 without one), then checkScope for the write grant on the namespace the body names (403 otherwise); the group is never named by the caller but read from access_sync_groups for that namespace, and its name is checked against the pin before any write; per-key hourly and daily limits failing closed; a 64KB body cap; every call audited; POST only, no CORS",
   "/ops/hooks":
-    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver, a runner key or the admin, and through checkScope only a caller holding the write grant on capsid_work_jobs (403 otherwise); each event binds to the runner key's job or the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
-  "/ops/runner-key":
-    "a GitHub Actions OIDC token verified against GitHub's key set, its run claims pinned against the repo as GitHub reports it, and a pending seat start; it mints a key bound to that one job (src/runner-key.ts)",
+    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver or the admin, and through checkScope only a caller holding the write grant on capsid_work_jobs (403 otherwise); each event binds to the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
   "/ops/otlp/v1/metrics":
-    "Claude Code's OTLP metrics: resolveAgent on the bearer (401 otherwise), then a driver, runner key or the admin holding write through checkScope (403 otherwise); the usage is bound to the runner key's job or the one job the driver holds claimed, never to a job the body names; points for a session another key reported first are refused (src/ops-session-auth.ts, src/ops-otlp.ts)",
+    "Claude Code's OTLP metrics: resolveAgent on the bearer (401 otherwise), then a driver or the admin holding write through checkScope (403 otherwise); the usage is bound to the one job the driver holds claimed, never to a job the body names; points for a session another caller reported first are refused (src/ops-session-auth.ts, src/ops-otlp.ts)",
   "/ops/otlp/v1/logs":
     "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
@@ -249,30 +247,11 @@ export interface ScopeNeed {
   // Flags whose absence refuses the call. Every one is checked, and the refusal
   // names the FIRST missing one.
   flags?: readonly ScopeFlag[];
-  // The job id a jobs call names, for a caller bound to one job (boundJobRefusal).
-  jobId?: string;
 }
 
-// What a key bound to one job may do with the queue. The work actions need that job's
-// id; list may read the queue but not name another job; everything else, including an
-// action added later, is refused, so a new action is closed to a runner until listed.
-const BOUND_WORK_ACTIONS: readonly string[] = ["claim", "heartbeat", "complete", "fail", "block", "resume"];
-
-// The work queue's tool, named once: the job binding and the handlers' re-checks
-// (src/tools/jobs.ts, src/jobs-schema.ts, src/ops-session-auth.ts) all ask about it.
+// The work queue's tool, named once: the handlers' re-checks
+// (src/tools/jobs.ts, src/jobs-schema.ts, src/ops-session-auth.ts) ask about it.
 export const JOBS_TOOL = "capsid_work_jobs";
-
-// capsid/research/design-seat-session-hardening.md, section 2b. A runner that could
-// claim a second job would be choosing its own work, and one that could post or start
-// could hand itself more.
-function boundJobRefusal(agent: Agent, action: string, jobId: string | undefined): string | null {
-  const job = agent.job as string;
-  const refusal = `unauthorized: ${agent.actor} is bound to job ${job} and may work that job only`;
-  if (action === "list") return jobId === undefined || jobId === job ? null : `${refusal}; it cannot list ${jobId}.`;
-  if (!BOUND_WORK_ACTIONS.includes(action)) return `${refusal}; it cannot ${action}.`;
-  if (jobId !== job) return `${refusal}; this call names ${jobId ?? "no job"}.`;
-  return null;
-}
 
 // Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
@@ -295,16 +274,6 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     // 'capsid_work_jobs' after being minted with capsid_work_jobs in its list would look for the wrong bug.
     const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
     return `unauthorized: ${agent.actor} is not scoped to the '${asked}' tool. Its tool scope is ${describeScope(scopes.tools)}.`;
-  }
-  // Binds every capsid_work_jobs call that names an action: the registrar's check, which runs
-  // before every handler, and the jobs handler's own re-checks (src/tools/jobs.ts),
-  // which name the action too. So every caller that names an action must also name
-  // the call's id, or a bound key reads as naming no job. That omission refused every
-  // claim in the first two hardened canary runs. A check with no action (the namespace
-  // re-checks in src/jobs-schema.ts) is not bound here.
-  if (agent.job && need.tool === JOBS_TOOL && need.action !== undefined) {
-    const bound = boundJobRefusal(agent, need.action, need.jobId);
-    if (bound) return bound;
   }
   if (need.grant && !scopes.grants.includes(need.grant)) {
     return (
@@ -628,7 +597,6 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         repo,
         path: typeof args.path === "string" ? args.path : undefined,
         action,
-        jobId: name === JOBS_TOOL && typeof args.id === "string" ? args.id : undefined,
         stepUp: needsStepUp(name, action),
         // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
         // handler, where the namespace is known, so the registrar names no grant.

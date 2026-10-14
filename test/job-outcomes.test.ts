@@ -5,8 +5,6 @@ import {
   durationMinutes,
   outcomeFrom,
   resultKindOf,
-  signalFor,
-  signalForRow,
   usageFromTotals,
   verifyEvidence,
   type EvidenceVerdict,
@@ -30,7 +28,6 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
     posted_by: "github:DrDustinEdwards",
     claimed_by: "agent:capsid-driver",
     claimed_at: "2026-09-11T10:00:00.000Z",
-    lease_expires: null,
     result_ref: null,
     result_summary: "did the thing",
     gate_required: 0,
@@ -115,7 +112,7 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
 
 test("PLANT: a job with no telemetry records NULL cost, tokens and active time, never 0", () => {
   // Both ways in: no usage argument, and a session_usage read that found no row.
-  for (const row of [outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z")), outcomeFrom(job(), empty(), new Date(), undefined, usageFromTotals([]))]) {
+  for (const row of [outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z")), outcomeFrom(job(), empty(), new Date(), usageFromTotals([]))]) {
     for (const field of ["cost_usd", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation", "active_seconds"] as const) {
       assert.equal(row[field], null, `${field} is ${row[field]} for a job no telemetry reached`);
     }
@@ -130,7 +127,7 @@ test("a job's telemetry totals land on its outcome row: summed per column, a fam
     { metric: "claude_code.token.usage", kind: "output", total: 300.4 },
     { metric: "claude_code.token.usage", kind: "cacheRead", total: 5000 },
   ]);
-  const row = outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z"), undefined, usage);
+  const row = outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z"), usage);
   assert.equal(row.cost_usd, 0.75);
   assert.equal(row.tokens_input, 1200);
   assert.equal(row.tokens_output, 300, "token columns are INTEGER");
@@ -238,7 +235,6 @@ test("a pull request GitHub will not answer for leaves prs_opened, commits and f
       assert.equal(verdict.commits, 2, "the driver's number survives; it is the FLAG that must not");
       // The last named pull request was not read, so CI was not looked up.
       assert.equal(verdict.ci_green, null);
-      assert.equal(signalFor(verdict), "environment-failure");
       assert.ok(verdict.notes.some((n) => /1 of 2/.test(n)), `the shortfall is not named in the notes: ${verdict.notes.join(" | ")}`);
     }
   );
@@ -526,108 +522,6 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
 // That the claim and a resume with take both ask the record question is driven against
 // a real D1 in test-integration/job-outcomes.test.ts, one plant per path.
 
-// the skills a job was offered and used
-//
-// improve_status's offered-to-used rate reads skill_ids_offered and skill_ids_used, so
-// the outcome row must carry them.
-test("REPRO: the outcome row carries the skills the job was offered and used", () => {
-  const verdict: EvidenceVerdict = {
-    prs_opened: 1,
-    prs_merged: 1,
-    commits: 2,
-    files_changed: 3,
-    tests_added: null,
-    ci_green: 1,
-    verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true },
-    notes: [],
-  };
-  const row = outcomeFrom(job(), verdict, new Date("2026-09-11T11:00:00.000Z"), {
-    offered: ["sk-a", "sk-b"],
-    used: ["sk-a"],
-  });
-  assert.equal(row.skill_ids_offered, JSON.stringify(["sk-a", "sk-b"]));
-  assert.equal(row.skill_ids_used, JSON.stringify(["sk-a"]));
-});
-
-test("NULL IS NOT AN EMPTY LIST: a job that named no skills stores null, not []", () => {
-  // improve_status sums json_array_length over these columns, and SUM skips NULL. An
-  // empty array would count as "offered nothing", a measurement; NULL is the absence
-  // of one.
-  const verdict: EvidenceVerdict = {
-    prs_opened: null, prs_merged: null, commits: null, files_changed: null,
-    tests_added: null, ci_green: null,
-    verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false },
-    notes: [],
-  };
-  const row = outcomeFrom(job(), verdict, new Date("2026-09-11T11:00:00.000Z"));
-  assert.equal(row.skill_ids_offered, null);
-  assert.equal(row.skill_ids_used, null);
-});
-
-// the signal is the Worker's, not the driver's
-//
-// A driver names which skills it was offered and used; the direction comes only from
-// what this Worker verified on GitHub. These drive signalFor to each of its three answers.
-
-const verdictWith = (over: Partial<EvidenceVerdict>): EvidenceVerdict => ({
-  prs_opened: 1,
-  prs_merged: 1,
-  commits: 1,
-  files_changed: 1,
-  tests_added: null,
-  ci_green: 1,
-  verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true },
-  notes: [],
-  ...over,
-});
-
-test("A WIN NEEDS EVERY NAMED PR MERGED AND CI GREEN, both verified", () => {
-  assert.equal(signalFor(verdictWith({})), "verified-success");
-});
-
-test("a named PR that did not merge is a loss, and so is red CI", () => {
-  assert.equal(signalFor(verdictWith({ prs_opened: 2, prs_merged: 1 })), "verified-failure");
-  assert.equal(signalFor(verdictWith({ ci_green: 0 })), "verified-failure");
-});
-
-test("UNVERIFIED EARNS NOTHING IN EITHER DIRECTION, and that is not a loss", () => {
-  // Charging a loss for a GitHub outage would retire skills for being present during one.
-  const unread = verdictWith({ verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false } });
-  assert.equal(signalFor(unread), "environment-failure");
-  // CI could not be read, merge state could.
-  assert.equal(
-    signalFor(verdictWith({ ci_green: null, verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: false } })),
-    "environment-failure"
-  );
-});
-
-test("a job that named no pull request earns nothing, rather than a loss", () => {
-  // Most jobs in this queue are research or docs and name no PR. If those counted as
-  // losses, every skill would retire on the ordinary work of the portfolio.
-  assert.equal(signalFor(verdictWith({ prs_opened: null, prs_merged: null, ci_green: null })), "environment-failure");
-  assert.equal(signalFor(verdictWith({ prs_opened: 0, prs_merged: 0 })), "environment-failure");
-});
-
-test("signalForRow gives a stored row the answer signalFor gave its verdict", () => {
-  // The evaluation cycle judges stored rows; a row and the verdict it came from must
-  // never disagree.
-  const cases: Array<Partial<EvidenceVerdict>> = [
-    {},
-    { prs_opened: 2, prs_merged: 1 },
-    { ci_green: 0 },
-    { prs_opened: 0 },
-    { verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false } },
-    { ci_green: null, verified: { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: false } },
-  ];
-  for (const over of cases) {
-    const v = verdictWith(over);
-    const row = { prs_opened: v.prs_opened, prs_merged: v.prs_merged, ci_green: v.ci_green, verified: JSON.stringify(v.verified) };
-    assert.equal(signalForRow(row), signalFor(v), JSON.stringify(over));
-  }
-  // A verified column that does not parse verified nothing.
-  assert.equal(signalForRow({ prs_opened: 1, prs_merged: 1, ci_green: 1, verified: "not json" }), "environment-failure");
-});
-
 // REPRODUCTION of the observed error: two readable pull requests and one in a repo
 // the namespace does not map (a claude-skills PR on a capsid job). Before the fix the
 // row recorded prs_merged null, ci_green null and every field unverified.
@@ -649,8 +543,6 @@ test("one unreadable pull request does not erase what the readable ones verified
       assert.equal(verdict.verified.ci_green, true);
       // Which pull requests were verified: the unread one is absent, never false.
       assert.deepEqual(verdict.pr_states, { [PR_URL]: true, [ninth]: true });
-      // Partly read is not judged: neither a win nor a loss.
-      assert.equal(signalFor(verdict), "environment-failure");
     }
   );
 });

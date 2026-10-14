@@ -315,7 +315,7 @@ test("only a driver, a runner key or the admin, holding write, may report on a s
   readOnlyDriver.scopes.grants = ["read"];
   assert.match(sessionCallerRefusal(readOnlyDriver) ?? "", /write grant/);
   const seat = { ...driverAgent(), kind: "seat" as const };
-  assert.match(sessionCallerRefusal(seat) ?? "", /not a driver or a runner/);
+  assert.match(sessionCallerRefusal(seat) ?? "", /is not a driver\./);
 });
 
 // whose session it is

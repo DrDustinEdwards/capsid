@@ -94,13 +94,20 @@ describe("autoResumeJob", () => {
     expect(r?.claimed_by).toBeNull();
   });
 
-  it("queues the job when its holder holds another claim", async () => {
+  it("queues the job when its holder is a shared identity", async () => {
+    const id = await blockedBy(ADMIN, "holder shared");
+    const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
+    expect(out.to).toBe("queue");
+    expect((await row(id))?.status).toBe("queued");
+  });
+
+  it("returns the job to its holder even when the holder holds another claim: there is no claim limit", async () => {
     const driver = driverAgent();
     const id = await blockedBy(driver, "holder busy");
     expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("the driver moved on") })).ok).toBe(true);
     const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
-    expect(out.to).toBe("queue");
-    expect((await row(id))?.status).toBe("queued");
+    expect(out.to).toBe("holder");
+    expect((await row(id))?.status).toBe("claimed");
   });
 
   it("writes nothing when the job moved after it was read", async () => {

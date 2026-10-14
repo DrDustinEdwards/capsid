@@ -498,13 +498,13 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
 /** A finding that is no longer found: the job is marked failed with "cleared", since
  *  nobody did the work. Keyed on queued, so a job claimed between the read and the
  *  write is not closed underneath its driver; RETURNING, not meta.changes. */
-export async function clearFinding(env: Env, id: string, now: Date): Promise<boolean> {
+export async function clearFinding(env: Env, id: string, now: Date, summary: string = CLEARED_SUMMARY): Promise<boolean> {
   const job = await readJob(env.DB, id);
   if (!job || job.status !== "queued" || job.posted_by !== WATCHER_ACTOR) return false;
   // The mirror document closes in the same batch as the row (CLAUDE.md, snapshot rule),
   // and the batch is guarded on the status read above, so a job claimed in between is
   // left alone.
-  const result = await markJobFailed(env, job, "queued", CLEARED_SUMMARY, "job-cleared", WATCHER_ACTOR, {}, now);
+  const result = await markJobFailed(env, job, "queued", summary, "job-cleared", WATCHER_ACTOR, {}, now);
   return result.failed;
 }
 
@@ -552,8 +552,10 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^unmapped-repo/, "repo map"],
   [/^site-down-/, "site probes"],
   [/^site-errors-/, "cloudflare"],
+  [/^live-config-/, "live checks"],
   [/^live-/, "live checks"],
-  [/^site-(health|weekly)-/, "site repairs"],
+  [/^site-health-/, "site repairs"],
+  [/^site-weekly-/, "site repairs"],
   // Before the audit rule's prefix, which would otherwise claim these too.
   [/^anomaly-tool-/, "tool anomalies"],
   [/^anomaly-/, "agent anomalies"],
@@ -564,6 +566,47 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
 export function owningCheck(fingerprint: string): WatcherCheck | null {
   return OWNERS.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? null;
 }
+
+// WHAT A FINDING IS FOR (job_2c92174d5bff item 5; every alert actionable, the rest to a
+// digest). One class per OWNERS pattern, the same patterns in the same order:
+//   job        a person must act now: it posts a job.
+//   digest     a hygiene or drift finding: kept in finding memory and shown on the Portal's
+//              weekly digest per site and in the Monday email; posts no job.
+//   attention  shown on the Portal's attention list only; posts no job.
+// test/watcher-classes.test.ts fails when OWNERS and this table disagree in either
+// direction. A fingerprint no pattern names is a job, so an unclassed finding is loud.
+export type FindingClass = "job" | "digest" | "attention";
+const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
+  [/^(health-degraded|backup-stale|backup-never)$/, "job"],
+  [/^deploy-drift-/, "job"],
+  [/^schema-behind-/, "job"],
+  [/^(budget-|paused-|breaker-open-)/, "attention"],
+  [/^mirror-no-dump$/, "job"],
+  [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "job"],
+  [/^scorer-unread-/, "digest"],
+  [/^(scorer-diverged-|scorer-identity-unknown$)/, "digest"],
+  [/^ci-red-/, "job"],
+  [/^site-map-drift-/, "job"],
+  [/^unmapped-repo/, "job"],
+  [/^site-down-/, "job"],
+  [/^site-errors-/, "job"],
+  [/^live-config-/, "job"],
+  [/^live-/, "digest"],
+  [/^site-health-/, "job"],
+  [/^site-weekly-/, "digest"],
+  [/^anomaly-tool-/, "attention"],
+  [/^anomaly-/, "attention"],
+  [/^domain-expiry-/, "job"],
+  [/^deploy-(rolled-back|rollback-failed)-/, "job"],
+];
+
+export function findingClass(fingerprint: string): FindingClass {
+  return CLASSES.find(([pattern]) => pattern.test(fingerprint))?.[1] ?? "job";
+}
+
+/** The patterns each table names, for the coverage test. */
+export const OWNER_PATTERNS: readonly string[] = OWNERS.map(([p]) => p.source);
+export const CLASS_PATTERNS: readonly string[] = CLASSES.map(([p]) => p.source);
 
 // What a pass saw, kept for the operations dashboard (src/ops-snapshot.ts). Null
 // where the read failed, so the snapshot says "could not read" rather than "none".
@@ -692,7 +735,7 @@ export function checkStates(gathered: Pick<Gathered, "findings" | "ran">): OpsSn
 export interface PassReaders {
   findings: () => Promise<Pick<Gathered, "findings" | "ran">>;
   open: () => Promise<Map<string, string>>;
-  clear: (id: string) => Promise<boolean>;
+  clear: (id: string, summary?: string) => Promise<boolean>;
   post: (f: Finding) => Promise<{ ok: true; jobId: string } | { ok: false; refusal?: string }>;
   memory: FindingMemory;
 }
@@ -702,7 +745,12 @@ export interface PassResult {
   cleared: string[];
   // Seen and not filed: dismissed by a person, or inside the quiet period.
   held: string[];
+  // Digest or attention class, recorded in finding memory with no job.
+  routed: string[];
 }
+
+const movedSummary = (klass: FindingClass): string =>
+  `${CLEARED_SUMMARY}: moved to ${klass === "digest" ? "the weekly digest" : "the Portal's attention list"}, no job needed`;
 
 // A keyed write that moved nothing lost a race with another pass (the tick and the
 // Portal's Refresh). Said, not swallowed; the next pass reads the row again.
@@ -725,7 +773,21 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
   };
 
   const cleared: string[] = [];
+  // Non-job findings whose old job was cleared this pass, and those whose job the clear
+  // refused (claimed, blocked, parked): the second stay attached to their job.
+  const movedOff = new Set<string>();
+  const stillHeld = new Map<string, string>();
   for (const [fingerprint, id] of open) {
+    // A still-found finding whose class is not job: its queued job is noise now, cleared
+    // the way a gone finding is, with a summary saying where it went.
+    const klass = byFingerprint.has(fingerprint) ? findingClass(fingerprint) : "job";
+    if (klass !== "job") {
+      if (await readers.clear(id, movedSummary(klass))) {
+        cleared.push(fingerprint);
+        movedOff.add(fingerprint);
+      } else stillHeld.set(fingerprint, id);
+      continue;
+    }
     if (!clearable(fingerprint)) continue;
     if (await readers.clear(id)) cleared.push(fingerprint);
   }
@@ -739,8 +801,37 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
 
   const posted: string[] = [];
   const held: string[] = [];
+  const routed: string[] = [];
   for (const f of found) {
     const row: FindingRow | null = rows.get(f.fingerprint) ?? null;
+    if (findingClass(f.fingerprint) !== "job") {
+      // Recorded for the Portal and the digest, never filed. Open with no job; a row
+      // still pointing at a job from before the class existed is pointed at none once
+      // that job is gone. A person's dismissal and the quiet period hold as they do for
+      // a job-class finding (onSighting).
+      routed.push(f.fingerprint);
+      const heldJob = stillHeld.get(f.fingerprint) ?? null;
+      const justMoved = movedOff.has(f.fingerprint) && row?.state === "open";
+      const rowJob = !heldJob && !justMoved && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
+      const verdict = justMoved ? ({ do: "post" } as const) : onSighting(row, heldJob, rowJob, now);
+      if (verdict.do === "bump") moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
+      else if (verdict.do === "adopt") moved(row ? await readers.memory.open(row, f, verdict.jobId, now) : await readers.memory.insert(f, "open", verdict.jobId, now), f.fingerprint, "adoption of its open job");
+      else if (verdict.do === "dismiss") {
+        held.push(f.fingerprint);
+        moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
+      } else if (verdict.do === "quiet") {
+        held.push(f.fingerprint);
+        moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, `sighting (${verdict.why})`);
+      } else {
+        const ok = !row
+          ? await readers.memory.insert(f, "open", null, now)
+          : row.state === "open" && row.job_id === null
+            ? await readers.memory.sight(row, f, now)
+            : await readers.memory.open(row, f, null, now);
+        moved(ok, f.fingerprint, "record of a finding with no job");
+      }
+      continue;
+    }
     const openJob = open.get(f.fingerprint) ?? null;
     // How the row's job ended, read only when the decision turns on it.
     const rowJob = !openJob && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
@@ -779,7 +870,7 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
       }
     }
   }
-  return { posted, cleared, held };
+  return { posted, cleared, held, routed };
 }
 
 /** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
@@ -793,11 +884,11 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   const agent = watcherAgent();
   const started = Date.now();
   const gathered = await gather();
-  const { posted, cleared, held } = await runPass(
+  const { posted, cleared, held, routed } = await runPass(
     {
       findings: async () => gathered,
       open: () => openWatcherFingerprints(env),
-      clear: (id) => clearFinding(env, id, now),
+      clear: (id, summary) => clearFinding(env, id, now, summary),
       post: async (f) => {
         const result = await postJob(env, agent, now, {
           namespace: f.namespace,
@@ -864,7 +955,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   await env.APP_KV.put(WATCHER_LAST_KEY, now.toISOString());
   return {
     ran: true,
-    note: `${due.reason} posted ${posted.length}, cleared ${cleared.length}, held ${held.length}.`,
+    note: `${due.reason} posted ${posted.length}, cleared ${cleared.length}, held ${held.length}, routed ${routed.length} to the digest or attention list.`,
     posted,
     cleared,
   };

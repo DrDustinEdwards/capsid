@@ -24,14 +24,14 @@ test("Incidents lists every scheduled task with its state, its last run and what
   await visit(page, "incidents");
   const panel = page.locator("#scheduled");
   await expect(panel.getByRole("heading", { name: "Scheduled tasks" })).toBeVisible();
-  await expect(panel.locator("tbody tr")).toHaveCount(9);
+  await expect(panel.locator("tbody tr")).toHaveCount(8);
 
   const merge = panel.locator('tr[data-task="auto-merge"]');
   await expect(merge.locator("td").nth(1)).toHaveText("Failing");
   await expect(merge.locator("td").nth(2)).toContainText("Refused");
   await expect(merge.locator("td").nth(3)).toContainText("the policy document does not name required_checks");
 
-  await expect(panel.locator('tr[data-task="skill-cycle"] td').nth(1)).toHaveText("No run yet");
+  await expect(panel.locator('tr[data-task="merge-resume"] td').nth(1)).toHaveText("No run yet");
   await expect(panel.locator('tr[data-task="backup"] td').nth(1)).toHaveText("Running");
 
   const tick = panel.locator('tr[data-task="tick"]');

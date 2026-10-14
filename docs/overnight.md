@@ -1,21 +1,23 @@
 # The overnight run
 
-What a night of unattended driver work looks like, and the three parts that make it safe to turn on: a plan, a morning digest, and a scheduler behind a switch. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`; the amendment is in `capsid/decisions.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`, `scripts/overnight-guard.mjs`, `scripts/schedule-drivers.mjs`.
+What a night of unattended driver work looks like: a plan and a morning digest, plus a switch that now gates nothing. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`; the amendment is in `capsid/decisions.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`.
+
+**The local Windows scheduler was removed** (job_2c92174d5bff, 2026-10-11): `scripts/schedule-drivers.mjs`, its guard `scripts/overnight-guard.mjs`, the per-job session key it claimed with, and the claim leases and heartbeats it relied on are gone. Routines now start sessions in the cloud (docs/routines.md). The switch below is still stored and shown, and the plan and digest are still served, but nothing reads the switch to start a run.
 
 ## Hand-started tabs are the default
 
-Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is ordinary use you start. It continues unchanged. Nothing here gates it, and the plan below exists so those tabs can follow it. The scheduler is a second way to run a night, off until you turn it on.
+Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is ordinary use you start. It continues unchanged. Nothing here gates it, and the plan below exists so those tabs can follow it.
 
 ## The plan
 
 `capsid_work_jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the queued jobs in priority order that fit about eight hours.
 
 - **Eligible:** queued, no required flags, no `min_record`, a title that does not begin `LATER`, and a namespace that maps to a repo. Everything else is in `skipped` with its reason. A parked job is not queued, so it is never planned and never listed as skipped.
-- **Gated jobs are planned** (conventions 2.3: gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. The scheduled run's prompt says so for each gated job (`jobPrompt` in `scripts/overnight-guard.mjs`). test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
+- **Gated jobs are planned** (conventions 2.3: gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
 - **One lane per repo.** Two namespaces that map to one repo share one lane, so there is never a second session on a repo.
 - **Heavy suites run one session at a time across repos.** Repos that run heavy suites share one budget (`heavy_planned_minutes`), so their lanes add up to one night, not several. Light repos each get the whole night.
 - **Estimates:** the policy document's `estimate`, else the 75th percentile of that namespace's unblocked job durations (at least 5 samples, floor 15 minutes), else 60 minutes. Each planned job says which.
-- A job that does not fit is skipped and a smaller later one may still go in. A job that blocks stops only itself; the scheduler claims its lane's next job for a new session.
+- A job that does not fit is skipped and a smaller later one may still go in. A job that blocks stops only itself.
 - A caller scoped to one namespace names it and gets that namespace's lane and skips. The plan is built over every namespace first, because the heavy budget is shared.
 
 `capsid/policy/overnight.md` (optional, read each pass): `- heavy <namespace>`, `- budget-minutes <n>` (60 to 1440, default 480) and `- estimate <namespace> <minutes>`. With no document, or one that names no heavy repo, every repo counts as heavy: unknown fails toward one session at a time. A document that does not parse is ignored and the plan says why. A proposed first version for the seat:
@@ -40,7 +42,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 - **usage per job** is the telemetry on the outcome row if there is one, else what the agent reported in `claim.usage` (PR 240), else null. The two are never added. `totals` keeps them apart and counts the jobs that reported nothing. Telemetry is empty until the exporter in `docs/telemetry.md` is turned on, so until then the numbers are what agents reported.
 - Each read is bounded; one that hit its bound is named in `truncated`.
 
-## The scheduler switch
+## The overnight switch
 
 APP_KV `overnight:mode`: `off` (default), `api` or `subscription`, the improve loop's three values. Set in the Portal's Settings, Automation and namespaces section, Automation panel, **Overnight run**, with its own "Runs on" choice of API or Subscription, or by an admin with `capsid_admin_control_improve` action `overnight`. A reason is required in both directions and recorded in the audit rows (`overnight-set`, `portal-overnight`); an Undo is its own row.
 
@@ -48,24 +50,4 @@ APP_KV `overnight:mode`: `off` (default), `api` or `subscription`, the improve l
 
 The ruling's reasoning, in short: the use is personal, on Dustin's own repositories, and not shared. Anthropic's Agent SDK support page (updated 2026-06-16) says `claude -p` on a plan draws from subscription limits and sends shared production automation to API keys. The Consumer Terms clause on automated or non-human access (section 3) is the counterweight, the pages do not settle it, and the risk is to Dustin's own account. Sources and quotes: `capsid/research/terms-scheduled-claude-code.md`.
 
-### What the scheduler does before it starts a session
-
-`node scripts/schedule-drivers.mjs --run --namespace <ns>` (what the installed Task Scheduler task runs, still created disabled):
-
-1. Reads the switch with the namespace's driver key. No key, an unreadable switch or an unknown mode: no run.
-2. **off:** no run. **api:** runs only if `ANTHROPIC_API_KEY` is set and holds a Console key (not a subscription token, `sk-ant-oat...`), and neither `ANTHROPIC_AUTH_TOKEN` nor a cloud-provider variable is set, because those outrank the key. The subscription token is removed from the session's environment. **subscription:** runs only if the recorded decision is present. `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and the provider variables are removed from the session's environment, so a run set to the subscription cannot bill the API.
-3. A refusal says why, is posted as that night's run log, and exits 3.
-4. Reads the namespace's lane from the plan. Nothing planned is a skip, not a failure.
-5. A heavy lane takes `~/.capsid/overnight-heavy.lock` first, waiting up to the plan's budget, so heavy sessions run one at a time. A lock older than nine hours is taken over.
-6. For each planned job in order, while the plan's budget lasts: claims it with the driver key and `session_key: true`, which hands the job to a key minted for it alone (docs/auth.md). A refusal skips that job. It then writes a one-off MCP config holding that key to a private temp folder and starts `claude -p` with it and `--strict-mcp-config`, so the session never holds the long-lived key. The prompt names that one job id and its estimate, says the job is already claimed, and says to complete, block or fail it. The config is deleted when the session ends, and the next job gets a new session and a new key (`jobPrompt` in `scripts/overnight-guard.mjs`). Job titles are not in the prompt: a title can carry text from outside, and the session acts on the prompt.
-
-Credential order is from code.claude.com/docs/en/authentication ("Authentication precedence"): cloud-provider variables, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY` (in `-p` mode always used when present), `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN`, a `/login` subscription. A setting that adds an `apiKeyHelper` outranks the subscription login and cannot be seen from the script; `/status` in the run is how to confirm which credential a night used.
-
-## Turning it on, and what is not verified
-
-It ships off and each installed task is disabled. Turning it on is Dustin's decision, after a supervised night, once telemetry shows what a night costs.
-
-- Not verified: how the `/improve work` command treats the plan text after its first line. The prompt is the plain command plus the one job; that command lives outside this repository, and if it tries to claim, the claim is refused because the job is already claimed by the session's key.
-- Not verified: a scheduled session started with `--mcp-config` and `--strict-mcp-config` on Windows. The flags are Claude Code's documented ones; the arguments are tested here, not a live night.
-- Not verified: whether a scheduled run on the subscription is within Anthropic's terms. The ruling says it is allowed by Dustin's choice and that Dustin may still ask Anthropic support; nothing waits on the answer.
-- Not verified: the lock and the environment change on Windows. They are tested here with the platform's own file calls and a process environment, not on Task Scheduler.
+Since the scheduler was removed, no code reads this switch to start anything: it records a mode and, for the subscription, the decision, and that is all. Removing the switch, its Portal panel and the `overnight` action is a separate change.

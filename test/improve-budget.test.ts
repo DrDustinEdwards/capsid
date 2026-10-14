@@ -158,10 +158,10 @@ test("improve_status reports spend against cap", async () => {
   });
 });
 
-// the lease sweep cannot stop the tick
+// one step before the runs cannot stop the tick
 
-test("PLANT: a lease sweep that throws does not stop the rest of the tick", async () => {
-  // A D1 error in expireJobLeases must not end auto-merge, the skill cycle and every
+test("PLANT: a merge-resume step that throws does not stop the rest of the tick", async () => {
+  // A D1 error in mergeResumeTick must not end the maintenance pass and every
   // run transition for that tick.
   await withFetch({}, async () => {
     const { d1, env } = await harness({
@@ -173,8 +173,8 @@ test("PLANT: a lease sweep that throws does not stop the rest of the tick", asyn
     const prepare = d1.db.prepare.bind(d1.db);
     let swept = 0;
     (d1.db as { prepare: unknown }).prepare = (sql: string) => {
-      // The sweep's first statement: the read of expired leases.
-      if (/FROM jobs WHERE status = 'claimed' AND lease_expires/.test(sql)) {
+      // The step's first statement: the read of blocked jobs it has not resumed.
+      if (/FROM jobs WHERE status = 'blocked'\s+AND NOT EXISTS/.test(sql)) {
         swept++;
         const failing = { bind: () => failing, all: async () => { throw new Error("D1_ERROR: database is locked"); } };
         return failing;
@@ -182,8 +182,8 @@ test("PLANT: a lease sweep that throws does not stop the rest of the tick", asyn
       return prepare(sql);
     };
     const outcomes = await tickRuns(env, NOW);
-    assert.equal(swept, 1, "the sweep did not run, so this test proves nothing");
-    assert.equal(outcomes.length, 1, "the tick stopped at the lease sweep");
+    assert.equal(swept, 1, "the merge-resume step did not run, so this test proves nothing");
+    assert.equal(outcomes.length, 1, "the tick stopped at the merge-resume step");
     assert.match(outcomes[0].note, /budget exceeded/);
   });
 });

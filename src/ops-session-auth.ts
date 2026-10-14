@@ -5,8 +5,8 @@ import { checkScope, JOBS_TOOL } from "./scope";
 // The one caller check for the receivers a session posts to on its own: the hook
 // receiver (src/ops-hooks.ts) and the OTLP receiver (src/ops-otlp.ts).
 //
-// The bearer is the session's own key. Accepted:
-//   - a minted driver (kind driver) or a runner/session key (kind session, row-backed),
+// The bearer is the session's own driver key. Accepted:
+//   - a minted driver (kind driver, row-backed),
 //   - the admin (a legacy write operator key), for testing.
 // Anything else that resolves is 403; nothing that resolves is 401.
 //
@@ -14,7 +14,7 @@ import { checkScope, JOBS_TOOL } from "./scope";
 // these routes write is part of a job's record, so a read-only caller may not send it.
 // The tool named is "jobs", which every caller that works jobs holds.
 //
-// The job: a runner key is bound to one job (agent.job). A driver is bound to the single
+// The job: a driver is bound to the single
 // job it holds claimed, or to none when it holds zero or several. The admin is bound to
 // none.
 
@@ -37,18 +37,13 @@ function text(message: string, status: number, extra: Record<string, string> = {
 export function sessionCallerRefusal(agent: Agent): string | null {
   if (agent.admin) return null;
   if (!agent.row || (agent.kind !== "driver" && agent.kind !== "session")) {
-    return `forbidden: ${agent.actor} is not a driver or a runner. Hooks and telemetry are posted with the session's own driver or runner key (docs/hooks.md, docs/telemetry.md).`;
+    return `forbidden: ${agent.actor} is not a driver. Hooks and telemetry are posted with the session's own driver key (docs/hooks.md, docs/telemetry.md).`;
   }
   return checkScope(agent, { tool: JOBS_TOOL, grant: "write" });
 }
 
-/** The job a caller's session is working: a runner key's bound job, or the one job a
- *  driver holds claimed. None, or more than one, is no binding. */
+/** The job a caller's session is working: the one job a driver holds claimed. None, or more than one, is no binding. */
 async function sessionJobFor(db: D1Database, agent: Agent): Promise<{ job_id: string; namespace: string } | null> {
-  if (agent.job) {
-    const row = await db.prepare("SELECT id, namespace FROM jobs WHERE id = ?1").bind(agent.job).first<{ id: string; namespace: string }>();
-    return row ? { job_id: row.id, namespace: row.namespace } : null;
-  }
   if (!agent.row || agent.kind !== "driver") return null;
   // LIMIT 2, so "holds several" is told apart from "holds one" without reading them all.
   const { results } = await db
@@ -67,7 +62,7 @@ export async function resolveSessionCaller(
 ): Promise<SessionCaller | Response> {
   const resolved = await resolveAgent(request, env, now);
   if (!resolved) {
-    return text("unauthorized: a driver or runner key is required as Authorization: Bearer <key>", 401, {
+    return text("unauthorized: a driver key is required as Authorization: Bearer <key>", 401, {
       "WWW-Authenticate": `Bearer realm="${SESSION_REALM}"`,
     });
   }

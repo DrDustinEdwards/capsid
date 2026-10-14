@@ -15,16 +15,13 @@ const DRIVER_KEY = "capsid_agent_" + "1".repeat(64);
 const RO_DRIVER_KEY = "capsid_agent_" + "2".repeat(64);
 const CRON_KEY = "capsid_agent_" + "3".repeat(64);
 const REVOKED_KEY = "capsid_agent_" + "4".repeat(64);
-const RUNNER_KEY = "capsid_runner_" + "5".repeat(64);
 const OTHER_DRIVER_KEY = "capsid_agent_" + "6".repeat(64);
 
 const DRIVER_JOB = "job_0000000a0b01";
 const SECOND_JOB = "job_0000000a0b02";
-const RUNNER_JOB = "job_0000000a0b03";
-const RUNNER_NAME = `runner-${RUNNER_JOB}-s1`;
 
 const SESSION = "5e55a0a1-0000-4000-8000-0000000000b1";
-const RUNNER_SESSION = "5e55a0a1-0000-4000-8000-0000000000b2";
+const OTHER_SESSION = "5e55a0a1-0000-4000-8000-0000000000b2";
 
 const HOUR = 3_600_000;
 const iso = (agoMs: number) => new Date(Date.now() - agoMs).toISOString();
@@ -40,9 +37,9 @@ async function agentRow(id: string, name: string, kind: string, key: string, gra
 
 function job(id: string, status: string, claimedBy: string | null) {
   return env.DB.prepare(
-    `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by, lease_expires)
-     VALUES (?1, 'sample', 'a sample job ' || ?1, 'lorem body', ?2, 'github:sample', ?3, ?4)`
-  ).bind(id, status, claimedBy, claimedBy ? iso(-2 * HOUR) : null);
+    `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by)
+     VALUES (?1, 'sample', 'a sample job ' || ?1, 'lorem body', ?2, 'github:sample', ?3)`
+  ).bind(id, status, claimedBy);
 }
 
 beforeEach(async () => {
@@ -57,11 +54,9 @@ beforeEach(async () => {
     await agentRow("agent_hook00000002", "sample-ro-driver", "driver", RO_DRIVER_KEY, ["read"]),
     await agentRow("agent_hook00000003", "sample-cron", "cron", CRON_KEY, ["read", "write"]),
     await agentRow("agent_hook00000004", "sample-revoked-driver", "driver", REVOKED_KEY, ["read", "write"], { revoked: true }),
-    await agentRow("agent_hook00000005", RUNNER_NAME, "session", RUNNER_KEY, ["read", "write"], { job: RUNNER_JOB }),
     await agentRow("agent_hook00000006", "sample-b-driver", "driver", OTHER_DRIVER_KEY, ["read", "write"]),
     job(DRIVER_JOB, "claimed", "agent:sample-driver"),
     job(SECOND_JOB, "queued", null),
-    job(RUNNER_JOB, "claimed", `agent:${RUNNER_NAME}`),
   ]);
 });
 
@@ -111,7 +106,7 @@ describe("who may post hooks", () => {
     expect(await ro.text()).toMatch(/write grant/);
     const cron = await hook(CRON_KEY, start());
     expect(cron.status, "a cron agent").toBe(403);
-    expect(await cron.text()).toMatch(/not a driver or a runner/);
+    expect(await cron.text()).toMatch(/is not a driver\./);
     expect(await sessionCount()).toBe(0);
     expect(await eventCount()).toBe(0);
   });
@@ -121,16 +116,6 @@ describe("who may post hooks", () => {
     const row = await session();
     expect(row?.agent).toMatch(/^opkey:/);
     expect(row?.job_id).toBeNull();
-  });
-
-  it("PLANT: a runner key binds its session and every event to its own job", async () => {
-    await ok(RUNNER_KEY, start(RUNNER_SESSION));
-    const row = await session(RUNNER_SESSION);
-    expect(row?.agent).toBe(`agent:${RUNNER_NAME}`);
-    expect(row?.job_id).toBe(RUNNER_JOB);
-    expect(row?.namespace).toBe("sample");
-    const event = await env.DB.prepare("SELECT job_id, agent, event, subtype FROM session_events WHERE session_id = ?1").bind(RUNNER_SESSION).first();
-    expect(event).toEqual({ job_id: RUNNER_JOB, agent: `agent:${RUNNER_NAME}`, event: "SessionStart", subtype: "startup" });
   });
 
   it("a driver binds to the one job it holds claimed, and the session keeps that job when the driver moves on", async () => {
@@ -235,7 +220,7 @@ describe("the feed's live sessions", () => {
   it("lists unended sessions seen in the last day, newest first, with a long wait for input as an incident", async () => {
     await ok(DRIVER_KEY, start());
     await ok(DRIVER_KEY, notify("permission_prompt"));
-    await ok(RUNNER_KEY, start(RUNNER_SESSION));
+    await ok(OTHER_DRIVER_KEY, start(OTHER_SESSION));
     // The driver's session has waited fifteen minutes; a third session went quiet two days ago.
     await env.DB.batch([
       env.DB.prepare("UPDATE agent_sessions SET last_event_at = ?1 WHERE session_id = ?2").bind(iso(15 * 60_000), SESSION),
@@ -245,8 +230,8 @@ describe("the feed's live sessions", () => {
       ).bind(iso(48 * HOUR)),
     ]);
     const feed = await opsFeed(env as unknown as Env, new Date());
-    expect(feed.live.sessions.map((s) => s.session_id)).toEqual([RUNNER_SESSION, SESSION]);
+    expect(feed.live.sessions.map((s) => s.session_id)).toEqual([OTHER_SESSION, SESSION]);
     expect(feed.live.sessions[1]).toMatchObject({ needs_input: true, incident: "waiting", last_notification_type: "permission_prompt", job_id: DRIVER_JOB });
-    expect(feed.live.sessions[0]).toMatchObject({ needs_input: false, incident: null, job_id: RUNNER_JOB });
+    expect(feed.live.sessions[0]).toMatchObject({ needs_input: false, incident: null, job_id: null });
   });
 });

@@ -1,7 +1,5 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
-import { DEFAULT_MAX_CLAIMS, agentActor, claimLimit } from "./agents-schema";
-import { mintSessionKey, sessionKeyRefusal, type SessionKey } from "./job-session-key";
 import {
   JOBS_ROWS_MAX,
   OPEN_JOB_STATUSES,
@@ -23,17 +21,11 @@ import { signTaskBody, verifySignedBody } from "./improve-task";
 import { JOB_KINDS, isJobKind, routeJob, type Routing } from "./model-routing";
 import { pullRequestRisk } from "./model-routing-pr";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
-import { offerForClaim } from "./job-skill-offers";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { externalFenceProblem, jobOrigin } from "./provenance";
 import {
   actorShapeRefusal,
-  claimRoom,
-  claimRoomClause,
   guardedTransition,
-  heldClaims,
-  type ClaimRoom,
-  leaseUntil,
   markJobFailed,
   movedBeforeFailing,
   readJob,
@@ -166,7 +158,6 @@ export async function postJob(
     posted_by: actor,
     claimed_by: null,
     claimed_at: null,
-    lease_expires: null,
     result_ref: null,
     result_summary: null,
     gate_required: args.gate_required ? 1 : 0,
@@ -253,7 +244,6 @@ const JOB_LIST_COLUMNS = [
   "priority",
   "posted_by",
   "claimed_by",
-  "lease_expires",
   "gate_required",
   "review_required",
   "blocked_count",
@@ -319,18 +309,6 @@ export async function listJobs(
   };
 }
 
-/** The claim's refusal for a ClaimRoom. At the default limit of one it reads as it always
- *  has: "<actor> already holds <job>, leased until <time>". */
-function claimRefusal(actor: string, room: ClaimRoom, id: string): string {
-  if (room.kind === "full") {
-    const clause = claimRoomClause(actor, room, id, { lease: true }).replace(`${actor} holds `, `${actor} already holds `);
-    return room.limit === DEFAULT_MAX_CLAIMS
-      ? `${clause}. Complete it, fail it, or block it before claiming another.`
-      : `${clause}. Complete, fail or block one before claiming another.`;
-  }
-  return `${claimRoomClause(actor, room, id)}. ${id} stays queued.`;
-}
-
 /** What a claim hands the driver about the model (capsid/conventions.md, "Model routing"): the
  *  recommendation, why, and how to follow it. The driver never picks a model itself. */
 function deliveryOf(routing: Routing) {
@@ -347,31 +325,18 @@ function deliveryOf(routing: Routing) {
   };
 }
 
-// Claims per caller, across every namespace, up to the caller's claim limit (one unless
-// the admin raised it with capsid_admin_manage_agents's max_claims). Each held job keeps its own
-// lease, and every holder action names the job it acts on. A claim past the limit, or a
-// second claim on the repo of a job already held (unless one of the two is a design
-// job), is refused before the CAS, so the refusal names the job already held rather
-// than reporting a lost race.
+// A claim names the caller as the job's holder, with no lease: it never expires, and a
+// caller may hold any number of jobs, on any repo. Every holder action names the job it
+// acts on. A holder that is gone is released by the seat (releaseJob).
 export async function claimJob(
   env: Env,
   agent: Agent,
   now: Date,
-  args: { namespace?: string; id?: string; sessionKey?: boolean }
+  args: { namespace?: string; id?: string }
 ): Promise<JobResult> {
   const actor = agent.actor;
   const badActor = actorShapeRefusal("claim", actor);
   if (badActor) return badActor;
-  // A claim that hands the job to a key minted for it (src/job-session-key.ts) is a
-  // driver's alone, refused before anything is read.
-  if (args.sessionKey) {
-    const notDriver = sessionKeyRefusal(agent);
-    if (notDriver) return refuse("claim", notDriver);
-  }
-  const limit = claimLimit(agent.scopes);
-  const held = await heldClaims(env.DB, actor);
-  if (held.length >= limit) return refuse("claim", claimRefusal(actor, { kind: "full", held, limit }, args.id ?? "another job"));
-
   // Either a named job or the highest-priority queued one in a namespace. The SELECT
   // only picks a candidate; the guarded UPDATE below is what claims it, so two drivers
   // reading the same candidate still resolve to one winner.
@@ -392,21 +357,15 @@ export async function claimJob(
     if (!candidate) return refuse("claim", `no queued jobs in ${args.namespace}.`);
   }
 
-  // The repo question, now that the job is known: a second claim on the repo of a job
-  // already held is refused and leaves the queue as it was.
-  const room = await claimRoom(env, limit, held, candidate);
-  if (room) return refuse("claim", claimRefusal(actor, room, candidate.id));
-
   // A namespace whose drivers keep failing stops handing out work until a person looks
   // (src/job-breaker.ts). Checked before anything else touches the candidate, so an
   // open breaker leaves the queue exactly as it was.
   const breaker = await breakerState(env, candidate.namespace, now);
   if (breaker.open) return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
 
-  // What the job needs of the driver is checked before the lease is taken. A claim
-  // that took the lease and then refused would park the job on a driver that cannot do
-  // it, and since a caller holds a limited number of claims it would also take one of
-  // that driver's places for four hours. The check runs through checkScope, so a job
+  // What the job needs of the driver is checked before the job is taken. A claim
+  // that took the job and then refused would park it on a driver that cannot do it.
+  // The check runs through checkScope, so a job
   // requirement and an agent scope are compared by the same function that decides
   // every tool call.
   //
@@ -415,7 +374,7 @@ export async function claimJob(
   // with no id takes the top queued job, so it would stop the namespace's queue.
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
-    const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not leased.`;
+    const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not handed out.`;
     const marked = await markJobFailed(env, candidate, "queued", reason, "job-requirement-corrupt", actor, { reason: corrupt }, now);
     if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "has a corrupt requirement");
     return refuse("claim", `${reason} It has been marked failed.`);
@@ -430,7 +389,7 @@ export async function claimJob(
   }
 
   // What it needs of the driver's history, on the same terms and in the same place:
-  // before the lease, so the job stays queued for a driver that meets the bar.
+  // before the job is taken, so it stays queued for a driver that meets the bar.
   const shortfall = await recordShortfall(env.DB, actor, candidate);
   if (shortfall) {
     return refuse("claim", `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${shortfall} The job stays queued for a driver that can do it.`);
@@ -454,7 +413,7 @@ export async function claimJob(
     return refuse("claim", `${candidate.id} failed its signature check and has been marked failed: ${verdict.reason}`);
   }
 
-  // The approval a resume handed on is checked the same way, before the lease: a note
+  // The approval a resume handed on is checked the same way, before the job is taken: a note
   // changed after the resume wrote it is an instruction nobody gave, so the job is
   // failed rather than handed to a driver with it (src/job-signing.ts).
   const claimNotes = await resumeNotes(env, candidate);
@@ -483,11 +442,7 @@ export async function claimJob(
     pr_risk: prRisk.risk,
   });
 
-  const expires = leaseUntil(now);
-  // With session_key, the job is held by a key minted for it in the same batch, and the
-  // checks above were the driver's: its limit, its repo, its flags, its record.
-  const session: SessionKey | null = args.sessionKey ? await mintSessionKey(env.DB, agent, candidate.id, now) : null;
-  const holder = session ? agentActor(session.name) : actor;
+  const holder = actor;
   const claimed: JobRow = {
     ...candidate,
     kind: routing.kind,
@@ -497,47 +452,38 @@ export async function claimJob(
     status: "claimed",
     claimed_by: holder,
     // A job the seat released keeps its first claim time, so its duration covers its
-    // whole working life. The lease sweep clears claimed_at, so a swept job starts over.
+    // whole working life.
     claimed_at: candidate.claimed_at ?? now.toISOString(),
-    lease_expires: expires,
     updated_at: now.toISOString(),
   };
-  // The skills this job is offered: decided at its first claim and recorded in the
-  // same batch, or read back from that record on a later claim.
-  const offer = await offerForClaim(env, claimed, holder);
   // One batch with its records, behind the guard. Two drivers reading the same
   // candidate still resolve to one winner, because the first commit moves updated_at
   // and the second batch's guard aborts before its UPDATE runs.
   const won = await guardedTransition(env, candidate, [
     env.DB.prepare(
-      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), lease_expires = ?4, updated_at = ?3,
-         kind = ?5, model_recommended = ?6, effort_recommended = ?7, routing_reason = ?8
+      `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), updated_at = ?3,
+         kind = ?4, model_recommended = ?5, effort_recommended = ?6, routing_reason = ?7
        WHERE id = ?1 AND status = 'queued' RETURNING id`
-    ).bind(candidate.id, holder, now.toISOString(), expires, routing.kind, routing.model, routing.effort, routing.reason),
-    ...(session ? session.statements : []),
+    ).bind(candidate.id, holder, now.toISOString(), routing.kind, routing.model, routing.effort, routing.reason),
     ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
-    jobAudit(env.DB, actor, "job-claimed", claimed, { lease_expires: expires, ...(session ? { session_key: session.name, key_fingerprint: session.fingerprint } : {}) }),
-    ...(offer.record ? [offer.record] : []),
+    jobAudit(env.DB, actor, "job-claimed", claimed, {}),
   ]);
   if (!won) {
     return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
   }
   const startedOn = startedNotice(candidate);
-  // A job that went back to the queue after a resume (an expired lease) reaches its
-  // next driver here, so the approval has to come with it: the note read and checked
-  // above, before the lease.
+  // A job that went back to the queue after a resume reaches its next driver here, so
+  // the approval has to come with it: the note read and checked above.
   return {
     ok: true,
     action: "claim",
     job: claimed,
-    // A label is not a lease, so it refuses nothing; the claimant is told who began it.
+    // A label refuses nothing; the claimant is told who began it.
     ...(startedOn ? { started: startedOn } : {}),
     ...(claimNote ? { resume_note: claimNote } : {}),
     ...(claimNotes.notes.length > 0 ? { resume_notes: claimNotes.notes } : {}),
     ...(claimNotes.dropped > 0 ? { resume_notes_dropped: claimNotes.dropped } : {}),
-    offered_skills: offer.skills,
     routing: deliveryOf(routing),
     ...(prRisk.note ? { routing_note: prRisk.note } : {}),
-    ...(session ? { session_key: { name: session.name, key: session.key, note: session.note } } : {}),
   };
 }

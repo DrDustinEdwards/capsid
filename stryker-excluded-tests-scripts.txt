@@ -6,7 +6,6 @@
 # Mutants only they would kill show as survivors in the report.
 #
 # Why each fails (the script it reads as text):
-#   admin-exposure-check  scripts/schedule-drivers.mjs
 #   canary                scripts/verify-live.mjs (gate 2b is wired)
 #   cloudflare-platform   scripts/bindings.mjs
 #   counts                scripts/verify-live.mjs (the live gate count)
@@ -14,9 +13,7 @@
 #   improve-derive-key    scripts/improve-derive-key.mjs
 #   improve-report        scripts/improve-report.mjs
 #   integration-layer     scripts/bindings.mjs
-#   schedule-drivers      scripts/schedule-drivers.mjs, scripts/capsid-rpc.mjs
 #   workflow-policy       scripts/improve-report.mjs
-admin-exposure-check.test.ts
 canary.test.ts
 cloudflare-platform.test.ts
 counts.test.ts
@@ -24,5 +21,4 @@ deploy-pipeline.test.ts
 improve-derive-key.test.ts
 improve-report.test.ts
 integration-layer.test.ts
-schedule-drivers.test.ts
 workflow-policy.test.ts

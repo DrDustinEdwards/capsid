@@ -223,7 +223,7 @@ test("worthReviewer: money, judges, guards, migrations, workflows and backup cod
     ["src/tools/repo.ts", /guardedWrite/],
     ["src/tools/docs.ts", /pathMutation/],
     ["src/portal-auth.ts", /login or session check/],
-    ["src/runner-key.ts", /key or a signature/],
+    ["src/job-signing.ts", /key or a signature/],
     ["src/agents-admin.ts", /agent credentials/],
     ["src/backup.ts", /backup or restore code/],
     ["scripts/restore-table.mjs", /backup or restore code/],
@@ -257,7 +257,7 @@ test("worthReviewer reaches past riskOf only through the guard sources", () => {
   ]) {
     assert.equal(riskOf([{ filename }]).level, "high", filename);
   }
-  for (const filename of ["src/store-guards.ts", "src/tools/repo.ts", "src/portal-auth.ts", "src/runner-key.ts"]) {
+  for (const filename of ["src/store-guards.ts", "src/tools/repo.ts", "src/portal-auth.ts"]) {
     assert.deepEqual([riskOf([{ filename }]).level, worth([{ filename }])], ["routine", "worth"], filename);
   }
 });

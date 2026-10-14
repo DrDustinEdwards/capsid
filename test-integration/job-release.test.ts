@@ -71,7 +71,6 @@ describe("release", () => {
     const r = await row(id);
     expect(r?.status).toBe("queued");
     expect(r?.claimed_by).toBeNull();
-    expect(r?.lease_expires).toBeNull();
     const a = await audit(id, "job-released");
     expect(a?.actor).toBe("agent:seat");
     expect(JSON.parse(a!.params)).toMatchObject({ reason: "no driver session is running", held_by: "agent:capsid-driver" });

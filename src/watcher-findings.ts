@@ -97,7 +97,8 @@ export interface JobEnd {
   updated_at: string;
 }
 
-const clearedByWatcher = (job: JobEnd) => job.status === "failed" && job.result_summary === CLEARED_SUMMARY;
+const clearedByWatcher = (job: JobEnd) =>
+  job.status === "failed" && (job.result_summary === CLEARED_SUMMARY || (job.result_summary?.startsWith(`${CLEARED_SUMMARY}: `) ?? false));
 
 export type SightingVerdict =
   // Its job is open and the row knows it: count the sighting.
@@ -162,8 +163,8 @@ export interface FindingMemory {
   insert(f: Sighted, state: FindingState, jobId: string | null, now: Date): Promise<boolean>;
   /** A sighting with no state change. False when the row has left `row.state`. */
   sight(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
-  /** To 'open' with this job, from the state it was read in. */
-  open(row: FindingRow, f: Sighted, jobId: string, now: Date): Promise<boolean>;
+  /** To 'open' with this job (null for a digest or attention finding), from the state it was read in. */
+  open(row: FindingRow, f: Sighted, jobId: string | null, now: Date): Promise<boolean>;
   /** From 'open' with its job ended by a person, to 'dismissed'. */
   dismiss(row: FindingRow, f: Sighted, now: Date): Promise<boolean>;
   /** From 'open' or 'dismissed' to 'cleared', quiet until reopenAfter(now). */

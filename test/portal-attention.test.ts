@@ -141,7 +141,7 @@ test("PLANT: a scheduled task that failed or went quiet is a problem; a backup i
   for (const t of tasks) set(t.id, null);
   set("backup", "failing", "threw");
   set("watcher", "quiet");
-  set("skill-cycle", "never");
+  set("merge-resume", "never");
   const rows = attentionItems(f, now).filter((a) => a.kind === "Scheduled");
   assert.deepEqual(
     rows.map((r) => [r.sev, r.title, r.sub]),

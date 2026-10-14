@@ -226,7 +226,7 @@ export function jobMeta(j: OpsJob, now: number): string {
     case "blocked":
       return `waiting ${age(ms(j.updated_at), now)}`;
     case "claimed":
-      return j.lease_expires ? `lease ${ago(ms(j.lease_expires), now)}` : "no lease";
+      return `claimed ${ago(ms(j.updated_at), now)}`;
     case "queued":
       return `queued ${ago(ms(j.created_at), now)}`;
     case "parked":

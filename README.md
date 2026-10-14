@@ -9,10 +9,10 @@ AI agents forget between sessions, and each repository has its own rules. Capsid
 ## How it is different
 
 - **Scoped credentials.** Every caller is an agent with its own key and scopes, and one function, `checkScope`, is the only place a grant is checked.
-- **A signed work queue.** Jobs carry a signed body, a lease and gates that stop at a push, a deploy, a secret or a merge until a person approves.
+- **A signed work queue.** Jobs carry a signed body and gates that stop at a push, a deploy, a secret or a merge until a person approves.
 - **Claims and verified outcomes.** The driver's own statement is stored beside what GitHub shows, so the two can be compared.
 - **Every overwrite and delete is kept.** Each one snapshots the old version and writes an audit row.
-- **Off by default.** The improve loop, auto-merge and the nightly driver each need to be turned on.
+- **Off by default.** The improve loop and auto-merge each need to be turned on.
 
 ## Stack
 
@@ -23,7 +23,7 @@ AI agents forget between sessions, and each repository has its own rules. Capsid
 
 ## Quick start
 
-A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstrap.md) is written for that reader, and its section 11 ([a fresh install, step by step](docs/bootstrap.md#11-a-fresh-install-step-by-step)) lists the commands in order. Copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored), fill in your ids, apply the migrations, set the secrets and run `npm run deploy`. Never commit `wrangler.jsonc`, `.dev.vars`, a key or real vault content.
+A fresh install needs a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstrap.md) is written for that reader, and its section 10 ([a fresh install, step by step](docs/bootstrap.md#10-a-fresh-install-step-by-step)) lists the commands in order. Copy `wrangler.jsonc.example` to `wrangler.jsonc` (gitignored), fill in your ids, apply the migrations, set the secrets and run `npm run deploy`. Never commit `wrangler.jsonc`, `.dev.vars`, a key or real vault content.
 
 ## How agents connect
 
@@ -33,13 +33,12 @@ Capsid serves MCP over Streamable HTTP as two servers, each on two endpoints.
 - **Capsid Admin** (8 tools) holds what changes who may do what or reads across every namespace. It is on `/mcp/admin` and `/ops/mcp/admin`, for the owner only, and its risky actions need a recent sign-in.
 - **22 tools in all.** `src/counts.ts` derives the count from `TOOL_GRANTS` in `src/scope.ts`, and tests hold that table to the tools actually registered.
 - **Clients.** Claude and ChatGPT identify themselves by a Client ID Metadata Document. Grok and Gemini use a tightened dynamic registration at `/register` that admits only allowlisted callbacks and grants nothing on its own (`src/dcr.ts`).
-- **Job keys.** A session the seat starts on GitHub's runners trades its GitHub OIDC token at `/ops/runner-key` for a key bound to one job.
 
-Detail: [docs/auth.md](docs/auth.md) (including the full endpoint list), [docs/bootstrap.md](docs/bootstrap.md), [docs/seat-start.md](docs/seat-start.md), [docs/routines.md](docs/routines.md).
+Detail: [docs/auth.md](docs/auth.md) (including the full endpoint list), [docs/bootstrap.md](docs/bootstrap.md), [docs/routines.md](docs/routines.md).
 
 ## The work queue and claims
 
-A job is a title and a signed body, and the body is the prompt a driver runs. A driver claims a job on a four-hour lease and works it. It opens a pull request and completes the job, and a job that reaches a push, a deploy, a secret, a live migration or a merge blocks with the exact command a person must run. Capsid stores the driver's claim and the evidence it can read from GitHub in separate tables (`job_claims`, `job_outcomes`, `job_evaluations`, `job_touches`). A field nobody reported is `NULL`, not `0`. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
+A job is a title and a signed body, and the body is the prompt a driver runs. A driver claims a job and works it, with no lease: a claim never expires, and the seat releases a holder that is gone. It opens a pull request and completes the job, and a job that reaches a push, a deploy, a secret, a live migration or a merge blocks with the exact command a person must run. Capsid stores the driver's claim and the evidence it can read from GitHub in separate tables (`job_claims`, `job_outcomes`, `job_evaluations`, `job_touches`). A field nobody reported is `NULL`, not `0`. Detail: [docs/work-queue.md](docs/work-queue.md), [docs/autonomy.md](docs/autonomy.md), [docs/schema.md](docs/schema.md), [docs/telemetry.md](docs/telemetry.md).
 
 ## The improve loop
 
@@ -73,10 +72,10 @@ The Portal is the owner's admin app, served at `/portal/` and on its own host. I
 - **Repo writes.** Every write to GitHub goes through `guardedWrite`, which checks the repo the call reaches and then writes an audit row.
 - **Snapshots.** Every overwrite and delete of a document snapshots the prior version to `document_versions` and writes `audit_log`.
 - **Co-owner.** A second person can hold the same access as the owner through the `CO_OWNER_EMAILS` secret. She cannot change `ADMIN_EMAIL` from inside Capsid.
-- **Seat-started sessions.** The seat can start a Claude Code session on GitHub's runners for one queued job. It is off by default, runs on a public repo only, and has a network allowlist, a per-job key, no deploy rights and a canary test.
+- **Routine-started sessions.** The seat starts a Claude Code session for one queued job by firing its namespace's routine (docs/routines.md).
 - **Limits.** [docs/auth.md](docs/auth.md) lists what Capsid cannot control, such as the owner's own shell.
 
-Detail: [docs/auth.md](docs/auth.md), [docs/repo-access.md](docs/repo-access.md), [docs/seat-start.md](docs/seat-start.md), [docs/hooks.md](docs/hooks.md). A 2026-09-16 source audit is [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md); it is a snapshot, not canon.
+Detail: [docs/auth.md](docs/auth.md), [docs/repo-access.md](docs/repo-access.md), [docs/hooks.md](docs/hooks.md). A 2026-09-16 source audit is [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md); it is a snapshot, not canon.
 
 ## Backups
 
@@ -88,10 +87,9 @@ A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mi
 - [docs/auth.md](docs/auth.md) the agent model, the five scope axes, the roles, the endpoint list, the co-owner, and the tool hints and list cache fields clients receive
 - [docs/repo-access.md](docs/repo-access.md) how the GitHub App token flow works and which tools read and write repos
 - [docs/routines.md](docs/routines.md) how Capsid starts a Claude Code cloud session for a queued job by firing its namespace's routine
-- [docs/seat-start.md](docs/seat-start.md) how the seat starts a Claude Code session on GitHub's runners for a queued job, its guards and its canary
 - [docs/telemetry.md](docs/telemetry.md) Claude Code's OpenTelemetry into Capsid: per-session usage, per-job cost on the outcome row, and the settings that turn it on
-- [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, leases, gates, evidence and agent records
-- [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes, the nightly driver and the watcher
+- [docs/work-queue.md](docs/work-queue.md) the job lifecycle, signing, gates, evidence and agent records
+- [docs/autonomy.md](docs/autonomy.md) auto-merge, pre-approved gate classes and the watcher
 - [docs/improve.md](docs/improve.md) the self-improvement loop: how it runs, and what stops it moving its own goalposts
 - [docs/skills.md](docs/skills.md) how an idea abstracted from work that landed is offered to other projects
 - [docs/portal.md](docs/portal.md) Capsid Portal: its views and data, what "no data" means, who gets in, its routes and controls, the Cloudflare token, and building it
@@ -103,7 +101,7 @@ A daily cron at 09:00 UTC dumps every D1 table to R2 as JSON, with a markdown mi
 - [docs/health-format.md](docs/health-format.md) the one health body every site answers with (status and sha), which the live `sha` check reads
 - [docs/live-checks.md](docs/live-checks.md) the watcher's live checks: a site's deployed sha against its default branch, and the Web Analytics beacon and CSP on named pages
 - [docs/public-data.md](docs/public-data.md) the public system model and stats documents served without auth
-- [docs/overnight.md](docs/overnight.md) the overnight run: the plan per repo, the morning digest, and the scheduler switch with its Runs on choice
+- [docs/overnight.md](docs/overnight.md) the overnight run: the plan per repo, the morning digest, and the overnight switch with its Runs on choice
 - [explorer/README.md](explorer/README.md) the system explorer at capsid.dustinedwards.info: pages built daily from the public documents, its checks, and its deploy
 
 ## What Capsid is not
