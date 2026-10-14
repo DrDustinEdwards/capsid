@@ -38,6 +38,8 @@
     "scripts/export-claims.mjs",
     "scripts/export-claims.d.mts",
     "scripts/drill-all.mjs",
-    "scripts/drill-all.d.mts"
+    "scripts/drill-all.d.mts",
+    "scripts/strip-pr-footer.mjs",
+    "scripts/strip-pr-footer.d.mts"
   ]
 }
