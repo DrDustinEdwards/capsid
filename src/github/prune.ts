@@ -33,6 +33,7 @@ interface PullRow {
   state: string;
   merged_at: string | null;
   head: { ref: string; sha: string; repo: { full_name: string } | null };
+  body?: string | null;
 }
 
 export interface PruneKept {
@@ -43,7 +44,21 @@ export interface PruneKept {
 export interface PruneCandidate {
   branch: string;
   sha: string;
-  pr: number;
+  // The merged pull request, or null for a branch the daily pass deletes for its age alone
+  // (src/maintenance-branches.ts).
+  pr: number | null;
+}
+
+// Screenshot branches (job_9dbaf2ecfd2c): a pull request's images live on a branch of their
+// own, named shots/... or ...-shots, that no pull request has as its head. One is kept while
+// an open pull request's description names it or its tip, and is an orphan after that.
+const SHOTS_BRANCH = /^shots\/|-shots$/;
+
+/** The open pull request whose description shows a screenshot branch's images, or null. */
+function shotsInUse(branch: { name: string; sha: string }, open: ReadonlyArray<{ number: number; body?: string | null }>): number | null {
+  if (!SHOTS_BRANCH.test(branch.name)) return null;
+  const used = open.find((pr) => (pr.body ?? "").includes(branch.name) || (pr.body ?? "").includes(branch.sha));
+  return used ? used.number : null;
 }
 
 // orphan: kept only because the rule cannot prove its work landed (no pull request, one
@@ -142,6 +157,11 @@ export async function readPrunePlan(env: Env, namespace: string, keep: string[] 
       continue;
     }
     const verdict = pruneVerdict({ name: b.name, sha: b.commit.sha, protected: b.protected === true }, defaultBranch, latest.get(b.name), listsComplete);
+    const shotsFor = !verdict.prune && verdict.orphan ? shotsInUse({ name: b.name, sha: b.commit.sha }, open.rows) : null;
+    if (shotsFor !== null) {
+      kept.push({ branch: b.name, reason: `screenshots for open pull request #${shotsFor}`, sha: b.commit.sha, orphan: false });
+      continue;
+    }
     if (verdict.prune) prune.push({ branch: b.name, sha: b.commit.sha, pr: verdict.pr });
     else kept.push({ branch: b.name, reason: verdict.reason, sha: b.commit.sha, orphan: verdict.orphan });
   }
