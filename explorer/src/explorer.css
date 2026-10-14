@@ -121,3 +121,44 @@ h2 {
   margin-block-start: var(--space-3);
   color: var(--muted);
 }
+
+/* A flow's step page. The page lists every step itself, with links, so the map's own list of
+   the same steps is not shown twice; the script still reads it to play the flow. */
+.flow-map .cap-system-map-flows {
+  display: none;
+}
+.flow-text {
+  max-width: var(--measure);
+  font: 1.125rem / 1.5 var(--prose);
+}
+.flow-step h3 {
+  margin-block: var(--space-5) var(--space-2);
+  font-size: 1rem;
+}
+.flow-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin-block-start: var(--space-5);
+}
+.flow-nav a {
+  padding-block: var(--space-2);
+  font-weight: 600;
+}
+/* Each step's link is a 24 px target at least, apart from its neighbours (WCAG 2.5.8). */
+.flow-steps li {
+  margin-block: var(--space-1);
+}
+.flow-steps a {
+  display: inline-block;
+  padding-block: var(--space-1);
+  min-block-size: 24px;
+}
+.flow-steps a[aria-current] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration-thickness: 2px;
+}
+.hint {
+  color: var(--muted);
+}

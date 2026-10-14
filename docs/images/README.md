@@ -36,3 +36,12 @@ The mock's clock and the browser's are both pinned to the fixture's own time
 | `claims-light.png` | Agents, its Claims tab |
 | `phone-health-light.png` | Health on a phone, 390 x 844 |
 | `phone-health-dark.png` | Health on a phone, dark theme |
+
+## The explorer picture
+
+`explorer-light.png` (1440 x 900, light theme) is not the Portal and is the one exception to the
+sample-data rule above. It shows the system explorer's home page, built locally from master with
+`explorer/build.mjs` from public data only: the model from `system/model.json` passed through
+`toPublic` (12 public systems and 5 private ones, the counts the live document reports) and the
+numbers from the live `/public/stats/v1.json` document as of 2026-10-14. Everything in it is
+already published at capsid.dustinedwards.info. The README links it to the live explorer.

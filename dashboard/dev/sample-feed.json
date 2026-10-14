@@ -1981,13 +1981,15 @@
               "title": "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]",
               "kind": "blocked-job",
               "link": null,
-              "since": "2026-09-18T19:12:00.000Z"
+              "since": "2026-09-18T19:12:00.000Z",
+              "job": "job_7c1e44b0a912"
             },
             {
               "title": "Design only: paired comparison for the methods note",
               "kind": "blocked-job",
               "link": null,
-              "since": "2026-09-26T09:36:00.000Z"
+              "since": "2026-09-26T09:36:00.000Z",
+              "job": "job_91b3c0de5a24"
             }
           ]
         },
@@ -2001,7 +2003,8 @@
               "title": "Sync the score block onto the open scorer PR",
               "kind": "blocked-job",
               "link": null,
-              "since": "2026-09-23T00:00:00.000Z"
+              "since": "2026-09-23T00:00:00.000Z",
+              "job": "job_15e10168e61c"
             },
             {
               "title": "CI is failing on 1a2b3c4",
@@ -2018,7 +2021,7 @@
           "severity": "needs-you",
           "items": [
             {
-              "title": "PR #32 waits for the seat: auto-merge",
+              "title": "PR #32 waits for you: it changes a file auto-merge never merges on its own (one tap to approve)",
               "kind": "pr",
               "link": "https://github.com/example-org/sample-c/pull/32",
               "since": "2026-09-23T00:00:00.000Z"

@@ -5,6 +5,8 @@ import { readSnapshot } from "./ops-snapshot";
 import { prUrlsFromJob } from "./outcome-prs";
 import { readReports } from "./inbox-report";
 import { unitInboxItems } from "./merge-units";
+import type { MergeClass } from "./merge-class";
+import { prsSettled, readStaleCache, type StalePrCache } from "./stale-jobs";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -40,12 +42,86 @@ export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeve
   return items.length > 0 ? "failing" : "none";
 }
 
+// What each auto-merge check that held a pull request back means, in the words the inbox
+// shows Dustin (his review of 2026-10-11: the rows showed check names). A check this list
+// does not know yet still shows, its underscores read as spaces.
+const CHECK_WORDS: Record<string, string> = {
+  paths_not_refused: "it changes a file auto-merge never merges on its own",
+  paths_not_money: "it touches payment code",
+  no_migration_workflow_lockfile: "it changes a migration, a workflow or a lockfile",
+  paths_allowed_for_namespace: "it changes files outside what this app merges on its own",
+  head_in_base_repo: "it comes from a fork",
+  body_names_job: "its description names no job",
+  pr_author_allowed: "its author may not merge without you",
+  job_handed_on: "its job has not handed it on yet",
+  pr_recorded_for_job: "no job records it",
+  base_is_default_branch: "it does not target the default branch",
+  size_within_cap: "it is too large to merge unread",
+  ci_green: "its checks are not green",
+  head_moved: "a push landed after it was judged",
+  unit_suspended: "its merge unit is suspended",
+  visual_awaits_look: "it changes what people see, so it waits for your look",
+  namespace_paused: "its app is paused",
+  changes_existing_test: "it changes an existing test",
+};
+
+// What answering it takes, by the class the tick gave it (src/merge-class.ts).
+const CLASS_WORDS: Record<MergeClass, string> = {
+  auto: "merges on its own",
+  approve: "one tap to approve",
+  typed: "a typed confirmation",
+  seat: "a step outside a merge",
+  wait: "nothing yet, CI is running",
+};
+
+/** An auto-merge hold as an inbox title, in plain words: what held it, then what it takes. */
+export function prHoldTitle(a: Pick<AwaitingSeat, "number" | "failed" | "class">): string {
+  const why = CHECK_WORDS[a.failed] ?? a.failed.replace(/_/g, " ");
+  return `PR #${a.number} waits for you: ${why}${a.class ? ` (${CLASS_WORDS[a.class]})` : ""}`;
+}
+
+// A blocked job whose block is already answered is not waiting on anyone (Dustin's review of
+// 2026-10-11: the inbox kept a migration the seat had applied, and a job whose pull requests
+// had merged). Two facts the Worker already holds settle it: every pull request it names is
+// merged or closed, as the merge-resume step last read them after the job last changed
+// (src/stale-jobs.ts, the same test as the stale view's prs-settled), or every migration
+// file its block names (the command is in its summary, src/jobs-holder.ts) is in d1_migrations. Such a job stays blocked and shows in the stale
+// view, where it is closed; the inbox leaves it out.
+const MIGRATION_FILE = /\b(\d{4}_[a-z0-9_]+)(?:\.sql)?\b/gi;
+
+/** The migration files a blocked job's summary names, without ".sql". */
+export function migrationsNamed(text: string): string[] {
+  return [...new Set([...text.matchAll(MIGRATION_FILE)].map((m) => m[1]!.toLowerCase()))];
+}
+
+export function blockSettled(
+  job: { id: string; result_summary: string | null; updated_at: string },
+  stale: StalePrCache,
+  applied: ReadonlySet<string> | null
+): boolean {
+  const entry = stale[job.id];
+  if (entry && entry.at >= job.updated_at && prsSettled(entry)) return true;
+  if (!applied) return false;
+  const named = migrationsNamed(job.result_summary ?? "");
+  return named.length > 0 && named.every((n) => applied.has(n));
+}
+
+/** The applied migrations by file name without ".sql", or null when the table cannot be read. */
+async function appliedMigrations(db: D1Database): Promise<Set<string> | null> {
+  try {
+    const rows = await db.prepare("SELECT name FROM d1_migrations").all<{ name: string }>();
+    return new Set((rows.results ?? []).map((r) => r.name.toLowerCase().replace(/\.sql$/, "")));
+  } catch {
+    return null;
+  }
+}
+
 /** A blocked job as an inbox item. A block that asks a question is marked in its summary
  *  (src/jobs-holder.ts), and it is the kind that most needs a person's words. */
 export function blockedJobItem(job: { id: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }): InboxItem {
   const question = (job.result_summary ?? "").startsWith("QUESTION:");
   const [pr] = prUrlsFromJob({ result_ref: job.result_ref, result_summary: job.result_summary });
-  return { title: job.title, kind: question ? "question" : "blocked-job", link: pr ?? null, since: job.updated_at };
+  return { title: job.title, kind: question ? "question" : "blocked-job", link: pr ?? null, since: job.updated_at, job: job.id };
 }
 
 /**
@@ -68,7 +144,14 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
   )
     .bind(MAX_BLOCKED)
     .all<{ id: string; namespace: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }>();
-  for (const job of blocked.results ?? []) add(job.namespace, blockedJobItem(job));
+  // An unreadable cache or migrations table settles nothing: the job shows, as before.
+  // Both are read whether or not a job is blocked, so the feed's stated read count
+  // (src/ops-feed.ts, OPS_FEED_READS) does not move with the data.
+  const stale = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
+  const applied = await appliedMigrations(env.DB);
+  for (const job of blocked.results ?? []) {
+    if (!blockSettled(job, stale, applied)) add(job.namespace, blockedJobItem(job));
+  }
 
   // The pull requests auto-merge declined, rewritten whole by its tick. An unreadable
   // list reads as none, not as a failure of the inbox.
@@ -77,9 +160,7 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) {
       for (const a of parsed as AwaitingSeat[]) {
-        // The class says what kind of answer it needs (src/merge-class.ts, report-only).
-        const cls = a.class ? ` (${a.class}${a.class_reasons?.[0] ? `: ${a.class_reasons[0].slice(0, 160)}` : ""})` : "";
-        add(a.namespace, { title: `PR #${a.number} waits for the seat: ${a.failed}${cls}`, kind: "pr", link: `https://github.com/${a.repo}/pull/${a.number}`, since: a.at });
+        add(a.namespace, { title: prHoldTitle(a), kind: "pr", link: `https://github.com/${a.repo}/pull/${a.number}`, since: a.at });
       }
     }
   } catch {

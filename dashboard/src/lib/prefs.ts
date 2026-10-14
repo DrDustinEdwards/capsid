@@ -76,6 +76,8 @@ export function setThemeChoice(choice: ThemeChoice): void {
     document.documentElement.setAttribute("data-theme", choice);
     writePref(THEME_PREF, choice);
   }
+  // The header's theme button (Capsomer's theme switch) renames itself on this event.
+  document.dispatchEvent(new CustomEvent("cap-theme", { detail: { choice: currentTheme() } }));
   emit();
 }
 
@@ -88,8 +90,10 @@ export function toggleTheme(): Theme {
 function subscribeTheme(l: () => void): () => void {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   mq.addEventListener("change", l);
+  // A press on the header's theme button arrives as Capsomer's cap-theme event.
+  document.addEventListener("cap-theme", l);
   const off = subscribe(l);
-  return () => (mq.removeEventListener("change", l), off());
+  return () => (mq.removeEventListener("change", l), document.removeEventListener("cap-theme", l), off());
 }
 
 /** The saved choice (system, light or dark), kept current. */

@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 
 import { build } from "../build.mjs";
-import { SITE, allPages, containersPath, numbersHtml, systemPath } from "../src/pages.mjs";
+import { SITE, allPages, containersPath, flowPath, numbersHtml, stepPath, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
@@ -32,9 +32,15 @@ const built = await build({ model: join(fixtures, "model.json"), stats: join(fix
 const files = walk(out);
 const html = files.filter((f) => f.endsWith(".html")).map((f) => ({ file: f, text: readFileSync(join(out, f), "utf8") }));
 
-test("every system has a page, a public one with parts has its parts page, and nothing else is built", () => {
+test("every system has a page, a public one with parts has its parts page, every flow and each step of it a page, and nothing else is built", () => {
   const pages = files.filter((f) => f.endsWith(".html")).sort();
-  const expected = ["404.html", "index.html", ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`), "s/hub/containers/index.html"].sort();
+  const expected = [
+    "404.html",
+    "index.html",
+    ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`),
+    "s/hub/containers/index.html",
+    ...model.flows.flatMap((/** @type {any} */ f) => [`flows/${f.id}/index.html`, ...f.steps.map((/** @type {any} */ _s, /** @type {number} */ i) => `flows/${f.id}/${i + 1}/index.html`)]),
+  ].sort();
   assert.deepEqual(pages, expected);
   assert.equal(built.pages, expected.length);
 });
@@ -171,7 +177,115 @@ test("an external container is listed outside the system, never as one of its pa
   const page = readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8");
   const table = page.slice(page.indexOf("<table"), page.indexOf("</table>"));
   assert.doesNotMatch(table, /Agents/);
-  assert.match(page, /<h2 id="outside-title">Outside it<\/h2>\s*<ul><li><strong>Agents<\/strong> \(Sample sessions\)/);
+  assert.match(page, /<h2 id="outside-title">Outside it<\/h2>\s*<ul><li id="part-hub-agents"><strong>Agents<\/strong> \(Sample sessions\)/);
   assert.match(page, /Its 3 parts, .*, and the 1 it works with outside it\./);
   assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts and how they connect/);
+});
+
+// Flows (design section 4, "Animated flows"). Read from the fixture's own steps, not through
+// the renderer's resolveFlow, so a mistake there cannot agree with itself here.
+const stepFile = (/** @type {string} */ flow, /** @type {number} */ n) => readFileSync(join(out, "flows", flow, String(n), "index.html"), "utf8");
+const edge = (/** @type {string} */ id) => model.relationships.find((/** @type {any} */ r) => r.id === id);
+/** Every link's target in one region of a page, by the attribute that marks the link. */
+const hrefOf = (/** @type {string} */ page, /** @type {string} */ rel) => page.match(new RegExp(`<a rel="${rel}" href="([^"]+)"`))?.[1];
+
+test("the fixtures carry flows enough to test with: one with a middle step", () => {
+  assert.ok(model.flows.length >= 2);
+  assert.ok(model.flows.some((/** @type {any} */ f) => f.steps.length >= 3));
+});
+
+test("every step of every flow has its page, saying the flow's name, where it is and what happens", () => {
+  let seen = 0;
+  for (const f of model.flows) {
+    assert.ok(existsSync(join(out, "flows", f.id, "index.html")), `${f.id} has no page`);
+    f.steps.forEach((/** @type {any} */ st, /** @type {number} */ i) => {
+      const page = stepFile(f.id, i + 1);
+      assert.ok(page.includes(`<h1>${f.name.replace("'", "&#39;")}</h1>`), `${f.id} step ${i + 1} does not name its flow`);
+      assert.ok(page.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${i + 1} does not say where it is`);
+      assert.ok(page.includes(`<p class="flow-text">${st.text.replace("'", "&#39;")}</p>`), `${f.id} step ${i + 1} does not say what happens`);
+      seen++;
+    });
+  }
+  assert.equal(seen, model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.steps.length, 0));
+});
+
+test("Back and Next chain every step to the next both ways, with no Back on the first and no Next on the last", () => {
+  let links = 0;
+  for (const f of model.flows) {
+    const total = f.steps.length;
+    for (let n = 1; n <= total; n++) {
+      const page = stepFile(f.id, n);
+      assert.equal(hrefOf(page, "prev"), n > 1 ? stepPath(f.id, n - 1) : undefined, `${f.id} step ${n}'s Back`);
+      assert.equal(hrefOf(page, "next"), n < total ? stepPath(f.id, n + 1) : undefined, `${f.id} step ${n}'s Next`);
+      if (n < total) {
+        assert.equal(hrefOf(stepFile(f.id, n + 1), "prev"), stepPath(f.id, n), `${f.id} step ${n + 1} does not lead back to ${n}`);
+        links += 2;
+      }
+      // The list of all steps is on every step, the shown one marked.
+      for (let k = 1; k <= total; k++) assert.ok(page.includes(`href="${stepPath(f.id, k)}" data-go="${k}"${k === n ? ' aria-current="step"' : ""}>`), `${f.id} step ${n} does not list step ${k}`);
+    }
+  }
+  assert.equal(links, model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + 2 * (f.steps.length - 1), 0));
+});
+
+test("each step page names exactly the parts its step touches, and its drawing lights exactly them", () => {
+  for (const f of model.flows) {
+    f.steps.forEach((/** @type {any} */ st, /** @type {number} */ i) => {
+      const page = stepFile(f.id, i + 1);
+      const r = edge(st.relationship);
+      const want = [...new Set([r.from, r.to, ...(st.lights ?? [])])].sort();
+      const touches = page.slice(page.indexOf('<ul class="flow-touches">'), page.indexOf("</ul>", page.indexOf('<ul class="flow-touches">')));
+      const named = [...touches.matchAll(/<li data-part="([^"]+)"><a href="([^"]+)">/g)];
+      assert.deepEqual(named.map((m) => m[1]).sort(), want, `${f.id} step ${i + 1} names the wrong parts`);
+      for (const [, id, href] of named) {
+        const c = model.containers.find((/** @type {any} */ x) => x.id === id);
+        assert.equal(href, `${containersPath(c.system)}#part-${id}`);
+      }
+      const on = [...page.matchAll(/<path class="cap-system-map-wire" data-from="([^"]+)" data-to="([^"]+)" data-on/g)].map((m) => `${m[1]} ${m[2]}`);
+      assert.deepEqual(on, [`${r.from} ${r.to}`], `${f.id} step ${i + 1} draws the wrong line`);
+      const lit = [...page.matchAll(/<g class="cap-system-map-box" data-id="([^"]+)" data-lit/g)].map((m) => m[1]).sort();
+      assert.deepEqual(lit, [...(st.lights ?? [])].sort(), `${f.id} step ${i + 1} lights the wrong parts`);
+      assert.match(page, new RegExp(`data-id="${st.toward}"(?: data-lit)? data-at`));
+      assert.match(page, /<figure class="cap-system-map" data-cap="system-map" data-entered/);
+    });
+  }
+});
+
+test("a part's link from a step lands on its row on the parts page", () => {
+  const parts = readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8");
+  for (const c of model.containers.filter((/** @type {any} */ x) => x.system === "hub")) assert.ok(parts.includes(`id="part-${c.id}"`), `no anchor for ${c.id}`);
+});
+
+test("a flow step riding an edge the model does not have fails the build", async () => {
+  const bad = structuredClone(model);
+  bad.flows[0].steps[1].relationship = "hub-tick--reads--hub-worker";
+  const file = join(mkdtempSync(join(tmpdir(), "explorer-edge-")), "model.json");
+  writeFileSync(file, JSON.stringify(bad));
+  await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }), /rides hub-tick--reads--hub-worker, which is not a relationship/);
+  const away = structuredClone(model);
+  away.flows[0].steps[0].toward = "hub-tick";
+  assert.throws(() => allPages(away, stats), /goes toward hub-tick, which is not an end/);
+});
+
+test("a flow touching a private system or a part not in the public model renders nothing", () => {
+  const viaEdge = structuredClone(model);
+  viaEdge.flows[0].steps[0].relationship = "hub--coordinates--vault";
+  viaEdge.flows[0].steps[0].toward = "vault";
+  assert.throws(() => allPages(viaEdge, stats), /touches .*private system|not a part in the public model/);
+  const viaLight = structuredClone(model);
+  viaLight.flows[0].steps[0].lights = ["vault-db"];
+  assert.throws(() => allPages(viaLight, stats), /touches vault-db, which is not a part in the public model/);
+  // A part listed under a private system (the filter never writes one) is refused too.
+  const viaPart = structuredClone(model);
+  viaPart.containers.push({ id: "vault-db", system: "vault", name: "Vault store", kind: "database", technology: "D1" });
+  viaPart.flows[0].steps[0].lights = ["vault-db"];
+  assert.throws(() => allPages(viaPart, stats), /touches vault-db, a part of vault, which is not public/);
+});
+
+test("the core's page and its parts page link each flow over its parts, and a system it does not touch does not", () => {
+  for (const page of [join(out, "s", "hub", "index.html"), join(out, "s", "hub", "containers", "index.html")]) {
+    const text = readFileSync(page, "utf8");
+    for (const f of model.flows) assert.ok(text.includes(`href="${flowPath(f.id)}"`), `${page} does not link ${f.id}`);
+  }
+  assert.doesNotMatch(readFileSync(join(out, "s", "kit", "index.html"), "utf8"), /href="\/flows\//);
 });

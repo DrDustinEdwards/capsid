@@ -118,7 +118,7 @@ test("j with focus on row 3 moves focus to row 4", async ({ page }) => {
 // Defect 8 (SC 2.5.3): the Search button's name contains its visible word.
 test("the Search button's accessible name contains Search", async ({ page }) => {
   await visit(page, "health");
-  const btn = page.locator("nav.cap-admin-strip button").filter({ hasText: "Search" });
+  const btn = page.locator("header.cap-site-header button").filter({ hasText: "Search" });
   await expect(btn).toHaveCount(1);
   await expect(btn).toHaveAccessibleName(/^Search\b/);
   // And the command menu's input has a name.

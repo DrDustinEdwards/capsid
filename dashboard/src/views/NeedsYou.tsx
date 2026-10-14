@@ -6,7 +6,7 @@ import { PROBLEM_ROWS, attentionGroups, hasSites, type AttentionRow, type Kind }
 import { ago, ms } from "../lib/format";
 import type { InboxApp, InboxItem } from "../types";
 import { Anchors } from "../ui/anchors";
-import { St } from "../ui/icons";
+import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
@@ -66,7 +66,8 @@ export function NeedsYou() {
 // ---- By app ----------------------------------------------------------------------------
 
 // One block per app with something waiting, worst first, then one line naming the quiet
-// ones, so the admin strip's badges and this page always agree.
+// ones, so the admin strip's badges and this page always agree. The total is the header
+// inbox's number, so the heading does not repeat it.
 function ByApp() {
   const { feed, now } = useApp();
   const inbox = feed.live.inbox;
@@ -78,7 +79,6 @@ function ByApp() {
       title="By app"
       id="by-app"
       section="By app"
-      count={inbox.count}
       src={`inbox read ${ago(ms(inbox.generated), now)}`}
       footer={quiet.length > 0 ? <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span> : undefined}
     >
@@ -115,21 +115,30 @@ function AppBlock({ app }: { app: InboxApp }) {
   );
 }
 
+// Every row is a link, styled the same (Dustin's review of 2026-10-11: the first row was black
+// text and the rest links): an item with a page opens it; a blocked job or a question with no
+// pull request opens the job's panel here; anything else is plain text in the same weight.
 function InboxRow({ item }: { item: InboxItem }) {
-  const { now } = useApp();
+  const { now, open } = useApp();
   const k = KIND[item.kind] ?? { label: item.kind, kind: "blocked" as const };
   return (
     <li className="inbox-item">
       <span className="kind">
-        <St kind={k.kind}>{k.label}</St>
+        <InboxMark kind={item.kind} tone={k.kind === "blocked" ? "warn" : k.kind}>
+          {k.label}
+        </InboxMark>
       </span>
       <span className="what">
         {item.link ? (
           <a href={item.link} target="_blank" rel="noreferrer noopener">
             {item.title}
           </a>
+        ) : item.job ? (
+          <button type="button" className="linkbtn" onClick={() => open(`job:${item.job}`)}>
+            {item.title}
+          </button>
         ) : (
-          <b>{item.title}</b>
+          <span>{item.title}</span>
         )}
       </span>
       <span className="when">{ago(ms(item.since), now)}</span>

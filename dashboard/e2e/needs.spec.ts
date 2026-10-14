@@ -32,9 +32,10 @@ test("PLANT: the home address is Needs you, with each app that has something wai
   expect(names.at(-1), "the app with only a machine fault comes after the ones that need a person").toMatch(/^Sample F\b.*failing/);
   await expect(byApp(page).getByText(/^Nothing waiting: /)).toContainText("Sample D");
   // An item with a link opens it; one without is plain text.
-  await expect(byApp(page).getByRole("link", { name: /PR #32 waits for the seat/ })).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
-  // The rail's count is the inbox's count, the number the admin strip's badge shows.
-  await expect(page.locator("nav.cap-admin-menu").getByRole("link", { name: "Needs you, 6 waiting on you" })).toHaveCount(1);
+  await expect(byApp(page).getByRole("link", { name: /PR #32 waits for you/ })).toHaveAttribute("href", "https://github.com/example-org/sample-c/pull/32");
+  // The inbox's count is the header's Inbox, once; the menu entry carries no second copy.
+  await expect(page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 6 waiting on you" })).toHaveCount(1);
+  await expect(page.locator("nav.cap-admin-menu").getByRole("link", { name: /^Needs you/ })).toHaveAccessibleName("Needs you");
   // The attention list is here too, under the inbox.
   await expect(page.getByRole("heading", { level: 2, name: "Needs attention" })).toBeVisible();
 });
