@@ -1,6 +1,6 @@
 # CLAUDE.md - capsid
 
-A single-user Cloudflare Worker serving the portfolio's knowledge base (D1, R2) over MCP, reaching GitHub through an App. Live: https://mcp.dustinedwards.info/mcp; Portal https://portal.dustinedwards.info. Public MIT repo. Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting; they outrank this file. Rule detail loads from `.claude/rules/` when you touch its files.
+A Cloudflare Worker, run by its owner and the co-owners in `CO_OWNER_EMAILS`, serving the portfolio's knowledge base (D1, R2) over MCP, reaching GitHub through an App. Live: https://mcp.dustinedwards.info/mcp; Portal https://portal.dustinedwards.info. Public MIT repo. Read `capsid/conventions.md` and `capsid/core.md` in Capsid before acting; they outrank this file. Rule detail loads from `.claude/rules/` when you touch its files.
 
 ## Commands
 
