@@ -37,6 +37,8 @@ Each figure is a count or a rate across every agent and project, and a rate draw
 4. The session marks the task done by naming that pull request. The pull request is the record of the work ([docs/work-queue.md](docs/work-queue.md), `completeUnclaimed` in `src/jobs-seat.ts`).
 5. Capsid reads the pull request from GitHub and stores what it finds beside what the session said. A task that reaches a push, a deploy, a secret, a database change or a merge stops and waits, with the exact command a person must run.
 
+A pull request that changes what people see waits for the owner to look at its before-and-after screenshots, and Capsid alerts him with a preview.
+
 Agents open pull requests and never merge them. The owner merges, or Capsid merges by itself where a signed policy allows it and every check passes ([docs/autonomy.md](docs/autonomy.md)).
 
 ## What is inside
@@ -49,11 +51,13 @@ Agents open pull requests and never merge them. The owner merges, or Capsid merg
 - **Daily backups.** Every table is copied to R2 each morning and mirrored to a private repository, and a weekly run practises a restore ([docs/backups.md](docs/backups.md)).
 - **Off by default.** An optional loop that proposes improvements to the code, and automatic merging, each have to be turned on.
 
-The owner also has an admin app, the Capsid Portal, which shows the health of each site, the task list and the controls. It is being rebuilt, so only one screen is shown here ([docs/portal.md](docs/portal.md)).
+The owner also has an admin app, the Capsid Portal, at portal.dustinedwards.info. It shows what needs the owner, the health of each site, the task list, open pull requests and the controls ([docs/portal.md](docs/portal.md)). The pictures below are drawn from sample data, not from the live site.
 
 ![The Portal's Health screen, light theme, drawn from sample data](docs/images/health-light.png)
 
 ![The Portal's Health screen, dark theme, drawn from sample data](docs/images/health-dark.png)
+
+![The Portal's task list with one task's details open, drawn from sample data](docs/images/queue-drawer-light.png)
 
 ## What Capsid is not
 

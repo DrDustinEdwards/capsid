@@ -488,7 +488,7 @@ function pushView(): PortalPush {
     problem: null,
     devices: pushDevices,
     // Off until Email Routing is on, as the Worker says it (src/digest.ts digestProblem).
-    digest: { on: false, problem: 'Email Routing is not on: EMAIL_ROUTING is unset, not "on". Dustin turns Email Routing on for the domain and verifies the address, then the seat sets EMAIL_ROUTING to "on" (docs/portal.md, "Daily digest").', to: null, hour_utc: 12, last: null },
+    digest: { on: false, problem: 'Email Routing is not on: EMAIL_ROUTING is unset, not "on". The owner turns Email Routing on for the domain and verifies the address, then the seat sets EMAIL_ROUTING to "on" (docs/portal.md, "Daily digest").', to: null, hour_utc: 12, last: null },
   };
 }
 
