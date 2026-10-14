@@ -45,7 +45,7 @@ test("nothing is created without --apply", () => {
 function readTaskFile(path: string): string {
   const buf = readFileSync(path);
   assert.deepEqual([buf[0], buf[1]], [0xff, 0xfe], "the task file must start with a UTF-16 LE byte-order mark");
-  return buf.subarray(2).toString("utf16le");
+  return new TextDecoder("utf-16le").decode(buf.subarray(2));
 }
 
 /** A strict enough well-formedness check for the task XML: one prolog, one root,

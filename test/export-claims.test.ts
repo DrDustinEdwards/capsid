@@ -147,7 +147,7 @@ test("an export writes every table, and the manifest's hashes and counts match t
     assert.equal(readFileSync(join(out, "job_touches.jsonl"), "utf8"), "");
 
     const manifestBytes = readFileSync(join(out, "manifest.json"));
-    assert.deepEqual(JSON.parse(manifestBytes.toString("utf8")), manifest);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(manifestBytes)), manifest);
     assert.equal(readFileSync(join(out, "manifest.sha256"), "utf8"), `${sha256Hex(manifestBytes)}  manifest.json\n`);
     assert.deepEqual(readdirSync(out).sort(), [...EXPORT_TABLES.map((t) => `${t}.jsonl`), "manifest.json", "manifest.sha256"].sort());
   });
