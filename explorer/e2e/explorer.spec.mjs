@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 import { eachTheme, expectNoAxeViolations } from "capsomer/testing";
 
-const PAGES = ["/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/vault/", "/s/gone/", "/nope"];
+const PAGES = ["/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/vault/", "/s/gone/", "/flows/sample-round/", "/flows/sample-round/1/", "/flows/sample-round/2/", "/nope"];
 
 /**
  * Every console error, page error and policy violation the page raises. A failed load is one
@@ -25,6 +25,23 @@ async function watch(page, expect404 = false) {
   });
   page.on("pageerror", (e) => problems.push(e.message));
   return problems;
+}
+
+/**
+ * Counts each animation started on the map's token: a finished one leaves getAnimations(), so
+ * the count is what says the token travelled.
+ * @param {import("@playwright/test").Page} page
+ */
+async function countTokenMoves(page) {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    w.tokenMoves = 0;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (...args) {
+      if (this.classList.contains("cap-system-map-token")) w.tokenMoves++;
+      return animate.apply(this, args);
+    };
+  });
 }
 
 eachTheme((theme) => {
@@ -71,9 +88,73 @@ eachTheme((theme) => {
   });
 
   test("behaviour: nothing is wider than a phone's screen", async ({ page }) => {
-    await page.goto("/s/hub/containers/");
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.goto("/");
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const path of ["/s/hub/containers/", "/", "/flows/sample-round/2/"]) {
+      await page.goto(path);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), path).toBe(true);
+    }
+  });
+
+  test("flow: number keys and Next step the flow in place, the address follows, and a token travels the line", async ({ page }) => {
+    const problems = await watch(page);
+    await countTokenMoves(page);
+    await page.goto("/flows/sample-round/1/");
+    const map = page.locator(".cap-system-map");
+    await expect(map).toHaveAttribute("data-flow", "sample-round");
+    await expect(map).toHaveAttribute("data-step", "1");
+    await expect(page.locator("[data-keys]")).toBeVisible();
+    const loads = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+
+    await page.keyboard.press("3");
+    await expect(page).toHaveURL(/\/flows\/sample-round\/3\/$/);
+    await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
+    await expect(map).toHaveAttribute("data-step", "3");
+    await expect(page.locator(".cap-system-map-wire[data-on]")).toHaveAttribute("data-from", "hub-tick");
+    await expect(page.locator(".flow-touches li")).toHaveCount(2);
+    await expect(page.locator(".flow-nav a[rel='next']")).toHaveCount(0);
+
+    await page.locator(".flow-nav a[rel='prev']").click();
+    await expect(page).toHaveURL(/\/flows\/sample-round\/2\/$/);
+    await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
+    // Focus stays on Back, now step 2's own Back.
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("rel"))).toBe("prev");
+    // The token moved for the load, for 3 and for Back: one animation each.
+    expect(await page.evaluate(() => /** @type {any} */ (window).tokenMoves)).toBe(3);
+
+    await page.goBack();
+    await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
+    await expect(map).toHaveAttribute("data-step", "3");
+    // Every step happened in the one page.
+    expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(loads);
+    expect(problems).toEqual([]);
+  });
+
+  test("flow: under reduced motion a step jumps, with no animation running", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const problems = await watch(page);
+    await countTokenMoves(page);
+    await page.goto("/flows/sample-round/1/");
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-step", "1");
+    await page.keyboard.press("2");
+    await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
+    await expect(page.locator(".cap-system-map-token")).toBeVisible();
+    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    await page.locator(".flow-nav a[rel='next']").click();
+    await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
+    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await page.evaluate(() => /** @type {any} */ (window).tokenMoves)).toBe(0);
+    expect(problems).toEqual([]);
+  });
+
+  test("flow: with no script every step is its own page, drawn at its step", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false, colorScheme: theme });
+    const page = await context.newPage();
+    await page.goto("/flows/sample-round/1/");
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-entered", "");
+    await expect(page.locator(".cap-system-map-wire[data-on]")).toHaveCount(1);
+    await page.locator(".flow-nav a[rel='next']").click();
+    await expect(page).toHaveURL(/\/flows\/sample-round\/2\/$/);
+    await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
+    await expect(page.locator(".cap-system-map-box[data-at]")).toHaveAttribute("data-id", "hub-db");
+    await context.close();
   });
 });
