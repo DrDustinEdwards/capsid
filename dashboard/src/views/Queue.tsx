@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { ChartSlot } from "../ui/Enar";
+import { lazy, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { fetchStale } from "../lib/api";
@@ -11,6 +12,10 @@ import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
+
+// Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
+// Enarratio's area chart stays out of the initial bundle.
+const QueueChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.QueueChart })));
 
 // Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
 // the job each is bound to, the key, its last event, whether it waits on a person, and
@@ -205,6 +210,9 @@ export function Queue() {
     <div className="page">
       <Anchors />
       <PageHead title="Queue" />
+      <ChartSlot>
+        <QueueChart />
+      </ChartSlot>
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />

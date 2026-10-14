@@ -34,7 +34,7 @@ function githubSays(names: string[]): PublicBuildReaders {
     statsRows: async (_env, _now, systems) => NO_ROWS(systems),
   };
 }
-const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "dustinedwards-mcp", "claude-skills", ...PRIVATE_REPOS];
+const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", ...PRIVATE_REPOS];
 
 test("the build runs once a UTC day and stores the filtered bundled model", async () => {
   const kv = fakeKv();

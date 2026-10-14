@@ -284,6 +284,8 @@ export interface OpsAwaitingSeat {
   class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
   path_class?: string | null;
   class_reasons?: string[];
+  // The head the tick judged; the Portal's Approve sends it as the sha approved.
+  head_sha?: string;
 }
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is
@@ -1042,6 +1044,16 @@ export interface TrendMergeWeek {
   closed: number; // closed without merging, from chat or the Portal
 }
 
+export interface TrendCostWeek {
+  week: string;
+  start: string;
+  // Model spend of the jobs that ended that week, from their outcome rows' telemetry
+  // cost. Null when no outcome that week carried a cost, which is not a spend of zero.
+  usd: number | null;
+  // Outcome rows that carried a cost.
+  jobs: number;
+}
+
 export interface TrendBackupSlot {
   key: string; // a day, a week's Monday, or a month (YYYY-MM)
   filled: boolean;
@@ -1070,6 +1082,8 @@ export interface PortalTrends {
   minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
   queue: TrendQueueDay[];
   merges: { weeks: TrendMergeWeek[]; rollbacks: Array<{ at: string; repo: string; pr: number | null; outcome: "rolled_back" | "rollback_failed" }> };
+  // Visual 6: model spend per week (a read-only sum over job_outcomes.cost_usd).
+  cost: { weeks: TrendCostWeek[] };
   // null slots and runs, with error set, when the bucket could not be listed.
   backups: { slots: { daily: TrendBackupSlot[]; weekly: TrendBackupSlot[]; monthly: TrendBackupSlot[] } | null; runs: number | null; error: string | null };
   // Read from GitHub and kept an hour; a repo that could not be read is in not_read.

@@ -109,13 +109,13 @@
     },
     {
       "id": "dustinedwards-mcp",
-      "name": "dustinedwards-mcp",
+      "name": "Dustin Edwards Admin",
       "short": "Site MCP",
       "family": "plumbing",
       "ring": "used",
       "public": true,
-      "description": "Publishes posts to dustinedwards.info from a chat.",
-      "repos": ["DrDustinEdwards/dustinedwards-mcp"]
+      "description": "Runs dustinedwards.info from a chat: site health, mentions, media, registries, citations and lab procedures. Writing is Carrel's.",
+      "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
     {
       "id": "skills",
@@ -265,7 +265,7 @@
     { "from": "carrel", "to": "site-api", "kind": "installs" },
     { "from": "carrel", "to": "dustinedwards-info", "kind": "publishes-to" },
     { "from": "carrel", "to": "germomics", "kind": "publishes-to" },
-    { "from": "dustinedwards-mcp", "to": "dustinedwards-info", "kind": "publishes-to" },
+    { "from": "dustinedwards-mcp", "to": "dustinedwards-info", "kind": "writes" },
     { "from": "capsid", "to": "capsomer", "kind": "coordinates" },
     { "from": "capsid", "to": "carrel", "kind": "coordinates" },
     { "from": "capsid", "to": "dustinedwards-info", "kind": "coordinates" },
