@@ -60,6 +60,7 @@ const CHECK_WORDS: Record<string, string> = {
   ci_green: "its checks are not green",
   head_moved: "a push landed after it was judged",
   unit_suspended: "its merge unit is suspended",
+  visual_awaits_look: "it changes what people see, so it waits for your look",
   namespace_paused: "its app is paused",
   changes_existing_test: "it changes an existing test",
 };
