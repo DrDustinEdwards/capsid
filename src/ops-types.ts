@@ -285,6 +285,8 @@ export interface OpsAwaitingSeat {
   class?: "auto" | "approve" | "typed" | "seat" | "wait" | null;
   path_class?: string | null;
   class_reasons?: string[];
+  // The head the tick judged; the Portal's Approve sends it as the sha approved.
+  head_sha?: string;
 }
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is

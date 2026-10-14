@@ -109,6 +109,17 @@ test("a pull request awaiting the seat has Close, which asks a reason and previe
   await expect(page.locator(".msg-region")).toContainText(`Closed ${name}.`);
 });
 
+test("a pull request classed approve has Approve, which previews the approval at the head the tick judged", async ({ page }) => {
+  await visit(page, "prs");
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  await performLeavesFeed(page, "approve_pr", "Approved example-org/sample-c#32. It merges once CI is green on 4f2c9a1.");
+  await awaiting.getByRole("button", { name: "Approve example-org/sample-c #32", exact: true }).click();
+  const d = await previewWith(page, null);
+  await expect(d).toContainText("approved at 4f2c9a1");
+  await d.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.locator(".msg-region")).toContainText("Approved example-org/sample-c#32. It merges once CI is green on 4f2c9a1.");
+});
+
 test("the Queue's Tonight section lists the planned jobs per repo, marks a gated one, and a row opens its job", async ({ page }) => {
   await visit(page, "queue");
   const tonight = page.locator("main section#tonight");
