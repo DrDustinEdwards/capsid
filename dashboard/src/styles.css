@@ -523,3 +523,8 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
   .auto-row { grid-template-columns: minmax(0, 1fr); }
   .auto-row .runs { grid-column: 1; }
 }
+
+/* A visual pull request's preview and screenshots in Awaiting the seat (Ci.tsx). */
+.visual-look { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--text); }
+.visual-look > span:first-child { flex-basis: 100%; }
+.visual-look a { white-space: nowrap; }

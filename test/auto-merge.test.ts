@@ -1922,3 +1922,38 @@ test("Dustin's approval still merges a PR in a paused namespace, and one that ch
     assert.equal(calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length, 1);
   });
 });
+
+// A pull request labelled visual waits for Dustin's look (src/visual-pr.ts,
+// job_0368576da167): held as class approve with what he needs to look at, judged even when
+// its body names no job, and merged by his approval on green CI.
+
+function visualRoutes(body: string) {
+  const routes = tickRoutes(["docs/autonomy.md"]);
+  const [pr] = routes[`GET ${OWNER}/pulls`].body;
+  return { ...routes, [`GET ${OWNER}/pulls`]: { body: [{ ...pr, title: "New header", body, labels: [{ name: "visual" }] }] } };
+}
+
+test("PLANT: a visual PR the policy would merge is held for Dustin's look, with its preview and screenshots", async () => {
+  const { outcome, merges } = await tickWith(await enabledEnv(), visualRoutes("Closes job_4c0ecc28548b.\n\nPreview: https://pr-23.sample.workers.dev/\n\n![after](https://example.com/after.png)"));
+  assert.equal(merges, 0, "a visual PR was merged unattended");
+  assert.equal(outcome.failed, "visual_awaits_look");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.deepEqual(outcome.visual, { title: "New header", preview: "https://pr-23.sample.workers.dev/", shots: ["https://example.com/after.png"] });
+});
+
+test("a visual PR whose body names no job is still judged and waits for Dustin as class approve", async () => {
+  const { outcome, merges } = await tickWith(await enabledEnv(), visualRoutes("A redesign, no job here."));
+  assert.equal(merges, 0);
+  assert.equal(outcome.failed, "body_names_job");
+  assert.equal(outcome.merge_class?.class, "approve");
+  assert.equal(outcome.visual?.title, "New header");
+});
+
+test("Dustin's approval merges a visual PR on green CI", async () => {
+  const a = withApprovals(await enabledEnv(), [approval()]);
+  await withFetch(visualRoutes("Closes job_4c0ecc28548b.") as never, async (calls) => {
+    const report = await autoMergeTick(a.env, new Date("2026-09-25T12:00:00Z"));
+    assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
+    assert.equal(calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length, 1);
+  });
+});

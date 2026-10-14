@@ -13,17 +13,20 @@ import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys 
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
-// Portal's Settings, for exactly five things:
+// Portal's Settings, for exactly six things:
 //   1. a `typed` pull request (a money path) waiting more than 2 hours;
 //   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
 //   3. a job at the correction cap (blocked with the retry-cap reason);
 //   4. a question over 4 hours old on a job with priority 70 or more;
-//   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts).
+//   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts);
+//   6. a pull request labelled visual waiting for Dustin to look at it (src/visual-pr.ts),
+//      once per head, so a new push asks again (job_0368576da167).
 // Everything else waits for the digest.
 //
 // No alert carries an Approve button. The button was for `approve`-class pull requests,
-// and none of the five triggers is one: a typed PR is approved only by typing its number
-// (design section 8), and the other four are not pull requests. So there is no
+// and no trigger carries one: a typed PR is approved only by typing its number (design
+// section 8), a visual PR is approved after looking at its preview in the Portal, and the
+// other four are not pull requests. So there is no
 // /ops/approve route: a tap opens the Portal, where every answer is given. An alert names
 // the repo, the pull request or job id and the class, never a title.
 //
@@ -43,7 +46,7 @@ const MAX_PER_TICK = 3;
 const MAX_DEVICES = 10;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
-export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused";
+export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr";
 
 export interface Urgent {
   key: string;
@@ -75,7 +78,7 @@ async function readState(env: Env): Promise<PushState> {
 
 const hours = (ms: number) => `${Math.floor(ms / 3_600_000)}h`;
 
-/** The five triggers, from what the tick, the watcher and the queue already keep. Reads
+/** The six triggers, from what the tick, the watcher and the queue already keep. Reads
  *  only; `typedSeen` is updated in place with the typed PRs seen now. */
 async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, string>): Promise<Urgent[]> {
   const out: Urgent[] = [];
@@ -97,6 +100,20 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     }
   }
   for (const id of Object.keys(typedSeen)) if (!typedNow.has(id)) delete typedSeen[id];
+
+  // 6. Visual pull requests, from the same set, sent at once: a look is quick, and the
+  // key carries the head, so each new push asks again.
+  for (const a of Array.isArray(awaiting) ? awaiting : []) {
+    if (!a.visual) continue;
+    const id = `${a.repo}#${a.number}`;
+    out.push({
+      key: `visual:${id}:${a.head_sha ?? a.at}`,
+      kind: "visual-pr",
+      namespace: a.namespace,
+      title: "Visual change to look at",
+      body: `${id} changes what people see. Open the Portal for its preview and screenshots, then approve it there.`,
+    });
+  }
 
   // 2. Rollbacks the watcher recorded.
   const since = new Date(t - RECENT_MS).toISOString().replace("T", " ").slice(0, 19);

@@ -16,6 +16,7 @@ import {
   ciVerdict,
 } from "./auto-merge-policy";
 import { logEvent } from "./log";
+import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
 
 // The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
@@ -23,7 +24,9 @@ import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenAppro
 
 interface OpenPr {
   number: number;
+  title?: string | null;
   body: string | null;
+  labels?: Array<{ name?: string }> | null;
   base: { ref: string };
   // repo is null when the head was on a fork that has since been deleted.
   head: { sha: string; repo?: { full_name?: string } | null };
@@ -151,7 +154,7 @@ export function declineParams(
   // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts),
   // "namespace_paused" when the safety shutoff paused the namespace (src/merge-safety.ts),
   // or "changes_existing_test" when the PR edits an existing test (src/merge-class.ts).
-  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test"; why: string; passed: PolicyCheck[] },
+  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test" | "visual_awaits_look"; why: string; passed: PolicyCheck[] },
   now: Date
 ): Record<string, unknown> {
   return {
@@ -245,6 +248,9 @@ export interface AutoMergeOutcome {
   // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
   // files were never read (the body names no job, or the tick threw).
   merge_class?: Classification | null;
+  // For a pull request labelled visual: what Dustin looks at before he approves it
+  // (src/visual-pr.ts).
+  visual?: VisualPr;
 }
 
 // Where the awaiting-seat set lives. Rewritten whole on every tick rather than
@@ -269,6 +275,8 @@ export interface AwaitingSeat {
   // The head the tick judged (absent on sets written before this field). The Portal's
   // Approve sends it as the sha Dustin approved, so a later push voids the approval.
   head_sha?: string;
+  // A pull request labelled visual: its title, preview and screenshots (src/visual-pr.ts).
+  visual?: VisualPr;
 }
 
 export interface AutoMergeReport {
@@ -342,8 +350,11 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
 
     for (const pr of prs) {
       // A PR whose body names no job is declined before any GitHub read, since
-      // body_names_job refuses it anyway and the reads share the rate limit.
-      if (!jobIdFromBody(pr.body ?? "")) {
+      // body_names_job refuses it anyway and the reads share the rate limit. A visual PR,
+      // or one Dustin approved, is judged all the same: body_names_job leaves it class
+      // approve, so his approval merges it on green CI (job_0368576da167).
+      const visual = isVisual(pr);
+      if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number)) {
         const skipped = {
           failed: "body_names_job" as const,
           why: "the PR body names no job id, so there is no request this change can be traced back to. Its files and checks were not read.",
@@ -370,7 +381,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       const before = outcomes.length;
       try {
         try {
-          await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused);
+          await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused, visual);
         } catch (err) {
           const why = err instanceof Error ? err.message : String(err);
           logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
@@ -393,7 +404,10 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           }
         }
       } finally {
-        for (let k = before; k < outcomes.length; k++) outcomes[k]!.head_sha ??= pr.head.sha;
+        for (let k = before; k < outcomes.length; k++) {
+          outcomes[k]!.head_sha ??= pr.head.sha;
+          if (visual && !outcomes[k]!.merged) outcomes[k]!.visual = visualDetails(pr);
+        }
       }
     }
   }
@@ -421,6 +435,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       path_class: o.merge_class?.path_class ?? null,
       class_reasons: o.merge_class?.reasons ?? [],
       ...(o.head_sha ? { head_sha: o.head_sha } : {}),
+      ...(o.visual ? { visual: o.visual } : {}),
     }));
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));
@@ -458,7 +473,9 @@ async function judgeOnePr(
   // The units the signed policy promoted to auto, each `<namespace> / <path class>`.
   units: readonly string[] = [],
   // The namespaces the safety shutoff paused, or "all" when they could not be read.
-  paused: PausedNamespaces = new Map()
+  paused: PausedNamespaces = new Map(),
+  // Labelled visual: it waits for Dustin's look even when the policy would merge it.
+  visual = false
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   // A promoted unit widens only the namespace's allowed paths (src/auto-merge-policy.ts).
@@ -466,13 +483,15 @@ async function judgeOnePr(
   const promotedUnit = pathClass && units.includes(`${namespace} / ${pathClass}`) ? { unit: `${namespace} / ${pathClass}` } : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
-  // Three holds that only narrow, each leaving the PR for Dustin as class approve (his
-  // approval still executes below): an existing test it changes (src/merge-class.ts), a
+  // Four holds that only narrow, each leaving the PR for Dustin as class approve (his
+  // approval still executes below): a visual change (src/visual-pr.ts), an existing test it changes (src/merge-class.ts), a
   // paused namespace (src/merge-safety.ts), and a unit a rollback suspended
   // (src/merge-units.ts). The policy would merge it, so it is held with the reason.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
-  let hold: { failed: "changes_existing_test" | "namespace_paused" | "unit_suspended"; reason: string } | null = null;
-  if (verdict.merge && facts.existingTestEdits.length > 0) {
+  let hold: { failed: "changes_existing_test" | "namespace_paused" | "unit_suspended" | "visual_awaits_look"; reason: string } | null = null;
+  if (verdict.merge && visual) {
+    hold = { failed: "visual_awaits_look", reason: "a visual change: Dustin looks at its preview or screenshots before it merges" };
+  } else if (verdict.merge && facts.existingTestEdits.length > 0) {
     hold = { failed: "changes_existing_test", reason: existingTestReason(facts.existingTestEdits) };
   } else if (verdict.merge && (paused === "all" || paused.has(namespace))) {
     hold = {
