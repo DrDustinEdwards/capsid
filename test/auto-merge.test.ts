@@ -1362,6 +1362,8 @@ test("PLANT: the awaiting-seat set carries each PR's merge class and why (report
     assert.equal(awaiting[0].class, cls, paths.join(", "));
     assert.equal(awaiting[0].path_class, pathClass);
     assert.ok(awaiting[0].class_reasons.length > 0, "a class with no reason");
+    // The Portal's Approve sends this sha, so it must be the head the tick judged.
+    assert.equal(awaiting[0].head_sha, HEAD_SHA);
   }
 });
 

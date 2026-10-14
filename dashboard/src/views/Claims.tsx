@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
@@ -10,6 +10,10 @@ import type { ClaimsAgreement, ClaimsAgreementCounts, ClaimsGroup, JobClaimRow, 
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
+
+// Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
+// lazy chunk as the Portal's other charts.
+const AgreementChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.AgreementChart })));
 
 interface Load<T> {
   data: T | null;
@@ -461,6 +465,11 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
           <div className="body faint">No read yet.</div>
         )}
       </Panel>
+      {data && data.groups.length > 0 && (
+        <Suspense fallback={null}>
+          <AgreementChart groups={data.groups} />
+        </Suspense>
+      )}
       {checks.length > 0 && (
         <Panel flush title="By check" count={checks.length} src="every agent above, summed">
           <div className="scroll-x reflow">

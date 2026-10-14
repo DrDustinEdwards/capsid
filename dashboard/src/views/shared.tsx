@@ -1,6 +1,6 @@
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
@@ -8,6 +8,7 @@ import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey }
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
+import { useWidth } from "../ui/useWidth";
 
 // The heading only: what a view is for is one line in the shortcut sheet (design D13).
 export function PageHead({ title }: { title: string }) {
@@ -348,25 +349,6 @@ export function IncidentFeed({ ns }: { ns?: string }) {
 }
 
 // ---- timeline panel ------------------------------------------------------------------------
-
-// The content-box width of an element, kept current as the layout changes (the window,
-// the rail collapsing).
-function useWidth(): [number | null, (el: HTMLElement | null) => void] {
-  const [w, setW] = useState<number | null>(null);
-  const obs = useRef<ResizeObserver | null>(null);
-  const ref = useCallback((el: HTMLElement | null) => {
-    obs.current?.disconnect();
-    obs.current = null;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const e = entries[entries.length - 1];
-      if (e) setW(e.contentRect.width);
-    });
-    ro.observe(el);
-    obs.current = ro;
-  }, []);
-  return [w, ref];
-}
 
 export function TimelinePanel({ title, days, src, id, section }: { title: string; days: number; src: string; id?: string; section?: string }) {
   const { feed, now } = useApp();

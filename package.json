@@ -31,7 +31,7 @@
     "report:bloat": "devkit-no-bloat"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/vitest-pool-workers": "0.23.0",
     "@cloudflare/workers-types": "5.20261006.1",
     "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.6.0",
     "@modelcontextprotocol/client": "2.2.0",
@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",
-    "@cloudflare/workers-oauth-provider": "1.1.0",
+    "@cloudflare/workers-oauth-provider": "1.2.3",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.4.1",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.3.0",
     "@modelcontextprotocol/server": "2.0.0",
