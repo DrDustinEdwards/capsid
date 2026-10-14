@@ -145,8 +145,10 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     .bind(MAX_BLOCKED)
     .all<{ id: string; namespace: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }>();
   // An unreadable cache or migrations table settles nothing: the job shows, as before.
-  const stale = blocked.results?.length ? (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache : {};
-  const applied = blocked.results?.length ? await appliedMigrations(env.DB) : null;
+  // Both are read whether or not a job is blocked, so the feed's stated read count
+  // (src/ops-feed.ts, OPS_FEED_READS) does not move with the data.
+  const stale = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
+  const applied = await appliedMigrations(env.DB);
   for (const job of blocked.results ?? []) {
     if (!blockSettled(job, stale, applied)) add(job.namespace, blockedJobItem(job));
   }
