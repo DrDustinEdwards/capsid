@@ -201,14 +201,56 @@ test("with the auto-prune on, the merged branch is deleted and audit-logged, and
   await withFetch(branchRoutes(), async (calls) => {
     const { env, audits } = branchEnv({ [PRUNE_SWITCH_KEY]: "on", [BRANCH_KEEP_KEY]: KEEP });
     const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
-    assert.deepEqual(deletes(calls), ["feat/merged-clean"], "never the default, a keep-listed branch, or one whose newest pull request is open");
-    assert.equal(got.pruned, 1);
-    assert.equal(audits.length, 1);
+    // The two orphans (no pull request, 39 and 7 days without a commit) go too, oldest first.
+    assert.deepEqual(deletes(calls), ["feat/merged-clean", "feat/old-orphan", "feat/new-orphan"], "never the default, a keep-listed branch, or one whose newest pull request is open");
+    assert.equal(got.pruned, 3);
+    assert.equal(audits.length, 3);
     assert.equal(audits[0][1], PRUNE_AUDIT_ACTION);
     assert.deepEqual(JSON.parse(audits[0][4] as string), { repo: "o/r", branch: "feat/merged-clean", sha: "a1", pr: 1 });
-    assert.match(lines(got.items, "branch-pruned")[0], /git push origin a1:refs\/heads\/feat\/merged-clean/);
+    assert.deepEqual(JSON.parse(audits[1][4] as string), { repo: "o/r", branch: "feat/old-orphan", sha: "n1", pr: null });
+    const pruned = lines(got.items, "branch-pruned");
+    assert.match(pruned[0], /git push origin a1:refs\/heads\/feat\/merged-clean/);
+    assert.match(pruned[1], /branch feat\/old-orphan was deleted: no open pull request and no commit for 39 days \(no pull request\)\. Put it back with git push origin n1:refs\/heads\/feat\/old-orphan/);
     assert.deepEqual(lines(got.items, "branch-merged"), []);
+    assert.deepEqual(lines(got.items, "branch-stale"), [], "with the prune on, an old branch is deleted, not listed");
   });
+});
+
+test("PLANT: with the auto-prune on, a branch under 2 days old and a screenshot branch an open pull request shows are kept", async () => {
+  const branches = [
+    { name: "main", commit: { sha: "m1" } },
+    { name: "feat/fresh", commit: { sha: "f1" } },
+    { name: "shots/in-use", commit: { sha: "s1" } },
+    { name: "old-shots", commit: { sha: "s2" } },
+  ];
+  COMMITTED.f1 = "2026-10-06T13:00:00Z";
+  COMMITTED.s1 = "2026-09-01T00:00:00Z";
+  COMMITTED.s2 = "2026-09-01T00:00:00Z";
+  const open = [{ ...ghPr(9, "feat/redesign", "r1", "open"), body: "![after](https://raw.githubusercontent.com/o/r/s1/after.png)" }];
+  const routes = { ...(branchRoutes(branches) as Record<string, unknown>), "GET /repos/o/r/pulls": (_b: unknown, p: URLSearchParams) => ({ body: p.get("state") === "open" ? open : [] }) };
+  await withFetch(routes as never, async (calls) => {
+    const { env } = branchEnv({ [PRUNE_SWITCH_KEY]: "on" });
+    const got = await gatherBranchItems(env, ["sample"], githubBranchReaders(env), NOW);
+    assert.deepEqual(deletes(calls), ["old-shots"], "a fresh branch, or screenshots an open pull request shows, was deleted");
+    assert.equal(got.pruned, 1);
+  });
+});
+
+test("an orphan is not deleted when a pull request list was not read in full", async () => {
+  const plan = { owner: "o", name: "r", repo: "o/r", defaultBranch: "main", branchesRead: 2, listsComplete: false, openComplete: true, prune: [], kept: [{ branch: "feat/x", reason: "no pull request", sha: "x1", orphan: true }] };
+  let asked = 0;
+  const fake: BranchReaders = {
+    plan: async () => plan,
+    committedAt: async () => "2026-09-01T00:00:00Z",
+    prune: async (p) => {
+      asked += p.prune.length;
+      return { deleted: [], skipped: [], remaining: 0 };
+    },
+  };
+  const { env } = branchEnv({ [PRUNE_SWITCH_KEY]: "on" });
+  const got = await gatherBranchItems(env, ["sample"], fake, NOW);
+  assert.equal(asked, 0, "an orphan was offered for deletion from an incomplete list");
+  assert.match(lines(got.items, "branch-stale")[0], /branch feat\/x has had no commit for 37 days/);
 });
 
 test("the pass deletes at most 25 merged branches per repo per run and says how many wait", async () => {

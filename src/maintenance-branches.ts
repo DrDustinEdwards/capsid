@@ -16,6 +16,13 @@ import { auditStatement } from "./store-guards";
 // sha it pointed at, so it can be put back. Every other branch with no open pull request
 // whose last commit is older than STALE_DAYS is listed with its age. A keep list, kept in
 // APP_KV with an empty default, names branches that are never pruned and never listed.
+//
+// With the switch on, a branch with no open pull request and no commit for ORPHAN_DAYS is
+// deleted too, in the same cap and with the same audit row (job_9dbaf2ecfd2c; Dustin,
+// 2026-10-14: every repo's branches down to the default and those with an open pull request
+// or active work). Only when every list was read in full, and never the default, a
+// protected, keep-listed or improve branch, or a screenshot branch an open pull request
+// still shows (src/github/prune.ts, shotsInUse).
 
 /** The switch the seat sets to "on" to let the pass delete merged branches. Anything else,
  *  or no key, is off. A KV key rather than a control: a control would add to a served
@@ -27,6 +34,7 @@ export const BRANCH_KEEP_KEY = "maintenance:branch-keep";
 
 export const PRUNE_CAP = 25;
 const STALE_DAYS = 30;
+const ORPHAN_DAYS = 2;
 // Commit dates read per repo per run; more stale candidates are listed as not checked.
 const AGE_READS_PER_REPO = 30;
 const MAX_ITEMS_PER_RULE = 50;
@@ -96,6 +104,7 @@ export async function gatherBranchItems(
       continue;
     }
     read[namespace] = plan.branchesRead;
+    let prunedHere = 0;
 
     if (settings.prune) {
       // One audit row per deleted branch, written before the next delete, with the sha it
@@ -105,6 +114,7 @@ export async function gatherBranchItems(
         await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: c.pr }).run();
       });
       pruned += done.deleted.length;
+      prunedHere = done.deleted.length;
       for (const c of done.deleted.slice(0, MAX_ITEMS_PER_RULE)) {
         items.push({
           rule: "branch-pruned",
@@ -142,7 +152,7 @@ export async function gatherBranchItems(
     if (orphans.length > reading.length) {
       items.push(notChecked(namespace, `${orphans.length - reading.length} branch(es) in ${plan.repo} with no open pull request had their age not read`));
     }
-    const stale: Array<{ branch: string; reason: string; age: number }> = [];
+    const stale: Array<{ branch: string; reason: string; age: number; sha: string; ms: number }> = [];
     for (const k of reading) {
       let at: string;
       try {
@@ -151,11 +161,35 @@ export async function gatherBranchItems(
         items.push(notChecked(namespace, `the last commit of ${plan.repo} branch ${k.branch}: ${err instanceof Error ? err.message : String(err)}`));
         continue;
       }
-      const age = days(now.getTime() - Date.parse(at));
-      if (age > STALE_DAYS) stale.push({ branch: k.branch, reason: k.reason, age });
+      const ms = now.getTime() - Date.parse(at);
+      stale.push({ branch: k.branch, reason: k.reason, age: days(ms), sha: k.sha, ms });
     }
-    stale.sort((a, b) => b.age - a.age);
-    for (const s of stale.slice(0, MAX_ITEMS_PER_RULE)) {
+    stale.sort((a, b) => b.ms - a.ms);
+
+    if (settings.prune && plan.listsComplete) {
+      const old = stale.filter((s) => s.ms >= ORPHAN_DAYS * 86_400_000);
+      const budget = Math.max(0, PRUNE_CAP - prunedHere);
+      const done = old.length === 0 ? { deleted: [], skipped: [], remaining: 0 } : await readers.prune({ ...plan, prune: old.map((s) => ({ branch: s.branch, sha: s.sha, pr: null })) }, budget, async (c) => {
+        await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: null }).run();
+      });
+      pruned += done.deleted.length;
+      const why = new Map(old.map((s) => [s.branch, s]));
+      for (const c of done.deleted.slice(0, MAX_ITEMS_PER_RULE)) {
+        const s = why.get(c.branch)!;
+        items.push({
+          rule: "branch-pruned",
+          namespace,
+          job: null,
+          line: `${plan.repo} branch ${c.branch} was deleted: no open pull request and no commit for ${s.age} days (${s.reason}). Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
+        });
+      }
+      for (const k of done.skipped) items.push({ rule: "branch-stale", namespace, job: null, line: `${plan.repo} branch ${k.branch} is old and was not pruned: ${k.reason}.` });
+      if (done.remaining > 0) {
+        items.push({ rule: "branch-stale", namespace, job: null, line: `${done.remaining} more old branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).` });
+      }
+      continue;
+    }
+    for (const s of stale.filter((x) => x.age > STALE_DAYS).slice(0, MAX_ITEMS_PER_RULE)) {
       items.push({ rule: "branch-stale", namespace, job: null, line: `${plan.repo} branch ${s.branch} has had no commit for ${s.age} days (${s.reason}): delete it, open its pull request, or keep-list it.` });
     }
   }
