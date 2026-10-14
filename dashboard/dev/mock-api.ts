@@ -649,10 +649,23 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.closedPrs.add(`${repo}#${number}`),
       };
     }
-    case "approve_pr":
-      // The inbox screens that approve are the merge pipeline's PR 5; until then the
-      // mock answers the way the Worker answers a pull request the tick has not classed.
-      throw new Refusal(400, `#${params.prs ?? ""} has no class: the tick has not classed it into the awaiting-seat set yet.`);
+    case "approve_pr": {
+      // As src/pr-approvals.ts plans it: the pull request must be in the awaiting-seat set,
+      // classed approve or auto, and approved at the head the tick judged.
+      const repo = need(params, "repo", "The repo");
+      const pr = need(params, "prs", "The pull request's number");
+      const sha = need(params, "shas", "The head sha you reviewed");
+      const a = f.live.awaiting_seat.find((x) => x.repo === repo && String(x.number) === pr);
+      if (!a) throw new Refusal(400, `${repo}#${pr} is not an open pull request the mock knows.`);
+      if (a.class !== "approve" && a.class !== "auto") throw new Refusal(400, `#${pr} is class ${a.class ?? "unclassed"}, which the Portal cannot approve.`);
+      if (a.head_sha !== sha) throw new Refusal(400, `#${pr} moved: its head is ${a.head_sha?.slice(0, 7) ?? "unknown"} now, not ${sha.slice(0, 7)}.`);
+      return {
+        summary: `Approve ${repo}#${pr} at ${sha.slice(0, 7)}.`,
+        done: `Approved ${repo}#${pr}. It merges once CI is green on ${sha.slice(0, 7)}.`,
+        changes: [`${repo}#${pr}: approved at ${sha.slice(0, 7)} (class ${a.class}). Nothing merges now; the next tick merges it on green CI.`],
+        apply: () => undefined,
+      };
+    }
     case "release_job": {
       const j = job();
       need(params, "reason", "A reason");

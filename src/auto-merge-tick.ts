@@ -238,6 +238,8 @@ export interface AutoMergeOutcome {
   merged: boolean;
   // The check that refused, for a PR left open.
   failed: string | null;
+  // The head the tick judged, which the Portal's Approve records as the sha Dustin saw.
+  head_sha?: string;
   why: string | null;
   passed: string[];
   // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
@@ -264,6 +266,9 @@ export interface AwaitingSeat {
   class?: MergeClass | null;
   path_class?: PathClass | null;
   class_reasons?: string[];
+  // The head the tick judged (absent on sets written before this field). The Portal's
+  // Approve sends it as the sha Dustin approved, so a later push voids the approval.
+  head_sha?: string;
 }
 
 export interface AutoMergeReport {
@@ -344,7 +349,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           why: "the PR body names no job id, so there is no request this change can be traced back to. Its files and checks were not read.",
           passed: [] as PolicyCheck[],
         };
-        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, ...skipped });
+        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, head_sha: pr.head.sha, ...skipped });
         try {
           const skippedFacts = { repo: `${owner}/${repo}`, number: pr.number, headSha: pr.head.sha };
           await auditDeclineOnChange(
@@ -364,27 +369,31 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // merged with the error, and an auto-merge-failed row says why.
       const before = outcomes.length;
       try {
-        await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused);
-      } catch (err) {
-        const why = err instanceof Error ? err.message : String(err);
-        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
-        // An outcome already pushed is the true one; only its audit row failed.
-        if (outcomes.length > before) continue;
-        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
         try {
-          await env.DB.batch([
-            improveAudit(env.DB, "auto-merge-failed", namespace, {
-              policy_version: policy.version,
-              repo: `${owner}/${repo}`,
-              pr: pr.number,
-              head_sha: pr.head.sha,
-              error: why,
-              at: now.toISOString(),
-            }),
-          ]);
-        } catch (auditErr) {
-          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` });
+          await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused);
+        } catch (err) {
+          const why = err instanceof Error ? err.message : String(err);
+          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
+          // An outcome already pushed is the true one; only its audit row failed.
+          if (outcomes.length > before) continue;
+          outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
+          try {
+            await env.DB.batch([
+              improveAudit(env.DB, "auto-merge-failed", namespace, {
+                policy_version: policy.version,
+                repo: `${owner}/${repo}`,
+                pr: pr.number,
+                head_sha: pr.head.sha,
+                error: why,
+                at: now.toISOString(),
+              }),
+            ]);
+          } catch (auditErr) {
+            logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` });
+          }
         }
+      } finally {
+        for (let k = before; k < outcomes.length; k++) outcomes[k]!.head_sha ??= pr.head.sha;
       }
     }
   }
@@ -411,6 +420,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       class: o.merge_class?.class ?? null,
       path_class: o.merge_class?.path_class ?? null,
       class_reasons: o.merge_class?.reasons ?? [],
+      ...(o.head_sha ? { head_sha: o.head_sha } : {}),
     }));
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));

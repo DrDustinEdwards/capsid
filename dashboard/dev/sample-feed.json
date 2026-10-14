@@ -1704,7 +1704,11 @@
         "number": 32,
         "failed": "auto-merge",
         "why": "namespace not in the auto-merge policy",
-        "at": "2026-09-23T00:00:00.000Z"
+        "at": "2026-09-23T00:00:00.000Z",
+        "class": "approve",
+        "path_class": "docs",
+        "class_reasons": ["the namespace is not in the policy, so it needs your approval"],
+        "head_sha": "4f2c9a1e8b7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f"
       }
     ],
     "overnight": {
