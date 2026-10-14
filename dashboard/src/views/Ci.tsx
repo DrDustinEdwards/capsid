@@ -1,3 +1,4 @@
+import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
@@ -14,6 +15,8 @@ function prLabel(url: string): string {
 // Chart 11, each default branch by day for 14 days, from GET /portal/api/trends. Lazy, so
 // Enarratio loads with Health and not with Pull requests, which shares this file.
 const CiHistory = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CiHistory })));
+// Chart 7, merges per week by who acted, loads the same way for Pull requests.
+const MergesChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MergesChart })));
 
 // CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
 export function DefaultBranches() {
@@ -81,6 +84,9 @@ export function PullRequests() {
   return (
     <div className="page">
       <PageHead title="Pull requests" />
+      <ChartSlot>
+        <MergesChart />
+      </ChartSlot>
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x">
           <table className="list">

@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { ChartSlot } from "../ui/Enar";
+import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import type { OpsAgent, OpsJob, PortalActivityRow, SiteSnapshot } from "../types";
@@ -7,9 +8,13 @@ import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { ErrorChart, UptimeFoot, UptimeTicks } from "../ui/charts";
+import { UptimeFoot, UptimeTicks } from "../ui/charts";
 import { jobMeta } from "../views/shared";
 import { agentState, attemptsText, nsList } from "../lib/derive";
+
+// Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
+// drawer opens so it stays out of the initial bundle.
+const ErrorRate = lazy(() => import("../views/TrendCharts").then((m) => ({ default: m.ErrorRate })));
 
 type Ref = { type: DrawerType; id: string };
 
@@ -57,7 +62,9 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
         </div>
         <div>
           <p className="section-title">Requests and error rate, 24 hours</p>
-          <ErrorChart site={s} />
+          <ChartSlot>
+            <ErrorRate site={s} />
+          </ChartSlot>
         </div>
         <div>
           <p className="section-title">Probe</p>

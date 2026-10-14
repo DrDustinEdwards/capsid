@@ -5,7 +5,7 @@ import { uptimeStrip, uptimeStripTable, type UptimeSlot } from "enarratio";
 import { EnarChart } from "./Enar";
 import type { HourBucket, SiteSnapshot } from "../types";
 import { RING_SLOTS, cfNoData, cfOk, ringOf, slotStart, uptime } from "../lib/derive";
-import { DAY, HOUR, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { DAY, SLOT_MS, ms, pct, shortId, utc } from "../lib/format";
 
 // ---- uptime ticks: 336 half-hour slots as 84 two-hour ticks ------------------------
 
@@ -32,7 +32,7 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
     slots.push({ status, label });
   }
   const up = uptime(ring);
-  const opts = { slots, width: 336, height: 22, label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass` };
+  const opts = { slots, width: 420, height: 22, label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass` };
   return <EnarChart className="ticks" draw={() => ({ svg: uptimeStrip(opts), table: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup })} />;
 }
 
@@ -76,78 +76,6 @@ export function errorTotals(e: HourBucket[]) {
   const req = e.reduce((a, x) => a + x.requests, 0);
   const err = e.reduce((a, x) => a + x.errors, 0);
   return { req, err, rate: req ? err / req : null };
-}
-
-// ---- 24h requests and error rate, with deploy markers ----------------------------------------
-
-export function ErrorChart({ site }: { site: SiteSnapshot }) {
-  const cf = cfOk(site);
-  const why = cfNoData(site.cloudflare);
-  if (!cf) return <div className="callout">No data: {why}</div>;
-  if (!cf.errors24) return <div className="callout">No data: {cf.errors_reason ?? "the analytics read failed"}</div>;
-  const e = cf.errors24;
-  if (!e.length) return <div className="callout">No data: the analytics read returned no hours</div>;
-  const W = 560, H = 170, L = 40, R = 10, T = 12, B = 26;
-  const pw = W - L - R, ph = H - T - B;
-  const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
-  const maxR = Math.max(1, Math.ceil(Math.max(...rates)));
-  const maxQ = Math.max(1, ...e.map((x) => x.requests));
-  const bw = pw / e.length;
-  const y = (v: number) => T + ph - (v / maxR) * ph;
-  const t0 = ms(e[0]!.hour);
-  const t1 = ms(e[e.length - 1]!.hour) + HOUR;
-  const grid: number[] = [];
-  for (let g = 0; g <= maxR; g += Math.max(1, Math.round(maxR / 4))) grid.push(g);
-  const tot = errorTotals(e);
-  const peak = Math.max(...rates);
-  const inWindow = cf.deploys.filter((d) => ms(d.created_on) >= t0 && ms(d.created_on) <= t1);
-  const label = `Requests and error rate for ${site.name}, last 24 hours: ${fmtN(tot.req)} requests, ${fmtN(tot.err)} errors (${pct(tot.rate)}), peak hour ${peak.toFixed(2)}%, ${inWindow.length} deploys in the window.`;
-  const xAt = (t: number) => L + ((t - t0) / (t1 - t0)) * pw;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="chart">
-      {grid.map((g) => (
-        <g key={g}>
-          <line x1={L} x2={W - R} y1={y(g)} y2={y(g)} stroke="var(--line)" strokeWidth="1" />
-          <text x={L - 6} y={y(g) + 3} textAnchor="end" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
-            {g}%
-          </text>
-        </g>
-      ))}
-      {e.map((x, i) => {
-        const bh = (x.requests / maxQ) * ph * 0.9;
-        return (
-          <rect key={x.hour} x={L + i * bw + 1.5} y={T + ph - bh} width={Math.max(1, bw - 3)} height={bh} fill="var(--line-strong)" opacity=".55">
-            <title>{`${utc(ms(x.hour))}: ${x.requests} requests, ${x.errors} errors`}</title>
-          </rect>
-        );
-      })}
-      <path d={rates.map((r, i) => `${i ? "L" : "M"}${(L + i * bw + bw / 2).toFixed(1)} ${y(r).toFixed(1)}`).join(" ")} fill="none" stroke="var(--crit)" strokeWidth="1.8" strokeLinejoin="round" />
-      {rates.map((r, i) => (
-        <circle key={i} cx={(L + i * bw + bw / 2).toFixed(1)} cy={y(r).toFixed(1)} r="2" fill="var(--crit)">
-          <title>{`${r.toFixed(2)}% errors`}</title>
-        </circle>
-      ))}
-      <line x1={L} x2={W - R} y1={y(1)} y2={y(1)} stroke="var(--warn)" strokeDasharray="4 3" />
-      <text x={W - R} y={y(1) - 4} textAnchor="end" fontSize="11" fontFamily="var(--ui)" fill="var(--warn)">
-        alert at 1%
-      </text>
-      {inWindow.map((d) => {
-        const x = xAt(ms(d.created_on));
-        return (
-          <g key={d.id}>
-            <title>{`deploy ${shortId(d.version_id ?? d.id)} ${utc(ms(d.created_on))}${d.message ? `: ${d.message}` : ""}`}</title>
-            <line x1={x} x2={x} y1={T} y2={T + ph} stroke="var(--accent)" strokeWidth="1.2" />
-            <path d={`M${x - 4} ${T} L${x + 4} ${T} L${x} ${T + 6} Z`} fill="var(--accent)" />
-          </g>
-        );
-      })}
-      {[0, 6, 12, 18, 24].map((hh) => (
-        <text key={hh} x={L + (hh / 24) * pw} y={H - 8} textAnchor="middle" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
-          {hh === 24 ? "now" : `-${24 - hh}h`}
-        </text>
-      ))}
-    </svg>
-  );
 }
 
 // ---- deploys and downtime, one lane per site ------------------------------------------------

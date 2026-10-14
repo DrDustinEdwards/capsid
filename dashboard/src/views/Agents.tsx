@@ -1,3 +1,4 @@
+import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { placePath, useApp } from "../app/ctx";
@@ -11,6 +12,8 @@ import { PageHead } from "./shared";
 // agent doing"), loaded when the tab opens. The tab is in the address (?tab=claims), so it can
 // be reloaded or shared.
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
+// Chart 6, weekly model spend against the cap, sits under the budget panel.
+const CostChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CostChart })));
 
 type Tab = "roster" | "archive" | "claims";
 
@@ -210,6 +213,9 @@ function Roster() {
           </dl>
         </div>
       </Panel>
+      <ChartSlot>
+        <CostChart />
+      </ChartSlot>
     </div>
   );
 }

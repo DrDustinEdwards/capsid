@@ -312,7 +312,12 @@ function mockTrends(weeks: number): PortalTrends {
       note: "An estimate: the administrator's own writes and job touches, sessions split at a 5-minute gap, plus 1 minute each. Reading the Portal without acting is not counted.",
     },
     queue: days.map((d, i) => ({ day: d, posted: 3 + (i % 4), ended: 4 + (i % 3), open: 30 - i })),
-    merges: { weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, auto: 4 + i, approved: 3, seat: Math.max(0, 6 - i), closed: 1 })), rollbacks: [] },
+    merges: {
+      weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, auto: 4 + i, approved: 3, seat: Math.max(0, 6 - i), closed: 1 })),
+      rollbacks: [{ at: new Date(now - 3 * DAYMS).toISOString(), repo: "example-org/sample", pr: 12, outcome: "rolled_back" as const }],
+    },
+    // Weekly model spend: one week with no costed outcome (a gap, not a zero).
+    cost: { weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, usd: i === 1 && weeks > 3 ? null : 6 + ((i * 7) % 9) * 1.5, jobs: i === 1 && weeks > 3 ? 0 : 3 + (i % 4) })) },
     backups: {
       runs: 27,
       error: null,
@@ -1111,6 +1116,21 @@ function seedClaimGroups(): ClaimsGroup[] {
   ];
 }
 
+// Ended waits by namespace, gate class and who ended them (visual 2), sample figures.
+function seedWaits(): PortalClaimsAggregate["waits"] {
+  const H = 3_600_000;
+  const w = (namespace: string, gate_class: string, ended_by: string, waits: number, hours: number) => ({ namespace, gate_class, ended_by, waits, waited_ms_total: Math.round(hours * H), waited_ms_median: Math.round((hours / waits) * H) });
+  return [
+    w("sample", "needs_human", "human", 4, 24.4),
+    w("sample-b", "needs_human", "human", 2, 6.2),
+    w("sample", "push_branch", "human", 3, 4.2),
+    w("sample", "push_branch", "policy", 5, 0.4),
+    w("sample-b", "migration", "human", 1, 2.7),
+    w("sample", "open_pr", "policy", 6, 0.6),
+    w("sample-c", "open_pr", "seat", 2, 0.9),
+  ];
+}
+
 function seedClaimJobs(): Map<string, Omit<PortalClaimsJob, "generated">> {
   const now = mockNow();
   const at = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
@@ -1416,7 +1436,7 @@ export function mockOpsApi(): Plugin {
           const until = isoOrNull(url.searchParams.get("until"));
           if (since === "bad" || until === "bad") return refuse(res, 400, "since and until must be ISO 8601 times such as 2026-09-01.");
           const groups = claimGroups.filter((g) => (!namespace || g.namespace === namespace) && (!agent || g.agent === agent));
-          const out: PortalClaimsAggregate = { generated: new Date(mockNow()).toISOString(), filter: { namespace, agent, since, until }, groups, waits: [], usage: [], truncated: [] };
+          const out: PortalClaimsAggregate = { generated: new Date(mockNow()).toISOString(), filter: { namespace, agent, since, until }, groups, waits: seedWaits().filter((w) => !namespace || w.namespace === namespace), usage: [], truncated: [] };
           return send(res, 200, out);
         }
         if (req.method !== "POST" || req.headers["x-capsid-ops"] !== "refresh") return send(res, 400, { error: "refresh needs POST and X-Capsid-Ops: refresh" });
