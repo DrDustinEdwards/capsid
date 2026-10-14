@@ -57,6 +57,56 @@ const SHAPES: Record<Kind, ReactNode> = {
   ),
 };
 
+// The inbox's kinds each get their own mark (Dustin's review of 2026-10-11: every row had the
+// same pause icon). The colour still says who acts: warning for a person, critical for a
+// machine fault.
+const INBOX_SHAPES: Record<string, ReactNode> = {
+  "blocked-job": SHAPES.blocked,
+  question: (
+    <>
+      <circle cx="7" cy="7" r="6" fill="currentColor" opacity=".18" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.3 5.4a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="7" cy="10.4" r=".8" fill="currentColor" />
+    </>
+  ),
+  pr: (
+    <>
+      <circle cx="3.8" cy="3" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="3.8" cy="11" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="10.2" cy="11" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.8 4.6v4.8M10.2 9.4V6.2A2.2 2.2 0 0 0 8 4H6.4M7.6 2.6 6.2 4l1.4 1.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  report: (
+    <>
+      <path d="M3 13V1.8M3 2.2h7.6l-1.6 2.6 1.6 2.6H3" fill="currentColor" fillOpacity=".18" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
+    </>
+  ),
+  proposal: (
+    <>
+      <path d="M3 1.5h5.5L11 4v8.5H3z" fill="currentColor" fillOpacity=".18" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M5 7h4M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>
+  ),
+  ci: SHAPES.crit,
+  "site-down": (
+    <>
+      <circle cx="7" cy="7" r="6.2" fill="currentColor" />
+      <path d="M7 3.6v5.6M4.6 6.9 7 9.3l2.4-2.4" fill="none" stroke="var(--surface)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+};
+
+/** An inbox kind's own mark, with its word. An unknown kind takes the tone's status shape. */
+export function InboxMark({ kind, tone, children }: { kind: string; tone: Kind; children: ReactNode }) {
+  return (
+    <span className={`st ${tone}`}>
+      <S>{INBOX_SHAPES[kind] ?? SHAPES[tone]}</S>
+      {children}
+    </span>
+  );
+}
+
 export function Icon({ kind, style }: { kind: Kind; style?: CSSProperties }) {
   return <S style={style}>{SHAPES[kind]}</S>;
 }
@@ -142,34 +192,6 @@ export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
       {NAV_ICONS[id]}
-    </svg>
-  );
-}
-
-export function BrandMark() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-      <polygon points="12,1.8 21.4,7.2 21.4,16.8 12,22.2 2.6,16.8 2.6,7.2" fill="none" stroke="var(--accent)" strokeWidth="1.6" />
-      <polyline points="12,1.8 12,8.4 21.4,7.2 M12,8.4 2.6,7.2" fill="none" stroke="var(--accent)" strokeWidth="1.1" />
-      <polygon points="12,8.4 17.2,14.6 6.8,14.6" fill="var(--accent-soft)" stroke="var(--accent)" strokeWidth="1.1" />
-      <polyline points="6.8,14.6 2.6,16.8 M17.2,14.6 21.4,16.8 M6.8,14.6 12,22.2 17.2,14.6" fill="none" stroke="var(--accent)" strokeWidth="1.1" />
-    </svg>
-  );
-}
-
-export function RefreshIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function ThemeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor" />
-      <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
     </svg>
   );
 }

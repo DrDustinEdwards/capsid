@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blockedJobItem, restrictInbox, severityOf, type Inbox } from "../src/inbox.ts";
+import { blockSettled, blockedJobItem, migrationsNamed, prHoldTitle, restrictInbox, severityOf, type Inbox } from "../src/inbox.ts";
+import { POLICY_CHECKS } from "../src/auto-merge-policy.ts";
 import { MAX_REPORT_ITEMS, MAX_REPORT_TITLE, REPORT_TTL_SECONDS, parseReport, reportItems, spendReportRate } from "../src/inbox-report.ts";
 import { fakeKv } from "./fakes.ts";
 
@@ -25,10 +26,36 @@ test("a blocked job is an item with the pull request it names as its link, and a
     result_summary: "Ready. Merge https://github.com/example-org/sample/pull/42 once CI is green.\n\nRun this: ...",
     updated_at: "2026-10-08T10:00:00.000Z",
   });
-  assert.deepEqual(plain, { title: "Add the health route", kind: "blocked-job", link: "https://github.com/example-org/sample/pull/42", since: "2026-10-08T10:00:00.000Z" });
+  assert.deepEqual(plain, { title: "Add the health route", kind: "blocked-job", link: "https://github.com/example-org/sample/pull/42", since: "2026-10-08T10:00:00.000Z", job: "job_a" });
   const question = blockedJobItem({ id: "job_b", title: "Choose a name", result_ref: null, result_summary: "QUESTION: Which name?", updated_at: "2026-10-08T11:00:00.000Z" });
   assert.equal(question.kind, "question");
   assert.equal(question.link, null, "no pull request, no link");
+});
+
+test("a held pull request reads in plain words: what held it and what answering takes, never a check's name", () => {
+  assert.equal(prHoldTitle({ number: 383, failed: "body_names_job", class: "approve" }), "PR #383 waits for you: its description names no job (one tap to approve)");
+  assert.equal(prHoldTitle({ number: 7, failed: "paths_allowed_for_namespace" }), "PR #7 waits for you: it changes files outside what this app merges on its own");
+  for (const check of POLICY_CHECKS) {
+    const title = prHoldTitle({ number: 1, failed: check });
+    assert.ok(!/_/.test(title), `${check} has words: ${title}`);
+    assert.ok(!/the seat/.test(title), title);
+  }
+  assert.equal(prHoldTitle({ number: 2, failed: "some_new_check" }), "PR #2 waits for you: some new check", "an unknown check still reads as words");
+});
+
+test("a blocked job is settled when its pull requests all closed after it blocked, or every migration it names is applied", () => {
+  const job = { id: "job_a", result_summary: "Blocked. Run this: npx wrangler d1 migrations apply capsid --remote (migrations/0045_merge_units.sql)", updated_at: "2026-10-10T10:00:00.000Z" };
+  assert.deepEqual(migrationsNamed(job.result_summary), ["0045_merge_units"]);
+  assert.deepEqual(migrationsNamed("Apply 0044_a.sql then 0045_b and 0044_a again"), ["0044_a", "0045_b"]);
+  assert.equal(blockSettled(job, {}, new Set(["0045_merge_units"])), true, "the seat applied it");
+  assert.equal(blockSettled(job, {}, new Set(["0044_a"])), false, "not applied yet");
+  assert.equal(blockSettled(job, {}, null), false, "an unreadable migrations table settles nothing");
+  assert.equal(blockSettled({ ...job, result_summary: "QUESTION: Which name?" }, {}, new Set(["0045_merge_units"])), false, "a block naming no migration is not settled by one");
+  const merged = { merged: 1, closed: 0, open: 0, unread: 0, at: "2026-10-11T00:00:00.000Z" };
+  const plain = { ...job, result_summary: "Run this: Merge it" };
+  assert.equal(blockSettled(plain, { job_a: merged }, null), true, "every pull request it names merged");
+  assert.equal(blockSettled(plain, { job_a: { ...merged, open: 1 } }, null), false, "one still open");
+  assert.equal(blockSettled(plain, { job_a: { ...merged, at: "2026-10-09T00:00:00.000Z" } }, null), false, "read before the job last changed");
 });
 
 test("restricting the inbox to readable apps drops the others and recomputes the totals", () => {

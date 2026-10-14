@@ -27,12 +27,12 @@ async function inboxAs(bearer: string | null): Promise<Response> {
   return SELF.fetch(`${ORIGIN}/ops/inbox`, { headers: bearer ? { Authorization: `Bearer ${bearer}` } : {} });
 }
 
-async function blocked(namespace: string, title: string, reason: string, question = false): Promise<string> {
+async function blocked(namespace: string, title: string, reason: string, question = false, command = "Merge it"): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace, title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
   const id = posted.job!.id;
   expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
-  const out = question ? await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, question: true }) : await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, command: "Merge it" });
+  const out = question ? await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, question: true }) : await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, command });
   expect(out.ok, out.refusal).toBe(true);
   return id;
 }
@@ -90,9 +90,19 @@ describe("GET /ops/inbox", () => {
     expect(app.severity).toBe("needs-you");
     expect(app.items.find((i) => i.kind === "blocked-job")?.link).toBe(PR);
     expect(app.items.find((i) => i.kind === "pr")?.link).toBe("https://github.com/example-org/sample/pull/7");
-    expect(app.items.find((i) => i.kind === "pr")?.title, "the merge class says what kind of answer the PR needs").toContain("(approve: the policy stops at paths_not_refused)");
+    expect(app.items.find((i) => i.kind === "pr")?.title, "plain words for the check, and what answering it takes").toBe("PR #7 waits for you: it changes a file auto-merge never merges on its own (one tap to approve)");
     expect(JSON.stringify(body), "another namespace's job title leaked to a scoped caller").not.toContain("Not for this driver");
     expect(body.count).toBe(3);
+  });
+
+  it("leaves out a blocked job whose migration the seat has applied, and keeps one whose migration is not", async () => {
+    // The test database has every migration in migrations/ applied, 0001_init among them.
+    await blocked("capsid", "Apply the first migration", "needs the seat", false, "npx wrangler d1 migrations apply capsid --remote (migrations/0001_init.sql)");
+    await blocked("capsid", "Apply a future migration", "needs the seat", false, "npx wrangler d1 migrations apply capsid --remote (migrations/9999_not_yet.sql)");
+    const body = (await (await inboxAs(env.TEST_OPERATOR_KEYS.write)).json()) as Inbox;
+    const titles = body.apps.flatMap((a) => a.items.map((i) => i.title));
+    expect(titles).not.toContain("Apply the first migration");
+    expect(titles).toContain("Apply a future migration");
   });
 
   it("gives the admin every app: a question and a down site under a namespace with no site row, and quiet configured apps at none", async () => {

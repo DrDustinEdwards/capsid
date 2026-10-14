@@ -1,4 +1,4 @@
-import { heatStrip, heatStripTable, sparkline, sparklineTable, timeline, timelineTable, type TimelineEvent } from "enarratio";
+import { heatStrip, heatStripTable, timeline, timelineTable, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
@@ -35,12 +35,13 @@ function Stale({ error }: { error: string | null }) {
 
 // ---- 1. Minutes of Dustin per week ------------------------------------------------------
 
-/** The header tile on Needs you: this week's minutes, the change on last week in words,
- *  and eight weeks as a sparkline. Says it is an estimate (the route's note). */
+/** The first chart on Needs you: this week's minutes, the change on last week with its unit
+ *  and direction, and eight weeks as a line with its axes and week dates (Dustin's review of
+ *  2026-10-11: the tile was half width, a sparkline with no axes, and its words jargon). */
 export function MinutesTile() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint minutes-none">Minutes per week could not be read: {error}</p>;
+  if (!data) return <p className="faint minutes-none">Your time per week could not be read: {error}</p>;
   return (
     <>
       <Minutes minutes={data.minutes} />
@@ -49,31 +50,51 @@ export function MinutesTile() {
   );
 }
 
+/** The change on last week in words, with its direction: more of Dustin's time is worse. */
+export function minutesChange(now: number, before: number | null): { text: string; dir: "up" | "down" | "same" | null } {
+  if (before === null) return { text: "no week before to compare", dir: null };
+  const d = now - before;
+  if (d === 0) return { text: "the same as last week", dir: "same" };
+  return { text: `${Math.abs(d)} min ${d > 0 ? "more" : "less"} than last week`, dir: d > 0 ? "up" : "down" };
+}
+
 function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
   const weeks = minutes.weeks;
   const now = weeks[weeks.length - 1];
   const before = weeks[weeks.length - 2];
   if (!now) return null;
-  const delta = before ? now.minutes - before.minutes : null;
+  const change = minutesChange(now.minutes, before ? before.minutes : null);
   const opts = {
-    values: weeks.map((w) => w.minutes),
-    label: `Minutes of Dustin per week, ${weeks[0]!.week} to ${now.week}`,
+    data: weeks.map((w) => ({ week: w.start, minutes: w.minutes })),
+    x: "week",
+    y: "minutes",
+    xLabel: "Week starting",
+    yLabel: "Minutes",
     formatValue: (v: number) => `${v} min`,
-  };
+    height: 56 + 4 * 30,
+    alt: `Your time on Capsid per week, ${weeks[0]!.start} to ${now.start}: ${now.minutes} minutes this week, ${change.text}.`,
+    dataTable: "details",
+  } as const;
   return (
-    <div className="tile minutes-tile" data-chart="minutes">
+    <div className="minutes-chart" data-chart="minutes">
       <div className="t1">
+        <span className="l">How much of your time does Capsid take?</span>
+      </div>
+      <div className="minutes-now">
         <span className="v">
           {now.minutes} <small>min this week</small>
         </span>
-        <span className="l">{delta === null ? "no week before" : `${delta > 0 ? "+" : ""}${delta} vs last week`}</span>
+        <span className={`minutes-change${change.dir ? ` ${change.dir}` : ""}`}>
+          {change.dir === "up" ? "\u25B2 " : change.dir === "down" ? "\u25BC " : ""}
+          {change.text}
+        </span>
       </div>
-      <EnarChart draw={() => ({ svg: sparkline(opts), table: sparklineTable(opts, TABLE).markup })}>
-        <figcaption className="d">
-          {now.decisions} {now.decisions === 1 ? "decision" : "decisions"} in {now.sessions} {now.sessions === 1 ? "session" : "sessions"} this week. An estimate: {minutes.note.replace(/^An estimate: /, "")}
-          {minutes.truncated ? " Cut at the row limit, so the figure is low." : ""}
-        </figcaption>
-      </EnarChart>
+      <EnarFigure draw={(width) => lineChart({ ...opts, width })}>
+        <p className="d">
+          An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.
+          {minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}
+        </p>
+      </EnarFigure>
     </div>
   );
 }
@@ -83,6 +104,30 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
 const MOST_CLASSES = 10;
 
 const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 60)} min`);
+
+// The gate classes and who ended a wait, in words (Dustin's review of 2026-10-11: the chart
+// showed needs_human and push_branch). A compound command's classes are joined with "+"
+// (src/ops-types.ts, ClaimsWaitRow); a class this list does not know reads as words.
+const GATE_WORDS: Record<string, string> = {
+  needs_human: "A step only a person takes",
+  additive_migration: "Applying a migration",
+  migration: "Applying a migration",
+  push_branch: "Pushing a branch",
+  open_pr: "Opening a pull request",
+  unreadable_gate: "A gate that could not be read",
+};
+const ENDED_BY_WORDS: Record<string, string> = { human: "You", policy: "The signed policy", seat: "A session acting for you" };
+const words = (code: string) => code.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+export function gateWords(gate: string): string {
+  return gate
+    .split("+")
+    .map((g, i) => {
+      const w = GATE_WORDS[g] ?? words(g);
+      return i === 0 ? w : w.charAt(0).toLowerCase() + w.slice(1);
+    })
+    .join(", then ");
+}
 
 /** Total ended waiting per gate class, split by who ended it, longest first. A median
  *  cannot be combined across namespaces and says nothing of how often a gate waits; the
@@ -96,7 +141,7 @@ export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; 
   }
   const sum = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
   const ranked = [...byClass].sort(([, a], [, b]) => sum(b) - sum(a)).slice(0, MOST_CLASSES);
-  const rows = ranked.flatMap(([gate, ends]) => [...ends].map(([endedBy, h]) => ({ gate, endedBy, hours: Math.round(h * 100) / 100 })));
+  const rows = ranked.flatMap(([gate, ends]) => [...ends].map(([endedBy, h]) => ({ gate: gateWords(gate), endedBy: ENDED_BY_WORDS[endedBy] ?? words(endedBy), hours: Math.round(h * 100) / 100 })));
   return { rows, classes: byClass.size, shown: ranked.length, allHours: [...byClass.values()].reduce((a, m) => a + sum(m), 0) };
 }
 
@@ -150,7 +195,7 @@ export function WaitingChart() {
     yLabel: "Waiting that ended (hours)",
     formatValue: hours,
     height: 56 + shown * 30,
-    alt: `Waiting that ended in the last 14 days, by gate class and who ended it: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate}.`,
+    alt: `Waiting that ended in the last 14 days, by what the job waited for and who answered: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate.toLowerCase()}.`,
     dataTable: "details",
   } as const;
   return (

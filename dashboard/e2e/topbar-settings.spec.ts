@@ -3,11 +3,11 @@ import { RAIL_COUNT, visit } from "./views.ts";
 
 // Settings is not a view in the menu (Dustin, 2026-10-01): it is under the avatar's account panel,
 // current on the Settings view. It keeps its g then e shortcut and its command-menu entry. On a
-// phone it is in the sheet behind More.
+// phone it is in the sheet behind the header's menu button.
 
 const openAccount = async (page: Page) => {
   await page.getByRole("button", { name: "Your account" }).click();
-  return page.locator(".cap-admin-account");
+  return page.locator(".cap-site-header-account");
 };
 
 test("PLANT: Settings is under the avatar, not in the menu", async ({ page }) => {
@@ -45,13 +45,13 @@ test("PLANT: g then e and the command menu still reach Settings", async ({ page 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("PLANT: Settings is in the sheet behind More, and More is current on it", async ({ page }) => {
+  test("PLANT: Settings is in the sheet behind the menu button", async ({ page }) => {
     await visit(page, "health");
-    await page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" }).tap();
+    await page.locator("header.cap-site-header").getByRole("button", { name: "Menu" }).tap();
     const link = page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ });
     await expect(link).toBeVisible();
     await link.tap();
     await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-    await expect(page.locator("nav.cap-admin-tabs").getByRole("button", { name: "More" })).toHaveAttribute("aria-current", "true");
+    await expect(page.getByRole("dialog")).toBeHidden();
   });
 });
