@@ -38,6 +38,24 @@ test("PLANT: chart 10, the backup slots, counts each period's kept runs", async 
   await expect(slots.getByRole("img", { name: /Daily backups/ })).toBeVisible();
 });
 
+test("a missing backup slot is a full-height mark, not an underline", async ({ page }) => {
+  await visit(page, "health");
+  const daily = page.locator('#backup-slots [data-slots="daily"]').getByRole("img", { name: /Daily backups/ });
+  const heights = await daily.locator("rect").evaluateAll((rs) => rs.map((r) => r.getBoundingClientRect().height));
+  expect(heights.length).toBe(14);
+  expect(Math.min(...heights)).toBeGreaterThan(Math.max(...heights) - 2);
+});
+
+test("a chart is drawn at the width of its card, not a fixed 560px", async ({ page }) => {
+  await visit(page, "queue");
+  const fig = page.locator('[data-chart="queue"] .enar-fig');
+  const svg = fig.locator("svg[role=img]").first();
+  await expect(svg).toBeVisible();
+  const [figW, svgW] = await Promise.all([fig.evaluate((e) => e.clientWidth), svg.evaluate((e) => e.getBoundingClientRect().width)]);
+  expect(figW).toBeGreaterThan(600);
+  expect(Math.abs(figW - svgW)).toBeLessThan(2);
+});
+
 test("PLANT: chart 11 says how long a branch has been red, a branch never run, and a repo not read", async ({ page }) => {
   await visit(page, "health");
   const ci = page.locator("#ci-history");

@@ -200,12 +200,14 @@ table.fleet { width: 100%; border-collapse: collapse; }
 .fleet .site span { font-size: 12px; color: var(--muted); white-space: nowrap; }
 /* Enarratio's primitives (ui/Enar.tsx): its variables mapped to the Portal's tokens, so
    both themes follow; ci-strip turns the heat strip's two ends into green and red. */
-:root { --enarratio-text: var(--text); --enarratio-text-muted: var(--muted); --enarratio-grid: var(--line); --enarratio-background: var(--surface); --enarratio-series-1: var(--accent); --enarratio-series-2: var(--info); --enarratio-series-3: var(--ok); --enarratio-series-4: var(--warn); --enarratio-series-5: var(--crit); --enarratio-series-6: var(--nodata); --enarratio-series-7: var(--muted); --enarratio-series-8: var(--line-strong); --enarratio-status-good: var(--ok); --enarratio-status-warning: var(--warn); --enarratio-status-bad: var(--crit); --enarratio-status-unknown: var(--nodata); --enarratio-font: inherit; --enarratio-font-numeric: var(--mono); }
+:root { --enarratio-text: var(--text); --enarratio-text-muted: var(--muted); --enarratio-grid: var(--line); --enarratio-background: var(--surface); --enarratio-series-1: var(--series-1); --enarratio-series-2: var(--series-2); --enarratio-series-3: var(--series-3); --enarratio-series-4: var(--series-4); --enarratio-series-5: var(--series-5); --enarratio-series-6: var(--series-6); --enarratio-series-7: var(--series-7); --enarratio-series-8: var(--series-8); --enarratio-status-good: var(--ok); --enarratio-status-warning: var(--warn); --enarratio-status-bad: var(--crit); --enarratio-status-unknown: var(--nodata); --enarratio-font: inherit; --enarratio-font-numeric: var(--ui); }
 .enar { margin: 0; }
 .agree-chart { --enarratio-series-1: var(--ok); --enarratio-series-2: var(--crit); --enarratio-series-3: var(--nodata); --enarratio-series-4: var(--warn); }
 .chart-row { display: flex; flex-wrap: wrap; gap: 0 24px; align-items: flex-start; }
 .wait-chart { margin: 0 0 16px; max-width: 600px; flex: 1 1 360px; }
-.enar-fig { --enarratio-font-numeric: var(--ui); }
+/* Every chart is drawn at the width it is given (Enar.tsx), so a wide chart's 30rem floor
+   would only make it scroll on a phone. */
+.enarratio-frame-wide > svg { min-width: 0; }
 .enar-fig .d { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
 .enar-fig details.enarratio-data { font-size: 12px; color: var(--muted); }
 .ci-strip { --enarratio-sequential-1: var(--ok); --enarratio-sequential-5: var(--crit); }

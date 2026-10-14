@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "../app/ErrorBoundary";
+import { useWidth } from "./useWidth";
 
 // An Enarratio primitive in the page (capsid/decisions.md 2026-10-09, Portal review item 7:
 // "Enarratio in the browser for the Portal's charts", option a of
@@ -12,15 +13,22 @@ import { ErrorBoundary } from "../app/ErrorBoundary";
 // draw runs here, not in the caller: Enarratio refuses input it cannot draw honestly (no
 // value at all, say) by throwing, and one chart's refusal must not take the page down.
 // The refusal is shown in the chart's place, in Enarratio's own words.
-export function EnarChart({ draw, className, children }: { draw: () => { svg: string; table?: string }; className?: string; children?: ReactNode }) {
+// draw gets the width the chart has: the figure's own measured width, so a chart fills its
+// card at any size instead of sitting at a fixed pixel width beside empty space. Before the
+// first measurement it draws at FALLBACK_W, the width the charts were fixed at.
+export const FALLBACK_W = 560;
+
+export function EnarChart({ draw, className, children }: { draw: (width: number) => { svg: string; table?: string }; className?: string; children?: ReactNode }) {
+  const [measured, ref] = useWidth();
+  const width = Math.max(120, Math.floor(measured ?? FALLBACK_W));
   let out: { svg: string; table?: string };
   try {
-    out = draw();
+    out = draw(width);
   } catch (err) {
     return <p className="faint enar-refused">This chart could not be drawn: {err instanceof Error ? err.message : String(err)}</p>;
   }
   return (
-    <figure className={`enar${className ? ` ${className}` : ""}`}>
+    <figure className={`enar${className ? ` ${className}` : ""}`} ref={ref}>
       <div className="enar-mark" dangerouslySetInnerHTML={{ __html: out.svg }} />
       {children}
       {out.table && <div className="enar-table" dangerouslySetInnerHTML={{ __html: out.table }} />}

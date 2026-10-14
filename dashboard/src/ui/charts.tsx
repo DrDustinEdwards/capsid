@@ -32,7 +32,7 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
     slots.push({ status, label });
   }
   const up = uptime(ring);
-  const opts = { slots, width: 336, height: 22, label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass` };
+  const opts = { slots, width: 420, height: 22, label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass` };
   return <EnarChart className="ticks" draw={() => ({ svg: uptimeStrip(opts), table: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup })} />;
 }
 

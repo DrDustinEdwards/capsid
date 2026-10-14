@@ -1,4 +1,4 @@
-import { heatStrip, heatStripTable, sparkline, sparklineTable, timeline, timelineTable, uptimeStrip, uptimeStripTable, type TimelineEvent, type UptimeSlot } from "enarratio";
+import { heatStrip, heatStripTable, sparkline, sparklineTable, timeline, timelineTable, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
@@ -149,7 +149,6 @@ export function WaitingChart() {
     xLabel: null,
     yLabel: "Waiting that ended (hours)",
     formatValue: hours,
-    width: 560,
     height: 56 + shown * 30,
     alt: `Waiting that ended in the last 14 days, by gate class and who ended it: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate}.`,
     dataTable: "details",
@@ -159,7 +158,7 @@ export function WaitingChart() {
       <div className="t1">
         <span className="l">Where does waiting go?</span>
       </div>
-      <EnarFigure draw={() => barChart(opts)}>
+      <EnarFigure draw={(width) => barChart({ ...opts, width })}>
         <p className="d">
           Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.{load.cut ? " Cut at the read's row limit, so the figure is low." : ""}
         </p>
@@ -190,7 +189,6 @@ export function QueueChart() {
     y: "open",
     xLabel: null,
     yLabel: "Open jobs",
-    width: 560,
     height: 200,
     alt: `Jobs open at each day's end, ${first.day} to ${last.day}: ${last.open} now, ${net === 0 ? "unchanged" : net > 0 ? `up ${net}` : `down ${-net}`} over the window. ${posted} posted, ${ended} ended.`,
     dataTable: "details",
@@ -199,7 +197,7 @@ export function QueueChart() {
     <Panel flush title="Is the queue growing or draining?" src="D1 jobs, 14 days" id="queue-trend">
       <div className="body" data-chart="queue">
         <Stale error={error} />
-        <EnarFigure draw={() => areaChart(opts)}>
+        <EnarFigure draw={(width) => areaChart({ ...opts, width })}>
           <p className="d">
             {posted} posted and {ended} ended in 14 days, so the queue {net === 0 ? "held" : net > 0 ? "grew" : "drained"} by {Math.abs(net)}. Open means queued, claimed, blocked or parked.
           </p>
@@ -248,7 +246,7 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   return (
     <Panel flush title="Does each agent's claim match what was verified?" src="every check, summed per agent" id="claim-agreement">
       <div className="body" data-chart="agreement">
-        <EnarFigure className="agree-chart" draw={() => barChart(opts)} />
+        <EnarFigure className="agree-chart" draw={(width) => barChart({ ...opts, width })} />
       </div>
     </Panel>
   );
@@ -277,7 +275,6 @@ export function CostChart() {
     yLabel: "Model spend (USD)",
     formatValue: (v: number) => `$${v.toFixed(2)}`,
     references: share ? [{ y: share, label: `Cap $${cap} a month, about $${share} a week` }] : [],
-    width: 560,
     height: 240,
     alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}${share ? `, against a weekly share of the $${cap} monthly cap ($${share})` : ""}. Weeks with no recorded cost are gaps.`,
     dataTable: "details",
@@ -286,7 +283,7 @@ export function CostChart() {
     <Panel flush title="What does the work cost, and is it on budget?" src="job outcomes, telemetry cost, an estimate" id="cost-trend">
       <div className="body" data-chart="cost">
         <Stale error={error} />
-        <EnarFigure draw={() => lineChart(opts)}>
+        <EnarFigure draw={(width) => lineChart({ ...opts, width })}>
           <p className="d">
             {cap ? `$${spent.toFixed(2)} of $${cap} spent this month.` : `$${spent.toFixed(2)} spent this month; no monthly cap is set.`} A week with no job outcome carrying a cost is a gap, not a free week.
           </p>
@@ -322,7 +319,6 @@ export function MergesChart() {
     // Labels are the ISO week without its year, so eight fit a phone's width.
     xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
-    width: 560,
     height: 240,
     alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by the seat, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
     dataTable: "details",
@@ -331,7 +327,7 @@ export function MergesChart() {
     <Panel flush title="How much merges with no human, and is that rising?" src="audit log, weekly" id="merge-trend">
       <div className="body" data-chart="merges">
         <Stale error={error} />
-        <EnarFigure className="merge-chart" draw={() => barChart(opts)}>
+        <EnarFigure className="merge-chart" draw={(width) => barChart({ ...opts, width })}>
           <p className="d">
             {merged ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.` : `Nothing merged in ${weeks.length} weeks.`}
           </p>
@@ -373,13 +369,12 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     formatValue: (v: number) => `${v}%`,
     references: [{ y: 1, label: "Alert at 1%" }],
     markers: inWindow.map((d) => ({ x: new Date(ms(d.created_on)).toISOString(), label: `Deploy ${shortId(d.version_id ?? d.id)}` })),
-    width: 560,
     height: 220,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
     dataTable: "details",
   } as const;
   return (
-    <EnarFigure className="error-rate" draw={() => lineChart(opts)}>
+    <EnarFigure className="error-rate" draw={(width) => lineChart({ ...opts, width })}>
       <p className="d" data-deploys="">
         {fmtN(tot.req)} requests and {fmtN(tot.err)} errors ({pct(tot.rate)}).{" "}
         {inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window."}
@@ -423,12 +418,14 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     end,
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
   };
-  return <EnarChart className="tonight-chart" draw={() => ({ svg: timeline(opts), table: timelineTable(opts, TABLE).markup })} />;
+  return <EnarChart className="tonight-chart" draw={(width) => ({ svg: timeline({ ...opts, width }), table: timelineTable(opts, TABLE).markup })} />;
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
 
-const SLOT = (filled: boolean): Extract<UptimeSlot, string> => (filled ? "up" : "down");
+// Drawn as a heat strip with the CI history's two ends, green kept and red missing, at full
+// height: as an uptime strip a missing slot was a third-height tick that read as an underline.
+const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
   const { data, error, loading } = useTrends();
@@ -449,17 +446,20 @@ export function BackupSlots() {
           ] as const).map(([name, span, slots]) => {
             const kept = slots.filter((s) => s.filled).length;
             const opts = {
-              slots: slots.map((s) => ({ status: SLOT(s.filled), label: s.key })),
+              values: slots.map((s) => (s.filled ? 0 : 1)),
+              min: 0,
+              max: 1,
               label: `${name} backups, the last ${span}`,
-              width: 560,
               height: 20,
+              cellLabels: slots.map((s) => s.key),
+              formatValue: missing,
             };
             return (
               <div className="slot-row" key={name} data-slots={name.toLowerCase()}>
                 <div className="slot-head">
                   <b>{name}</b> <span className="faint num">{kept} of {slots.length} kept</span>
                 </div>
-                <EnarChart draw={() => ({ svg: uptimeStrip(opts), table: uptimeStripTable(opts, TABLE).markup })} />
+                <EnarChart className="ci-strip" draw={(width) => ({ svg: heatStrip({ ...opts, width }), table: heatStripTable(opts, TABLE).markup })} />
               </div>
             );
           })
@@ -501,7 +501,6 @@ export function CiHistory() {
                 min: 0,
                 max: 1,
                 label: `${r.namespace} default branch, red or green by day`,
-                width: 560,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
@@ -514,7 +513,7 @@ export function CiHistory() {
                     {r.truncated && <span className="faint"> (over 100 runs; early days may be missing some)</span>}
                   </div>
                   {/* A branch with no verdict in the window has nothing to draw; its line says so. */}
-                  {r.days.some((d) => d.state !== "none") && <EnarChart className="ci-strip" draw={() => ({ svg: heatStrip(opts), table: heatStripTable(opts, TABLE).markup })} />}
+                  {r.days.some((d) => d.state !== "none") && <EnarChart className="ci-strip" draw={(width) => ({ svg: heatStrip({ ...opts, width }), table: heatStripTable(opts, TABLE).markup })} />}
                 </div>
               );
             })}
