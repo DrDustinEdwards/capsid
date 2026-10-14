@@ -10,7 +10,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "capsomer": "github:DrDustinEdwards/capsomer#d4d24701deb3df26a9869e94528d4726d71e083f",
+    "capsomer": "github:DrDustinEdwards/capsomer#6eb531a5a0e2efe68956a060010a7abe604a52d7",
     "enarratio": "0.1.0-alpha.8"
   },
   "devDependencies": {
