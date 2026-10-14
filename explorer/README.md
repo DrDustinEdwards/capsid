@@ -9,6 +9,7 @@ Every page is prerendered from Capsid's two public documents (docs/public-data.m
 - `/`: the family as a capsid, with the daily numbers as charts and a table.
 - `/s/{system}/`: one system chosen on the map, its facts, its connections, and a link to the same system on dustinedwards.info/systems.
 - `/s/{system}/containers/`: inside a public system with parts: a table and the lines between them, with the map's drawing for Capsid, the one system the map draws inside.
+- `/flows/{flow}/`: a flow from the public model, what it is and every step. `/flows/{flow}/{step}/`, counted from 1 (`/flows/job-life/4/`): one step, its sentence, the parts it touches with links to them, Back and Next, every step, and the core drawn with the step's line on and its parts lit. With the script, Back, Next, the step list, number keys and the map's own controls step in place, the address following, and a token travels the line; under reduced motion it jumps. A step on a line the model lacks, or touching a private system, stops the build. The core's page and its parts page link each flow over its parts.
 - A private system's page says it is private and shows its name, and its address if it has one. It has no parts page.
 
 ## Commands
