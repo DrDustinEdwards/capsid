@@ -47,6 +47,13 @@ function score(q: string, text: string): number {
   return 1;
 }
 
+// The menu with its list built from the feed: App loads this module on the first Ctrl K, so
+// neither the menu nor its list builder is in the initial bundle.
+export function CommandPalette({ open, onClose, feed, views, actions, now }: { open: boolean; onClose: () => void; feed: OpsFeed | null; views: ReadonlyArray<ViewDef>; actions: Actions; now: number }) {
+  const list = useMemo(() => commands(feed, views, actions, now), [feed, views, actions, now]);
+  return <CommandMenu open={open} onClose={onClose} list={list} />;
+}
+
 export function CommandMenu({ open, onClose, list }: { open: boolean; onClose: () => void; list: Command[] }) {
   const dlg = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);

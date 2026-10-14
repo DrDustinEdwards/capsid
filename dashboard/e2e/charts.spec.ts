@@ -5,13 +5,16 @@ import { visit } from "./views.ts";
 // mock's sample trends, plan and feed. Each is an <svg role="img"> with its own text
 // alternative, and each carries a table of the same numbers.
 
-test("PLANT: chart 1, minutes of Dustin per week, says this week's figure and the change", async ({ page }) => {
+test("PLANT: chart 1, your time per week, says this week's figure and the change with its unit and direction", async ({ page }) => {
   await visit(page, "needs");
   const tile = page.locator('[data-chart="minutes"]');
   await expect(tile).toContainText("34 min this week");
-  await expect(tile).toContainText("+4 vs last week");
+  await expect(tile.locator(".minutes-change.up")).toHaveText(/4 min more than last week/);
   await expect(tile).toContainText("An estimate");
-  await expect(tile.getByRole("img", { name: /Minutes of Dustin per week/ })).toBeVisible();
+  await expect(tile).not.toContainText("decisions");
+  await expect(tile.getByRole("img", { name: /Your time on Capsid per week/ })).toBeVisible();
+  // A line with its axes: the weeks along the bottom, minutes up the side.
+  await expect(tile.locator("svg").getByText("Week starting", { exact: true })).toBeVisible();
   await expect(tile.locator("details.enarratio-data tbody tr")).toHaveCount(8);
 });
 
@@ -73,13 +76,15 @@ test("PLANT: chart 11 says how long a branch has been red, a branch never run, a
 test("PLANT: chart 2, where waiting goes, sums the waits across namespaces and puts the longest gate first", async ({ page }) => {
   await visit(page, "needs");
   const tile = page.locator('[data-chart="waiting"]');
-  await expect(tile.getByRole("img", { name: /39\.4 h in all, 30\.6 h of it at needs_human/ })).toBeVisible();
-  // needs_human is 24.4 h in sample and 6.2 h in sample-b, both ended by a human.
+  await expect(tile.getByRole("img", { name: /39\.4 h in all, 30\.6 h of it at a step only a person takes/ })).toBeVisible();
+  // needs_human is 24.4 h in sample and 6.2 h in sample-b, both ended by a human; every
+  // gate class reads as words, never its code name.
   const rows = tile.locator("details.enarratio-data tbody tr");
   await expect(rows).toHaveCount(4);
-  await expect(rows.first()).toContainText("needs_human");
+  await expect(rows.first()).toContainText("A step only a person takes");
   await expect(rows.first()).toContainText("30.6 h");
-  await expect(rows.last()).toContainText("open_pr");
+  await expect(rows.last()).toContainText("Opening a pull request");
+  await expect(tile).not.toContainText("_");
 });
 
 test("PLANT: chart 3, the queue, says whether it grew or drained over the 14 days", async ({ page }) => {
