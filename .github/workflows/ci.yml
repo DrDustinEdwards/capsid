@@ -327,7 +327,7 @@ jobs:
             exit 0
           fi
           echo "::warning::the live gate failed against ${ROLLBACK_FROM}; rolling back to the previous version"
-          npx --yes wrangler@4.107.0 rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
+          npx --yes wrangler@4.149.0 rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
           # The rollout is not instant, so read the sha back rather than assuming, and
           # say so when it never moved.
           ROLLBACK_TO=unreadable
