@@ -198,6 +198,11 @@ test("a live schema behind the newest migration is a finding", () => {
   assert.deepEqual(found.map((f) => f.fingerprint), ["schema-behind-0017_something_new.sql"]);
 });
 
+test("a live schema ahead of master is its own finding, not a behind one", () => {
+  const found = healthFindings({ ...HEALTHY, schema_version: "0018_applied_early.sql" }, HEALTHY.sha, "0017_something_new.sql", "capsid");
+  assert.deepEqual(found.map((f) => f.fingerprint), ["schema-ahead-0018_applied_early.sql"]);
+});
+
 test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
   // A human pausing a namespace is the system working; reporting it would teach the
   // reader to ignore the watcher.

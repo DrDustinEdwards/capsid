@@ -265,7 +265,20 @@ export function healthFindings(
       ])
     );
   }
-  if (latestMigration && health.schema_version && health.schema_version !== latestMigration) {
+  // Ahead is a migration applied before its PR merged, which the merge clears: a digest
+  // line, not a job. Behind is a committed migration never applied. Migration names
+  // start with a zero-padded number, so the prefix orders them.
+  const ahead =
+    latestMigration && health.schema_version && migrationNumber(health.schema_version) > migrationNumber(latestMigration);
+  if (ahead) {
+    out.push(
+      finding(namespace, `schema-ahead-${health.schema_version}`, "the live schema is newer than master's newest migration", [
+        `live: ${health.schema_version}`,
+        `newest on master: ${latestMigration}`,
+        "A migration applied before its pull request merged reads like this; the merge clears it.",
+      ])
+    );
+  } else if (latestMigration && health.schema_version && health.schema_version !== latestMigration) {
     out.push(
       finding(namespace, `schema-behind-${latestMigration}`, "the live schema is not the newest migration", [
         `live: ${health.schema_version}`,
@@ -275,6 +288,11 @@ export function healthFindings(
     );
   }
   return out;
+}
+
+function migrationNumber(name: string): number {
+  const n = Number.parseInt(name, 10);
+  return Number.isNaN(n) ? -1 : n;
 }
 
 /** What capsid_run_improve action status says that should not be true. Per namespace, because the job
@@ -542,6 +560,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^(health-degraded|backup-stale|backup-never)$/, "health"],
   [/^deploy-drift-/, "master head"],
   [/^schema-behind-/, "migrations"],
+  [/^schema-ahead-/, "migrations"],
   [/^(budget-|paused-|breaker-open-)/, "improve_status"],
   [/^mirror-no-dump$/, "mirror dumps"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "mirror runs"],
@@ -580,6 +599,7 @@ const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
   [/^(health-degraded|backup-stale|backup-never)$/, "job"],
   [/^deploy-drift-/, "job"],
   [/^schema-behind-/, "job"],
+  [/^schema-ahead-/, "digest"],
   [/^(budget-|paused-|breaker-open-)/, "attention"],
   [/^mirror-no-dump$/, "job"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "job"],

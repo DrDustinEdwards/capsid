@@ -4,7 +4,8 @@ import { ghFetch, parseReposList } from "./github/client";
 import { readAllPages } from "./github/pr-files";
 import { commandFromSummary, isQuestionSummary } from "./jobs-holder";
 import { readSnapshot } from "./ops-snapshot";
-import { staleJobs } from "./stale-jobs";
+import { appliedMigrations, blockSettled } from "./inbox";
+import { readStaleCache, staleJobs } from "./stale-jobs";
 
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what
 // needs me'"; capsid/rulings/mcp-2026-10-10.md, amendment answer 2: "all open PRs across
@@ -133,7 +134,11 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   )
     .bind(JOBS_LIMIT + 1)
     .all<BlockedRow>();
-  const blocked = (blockedRows ?? []).slice(0, JOBS_LIMIT);
+  // A block already answered (its pull requests merged, its migrations applied) is left
+  // out, as the inbox leaves it out; the stale view below still lists it to close.
+  const staleCache = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
+  const applied = await appliedMigrations(env.DB);
+  const blocked = (blockedRows ?? []).slice(0, JOBS_LIMIT).filter((j) => !blockSettled(j, staleCache, applied));
   if ((blockedRows ?? []).length > JOBS_LIMIT) notChecked.push(`more than ${JOBS_LIMIT} blocked jobs; the oldest ${JOBS_LIMIT} are listed`);
   const questions = blocked.filter((j) => isQuestionSummary(j.result_summary)).map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, question: j.result_summary, since: j.updated_at }));
   const waiting = blocked

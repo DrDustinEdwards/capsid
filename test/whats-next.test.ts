@@ -15,7 +15,7 @@ const repos = (...list: string[]) => JSON.stringify(list.map((repo, i) => ({ rep
 
 // The three statements whatsNext and staleJobs read, each answered by its shape. Any other
 // statement throws, so a read this fake does not know about cannot pass as empty.
-function db(opts: { namespaces?: NsRow[]; blocked?: Array<Record<string, unknown>>; failNamespaces?: boolean; failStale?: boolean } = {}) {
+function db(opts: { namespaces?: NsRow[]; blocked?: Array<Record<string, unknown>>; applied?: string[]; failNamespaces?: boolean; failStale?: boolean } = {}) {
   const answer = (sql: string): unknown[] => {
     const flat = sql.replace(/\s+/g, " ");
     if (/^SELECT namespace, repos FROM namespaces ORDER BY namespace$/.test(flat.trim())) {
@@ -23,6 +23,7 @@ function db(opts: { namespaces?: NsRow[]; blocked?: Array<Record<string, unknown
       return opts.namespaces ?? [];
     }
     if (/FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT \?1/.test(flat)) return opts.blocked ?? [];
+    if (flat.trim() === "SELECT name FROM d1_migrations") return (opts.applied ?? []).map((name) => ({ name }));
     if (/FROM jobs j WHERE j\.status IN/.test(flat)) {
       if (opts.failStale) throw new Error("D1_ERROR: sample stale read failed");
       return [];
@@ -231,6 +232,17 @@ test("THE INNOCENT DIRECTION: when every part reads, not_checked names only the 
     // The fake KV holds no watcher snapshot, which is itself something not checked.
     assert.deepEqual(r.not_checked, ["the watcher has written no pass yet"]);
     assert.equal(r.as_of, NOW.toISOString());
+  });
+});
+
+test("a blocked job whose named migration is applied is left out, and one still waiting stays", async () => {
+  const blocked = [
+    { id: "job_aaaaaaaaaaaa", namespace: "sample", title: "Apply 0046", result_summary: "Run this:\nwrangler d1 migrations apply (0046_sample_index.sql)", updated_at: "2026-10-09T00:00:00Z" },
+    { id: "job_bbbbbbbbbbbb", namespace: "sample", title: "Apply 0047", result_summary: "Run this:\nwrangler d1 migrations apply (0047_sample_table.sql)", updated_at: "2026-10-09T00:00:00Z" },
+  ];
+  await withFetch({}, async () => {
+    const r = await whatsNext(env(db({ blocked, applied: ["0046_sample_index.sql"] })), NOW);
+    assert.deepEqual(r.blocked.map((j) => j.id), ["job_bbbbbbbbbbbb"]);
   });
 });
 

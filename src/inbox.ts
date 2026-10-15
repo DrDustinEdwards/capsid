@@ -107,7 +107,7 @@ export function blockSettled(
 }
 
 /** The applied migrations by file name without ".sql", or null when the table cannot be read. */
-async function appliedMigrations(db: D1Database): Promise<Set<string> | null> {
+export async function appliedMigrations(db: D1Database): Promise<Set<string> | null> {
   try {
     const rows = await db.prepare("SELECT name FROM d1_migrations").all<{ name: string }>();
     return new Set((rows.results ?? []).map((r) => r.name.toLowerCase().replace(/\.sql$/, "")));
