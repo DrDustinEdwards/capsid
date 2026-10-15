@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { CURSOR_KEY, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, indexKey, isCanon } from "../src/doc-index.ts";
+import { CURSOR_KEY, HYBRID_MONTHLY_CAP, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, hybridSearch, indexKey, isCanon } from "../src/doc-index.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The meaning index is fed from D1 by a watermark, so these run the real migrations
@@ -46,12 +46,16 @@ interface FakeItem {
   metadata: Record<string, unknown>;
 }
 
-function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean } = {}) {
+function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean; search?: (request: AiSearchSearchRequest) => AiSearchSearchResponse["chunks"] } = {}) {
   const items = new Map<string, FakeItem>();
   const created: unknown[] = [];
   let next = 1;
   let exists = opts.exists ?? false;
   const instance = {
+    search: async (request: AiSearchSearchRequest) => {
+      if (!opts.search) throw new Error("no search fake");
+      return { search_query: request.query ?? "", chunks: opts.search(request) };
+    },
     info: async () => {
       if (!exists) throw new Error("AiSearchNotFoundError");
       return { id: INDEX_INSTANCE };
@@ -189,4 +193,57 @@ test("canon is the conventions, decisions, rulings and every core.md; keys alway
   assert.ok(!isCanon("capsid", "handoffs/session.md"));
   assert.equal(indexKey("sample", "jobs/job_1.md"), "sample/jobs/job_1.md");
   assert.equal(indexKey("sample", "notes/backup"), "sample/notes/backup.md");
+});
+
+// Hybrid search
+
+const chunk = (doc_id: number, text: string, score: number) => ({ id: `c${doc_id}-${score}`, type: "text", score, text, item: { key: `k${doc_id}`, metadata: { doc_id } } });
+const READY = { "doc-index:instance": "ready" };
+
+test("hybrid search keeps the index's order and reads every hit back from D1 with the caller's filters", async () => {
+  const { raw, db } = fresh();
+  const a = put(raw, "sample", "a.md", "alpha body");
+  const b = put(raw, "sample", "b.md", "beta body");
+  const other = put(raw, "elsewhere", "c.md", "gamma body");
+  const gone = put(raw, "sample", "gone.md", "deleted since indexing");
+  raw.prepare("DELETE FROM documents WHERE id = ?").run(gone);
+  let seen: AiSearchSearchRequest | undefined;
+  const search = fakeSearch({
+    exists: true,
+    search: (request) => {
+      seen = request;
+      return [chunk(b, "beta   best\nchunk", 0.9), chunk(gone, "stale", 0.8), chunk(other, "gamma", 0.7), chunk(a, "alpha", 0.6), chunk(b, "beta second chunk", 0.5)];
+    },
+  });
+  const kv = fakeKv({ seed: { ...READY } });
+  const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
+
+  const rows = await hybridSearch(env, "what about beta", { namespace: "sample", type: null, allowed: null }, DAY1);
+  assert.ok(Array.isArray(rows));
+  assert.deepEqual(rows.map((r) => r.path), ["b.md", "a.md"], "the deleted document and the other namespace's are dropped, the order kept");
+  assert.equal(rows[0].snippet, "beta best chunk", "the best chunk is the snippet");
+  const retrieval = seen?.ai_search_options?.retrieval;
+  assert.equal(retrieval?.retrieval_type, "hybrid");
+  assert.equal(retrieval?.return_on_failure, false, "a failure throws, so the caller falls back instead of seeing nothing");
+  assert.deepEqual(retrieval?.filters, { namespace: { $eq: "sample" } });
+  assert.equal(await kv.kv.get("doc-index:queries:2026-10"), "1", "the query is counted");
+
+  const limited = await hybridSearch(env, "what about beta", { namespace: null, type: null, allowed: JSON.stringify(["a.md"]) }, DAY1);
+  assert.deepEqual(Array.isArray(limited) && limited.map((r) => r.path), ["a.md"], "a path limit holds even when the index returns more");
+});
+
+test("hybrid search says why instead of answering when the index cannot, so the caller falls back", async () => {
+  const { db } = fresh();
+  const failing = fakeSearch({
+    exists: true,
+    search: () => {
+      throw new Error("index unavailable");
+    },
+  });
+  const filter = { namespace: null, type: null, allowed: null };
+  assert.equal(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv }), "q", filter, DAY1), "AI_SEARCH is not bound");
+  assert.equal(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1), "the search index is not built yet");
+  const capped = fakeKv({ seed: { ...READY, "doc-index:queries:2026-10": String(HYBRID_MONTHLY_CAP) } });
+  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: capped.kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /hybrid queries are used/);
+  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /refused the query: index unavailable/);
 });

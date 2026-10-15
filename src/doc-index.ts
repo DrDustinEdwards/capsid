@@ -1,5 +1,7 @@
 import type { Env } from "./env";
 import { logEvent } from "./log";
+import { SEARCH_ROWS } from "./limits";
+import type { SearchFilter, SearchRow } from "./doc-reads";
 
 // The meaning index: every document, copied into a Cloudflare AI Search instance on
 // built-in storage so search can match by meaning as well as by keyword
@@ -221,4 +223,73 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
     failed: allFailed,
     deleted,
   };
+}
+
+// Hybrid search (step 2 of the design): meaning plus keyword, through the index. The
+// index decides only the order. Every hit is read back from D1 with the caller's
+// filters, so a document the caller may not see, or one deleted or moved since it was
+// indexed, is never returned. Anything that keeps the index from answering returns a
+// reason instead of rows, and the caller falls back to FTS5.
+//
+// Queries are counted per month in KV. The account's free 1,000 a month is shared with
+// the site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case
+// near $4 a month (Dustin's $5 cap, decision D1 of the design).
+export const HYBRID_MONTHLY_CAP = 5000;
+const SNIPPET_CHARS = 240;
+
+export async function hybridSearch(env: Env, query: string, filter: SearchFilter, now: Date = new Date()): Promise<SearchRow[] | string> {
+  const ns = env.AI_SEARCH;
+  if (!ns) return "AI_SEARCH is not bound";
+  if ((await env.APP_KV.get(READY_KEY)) !== "ready") return "the search index is not built yet";
+  const countKey = `doc-index:queries:${now.toISOString().slice(0, 7)}`;
+  const used = Number((await env.APP_KV.get(countKey)) ?? 0);
+  if (used >= HYBRID_MONTHLY_CAP) return `this month's ${HYBRID_MONTHLY_CAP} hybrid queries are used`;
+  await env.APP_KV.put(countKey, String(used + 1), { expirationTtl: 40 * 86_400 });
+
+  const filters: Record<string, { $eq: string }> = {};
+  if (filter.namespace) filters.namespace = { $eq: filter.namespace };
+  if (filter.type) filters.type = { $eq: filter.type };
+  let chunks: AiSearchSearchResponse["chunks"];
+  try {
+    ({ chunks } = await ns.get(INDEX_INSTANCE).search({
+      query,
+      ai_search_options: {
+        retrieval: {
+          retrieval_type: "hybrid",
+          max_num_results: 50,
+          return_on_failure: false,
+          ...(Object.keys(filters).length > 0 ? { filters } : {}),
+        },
+      },
+    }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logEvent("warn", "DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` });
+    return `the search index refused the query: ${message}`;
+  }
+
+  // Best chunk first, so a document's first chunk sets its rank and its snippet.
+  const ranked = new Map<number, string>();
+  for (const chunk of chunks) {
+    const id = Number(chunk.item.metadata?.doc_id);
+    if (Number.isInteger(id) && !ranked.has(id)) ranked.set(id, chunk.text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS));
+  }
+  if (ranked.size === 0) return [];
+  const { results } = await env.DB.prepare(
+    `SELECT id, namespace, path, title, type, status, updated_at FROM documents
+     WHERE id IN (SELECT value FROM json_each(?1))
+       AND (?2 IS NULL OR namespace = ?2)
+       AND (?3 IS NULL OR type = ?3)
+       AND (?4 IS NULL OR path IN (SELECT value FROM json_each(?4)))`
+  )
+    .bind(JSON.stringify([...ranked.keys()]), filter.namespace, filter.type, filter.allowed)
+    .all<Omit<SearchRow, "snippet">>();
+  const byId = new Map(results.map((r) => [r.id, r]));
+  const rows: SearchRow[] = [];
+  for (const [id, snippet] of ranked) {
+    const row = byId.get(id);
+    if (row) rows.push({ ...row, snippet });
+    if (rows.length > SEARCH_ROWS) break;
+  }
+  return rows;
 }
