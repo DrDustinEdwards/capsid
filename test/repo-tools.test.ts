@@ -109,6 +109,33 @@ test("requireSinglePrimary demands exactly one primary", () => {
   );
 });
 
+// commit author
+
+test("PLANT: a write and a delete through the repo tool are authored by the owner when ADMIN_EMAIL is set, and by GitHub's default when not", async () => {
+  const routes = {
+    "GET /repos/o/r": { body: { default_branch: "main" } },
+    "GET /repos/o/r/contents/doc.md": { body: { sha: "file-sha" } },
+    "PUT /repos/o/r/contents/doc.md": { body: { commit: { sha: "c" }, content: { sha: "f" } } },
+    "DELETE /repos/o/r/contents/doc.md": { body: { commit: { sha: "c" } } },
+  };
+  const repos = [{ repo: "o/r", label: "primary" }];
+  await withFetch(routes, async (calls) => {
+    const env = makeEnv(repos, fakeKv({ seedToken: true }), { ADMIN_EMAIL: "owner@example.com" });
+    await writeRepoFile(env, "ns", "doc.md", "NEW", "m", "direct");
+    await deleteRepoFile(env, "ns", "doc.md", "m", "direct");
+    const authors = calls.filter((c) => c.method === "PUT" || c.method === "DELETE").map((c) => (c.body as { author?: unknown }).author);
+    assert.deepEqual(authors, [
+      { name: "Dustin Edwards", email: "owner@example.com" },
+      { name: "Dustin Edwards", email: "owner@example.com" },
+    ]);
+  });
+  await withFetch(routes, async (calls) => {
+    await writeRepoFile(makeEnv(repos), "ns", "doc.md", "NEW", "m", "direct");
+    const put = calls.find((c) => c.method === "PUT");
+    assert.equal((put?.body as { author?: unknown }).author, undefined);
+  });
+});
+
 // delete_repo_file: mode + precondition
 
 test("delete_repo_file direct mode deletes on the default branch", async () => {

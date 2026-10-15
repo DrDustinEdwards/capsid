@@ -274,6 +274,17 @@ export async function searchCode(
   return result;
 }
 
+// Commits the repo tool makes are authored by the owner, not by the App's bot
+// (improvement list item 22). The App still commits them, so GitHub shows the owner as
+// author and capsid-repo-access[bot] as committer. Without ADMIN_EMAIL, GitHub's
+// default (the bot as both) stands.
+const COMMIT_AUTHOR_NAME = "Dustin Edwards";
+
+function commitAuthor(env: Pick<Env, "ADMIN_EMAIL">): { author?: { name: string; email: string } } {
+  const email = env.ADMIN_EMAIL?.trim();
+  return email ? { author: { name: COMMIT_AUTHOR_NAME, email } } : {};
+}
+
 async function putFile(
   env: Env,
   owner: string,
@@ -297,6 +308,7 @@ async function putFile(
       content: base64Encode(content),
       branch,
       ...(sha ? { sha } : {}),
+      ...commitAuthor(env),
     }),
   });
   if (!resp.ok) throw new Error(`commit failed (${resp.status}): ${await resp.text()}`);
@@ -552,7 +564,7 @@ export async function deleteRepoFile(
       const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/${encodePath(path)}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, sha, branch: target }),
+        body: JSON.stringify({ message, sha, branch: target, ...commitAuthor(env) }),
       });
       if (!resp.ok) throw new Error(`delete failed (${resp.status}): ${await resp.text()}`);
       const data = (await resp.json()) as { commit: { sha: string } };
