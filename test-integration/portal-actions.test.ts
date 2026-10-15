@@ -153,15 +153,17 @@ async function siteRow(namespace: string) {
 }
 
 // A driver's pending proposal for sample/core.md, written against the body stored now.
-async function proposal(): Promise<string> {
-  await env.DB.prepare("DELETE FROM canon_proposals").run();
-  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'sample' AND path = 'core.md'").run();
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type) VALUES ('sample', 'core.md', 'sample - core', 'The sample service answers on port 80.', 'core')").run();
+async function proposal(fresh = true, body = "The sample service answers on port 8080."): Promise<string> {
+  if (fresh) {
+    await env.DB.prepare("DELETE FROM canon_proposals").run();
+    await env.DB.prepare("DELETE FROM documents WHERE namespace = 'sample' AND path = 'core.md'").run();
+    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type) VALUES ('sample', 'core.md', 'sample - core', 'The sample service answers on port 80.', 'core')").run();
+  }
   const proposed = await proposeCanon(env.DB, "agent:sample-driver", NOW, {
     namespace: "sample",
     path: "core.md",
     title: null,
-    body: "The sample service answers on port 8080.",
+    body,
     type: null,
     tags: null,
     status: null,
@@ -171,6 +173,9 @@ async function proposal(): Promise<string> {
   });
   return String(proposed.id);
 }
+
+// The ids canon_approve_all's case wrote, for its after.
+const sweepIds = { older: "", newer: "" };
 
 async function coreBody() {
   return (await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'sample' AND path = 'core.md'").first<{ body: string }>())?.body;
@@ -404,6 +409,21 @@ const CASES: Record<string, Case> = {
       expect(version?.body, "the approval did not snapshot the body it replaced").toBe("The sample service answers on port 80.");
     },
   },
+  // Two proposals on one document: the older is rejected as superseded, the newer approved.
+  canon_approve_all: {
+    params: async () => {
+      sweepIds.older = await proposal();
+      sweepIds.newer = await proposal(false, "The sample service answers on port 9090.");
+      return { reason: "the rules audit" };
+    },
+    after: async () => {
+      expect(await coreBody()).toBe("The sample service answers on port 9090.");
+      expect(await proposalRow(sweepIds.older)).toMatchObject({ state: "rejected", decided_by: ACTOR, decided_reason: `superseded by proposal ${sweepIds.newer} on the same document` });
+      expect(await proposalRow(sweepIds.newer)).toMatchObject({ state: "approved", decided_by: ACTOR });
+      const click = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'portal-canon_approve_all' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
+      expect(JSON.parse(click?.params ?? "{}")).toMatchObject({ reason: "the rules audit", approved: [Number(sweepIds.newer)], rejected: [Number(sweepIds.older)], failed: [] });
+    },
+  },
   sign_policy_change: {
     // Version 8, signed, with the unit, snapshotting version 7, and loading as the Worker's
     // copy: the typed version is what lets it through.
@@ -469,9 +489,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-seven actions", () => {
+  it("covers the allow-list, twenty-eight actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(27);
+    expect(Object.keys(CASES).length).toBe(28);
   });
 
   for (const action of PORTAL_ACTIONS) {

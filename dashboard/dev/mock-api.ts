@@ -61,7 +61,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "site_repair"];
+const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "canon_approve_all", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "overnight"];
@@ -807,6 +807,36 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
           "added: The sample service answers on port 8080.",
         ],
         apply: (st) => void st.canonDecided.add(id),
+      };
+    }
+    case "canon_approve_all": {
+      // The Worker's plan (src/canon.ts, planSweep): the newest proposal on each document
+      // is approved unless stale; older ones are superseded, a stale newest one outdated.
+      const list = [...f.live.canon_proposals].sort((a, b) => a.id - b.id);
+      if (!list.length) throw new Refusal(400, "no pending canon proposals.");
+      const key = (c: (typeof list)[number]) => `${c.namespace}/${c.path}`;
+      const newest = new Map<string, number>();
+      for (const c of list) newest.set(key(c), Math.max(newest.get(key(c)) ?? 0, c.id));
+      const plan = list.map((c) => {
+        const top = newest.get(key(c)) ?? c.id;
+        const reason = c.id !== top ? `superseded by proposal ${top} on the same document` : c.stale ? `outdated: ${key(c)} changed after this proposal was written; write it again against the current body` : null;
+        return { c, reason };
+      });
+      const approvals = plan.filter((p) => p.reason === null);
+      const rejections = plan.filter((p) => p.reason !== null);
+      const flagged = approvals.filter((p) => p.c.directive_lines.length);
+      return {
+        summary: "Decide every pending canon proposal at once.",
+        done: `Decided ${plan.length} of ${plan.length} canon proposal(s). Approved ${approvals.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}. Rejected ${rejections.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}.`,
+        changes: [
+          `${plan.length} pending canon proposal(s): ${approvals.length} approved, ${rejections.length} rejected. Rejections run first, then approvals, each its own decision; one that fails does not stop the rest.`,
+          ...(flagged.length
+            ? [`${flagged.length} approval(s) add lines that read as instructions addressed to agents. Read them before approving:`, ...flagged.flatMap((p) => p.c.directive_lines.map((l) => `instruction (proposal ${p.c.id}, ${key(p.c)}): ${l}`))]
+            : ["No approval adds a line that reads as an instruction addressed to agents."]),
+          ...rejections.map((p) => `reject proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): pending -> rejected, with the reason "${p.reason}". ${key(p.c)} is not touched.`),
+          ...approvals.map((p) => `approve proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): ${key(p.c)} is overwritten, the current version snapshotted first; ${p.c.added} line(s) added, ${p.c.removed} removed.`),
+        ],
+        apply: (st) => void plan.forEach((p) => st.canonDecided.add(p.c.id)),
       };
     }
     case "site_repair": {

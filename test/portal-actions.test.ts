@@ -133,6 +133,10 @@ function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
             async first() {
               return CANON_ROWS.find((p) => p.id === statement.params[0]) ?? null;
             },
+            // pendingProposals' read, joined to a document the fake does not hold.
+            async all() {
+              return { results: CANON_ROWS.filter((p) => p.state === "pending").map((p) => ({ ...p, doc_id: null, current_body: null })), meta: {} };
+            },
           };
           return statement;
         }
@@ -375,19 +379,21 @@ const EVERY_ACTION = [
   ["package_remove", { name: "sample-pkg", revision: "1" }],
   ["canon_approve", { id: "7" }],
   ["canon_reject", { id: "7", reason: "the rule belongs in a typed doc" }],
+  ["canon_approve_all", {}],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
   ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "8" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
 ] as const;
 
-test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, and every loop below covers each", () => {
+test("the Portal's actions are the eight the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the two canon decisions and approve all, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
     "approve_pr",
     "automerge_resume",
     "canon_approve",
+    "canon_approve_all",
     "canon_reject",
     "close_shipped",
     "fail_job",
@@ -414,7 +420,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 27);
+  assert.equal(PORTAL_ACTIONS.length, 28);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -449,6 +455,24 @@ for (const [action, params] of EVERY_ACTION) {
 }
 
 // The concrete lines, where they name what the state holds now
+
+test("an approve all preview lists each proposal and its flagged lines, and its token binds the plan it read", async () => {
+  const body = await previewOk(world(), "canon_approve_all", { reason: "the rules audit" });
+  assert.match(body.changes[0], /^1 pending canon proposal\(s\): 1 approved, 0 rejected/);
+  assert.ok(body.changes.includes("instruction (proposal 7, capsid/core.md): - Agents must call write after every job."), JSON.stringify(body.changes));
+  assert.ok(body.changes.some((c) => /^approve proposal 7 \(capsid\/core\.md, from agent:capsid-driver\): capsid\/core\.md is created; 3 line\(s\) added, 0 removed\.$/.test(c)), JSON.stringify(body.changes));
+  assert.equal(body.changes.at(-1), `Your reason "the rules audit" is recorded in the portal-canon_approve_all audit row.`);
+  const claims = JSON.parse(b64urlDecode(body.token.split(".")[0])) as { params: Record<string, string> };
+  assert.deepEqual(claims.params, { reason: "the rules audit", plan: "7:approve" });
+});
+
+test("PLANT: approve all refuses a plan sent by the caller, and writes nothing", async () => {
+  const w = world();
+  const res = await handlePortalPreview(await preview({ action: "canon_approve_all", params: { plan: "7:approve" } }), w.env, NOW);
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /canon_approve_all takes reason; 'plan' is not one of them/);
+  wroteNothing(w, "canon_approve_all with a plan");
+});
 
 test("a resume preview says the job goes back to its claimant, naming it", async () => {
   const body = await previewOk(world(), "resume_job", { id: "job_blocked00001", reason: "ran the push" });

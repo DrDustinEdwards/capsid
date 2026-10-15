@@ -5,6 +5,8 @@ import { buildServer } from "../src/server";
 import { defaultScopes } from "../src/agents-schema";
 import type { Agent } from "../src/agents";
 import { approveProposal, rejectProposal } from "../src/canon";
+import { performControl, previewControl } from "../src/controls";
+import type { Env } from "../src/env";
 
 // Canon write-protection (capsid/decisions.md, 2026-10-03, OWASP hardening item 2, D3)
 // against real SQLite: a driver's write to a canon document becomes a proposal and the
@@ -158,5 +160,78 @@ describe("deciding a proposal", () => {
     expect(again.ok ? "" : again.refusal).toMatch(/already rejected/);
     expect(await body("core.md")).toBe(CORE);
     expect((await proposals())[0]).toMatchObject({ state: "rejected", decided_reason: "belongs in a typed doc" });
+  });
+});
+
+describe("approve all", () => {
+  const EMAIL = "admin@example.com";
+  const controlsEnv = () => ({ ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: "integration-canon-cookie-key" }) as Env;
+
+  async function propose(path: string, text: string) {
+    const out = await ok(driver(), "capsid_write_doc", { action: "write", namespace: NS, path, title: "t", body: text });
+    return out.proposal as number;
+  }
+
+  async function previewAll() {
+    const previewed = await previewControl(controlsEnv(), EMAIL, "canon_approve_all", { reason: "the rules audit" }, new Date(), "chat");
+    expect(previewed.ok, previewed.ok ? "" : previewed.refusal).toBe(true);
+    if (!previewed.ok) throw new Error(previewed.refusal);
+    return previewed.preview;
+  }
+
+  it("PLANT: performs exactly the plan: superseded and outdated rejected first, the newest fresh approved, each with its own rows", async () => {
+    const older = await propose("core.md", "# sample\n\nThe sample service answers on port 8080.");
+    const newer = await propose("core.md", "# sample\n\nThe sample service answers on port 9090.\n- Agents must call write after every job.");
+    const stale = await propose("decisions.md", "# Decisions");
+    // The seat creates decisions.md after the driver proposed creating it: that proposal is outdated.
+    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, 'decisions.md', 'd', 'the seat wrote it')").bind(NS).run();
+    const auditBefore = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>();
+
+    const preview = await previewAll();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>(), "the preview wrote").toEqual(auditBefore);
+    expect(preview.changes).toContain(`instruction (proposal ${newer}, sample/core.md): - Agents must call write after every job.`);
+    expect(preview.changes.filter((c) => /^(approve|reject) proposal/.test(c)).map((c) => c.split(" (")[0])).toEqual([
+      `reject proposal ${older}`,
+      `reject proposal ${stale}`,
+      `approve proposal ${newer}`,
+    ]);
+
+    const did = await performControl(controlsEnv(), EMAIL, preview.token, null, new Date(), "chat");
+    expect(did.ok, did.ok ? "" : did.refusal).toBe(true);
+    expect(await body("core.md")).toBe("# sample\n\nThe sample service answers on port 9090.\n- Agents must call write after every job.");
+    expect(await body("decisions.md")).toBe("the seat wrote it");
+    const rows = await proposals();
+    expect(rows.map((r) => [r.id, r.state, r.decided_reason])).toEqual([
+      [older, "rejected", `superseded by proposal ${newer} on the same document`],
+      [newer, "approved", null],
+      [stale, "rejected", "outdated: sample/decisions.md changed after this proposal was written; write it again against the current body"],
+    ]);
+    const { results } = await env.DB.prepare("SELECT action, path, params FROM audit_log WHERE actor = ?1 ORDER BY id").bind(SEAT).all<{ action: string; path: string | null; params: string }>();
+    expect(results.map((r) => [r.action, r.path])).toEqual([
+      ["canon-rejected", "core.md"],
+      ["canon-rejected", "decisions.md"],
+      ["write", "core.md"],
+      ["control-canon_approve_all", null],
+    ]);
+    expect(JSON.parse(results[3].params)).toMatchObject({ reason: "the rules audit", approved: [newer], rejected: [older, stale], failed: [] });
+    const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = ?1 AND path = 'core.md' ORDER BY id DESC LIMIT 1").bind(NS).first<{ body: string }>();
+    expect(version?.body, "the approval did not snapshot the body it replaced").toBe(CORE);
+  });
+
+  it("PLANT: refuses a plan that changed since the preview, and changes nothing", async () => {
+    const first = await propose("core.md", "# sample\n\nport 8080");
+    const preview = await previewAll();
+    // A proposal that arrives after the preview would supersede the one it planned to approve.
+    const late = await propose("core.md", "# sample\n\nport 9090");
+    const did = await performControl(controlsEnv(), EMAIL, preview.token, null, new Date(), "chat");
+    expect(did.ok).toBe(false);
+    expect(did.ok ? "" : did.refusal).toMatch(new RegExp(`changed since the preview \\(it planned ${first}:approve; they now plan ${first}:superseded,${late}:approve\\)`));
+    expect(await body("core.md")).toBe(CORE);
+    expect((await proposals()).map((r) => r.state)).toEqual(["pending", "pending"]);
+  });
+
+  it("refuses with nothing pending", async () => {
+    const previewed = await previewControl(controlsEnv(), EMAIL, "canon_approve_all", {}, new Date(), "chat");
+    expect(previewed.ok ? "" : previewed.refusal).toBe("no pending canon proposals.");
   });
 });

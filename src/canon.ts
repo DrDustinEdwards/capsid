@@ -368,3 +368,67 @@ export async function rejectProposal(db: D1Database, actor: string, now: Date, i
   }
   return { ok: true, row, sha256: await sha256Hex(row.body), snapshotted: false };
 }
+
+// ---------------------------------------------------------------------------
+// Approve all (the canon_approve_all control, src/controls.ts): one decision over the
+// whole pending queue, each proposal still decided by approveProposal or rejectProposal
+// above, so its snapshot, audit row and guards are the single decision's (CLAUDE.md,
+// snapshot rule).
+
+export type SweepOutcome = "approve" | "superseded" | "outdated";
+
+export interface SweepItem {
+  proposal: PendingProposal;
+  outcome: SweepOutcome;
+  // The reason the proposer reads; null for an approval.
+  reason: string | null;
+}
+
+const docKey = (p: PendingProposal) => JSON.stringify([p.namespace, p.path]);
+
+/** What approve all does to each pending proposal, by id. The newest proposal on a
+ *  document (the highest id) is its candidate; every older one on it is rejected as
+ *  superseded. A stale candidate (its document moved, or now exists when it was a
+ *  create) is rejected as outdated, and every other candidate is approved. Pure. */
+export function planSweep(pending: readonly PendingProposal[]): SweepItem[] {
+  const newest = new Map<string, number>();
+  for (const p of pending) newest.set(docKey(p), Math.max(newest.get(docKey(p)) ?? 0, p.id));
+  return [...pending]
+    .sort((a, b) => a.id - b.id)
+    .map((p): SweepItem => {
+      const top = newest.get(docKey(p)) ?? p.id;
+      if (p.id !== top) return { proposal: p, outcome: "superseded", reason: `superseded by proposal ${top} on the same document` };
+      if (p.stale) {
+        return {
+          proposal: p,
+          outcome: "outdated",
+          reason: `outdated: ${p.namespace}/${p.path} changed after this proposal was written; write it again against the current body`,
+        };
+      }
+      return { proposal: p, outcome: "approve", reason: null };
+    });
+}
+
+/** The plan in one spelling, "<id>:<outcome>" by id, which the confirmation token binds:
+ *  a perform whose plan reads differently now is refused. */
+export function sweepKey(items: readonly SweepItem[]): string {
+  return items.map((i) => `${i.proposal.id}:${i.outcome}`).join(",");
+}
+
+export type Sweep = { ok: true; items: SweepItem[]; key: string } | { ok: false; refusal: string };
+
+/** The plan from the queue as it is now, or why there is none. Reads only. */
+export async function readSweep(db: D1Database): Promise<Sweep> {
+  const pending = await pendingProposals(db);
+  if (!pending.length) return { ok: false, refusal: "no pending canon proposals." };
+  // pendingProposals reads the oldest PENDING_LIMIT. A full read may have left out a newer
+  // proposal on a document it holds, which would change what is newest, so it is refused.
+  if (pending.length >= PENDING_LIMIT) {
+    return {
+      ok: false,
+      refusal: `${PENDING_LIMIT} or more canon proposals are pending, and approve all reads at most ${PENDING_LIMIT}, so it could miss a newer proposal on a document it decides. Decide some one at a time, then preview again.`,
+    };
+  }
+  const items = planSweep(pending);
+  return { ok: true, items, key: sweepKey(items) };
+}
