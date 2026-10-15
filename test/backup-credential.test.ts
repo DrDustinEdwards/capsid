@@ -143,7 +143,7 @@ test("every pinned site mints object-read-only on its OWN bucket and backups/jso
   assert.deepEqual(asked, OFFACCOUNT_SITES.map((site) => OFFACCOUNT_SOURCES[site].bucket));
 });
 
-test("the pinned table: the five sites that dump, capsid on its media pin, no bucket shared and none the holdout", () => {
+test("the pinned table: the six sites that dump, capsid on its media pin, no bucket shared and none the holdout", () => {
   assert.deepEqual(
     Object.fromEntries(OFFACCOUNT_SITES.map((site) => [site, OFFACCOUNT_SOURCES[site].bucket])),
     {
@@ -152,6 +152,7 @@ test("the pinned table: the five sites that dump, capsid on its media pin, no bu
       txasm: "txasm-books",
       foxing: "foxing-backups",
       foxhound: "foxhound-backups",
+      dustinedwards: "dustinedwards-backups",
     }
   );
   assert.equal(OFFACCOUNT_SOURCES.capsid.bucket, R2.name, "capsid's backup bucket drifted from the MEDIA pin in scripts/bindings.mjs");
@@ -175,10 +176,10 @@ test("a pinned site in the body is read through", () => {
 });
 
 test("an unknown, empty, inherited or non-string site is refused, naming the sites", () => {
-  for (const site of ["dustinedwards", "julieedwards", "CAPSID", "", "constructor", "__proto__", "toString", 5, null, ["capsid"], { bucket: "capsid-media" }]) {
+  for (const site of ["dustinedwards-backups", "julieedwards", "CAPSID", "", "constructor", "__proto__", "toString", 5, null, ["capsid"], { bucket: "capsid-media" }]) {
     const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site }));
     assert.equal(parsed.ok, false, `site ${JSON.stringify(site)} was admitted`);
-    assert.equal(parsed.ok ? "" : parsed.refusal, "the credential request names no known site; the sites are capsid, germomics, txasm, foxing, foxhound");
+    assert.equal(parsed.ok ? "" : parsed.refusal, "the credential request names no known site; the sites are capsid, germomics, txasm, foxing, foxhound, dustinedwards");
   }
 });
 
