@@ -27,7 +27,8 @@ export type TaskId =
   | "push"
   | "digest"
   | "merge-units"
-  | "merge-safety";
+  | "merge-safety"
+  | "doc-index";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -66,6 +67,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The auto-merge safety meter and shutoff (src/merge-safety.ts), on the tick; recorded
   // only when a revert was recorded, a namespace paused or the meter changed.
   { id: "merge-safety", label: "Auto-merge safety meter", period_ms: null },
+  // The meaning index (src/doc-index.ts), on the tick; recorded only when it sent or
+  // removed something, so a quiet spell means nothing changed.
+  { id: "doc-index", label: "Search index", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

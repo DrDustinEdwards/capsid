@@ -1,0 +1,192 @@
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { test } from "node:test";
+import { CURSOR_KEY, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, indexKey, isCanon } from "../src/doc-index.ts";
+import { fakeEnv, fakeKv } from "./fakes.ts";
+
+// The meaning index is fed from D1 by a watermark, so these run the real migrations
+// (the FTS triggers included) in Node's SQLite, and AI Search is an in-memory fake that
+// records what it was sent.
+
+const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
+const DAY1 = new Date("2026-10-15T12:00:00Z");
+const DAY2 = new Date("2026-10-16T12:00:00Z");
+
+function d1(db: DatabaseSync): D1Database {
+  const statement = (sql: string, params: unknown[] = []) => {
+    const s = db.prepare(sql);
+    const args = params as Array<string | number | null>;
+    return {
+      bind: (...next: unknown[]) => statement(sql, next),
+      first: async () => (s.get(...args) as Record<string, unknown> | undefined) ?? null,
+      all: async () => ({ results: s.all(...args).map((r) => ({ ...r })) }),
+      run: async () => ({ meta: { changes: Number(s.run(...args).changes) } }),
+    };
+  };
+  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
+}
+
+function fresh(): { raw: DatabaseSync; db: D1Database } {
+  const raw = new DatabaseSync(":memory:");
+  for (const name of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  return { raw, db: d1(raw) };
+}
+
+function put(raw: DatabaseSync, namespace: string, path: string, body: string, updated_at = "2026-10-15 10:00:00"): number {
+  raw.prepare("INSERT INTO documents (namespace, path, title, body, updated_at) VALUES (?, ?, ?, ?, ?)").run(namespace, path, path, body, updated_at);
+  return Number((raw.prepare("SELECT id FROM documents WHERE namespace = ? AND path = ?").get(namespace, path) as { id: number }).id);
+}
+
+interface FakeItem {
+  id: string;
+  key: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}
+
+function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean } = {}) {
+  const items = new Map<string, FakeItem>();
+  const created: unknown[] = [];
+  let next = 1;
+  let exists = opts.exists ?? false;
+  const instance = {
+    info: async () => {
+      if (!exists) throw new Error("AiSearchNotFoundError");
+      return { id: INDEX_INSTANCE };
+    },
+    items: {
+      upload: async (key: string, content: string, o?: { metadata?: Record<string, unknown> }) => {
+        if (opts.refuse?.(key)) throw new Error("refused");
+        const prior = [...items.values()].find((i) => i.key === key);
+        const id = prior?.id ?? `item-${next++}`;
+        items.set(id, { id, key, content, metadata: o?.metadata ?? {} });
+        return { id, key, status: "queued" };
+      },
+      list: async (p: { page?: number; per_page?: number } = {}) => {
+        const all = [...items.values()];
+        const size = p.per_page ?? 20;
+        const start = ((p.page ?? 1) - 1) * size;
+        return { result: all.slice(start, start + size).map((i) => ({ id: i.id, key: i.key, status: "completed", metadata: i.metadata })) };
+      },
+      delete: async (id: string) => {
+        items.delete(id);
+      },
+    },
+  };
+  const ns = {
+    get: (name: string) => {
+      assert.equal(name, INDEX_INSTANCE);
+      return instance;
+    },
+    create: async (config: unknown) => {
+      created.push(config);
+      exists = true;
+      return instance;
+    },
+  } as unknown as AiSearchNamespace;
+  return { ns, items, created, keys: () => [...items.values()].map((i) => i.key).sort() };
+}
+
+test("unbound, the tick does nothing and says so", async () => {
+  const { db } = fresh();
+  const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }), DAY1);
+  assert.deepEqual([report.ran, report.note], [false, "AI_SEARCH is not bound"]);
+});
+
+test("first tick creates a hybrid instance with the five metadata fields and sends every document", async () => {
+  const { raw, db } = fresh();
+  put(raw, "capsid", "rulings/testing.md", "Tested once where code lives.");
+  put(raw, "sample", "notes/backup", "Nightly dump to R2.");
+  const search = fakeSearch();
+  const kv = fakeKv({});
+  const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns }), DAY1);
+  assert.equal(search.created.length, 1);
+  const config = search.created[0] as { index_method: unknown; custom_metadata: Array<{ field_name: string }> };
+  assert.deepEqual(config.index_method, { vector: true, keyword: true });
+  assert.deepEqual(config.custom_metadata.map((m) => m.field_name), ["namespace", "type", "status", "doc_id", "canon"]);
+  assert.deepEqual(search.keys(), ["capsid/rulings/testing.md", "sample/notes/backup.md"]);
+  const ruling = [...search.items.values()].find((i) => i.key === "capsid/rulings/testing.md");
+  assert.equal(ruling?.content, "# rulings/testing.md\n\nTested once where code lives.");
+  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: 1, canon: true });
+  assert.equal(report.sent, 2);
+
+  // Nothing changed: no upload, no run recorded, and an existing instance is not re-created.
+  const again = await docIndexTick(fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns }), DAY1);
+  assert.deepEqual([again.ran, again.sent, search.created.length], [false, 0, 1]);
+});
+
+test("an edit is sent on the next tick, and two writes in the same second are both sent", async () => {
+  const { raw, db } = fresh();
+  put(raw, "sample", "a.md", "one");
+  const search = fakeSearch({ exists: true });
+  const kv = fakeKv({});
+  const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
+  await docIndexTick(env, DAY1);
+  put(raw, "sample", "b.md", "two", "2026-10-15 11:00:00");
+  put(raw, "sample", "c.md", "three", "2026-10-15 11:00:00");
+  raw.prepare("UPDATE documents SET body = 'one, edited', updated_at = '2026-10-15 11:00:00' WHERE path = 'a.md'").run();
+  const report = await docIndexTick(env, DAY1);
+  assert.equal(report.sent, 3);
+  assert.equal([...search.items.values()].find((i) => i.key === "sample/a.md")?.content, "# a.md\n\none, edited");
+  assert.deepEqual(JSON.parse(kv.store.get(CURSOR_KEY) ?? "{}"), { updated_at: "2026-10-15 11:00:00", id: 3 });
+});
+
+test("a backfill larger than one batch goes a batch per tick", async () => {
+  const { raw, db } = fresh();
+  for (let i = 0; i < INDEX_BATCH + 5; i++) put(raw, "sample", `n/${i}.md`, `doc ${i}`);
+  const search = fakeSearch({ exists: true });
+  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
+  assert.equal((await docIndexTick(env, DAY1)).sent, INDEX_BATCH);
+  assert.equal((await docIndexTick(env, DAY1)).sent, 5);
+  assert.equal(search.items.size, INDEX_BATCH + 5);
+});
+
+test("a refused upload is counted and does not hold back the rest; the next day's reconcile re-sends it", async () => {
+  const { raw, db } = fresh();
+  put(raw, "sample", "bad.md", "x");
+  put(raw, "sample", "good.md", "y");
+  let refuse = true;
+  const search = fakeSearch({ exists: true, refuse: (key) => refuse && key === "sample/bad.md" });
+  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
+  const first = await docIndexTick(env, DAY1);
+  // Refused twice: on the tick's send, and again by the same day's first reconcile.
+  assert.deepEqual([first.ran, first.sent, first.failed], [true, 1, 2]);
+  assert.deepEqual(search.keys(), ["sample/good.md"]);
+  refuse = false;
+  const next = await docIndexTick(env, DAY2);
+  assert.deepEqual([next.sent, next.failed], [1, 0]);
+  assert.deepEqual(search.keys(), ["sample/bad.md", "sample/good.md"]);
+});
+
+test("PLANT: the daily reconcile removes the items of a deleted and a moved document, and keeps the rest", async () => {
+  const { raw, db } = fresh();
+  put(raw, "sample", "keep.md", "k");
+  put(raw, "sample", "gone.md", "g");
+  const moved = put(raw, "sample", "old.md", "m");
+  const search = fakeSearch({ exists: true });
+  const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
+  await docIndexTick(env, DAY1);
+  raw.prepare("DELETE FROM documents WHERE path = 'gone.md'").run();
+  raw.prepare("UPDATE documents SET path = 'new.md', updated_at = '2026-10-16 01:00:00' WHERE id = ?").run(moved);
+  // Same day: the move is sent, but the reconcile already ran, so the old items stay.
+  await docIndexTick(env, DAY1);
+  assert.deepEqual(search.keys(), ["sample/gone.md", "sample/keep.md", "sample/new.md", "sample/old.md"]);
+  const report = await docIndexTick(env, DAY2);
+  assert.equal(report.deleted, 2);
+  assert.deepEqual(search.keys(), ["sample/keep.md", "sample/new.md"]);
+});
+
+test("canon is the conventions, decisions, rulings and every core.md; keys always end in .md", () => {
+  assert.ok(isCanon("capsid", "conventions.md"));
+  assert.ok(isCanon("capsid", "conventions-cloud.md"));
+  assert.ok(isCanon("capsid", "rulings/testing-2026-10-04.md"));
+  assert.ok(isCanon("capsid", "archive/decisions-vol-8.md"));
+  assert.ok(isCanon("sample", "core.md"));
+  assert.ok(!isCanon("capsid", "archive/decisions-vol-1.md"), "a closed log volume is history");
+  assert.ok(!isCanon("sample", "rulings/x.md"), "rulings are capsid's");
+  assert.ok(!isCanon("capsid", "handoffs/session.md"));
+  assert.equal(indexKey("sample", "jobs/job_1.md"), "sample/jobs/job_1.md");
+  assert.equal(indexKey("sample", "notes/backup"), "sample/notes/backup.md");
+});
