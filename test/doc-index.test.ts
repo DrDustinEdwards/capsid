@@ -69,6 +69,8 @@ function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean;
         return { id, key, status: "queued" };
       },
       list: async (p: { page?: number; per_page?: number } = {}) => {
+        // The real binding's limit; it refused 100 in production on 2026-10-15.
+        if ((p.per_page ?? 20) > 50) throw new Error("Too big: expected number to be <=50");
         const all = [...items.values()];
         const size = p.per_page ?? 20;
         const start = ((p.page ?? 1) - 1) * size;
@@ -246,4 +248,19 @@ test("hybrid search says why instead of answering when the index cannot, so the 
   const capped = fakeKv({ seed: { ...READY, "doc-index:queries:2026-10": String(HYBRID_MONTHLY_CAP) } });
   assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: capped.kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /hybrid queries are used/);
   assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /refused the query: index unavailable/);
+});
+
+test("when the index refuses every document the cursor stays, reconcile waits, and the note names the refusal", async () => {
+  const { raw, db } = fresh();
+  put(raw, "sample", "a.md", "one");
+  put(raw, "sample", "b.md", "two");
+  const search = fakeSearch({ refuse: () => true });
+  const kv = fakeKv({});
+  const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
+  const report = await docIndexTick(env, DAY1);
+  assert.equal(report.sent, 0);
+  assert.equal(report.failed, 2);
+  assert.match(report.note, /first refusal: refused/);
+  assert.equal(await kv.kv.get(CURSOR_KEY), null, "the cursor did not move past rows nothing accepted");
+  assert.equal(await kv.kv.get("doc-index:reconciled"), null, "no reconcile while everything is refused");
 });
