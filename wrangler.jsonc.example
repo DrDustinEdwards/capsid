@@ -118,5 +118,15 @@
       "binding": "HOLDOUT",
       "bucket_name": "YOUR_HOLDOUT_R2_BUCKET"
     }
+  ],
+  // THE MEANING INDEX. Cloudflare AI Search, namespace-scoped, so the Worker creates
+  // its own instance (capsid-docs, built-in storage) on first use and needs no id here.
+  // src/doc-index.ts feeds it from D1 on the tick; D1 stays the source of truth
+  // (capsid/research/design-hybrid-search.md). The deploy token needs AI Search Edit.
+  "ai_search_namespaces": [
+    {
+      "binding": "AI_SEARCH",
+      "namespace": "default"
+    }
   ]
 }

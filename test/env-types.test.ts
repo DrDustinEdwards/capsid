@@ -12,7 +12,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // and compared in both directions. The count read is asserted so an empty parse cannot
 // pass for "they agree".
 
-const TYPES = { d1_databases: "D1Database", kv_namespaces: "KVNamespace", r2_buckets: "R2Bucket" } as const;
+const TYPES = { d1_databases: "D1Database", kv_namespaces: "KVNamespace", r2_buckets: "R2Bucket", ai_search_namespaces: "AiSearchNamespace" } as const;
 
 function exampleBindings(): Map<string, string> {
   const text = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");

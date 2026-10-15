@@ -7,6 +7,7 @@ import { runTask, type TaskResult } from "../task-runs";
 import { gatherFindings, watcherTick } from "../watcher";
 import { maintenanceTick } from "../maintenance";
 import { publicBuildTick } from "../public-data";
+import { docIndexTick } from "../doc-index";
 import { pushTick } from "../push";
 import { digestTick } from "../digest";
 import { unitsTick } from "../merge-units";
@@ -193,6 +194,21 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
       return { outcome: "ok", reason: report.note };
     },
     { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
+  );
+
+  // The meaning index (src/doc-index.ts): documents changed since the last tick go to
+  // AI Search, and once a day stale items are removed and missing ones re-sent. A
+  // refused upload is recorded as refused; the next edit or the daily pass retries it.
+  await runTask(
+    env,
+    "doc-index",
+    () => docIndexTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent(report.failed > 0 ? "error" : "log", "DOC_INDEX", { message: `DOC_INDEX ${report.note}` });
+      return { outcome: report.failed > 0 ? "refused" : "ok", reason: report.note };
+    },
+    { tag: "DOC_INDEX_THREW:", rethrow: false }
   );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
