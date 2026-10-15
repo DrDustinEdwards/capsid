@@ -5,14 +5,15 @@
 //
 // Each site dumps into its own bucket under d1-dump's prefix, BACKUP_DUMP_PREFIX in
 // src/improve-scorer.ts. txasm dumps into its books bucket rather than a backups one.
-// dustinedwards is not listed: it runs no d1-dump today, so it has no bucket to pin.
-// It joins when its nightly dump exists, with a test naming its bucket.
+// dustinedwards joined 2026-10-15, after its nightly dump (dustinedwards-info #439, on the
+// watchdog Worker) completed and passed its first drill (job_e40ec706c10a).
 export const OFFACCOUNT_SOURCES = {
   capsid: { bucket: "capsid-media" },
   germomics: { bucket: "germomics-backups" },
   txasm: { bucket: "txasm-books" },
   foxing: { bucket: "foxing-backups" },
   foxhound: { bucket: "foxhound-backups" },
+  dustinedwards: { bucket: "dustinedwards-backups" },
 } as const satisfies Record<string, { bucket: string }>;
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
