@@ -6,10 +6,17 @@ export type ModelEnv = Pick<Env, "ANTHROPIC_API_KEY">;
 
 
 // Per million tokens. Estimate only. Unknown models cost at the highest listed rate, not zero.
-const RATES: Record<string, { input: number; output: number }> = {
+// `long` is the rate for a prompt over 100K input tokens, where a model prices one.
+interface Rate {
+  input: number;
+  output: number;
+  long?: { input: number; output: number };
+}
+const RATES: Record<string, Rate> = {
   "claude-opus-5": { input: 5, output: 25 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-  "claude-haiku-4-5": { input: 1, output: 5 },
+  "claude-sonnet-5": { input: 2, output: 10 },
+  // Claude Haiku 5.5, released 2026-10-07 (platform.claude.com models overview, read 2026-10-15).
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, long: { input: 0.5, output: 2.5 } },
   // The documented fallback target for a policy decline on Opus 5.
   "claude-opus-4-8": { input: 5, output: 25 },
 };
@@ -23,12 +30,16 @@ interface UsageLike {
   cache_read_input_tokens?: number | null;
 }
 
+const LONG_PROMPT_TOKENS = 100_000;
+
 export function costOf(model: string, usage: UsageLike): number {
-  const rate = RATES[model] ?? HIGHEST_RATE;
   const input = usage.input_tokens ?? 0;
   const output = usage.output_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const listed = RATES[model];
+  const prompt = input + cacheWrite + cacheRead;
+  const rate = listed ? (listed.long && prompt > LONG_PROMPT_TOKENS ? listed.long : listed) : HIGHEST_RATE;
   return (
     (input * rate.input + cacheWrite * rate.input * 1.25 + cacheRead * rate.input * 0.1 + output * rate.output) /
     1_000_000
@@ -69,8 +80,9 @@ export interface ModelResult {
 // These stages run on Opus 5, whose safety classifiers can decline a request, so they
 // opt in to fallbacks ("default", which follows the refusal category).
 const OPUS_STAGES = new Set<ModelStage>(["abstract", "meta"]);
-// Haiku 4.5 rejects the effort parameter and adaptive thinking with a 400.
-const NO_EFFORT_STAGES = new Set<ModelStage>(["triage", "monitor"]);
+// The reading stages run on Haiku 5.5, whose effort defaults to medium; it is set
+// explicitly so a model change cannot move it silently.
+const READING_STAGES = new Set<ModelStage>(["triage", "monitor"]);
 
 export function clientFor(env: ModelEnv): Anthropic {
   if (!env.ANTHROPIC_API_KEY) {
@@ -85,7 +97,7 @@ export async function callModel(env: ModelEnv, call: ModelCall): Promise<ModelRe
   const client = clientFor(env);
   const model = MODEL_FOR[call.stage];
   const isOpus = OPUS_STAGES.has(call.stage);
-  const noEffort = NO_EFFORT_STAGES.has(call.stage);
+  const reading = READING_STAGES.has(call.stage);
 
   // Keeps a non-streaming request under the SDK's HTTP timeout. The attempt stage
   // streams instead (callModelStreaming).
@@ -93,7 +105,7 @@ export async function callModel(env: ModelEnv, call: ModelCall): Promise<ModelRe
 
   const outputConfig: Record<string, unknown> = {};
   // xhigh is the documented setting for coding and agentic work.
-  if (!noEffort) outputConfig.effort = "xhigh";
+  outputConfig.effort = reading ? "medium" : "xhigh";
   if (call.schema) outputConfig.format = { type: "json_schema", schema: call.schema };
 
   const response = await client.beta.messages.create({

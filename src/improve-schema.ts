@@ -277,8 +277,8 @@ export const MODEL_FOR: Record<ModelStage, string> = {
   // Reading a diff and answering a bounded question. Bare aliases, not dated snapshots:
   // the dated form resolves too, and pinning it here would make this file the one place
   // a model upgrade has to be remembered.
-  triage: "claude-haiku-4-5",
-  monitor: "claude-haiku-4-5",
+  triage: "claude-haiku-5-5",
+  monitor: "claude-haiku-5-5",
   // Writing the change.
   attempt: "claude-sonnet-5",
   // Cross-project reasoning: what does this change generalize to.
