@@ -6,6 +6,7 @@ import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocuments } from "../portfolio-docs";
 import { portfolioOnly } from "../scope";
 import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
+import { hybridSearch } from "../doc-index";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
@@ -352,14 +353,15 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "search",
     {
-      description: `Full text search across all documents (FTS5, ranked by bm25). Optional namespace and type filters. This is the cross-project search. Returns the top ${SEARCH_ROWS} matches under \`documents\`; when more matched it sets truncated:true.`,
+      description: `Full text search across all documents (FTS5, ranked by bm25). Optional namespace and type filters. This is the cross-project search. Returns the top ${SEARCH_ROWS} matches under \`documents\`; when more matched it sets truncated:true. mode "hybrid" matches by meaning as well as by keyword, for a question phrased in other words than the document uses; when the meaning index cannot answer, it falls back to the keyword search and says why under \`fallback\`.`,
       inputSchema: {
         query: bounded(MAX_QUERY),
         namespace: nsName.optional(),
         type: bounded(MAX_DOC_TYPE).optional(),
+        mode: z.enum(["keyword", "hybrid"]).optional(),
       },
     },
-    async ({ query, namespace, type }) => {
+    async ({ query, namespace, type, mode }) => {
       // A caller outside capsid searches the portfolio documents there and nothing else
       // (src/portfolio-docs.ts): the query is narrowed to the paths that exist, so the
       // page is not spent on rows that would be dropped, and every row is checked again
@@ -372,8 +374,16 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
           SEARCH_ROWS,
           "Add a namespace or type filter, or make the query more specific."
         );
+      const filter = { namespace: namespace ?? null, type: type ?? null, allowed };
+      let fallback: string | undefined;
+      if (mode === "hybrid") {
+        const hybrid = await hybridSearch(ctx.env, query, filter);
+        if (typeof hybrid !== "string") return ok({ mode: "hybrid", ...bound(hybrid) });
+        fallback = hybrid;
+      }
       try {
-        return ok(bound(await searchDocuments(db, query, { namespace: namespace ?? null, type: type ?? null, allowed })));
+        const rows = bound(await searchDocuments(db, query, filter));
+        return ok(fallback === undefined ? rows : { mode: "keyword", fallback, ...rows });
       } catch (err) {
         return fail(`search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`);
       }
