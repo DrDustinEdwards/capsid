@@ -28,7 +28,8 @@ export type TaskId =
   | "digest"
   | "merge-units"
   | "merge-safety"
-  | "doc-index";
+  | "doc-index"
+  | "supersede";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -70,6 +71,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The meaning index (src/doc-index.ts), on the tick; recorded only when it sent or
   // removed something, so a quiet spell means nothing changed.
   { id: "doc-index", label: "Search index", period_ms: null },
+  // The daily supersede pass (src/supersede.ts), with the backup; recorded only when it
+  // marked something.
+  { id: "supersede", label: "Supersede pass", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

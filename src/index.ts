@@ -4,6 +4,7 @@ import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
 import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
 import { runBackup } from "./backup";
+import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
 import { mcpOriginProblem, withSecurityHeaders } from "./headers";
 import type { Env, Props } from "./env";
@@ -165,6 +166,20 @@ export default {
             };
           },
           { tag: "BACKUP_CRON_THREW", rethrow: true }
+        )
+      );
+      // Its own task, so a throw here cannot stop the backup (design-hybrid-search 3.4).
+      ctx.waitUntil(
+        runTask(
+          env,
+          "supersede",
+          () => supersedePass(env),
+          (report): TaskResult => {
+            if (report.marked.length === 0) return null;
+            const line = report.marked.map((m) => `${m.document} by ${m.by}`).join("; ");
+            return { outcome: "ok", reason: `marked ${report.marked.length} superseded${report.more ? " (more next pass)" : ""}: ${line}` };
+          },
+          { tag: "SUPERSEDE_PASS_THREW", rethrow: true }
         )
       );
     }
