@@ -22,7 +22,8 @@ export const INDEX_INSTANCE = "capsid-docs";
 export const INDEX_BATCH = 100;
 // Index items deleted per reconcile, so a mistake removes a bounded number.
 const RECONCILE_DELETE_MAX = 200;
-const LIST_PAGE = 100;
+// AI Search lists at most 50 items a page.
+const LIST_PAGE = 50;
 
 export const CURSOR_KEY = "doc-index:cursor";
 const READY_KEY = "doc-index:instance";
@@ -139,32 +140,39 @@ async function changedSince(db: D1Database, cursor: Cursor, limit: number): Prom
 
 // One document to the index. A refusal is logged and reported, never thrown, so one
 // document AI Search will not take cannot stop the rest.
-async function upload(instance: AiSearchInstance, row: IndexRow): Promise<boolean> {
+// Returns null when sent, or the refusal's message.
+async function upload(instance: AiSearchInstance, row: IndexRow): Promise<string | null> {
   try {
     await instance.items.upload(indexKey(row.namespace, row.path), indexContent(row), { metadata: indexMetadata(row) });
-    return true;
+    return null;
   } catch (err) {
-    logEvent("error", "DOC_INDEX_UPLOAD_FAILED", {
-      message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${err instanceof Error ? err.message : String(err)}`,
-    });
-    return false;
+    const message = err instanceof Error ? err.message : String(err);
+    logEvent("error", "DOC_INDEX_UPLOAD_FAILED", { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` });
+    return message;
   }
 }
 
 /** Send what changed since the last tick. The cursor moves past every row tried, sent
  *  or not: one document AI Search refuses must not hold back the rest. A refusal is
- *  logged and counted, and the run is recorded as refused so it shows on Health. */
-async function sendChanged(env: Env, instance: AiSearchInstance): Promise<{ sent: number; failed: number }> {
+ *  logged and counted, and the run is recorded as refused so it shows on Health. When
+ *  every row is refused the fault is the index's, not a document's, so the cursor stays
+ *  and the same rows are tried next tick. */
+async function sendChanged(env: Env, instance: AiSearchInstance): Promise<{ tried: number; sent: number; failed: number; refusal: string | null }> {
   const rows = await changedSince(env.DB, await readCursor(env), INDEX_BATCH);
   let sent = 0;
   let failed = 0;
+  let refusal: string | null = null;
   for (const row of rows) {
-    if (await upload(instance, row)) sent++;
-    else failed++;
+    const refused = await upload(instance, row);
+    if (refused === null) sent++;
+    else {
+      failed++;
+      refusal ??= refused;
+    }
   }
   const last = rows.at(-1);
-  if (last) await env.APP_KV.put(CURSOR_KEY, JSON.stringify({ updated_at: last.updated_at, id: last.id }));
-  return { sent, failed };
+  if (last && sent > 0) await env.APP_KV.put(CURSOR_KEY, JSON.stringify({ updated_at: last.updated_at, id: last.id }));
+  return { tried: rows.length, sent, failed, refusal };
 }
 
 /** Once a UTC day: remove index items whose document is gone or has moved, and
@@ -194,7 +202,7 @@ async function reconcile(env: Env, instance: AiSearchInstance): Promise<{ delete
   for (const id of missing) {
     const row = await env.DB.prepare(`SELECT id, namespace, path, title, body, type, status, updated_at FROM documents WHERE id = ?1`).bind(id).first<IndexRow>();
     if (!row) continue;
-    if (await upload(instance, row)) resent++;
+    if ((await upload(instance, row)) === null) resent++;
     else failed++;
   }
   return { deleted, resent, failed };
@@ -204,13 +212,14 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
   const ns = env.AI_SEARCH;
   if (!ns) return idle("AI_SEARCH is not bound");
   const instance = await ensureInstance(env, ns);
-  const { sent, failed } = await sendChanged(env, instance);
+  const { tried, sent, failed, refusal } = await sendChanged(env, instance);
   const today = now.toISOString().slice(0, 10);
   let deleted = 0;
   let resent = 0;
   let refused = 0;
-  // Not until the backfill is done: before then every document is "missing".
-  if (sent < INDEX_BATCH && (await env.APP_KV.get(RECONCILED_KEY)) !== today) {
+  // Not until the backfill is done (before then every document is "missing"), and not
+  // while the index refuses everything.
+  if (tried < INDEX_BATCH && (sent > 0 || failed === 0) && (await env.APP_KV.get(RECONCILED_KEY)) !== today) {
     ({ deleted, resent, failed: refused } = await reconcile(env, instance));
     await env.APP_KV.put(RECONCILED_KEY, today);
   }
@@ -218,7 +227,7 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
   if (sent === 0 && allFailed === 0 && deleted === 0 && resent === 0) return idle("nothing changed");
   return {
     ran: true,
-    note: `sent ${sent}, failed ${failed}; reconcile removed ${deleted} stale item(s), re-sent ${resent}, failed ${refused}`,
+    note: `sent ${sent}, failed ${failed}${refusal ? ` (first refusal: ${refusal})` : ""}; reconcile removed ${deleted} stale item(s), re-sent ${resent}, failed ${refused}`,
     sent: sent + resent,
     failed: allFailed,
     deleted,
