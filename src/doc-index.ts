@@ -47,8 +47,6 @@ export interface IndexRow {
   updated_at: string;
 }
 
-const ROW_SELECT = "SELECT id, namespace, path, title, body, type, status, updated_at FROM documents";
-
 interface Cursor {
   updated_at: string;
   id: number;
@@ -128,8 +126,8 @@ async function readCursor(env: Env): Promise<Cursor> {
 async function changedSince(db: D1Database, cursor: Cursor, limit: number): Promise<IndexRow[]> {
   const { results } = await db
     .prepare(
-      `${ROW_SELECT}
-       WHERE updated_at > ?1 OR (updated_at = ?1 AND id > ?2)
+      `SELECT id, namespace, path, title, body, type, status, updated_at FROM documents
+       WHERE (updated_at, id) > (?1, ?2)
        ORDER BY updated_at, id LIMIT ?3`
     )
     .bind(cursor.updated_at, cursor.id, limit)
@@ -192,7 +190,7 @@ async function reconcile(env: Env, instance: AiSearchInstance): Promise<{ delete
   let resent = 0;
   let failed = 0;
   for (const id of missing) {
-    const row = await env.DB.prepare(`${ROW_SELECT} WHERE id = ?1`).bind(id).first<IndexRow>();
+    const row = await env.DB.prepare(`SELECT id, namespace, path, title, body, type, status, updated_at FROM documents WHERE id = ?1`).bind(id).first<IndexRow>();
     if (!row) continue;
     if (await upload(instance, row)) resent++;
     else failed++;
