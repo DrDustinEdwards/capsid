@@ -27,3 +27,17 @@ test("a visual pull request shows its title, preview and screenshots beside Appr
   await expect(look.getByRole("link", { name: "Screenshot 2" })).toHaveAttribute("target", "_blank");
   await expect(awaiting.getByRole("button", { name: "Approve example-org/sample-c #32", exact: true })).toBeVisible();
 });
+
+test("Awaiting the seat says why a pull request was held in words, not a check name", async ({ page }) => {
+  await page.route("**/portal/api/ops", async (route) => {
+    const res = await route.fetch();
+    const feed = (await res.json()) as OpsFeed;
+    feed.live.awaiting_seat[0] = { ...feed.live.awaiting_seat[0]!, failed: "paths_not_money" };
+    await route.fulfill({ response: res, json: feed });
+  });
+  await visit(page, "prs");
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  await expect(awaiting.getByRole("columnheader", { name: "Held because" })).toBeVisible();
+  await expect(awaiting).toContainText("it touches payment code");
+  await expect(awaiting).not.toContainText("paths_not_money");
+});
