@@ -81,13 +81,16 @@ function indexContent(row: IndexRow): string {
   return `# ${row.title ?? row.path}\n\n${row.body ?? ""}`;
 }
 
-function indexMetadata(row: IndexRow): Record<string, unknown> {
+// Every value is sent as a string, as R2 custom metadata is: the live index refused
+// a number and a boolean as invalid_metadata_format (2026-10-15). The instance's schema
+// types them, so doc_id still filters as a number and canon as a boolean.
+function indexMetadata(row: IndexRow): Record<string, string> {
   return {
     namespace: row.namespace,
     type: row.type ?? "note",
     status: row.status ?? "published",
-    doc_id: row.id,
-    canon: isCanon(row.namespace, row.path),
+    doc_id: String(row.id),
+    canon: String(isCanon(row.namespace, row.path)),
   };
 }
 
@@ -247,19 +250,47 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
 // near $4 a month (Dustin's $5 cap, decision D1 of the design).
 export const HYBRID_MONTHLY_CAP = 5000;
 const SNIPPET_CHARS = 240;
+// Closed tasks and superseded rulings stay searchable on request but are hidden by
+// default, so an old answer does not sit beside the current one (design 3.2).
+const RETIRED = ["closed", "superseded"];
 
-export async function hybridSearch(env: Env, query: string, filter: SearchFilter, now: Date = new Date()): Promise<SearchRow[] | string> {
+const countKey = (now: Date) => `doc-index:queries:${now.toISOString().slice(0, 7)}`;
+
+/** This month's hybrid queries, for /health (design 3.5). */
+export async function aiSearchUsage(env: Env, now: Date = new Date()): Promise<{ month: string; hybrid: number; cap: number }> {
+  return { month: now.toISOString().slice(0, 7), hybrid: Number((await env.APP_KV.get(countKey(now))) ?? 0), cap: HYBRID_MONTHLY_CAP };
+}
+
+export type Match = "keyword" | "meaning" | "both";
+export type HybridRow = SearchRow & { match: Match };
+
+function matchOf(chunk: AiSearchSearchResponse["chunks"][number]): Match {
+  const d = chunk.scoring_details;
+  const keyword = d?.keyword_rank !== undefined || (d?.keyword_score ?? 0) > 0;
+  const meaning = d?.vector_rank !== undefined || (d?.vector_score ?? 0) > 0;
+  return keyword && meaning ? "both" : keyword ? "keyword" : "meaning";
+}
+
+const joinMatch = (a: Match, b: Match): Match => (a === b ? a : "both");
+
+export async function hybridSearch(
+  env: Env,
+  query: string,
+  filter: SearchFilter & { includeRetired?: boolean },
+  now: Date = new Date()
+): Promise<HybridRow[] | string> {
   const ns = env.AI_SEARCH;
   if (!ns) return "AI_SEARCH is not bound";
   if ((await env.APP_KV.get(READY_KEY)) !== "ready") return "the search index is not built yet";
-  const countKey = `doc-index:queries:${now.toISOString().slice(0, 7)}`;
-  const used = Number((await env.APP_KV.get(countKey)) ?? 0);
+  const key = countKey(now);
+  const used = Number((await env.APP_KV.get(key)) ?? 0);
   if (used >= HYBRID_MONTHLY_CAP) return `this month's ${HYBRID_MONTHLY_CAP} hybrid queries are used`;
-  await env.APP_KV.put(countKey, String(used + 1), { expirationTtl: 40 * 86_400 });
+  await env.APP_KV.put(key, String(used + 1), { expirationTtl: 40 * 86_400 });
 
-  const filters: Record<string, { $eq: string }> = {};
+  const filters: Record<string, { $eq: string } | { $nin: string[] }> = {};
   if (filter.namespace) filters.namespace = { $eq: filter.namespace };
   if (filter.type) filters.type = { $eq: filter.type };
+  if (!filter.includeRetired) filters.status = { $nin: RETIRED };
   let chunks: AiSearchSearchResponse["chunks"];
   try {
     ({ chunks } = await ns.get(INDEX_INSTANCE).search({
@@ -270,6 +301,8 @@ export async function hybridSearch(env: Env, query: string, filter: SearchFilter
           max_num_results: 50,
           return_on_failure: false,
           ...(Object.keys(filters).length > 0 ? { filters } : {}),
+          // The current canon ranks above a session log that quotes an old ruling (3.3).
+          boost_by: [{ field: "canon", direction: "desc" }],
         },
       },
     }));
@@ -279,11 +312,15 @@ export async function hybridSearch(env: Env, query: string, filter: SearchFilter
     return `the search index refused the query: ${message}`;
   }
 
-  // Best chunk first, so a document's first chunk sets its rank and its snippet.
-  const ranked = new Map<number, string>();
+  // Best chunk first, so a document's first chunk sets its rank and its snippet; every
+  // chunk of it adds to how it matched.
+  const ranked = new Map<number, { snippet: string; match: Match }>();
   for (const chunk of chunks) {
     const id = Number(chunk.item.metadata?.doc_id);
-    if (Number.isInteger(id) && !ranked.has(id)) ranked.set(id, chunk.text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS));
+    if (!Number.isInteger(id)) continue;
+    const seen = ranked.get(id);
+    if (seen) seen.match = joinMatch(seen.match, matchOf(chunk));
+    else ranked.set(id, { snippet: chunk.text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS), match: matchOf(chunk) });
   }
   if (ranked.size === 0) return [];
   const { results } = await env.DB.prepare(
@@ -291,15 +328,16 @@ export async function hybridSearch(env: Env, query: string, filter: SearchFilter
      WHERE id IN (SELECT value FROM json_each(?1))
        AND (?2 IS NULL OR namespace = ?2)
        AND (?3 IS NULL OR type = ?3)
-       AND (?4 IS NULL OR path IN (SELECT value FROM json_each(?4)))`
+       AND (?4 IS NULL OR path IN (SELECT value FROM json_each(?4)))
+       AND (?5 = 1 OR status IS NULL OR status NOT IN (SELECT value FROM json_each(?6)))`
   )
-    .bind(JSON.stringify([...ranked.keys()]), filter.namespace, filter.type, filter.allowed)
+    .bind(JSON.stringify([...ranked.keys()]), filter.namespace, filter.type, filter.allowed, filter.includeRetired ? 1 : 0, JSON.stringify(RETIRED))
     .all<Omit<SearchRow, "snippet">>();
   const byId = new Map(results.map((r) => [r.id, r]));
-  const rows: SearchRow[] = [];
-  for (const [id, snippet] of ranked) {
+  const rows: HybridRow[] = [];
+  for (const [id, hit] of ranked) {
     const row = byId.get(id);
-    if (row) rows.push({ ...row, snippet });
+    if (row) rows.push({ ...row, ...hit });
     if (rows.length > SEARCH_ROWS) break;
   }
   return rows;

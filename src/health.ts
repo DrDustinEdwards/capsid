@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { probeFts } from "./store-probe";
+import { aiSearchUsage } from "./doc-index";
 
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
@@ -71,6 +72,9 @@ export interface HealthReport {
   store: { d1: string; fts: string };
   bindings: { media: string; app_kv: string };
   backup: { last_ok: string | null; age_hours: number | null; warning?: string };
+  // Capsid's own hybrid searches this month against its cap (design-hybrid-search 3.5).
+  // Informational; null when KV cannot be read, absent from snapshots taken before it.
+  ai_search?: { month: string; hybrid: number; cap: number } | null;
 }
 
 // /health serializes this and the watcher's pass records it for Capsid Portal, so the
@@ -105,10 +109,11 @@ export async function healthReport(env: Env): Promise<HealthReport> {
 
   const backup = await backupFreshness(env);
   const bindings = await probeBindings(env);
+  const ai_search = await aiSearchUsage(env).catch(() => null);
 
   // Status is the store only: the live gate polls it after a deploy, and a 503 fails it.
   const healthy = d1 === "ok" && fts === "ok";
-  return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, bindings, backup };
+  return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, bindings, backup, ai_search };
 }
 
 export async function handleHealth(env: Env): Promise<Response> {

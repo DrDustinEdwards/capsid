@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { CURSOR_KEY, HYBRID_MONTHLY_CAP, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, hybridSearch, indexKey, isCanon } from "../src/doc-index.ts";
+import { CURSOR_KEY, HYBRID_MONTHLY_CAP, aiSearchUsage, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, hybridSearch, indexKey, isCanon } from "../src/doc-index.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The meaning index is fed from D1 by a watermark, so these run the real migrations
@@ -63,6 +63,8 @@ function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean;
     items: {
       upload: async (key: string, content: string, o?: { metadata?: Record<string, unknown> }) => {
         if (opts.refuse?.(key)) throw new Error("refused");
+        // The live index refused a number and a boolean (2026-10-15).
+        if (Object.values(o?.metadata ?? {}).some((v) => typeof v !== "string")) throw new Error("invalid_metadata_format");
         const prior = [...items.values()].find((i) => i.key === key);
         const id = prior?.id ?? `item-${next++}`;
         items.set(id, { id, key, content, metadata: o?.metadata ?? {} });
@@ -115,7 +117,7 @@ test("first tick creates a hybrid instance with the five metadata fields and sen
   assert.deepEqual(search.keys(), ["capsid/rulings/testing.md", "sample/notes/backup.md"]);
   const ruling = [...search.items.values()].find((i) => i.key === "capsid/rulings/testing.md");
   assert.equal(ruling?.content, "# rulings/testing.md\n\nTested once where code lives.");
-  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: 1, canon: true });
+  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: "1", canon: "true" });
   assert.equal(report.sent, 2);
 
   // Nothing changed: no upload, no run recorded, and an existing instance is not re-created.
@@ -199,7 +201,14 @@ test("canon is the conventions, decisions, rulings and every core.md; keys alway
 
 // Hybrid search
 
-const chunk = (doc_id: number, text: string, score: number) => ({ id: `c${doc_id}-${score}`, type: "text", score, text, item: { key: `k${doc_id}`, metadata: { doc_id } } });
+const chunk = (doc_id: number, text: string, score: number, ranks: { keyword_rank?: number; vector_rank?: number } = { vector_rank: 1 }) => ({
+  id: `c${doc_id}-${score}`,
+  type: "text",
+  score,
+  text,
+  item: { key: `k${doc_id}`, metadata: { doc_id: String(doc_id) } },
+  scoring_details: ranks,
+});
 const READY = { "doc-index:instance": "ready" };
 
 test("hybrid search keeps the index's order and reads every hit back from D1 with the caller's filters", async () => {
@@ -214,7 +223,13 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
     exists: true,
     search: (request) => {
       seen = request;
-      return [chunk(b, "beta   best\nchunk", 0.9), chunk(gone, "stale", 0.8), chunk(other, "gamma", 0.7), chunk(a, "alpha", 0.6), chunk(b, "beta second chunk", 0.5)];
+      return [
+        chunk(b, "beta   best\nchunk", 0.9, { vector_rank: 1 }),
+        chunk(gone, "stale", 0.8),
+        chunk(other, "gamma", 0.7),
+        chunk(a, "alpha", 0.6, { keyword_rank: 1 }),
+        chunk(b, "beta second chunk", 0.5, { keyword_rank: 2 }),
+      ];
     },
   });
   const kv = fakeKv({ seed: { ...READY } });
@@ -224,11 +239,14 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   assert.ok(Array.isArray(rows));
   assert.deepEqual(rows.map((r) => r.path), ["b.md", "a.md"], "the deleted document and the other namespace's are dropped, the order kept");
   assert.equal(rows[0].snippet, "beta best chunk", "the best chunk is the snippet");
+  assert.deepEqual(rows.map((r) => r.match), ["both", "keyword"], "a document's chunks add up to how it matched");
   const retrieval = seen?.ai_search_options?.retrieval;
   assert.equal(retrieval?.retrieval_type, "hybrid");
   assert.equal(retrieval?.return_on_failure, false, "a failure throws, so the caller falls back instead of seeing nothing");
-  assert.deepEqual(retrieval?.filters, { namespace: { $eq: "sample" } });
+  assert.deepEqual(retrieval?.filters, { namespace: { $eq: "sample" }, status: { $nin: ["closed", "superseded"] } });
+  assert.deepEqual(retrieval?.boost_by, [{ field: "canon", direction: "desc" }]);
   assert.equal(await kv.kv.get("doc-index:queries:2026-10"), "1", "the query is counted");
+  assert.deepEqual(await aiSearchUsage(env, DAY1), { month: "2026-10", hybrid: 1, cap: HYBRID_MONTHLY_CAP }, "and reported for /health");
 
   const limited = await hybridSearch(env, "what about beta", { namespace: null, type: null, allowed: JSON.stringify(["a.md"]) }, DAY1);
   assert.deepEqual(Array.isArray(limited) && limited.map((r) => r.path), ["a.md"], "a path limit holds even when the index returns more");
@@ -263,4 +281,27 @@ test("when the index refuses every document the cursor stays, reconcile waits, a
   assert.match(report.note, /first refusal: refused/);
   assert.equal(await kv.kv.get(CURSOR_KEY), null, "the cursor did not move past rows nothing accepted");
   assert.equal(await kv.kv.get("doc-index:reconciled"), null, "no reconcile while everything is refused");
+});
+
+test("retired documents are hidden unless asked for, in the index's filter and again in D1", async () => {
+  const { raw, db } = fresh();
+  const live = put(raw, "sample", "live.md", "current");
+  const old = put(raw, "sample", "old.md", "replaced");
+  raw.prepare("UPDATE documents SET status = 'superseded' WHERE id = ?").run(old);
+  let seen: AiSearchSearchRequest | undefined;
+  // The fake ignores the filter, as a stale index entry would: the D1 read must still hold.
+  const search = fakeSearch({
+    exists: true,
+    search: (request) => {
+      seen = request;
+      return [chunk(old, "old", 0.9), chunk(live, "live", 0.8)];
+    },
+  });
+  const env = fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: search.ns });
+  const filter = { namespace: null, type: null, allowed: null };
+  const hidden = await hybridSearch(env, "q", filter, DAY1);
+  assert.deepEqual(Array.isArray(hidden) && hidden.map((r) => r.path), ["live.md"]);
+  const shown = await hybridSearch(env, "q", { ...filter, includeRetired: true }, DAY1);
+  assert.deepEqual(Array.isArray(shown) && shown.map((r) => r.path), ["old.md", "live.md"]);
+  assert.equal(seen?.ai_search_options?.retrieval?.filters, undefined, "include_retired drops the status filter");
 });
