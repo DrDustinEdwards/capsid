@@ -281,14 +281,28 @@
       "description": "One job from the moment it is posted to the moment GitHub's record is checked against what its agent claimed.",
       "steps": [
         { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Posted: a session posts a job over MCP. The Worker checks the caller's grant, picks the model, signs the body and stores the job." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claimed: an agent claims it. The Worker verifies the body's signature first, then gives the claim a lease." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Worked: the agent works on one branch of one repo and sends heartbeats that keep its lease alive." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claimed: an agent claims it. The Worker verifies the body's signature first and records who holds the job." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Worked: the agent works on one branch of one repo." },
         { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "lights": ["capsid-db"], "text": "Blocked: at a push, a deploy, a secret or a merge the agent stops. The job waits with the exact command a person or the signed policy must approve, and resume hands it back." },
         { "from": "capsid-worker", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Pull request: the pull request opens through Capsid's GitHub App, and CI runs on it." },
-        { "from": "capsid-tick", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Merged: the five-minute tick merges a pull request whose CI is green on its exact head under the signed auto-merge policy, or the seat merges it." },
+        { "from": "capsid-tick", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Merged: the five-minute tick merges a pull request whose CI is green on its exact head under the signed auto-merge policy, or the session that opened it merges it on green." },
         { "from": "capsid-github", "kind": "deploys", "to": "capsid-worker", "toward": "capsid-worker", "text": "Deployed: the merge to master runs CI on GitHub Actions, which deploys the Worker." },
         { "from": "capsid-github", "kind": "watches", "to": "capsid-worker", "toward": "capsid-github", "text": "Verified: CI's live gate reads the Worker's /health and checks it reports the commit that was merged." },
         { "from": "capsid-worker", "kind": "reads", "to": "capsid-github", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claims checked: when the job completes, the Worker reads the pull request, its commits and CI from GitHub and records each claim beside what GitHub says." }
+      ]
+    },
+    {
+      "id": "nightly-backup",
+      "name": "The nightly backup",
+      "description": "Once a day the Worker copies the whole store to R2, keeps a graduated set of copies, trims old history only once a copy holds it, and the watcher checks that the copy kept off the account is fresh.",
+      "steps": [
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Dumped: at 09:00 UTC a daily cron in the Worker dumps every table to R2 with d1-dump, one JSON file each plus the schema." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Marked complete: a completion marker is written last, and only when the dumped tables match the ones the migrations create. A run without it is never counted as a backup." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Mirrored: every document body is written beside the dump as plain markdown, one file per document." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "text": "Pruned: the newest complete run of each of the last 14 days, 8 weeks and 6 months is kept, and every other run is deleted whole. The newest complete run is never deleted." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Trimmed: document versions older than 90 days and audit rows older than 180 are pruned, after the dump, so every pruned row is in a kept copy." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-kv", "toward": "capsid-kv", "text": "Stamped: the run records its success, and /health warns once that stamp is more than 26 hours old." },
+        { "from": "capsid-tick", "kind": "reads", "to": "capsid-github", "toward": "capsid-tick", "text": "Watched: every half hour the watcher reads the newest copy kept off the Cloudflare account and files a finding once it is more than 36 hours old." }
       ]
     }
   ]

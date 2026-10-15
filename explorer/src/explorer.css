@@ -149,8 +149,10 @@ h2 {
 .flow-steps li {
   margin-block: var(--space-1);
 }
+/* Top-aligned, so a step that wraps keeps its number beside its first line. */
 .flow-steps a {
   display: inline-block;
+  vertical-align: top;
   padding-block: var(--space-1);
   min-block-size: 24px;
 }
