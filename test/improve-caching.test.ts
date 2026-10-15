@@ -136,6 +136,15 @@ test("cache read and write are priced differently from plain input", () => {
   assert.ok(Math.abs(write / plain - 1.25) < 1e-9, `a cache write costs ${write / plain} of plain input`);
 });
 
+test("Haiku 5.5 is priced at its own rate, and at its long rate over 100K prompt tokens", () => {
+  // The reading stages run on it. Pricing it as an unknown model would charge Opus rates.
+  const short = costOf("claude-haiku-5-5", { input_tokens: 100_000, output_tokens: 1_000 });
+  assert.ok(Math.abs(short - (100_000 * 0.1 + 1_000 * 0.5) / 1_000_000) < 1e-12, `100K prompt tokens cost ${short}`);
+  // Cached tokens count toward the prompt's length.
+  const long = costOf("claude-haiku-5-5", { input_tokens: 1_000, cache_read_input_tokens: 100_000, output_tokens: 1_000 });
+  assert.ok(Math.abs(long - (1_000 * 0.5 + 100_000 * 0.5 * 0.1 + 1_000 * 2.5) / 1_000_000) < 1e-12, `a 101K prompt costs ${long}`);
+});
+
 // the dependency pin
 
 test("@anthropic-ai/sdk IS PINNED TO AN EXACT VERSION", () => {
