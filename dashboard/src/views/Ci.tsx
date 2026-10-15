@@ -2,6 +2,7 @@ import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
+import { checkWords } from "../../../src/check-words";
 import { ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
@@ -171,11 +172,11 @@ export function PullRequests() {
       )}
       <Panel flush title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
         <div className="scroll-x">
-          <table className="list">
+          <table className="list awaiting">
             <thead>
               <tr>
                 <th>PR</th>
-                <th>Failed</th>
+                <th>Held because</th>
                 <th>Why</th>
                 <th>When</th>
                 <th>
@@ -191,8 +192,8 @@ export function PullRequests() {
                       {a.repo} #{a.number}
                     </a>
                   </td>
-                  <td>
-                    <St kind="warn">{a.failed}</St>
+                  <td className="held">
+                    <St kind="warn">{checkWords(a.failed)}</St>
                   </td>
                   <td className="muted">
                     {a.why}
