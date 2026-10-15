@@ -63,6 +63,8 @@ function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean;
     items: {
       upload: async (key: string, content: string, o?: { metadata?: Record<string, unknown> }) => {
         if (opts.refuse?.(key)) throw new Error("refused");
+        // The live index refused a number and a boolean (2026-10-15).
+        if (Object.values(o?.metadata ?? {}).some((v) => typeof v !== "string")) throw new Error("invalid_metadata_format");
         const prior = [...items.values()].find((i) => i.key === key);
         const id = prior?.id ?? `item-${next++}`;
         items.set(id, { id, key, content, metadata: o?.metadata ?? {} });
@@ -115,7 +117,7 @@ test("first tick creates a hybrid instance with the five metadata fields and sen
   assert.deepEqual(search.keys(), ["capsid/rulings/testing.md", "sample/notes/backup.md"]);
   const ruling = [...search.items.values()].find((i) => i.key === "capsid/rulings/testing.md");
   assert.equal(ruling?.content, "# rulings/testing.md\n\nTested once where code lives.");
-  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: 1, canon: true });
+  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: "1", canon: "true" });
   assert.equal(report.sent, 2);
 
   // Nothing changed: no upload, no run recorded, and an existing instance is not re-created.
@@ -204,7 +206,7 @@ const chunk = (doc_id: number, text: string, score: number, ranks: { keyword_ran
   type: "text",
   score,
   text,
-  item: { key: `k${doc_id}`, metadata: { doc_id } },
+  item: { key: `k${doc_id}`, metadata: { doc_id: String(doc_id) } },
   scoring_details: ranks,
 });
 const READY = { "doc-index:instance": "ready" };

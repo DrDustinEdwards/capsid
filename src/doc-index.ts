@@ -81,13 +81,16 @@ function indexContent(row: IndexRow): string {
   return `# ${row.title ?? row.path}\n\n${row.body ?? ""}`;
 }
 
-function indexMetadata(row: IndexRow): Record<string, unknown> {
+// Every value is sent as a string, as R2 custom metadata is: the live index refused
+// a number and a boolean as invalid_metadata_format (2026-10-15). The instance's schema
+// types them, so doc_id still filters as a number and canon as a boolean.
+function indexMetadata(row: IndexRow): Record<string, string> {
   return {
     namespace: row.namespace,
     type: row.type ?? "note",
     status: row.status ?? "published",
-    doc_id: row.id,
-    canon: isCanon(row.namespace, row.path),
+    doc_id: String(row.id),
+    canon: String(isCanon(row.namespace, row.path)),
   };
 }
 
