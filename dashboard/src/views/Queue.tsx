@@ -156,7 +156,8 @@ export function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => voi
 // Drivers' writes to canon documents, waiting for approval (src/canon.ts). Approve
 // previews the lines it adds and removes, those that read as instructions to agents
 // first, then writes the document; Reject asks for the reason the proposer reads. A
-// stale proposal (its document moved since it was written) can only be rejected.
+// stale proposal (its document moved since it was written) can only be rejected. Approve
+// all, in the panel's head, decides them all in one dialog.
 export function CanonProposals() {
   const { feed, now, confirm } = useApp();
   const list = feed.live.canon_proposals;
@@ -195,7 +196,7 @@ export function CanonProposals() {
 }
 
 export function Queue() {
-  const { feed, filters, setFilters } = useApp();
+  const { feed, filters, setFilters, confirm } = useApp();
   const [ns, setNs] = useNsFilter();
   const all = feed.live.jobs;
   const q = filters.q.trim().toLowerCase();
@@ -260,7 +261,27 @@ export function Queue() {
           </div>
         </Panel>
         <Tonight />
-        <Panel flush title="Canon proposals" id="canon-proposals" section="Canon proposals" src="live · D1 canon_proposals" count={feed.live.canon_proposals.length}>
+        <Panel
+          flush
+          title="Canon proposals"
+          id="canon-proposals"
+          section="Canon proposals"
+          count={feed.live.canon_proposals.length}
+          src={
+            <>
+              live · D1 canon_proposals
+              {feed.live.canon_proposals.length ? (
+                <>
+                  {" · "}
+                  {/* Every pending proposal in one decision (canon_approve_all): its preview lists each one's outcome. */}
+                  <button type="button" className="btn" onClick={() => confirm({ action: "canon_approve_all", params: {}, title: "Approve all canon proposals" })}>
+                    Approve all
+                  </button>
+                </>
+              ) : null}
+            </>
+          }
+        >
           <CanonProposals />
         </Panel>
         <Panel flush title="Live sessions" id="live-sessions" section="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>

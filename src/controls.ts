@@ -29,7 +29,7 @@ import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite,
 import type { PortalAction, PortalPreview } from "./ops-types";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { auditStatement } from "./store-guards";
-import { approveProposal, checkProposal, lineChanges, rejectProposal } from "./canon";
+import { approveProposal, checkProposal, lineChanges, readSweep, rejectProposal, type SweepItem } from "./canon";
 import { logEvent } from "./log";
 import { limitRefusalFor, runSiteRepair } from "./site-repair";
 import { tokenSet, toolRefusal } from "./site-operator";
@@ -69,6 +69,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_remove",
   "canon_approve",
   "canon_reject",
+  "canon_approve_all",
   "site_repair",
   "sign_policy_change",
   "unit_resume",
@@ -182,6 +183,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Approve canon proposal ${params.id ?? ""}. The document is written as proposed, with the current version snapshotted first, and only if it is still the body the proposal was written against.`;
     case "canon_reject":
       return `Reject canon proposal ${params.id ?? ""}. The document is not touched, and the proposer reads your reason.`;
+    case "canon_approve_all":
+      return "Decide every pending canon proposal at once. On each document the newest proposal is approved, written as the single Approve writes it, unless its document moved since it was written; older proposals on the same document, and outdated ones, are rejected with a reason the proposer reads.";
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
     case "sign_policy_change":
@@ -534,6 +537,57 @@ async function performAction(
         await auditClick(env, actor, source, surface, action, result.row.namespace, { id, ...(reason ? { reason } : {}), path: result.row.path });
         break;
       }
+      case "canon_approve_all": {
+        // The token binds the plan its preview read. The queue is read again and the plan
+        // must read the same, so a proposal that arrived, was decided or went stale since
+        // is never swept in: the perform is refused and the preview shows the queue as it is.
+        const bound = params.plan;
+        if (!bound) return { ok: false, refusal: "canon_approve_all carries the plan its preview read, and this confirmation has none. Nothing changed. Preview again." };
+        const sweep = await readSweep(env.DB);
+        if (!sweep.ok) return { ok: false, refusal: `${sweep.refusal} The pending canon proposals changed since the preview. Nothing changed.` };
+        if (sweep.key !== bound) {
+          return { ok: false, refusal: `the pending canon proposals changed since the preview (it planned ${bound}; they now plan ${sweep.key}). Nothing changed. Preview again.` };
+        }
+        const reason = required(params, "reason");
+        const done: Array<{ id: number; outcome: string; target: string }> = [];
+        const failed: Array<{ id: number; outcome: string; target: string; refusal: string }> = [];
+        for (const item of sweepOrder(sweep.items)) {
+          const { id } = item.proposal;
+          const target = `${item.proposal.namespace}/${item.proposal.path}`;
+          // One failure does not stop the rest: each is its own decision, guarded on its
+          // own state, and a failure is reported with its refusal.
+          try {
+            const result = item.reason === null ? await approveProposal(env.DB, actor, now, id) : await rejectProposal(env.DB, actor, now, id, item.reason);
+            if (result.ok) done.push({ id, outcome: item.outcome, target });
+            else failed.push({ id, outcome: item.outcome, target, refusal: result.refusal });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logEvent("error", "CANON_APPROVE_ALL_ITEM_FAILED", { id, outcome: item.outcome, message });
+            failed.push({ id, outcome: item.outcome, target, refusal: message });
+          }
+        }
+        const failures = failed.map((f) => `${f.id} (${f.target}, to ${f.outcome === "approve" ? "approve" : "reject"}): ${f.refusal}`);
+        if (!done.length) return { ok: false, refusal: `canon_approve_all decided nothing. ${failures.join(" ")}` };
+        committed = true;
+        const approved = done.filter((d) => d.outcome === "approve");
+        const rejected = done.filter((d) => d.outcome !== "approve");
+        summary = [
+          `Decided ${done.length} of ${sweep.items.length} canon proposal(s).`,
+          approved.length ? `Approved ${approved.map((d) => `${d.id} (${d.target})`).join(", ")}.` : "",
+          rejected.length ? `Rejected ${rejected.map((d) => `${d.id} (${d.target}, ${d.outcome})`).join(", ")}.` : "",
+          failed.length ? `Failed ${failed.length}: ${failures.join(" ")}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        await auditClick(env, actor, source, surface, action, null, {
+          plan: bound,
+          ...(reason ? { reason } : {}),
+          approved: approved.map((d) => d.id),
+          rejected: rejected.map((d) => d.id),
+          failed: failed.map((f) => ({ id: f.id, refusal: f.refusal })),
+        });
+        break;
+      }
       case "site_repair": {
         // Every check runs again inside runSiteRepair: the allowlist, the token and the
         // rate limit can all change between the preview and this click.
@@ -596,6 +650,9 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_remove: ["name", "revision"],
   canon_approve: ["id"],
   canon_reject: ["id", "reason"],
+  // The plan the preview read is bound into the token beside these (Plan.bind), so a
+  // caller cannot send one.
+  canon_approve_all: ["reason"],
   site_repair: ["namespace", "tool"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   unit_resume: ["unit", "reason"],
@@ -620,7 +677,9 @@ function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Rec
   return { ok: true, params };
 }
 
-export type Plan = { ok: true; changes: string[]; audit: string[] } | { ok: false; refusal: string };
+// bind: params the plan itself adds to the token, beside the caller's, so the perform
+// carries out what this preview read (canon_approve_all binds its plan this way).
+export type Plan = { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> } | { ok: false; refusal: string };
 
 /** A revision param as a positive integer, or null. */
 function revisionOf(raw: string | undefined): number | null {
@@ -642,6 +701,36 @@ const CANON_PREVIEW_LINES = 40;
 const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
 const AUTOMERGE_RESUME_REASON = "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
 const CANON_REJECT_REASON = "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.";
+
+// canon_approve_all's preview, one line per proposal in the order the perform runs them:
+// every rejection, then every approval, each by id.
+function sweepOrder(items: readonly SweepItem[]): SweepItem[] {
+  return [...items.filter((i) => i.outcome !== "approve"), ...items.filter((i) => i.outcome === "approve")];
+}
+
+function sweepChanges(items: readonly SweepItem[], reason: string | undefined, click: string): string[] {
+  const approvals = items.filter((i) => i.outcome === "approve");
+  const superseded = items.filter((i) => i.outcome === "superseded").length;
+  const outdated = items.filter((i) => i.outcome === "outdated").length;
+  const flagged = approvals.filter((i) => i.proposal.directive_lines.length);
+  const line = (i: SweepItem) => {
+    const p = i.proposal;
+    const target = `${p.namespace}/${p.path}`;
+    if (i.reason !== null) return `reject proposal ${p.id} (${target}, from ${p.proposer}): pending -> rejected, with the reason "${i.reason}". ${target} is not touched.`;
+    return `approve proposal ${p.id} (${target}, from ${p.proposer}): ${p.creates ? `${target} is created` : `${target} is overwritten, the current version snapshotted first`}; ${p.added} line(s) added, ${p.removed} removed.`;
+  };
+  return [
+    `${items.length} pending canon proposal(s): ${approvals.length} approved, ${items.length - approvals.length} rejected (${superseded} superseded, ${outdated} outdated). Rejections run first, then approvals, each its own decision; one that fails does not stop the rest.`,
+    ...(flagged.length
+      ? [
+          `${flagged.length} approval(s) add lines that read as instructions addressed to agents. Read them before approving:`,
+          ...flagged.flatMap((i) => i.proposal.directive_lines.map((l) => `instruction (proposal ${i.proposal.id}, ${i.proposal.namespace}/${i.proposal.path}): ${l}`)),
+        ]
+      : ["No approval adds a line that reads as an instruction addressed to agents."]),
+    ...sweepOrder(items).map(line),
+    ...(reason ? [`Your reason "${reason}" is recorded in the ${click} audit row.`] : []),
+  ];
+}
 
 function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
@@ -1087,6 +1176,18 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
         audit: [`write by ${actor}`, click],
       };
     }
+    case "canon_approve_all": {
+      const sweep = await readSweep(env.DB);
+      if (!sweep.ok) return refused(sweep.refusal);
+      const approves = sweep.items.some((i) => i.outcome === "approve");
+      const rejects = sweep.items.some((i) => i.outcome !== "approve");
+      return {
+        ok: true,
+        changes: sweepChanges(sweep.items, p.reason, clickAuditAction(action, p, surface)),
+        audit: [...(rejects ? [`canon-rejected by ${actor}`] : []), ...(approves ? [`write by ${actor}`] : []), click],
+        bind: { plan: sweep.key },
+      };
+    }
     case "revoke_agent": {
       if (!p.name) return refused("revoke_agent needs an agent name.");
       const agent = await env.DB.prepare("SELECT name, kind, revoked_at FROM agents WHERE name = ?1")
@@ -1227,7 +1328,7 @@ export async function previewControl(env: Env, email: string, name: unknown, raw
   const plan = await control.plan(env, email, parsed.params, surface);
   if (!plan.ok) return { ok: false, status: 400, refusal: plan.refusal };
   const exp = Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS;
-  const token = await signConfirm(env, { v: 2, jti: randomJti(), action: control.name, params: parsed.params, email, exp });
+  const token = await signConfirm(env, { v: 2, jti: randomJti(), action: control.name, params: { ...parsed.params, ...plan.bind }, email, exp });
   return {
     ok: true,
     preview: {

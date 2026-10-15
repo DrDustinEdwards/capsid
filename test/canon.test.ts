@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CANON_RULES, canonGuarded, directiveLines, isCanonPath, isDirectiveLine, lineChanges } from "../src/canon.ts";
+import { CANON_RULES, canonGuarded, directiveLines, isCanonPath, isDirectiveLine, lineChanges, planSweep, readSweep, sweepKey, type PendingProposal } from "../src/canon.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 
@@ -96,4 +96,53 @@ test("only added lines are measured: a moved or kept line is neither added nor r
   assert.deepEqual(lineChanges(before, after), { added: ["d", "Never skip the tests."], removed: ["c"] });
   assert.deepEqual(directiveLines(before, after), ["Never skip the tests."]);
   assert.deepEqual(directiveLines(null, "Always read the rules."), ["Always read the rules."]);
+});
+
+// Approve all (canon_approve_all): the plan it carries out. Performing it runs against
+// real D1 in test-integration/canon.test.ts.
+
+function pending(id: number, path: string, opts: Partial<PendingProposal> = {}): PendingProposal {
+  return { id, namespace: "sample", path, proposer: "agent:sample-driver", created_at: "2026-09-28T11:00:00.000Z", creates: false, stale: false, added: 1, removed: 0, directive_lines: [], ...opts };
+}
+
+test("approve all: the newest fresh proposal on a document is approved, older ones on it are rejected as superseded, and a stale newest is rejected as outdated", () => {
+  const plan = planSweep([pending(4, "core.md"), pending(9, "core.md"), pending(6, "decisions.md", { stale: true }), pending(2, "core.md", { stale: true })]);
+  assert.deepEqual(
+    plan.map((i) => [i.proposal.id, i.outcome, i.reason]),
+    [
+      [2, "superseded", "superseded by proposal 9 on the same document"],
+      [4, "superseded", "superseded by proposal 9 on the same document"],
+      [6, "outdated", "outdated: sample/decisions.md changed after this proposal was written; write it again against the current body"],
+      [9, "approve", null],
+    ]
+  );
+  assert.equal(sweepKey(plan), "2:superseded,4:superseded,6:outdated,9:approve");
+});
+
+test("approve all: the same path in another namespace is another document", () => {
+  const plan = planSweep([pending(3, "core.md"), pending(5, "core.md", { namespace: "sample-b" })]);
+  assert.deepEqual(
+    plan.map((i) => [i.proposal.id, i.outcome]),
+    [
+      [3, "approve"],
+      [5, "approve"],
+    ]
+  );
+});
+
+test("approve all: a newest proposal that is stale is outdated even with an older fresh one under it, which is still superseded", () => {
+  const plan = planSweep([pending(1, "core.md"), pending(2, "core.md", { stale: true })]);
+  assert.deepEqual(
+    plan.map((i) => [i.proposal.id, i.outcome]),
+    [
+      [1, "superseded"],
+      [2, "outdated"],
+    ]
+  );
+});
+
+test("approve all: nothing pending is refused", async () => {
+  const statement = { bind: () => statement, all: async () => ({ results: [], meta: {} }) };
+  const db = { prepare: () => statement } as unknown as D1Database;
+  assert.deepEqual(await readSweep(db), { ok: false, refusal: "no pending canon proposals." });
 });
