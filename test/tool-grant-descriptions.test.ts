@@ -87,3 +87,13 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
   // tools, and run_improve.
   assert.equal(stated, 15, `expected 15 tools with a grant sentence, found ${stated}`);
 });
+
+test("PLANT: every served tool's description fits the 4,096 characters Claude Code shows", async () => {
+  // Claude Code cuts a tool description at 4,096 characters, so anything past it is
+  // never read (capsid_work_jobs ran to 8,001 until 2026-10-15). Detail belongs in the
+  // parameter descriptions and docs/.
+  const served = await servedDescriptions();
+  assert.ok(served.size > 0, "the server served no tools");
+  const over = [...served].filter(([, d]) => d.length > 4096).map(([name, d]) => `${name} (${d.length})`);
+  assert.deepEqual(over, [], `these descriptions are cut off: ${over.join(", ")}`);
+});
