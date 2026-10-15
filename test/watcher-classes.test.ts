@@ -49,6 +49,7 @@ const EXPECTED: Array<[string, FindingClass]> = [
   ["domain-expiry-7d-example-com", "job"],
   ["ci-red-sample", "job"],
   ["schema-behind-0045_x", "job"],
+  ["schema-ahead-0046_x", "digest"],
   ["health-degraded", "job"],
   ["deploy-drift-abc1234", "job"],
   ["site-map-drift-add-sample", "job"],
