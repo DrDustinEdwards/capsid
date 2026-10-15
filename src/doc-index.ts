@@ -25,7 +25,9 @@ const RECONCILE_DELETE_MAX = 200;
 // AI Search lists at most 50 items a page.
 const LIST_PAGE = 50;
 
-export const CURSOR_KEY = "doc-index:cursor";
+// v2: the first live runs (2026-10-15) moved v1 past documents the index refused, so
+// the backfill starts again. Uploads are upserts, so re-sending a document is harmless.
+export const CURSOR_KEY = "doc-index:cursor:v2";
 const READY_KEY = "doc-index:instance";
 const RECONCILED_KEY = "doc-index:reconciled";
 
