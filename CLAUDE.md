@@ -20,4 +20,4 @@ Code comments cite these by name ("CLAUDE.md, snapshot rule").
 6. **Improve loop.** Off unless Dustin turns it on; only `src/improve-scorer.ts` names `HOLDOUT`.
 7. **No AI trailer** on any commit or pull request.
 8. **Health probe.** `capsid/conventions.md` must keep the word "conventions".
-9. **Verify a deploy directly** on `/ops/mcp` with this project's driver key (in a cloud session the network secret adds it; the committed `.mcp.json` carries none): `initialize`, `notifications/initialized`, `tools/list`, a read tool, never a cached client; admin tools are the seat's. Never read `~/.claude/.credentials.json`.
+9. **Verify a deploy directly** on `/ops/mcp` with this project's driver key, never through a cached client; the steps are in `.claude/rules/deploy.md`. Never read `~/.claude/.credentials.json`.
