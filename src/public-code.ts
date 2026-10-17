@@ -1,7 +1,6 @@
-import { z } from "zod";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
-import { bounded } from "./limits";
+import { CodeMapSchema, type PublicCode } from "./public-code-schema";
 import { publicRepos, type RepoPrivacy, type SystemModel } from "./system-model";
 
 // The public code maps (design capsid/research/design-system-explorer.md, section 5;
@@ -16,56 +15,6 @@ const FILE = "code-map.json";
 // Capsid's own map is the largest, a few thousand functions; a file far past that is
 // not one devkit wrote.
 const MAX_FILE_BYTES = 8_000_000;
-
-const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-// A repo-relative module path: no leading slash, no "." or ".." segment.
-const ModulePath = bounded(300).regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._@/+-]+$/, "a module path is repo-relative");
-const Line = z.number().int().min(1);
-const Share = z.number().min(0).max(1);
-
-const FunctionSchema = z.object({
-  name: bounded(200).min(1),
-  line: Line,
-  end: Line,
-  cc: z.number().int().min(1),
-  coverage: Share.nullable(),
-  crap: z.number().min(0).nullable(),
-  mutants: z.number().int().min(0).nullable(),
-  score: z.number().min(0).max(100).nullable(),
-});
-
-const ModuleSchema = z.object({
-  path: ModulePath,
-  loc: z.number().int().min(0),
-  imports: z.array(ModulePath).max(1000),
-  cycle: z.literal(true).optional(),
-  functions: z.array(FunctionSchema).max(5000),
-});
-
-/** code-map.json v1 as devkit writes it. Parsing strips any key not named here, so a
- *  field nobody listed cannot reach the public document. */
-const CodeMapSchema = z.object({
-  version: z.literal(1),
-  repo: bounded(200).regex(REPO),
-  sha: bounded(40).regex(/^[0-9a-f]{40}$/),
-  date: bounded(10).regex(DATE),
-  tools: z.object({
-    typescript: bounded(40).nullable(),
-    coverage: z.literal("istanbul").nullable(),
-    mutation: z.literal("stryker").nullable(),
-  }),
-  modules: z.array(ModuleSchema).max(5000),
-  cycles: z.array(z.array(ModulePath).min(1).max(1000)).max(1000),
-});
-
-export const PublicCodeSchema = z.strictObject({
-  version: z.literal(1),
-  as_of: bounded(10).regex(DATE),
-  maps: z.array(CodeMapSchema.extend({ system: bounded(64) }).strict()),
-});
-
-export type PublicCode = z.infer<typeof PublicCodeSchema>;
 
 /** The repo's code-map.json from its code-map branch, or null when the repo has none
  *  (no branch, no file). Any other failure throws. */

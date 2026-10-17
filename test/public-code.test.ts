@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { InstalledRepo } from "../src/github/client.ts";
-import { buildPublicCode, PublicCodeSchema } from "../src/public-code.ts";
+import { buildPublicCode } from "../src/public-code.ts";
+import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PUBLIC_BUILD_LAST_KEY, PUBLIC_CODE_KEY, PUBLIC_DOCS, PUBLIC_MODEL_KEY, publicBuildTick, type PublicBuildReaders } from "../src/public-data.ts";
 import { bundledModel } from "../src/public-data.ts";
 import type { StatsRows } from "../src/public-stats.ts";
