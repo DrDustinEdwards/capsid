@@ -6,6 +6,7 @@
 //
 // Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's colour
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
+import { graphSvg } from "./graph.mjs";
 import { escapeHtml, layout, systemPath } from "./pages.mjs";
 
 /** @param {string} id */
@@ -39,18 +40,35 @@ function status(tone, value, reason) {
   return `<span class="cap-status" data-tone="${tone}">${glyph}${WORD[tone]}<span class="code-num">${escapeHtml(value)}</span></span>`;
 }
 
+/** @param {number | null} crap @returns {"crit" | "warn" | "ok" | "nodata"} */
+const crapTone = (crap) => (crap === null ? "nodata" : crap > CRAP_CRIT ? "crit" : crap > CRAP_WATCH ? "warn" : "ok");
+/** @param {number | null} score @returns {"crit" | "warn" | "ok" | "nodata"} */
+const scoreTone = (score) => (score === null ? "nodata" : score >= SCORE_OK ? "ok" : score >= SCORE_WATCH ? "warn" : "crit");
+const crapText = (/** @type {number} */ crap) => `CRAP ${Math.round(crap * 10) / 10}`;
+
 /** @param {number | null} crap @param {string} reason */
 export function crapStatus(crap, reason) {
-  if (crap === null) return status("nodata", "", reason);
-  const tone = crap > CRAP_CRIT ? "crit" : crap > CRAP_WATCH ? "warn" : "ok";
-  return status(tone, `CRAP ${Math.round(crap * 10) / 10}`);
+  return crap === null ? status("nodata", "", reason) : status(crapTone(crap), crapText(crap));
 }
 
 /** @param {number | null} score @param {string} reason */
 export function scoreStatus(score, reason) {
-  if (score === null) return status("nodata", "", reason);
-  const tone = score >= SCORE_OK ? "ok" : score >= SCORE_WATCH ? "warn" : "crit";
-  return status(tone, `${score}%`);
+  return score === null ? status("nodata", "", reason) : status(scoreTone(score), `${score}%`);
+}
+
+/**
+ * A box's status lines in the drawing: its worst CRAP, and its mutation score once mutation has
+ * run on the repo. @param {any} map @param {any[]} mods the modules the box stands for
+ */
+function boxLines(map, mods) {
+  const fns = mods.flatMap((m) => m.functions);
+  const worst = worstCrap({ functions: fns });
+  const lines = [{ tone: crapTone(worst), text: worst !== null ? crapText(worst) : fns.length ? "no coverage" : "no functions" }];
+  if (map.tools.mutation) {
+    const score = moduleScore({ functions: fns });
+    lines.push({ tone: scoreTone(score), text: score === null ? "no mutants" : `mutation ${score}%` });
+  }
+  return lines;
 }
 
 /** Why a number is missing, from what the map says ran. @param {any} map */
@@ -125,6 +143,29 @@ export function codePage(s, maps, asOf) {
     for (const m of map.modules) folders.set(folderOf(m.path), [...(folders.get(folderOf(m.path)) ?? []), m]);
     const repoName = map.repo.split("/")[1];
     const id = (/** @type {string} */ suffix) => `${escapeHtml(repoName)}-${suffix}`;
+    const folderId = (/** @type {string} */ folder) => `${id("f")}-${escapeHtml(folder.replace(/[^A-Za-z0-9]+/g, "-"))}`;
+    const folderName = (/** @type {string} */ folder) => (folder === "." ? "The top folder" : `${folder}/`);
+    // Folders first when there are several: a box per folder, a wire where any module imports
+    // across, each box leading to its folder's own drawing and table below.
+    const folderGraph =
+      folders.size > 1
+        ? graphSvg({
+            id: id("folders"),
+            title: `The folders of ${map.repo} and the imports between them`,
+            boxes: [...folders].map(([folder, mods]) => ({ id: folder, label: folderName(folder), href: `#${folderId(folder)}`, lines: boxLines(map, mods), cycle: mods.some((/** @type {any} */ m) => m.cycle) })),
+            wires: map.modules.flatMap((/** @type {any} */ m) => m.imports.map((/** @type {string} */ to) => ({ from: folderOf(m.path), to: folderOf(to) }))),
+          })
+        : "";
+    /** The modules of one folder and the imports among them. @param {string} folder @param {any[]} mods */
+    const moduleGraph = (folder, mods) =>
+      mods.length > 1
+        ? graphSvg({
+            id: `${folderId(folder)}-graph`,
+            title: `The modules of ${folderName(folder)} and the imports among them${folders.size > 1 ? "; imports from other folders are on each module's page" : ""}`,
+            boxes: mods.map((m) => ({ id: m.path, label: baseName(m.path), href: modulePath(s.id, m.path), lines: boxLines(map, [m]), cycle: !!m.cycle })),
+            wires: mods.flatMap((m) => m.imports.map((/** @type {string} */ to) => ({ from: m.path, to }))),
+          })
+        : "";
     return `<section aria-labelledby="${id("title")}">
 <h2 id="${id("title")}">${escapeHtml(map.repo)}</h2>
 <p>Measured on ${escapeHtml(map.date)} at commit <a href="${repoUrl(map.repo)}/tree/${escapeHtml(map.sha)}"><code>${escapeHtml(map.sha.slice(0, 7))}</code></a>: ${map.modules.length} modules, ${fns.length} functions. ${
@@ -132,9 +173,10 @@ export function codePage(s, maps, asOf) {
     } ${map.tools.mutation ? "" : "Mutation testing has not run on it yet."}</p>
 <h3 id="${id("cycles")}">Import cycles</h3>
 ${map.cycles.length ? `<ul>${map.cycles.map((/** @type {string[]} */ c) => `<li>${c.map((p) => `<a href="${modulePath(s.id, p)}">${escapeHtml(p)}</a>`).join(" imports ")}, and back</li>`).join("")}</ul>` : "<p>None: no module imports itself, however indirectly.</p>"}
-${[...folders].map(([folder, mods]) => scroller(`${id("f")}-${escapeHtml(folder.replace(/[^A-Za-z0-9]+/g, "-"))}`, `<table class="cap-table code-table"><caption>${escapeHtml(folder === "." ? "The top folder" : `${folder}/`)}</caption>
+${folderGraph}
+${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(folder)}">${moduleGraph(folder, mods)}${scroller(`${folderId(folder)}-table`, `<table class="cap-table code-table"><caption>${escapeHtml(folderName(folder))}</caption>
 <thead><tr><th scope="col">Module</th><th scope="col">Lines</th><th scope="col">Functions</th><th scope="col">Worst function</th><th scope="col">Mutation</th></tr></thead>
-<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${modulePath(s.id, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), r.score)}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)).join("\n")}
+<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${modulePath(s.id, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), r.score)}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)}</div>`).join("\n")}
 </section>`;
   });
   const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${systemPath(s.id)}">${escapeHtml(s.name)}</a> / <span aria-current="page">Code</span></nav>

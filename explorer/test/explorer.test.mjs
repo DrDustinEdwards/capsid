@@ -106,6 +106,28 @@ test("a system with a code map links to it, and its code page shows each module'
   assert.match(page, /<caption>src\/util\/<\/caption>/);
 });
 
+test("the code page draws the folders, then each folder's modules, every box linked and coloured by its worst function", () => {
+  const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
+  const figures = [...page.matchAll(/<figure class="code-graph">(.*?)<\/figure>/gs)].map((m) => m[1]);
+  assert.equal(figures.length, 3, "one drawing of the folders and one for each folder with more than one module");
+  assert.match(figures[0], /<figcaption[^>]*>The folders of example\/theme and the imports between them<\/figcaption>/);
+  // A box per folder, leading to that folder's drawing and table; a wire from src/ to src/util/.
+  assert.match(figures[0], /<a href="#theme-f-src" tabindex="-1"><g class="code-graph-box" data-tone="crit">/);
+  assert.match(figures[0], /<a href="#theme-f-src-util" tabindex="-1"><g class="code-graph-box" data-tone="warn" data-cycle>/);
+  assert.equal((figures[0].match(/class="code-graph-wire"/g) ?? []).length, 1);
+  // The util folder's modules, each linked to its page, both in the cycle, with a wire each way.
+  assert.ok(figures[2].includes(`<a href="${modulePath("theme", "src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`));
+  assert.equal((figures[2].match(/class="code-graph-wire"/g) ?? []).length, 2);
+  assert.equal((figures[2].match(/>cycle<\/text>/g) ?? []).length, 2);
+  // The drawing repeats the table: hidden from assistive technology, its links no tab stop.
+  for (const f of figures) {
+    assert.match(f, /<svg class="code-graph-svg"[^>]*aria-hidden="true"/);
+    assert.doesNotMatch(f, /<a href="[^"]*"(?! tabindex="-1")/);
+    assert.match(f, /<div class="scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/);
+  }
+  for (const id of ["theme-f-src", "theme-f-src-util"]) assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
+});
+
 test("a module page lists its functions linked to their lines over its numbered source, and its imports both ways", () => {
   const page = readFileSync(join(out, "s", "theme", "code", "src", "index.ts", "index.html"), "utf8");
   assert.ok(page.includes('<a href="#L4">choose</a>'));
