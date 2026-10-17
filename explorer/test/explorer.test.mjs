@@ -8,12 +8,15 @@ import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 
 import { build } from "../build.mjs";
+import { codePath, modulePath } from "../src/code.mjs";
 import { SITE, allPages, containersPath, flowPath, numbersHtml, stepPath, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
 const model = read("model.json");
 const stats = read("stats.json");
+const code = read("code.json");
+const withCode = { code: join(fixtures, "code.json"), source: join(fixtures, "source") };
 
 /** Every file under a directory, as paths relative to it. */
 function walk(/** @type {string} */ dir, /** @type {string} */ root = dir) {
@@ -28,7 +31,7 @@ function walk(/** @type {string} */ dir, /** @type {string} */ root = dir) {
 }
 
 const out = mkdtempSync(join(tmpdir(), "explorer-"));
-const built = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), out });
+const built = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), ...withCode, out });
 const files = walk(out);
 const html = files.filter((f) => f.endsWith(".html")).map((f) => ({ file: f, text: readFileSync(join(out, f), "utf8") }));
 
@@ -39,6 +42,8 @@ test("every system has a page, a public one with parts has its parts page, every
     "index.html",
     ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`),
     "s/hub/containers/index.html",
+    "s/theme/code/index.html",
+    ...code.maps[0].modules.map((/** @type {any} */ m) => `s/theme/code/${m.path}/index.html`),
     ...model.flows.flatMap((/** @type {any} */ f) => [`flows/${f.id}/index.html`, ...f.steps.map((/** @type {any} */ _s, /** @type {number} */ i) => `flows/${f.id}/${i + 1}/index.html`)]),
   ].sort();
   assert.deepEqual(pages, expected);
@@ -78,6 +83,61 @@ test("the build refuses a model the privacy filter could not have written", asyn
   const file = join(mkdtempSync(join(tmpdir(), "explorer-leak-")), "model.json");
   writeFileSync(file, JSON.stringify(leaky));
   await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }));
+});
+
+test("a system with a code map links to it, and its code page shows each module's worst function and the cycle", () => {
+  const theme = readFileSync(join(out, "s", "theme", "index.html"), "utf8");
+  assert.ok(theme.includes(`href="${codePath("theme")}"`), "the system page does not link its code");
+  assert.match(theme, /Its code: 4 modules and 3 functions, measured 2026-10-17/);
+  const hub = readFileSync(join(out, "s", "hub", "index.html"), "utf8");
+  assert.ok(!hub.includes(codePath("hub")), "a system with no code map links to a code page");
+
+  const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
+  assert.match(page, /By CRAP, 1 critical, 1 to watch and 1 ok\./);
+  // Each status is a glyph, a word and the number: never colour alone.
+  assert.match(page, /data-tone="crit"><svg class="cap-status-glyph"[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Critical<span class="code-num">CRAP 90<\/span>/);
+  assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">CRAP 12<\/span>/);
+  assert.match(page, /data-tone="ok">.*?Ok<span class="code-num">CRAP 2<\/span>/);
+  // A number nobody measured says why, never 0.
+  assert.match(page, /No data<span class="cap-sr-only">: mutation testing has not run on this repo yet<\/span>/);
+  assert.match(page, /src\/tokens\.ts.*?<span class="code-none">No functions<\/span>/s);
+  assert.doesNotMatch(page, /CRAP 0\b|>0%</);
+  assert.ok(page.includes(`<li><a href="${modulePath("theme", "src/util/a.ts")}">src/util/a.ts</a> imports <a href="${modulePath("theme", "src/util/b.ts")}">src/util/b.ts</a>, and back</li>`));
+  assert.match(page, /<caption>src\/util\/<\/caption>/);
+});
+
+test("a module page lists its functions linked to their lines over its numbered source, and its imports both ways", () => {
+  const page = readFileSync(join(out, "s", "theme", "code", "src", "index.ts", "index.html"), "utf8");
+  assert.ok(page.includes('<a href="#L4">choose</a>'));
+  assert.match(page, /<span class="code-line" id="L4"><span class="code-ln" aria-hidden="true">4<\/span>export function choose\(tokens: Token\[\], dark: boolean, wide: boolean\): Token \| undefined \{/);
+  assert.ok(page.includes("&lt;") || !page.includes("<T>"), "source is not escaped");
+  assert.ok(page.includes(`href="https://github.com/example/theme/blob/${code.maps[0].sha}/src/index.ts"`));
+  assert.ok(page.includes(`It imports <a href="${modulePath("theme", "src/tokens.ts")}">src/tokens.ts</a>, <a href="${modulePath("theme", "src/util/a.ts")}">src/util/a.ts</a>.`));
+  const a = readFileSync(join(out, "s", "theme", "code", "src", "util", "a.ts", "index.html"), "utf8");
+  assert.ok(a.includes("&lt;T&gt;"), "a generic's angle brackets reached the page unescaped");
+  assert.match(a, /It is in an import cycle\./);
+  assert.match(a, /Imported by <a href="[^"]+">src\/index\.ts<\/a>, <a href="[^"]+">src\/util\/b\.ts<\/a>\./);
+  const tokens = readFileSync(join(out, "s", "theme", "code", "src", "tokens.ts", "index.html"), "utf8");
+  assert.match(tokens, /None: it only declares types or values\./);
+});
+
+test("the build refuses a code map for a system that is not public, and a code document with a field it does not name", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "explorer-code-"));
+  const write = (/** @type {string} */ name, /** @type {any} */ doc) => {
+    const file = join(dir, name);
+    writeFileSync(file, JSON.stringify(doc));
+    return file;
+  };
+  const run = (/** @type {string} */ file) => build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: file, source: join(fixtures, "source"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) });
+  const vault = structuredClone(code);
+  vault.maps[0].system = "vault";
+  await assert.rejects(run(write("vault.json", vault)), /belongs to vault, which is not a public system/);
+  const unknown = structuredClone(code);
+  unknown.maps[0].system = "nowhere";
+  await assert.rejects(run(write("unknown.json", unknown)), /belongs to nowhere/);
+  const extra = structuredClone(code);
+  extra.maps[0].secret = "CANARY";
+  await assert.rejects(run(write("extra.json", extra)));
 });
 
 test("no page carries an inline script, an inline style or a time of day", () => {
@@ -126,14 +186,14 @@ test("the map's script is under 25 KB gzip and all the explorer's script under 1
 });
 
 test("build.json's hash is the same for the same input and changes with what a reader gets", async () => {
-  const again = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-again-")) });
+  const again = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), ...withCode, out: mkdtempSync(join(tmpdir(), "explorer-again-")) });
   assert.equal(again.content, built.content);
   assert.equal(JSON.parse(readFileSync(join(out, "build.json"), "utf8")).content, built.content);
   const later = structuredClone(stats);
   later.jobs.completed_7d += 1;
   const file = join(mkdtempSync(join(tmpdir(), "explorer-later-")), "stats.json");
   writeFileSync(file, JSON.stringify(later));
-  const changed = await build({ model: join(fixtures, "model.json"), stats: file, out: mkdtempSync(join(tmpdir(), "explorer-changed-")) });
+  const changed = await build({ model: join(fixtures, "model.json"), stats: file, ...withCode, out: mkdtempSync(join(tmpdir(), "explorer-changed-")) });
   assert.notEqual(changed.content, built.content);
 });
 

@@ -1,14 +1,17 @@
 // Builds the explorer into explorer/dist: every page prerendered, the assets beside them, and
 // _headers. Run by .github/workflows/explorer.yml, which fetches the two public documents first.
 //
-//   npm run build -- [--model <file or url>] [--stats <file or url>] [--out <dir>]
+//   npm run build -- [--model <file or url>] [--stats <file or url>] [--code <file or url>] [--source <dir>] [--out <dir>]
 //
-// The defaults are the live documents Capsid serves (src/public-data.ts). Both are checked with
+// The defaults are the live documents Capsid serves (src/public-data.ts); a model from a file
+// builds no code pages unless --code names a code document too. Each code map's
+// source is read from GitHub at the commit the map measured, or from <dir>/<owner>/<repo>/<path>
+// with --source. Every document is checked with
 // Capsid's own schemas before anything is written, so the explorer can only publish what the
 // privacy filter's output shape allows (the third line, design section 2). The tests build from
 // explorer/fixtures, which are invented.
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
@@ -16,9 +19,11 @@ import { parseArgs } from "node:util";
 import { stylesheet } from "enarratio";
 import { capsomerTheme } from "capsomer/enarratio-theme";
 
+import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/headers.mjs";
+import { codeBySystem } from "./src/code.mjs";
 import { allPages } from "./src/pages.mjs";
 
 const here = import.meta.dirname;
@@ -59,12 +64,66 @@ function inlineCss(file) {
   });
 }
 
-export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, out = join(here, "dist") } = {}) {
+/**
+ * The code document, or null while Capsid has not built one yet: its route answers 503 until the
+ * first daily build after the route shipped, and the rest of the explorer does not wait for it.
+ * @param {string | undefined} source
+ */
+async function readCode(source) {
+  if (!source) return null;
+  if (/^https:\/\//.test(source)) {
+    const response = await fetch(source, { headers: { accept: "application/json" } });
+    if (response.status === 503) {
+      console.log(`explorer: ${source} is not computed yet, so no code pages`);
+      return null;
+    }
+    if (!response.ok) throw new Error(`GET ${source} answered ${response.status}`);
+    return PublicCodeSchema.parse(await response.json());
+  }
+  return PublicCodeSchema.parse(JSON.parse(readFileSync(source, "utf8")));
+}
+
+/**
+ * Every module's source, keyed "owner/repo path": from a directory, or from GitHub at the
+ * map's commit, a few files at a time. A file GitHub does not have stops the build, since the
+ * map says it was there at that commit.
+ * @param {any} code @param {string | undefined} dir
+ */
+async function readSources(code, dir) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  const wanted = (code?.maps ?? []).flatMap((/** @type {any} */ map) => map.modules.map((/** @type {any} */ m) => ({ repo: map.repo, sha: map.sha, path: m.path })));
+  if (dir) {
+    for (const w of wanted) {
+      const file = join(dir, w.repo, w.path);
+      if (existsSync(file)) out.set(`${w.repo} ${w.path}`, readFileSync(file, "utf8"));
+    }
+    return out;
+  }
+  for (let i = 0; i < wanted.length; i += 8) {
+    await Promise.all(
+      wanted.slice(i, i + 8).map(async (/** @type {{ repo: string, sha: string, path: string }} */ w) => {
+        const url = `https://raw.githubusercontent.com/${w.repo}/${w.sha}/${w.path}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`GET ${url} answered ${response.status}`);
+        out.set(`${w.repo} ${w.path}`, await response.text());
+      })
+    );
+  }
+  return out;
+}
+
+/** @param {{ model?: string, stats?: string, code?: string, source?: string, out?: string }} [options] */
+export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, source: sourceDir, out = join(here, "dist") } = {}) {
   const model = PublicModelSchema.parse(await read(modelSource));
   const stats = PublicStatsSchema.parse(await read(statsSource));
+  const code = await readCode(codeSource);
+  // Checked against the model before any source is read, so no private system's file is fetched.
+  codeBySystem(model, code);
+  const sources = await readSources(code, sourceDir);
 
   rmSync(out, { recursive: true, force: true });
-  const pages = allPages(model, stats);
+  const pages = allPages(model, stats, code, (repo, path) => sources.get(`${repo} ${path}`));
   for (const [path, html] of pages) {
     const file = path === "/404" ? join(out, "404.html") : join(out, path, "index.html");
     mkdirSync(dirname(file), { recursive: true });
@@ -79,6 +138,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "css/base.css",
     "components/button/button.css",
     "components/table/table.css",
+    "components/status/status.css",
     "components/system-map/system-map.css",
   ]
     .map((rel) => inlineCss(join(capsomer, rel)))
@@ -94,12 +154,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
   const content = contentHash(out);
-  writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, systems: model.systems.length, content }, null, 2)}\n`);
+  writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content }, null, 2)}\n`);
   return { pages: pages.length, out, content };
 }
 
 if (process.argv[1] === import.meta.filename) {
-  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, out: { type: "string" } } });
+  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, source: { type: "string" }, out: { type: "string" } } });
   const result = await build(/** @type {any} */ (values));
   console.log(`explorer: built ${result.pages} pages into ${result.out}`);
 }

@@ -10,6 +10,7 @@ Every page is prerendered from Capsid's two public documents (docs/public-data.m
 - `/s/{system}/`: one system chosen on the map, its facts, its connections, and a link to the same system on dustinedwards.info/systems.
 - `/s/{system}/containers/`: inside a public system with parts: a table and the lines between them, with the map's drawing for Capsid, the one system the map draws inside.
 - `/flows/{flow}/`: a flow from the public model, what it is and every step. `/flows/{flow}/{step}/`, counted from 1 (`/flows/job-life/4/`): one step, its sentence, the parts it touches with links to them, Back and Next, every step, and the core drawn with the step's line on and its parts lit. With the script, Back, Next, the step list, number keys and the map's own controls step in place, the address following, and a token travels the line; under reduced motion it jumps. A step on a line the model lacks, or touching a private system, stops the build. The core's page and its parts page link each flow over its parts.
+- `/s/{system}/code/`: a public system's code, from its repos' code maps (docs/public-data.md, "The code maps"): each module by folder with its riskiest function by CRAP and its mutation score, each a Capsomer status (shape, word and number, or "No data" with its reason), and its import cycles as text. `/s/{system}/code/{path}/`: one module's functions, linked to their lines in its numbered source at the commit the map measured, and its imports both ways. A code map for a system that is not public stops the build before any source is read.
 - A private system's page says it is private and shows its name, and its address if it has one. It has no parts page.
 
 ## Commands
@@ -19,7 +20,7 @@ From this folder, after `npm ci` at the repo root and here:
 - `npm run check`: the build, the page renderers and the tests, type-checked.
 - `npm test`: builds from `fixtures/` (invented systems on example.com) and checks the pages, the links, the headers and the script budget.
 - `npm run e2e`: the browser spec. Builds the fixtures into `.e2e-dist`, serves them with `wrangler dev` using the deploy's config and `_headers`, and runs axe in both themes, the policy, and the map's keyboard, on desktop and phone.
-- `npm run build`: builds from the live documents into `dist/`. `npm run build -- --model <file> --stats <file> --out <dir>` builds from files.
+- `npm run build`: builds from the live documents into `dist/`. `npm run build -- --model <file> --stats <file> --out <dir>` builds from files; add `--code <file>` for code pages, and `--source <dir>` to read their source from `<dir>/<owner>/<repo>/<path>` instead of GitHub.
 
 ## Deploy
 
