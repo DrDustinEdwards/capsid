@@ -36,6 +36,7 @@ const MCP_HOST_PATHS = new Set([
   "/backup/credential",
   "/public/model/v1.json",
   "/public/stats/v1.json",
+  "/public/code/v1.json",
   "/oauth/clients/verify-live.json",
 ]);
 const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-"];
