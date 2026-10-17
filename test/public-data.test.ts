@@ -32,6 +32,7 @@ function githubSays(names: string[]): PublicBuildReaders {
       repos: names.map((n): InstalledRepo => ({ full_name: `DrDustinEdwards/${n}`, private: PRIVATE_REPOS.has(n), archived: false, pushed_at: null })),
     }),
     statsRows: async (_env, _now, systems) => NO_ROWS(systems),
+    codeMap: async () => null,
   };
 }
 const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", ...PRIVATE_REPOS];
@@ -76,6 +77,7 @@ test("a public repo GitHub does not list is published as private, and a failed r
     statsRows: async () => {
       throw new Error("D1_ERROR: no such table");
     },
+    codeMap: async () => null,
   };
   await assert.rejects(publicBuildTick(fakeEnv({ APP_KV: failing.kv }), NOW, failingReaders), /D1_ERROR/);
   assert.equal(failing.store.get(PUBLIC_MODEL_KEY), "last good", "the model was written although the stats read failed");

@@ -181,7 +181,8 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
   );
 
   // The public system model (src/public-data.ts): once a UTC day, repo visibility read
-  // from GitHub, the model filtered by toPublic and stored for /public/model/v1.json. A
+  // from GitHub, the model filtered by toPublic and stored for /public/model/v1.json,
+  // and the public repos' code maps for /public/code/v1.json. A
   // failed read throws before anything is written, so the last good document stays
   // served and the ledger shows the failure. Not due is not a run.
   await runTask(
@@ -190,8 +191,10 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
     () => publicBuildTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("log", "PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` });
-      return { outcome: "ok", reason: report.note };
+      // A code map that would not parse is a refusal the ledger shows; the model was still built.
+      const failed = "codeFailed" in report;
+      logEvent(failed ? "error" : "log", "PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` });
+      return { outcome: failed ? "refused" : "ok", reason: report.note };
     },
     { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
   );

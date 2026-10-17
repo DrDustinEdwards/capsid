@@ -245,6 +245,12 @@ function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
   return s.public && s.repos.length > 0 && s.repos.every((r) => privacy.get(r.toLowerCase()) === false);
 }
 
+/** Every repo of a public system, with its system: the only repos whose code maps may be
+ *  published (design section 2, rule 2). */
+export function publicRepos(model: SystemModel, privacy: RepoPrivacy): Array<{ system: string; repo: string }> {
+  return model.systems.filter((s) => isPublicSystem(s, privacy)).flatMap((s) => s.repos.map((repo) => ({ system: s.id, repo })));
+}
+
 /**
  * The public document: what the explorer and the dustinedwards.info map read.
  *

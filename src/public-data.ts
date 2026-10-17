@@ -4,6 +4,7 @@ import { listInstalledRepos, type InstalledRepo } from "./github/client";
 import { callerIp, checkRate, rateLimitedResponse, type RateLimitPolicy } from "./rate-limit";
 import { parseSystemModel, toPublic, type SystemModel } from "./system-model";
 import { readStatsRows, summarize, type StatsRows } from "./public-stats";
+import { buildPublicCode, readCodeMap } from "./public-code";
 
 // The public data build (design capsid/research/design-system-explorer.md, section 2;
 // docs/public-data.md). Once a UTC day the tick reads every repo's visibility from
@@ -18,6 +19,8 @@ export const PUBLIC_MODEL_PATH = "/public/model/v1.json";
 export const PUBLIC_MODEL_KEY = "public:model:v1";
 export const PUBLIC_STATS_PATH = "/public/stats/v1.json";
 export const PUBLIC_STATS_KEY = "public:stats:v1";
+export const PUBLIC_CODE_PATH = "/public/code/v1.json";
+export const PUBLIC_CODE_KEY = "public:code:v1";
 export const PUBLIC_BUILD_LAST_KEY = "public:model:last";
 const CACHE_SECONDS = 3600;
 
@@ -40,20 +43,23 @@ export function bundledModel(): SystemModel {
   return parsed.model;
 }
 
-export type PublicBuildReport = { ran: false; note: string } | { ran: true; note: string };
+export type PublicBuildReport = { ran: false; note: string } | { ran: true; note: string; codeFailed?: true };
 
 export interface PublicBuildReaders {
   listRepos: (env: Env) => Promise<{ repos: InstalledRepo[] }>;
   statsRows: (env: Env, now: Date, systems: StatsRows["systems"]) => Promise<StatsRows>;
+  codeMap: (env: Env, repo: string) => Promise<unknown>;
 }
 
-const LIVE: PublicBuildReaders = { listRepos: listInstalledRepos, statsRows: readStatsRows };
+const LIVE: PublicBuildReaders = { listRepos: listInstalledRepos, statsRows: readStatsRows, codeMap: readCodeMap };
 
 /**
- * Builds and stores both public documents once per UTC day. Everything is read and
- * computed before anything is written, so a failed read leaves the last good documents
- * served and the day unstamped; a partial visibility read cannot happen
- * (listInstalledRepos throws on one).
+ * Builds and stores the public documents once per UTC day. The model and the numbers
+ * are read and computed before anything is written, so a failed read leaves the last
+ * good documents served and the day unstamped; a partial visibility read cannot happen
+ * (listInstalledRepos throws on one). The code maps come after, on their own: a repo's
+ * broken map keeps the last good code document and is reported, and does not hold back
+ * the model or retry every tick.
  */
 export async function publicBuildTick(env: Env, now: Date, readers: PublicBuildReaders = LIVE, model: SystemModel = bundledModel()): Promise<PublicBuildReport> {
   const today = now.toISOString().slice(0, 10);
@@ -68,11 +74,21 @@ export async function publicBuildTick(env: Env, now: Date, readers: PublicBuildR
   await env.APP_KV.put(PUBLIC_MODEL_KEY, JSON.stringify(doc));
   await env.APP_KV.put(PUBLIC_STATS_KEY, JSON.stringify(stats));
   await env.APP_KV.put(PUBLIC_BUILD_LAST_KEY, now.toISOString());
+
+  let code: string;
+  let codeFailed = false;
+  try {
+    const built = await buildPublicCode(env, model, privacy, today, readers.codeMap);
+    await env.APP_KV.put(PUBLIC_CODE_KEY, JSON.stringify(built));
+    code = `${built.maps.length} code map(s)${built.maps.length ? ` (${built.maps.map((m) => m.repo.split("/")[1]).join(", ")})` : ""}`;
+  } catch (e) {
+    codeFailed = true;
+    code = `code maps kept from the last build: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
   const c = doc.counts;
-  return {
-    ran: true,
-    note: `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s), ${doc.flows?.length ?? 0} of ${model.flows?.length ?? 0} flow(s) whole; visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}, ${stats.jobs.completed_30d} job(s) finished in 30 days`,
-  };
+  const note = `${c.public} public and ${c.private} private system(s), ${c.containers} container(s), ${c.relationships} relationship(s), ${doc.flows?.length ?? 0} of ${model.flows?.length ?? 0} flow(s) whole; visibility read for ${repos.length} repo(s); stats as of ${stats.as_of}, ${stats.jobs.completed_30d} job(s) finished in 30 days; ${code}`;
+  return codeFailed ? { ran: true, note, codeFailed: true } : { ran: true, note };
 }
 
 function json(body: string, status: number, cache: string): Response {
@@ -83,6 +99,7 @@ function json(body: string, status: number, cache: string): Response {
 export const PUBLIC_DOCS = {
   model: { path: PUBLIC_MODEL_PATH, key: PUBLIC_MODEL_KEY },
   stats: { path: PUBLIC_STATS_PATH, key: PUBLIC_STATS_KEY },
+  code: { path: PUBLIC_CODE_PATH, key: PUBLIC_CODE_KEY },
 } as const;
 
 /**

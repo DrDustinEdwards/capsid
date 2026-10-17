@@ -160,6 +160,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the public system model (src/public-data.ts): public by design, it serves only the document the daily build stored after toPublic filtered it (src/system-model.ts), never D1 or GitHub; GET only, edge-cached, then a per-IP KV limit that fails closed; no CORS, since site builds read it, not browsers",
   "/public/stats/v1.json":
     "the public aggregate numbers (src/public-stats.ts): counts, rates and medians over every namespace, agent and site, whole UTC days, null under ten rows, no string but a date and the sha /health shows; it serves only what the daily build stored, never D1; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
+  "/public/code/v1.json":
+    "the public code maps (src/public-code.ts): each public system's repos' code-map.json from their code-map branch, parsed field by field, a private system's repos never read; it serves only what the daily build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
