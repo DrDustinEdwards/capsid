@@ -19,7 +19,7 @@ export default defineConfig({
   ],
   webServer: {
     command: [
-      `npm run build -- --model fixtures/model.json --stats fixtures/stats.json --out ${OUT}`,
+      `npm run build -- --model fixtures/model.json --stats fixtures/stats.json --code fixtures/code.json --source fixtures/source --out ${OUT}`,
       `node wrangler-config.mjs ${OUT} --local > ${OUT}.wrangler.json`,
       `npx --prefix .. wrangler dev --config ${OUT}.wrangler.json --port ${PORT} --ip 127.0.0.1`,
     ].join(" && "),

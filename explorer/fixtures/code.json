@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "as_of": "2026-10-17",
+  "maps": [
+    {
+      "system": "theme",
+      "version": 1,
+      "repo": "example/theme",
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "date": "2026-10-17",
+      "tools": { "typescript": "5.9.3", "coverage": "istanbul", "mutation": null },
+      "modules": [
+        { "path": "src/index.ts", "loc": 10, "imports": ["src/tokens.ts", "src/util/a.ts"], "functions": [{ "name": "choose", "line": 4, "end": 11, "cc": 9, "coverage": 0, "crap": 90, "mutants": null, "score": null }] },
+        { "path": "src/tokens.ts", "loc": 5, "imports": [], "functions": [] },
+        { "path": "src/util/a.ts", "loc": 4, "imports": ["src/util/b.ts"], "cycle": true, "functions": [{ "name": "pick", "line": 3, "end": 5, "cc": 2, "coverage": 1, "crap": 2, "mutants": null, "score": null }] },
+        { "path": "src/util/b.ts", "loc": 2, "imports": ["src/util/a.ts"], "cycle": true, "functions": [{ "name": "same", "line": 3, "end": 3, "cc": 3, "coverage": 0, "crap": 12, "mutants": null, "score": null }] }
+      ],
+      "cycles": [["src/util/a.ts", "src/util/b.ts"]]
+    }
+  ]
+}

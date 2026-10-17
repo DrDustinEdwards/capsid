@@ -19,6 +19,7 @@ on:
       - "explorer/**"
       - "src/system-model.ts"
       - "src/public-stats.ts"
+      - "src/public-code-schema.ts"
       - "src/limits.ts"
       - "src/ops-snapshot.ts"
       - "src/health-format.ts"

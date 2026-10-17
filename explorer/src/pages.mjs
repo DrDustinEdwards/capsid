@@ -10,6 +10,7 @@ import { systemMapHtml } from "capsomer/behaviour/system-map";
 import { barChart, progressRing } from "enarratio";
 
 import { escapeHtml as escapeText } from "../../src/html.ts";
+import { codeBySystem, codePages, codePath, codeSummary } from "./code.mjs";
 
 export const SITE = "https://dustinedwards.info";
 const ORIGIN = "https://capsid.dustinedwards.info";
@@ -197,8 +198,8 @@ ${numbersHtml(stats)}`;
   return layout({ title: "Capsid explorer", description: `The ${model.systems.length} systems Dustin Edwards runs, as a capsid, with Capsid's daily numbers.`, path: "/", body, asOf: stats.as_of, script: true });
 }
 
-/** @param {any} model @param {string} id @param {string} asOf */
-export function systemPage(model, id, asOf) {
+/** @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any */
+export function systemPage(model, id, asOf, maps = []) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   if (!s) throw new Error(`no system ${id}`);
   const links = connectionsOf(model, id);
@@ -215,6 +216,7 @@ export function systemPage(model, id, asOf) {
 <dl class="facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("")}</dl>
 <p class="out"><a href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a></p>
 ${parts.length ? `<p><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${ownParts(parts).length} parts and how they connect</a></p>` : ""}
+${maps.length ? `<p><a href="${codePath(id)}">Its code: ${escapeHtml(codeSummary(maps))}</a></p>` : ""}
 <section aria-labelledby="links-title"><h2 id="links-title">Connections</h2>
 ${links.length ? `<ul>${links.map((c) => `<li>${escapeHtml(c.verb)} <a href="${systemPath(c.id)}">${escapeHtml(c.name)}</a></li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
@@ -428,22 +430,26 @@ export function notFoundPage(asOf) {
 
 /**
  * Every page the explorer serves, as [path, html]: the front page, one per system, one per
- * public system with parts, one per flow and one per step of it, and the 404.
- * @param {any} model @param {any} stats
+ * public system with parts, one per flow and one per step of it, the code pages of each public
+ * system with a code map, and the 404.
+ * @param {any} model @param {any} stats @param {any} [code] the public code document
+ * @param {(repo: string, path: string) => string | undefined} [sourceOf] a module's source at its map's commit
  * @returns {Array<[string, string]>}
  */
-export function allPages(model, stats) {
+export function allPages(model, stats, code = null, sourceOf = () => undefined) {
   const asOf = stats.as_of;
+  const bySystem = codeBySystem(model, code);
   /** @type {Array<[string, string]>} */
   const pages = [["/", homePage(model, stats)]];
   for (const s of model.systems) {
-    pages.push([systemPath(s.id), systemPage(model, s.id, asOf)]);
+    pages.push([systemPath(s.id), systemPage(model, s.id, asOf, bySystem.get(s.id))]);
     if (!s.private && model.containers.some((/** @type {any} */ c) => c.system === s.id)) pages.push([containersPath(s.id), containersPage(model, s.id, asOf)]);
   }
   for (const f of flowsOf(model)) {
     pages.push([flowPath(f.id), flowPage(f, asOf)]);
     for (const st of f.steps) pages.push([stepPath(f.id, st.n), stepPage(model, f, st.n, asOf)]);
   }
+  pages.push(...codePages(model, bySystem, sourceOf, asOf));
   pages.push(["/404", notFoundPage(asOf)]);
   return pages;
 }

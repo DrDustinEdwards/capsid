@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 import { eachTheme, expectNoAxeViolations } from "capsomer/testing";
 
-const PAGES = ["/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/vault/", "/s/gone/", "/flows/sample-round/", "/flows/sample-round/1/", "/flows/sample-round/2/", "/nope"];
+const PAGES = ["/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/theme/code/", "/s/theme/code/src/index.ts/", "/s/vault/", "/s/gone/", "/flows/sample-round/", "/flows/sample-round/1/", "/flows/sample-round/2/", "/nope"];
 
 /**
  * Every console error, page error and policy violation the page raises. A failed load is one
