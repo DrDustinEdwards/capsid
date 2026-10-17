@@ -243,6 +243,46 @@
       "kind": "external",
       "technology": "Repos, pull requests, Actions",
       "description": "Where the code, the pull requests and CI live. Capsid reaches it through its GitHub App."
+    },
+    {
+      "id": "carrel-worker",
+      "system": "carrel",
+      "name": "Carrel Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "The editor behind Access, and the MCP door AI sessions use, in one Worker."
+    },
+    {
+      "id": "carrel-cron",
+      "system": "carrel",
+      "name": "Fifteen-minute check",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Checks each connected site against site-api's contract and refreshes Carrel's index of its posts."
+    },
+    {
+      "id": "carrel-db",
+      "system": "carrel",
+      "name": "carrel",
+      "kind": "database",
+      "technology": "D1",
+      "description": "People and roles, working drafts, AI drafts, flags and the index of each site's posts."
+    },
+    {
+      "id": "website-worker",
+      "system": "dustinedwards-info",
+      "name": "Site Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "Serves the site, and the site-api routes Carrel writes through."
+    },
+    {
+      "id": "website-db",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards",
+      "kind": "database",
+      "technology": "D1",
+      "description": "The posts and pages, with every saved version."
     }
   ],
   "relationships": [
@@ -259,6 +299,11 @@
     { "from": "capsid-github", "to": "capsid-worker", "kind": "watches" },
     { "from": "capsid-tick", "to": "capsid-db", "kind": "writes" },
     { "from": "capsid-tick", "to": "capsid-kv", "kind": "writes" },
+    { "from": "carrel-worker", "to": "carrel-db", "kind": "writes" },
+    { "from": "carrel-worker", "to": "website-worker", "kind": "reads" },
+    { "from": "carrel-worker", "to": "website-worker", "kind": "publishes-to" },
+    { "from": "carrel-cron", "to": "website-worker", "kind": "watches" },
+    { "from": "website-worker", "to": "website-db", "kind": "writes" },
     { "from": "capsid", "to": "d1-dump", "kind": "installs" },
     { "from": "capsid", "to": "site-runtime", "kind": "installs" },
     { "from": "capsid", "to": "capsomer", "kind": "installs" },
@@ -303,6 +348,20 @@
         { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Trimmed: document versions older than 90 days and audit rows older than 180 are pruned, after the dump, so every pruned row is in a kept copy." },
         { "from": "capsid-worker", "kind": "writes", "to": "capsid-kv", "toward": "capsid-kv", "text": "Stamped: the run records its success, and /health warns once that stamp is more than 26 hours old." },
         { "from": "capsid-tick", "kind": "reads", "to": "capsid-github", "toward": "capsid-tick", "text": "Watched: every half hour the watcher reads the newest copy kept off the Cloudflare account and files a finding once it is more than 36 hours old." }
+      ]
+    },
+    {
+      "id": "carrel-publish",
+      "name": "Publishing a post",
+      "description": "A post goes from a private draft in Carrel to a live page on dustinedwards.info, through the one contract every site speaks, with the site deciding what may go live.",
+      "steps": [
+        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Drafted: the writer works in Carrel's editor, which autosaves a working draft only that person can see." },
+        { "from": "carrel-worker", "kind": "reads", "to": "website-worker", "toward": "carrel-worker", "text": "Previewed: Carrel shows the site's own render of the draft in a sandbox, with the checks' flags and any reviewer's beside it." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Saved: an Editor or the Owner saves the draft to the site, naming the version it replaces. The site refuses a stale one, so nobody overwrites a newer save." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Published: only the Owner publishes, and a first publish asks for confirmation. The site's own publish policy decides, so there is one authority." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Or by instruction: the Owner's AI session may publish through the MCP door, never while a flag is open. It sends no text, so only the saved version goes live, and Dustin is emailed an unpublish link." },
+        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Recorded: Carrel indexes the live post, records who published it (an AI session by its client name) and clears the draft that was sent." },
+        { "from": "carrel-cron", "kind": "watches", "to": "website-worker", "toward": "carrel-cron", "text": "Watched: every 15 minutes Carrel runs site-api's conformance suite against the site and emails when its state changes." }
       ]
     }
   ]
