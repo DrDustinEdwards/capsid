@@ -89,6 +89,7 @@ You need a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstr
 - [docs/overnight.md](docs/overnight.md) the overnight run and the morning summary
 - [docs/improve.md](docs/improve.md) the optional improvement loop and what stops it grading itself
 - [docs/skills.md](docs/skills.md) sharing an idea that worked in one project with the others
+- [docs/bench.md](docs/bench.md) the methods paper's paired comparison and how its runs are scored
 
 ### Watching the sites
 

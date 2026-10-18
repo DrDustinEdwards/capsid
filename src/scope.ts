@@ -170,6 +170,9 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
   "/improve/holdout-credential": "signed with the per-namespace HMAC score key, and mints read access to that namespace's holdout only",
   "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
+  "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no score or backup key can produce, and replay-protected; registers a task once and never changes one",
+  "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap",
+  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, and reads the treatment's claim from its own job row rather than the report",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":

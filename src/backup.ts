@@ -139,6 +139,11 @@ export const TABLES = [
   "access_sync_groups",
   // The devices that get a phone alert (migrations/0041_push_subscriptions.sql).
   "push_subscriptions",
+  // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
+  // tasks and every run's outcome, the data its primary outcome is computed from.
+  // Insert-only and close-once by trigger; nothing prunes them.
+  "bench_tasks",
+  "bench_runs",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;
