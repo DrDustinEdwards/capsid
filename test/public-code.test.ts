@@ -93,6 +93,14 @@ test("a map that fails the schema, names another repo, or climbs out of the repo
   await assert.rejects(bad({ ...sampleMap(), modules: [{ path: "/etc/passwd", loc: 1, imports: [], functions: [] }] }), /invalid/);
 });
 
+test("a framework's route file names are module paths: $ for a parameter, brackets for a literal dot", async () => {
+  // React Router's flat routes, as dustinedwards-info names them.
+  const paths = ["app/routes/blog.$slug.tsx", "app/routes/blog.$slug[.md].ts", "app/routes/api.carrel.v1.$.ts"];
+  const map = { ...sampleMap(), modules: paths.map((path) => ({ path, loc: 1, imports: paths.filter((p) => p !== path), functions: [] })) };
+  const doc = await buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": map }).read);
+  assert.deepEqual(doc.maps.find((m) => m.repo === "DrDustinEdwards/d1-dump")?.modules.map((m) => m.path), paths);
+});
+
 test("a broken map keeps the last code document and is reported, and the model is still built", async () => {
   const kv = fakeKv({ seed: { [PUBLIC_CODE_KEY]: "last code" } });
   const readers: PublicBuildReaders = {
