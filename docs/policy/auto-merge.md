@@ -10,6 +10,15 @@ edited after signing, merges nothing.
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
 
+Version 7 was amended on 2026-10-18 for dustinedwards-info's required CI steps and what
+a merge there means (ruled by Dustin 2026-10-15). The list as first signed named two
+steps that repo's `ci.yml` no longer has, `Slop` and the old long name of the migrations
+step, so no dustinedwards pull request could pass `ci_green`. The amended list names the
+steps of both of its CI jobs as they are on `main` on 2026-10-18. It also says what has
+been true since 2026-09-23: a merge to dustinedwards-info's `main` deploys. Dustin
+decided on 2026-10-15 that an auto-merge there may deploy, for pull requests not
+labelled `visual` only. Every check is unchanged.
+
 Version 7 makes the pull request the claim (job_e68de044f8a4, ruled by Dustin
 2026-10-10, plan step 2). Cloud sessions all sign in as the admin login, which may hold
 one claim, so they work jobs without claiming them, and complete a queued job by naming
@@ -224,17 +233,32 @@ success.
 
 ## Required CI, dustinedwards
 
-Every step of that repo's one job, ruled 2026-09-19. Install and the build step are
-named alongside the three that judge, so a reordered workflow that drops one refuses
-rather than merging on a run that skipped it. These five names were read off
-dustinedwards-info's `ci.yml` on 2026-09-19; no test in this repo can catch a rename
-there, because this repo does not hold that workflow.
+Every named step of both jobs of that repo's `ci.yml`, read off `main` on 2026-10-18
+(the first list was ruled 2026-09-19). Install and the build steps are named alongside
+the ones that judge, so a reordered workflow that drops one refuses rather than merging
+on a run that skipped it. The `Admin MCP, clean checkout` job's command
+steps carry no `name:`, so GitHub reports them as `Run <command>`, and the names below
+are those. No test in this repo can catch a rename there, because this repo does not
+hold that workflow.
+
+The repo's other pull request checks, `ai-author / No AI trailer or author on new
+commits` and `pr-footer / No Claude Code footer on the description`, run from reusable
+workflows in DrDustinEdwards/devkit, so they are not listed as steps here. `ci_green`
+still requires them, as it requires every check run on the head sha to conclude
+success, skipped or neutral.
 
 - step `.github/workflows/ci.yml / Gates, clean checkout / Install`
-- step `.github/workflows/ci.yml / Gates, clean checkout / Migrations, stack and content build, publication twins, enhancement bundles, local sync`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Migrations, stack and content build, local sync`
 - step `.github/workflows/ci.yml / Gates, clean checkout / Lint`
-- step `.github/workflows/ci.yml / Gates, clean checkout / Slop`
 - step `.github/workflows/ci.yml / Gates, clean checkout / Gates`
+- step `.github/workflows/ci.yml / Gates, clean checkout / Build`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Install`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Bootstrap wrangler.jsonc from the example`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Run npm run typecheck`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Run npm run check:wrapper`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Run npm run check:wrapper:plant`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Run npm test`
+- step `.github/workflows/ci.yml / Admin MCP, clean checkout / Run npm run build`
 
 ## Required CI, carrel
 
@@ -282,12 +306,15 @@ ruled 2026-09-16), with the checks above as the whole condition and the live gat
 rollback as the backstop. Extending this policy to another namespace authorises
 unattended production deploys there too, and is decided one namespace at a time.
 
-**dustinedwards-info does not.** Its `deploy.yml` is `workflow_dispatch` only, and that
-is a ruling of 2026-08-25 rather than an omission: push-to-deploy was considered in the
-same ruling and refused, because it would make every merge a release. So an auto-merge
-there lands on `main` and ships nothing, and releasing stays `npm run ship` or the
-dispatch button. Measured from that workflow on 2026-09-19. If it ever gains an
-`on: push` deploy, this paragraph is wrong and the namespace needs deciding again.
+**dustinedwards-info does.** Since 2026-09-23 (Dustin, reversing the 2026-08-25 ruling
+that kept deploys a separate decision) its `deploy.yml` runs on `workflow_run` after CI
+concludes success on `main`, and ships that exact sha through `npm run ship`, unless the
+repository variable `AUTO_DEPLOY` is `off`. So a dustinedwards auto-merge is an
+unattended production deploy of the site. Dustin decided on 2026-10-15 that this is
+allowed for pull requests not labelled `visual` only. A pull request labelled `visual`
+is held for his look even when every check passes (`visual_awaits_look`,
+`src/visual-pr.ts`), so it merges only on his approval. Measured from that workflow on
+2026-10-18.
 
 **carrel does:** since 2026-10-08 its ci.yml deploys after check and gates pass on a push
 to main, migrations first, so a carrel auto-merge is an unattended deploy of Carrel.
@@ -314,6 +341,9 @@ version 5 added and carries no author allowlist. A version 5 document does not n
 code deploying and version 6 being signed nothing is auto-merged in any namespace.
 A version 6 document does not name `size_within_cap`, so between the version 7 code
 deploying and version 7 being signed nothing is auto-merged in any namespace either.
+A version 7 document signed before the 2026-10-18 amendment lists the old dustinedwards
+steps, so between the amended code deploying and the amended document being signed
+nothing is auto-merged in any namespace.
 
 It can change who may author an unattended merge without a code change. The author
 allowlist is the one list the code does not also hold, so a signed document that adds

@@ -185,16 +185,23 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Tests",
     "Integration tests",
   ].map(ciStep("checks")),
-  // Every step of dustinedwards-info's one job. Install and the build step are named
-  // alongside the three that judge, so a reordered workflow that drops one refuses
-  // rather than merging on a run that skipped it.
+  // Every named step of both jobs of dustinedwards-info's ci.yml, read off main on
+  // 2026-10-18. Install and the build steps are named alongside the ones that judge, so
+  // a reordered workflow that drops one refuses rather than merging on a run that
+  // skipped it. The Admin MCP job's command steps carry no name, so GitHub reports them
+  // as "Run <command>", and those are the names below.
   dustinedwards: [
-    "Install",
-    "Migrations, stack and content build, publication twins, enhancement bundles, local sync",
-    "Lint",
-    "Slop",
-    "Gates",
-  ].map(ciStep("Gates, clean checkout")),
+    ...["Install", "Migrations, stack and content build, local sync", "Lint", "Gates", "Build"].map(ciStep("Gates, clean checkout")),
+    ...[
+      "Install",
+      "Bootstrap wrangler.jsonc from the example",
+      "Run npm run typecheck",
+      "Run npm run check:wrapper",
+      "Run npm run check:wrapper:plant",
+      "Run npm test",
+      "Run npm run build",
+    ].map(ciStep("Admin MCP, clean checkout")),
+  ],
   // Every step of Carrel's two jobs, read off its ci.yml on main on 2026-10-07. Carrel's
   // steps that run a command carry no name, so GitHub names them "Run <command>"; that
   // is the name the jobs API reports, and a script rename in package.json that changes
