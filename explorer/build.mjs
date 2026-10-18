@@ -23,7 +23,7 @@ import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/headers.mjs";
-import { codeBySystem } from "./src/code.mjs";
+import { codeBySystem, escapePath } from "./src/code.mjs";
 import { allPages } from "./src/pages.mjs";
 
 const here = import.meta.dirname;
@@ -103,7 +103,7 @@ async function readSources(code, dir) {
   for (let i = 0; i < wanted.length; i += 8) {
     await Promise.all(
       wanted.slice(i, i + 8).map(async (/** @type {{ repo: string, sha: string, path: string }} */ w) => {
-        const url = `https://raw.githubusercontent.com/${w.repo}/${w.sha}/${w.path}`;
+        const url = `https://raw.githubusercontent.com/${w.repo}/${w.sha}/${escapePath(w.path)}`;
         const response = await fetch(url);
         if (!response.ok) throw new Error(`GET ${url} answered ${response.status}`);
         out.set(`${w.repo} ${w.path}`, await response.text());
@@ -125,7 +125,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   rmSync(out, { recursive: true, force: true });
   const pages = allPages(model, stats, code, (repo, path) => sources.get(`${repo} ${path}`));
   for (const [path, html] of pages) {
-    const file = path === "/404" ? join(out, "404.html") : join(out, path, "index.html");
+    const file = path === "/404" ? join(out, "404.html") : join(out, decodeURIComponent(path), "index.html");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, html);
   }

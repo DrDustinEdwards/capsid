@@ -128,6 +128,22 @@ test("the code page draws the folders, then each folder's modules, every box lin
   for (const id of ["theme-f-src", "theme-f-src-util"]) assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
 });
 
+test("a route file name with $ and brackets gets a page under its own name, linked with the brackets escaped", async () => {
+  const route = "src/routes/blog.$slug[.md].ts";
+  const withRoute = structuredClone(code);
+  withRoute.maps[0].modules.push({ path: route, loc: 1, imports: ["src/index.ts"], functions: [] });
+  const dir = mkdtempSync(join(tmpdir(), "explorer-route-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(withRoute));
+  const routeOut = mkdtempSync(join(tmpdir(), "explorer-route-out-"));
+  await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: join(dir, "code.json"), source: join(fixtures, "source"), out: routeOut });
+  assert.equal(modulePath("theme", route), "/s/theme/code/src/routes/blog.%24slug%5B.md%5D.ts/");
+  assert.ok(existsSync(join(routeOut, "s", "theme", "code", "src", "routes", "blog.$slug[.md].ts", "index.html")), "the page is not under the file's own name");
+  const page = readFileSync(join(routeOut, "s", "theme", "code", "index.html"), "utf8");
+  assert.ok(page.includes(`href="/s/theme/code/src/routes/blog.%24slug%5B.md%5D.ts/"`), "the code page does not link the route module escaped");
+  const own = readFileSync(join(routeOut, "s", "theme", "code", "src", "routes", "blog.$slug[.md].ts", "index.html"), "utf8");
+  assert.ok(own.includes("/blob/0123456789abcdef0123456789abcdef01234567/src/routes/blog.%24slug%5B.md%5D.ts"), "the GitHub link is not escaped");
+});
+
 test("a function changed since the mutation run shows no score and says why, and the page dates the run", () => {
   const map = structuredClone(code.maps[0]);
   map.tools.mutation = "stryker";

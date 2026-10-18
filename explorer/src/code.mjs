@@ -11,8 +11,12 @@ import { escapeHtml, layout, systemPath } from "./pages.mjs";
 
 /** @param {string} id */
 export const codePath = (id) => `/s/${id}/code/`;
+// Each segment escaped as the static assets server writes it (blog.$slug[.md].ts is
+// blog.%24slug%5B.md%5D.ts; it redirects any other spelling). build.mjs writes the page
+// under the decoded path, and the server decodes the request to match it.
+export const escapePath = (/** @type {string} */ path) => path.split("/").map(encodeURIComponent).join("/");
 /** A module's page, its repo path under the system's code page. @param {string} id @param {string} path */
-export const modulePath = (id, path) => `/s/${id}/code/${path}/`;
+export const modulePath = (id, path) => `/s/${id}/code/${escapePath(path)}/`;
 
 // Section 5: CRAP up to 5 ok, 5 to 30 watch, over 30 critical (crap4j's threshold); mutation
 // 80% and up ok, 60 to 80 watch, under 60 critical.
@@ -113,7 +117,7 @@ const baseName = (path) => path.slice(path.lastIndexOf("/") + 1);
 /** A repo's GitHub address from its "owner/name". @param {string} repo */
 const repoUrl = (repo) => `https://github.com/${repo}`;
 /** @param {any} map @param {string} path @param {number} [line] @param {number} [end] */
-const blobUrl = (map, path, line, end) => `${repoUrl(map.repo)}/blob/${map.sha}/${path}${line ? `#L${line}${end && end !== line ? `-L${end}` : ""}` : ""}`;
+const blobUrl = (map, path, line, end) => `${repoUrl(map.repo)}/blob/${map.sha}/${escapePath(path)}${line ? `#L${line}${end && end !== line ? `-L${end}` : ""}` : ""}`;
 
 const scroller = (/** @type {string} */ id, /** @type {string} */ inner, /** @type {string} */ label) =>
   `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
