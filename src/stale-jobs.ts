@@ -1,15 +1,18 @@
 import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
 import type { OpsStaleJob, StaleRule } from "./ops-types";
+import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
 
 // The stale view (capsid/research/design-stale-jobs.md, D5): `capsid_work_jobs` action list with
-// stale: true. Three rules, each a fact the Worker already holds, so reading the view
+// stale: true. Four rules, each a fact the Worker already holds, so reading the view
 // costs no GitHub reads:
 //   unchanged: a blocked or claimed job whose row has not changed in 3 days;
 //   resumed-not-completed: a job the merge-resume step resumed 24 hours or more ago that
 //     is still blocked, claimed or queued;
 //   prs-settled: a blocked job whose named pull requests are all merged or closed, read
-//     from the cache the merge-resume step writes (src/merge-resume.ts).
+//     from the cache the merge-resume step writes (src/merge-resume.ts);
+//   steps-seen: a blocked job whose every "check:" line the watcher's last pass saw done,
+//     read from the cache that pass writes (src/manual-steps.ts).
 // Nothing here closes or moves a job; the view only says why a job looks stuck.
 
 export const STALE_UNCHANGED_MS = 3 * 24 * 60 * 60 * 1000;
@@ -105,14 +108,16 @@ function plural(n: number, word: string): string {
 
 /**
  * Why one job is stale, or null. Pure, so the rules are tested without a database.
- * The first rule that holds wins, the most actionable first: settled pull requests,
- * then an auto-resume nobody finished, then a row nobody touched. A cache entry read
- * before the job last changed says nothing about the job as it is now, so it is ignored.
+ * The first rule that holds wins, the most actionable first: settled pull requests, then
+ * manual steps seen, then an auto-resume nobody finished, then a row nobody touched. A
+ * cache entry read before the job last changed says nothing about the job as it is now,
+ * so it is ignored.
  */
 export function classifyStale(
   job: { status: string; updated_at: string; auto_resumed_at: string | null },
   entry: StalePrEntry | undefined,
-  now: Date
+  now: Date,
+  steps?: StaleStepEntry
 ): { rule: StaleRule; reason: string } | null {
   const nowMs = now.getTime();
   if (job.status === "blocked" && entry && entry.at >= job.updated_at && prsSettled(entry)) {
@@ -120,6 +125,9 @@ export function classifyStale(
       rule: "prs-settled",
       reason: `blocked, and every pull request it names is settled (${entry.merged} merged, ${entry.closed} closed without merging, read ${entry.at})`,
     };
+  }
+  if (job.status === "blocked" && steps && steps.at >= job.updated_at && stepsSeen(steps)) {
+    return { rule: "steps-seen", reason: `blocked, and every manual step it names is seen done (${plural(steps.seen, "step")}, read ${steps.at})` };
   }
   if (job.auto_resumed_at && ["blocked", "claimed", "queued"].includes(job.status)) {
     const since = Date.parse(job.auto_resumed_at);
@@ -154,7 +162,11 @@ export interface StaleJobsResult {
  */
 export async function staleJobs(env: Env, now: Date, opts: { namespace?: string } = {}): Promise<StaleJobsResult> {
   const read = await readStaleCache(env.APP_KV);
-  const settled = Object.keys(read.cache).filter((id) => prsSettled(read.cache[id]));
+  const steps = await readStepCache(env.APP_KV);
+  const settled = [
+    ...Object.keys(read.cache).filter((id) => prsSettled(read.cache[id])),
+    ...Object.keys(steps.cache).filter((id) => stepsSeen(steps.cache[id])),
+  ];
   const unchangedBefore = new Date(now.getTime() - STALE_UNCHANGED_MS).toISOString();
   const resumedBefore = new Date(now.getTime() - STALE_RESUMED_MS).toISOString();
   // The SQL narrows to the candidates; classifyStale decides, so the rules live in one
@@ -179,12 +191,13 @@ export async function staleJobs(env: Env, now: Date, opts: { namespace?: string 
   const truncated = candidates.length > STALE_ROWS_MAX;
   const rows: StaleRow[] = [];
   for (const job of truncated ? candidates.slice(0, STALE_ROWS_MAX) : candidates) {
-    const why = classifyStale(job, read.cache[job.id], now);
+    const why = classifyStale(job, read.cache[job.id], now, steps.cache[job.id]);
     if (why) rows.push({ id: job.id, namespace: job.namespace, title: job.title, status: job.status, updated_at: job.updated_at, ...why });
   }
   const notes = [
     ...(truncated ? [`more than ${STALE_ROWS_MAX} stale jobs; narrow by namespace.`] : []),
     ...(read.problem ? [`the pull request cache could not be fully read (${read.problem}), so prs-settled may be missing rows.`] : []),
+    ...(steps.problem ? [`the manual steps cache could not be fully read (${steps.problem}), so steps-seen may be missing rows.`] : []),
   ];
   return { rows, truncated, ...(notes.length ? { note: notes.join(" ") } : {}) };
 }

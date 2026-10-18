@@ -60,6 +60,7 @@ export function LiveSessions() {
 // orders them (src/stale-jobs.ts).
 const STALE_RULE: Record<StaleRule, string> = {
   "prs-settled": "Pull requests settled",
+  "steps-seen": "Manual steps seen",
   "resumed-not-completed": "Resumed, not finished",
   unchanged: "Unchanged 3 days",
 };

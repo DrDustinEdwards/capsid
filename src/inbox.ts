@@ -8,6 +8,7 @@ import { unitInboxItems } from "./merge-units";
 import type { MergeClass } from "./merge-class";
 import { checkWords } from "./check-words";
 import { prsSettled, readStaleCache, type StalePrCache } from "./stale-jobs";
+import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -67,8 +68,10 @@ export function prHoldTitle(a: Pick<AwaitingSeat, "number" | "failed" | "class" 
 // had merged). Two facts the Worker already holds settle it: every pull request it names is
 // merged or closed, as the merge-resume step last read them after the job last changed
 // (src/stale-jobs.ts, the same test as the stale view's prs-settled), or every migration
-// file its block names (the command is in its summary, src/jobs-holder.ts) is in d1_migrations. Such a job stays blocked and shows in the stale
-// view, where it is closed; the inbox leaves it out.
+// file its block names (the command is in its summary, src/jobs-holder.ts) is in d1_migrations,
+// or every manual step its "check:" lines name was seen by the watcher's last pass after the
+// job last changed (src/manual-steps.ts, the stale view's steps-seen). Such a job stays
+// blocked and shows in the stale view, where it is closed; the inbox leaves it out.
 const MIGRATION_FILE = /\b(\d{4}_[a-z0-9_]+)(?:\.sql)?\b/gi;
 
 /** The migration files a blocked job's summary names, without ".sql". */
@@ -79,10 +82,13 @@ export function migrationsNamed(text: string): string[] {
 export function blockSettled(
   job: { id: string; result_summary: string | null; updated_at: string },
   stale: StalePrCache,
-  applied: ReadonlySet<string> | null
+  applied: ReadonlySet<string> | null,
+  steps: StaleStepCache = {}
 ): boolean {
   const entry = stale[job.id];
   if (entry && entry.at >= job.updated_at && prsSettled(entry)) return true;
+  const step = steps[job.id];
+  if (step && step.at >= job.updated_at && stepsSeen(step)) return true;
   if (!applied) return false;
   const named = migrationsNamed(job.result_summary ?? "");
   return named.length > 0 && named.every((n) => applied.has(n));
@@ -127,12 +133,13 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     .bind(MAX_BLOCKED)
     .all<{ id: string; namespace: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }>();
   // An unreadable cache or migrations table settles nothing: the job shows, as before.
-  // Both are read whether or not a job is blocked, so the feed's stated read count
+  // All three are read whether or not a job is blocked, so the feed's stated read count
   // (src/ops-feed.ts, OPS_FEED_READS) does not move with the data.
   const stale = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
+  const steps = (await readStepCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const applied = await appliedMigrations(env.DB);
   for (const job of blocked.results ?? []) {
-    if (!blockSettled(job, stale, applied)) add(job.namespace, blockedJobItem(job));
+    if (!blockSettled(job, stale, applied, steps)) add(job.namespace, blockedJobItem(job));
   }
 
   // The pull requests auto-merge declined, rewritten whole by its tick. An unreadable

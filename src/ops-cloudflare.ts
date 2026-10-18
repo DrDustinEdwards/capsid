@@ -19,7 +19,8 @@ import { logEvent } from "./log";
 //   Email Routing Rules Read          GET /zones/{zone}/email/routing/rules
 //   Account Settings Read             GET /accounts/{id}/rum/site_info/list (the live checks'
 //                                     Web Analytics setting; developers.cloudflare.com/api/resources/rum/subresources/site_info/methods/list/)
-// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's. To add them to the existing token:
+// The Access, Email Routing and Zone permissions are capsid_admin_read_ops's; Access is also
+// the watcher's, for a blocked job's "check: access app" line (src/manual-steps.ts). To add them to the existing token:
 // dash.cloudflare.com/profile/api-tokens, the token capsid-portal-read, Edit; add
 // Account / Access: Apps and Policies / Read, Account / Email Routing Addresses / Read,
 // Zone / Email Routing Rules / Read and Zone / Zone / Read; Zone Resources: All zones
@@ -421,5 +422,26 @@ export async function readSecretNames(fetchImpl: FetchLike, token: string, accou
     throw err;
   }
   // The name only: whatever else a row carries is dropped here, unread.
+  return rows.map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null)).filter((n): n is string => typeof n === "string" && n.length > 0);
+}
+
+// The Access applications' names, for a blocked job's "check: access app <name>" line
+// (src/manual-steps.ts), read on the watcher's pass. Names only: an Access for SaaS app
+// carries a client secret beside its settings (src/ops-cloudflare-config.ts), and nothing
+// but the name is copied out here.
+const ACCESS_PERMISSION = "Account / Access: Apps and Policies / Read";
+
+/** GET /accounts/{id}/access/apps: the names. A 403 names the permission the token lacks. */
+export async function readAccessAppNames(fetchImpl: FetchLike, token: string, account: string): Promise<string[]> {
+  const what = "the Access applications list";
+  let rows: unknown[];
+  try {
+    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`, what, 50);
+  } catch (err) {
+    if (err instanceof CfReadError && err.status === 403) {
+      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${ACCESS_PERMISSION}. Cloudflare said: ${err.message}`);
+    }
+    throw err;
+  }
   return rows.map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null)).filter((n): n is string => typeof n === "string" && n.length > 0);
 }

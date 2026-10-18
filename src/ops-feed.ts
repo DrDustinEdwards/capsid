@@ -52,8 +52,9 @@ import { pendingProposals } from "./canon";
 //     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
 //        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 11 gets plus one per LOOP_ROSTER namespace (5 today, so 16): gatherInbox's own
-//     reads of the stale pull request cache (src/stale-jobs.ts), ops:snapshot, the awaiting-seat set and the merge units' report
+//   KV, 12 gets plus one per LOOP_ROSTER namespace (5 today, so 17): gatherInbox's own
+//     reads of the stale pull request cache (src/stale-jobs.ts), the manual steps cache
+//     (src/manual-steps.ts), ops:snapshot, the awaiting-seat set and the merge units' report
 //     (src/merge-units.ts), then ops:snapshot, the
 //     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp, the improve mode, the budget caps,
 //     the overnight switch's mode (its decision record is
@@ -65,7 +66,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 11 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 12 + LOOP_ROSTER.length } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
