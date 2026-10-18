@@ -371,3 +371,27 @@ jobs:
         run: |
           echo "the merge found a problem; the results branch is marked complete: false in summary.json"
           exit 1
+
+  # The explorer's code map with this run's mutation scores (capsid/research/design-system-explorer.md, slice 10). Only a
+  # full baseline of src/ at the baseline's Stryker: a targeted pass or another version would publish a part as the whole.
+  # devkit's code-map reads the shard reports from this run's artifacts and keeps them on the code-map branch, so the map
+  # code-map.yml publishes after each push carries these numbers forward until the next baseline.
+  code-map:
+    name: publish the code map
+    needs: mutate
+    if: >-
+      !cancelled() && (inputs.scope == 'src' || inputs.scope == '') && inputs.only == '' && inputs.tests == ''
+      && (inputs.stryker == '10.0.0' || inputs.stryker == '') && inputs.runner != 'command'
+    permissions:
+      contents: write
+    # Shared with code-map.yml, so a push's map never lands over this one mid-run.
+    concurrency:
+      group: code-map
+      cancel-in-progress: false
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@81275c4edb8b29c81229c2e052fe75b417c758b4 # devkit #31
+    with:
+      coverage-command: mkdir -p coverage && node --import ./test/resolve-ts.mjs --test --experimental-test-coverage --test-coverage-include='src/**' --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test-reporter=dot --test-reporter-destination=stdout "test/*.test.ts"
+      coverage-file: coverage/lcov.info
+      mutation-artifacts: mutation-shard-*
+      mutation-file: mutation-artifacts/mutation-shard-*/reports/mutation.json
+      timeout-minutes: 30
