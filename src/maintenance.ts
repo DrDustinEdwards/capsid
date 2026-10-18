@@ -4,6 +4,7 @@ import { ROSTER } from "./improve-schema";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
+import { gatherReleaseItems, githubReleaseReaders, type ReleaseReaders } from "./maintenance-releases";
 import { gatherModelDriftItems } from "./model-drift";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
@@ -18,13 +19,21 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 // on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
 // Every finding either was acted on by a step that already audit-logs (the merge-resume
 // step) or lands in one short list, served by capsid_run_improve action status, that the seat reads at the
-// start of a session. This pass lists; its one act is pruning merged branches, which is
-// off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts).
+// start of a session. This pass lists; it acts twice. It prunes merged branches, which is
+// off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts),
+// and it tags a shared package's merged version bump, which is on until the seat turns it
+// off and audit-logs each tag (src/maintenance-releases.ts).
 //
 // The job rules need only the database. The pull request rules (src/maintenance-prs.ts)
 // and the branch rules (src/maintenance-branches.ts) read GitHub for every roster
 // namespace. The undeployed-merge rule (src/maintenance-deploys.ts) reads the
-// watcher's snapshot and each site's default branch.
+// watcher's snapshot and each site's default branch. The release-tag rule
+// (src/maintenance-releases.ts) reads each shared package's repo.
+//
+// The release tags ride this daily pass rather than the five-minute tick: a merged bump
+// is tagged within a day, which is soon enough for the apps' bump pull requests the tag
+// starts, and the pass already has the switch, the cap, the audit pattern and the list
+// the seat reads, where a version it would not tag (below the newest tag) belongs.
 
 const MAINTENANCE_KEY = "maintenance:list";
 export const MAINTENANCE_LAST_KEY = "maintenance:last";
@@ -58,6 +67,8 @@ interface MaintenanceList {
   model_read: number;
   /** Rule documents checked for their cap and for stale tool names (src/rule-docs.ts). */
   rule_docs_read: number;
+  /** Shared packages whose version was compared with their tags (src/maintenance-releases.ts). */
+  releases_read: number;
 }
 
 type MaintenanceReport =
@@ -99,7 +110,8 @@ export async function gatherMaintenance(
   prReaders: PrReaders = githubPrReaders(env),
   branchReaders: BranchReaders = githubBranchReaders(env),
   deployReaders: DeployReaders = githubDeployReaders(env),
-  driftReader: DriftReader = (e) => gatherModelDriftItems(e, bundledModel())
+  driftReader: DriftReader = (e) => gatherModelDriftItems(e, bundledModel()),
+  releaseReaders: ReleaseReaders = githubReleaseReaders(env)
 ): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
@@ -178,6 +190,10 @@ export async function gatherMaintenance(
   const ruleDocs = await gatherRuleDocItems(env.DB);
   items.push(...ruleDocs.items);
 
+  // A shared package's version with no tag: tagged (on by default), or listed.
+  const releases = await gatherReleaseItems(env, releaseReaders);
+  items.push(...releases.items);
+
   return {
     generated: now.toISOString(),
     items,
@@ -186,6 +202,7 @@ export async function gatherMaintenance(
     deploys_read: deploys.read,
     model_read: drift.read,
     rule_docs_read: ruleDocs.read,
+    releases_read: releases.read,
   };
 }
 
@@ -198,13 +215,14 @@ export async function maintenanceTick(
   prReaders?: PrReaders,
   branchReaders?: BranchReaders,
   deployReaders?: DeployReaders,
-  driftReader?: DriftReader
+  driftReader?: DriftReader,
+  releaseReaders?: ReleaseReaders
 ): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
   if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders, driftReader);
+  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders, driftReader, releaseReaders);
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
@@ -213,9 +231,10 @@ export async function maintenanceTick(
   const branchRepos = Object.keys(list.branches_read).length;
   const pruned = list.items.filter((i) => i.rule === "branch-pruned").length;
   const deploySites = Object.keys(list.deploys_read).length;
+  const tagged = list.items.filter((i) => i.rule === "release-tagged").length;
   return {
     ran: true,
-    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked`,
+    note: `${list.items.length} item(s) listed; ${prsRead} open pull request(s) read in ${reposRead} of ${ROSTER.length} repo(s); ${branchesRead} branch(es) read in ${branchRepos} of ${ROSTER.length} repo(s), ${pruned} pruned; ${deploySites} site deploy(s) compared; ${list.model_read} fact(s) compared with the system model; ${list.rule_docs_read} rule document(s) checked; ${list.releases_read} shared package version(s) compared with their tags, ${tagged} tagged`,
     list,
   };
 }
@@ -238,6 +257,7 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
       deploys_read: counts(parsed.deploys_read),
       model_read: typeof parsed.model_read === "number" ? parsed.model_read : 0,
       rule_docs_read: typeof parsed.rule_docs_read === "number" ? parsed.rule_docs_read : 0,
+      releases_read: typeof parsed.releases_read === "number" ? parsed.releases_read : 0,
     };
   } catch {
     return null;

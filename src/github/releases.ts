@@ -72,36 +72,65 @@ export async function tagRelease(env: Env, namespace: string, args: TagReleaseAr
   let notes: string | null = null;
   if (args.publishRelease) {
     const file = await readRepoFile(env, namespace, args.changelogPath, sha, repoSelector);
-    notes = changelogSection(file.content, args.tag);
+    notes = releaseNotes(file.content, args.tag);
     if (!notes) {
       throw new Error(`${args.changelogPath} at ${sha.slice(0, 7)} has no section for ${args.tag}. Add one (a heading naming the version), merge it, and release that commit. Nothing was tagged.`);
     }
-    if (notes.length > NOTES_MAX) notes = `${notes.slice(0, NOTES_MAX)}\n\n(The CHANGELOG section continues past ${NOTES_MAX} characters.)`;
   }
 
-  const tagged = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ref: `refs/tags/${args.tag}`, sha }),
-  });
-  if (!tagged.ok) {
-    const detail = await tagged.text();
-    if (tagged.status === 422) throw new Error(`tag ${args.tag} already exists in ${full}, or the commit is unknown. Nothing was changed. Detail: ${detail.slice(0, 300)}`);
-    throw new Error(`tag failed (${tagged.status}): ${detail.slice(0, 300)}`);
-  }
-  if (!args.publishRelease) return { repo: full, tag: args.tag, sha, release: null };
+  await createTag(env, owner, repo, args.tag, sha);
+  if (!notes) return { repo: full, tag: args.tag, sha, release: null };
 
-  const released = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/releases`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_name: args.tag, name: args.tag, body: notes, draft: false, prerelease: /-/.test(args.tag) }),
-  });
-  if (!released.ok) {
+  let release: { id: number; url: string };
+  try {
+    release = await publishRelease(env, owner, repo, args.tag, notes);
+  } catch (err) {
     throw new Error(
-      `the tag ${args.tag} was created at ${sha.slice(0, 7)} but the release was not (${released.status}): ${(await released.text()).slice(0, 300)}. ` +
+      `the tag ${args.tag} was created at ${sha.slice(0, 7)} but the release was not (${err instanceof Error ? err.message : String(err)}). ` +
         `Publish it from the tag on GitHub, or delete the tag and release again.`
     );
   }
+  return { repo: full, tag: args.tag, sha, release: { id: release.id, url: release.url, notes_chars: notes.length } };
+}
+
+// The two writes, shared with the maintenance pass's release-tag rule
+// (src/maintenance-releases.ts). That rule tags a shared package's own repo, which need
+// not be any namespace's, so it cannot go through tagRelease's namespace lookup; it
+// calls these with the repo it read, and writes its own audit row for each tag.
+
+/** The CHANGELOG section for a tag as release notes, capped at NOTES_MAX; null when there is none. */
+export function releaseNotes(markdown: string, tag: string): string | null {
+  const notes = changelogSection(markdown, tag);
+  if (!notes) return null;
+  return notes.length > NOTES_MAX ? `${notes.slice(0, NOTES_MAX)}\n\n(The CHANGELOG section continues past ${NOTES_MAX} characters.)` : notes;
+}
+
+/** Create the tag's ref at `sha`. Never moves a tag: GitHub refuses a ref that already
+ *  exists (422), and that refusal is thrown saying nothing was changed. */
+export async function createTag(env: Env, owner: string, repo: string, tag: string, sha: string): Promise<void> {
+  const badTag = tagRefusal(tag);
+  if (badTag) throw new Error(badTag);
+  if (!SHA.test(sha)) throw new Error("sha must be a full 40-character commit sha.");
+  const tagged = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/tags/${tag}`, sha }),
+  });
+  if (!tagged.ok) {
+    const detail = await tagged.text();
+    if (tagged.status === 422) throw new Error(`tag ${tag} already exists in ${owner}/${repo}, or the commit is unknown. Nothing was changed. Detail: ${detail.slice(0, 300)}`);
+    throw new Error(`tag failed (${tagged.status}): ${detail.slice(0, 300)}`);
+  }
+}
+
+/** Publish the release of an existing tag with these notes. Throws with GitHub's answer. */
+export async function publishRelease(env: Env, owner: string, repo: string, tag: string, notes: string): Promise<{ id: number; url: string }> {
+  const released = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/releases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_name: tag, name: tag, body: notes, draft: false, prerelease: /-/.test(tag) }),
+  });
+  if (!released.ok) throw new Error(`${released.status}: ${(await released.text()).slice(0, 300)}`);
   const release = (await released.json()) as { id: number; html_url: string };
-  return { repo: full, tag: args.tag, sha, release: { id: release.id, url: release.html_url, notes_chars: notes?.length ?? 0 } };
+  return { id: release.id, url: release.html_url };
 }

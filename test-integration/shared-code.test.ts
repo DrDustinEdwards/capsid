@@ -38,6 +38,10 @@ describe("GET /portal/api/shared-code", () => {
     for (const pkg of view.packages) {
       expect(pkg.latest).toBeNull();
       expect(pkg.tags_error, `${pkg.name} has no tags and no reason`).toBeTruthy();
+      // Its own package.json was not read either, which is said, never taken as tagged.
+      expect(pkg.version).toBeNull();
+      expect(pkg.untagged).toBe(false);
+      expect(pkg.manifest_error, `${pkg.name} has no version and no reason`).toBeTruthy();
     }
     expect(view.packages.find((p) => p.name === "site-runtime")?.local_copies).toEqual([{ namespace: "dustinedwards", path: "packages/security-headers", present: null }]);
   });

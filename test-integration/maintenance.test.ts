@@ -6,6 +6,7 @@ import { legacyAgent } from "../src/agents";
 import type { PrReaders } from "../src/maintenance-prs";
 import { PRUNE_AUDIT_ACTION, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches";
 import type { DeployReaders } from "../src/maintenance-deploys";
+import type { ReleaseReaders } from "../src/maintenance-releases";
 import worker from "../src/index";
 import type { Env } from "../src/env";
 import type { PortalMaintenance } from "../src/ops-types";
@@ -46,6 +47,21 @@ const NO_DEPLOYS: DeployReaders = {
 };
 // The model drift check has its own tests (test/model-drift.test.ts); here it reads nothing.
 const NO_DRIFT = async () => ({ items: [], read: 0 });
+// The release-tag rule reads each shared package's repo; here there is none to read. It
+// is tested in test/maintenance-releases.test.ts.
+const notCalled = async (): Promise<never> => {
+  throw new Error("not called");
+};
+const NO_RELEASES: ReleaseReaders = {
+  packages: async () => [],
+  head: notCalled,
+  tags: notCalled,
+  manifestCommits: notCalled,
+  versionAt: notCalled,
+  changelog: notCalled,
+  tag: notCalled,
+  release: notCalled,
+};
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -73,7 +89,7 @@ describe("gatherMaintenance", () => {
   it("lists a queued LATER job whose date has passed, and leaves a future one alone", async () => {
     const past = await post("LATER 2026-10-01: move the cron");
     await post("LATER 2026-12-01: rename the tool");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(list.items.filter((i) => i.rule === "later-passed").map((i) => i.job)).toEqual([past]);
   });
 
@@ -82,7 +98,7 @@ describe("gatherMaintenance", () => {
     const other = await post("Unrelated work", "See https://github.com/example-org/sample/pull/70 for context.");
     const done = await post("The job that shipped it");
     await env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, ?2, 1)").bind(done, PR).run();
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     const found = list.items.filter((i) => i.rule === "shipped-elsewhere");
     expect(found.map((i) => i.job)).toEqual([shipped]);
     expect(found[0].line).toContain(done);
@@ -94,13 +110,13 @@ describe("gatherMaintenance", () => {
     await env.DB.prepare("UPDATE jobs SET status = 'done', result_summary = ?2, created_at = ?3, updated_at = ?4 WHERE id = ?1")
       .bind(promised, "Design done. The build will follow as separate jobs.", "2026-10-06T00:00:00.000Z", "2026-10-07T00:00:00.000Z")
       .run();
-    let list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    let list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(list.items.filter((i) => i.rule === "followups-missing").map((i) => i.job)).toEqual([promised]);
 
     // A job posted after it moved is the follow-up. (postJob stamps created_at from `now`.)
     const later = await postJob(jobsEnv(), ADMIN, new Date("2026-10-07T06:00:00.000Z"), { namespace: "sample", title: "Build the thing", body: "go" });
     expect(later.ok, later.refusal).toBe(true);
-    list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(list.items.filter((i) => i.rule === "followups-missing")).toEqual([]);
   });
 
@@ -111,13 +127,13 @@ describe("gatherMaintenance", () => {
       env.DB.prepare("INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES (?1, 'sample', 'resume', 'system:merge-resume', 'system', ?2)").bind(id, at).run();
     await touch(recent, "2026-10-08T06:00:00.000Z");
     await touch(old, "2026-10-01T06:00:00.000Z");
-    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const list = await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(list.items.filter((i) => i.rule === "auto-resumed").map((i) => i.job)).toEqual([recent]);
   });
 
   it("stays quiet on a clean queue", async () => {
     await post("An ordinary queued job");
-    expect((await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT)).items).toEqual([]);
+    expect((await gatherMaintenance(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES)).items).toEqual([]);
   });
 });
 
@@ -183,20 +199,20 @@ describe("rule documents", () => {
 describe("maintenanceTick", () => {
   it("does not run before 11:00 UTC, runs once a day after, and stores the list", async () => {
     await post("LATER 2026-10-01: stale");
-    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const early = await maintenanceTick(env as never, new Date("2026-10-08T09:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(early.ran).toBe(false);
     expect(await readMaintenance(env as never)).toBeNull();
 
-    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const first = await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(first.ran).toBe(true);
     expect((await readMaintenance(env as never))?.items.map((i) => i.rule)).toEqual(["later-passed"]);
     // Every roster repo was read, and the count says so: zero open pull requests, not none read.
     expect(Object.values((await readMaintenance(env as never))?.prs_read ?? {})).toEqual([0, 0, 0, 0, 0, 0, 0]);
     expect(Object.values((await readMaintenance(env as never))?.branches_read ?? {})).toEqual([1, 1, 1, 1, 1, 1, 1]);
 
-    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const second = await maintenanceTick(env as never, new Date("2026-10-08T15:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(second.ran).toBe(false);
-    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT);
+    const nextDay = await maintenanceTick(env as never, new Date("2026-10-09T12:00:00.000Z"), NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
     expect(nextDay.ran).toBe(true);
   });
 
@@ -214,7 +230,7 @@ describe("maintenanceTick", () => {
       },
     };
     try {
-      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED, NO_DEPLOYS, NO_DRIFT);
+      const ran = await maintenanceTick(env as never, NOW, NO_PRS, ONE_MERGED, NO_DEPLOYS, NO_DRIFT, NO_RELEASES);
       expect(ran.ran && ran.note).toContain("1 pruned");
       const rows = await env.DB.prepare("SELECT actor, namespace, params FROM audit_log WHERE action = ?1").bind(PRUNE_AUDIT_ACTION).all<{ actor: string; namespace: string; params: string }>();
       expect(rows.results.map((r) => [r.actor, r.namespace, JSON.parse(r.params)])).toEqual([
@@ -246,7 +262,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     expect(before.body.items).toEqual([]);
 
     await post("LATER 2026-10-01: stale");
-    expect((await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT)).ran).toBe(true);
+    expect((await maintenanceTick(env as never, NOW, NO_PRS, NO_BRANCHES, NO_DEPLOYS, NO_DRIFT, NO_RELEASES)).ran).toBe(true);
     const after = await read();
     expect(after.cache).toBe("no-store");
     expect(after.body.generated).toBe(NOW.toISOString());
