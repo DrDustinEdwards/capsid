@@ -9,7 +9,7 @@
       "family": "system",
       "ring": "core",
       "public": true,
-      "description": "The knowledge store, work queue and credential boundary that every other project is run through.",
+      "description": "The store, the queue, and the credentials every other project runs through.",
       "domain": "mcp.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsid"]
     },
@@ -20,7 +20,7 @@
       "family": "system",
       "ring": "shared",
       "public": true,
-      "description": "The design system every app is drawn in: tokens, the shell and shared controls in plain CSS.",
+      "description": "The tokens, the shell, and the shared controls every app is drawn with, in plain CSS.",
       "domain": "capsomer.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsomer"]
     },
@@ -31,7 +31,7 @@
       "family": "plumbing",
       "ring": "shared",
       "public": true,
-      "description": "Request-time behaviour every site imports: security headers, the rate limiter and the health format.",
+      "description": "Security headers, the rate limiter, and the health format that every site imports.",
       "repos": ["DrDustinEdwards/site-runtime"]
     },
     {
@@ -41,7 +41,7 @@
       "family": "plumbing",
       "ring": "shared",
       "public": true,
-      "description": "Per-table backups of a D1 database, with graduated retention and a restore drill.",
+      "description": "Backs up each table of a D1 database, keeps the backups on a schedule, and drills the restore.",
       "repos": ["DrDustinEdwards/d1-dump"]
     },
     {
@@ -51,7 +51,7 @@
       "family": "plumbing",
       "ring": "shared",
       "public": true,
-      "description": "The shared CI workflow, Renovate rules and test helpers.",
+      "description": "Shared CI workflows, Renovate rules, and test helpers.",
       "repos": ["DrDustinEdwards/devkit"]
     },
     {
@@ -61,7 +61,7 @@
       "family": "plumbing",
       "ring": "shared",
       "public": true,
-      "description": "The contract Carrel publishes through.",
+      "description": "The contract Carrel uses to publish.",
       "repos": ["DrDustinEdwards/site-api"]
     },
     {
@@ -71,7 +71,7 @@
       "family": "writing",
       "ring": "shared",
       "public": true,
-      "description": "Turns finished writing into pages, feeds and sitemaps.",
+      "description": "Turns finished writing into pages, feeds, and sitemaps.",
       "repos": ["DrDustinEdwards/prelum"]
     },
     {
@@ -81,7 +81,7 @@
       "family": "writing",
       "ring": "used",
       "public": true,
-      "description": "The writing desk, where drafts are written, checked and published.",
+      "description": "The writing desk, where drafts are written, checked, and published.",
       "domain": "carrel.dustinedwards.info",
       "repos": ["DrDustinEdwards/carrel"]
     },
@@ -92,7 +92,7 @@
       "family": "writing",
       "ring": "used",
       "public": true,
-      "description": "Charts, as an npm package, with a gallery.",
+      "description": "An npm package of charts, with a gallery.",
       "domain": "enarratio.dustinedwards.info",
       "repos": ["DrDustinEdwards/enarratio"]
     },
@@ -114,7 +114,7 @@
       "family": "plumbing",
       "ring": "used",
       "public": true,
-      "description": "Runs dustinedwards.info from a chat: site health, mentions, media, registries, citations and lab procedures. Writing is Carrel's.",
+      "description": "Runs dustinedwards.info from a chat, covering health, mentions, media, registries, citations, and lab procedures. Writing stays in Carrel.",
       "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
     {
@@ -124,7 +124,7 @@
       "family": "plumbing",
       "ring": "used",
       "public": true,
-      "description": "Instructions the AI sessions follow.",
+      "description": "The instructions AI sessions follow.",
       "repos": ["DrDustinEdwards/claude-skills"],
       "hide_repo_link": true
     },
