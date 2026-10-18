@@ -21,6 +21,8 @@ const FunctionSchema = z.object({
   crap: z.number().min(0).nullable(),
   mutants: z.number().int().min(0).nullable(),
   score: z.number().min(0).max(100).nullable(),
+  // Changed since the mutation run, so its old numbers were dropped (mutants and score null).
+  stale: z.literal(true).optional(),
 });
 
 const ModuleSchema = z.object({
@@ -43,6 +45,8 @@ export const CodeMapSchema = z.object({
     coverage: z.literal("istanbul").nullable(),
     mutation: z.literal("stryker").nullable(),
   }),
+  // The commit and day the mutation report was measured at, when it is older than the map.
+  mutated: z.object({ sha: bounded(40).regex(/^[0-9a-f]{40}$/), date: bounded(10).regex(DATE) }).optional(),
   modules: z.array(ModuleSchema).max(5000),
   cycles: z.array(z.array(ModulePath).min(1).max(1000)).max(1000),
 });

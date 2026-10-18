@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 
 import { build } from "../build.mjs";
-import { codePath, modulePath } from "../src/code.mjs";
+import { codePage, codePath, modulePage, modulePath } from "../src/code.mjs";
 import { SITE, allPages, containersPath, flowPath, numbersHtml, stepPath, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
@@ -126,6 +126,27 @@ test("the code page draws the folders, then each folder's modules, every box lin
     assert.match(f, /<div class="scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/);
   }
   for (const id of ["theme-f-src", "theme-f-src-util"]) assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
+});
+
+test("a function changed since the mutation run shows no score and says why, and the page dates the run", () => {
+  const map = structuredClone(code.maps[0]);
+  map.tools.mutation = "stryker";
+  map.mutated = { sha: "b".repeat(40), date: "2026-10-12" };
+  const [index, , a, b] = map.modules;
+  Object.assign(index.functions[0], { mutants: 10, score: 50 });
+  Object.assign(a.functions[0], { stale: true });
+  Object.assign(b.functions[0], { mutants: 4, score: 75 });
+  const theme = model.systems.find((/** @type {any} */ s) => s.id === "theme");
+  const page = codePage(theme, [map], "2026-10-17");
+  assert.match(page, /Mutation scores are from the run on <span class="nowrap">2026-10-12<\/span> at commit <code>bbbbbbb<\/code>; 1 function has changed since and shows none until the next run\./);
+  assert.match(page, /a\.ts<\/a>.*?No data<span class="cap-sr-only">: changed since the last mutation run<\/span>/s);
+  assert.match(page, />mutation stale<\/text>/);
+  assert.match(page, /data-tone="crit">.*?Critical<span class="code-num">50%<\/span>/);
+  assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">75%<\/span>/);
+  assert.doesNotMatch(page, /mutation testing has not run/);
+  const fn = modulePage(theme, map, a, undefined, "2026-10-17");
+  assert.match(fn, /No data<span class="cap-sr-only">: changed since the last mutation run<\/span>/);
+  assert.doesNotMatch(fn, /no mutants in this code/);
 });
 
 test("a module page lists its functions linked to their lines over its numbered source, and its imports both ways", () => {
