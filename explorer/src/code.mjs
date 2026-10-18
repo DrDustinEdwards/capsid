@@ -66,7 +66,7 @@ function boxLines(map, mods) {
   const lines = [{ tone: crapTone(worst), text: worst !== null ? crapText(worst) : fns.length ? "no coverage" : "no functions" }];
   if (map.tools.mutation) {
     const score = moduleScore({ functions: fns });
-    lines.push({ tone: scoreTone(score), text: score === null ? "no mutants" : `mutation ${score}%` });
+    lines.push({ tone: scoreTone(score), text: score !== null ? `mutation ${score}%` : fns.some((f) => f.stale) ? "mutation stale" : "no mutants" });
   }
   return lines;
 }
@@ -75,7 +75,11 @@ function boxLines(map, mods) {
 const reasons = (map) => ({
   fnCrap: "no coverage report in this map",
   score: map.tools.mutation ? "no mutants in this code" : "mutation testing has not run on this repo yet",
+  stale: "changed since the last mutation run",
 });
+
+/** Why a module or function has no mutation score: stale beats no mutants. @param {any} r @param {any[]} fns */
+const scoreReason = (r, fns) => (fns.some((f) => f.stale) ? r.stale : r.score);
 
 /** The largest of a module's function CRAPs, or null when none was measured. @param {any} m */
 const worstCrap = (m) => m.functions.reduce((/** @type {number | null} */ w, /** @type {any} */ f) => (f.crap === null ? w : Math.max(w ?? 0, f.crap)), null);
@@ -87,6 +91,18 @@ function moduleScore(m) {
   if (mutants === 0) return null;
   const detected = measured.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + (f.score / 100) * f.mutants, 0);
   return Math.round((detected / mutants) * 1000) / 10;
+}
+
+/**
+ * When the mutation scores are from an older commit than the map, say so, and how many
+ * functions changed since and so show none. @param {any} map @param {any[]} fns
+ */
+function mutationNote(map, fns) {
+  if (!map.mutated) return "";
+  const stale = fns.filter((f) => f.stale).length;
+  return `Mutation scores are from the run on <span class="nowrap">${escapeHtml(map.mutated.date)}</span> at commit <code>${escapeHtml(map.mutated.sha.slice(0, 7))}</code>${
+    stale ? `; ${stale === 1 ? "1 function has" : `${stale} functions have`} changed since and show${stale === 1 ? "s" : ""} none until the next run.` : "."
+  }`;
 }
 
 /** @param {string} path */
@@ -170,13 +186,13 @@ export function codePage(s, maps, asOf) {
 <h2 id="${id("title")}">${escapeHtml(map.repo)}</h2>
 <p>Measured on ${escapeHtml(map.date)} at commit <a href="${repoUrl(map.repo)}/tree/${escapeHtml(map.sha)}"><code>${escapeHtml(map.sha.slice(0, 7))}</code></a>: ${map.modules.length} modules, ${fns.length} functions. ${
       map.tools.coverage ? `By CRAP, ${counts.crit} critical, ${counts.warn} to watch and ${counts.ok} ok.` : "No coverage report, so no CRAP scores."
-    } ${map.tools.mutation ? "" : "Mutation testing has not run on it yet."}</p>
+    } ${map.tools.mutation ? mutationNote(map, fns) : "Mutation testing has not run on it yet."}</p>
 <h3 id="${id("cycles")}">Import cycles</h3>
 ${map.cycles.length ? `<ul>${map.cycles.map((/** @type {string[]} */ c) => `<li>${c.map((p) => `<a href="${modulePath(s.id, p)}">${escapeHtml(p)}</a>`).join(" imports ")}, and back</li>`).join("")}</ul>` : "<p>None: no module imports itself, however indirectly.</p>"}
 ${folderGraph}
 ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(folder)}">${moduleGraph(folder, mods)}${scroller(`${folderId(folder)}-table`, `<table class="cap-table code-table"><caption>${escapeHtml(folderName(folder))}</caption>
 <thead><tr><th scope="col">Module</th><th scope="col">Lines</th><th scope="col">Functions</th><th scope="col">Worst function</th><th scope="col">Mutation</th></tr></thead>
-<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${modulePath(s.id, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), r.score)}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)}</div>`).join("\n")}
+<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${modulePath(s.id, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), scoreReason(r, m.functions))}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)}</div>`).join("\n")}
 </section>`;
   });
   const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${systemPath(s.id)}">${escapeHtml(s.name)}</a> / <span aria-current="page">Code</span></nav>
@@ -199,7 +215,7 @@ export function modulePage(s, map, m, source, asOf) {
   const fnRows = m.functions
     .map(
       (/** @type {any} */ f) =>
-        `<tr><th scope="row"><a href="#L${f.line}">${escapeHtml(f.name)}</a></th><td>${f.line} to ${f.end}</td><td>${f.cc}</td><td>${f.coverage === null ? status("nodata", "", r.fnCrap) : `${Math.round(f.coverage * 100)}%`}</td><td>${crapStatus(f.crap, r.fnCrap)}</td><td>${scoreStatus(f.mutants ? f.score : null, r.score)}</td></tr>`
+        `<tr><th scope="row"><a href="#L${f.line}">${escapeHtml(f.name)}</a></th><td>${f.line} to ${f.end}</td><td>${f.cc}</td><td>${f.coverage === null ? status("nodata", "", r.fnCrap) : `${Math.round(f.coverage * 100)}%`}</td><td>${crapStatus(f.crap, r.fnCrap)}</td><td>${scoreStatus(f.mutants ? f.score : null, scoreReason(r, [f]))}</td></tr>`
     )
     .join("");
   const code = lines.length

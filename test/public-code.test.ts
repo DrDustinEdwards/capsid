@@ -71,6 +71,20 @@ test("PLANT: a field the schema does not name never reaches the document", async
   PublicCodeSchema.parse(doc);
 });
 
+test("a stale function and an older mutation run reach the document; a bad mutated sha throws", async () => {
+  const m = sampleMap();
+  m.tools = { typescript: "5.9.3", coverage: "istanbul", mutation: "stryker" };
+  m.mutated = { sha: "b".repeat(40), date: "2026-10-12" };
+  const fn = ((m.modules as Array<Record<string, unknown>>)[0].functions as Array<Record<string, unknown>>)[0];
+  fn.stale = true;
+  const doc = await buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": m }).read);
+  assert.deepEqual(doc.maps[0].mutated, { sha: "b".repeat(40), date: "2026-10-12" });
+  assert.equal(doc.maps[0].modules[0].functions[0].stale, true);
+  PublicCodeSchema.parse(doc);
+  const bad = { ...m, mutated: { sha: "main", date: "2026-10-12" } };
+  await assert.rejects(buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": bad }).read), /invalid/);
+});
+
 test("a map that fails the schema, names another repo, or climbs out of the repo throws", async () => {
   const bad = (m: Record<string, unknown>) => buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": m }).read);
   await assert.rejects(bad({ ...sampleMap(), sha: "main" }), /code map for DrDustinEdwards\/d1-dump is invalid/);
