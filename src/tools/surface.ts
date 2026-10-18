@@ -178,12 +178,13 @@ const READ_REPO: CompositeSpec = {
 const INSPECT_REPO: CompositeSpec = {
   name: "capsid_inspect_repo",
   title: "Inspect a repo and its site",
-  summary: "What state a namespace's repo and site are in: its branches, tags and open pull requests, its commit history, its CI runs, and a live check of its site. Read-only.",
+  summary: "What state a namespace's repo and site are in: its branches, tags and open pull requests, its commit history, its CI runs, a live check of its site, and its Google Search Console data. Read-only.",
   actions: {
     refs: { op: "repo_refs", summary: "Branches, tags and open pull requests." },
     history: { op: "repo_history", summary: "Commits and comparisons." },
     ci: { op: "ci_status", summary: "CI runs." },
     site: { op: "site_check", summary: "The live site." },
+    search: { op: "search_console", summary: "The site's Google Search Console data." },
   },
 };
 
