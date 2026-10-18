@@ -152,6 +152,8 @@ export interface BackupSummary {
   markdown_pruned: number;
   json_backups_kept: number;
   json_backups_pruned: number;
+  // Stale runs an R2 bucket lock refused to delete, left for a later prune (docs/backups.md).
+  json_backups_locked: number;
   reports_pruned: number;
   versions_pruned: number;
   audit_pruned: number;
@@ -330,7 +332,7 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
 // policy and is pruneDumps's job, and CSP reports past retention. pruneDumps counts runs
 // and not objects, deletes a run whole, never prunes the newest complete run, and
 // deletes nothing while no complete run exists.
-async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; reports: number }> {
+async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; locked: number; reports: number }> {
   const dumps = await pruneDumps(env.MEDIA, { prefix: JSON_PREFIX, now: new Date(now) });
 
   const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
@@ -338,7 +340,7 @@ async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: n
     isOlderThan(key, REPORT_PREFIX, reportCutoff)
   );
   if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
-  return { kept: dumps.kept, pruned: dumps.pruned, reports: staleReports.length };
+  return { kept: dumps.kept, pruned: dumps.pruned, locked: dumps.locked, reports: staleReports.length };
 }
 
 // Prunes history after the export, so the rows leaving D1 are in today's dump.
@@ -391,6 +393,7 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
       markdown_pruned: 0,
       json_backups_kept: 0,
       json_backups_pruned: 0,
+      json_backups_locked: 0,
       reports_pruned: 0,
       versions_pruned: 0,
       audit_pruned: 0,
@@ -421,6 +424,7 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
     markdown_pruned: markdownPruned,
     json_backups_kept: dumps.kept,
     json_backups_pruned: dumps.pruned,
+    json_backups_locked: dumps.locked,
     reports_pruned: dumps.reports,
     versions_pruned: history.versions,
     audit_pruned: history.audit,

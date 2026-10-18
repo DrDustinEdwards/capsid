@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { runBackup, TABLES } from "../src/backup.ts";
+import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
 
 // FTS5 derives documents_fts from documents and the sync triggers rebuild it on
@@ -598,8 +599,34 @@ test("dump retention is d1-dump's graduated policy over the backups/json prefix,
   // every window, so they go, each with all of its objects.
   assert.equal(result.json_backups_kept, 2);
   assert.equal(result.json_backups_pruned, 3);
+  assert.equal(result.json_backups_locked, 0);
   assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2), monthAgo, yesterday]), [yesterday]);
   for (const table of TABLES) assert.ok(r2.objects.has(`backups/json/${yesterday}/${table}.json`));
+});
+
+// A bucket lock (docs/backups.md) refuses a delete with R2 error 10069. The run must
+// finish, count the refused run as locked, and still stamp the last clean success.
+test("a stale run a bucket lock refuses is counted as locked and the run still succeeds", async () => {
+  const seed: Record<string, string> = { ...MIRROR };
+  seedRun(seed, day(1, 1), "marked");
+  seedRun(seed, day(1, 2), "marked");
+  const { env, r2, kv } = makeEnv({ documents: DOCS }, seed);
+  const realDelete = r2.bucket.delete.bind(r2.bucket);
+  r2.bucket.delete = async (keys: string | string[]) => {
+    const list = Array.isArray(keys) ? keys : [keys];
+    if (list.some((k) => k.startsWith(`backups/json/${day(1, 1)}/`))) {
+      throw new Error("delete: This object is subject to an object lock and cannot be deleted (10069)");
+    }
+    return realDelete(keys);
+  };
+  const result = await runBackup(env);
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.equal(result.json_backups_locked, 1);
+  assert.equal(result.json_backups_pruned, 1);
+  assert.deepEqual(survivingRuns(r2, [day(1, 1), day(1, 2)]), [day(1, 1)]);
+  assert.ok(await kv.kv.get(BACKUP_LAST_OK_KEY), "a locked run must not stop the success stamp");
 });
 
 test("a run whose lease was taken over does not release the new holder's lease", async () => {
