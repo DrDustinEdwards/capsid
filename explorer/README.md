@@ -19,7 +19,7 @@ From this folder, after `npm ci` at the repo root and here:
 
 - `npm run check`: the build, the page renderers and the tests, type-checked.
 - `npm test`: builds from `fixtures/` (invented systems on example.com) and checks the pages, the links, the headers and the script budget.
-- `npm run e2e`: the browser spec. Builds the fixtures into `.e2e-dist`, serves them with `wrangler dev` using the deploy's config and `_headers`, and runs axe in both themes, the policy, and the map's keyboard, on desktop and phone.
+- `npm run e2e`: the browser spec. Builds the fixtures into `.e2e-dist`, serves them with `wrangler dev` using the deploy's config and `_headers`, and runs axe in both themes, the policy, and the map's keyboard, on desktop and phone. `e2e/award.spec.mjs` is the design's section 6 checklist in Chromium: every system reached by the arrow keys, the list against the model, no layout shift while entering or stepping a flow, the INP proxy under 4x CPU throttling, and frame gaps (warn only). `e2e/lighthouse.spec.mjs` runs Lighthouse, mobile, median of three, on four pages: CLS 0.05, TBT 150 ms and 3 MB fail; LCP fails over 2.5 s and warns over the design's 1.5 s. A real phone's frame rate and a screen reader are checked by hand at release.
 - `npm run build`: builds from the live documents into `dist/`. `npm run build -- --model <file> --stats <file> --out <dir>` builds from files; add `--code <file>` for code pages, and `--source <dir>` to read their source from `<dir>/<owner>/<repo>/<path>` instead of GitHub.
 
 ## Deploy

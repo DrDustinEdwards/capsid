@@ -109,7 +109,7 @@ eachTheme((theme) => {
     await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
     await expect(map).toHaveAttribute("data-step", "3");
     await expect(page.locator(".cap-system-map-wire[data-on]")).toHaveAttribute("data-from", "hub-tick");
-    await expect(page.locator(".flow-touches li")).toHaveCount(2);
+    await expect(page.locator(".flow-touches li[data-part]")).toHaveCount(2);
     await expect(page.locator(".flow-nav a[rel='next']")).toHaveCount(0);
 
     await page.locator(".flow-nav a[rel='prev']").click();

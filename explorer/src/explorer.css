@@ -122,6 +122,18 @@ h2 {
   color: var(--muted);
 }
 
+/* The map's view buttons need its script, so Capsomer ships them hidden and shows them once it
+   runs. Shown late, they pushed the drawing down on a phone (Lighthouse CLS 0.17 on the front
+   page, e2e/lighthouse.spec.mjs), so their room is kept from the first paint, empty until then.
+   In Capsomer's reset layer, whose `[hidden] { display: none !important }` only a rule of the same
+   layer and more weight can answer. */
+@layer cap.reset {
+  .cap-system-map-views[hidden] {
+    display: inline-flex !important;
+    visibility: hidden;
+  }
+}
+
 /* A flow's step page. The page lists every step itself, with links, so the map's own list of
    the same steps is not shown twice; the script still reads it to play the flow. */
 .flow-map .cap-system-map-flows {
@@ -130,6 +142,23 @@ h2 {
 .flow-text {
   max-width: var(--measure);
   font: 1.125rem / 1.5 var(--prose);
+}
+/* Every step's text in one grid cell, so the section keeps the longest step's height and the
+   drawing below never moves as the flow steps (src/pages.mjs, stepText). */
+.flow-stack {
+  display: grid;
+  /* A grid item's margins stay inside it, so the step heading's top margin moves out here, where
+     it meets the page title's as it did before the stack. */
+  margin-block-start: var(--space-7);
+}
+.flow-stack h2 {
+  margin-block-start: 0;
+}
+.flow-stack > * {
+  grid-area: 1 / 1;
+}
+.flow-unseen {
+  visibility: hidden;
 }
 .flow-step h3 {
   margin-block: var(--space-5) var(--space-2);
