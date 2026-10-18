@@ -12,8 +12,9 @@ import { markJobFailed, readJob } from "./jobs-transition";
 import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
 import { readRepoMap, unmappedRepos, type RepoMapRead } from "./unmapped-repos";
 import { readSiteConfig, siteMapDrift, sitesFrom, type OpsSite, type SiteMapDrift } from "./ops-sites";
-import { readPackage, readPackageConfig, weekStatement } from "./ops-packages";
-import { cloudflareCredentials, readCloudflare, readSecretNames, readWebAnalyticsSites } from "./ops-cloudflare";
+import { npmVersions, readPackage, readPackageConfig, weekStatement } from "./ops-packages";
+import { cloudflareCredentials, readAccessAppNames, readCloudflare, readSecretNames, readWebAnalyticsSites } from "./ops-cloudflare";
+import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
 import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
@@ -1396,6 +1397,26 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     });
     if (read) observed.packages = read;
   }
+
+  // The manual steps blocked jobs name with a "check:" line (src/manual-steps.ts): after
+  // the secret names above, so a secret set since the last pass is seen on this one. Read,
+  // never judged: no finding comes from a step, and the counts go to stale:steps for the
+  // inbox and the stale view.
+  const steps = await attempt("manual steps", () =>
+    checkManualSteps(
+      env,
+      now,
+      liveStepReaders(env, {
+        npmVersions: (name) => npmVersions(fetchImpl, name),
+        accessAppNames: async () => {
+          const credentials = cloudflareCredentials(env);
+          if (!credentials.ok) throw new Error(credentials.reason);
+          return readAccessAppNames(fetchImpl, credentials.token, credentials.account);
+        },
+      })
+    )
+  );
+  if (steps && steps.seen.length > 0) logEvent("log", "WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
 
   return { findings: out, ran, observed };
 }

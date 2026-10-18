@@ -47,7 +47,7 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
       description:
         `The work queue. Each job mirrors to <namespace>/jobs/<id>.md. list needs the read grant; every other action needs the write grant. "Seat" below means the admin or a can_merge caller. Full rules: docs/work-queue.md.
 post: queue a job from namespace, title and body. The body is signed; a driver refuses one that does not verify. Refused while another open job has the same (namespace, title), or when the title or body holds an unfilled placeholder (<ID>, {{...}}, TODO:, TBD) outside a code block; warns when the body lacks GOAL, DO, OUT OF SCOPE, DONE WHEN or DECIDED/RULES parts.
-list: filter by namespace, status and id, without bodies; one named id returns its body and edit versions to a writer. stale: true returns blocked or claimed jobs that look stuck (unchanged, resumed-not-completed, prs-settled). view: plan, digest or models.
+list: filter by namespace, status and id, without bodies; one named id returns its body and edit versions to a writer. stale: true returns blocked or claimed jobs that look stuck (unchanged, resumed-not-completed, prs-settled, steps-seen). view: plan, digest or models.
 claim: take the top queued job in a namespace, or a named id. The claim never expires. Returns the recommended model. Refused without the job's required_flags or min_record, or while the namespace's breaker is open.
 begin: label a queued job started (who, when). Verifies the body's signature; never refuses otherwise.
 complete: needs result_summary; writes one outcome row and verifies each named pull request against GitHub. Also closes a queued job nobody holds when it names the job's pull request (the pull request is the claim), and lets the seat close a blocked job another credential holds.
@@ -106,7 +106,7 @@ block and complete act only on a job this caller holds, except as stated above.`
           .boolean()
           .optional()
           .describe(
-            "For list: true returns the stale view, the blocked and claimed jobs that look stuck, each with rule (unchanged | resumed-not-completed | prs-settled) and a one-line reason. Read-only and costs no GitHub reads. Refused with view, status or id, and on any other action."
+            "For list: true returns the stale view, the blocked and claimed jobs that look stuck, each with rule (unchanged | resumed-not-completed | prs-settled | steps-seen) and a one-line reason. Read-only and costs no GitHub reads. Refused with view, status or id, and on any other action."
           ),
         since: bounded(40).optional().describe('For list with view "digest": the ISO time to report from. Defaults to the last 24 hours.'),
         id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for complete, fail, block, resume, supersede, release, begin, fire, edit, park and unpark. For list, narrows to that job, with its body for a caller holding write.'),

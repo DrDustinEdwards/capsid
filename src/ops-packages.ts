@@ -184,6 +184,18 @@ async function getJson(fetchImpl: FetchLike, url: string, accept = "application/
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+/** The versions npm has published for `name`, or null when npm has no such package. A
+ *  failed read throws, so a caller cannot read it as "not published". For a blocked
+ *  job's "check: npm <name>@<version>" line (src/manual-steps.ts). */
+export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<string[] | null> {
+  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
+  if (!got.ok) {
+    if (got.status === 404) return null;
+    throw new Error(got.reason);
+  }
+  return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
+}
+
 async function readNpm(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["npm"]> {
   const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
   if (!got.ok) return got.status === 404 ? { state: "none", reason: `npm has no package ${name}` } : { state: "error", reason: got.reason };

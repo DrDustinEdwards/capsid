@@ -967,10 +967,11 @@ export interface PortalPush {
 // GET /portal/api/stale -> PortalStale. The jobs that look stuck, from the reader behind
 // `capsid_work_jobs` action list with stale: true (src/stale-jobs.ts), over every namespace. rule is
 // which test the job met, the most actionable first: prs-settled (blocked, and every pull
-// request it names is merged or closed), resumed-not-completed (the merge-resume step
-// resumed it 24 hours or more ago and it is not done), unchanged (blocked or claimed, and
-// its row has not changed in 3 days).
-export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled";
+// request it names is merged or closed), steps-seen (blocked, and every manual step its
+// "check:" lines name is seen, src/manual-steps.ts), resumed-not-completed (the
+// merge-resume step resumed it 24 hours or more ago and it is not done), unchanged
+// (blocked or claimed, and its row has not changed in 3 days).
+export type StaleRule = "unchanged" | "resumed-not-completed" | "prs-settled" | "steps-seen";
 
 export interface OpsStaleJob {
   id: string;
