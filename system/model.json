@@ -229,6 +229,22 @@
       "description": "Caches, rate-limit counters and computed documents."
     },
     {
+      "id": "capsid-oauth-kv",
+      "system": "capsid",
+      "name": "OAuth KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "The OAuth provider's grants and tokens, kept apart from the app KV."
+    },
+    {
+      "id": "capsid-holdout",
+      "system": "capsid",
+      "name": "Holdout bucket",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The hidden holdout suite the improve scorer alone reads."
+    },
+    {
       "id": "capsid-agents",
       "system": "capsid",
       "name": "Agents",
@@ -745,6 +761,8 @@
     { "from": "capsid-worker", "to": "capsid-db", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-media", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-kv", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-oauth-kv", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-holdout", "kind": "reads" },
     { "from": "capsid-worker", "to": "capsid-portal", "kind": "serves" },
     { "from": "capsid-worker", "to": "capsid-agents", "kind": "serves" },
     { "from": "capsid-worker", "to": "capsid-github", "kind": "writes" },
