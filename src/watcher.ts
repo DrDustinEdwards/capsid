@@ -22,6 +22,7 @@ import { anomalyFindings, readActionHours, readToolHours, toolRateFindings } fro
 import { archiveRevokedAgents } from "./agents-archive";
 import { expiryFindings, readExpiries, registrableDomain } from "./domain-expiry";
 import { DEPLOY_ROSTER, deployFindings, readDeployOutcomes } from "./deploy-outcomes";
+import { readStaleCanon } from "./stale-canon";
 import {
   buildSnapshot,
   probeSite,
@@ -553,6 +554,7 @@ export const WATCHER_CHECKS = [
   "tool anomalies",
   "domains",
   "deploys",
+  "stale canon",
 ] as const;
 export type WatcherCheck = (typeof WATCHER_CHECKS)[number];
 
@@ -580,6 +582,7 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^anomaly-/, "agent anomalies"],
   [/^domain-expiry-/, "domains"],
   [/^deploy-(rolled-back|rollback-failed)-/, "deploys"],
+  [/^stale-canon-/, "stale canon"],
 ];
 
 export function owningCheck(fingerprint: string): WatcherCheck | null {
@@ -618,6 +621,7 @@ const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
   [/^anomaly-/, "attention"],
   [/^domain-expiry-/, "job"],
   [/^deploy-(rolled-back|rollback-failed)-/, "job"],
+  [/^stale-canon-/, "digest"],
 ];
 
 export function findingClass(fingerprint: string): FindingClass {
@@ -1209,6 +1213,16 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (read.newest) out.push(...deployFindings(namespace, read.newest));
   }
   if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
+
+  // Canon documents a merged pull request left citing a removed, renamed or changed file
+  // (src/stale-canon.ts, improvement item 23). A digest finding: it posts no job, and it
+  // clears when the document is next written or stops citing the path.
+  const staleCanon = await attempt("stale canon", () => readStaleCanon(env, now));
+  if (staleCanon) {
+    if (staleCanon.complete) ran.add("stale canon");
+    out.push(...staleCanon.findings);
+    logEvent("log", "WATCHER_STALE_CANON", { message: `WATCHER_STALE_CANON ${staleCanon.note}` });
+  }
 
   // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
   // check below cannot run this pass: nothing is probed on a guess, and an open site
