@@ -283,6 +283,462 @@
       "kind": "database",
       "technology": "D1",
       "description": "The posts and pages, with every saved version."
+    },
+    {
+      "id": "website-watchdog",
+      "system": "dustinedwards-info",
+      "name": "Watchdog",
+      "kind": "cron",
+      "technology": "Second Worker on a 15-minute cron",
+      "description": "Reads the site's /api/health over a service binding, runs the repair plan and the nightly D1 dump through the operator API, and emails an alert when the state changes."
+    },
+    {
+      "id": "website-kv",
+      "system": "dustinedwards-info",
+      "name": "APP_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "The health snapshot, the drift cache, the Ask cache, the watchdog's alert state and other site state."
+    },
+    {
+      "id": "website-media",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-media",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Media originals. Irreplaceable and never emptied."
+    },
+    {
+      "id": "website-og",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-og",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Derived social cards and the CV PDF. Regenerable, so it may be emptied and rebuilt."
+    },
+    {
+      "id": "website-media-backup",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-media-backup",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The media mirror. No site code path deletes from it."
+    },
+    {
+      "id": "website-backups",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps, pruned to 14 daily, 8 weekly and 6 monthly."
+    },
+    {
+      "id": "website-media-events",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-media-events",
+      "kind": "queue",
+      "technology": "Queues, R2 event notifications, dead-letter queue",
+      "description": "Object-create events from the media bucket. The consumer derives the media table row and the mirror copy."
+    },
+    {
+      "id": "website-webmention-queue",
+      "system": "dustinedwards-info",
+      "name": "dustinedwards-webmention-verify",
+      "kind": "queue",
+      "technology": "Queues, dead-letter queue",
+      "description": "Webmention ids waiting for verification. The consumer fetches each source and records the verdict."
+    },
+    {
+      "id": "website-ask-budget",
+      "system": "dustinedwards-info",
+      "name": "AskBudget",
+      "kind": "database",
+      "technology": "Durable Object with SQLite",
+      "description": "The whole site's exact rate limiter: sign-in, the operator API, webmention, health, CSP reports, preview links and Ask."
+    },
+    {
+      "id": "website-ai-search",
+      "system": "dustinedwards-info",
+      "name": "Ask index",
+      "kind": "external",
+      "technology": "Cloudflare AI Search",
+      "description": "The one AI Search instance behind Ask mode. Classic search is D1 only and never waits on it."
+    },
+    {
+      "id": "website-images",
+      "system": "dustinedwards-info",
+      "name": "Images",
+      "kind": "external",
+      "technology": "Cloudflare Images binding",
+      "description": "Derives every thumbnail size from the one original in R2."
+    },
+    {
+      "id": "website-browser",
+      "system": "dustinedwards-info",
+      "name": "Browser Run",
+      "kind": "external",
+      "technology": "Cloudflare Browser Rendering binding",
+      "description": "Renders the CV PDF after each CV save."
+    },
+    {
+      "id": "website-access",
+      "system": "dustinedwards-info",
+      "name": "Cloudflare Access",
+      "kind": "external",
+      "technology": "Cloudflare Access application",
+      "description": "Guards /admin. The Worker verifies each request's signed Access token."
+    },
+    {
+      "id": "website-github",
+      "system": "dustinedwards-info",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repo, pull requests, Actions",
+      "description": "The repo the site's content saves commit to, CI, and the deploy workflow that runs ship after green CI on main."
+    },
+    {
+      "id": "website-openalex",
+      "system": "dustinedwards-info",
+      "name": "OpenAlex",
+      "kind": "external",
+      "technology": "OpenAlex API",
+      "description": "Citation counts for the publications, by DOI."
+    },
+    {
+      "id": "website-webmention-sources",
+      "system": "dustinedwards-info",
+      "name": "Webmention sources",
+      "kind": "external",
+      "technology": "Other sites on the web",
+      "description": "The pages a webmention names. The verifier fetches each one."
+    },
+    {
+      "id": "website-cf-analytics",
+      "system": "dustinedwards-info",
+      "name": "Cloudflare Analytics",
+      "kind": "external",
+      "technology": "GraphQL Analytics API",
+      "description": "The Worker's error rate, which the watchdog reads."
+    },
+    {
+      "id": "website-email",
+      "system": "dustinedwards-info",
+      "name": "Alert email",
+      "kind": "external",
+      "technology": "Workers send_email binding",
+      "description": "Where the watchdog sends an alert when the site's state changes."
+    },
+    {
+      "id": "admin-mcp-worker",
+      "system": "dustinedwards-mcp",
+      "name": "Admin MCP Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "Serves MCP and its OAuth at admin-mcp.dustinedwards.info. Every tool is a request to the site's operator API over a service binding; it holds no policy of its own."
+    },
+    {
+      "id": "admin-mcp-oauth-kv",
+      "system": "dustinedwards-mcp",
+      "name": "OAUTH_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Grants and tokens for the Worker's OAuth provider."
+    },
+    {
+      "id": "admin-mcp-probe-kv",
+      "system": "dustinedwards-mcp",
+      "name": "PROBE_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Captures from the client measurement probe at /probe/mcp."
+    },
+    {
+      "id": "admin-mcp-rate-limit",
+      "system": "dustinedwards-mcp",
+      "name": "OperatorRateLimit",
+      "kind": "database",
+      "technology": "Durable Object with SQLite",
+      "description": "The exact rate limiter on the MCP endpoint."
+    },
+    {
+      "id": "admin-mcp-tool-log",
+      "system": "dustinedwards-mcp",
+      "name": "ToolCallLog",
+      "kind": "database",
+      "technology": "Durable Object with SQLite",
+      "description": "The append-only log of every tool call, written before and after it runs. A call that cannot be logged does not run."
+    },
+    {
+      "id": "admin-mcp-github",
+      "system": "dustinedwards-mcp",
+      "name": "GitHub sign-in",
+      "kind": "external",
+      "technology": "GitHub OAuth App",
+      "description": "Proves the person consenting is the one configured administrator."
+    },
+    {
+      "id": "admin-mcp-clients",
+      "system": "dustinedwards-mcp",
+      "name": "AI clients",
+      "kind": "external",
+      "technology": "MCP clients",
+      "description": "Claude, ChatGPT, Gemini and Grok sessions that call the tools."
+    },
+    {
+      "id": "carrel-backup-cron",
+      "system": "carrel",
+      "name": "Nightly backup",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Dumps the D1 database into carrel-backups with d1-dump, alone, once a night."
+    },
+    {
+      "id": "carrel-oauth-kv",
+      "system": "carrel",
+      "name": "OAUTH_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Grants and tokens for the AI door's OAuth provider."
+    },
+    {
+      "id": "carrel-backups",
+      "system": "carrel",
+      "name": "carrel-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "carrel-access",
+      "system": "carrel",
+      "name": "Cloudflare Access",
+      "kind": "external",
+      "technology": "Access, and Access for SaaS",
+      "description": "Guards every page at the Worker level, and is the login behind the AI door's own OAuth."
+    },
+    {
+      "id": "carrel-ai-clients",
+      "system": "carrel",
+      "name": "AI sessions",
+      "kind": "external",
+      "technology": "MCP clients",
+      "description": "The AI sessions that read posts, save AI drafts and flag problems through the AI door."
+    },
+    {
+      "id": "carrel-github",
+      "system": "carrel",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repos, Actions, a GitHub App",
+      "description": "The writing repository Carrel commits book files to through its App, and CI, which deploys the Worker."
+    },
+    {
+      "id": "carrel-google",
+      "system": "carrel",
+      "name": "Google",
+      "kind": "external",
+      "technology": "Drive and Search Console APIs",
+      "description": "Manuscripts in a shared Drive folder, and search data for dustinedwards.info."
+    },
+    {
+      "id": "carrel-social",
+      "system": "carrel",
+      "name": "Bluesky and X",
+      "kind": "external",
+      "technology": "Bluesky and X APIs",
+      "description": "Where Carrel posts original social posts. It never replies, messages, follows or likes."
+    },
+    {
+      "id": "carrel-routine",
+      "system": "carrel",
+      "name": "Drafting routine",
+      "kind": "external",
+      "technology": "Claude Code routine",
+      "description": "Drafts brand posts when no session drafted them ahead. Carrel only fires it."
+    },
+    {
+      "id": "carrel-email",
+      "system": "carrel",
+      "name": "Email",
+      "kind": "external",
+      "technology": "Workers send_email binding",
+      "description": "Alerts when a site's state changes, and the unpublish link after an AI publish."
+    },
+    {
+      "id": "capsomer-site",
+      "system": "capsomer",
+      "name": "Capsomer site",
+      "kind": "site",
+      "technology": "Workers static assets, no script",
+      "description": "The docs and every component's states page at capsomer.dustinedwards.info. It shows the latest test results from the results branch."
+    },
+    {
+      "id": "capsomer-cli",
+      "system": "capsomer",
+      "name": "capsomer CLI",
+      "kind": "package",
+      "technology": "Node CLI",
+      "description": "Builds the states pages and the site data, and reports size, weight, lines and token use."
+    },
+    {
+      "id": "capsomer-builds",
+      "system": "capsomer",
+      "name": "Workers Builds",
+      "kind": "external",
+      "technology": "Cloudflare Git integration",
+      "description": "Builds and deploys the site on every push to main."
+    },
+    {
+      "id": "capsomer-github",
+      "system": "capsomer",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repo, Actions, releases",
+      "description": "CI, the results branch the site reads, and the tagged releases consumers install."
+    },
+    {
+      "id": "enarratio-gallery",
+      "system": "enarratio",
+      "name": "Gallery Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker with static assets",
+      "description": "Serves the gallery at enarratio.dustinedwards.info, and redirects http and the old abscissa hostname."
+    },
+    {
+      "id": "enarratio-npm",
+      "system": "enarratio",
+      "name": "npm",
+      "kind": "external",
+      "technology": "npm registry, trusted publishing",
+      "description": "Each release is staged here and goes live once a maintainer approves it."
+    },
+    {
+      "id": "enarratio-github",
+      "system": "enarratio",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repo and Actions",
+      "description": "CI, the release tags, and the gallery deploy on every push to main."
+    },
+    {
+      "id": "prelum-specimen",
+      "system": "prelum",
+      "name": "Specimen Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker with static assets",
+      "description": "Serves the rendering specimen at prelum.dustinedwards.info and redirects http to https."
+    },
+    {
+      "id": "prelum-github",
+      "system": "prelum",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repo and Actions",
+      "description": "CI, and the specimen deploy on every push to main once the tests pass."
+    },
+    {
+      "id": "devkit-worker-deploy",
+      "system": "devkit",
+      "name": "worker-deploy workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "Deploys a caller's Worker, gates it live on /health and rolls it back on a refusal."
+    },
+    {
+      "id": "devkit-bump-consumers",
+      "system": "devkit",
+      "name": "bump-consumers workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "On a package's release, starts a Renovate run in every repository whose manifest depends on it."
+    },
+    {
+      "id": "devkit-code-map",
+      "system": "devkit",
+      "name": "code-map workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "Publishes a repository's code-map.json to its code-map branch for the Capsid explorer."
+    },
+    {
+      "id": "devkit-improve-score",
+      "system": "devkit",
+      "name": "improve-score workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "The shared score job that measures improve attempts."
+    },
+    {
+      "id": "devkit-no-bloat-workflow",
+      "system": "devkit",
+      "name": "no-bloat workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "The warn-only Knip and jscpd report against the repository's baseline."
+    },
+    {
+      "id": "devkit-ai-author",
+      "system": "devkit",
+      "name": "ai-author workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "Refuses an AI attribution trailer or a commit authored as Claude."
+    },
+    {
+      "id": "devkit-pr-footer",
+      "system": "devkit",
+      "name": "pr-footer workflow",
+      "kind": "package",
+      "technology": "Reusable GitHub Actions workflow",
+      "description": "Removes the generated footer from pull request descriptions."
+    },
+    {
+      "id": "devkit-check-trailers",
+      "system": "devkit",
+      "name": "devkit-check-trailers",
+      "kind": "package",
+      "technology": "Node CLI",
+      "description": "The trailer and author check, the same on a laptop as in CI."
+    },
+    {
+      "id": "devkit-no-bloat",
+      "system": "devkit",
+      "name": "devkit-no-bloat",
+      "kind": "package",
+      "technology": "Node CLI",
+      "description": "Knip and jscpd counts compared with the baseline. Always exits 0."
+    },
+    {
+      "id": "devkit-renovate",
+      "system": "devkit",
+      "name": "Renovate preset",
+      "kind": "package",
+      "technology": "Renovate config",
+      "description": "The one Renovate policy every repository's renovate.json extends."
+    },
+    {
+      "id": "devkit-github",
+      "system": "devkit",
+      "name": "GitHub",
+      "kind": "external",
+      "technology": "Repos, Actions, issues",
+      "description": "Where callers run the workflows, the Dependency Dashboards bump-consumers ticks, and the code-map branches."
+    },
+    {
+      "id": "site-runtime-check-headers",
+      "system": "site-runtime",
+      "name": "check-security-headers",
+      "kind": "package",
+      "technology": "Node CLI",
+      "description": "Fetches live URLs without following redirects and grades each response's security headers, for a site's CI."
+    },
+    {
+      "id": "d1-dump-cli",
+      "system": "d1-dump",
+      "name": "d1-dump CLI",
+      "kind": "package",
+      "technology": "Node CLI",
+      "description": "The restore drill: restores a downloaded dump into local SQLite, or a scratch D1 over the REST API, and checks it."
     }
   ],
   "relationships": [
@@ -304,6 +760,67 @@
     { "from": "carrel-worker", "to": "website-worker", "kind": "publishes-to" },
     { "from": "carrel-cron", "to": "website-worker", "kind": "watches" },
     { "from": "website-worker", "to": "website-db", "kind": "writes" },
+    { "from": "website-worker", "to": "website-kv", "kind": "writes" },
+    { "from": "website-worker", "to": "website-media", "kind": "writes" },
+    { "from": "website-worker", "to": "website-og", "kind": "writes" },
+    { "from": "website-worker", "to": "website-backups", "kind": "writes" },
+    { "from": "website-worker", "to": "website-media-backup", "kind": "writes" },
+    { "from": "website-worker", "to": "website-webmention-queue", "kind": "writes" },
+    { "from": "website-worker", "to": "website-ask-budget", "kind": "writes" },
+    { "from": "website-worker", "to": "website-github", "kind": "writes" },
+    { "from": "website-worker", "to": "website-media-events", "kind": "reads" },
+    { "from": "website-worker", "to": "website-webmention-queue", "kind": "reads" },
+    { "from": "website-worker", "to": "website-webmention-sources", "kind": "reads" },
+    { "from": "website-worker", "to": "website-ai-search", "kind": "reads" },
+    { "from": "website-worker", "to": "website-images", "kind": "reads" },
+    { "from": "website-worker", "to": "website-browser", "kind": "reads" },
+    { "from": "website-worker", "to": "website-access", "kind": "reads" },
+    { "from": "website-worker", "to": "website-openalex", "kind": "reads" },
+    { "from": "website-media", "to": "website-media-events", "kind": "writes" },
+    { "from": "website-github", "to": "website-worker", "kind": "deploys" },
+    { "from": "website-github", "to": "website-watchdog", "kind": "deploys" },
+    { "from": "website-watchdog", "to": "website-worker", "kind": "watches" },
+    { "from": "website-watchdog", "to": "website-worker", "kind": "writes" },
+    { "from": "website-watchdog", "to": "website-kv", "kind": "writes" },
+    { "from": "website-watchdog", "to": "website-cf-analytics", "kind": "reads" },
+    { "from": "website-watchdog", "to": "website-email", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-oauth-kv", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-probe-kv", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-rate-limit", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-tool-log", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "website-worker", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "website-worker", "kind": "reads" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-github", "kind": "reads" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-clients", "kind": "serves" },
+    { "from": "carrel-worker", "to": "carrel-oauth-kv", "kind": "writes" },
+    { "from": "carrel-worker", "to": "carrel-access", "kind": "reads" },
+    { "from": "carrel-worker", "to": "carrel-ai-clients", "kind": "serves" },
+    { "from": "carrel-worker", "to": "carrel-github", "kind": "writes" },
+    { "from": "carrel-worker", "to": "carrel-github", "kind": "reads" },
+    { "from": "carrel-worker", "to": "carrel-google", "kind": "reads" },
+    { "from": "carrel-worker", "to": "carrel-email", "kind": "writes" },
+    { "from": "carrel-backup-cron", "to": "carrel-backups", "kind": "writes" },
+    { "from": "carrel-backup-cron", "to": "carrel-db", "kind": "reads" },
+    { "from": "carrel-cron", "to": "carrel-db", "kind": "writes" },
+    { "from": "carrel-cron", "to": "carrel-google", "kind": "reads" },
+    { "from": "carrel-cron", "to": "carrel-social", "kind": "writes" },
+    { "from": "carrel-cron", "to": "carrel-routine", "kind": "writes" },
+    { "from": "carrel-cron", "to": "carrel-email", "kind": "writes" },
+    { "from": "carrel-cron", "to": "capsid-worker", "kind": "writes" },
+    { "from": "carrel-github", "to": "carrel-worker", "kind": "deploys" },
+    { "from": "carrel-github", "to": "carrel-worker", "kind": "watches" },
+    { "from": "capsomer-builds", "to": "capsomer-site", "kind": "deploys" },
+    { "from": "capsomer-site", "to": "capsomer-github", "kind": "reads" },
+    { "from": "enarratio-github", "to": "enarratio-gallery", "kind": "deploys" },
+    { "from": "enarratio-github", "to": "enarratio-npm", "kind": "publishes-to" },
+    { "from": "prelum-github", "to": "prelum-specimen", "kind": "deploys" },
+    { "from": "devkit-ai-author", "to": "devkit-check-trailers", "kind": "installs" },
+    { "from": "devkit-no-bloat-workflow", "to": "devkit-no-bloat", "kind": "installs" },
+    { "from": "devkit-bump-consumers", "to": "devkit-github", "kind": "writes" },
+    { "from": "devkit-code-map", "to": "devkit-github", "kind": "writes" },
+    { "from": "devkit-pr-footer", "to": "devkit-github", "kind": "writes" },
+    { "from": "devkit-worker-deploy", "to": "carrel-worker", "kind": "deploys" },
+    { "from": "devkit-worker-deploy", "to": "carrel-worker", "kind": "watches" },
     { "from": "capsid", "to": "d1-dump", "kind": "installs" },
     { "from": "capsid", "to": "site-runtime", "kind": "installs" },
     { "from": "capsid", "to": "capsomer", "kind": "installs" },
