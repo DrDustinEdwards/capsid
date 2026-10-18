@@ -162,7 +162,7 @@ export default {
             }
             return {
               outcome: "ok",
-              reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps, ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
+              reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
             };
           },
           { tag: "BACKUP_CRON_THREW", rethrow: true }
