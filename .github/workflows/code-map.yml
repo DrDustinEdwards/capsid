@@ -1,0 +1,31 @@
+name: code-map
+
+# Capsid's code map for the system explorer at capsid.dustinedwards.info (capsid/research/design-system-explorer.md,
+# section 5, slice 10): after each push to master, devkit's code-map workflow maps src/ with the unit suite's coverage and
+# publishes code-map.json to the orphan code-map branch, which the daily public build reads. Never a gate on a pull request.
+#
+# Mutation scores come from the last full mutation baseline (mutation-baseline.yml), whose final job publishes the map with
+# its shard reports. Every map after it carries those numbers forward while a function is unchanged and marks the rest stale.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  code-map:
+    # A called workflow holds no more than this job grants: the write lets it push to the code-map branch.
+    permissions:
+      contents: write
+    # Shared with mutation-baseline.yml's map job, so a push's map never lands over a baseline's mid-run.
+    concurrency:
+      group: code-map
+      cancel-in-progress: false
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@81275c4edb8b29c81229c2e052fe75b417c758b4 # devkit #31
+    with:
+      # The unit suite as npm test runs it, with Node's own coverage written as lcov.
+      coverage-command: mkdir -p coverage && node --import ./test/resolve-ts.mjs --test --experimental-test-coverage --test-coverage-include='src/**' --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test-reporter=dot --test-reporter-destination=stdout "test/*.test.ts"
+      coverage-file: coverage/lcov.info
