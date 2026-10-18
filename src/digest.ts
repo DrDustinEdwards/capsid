@@ -96,7 +96,7 @@ async function composeDigest(env: Env, now: Date, since: string, read: DigestRea
   };
   section(
     `Pull requests waiting on you (${awaiting.length})`,
-    list(awaiting, (a) => `${a.repo}#${a.number}, class ${a.class ?? "unclassed"}${a.class === "typed" ? " (money: approve by typing its number)" : ""}: https://github.com/${a.repo}/pull/${a.number}`)
+    list(awaiting, (a) => `${a.repo}#${a.number}, class ${a.class ?? "unclassed"}${a.class === "typed" ? " (money: approve by typing its number)" : ""}${a.visual ? ` (visual: look${a.visual.preview ? ` at ${a.visual.preview}` : ""} and approve in the Portal)` : ""}: https://github.com/${a.repo}/pull/${a.number}`)
   );
   section(`Questions (${questions.length})`, list(questions, (q) => `${q.namespace} ${q.id}: ${q.title}`));
   section(`Blocked (${blocked.length})`, list(blocked, (b) => `${b.namespace} ${b.id}: ${b.title}`));

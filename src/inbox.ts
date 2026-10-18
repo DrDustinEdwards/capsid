@@ -53,9 +53,12 @@ const CLASS_WORDS: Record<MergeClass, string> = {
   wait: "nothing yet, CI is running",
 };
 
-/** An auto-merge hold as an inbox title, in plain words: what held it, then what it takes. */
-export function prHoldTitle(a: Pick<AwaitingSeat, "number" | "failed" | "class">): string {
-  const why = checkWords(a.failed);
+/** An auto-merge hold as an inbox title, in plain words: what held it, then what it takes.
+ *  A visual pull request one tap would merge says it waits for his look, whichever check
+ *  stopped it first: a session's visual PR usually names no job, and "names no job" hid
+ *  that there was something to look at (job_0368576da167). */
+export function prHoldTitle(a: Pick<AwaitingSeat, "number" | "failed" | "class" | "visual">): string {
+  const why = checkWords(a.visual && a.class === "approve" ? "visual_awaits_look" : a.failed);
   return `PR #${a.number} waits for you: ${why}${a.class ? ` (${CLASS_WORDS[a.class]})` : ""}`;
 }
 
