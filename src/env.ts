@@ -41,6 +41,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // key, the account added as a Restricted user on each site's property. Unset,
   // capsid_inspect_repo action search reads nothing and says why.
   GSC_SERVICE_ACCOUNT_KEY?: string;
+  // Bing Webmaster Tools' read (src/bing-webmaster.ts): the API key from Bing Webmaster
+  // Tools' Settings, API access. Bing gives it no narrower scope, so the module calls only
+  // Get methods. Unset, capsid_inspect_repo action bing reads nothing and says why.
+  BING_WEBMASTER_API_KEY?: string;
   // The dashboard app's built files (dashboard/dist), served under /portal/ only
   // after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;
