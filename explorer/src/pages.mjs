@@ -373,6 +373,26 @@ export function flowPage(f, asOf) {
 }
 
 /**
+ * One step's heading, sentence and parts. The shown step is read; every other step is laid in the
+ * same grid cell, unseen and out of the accessibility tree, so the section is as tall as the
+ * longest step at any width and stepping never moves the drawing below it (design section 6,
+ * CLS). The unseen copies carry no id and no link.
+ * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown
+ */
+function stepText(st, total, systems, shown) {
+  const link = (/** @type {string} */ href, /** @type {string} */ text) => (shown ? `<a href="${href}">${text}</a>` : `<span>${text}</span>`);
+  const parts = st.touches
+    .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name))}, in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}: ${role(st, p)}</li>`)
+    .join("");
+  return `<div${shown ? "" : ' class="flow-unseen" aria-hidden="true" inert'}>
+<h2${shown ? ' id="step-title"' : ""}>Step ${st.n} of ${total}</h2>
+<p class="flow-text">${escapeHtml(st.text)}</p>
+<h3>What it touches</h3>
+<ul class="flow-touches">${parts}</ul>
+</div>`;
+}
+
+/**
  * One step of a flow: where it is, what happens, the parts it touches, Back and Next, and the
  * core drawn with the step's line on. The script (src/explorer.js) steps without a reload and
  * moves a token along the line; with no script every step is a page of its own.
@@ -399,10 +419,7 @@ export function stepPage(model, f, n, asOf) {
   const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a> / <span aria-current="page">Step ${n}</span></nav>
 <h1>${escapeHtml(f.name)}</h1>
 <section class="flow-step" data-swap="step" aria-labelledby="step-title">
-<h2 id="step-title">Step ${n} of ${total}</h2>
-<p class="flow-text">${escapeHtml(st.text)}</p>
-<h3>What it touches</h3>
-<ul class="flow-touches">${st.touches.map((p) => `<li data-part="${escapeHtml(p.id)}"><a href="${partPath(p)}">${escapeHtml(p.name)}</a>, in <a href="${systemPath(p.system)}">${escapeHtml(systems.get(p.system)?.name ?? p.system)}</a>: ${role(st, p)}</li>`).join("")}</ul>
+<div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n)).join("")}</div>
 <nav class="flow-nav" aria-label="Steps">${nav}</nav>
 </section>
 ${drawn ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}

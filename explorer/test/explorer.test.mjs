@@ -312,6 +312,26 @@ test("every step of every flow has its page, saying the flow's name, where it is
   assert.equal(seen, model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.steps.length, 0));
 });
 
+test("each step page lays every step's text in one stack, the shown one alone read and linked", () => {
+  let pages = 0;
+  for (const f of model.flows) {
+    for (let n = 1; n <= f.steps.length; n++) {
+      const page = stepFile(f.id, n);
+      const stack = page.slice(page.indexOf('<div class="flow-stack">'), page.indexOf('<nav class="flow-nav"'));
+      const blocks = stack.split(/(?=<div(?: class="flow-unseen"[^>]*)?>\n<h2)/).slice(1);
+      assert.equal(blocks.length, f.steps.length, `${f.id} step ${n} stacks ${blocks.length} steps`);
+      blocks.forEach((b, i) => {
+        const shown = i + 1 === n;
+        assert.ok(b.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${n}: block ${i + 1} is out of order`);
+        assert.equal(b.startsWith('<div class="flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
+        assert.equal(/<a |id=|data-part=/.test(b), shown, `${f.id} step ${n}: block ${i + 1} ${shown ? "lacks" : "carries"} links or ids`);
+      });
+      pages++;
+    }
+  }
+  assert.equal(pages, model.flows.reduce((/** @type {number} */ k, /** @type {any} */ f) => k + f.steps.length, 0));
+});
+
 test("Back and Next chain every step to the next both ways, with no Back on the first and no Next on the last", () => {
   let links = 0;
   for (const f of model.flows) {
@@ -337,7 +357,9 @@ test("each step page names exactly the parts its step touches, and its drawing l
       const page = stepFile(f.id, i + 1);
       const r = edge(st.relationship);
       const want = [...new Set([r.from, r.to, ...(st.lights ?? [])])].sort();
-      const touches = page.slice(page.indexOf('<ul class="flow-touches">'), page.indexOf("</ul>", page.indexOf('<ul class="flow-touches">')));
+      // The shown step's list, after its heading; the unseen steps around it carry no data-part.
+      const at = page.indexOf('<ul class="flow-touches">', page.indexOf('id="step-title"'));
+      const touches = page.slice(at, page.indexOf("</ul>", at));
       const named = [...touches.matchAll(/<li data-part="([^"]+)"><a href="([^"]+)">/g)];
       assert.deepEqual(named.map((m) => m[1]).sort(), want, `${f.id} step ${i + 1} names the wrong parts`);
       for (const [, id, href] of named) {
