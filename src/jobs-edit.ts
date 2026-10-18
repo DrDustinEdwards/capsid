@@ -3,6 +3,7 @@ import type { Agent } from "./agents";
 import { OPEN_JOB_STATUSES, outsideJobNamespace, type JobRow } from "./jobs-schema";
 import { signedJobBody } from "./jobs-claim";
 import { jobTextRefusal } from "./job-body-check";
+import { factCheckBody } from "./job-fact-check";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 
@@ -107,6 +108,12 @@ export async function editJob(
     );
   }
 
+  // A new body's merged, tagged and published claims, read against GitHub and npm in the
+  // job's own namespace (src/job-fact-check.ts). A claim read as false refuses the edit; one
+  // that could not be read is a warning.
+  const facts = args.body === undefined ? { refusal: null, warnings: [] } : await factCheckBody(env, current.namespace, args.body);
+  if (facts.refusal) return refuse("edit", facts.refusal);
+
   const edited: JobRow = {
     ...current,
     title: title ?? current.title,
@@ -157,5 +164,11 @@ export async function editJob(
       `${id} changed between reading it and editing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written.`
     );
   }
-  return { ok: true, action: "edit", job: edited, versions: await jobVersions(env.DB, id) };
+  return {
+    ok: true,
+    action: "edit",
+    job: edited,
+    versions: await jobVersions(env.DB, id),
+    ...(facts.warnings.length > 0 ? { warnings: facts.warnings } : {}),
+  };
 }
