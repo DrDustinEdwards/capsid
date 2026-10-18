@@ -19,7 +19,7 @@ One Google service account reads every site.
 1. In Google Cloud, create a project (or use one), and enable the **Google Search Console API** for it.
 2. Under IAM and Admin, Service accounts, create a service account with no roles.
 3. On that account's Keys tab, add a key of type JSON. The file downloads once.
-4. In Search Console, for each site's property: Settings, Users and permissions, Add user, the service account's email, permission **Restricted**.
+4. In Search Console, for each site's property: Settings, Users and permissions, Add user, the service account's email, permission **Full** (Restricted hides some data; the read-only scope keeps it from changing anything).
 5. Set the whole key file as the Worker secret `GSC_SERVICE_ACCOUNT_KEY` (Cloudflare dashboard: Workers, capsid, Settings, Variables and Secrets, Add, type Secret), then delete the downloaded file.
 
 Unset, the action fetches nothing and says the key is missing. A property the account cannot read is refused with the email to add.

@@ -38,9 +38,13 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // (Dustin, 2026-10-09). Unset, POST /ops/access-sync answers 503 and calls nothing.
   CF_ACCESS_SYNC_TOKEN?: string;
   // Google Search Console's read (src/search-console.ts): a service account's whole JSON
-  // key, the account added as a Restricted user on each site's property. Unset,
+  // key, the account added as a Full user on each site's property. Unset,
   // capsid_inspect_repo action search reads nothing and says why.
   GSC_SERVICE_ACCOUNT_KEY?: string;
+  // Bing Webmaster Tools' read (src/bing-webmaster.ts): the API key from Bing Webmaster
+  // Tools' Settings, API access. Bing gives it no narrower scope, so the module calls only
+  // Get methods. Unset, capsid_inspect_repo action bing reads nothing and says why.
+  BING_WEBMASTER_API_KEY?: string;
   // The dashboard app's built files (dashboard/dist), served under /portal/ only
   // after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;

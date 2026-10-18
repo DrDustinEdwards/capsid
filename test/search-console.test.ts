@@ -116,7 +116,7 @@ test("inspect refuses a URL on another host before signing in, and a property th
   const env = fakeEnv({ DB: siteDb([ROW]), GSC_SERVICE_ACCOUNT_KEY: await serviceAccountKey() });
   await assert.rejects(() => searchConsole(env, "sample", { report: "inspect", url: "https://other.example.net/a" }, g.impl, NOW), /must be a page on sample's site/);
   assert.equal(g.calls.length, 0);
-  await assert.rejects(() => searchConsole(env, "sample", { report: "sitemaps" }, g.impl, NOW), /add reader@sample-project\.iam\.gserviceaccount\.com as a Restricted user/);
+  await assert.rejects(() => searchConsole(env, "sample", { report: "sitemaps" }, g.impl, NOW), /add reader@sample-project\.iam\.gserviceaccount\.com as a Full user/);
 });
 
 test("with no key set, it says what is missing and fetches nothing", async () => {
