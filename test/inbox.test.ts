@@ -34,6 +34,13 @@ test("a blocked job is an item with the pull request it names as its link, and a
 
 test("a held pull request reads in plain words: what held it and what answering takes, never a check's name", () => {
   assert.equal(prHoldTitle({ number: 383, failed: "body_names_job", class: "approve" }), "PR #383 waits for you: its description names no job (one tap to approve)");
+  const visual = { title: "New header", preview: null, shots: [] };
+  assert.equal(
+    prHoldTitle({ number: 479, failed: "body_names_job", class: "approve", visual }),
+    "PR #479 waits for you: it changes what people see, so it waits for your look (one tap to approve)",
+    "a visual PR one tap would merge says so, not that it names no job"
+  );
+  assert.equal(prHoldTitle({ number: 9, failed: "ci_green", visual }), "PR #9 waits for you: its checks are not green", "red CI still says red");
   assert.equal(prHoldTitle({ number: 7, failed: "paths_allowed_for_namespace" }), "PR #7 waits for you: it changes files outside what this app merges on its own");
   for (const check of POLICY_CHECKS) {
     const title = prHoldTitle({ number: 1, failed: check });

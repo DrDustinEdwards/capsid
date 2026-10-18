@@ -38,7 +38,7 @@ const FULL: OvernightDigest = {
 
 const awaiting = [
   { namespace: "foxhound", repo: "owner/foxhound", number: 7, failed: "money", why: "", at: "", class: "typed" },
-  { namespace: "capsid", repo: "owner/capsid", number: 8, failed: "path", why: "", at: "", class: "approve" },
+  { namespace: "capsid", repo: "owner/capsid", number: 8, failed: "path", why: "", at: "", class: "approve", visual: { title: "New header", preview: "https://pr-8.sample.workers.dev/", shots: [] } },
   { namespace: "capsid", repo: "owner/capsid", number: 9, failed: "ci", why: "", at: "", class: "wait" },
 ];
 
@@ -126,7 +126,7 @@ test("the mail lists what waits by class, questions, blocked jobs, rollbacks and
   assert.equal(m.from, "capsid@example.com");
   assert.equal(m.subject, "Capsid digest 2026-10-11: 4 waiting on you");
   assert.match(m.text, /owner\/foxhound#7, class typed \(money: approve by typing its number\)/);
-  assert.match(m.text, /owner\/capsid#8, class approve/);
+  assert.match(m.text, /owner\/capsid#8, class approve \(visual: look at https:\/\/pr-8\.sample\.workers\.dev\/ and approve in the Portal\)/);
   assert.doesNotMatch(m.text, /#9/, "a wait-class pull request was listed as waiting on Dustin");
   assert.match(m.text, /Questions \(1\)\n- carrel job_q: Which domain\?/);
   assert.match(m.text, /Blocked \(1\)\n- foxing job_b: Create the bucket/);
