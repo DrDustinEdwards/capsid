@@ -166,11 +166,12 @@ Agents and operators (`/ops/`):
 - `POST /ops/access-sync` an app's members page makes its Cloudflare Access group hold exactly its current members, with the app's own key and the write grant on its namespace. The group is the one the seat pinned for that namespace in `access_sync_groups`, its name checked before every write; removed people's Zero Trust seats are freed; every call is audited. Capsid holds the only write token, `CF_ACCESS_SYNC_TOKEN` (docs/portal.md)
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 
-The improve loop and backups (signed, no bearer):
+The improve loop, backups and the paired comparison (signed, no bearer):
 
 - `POST /improve/score` the signed score report a roster repo's CI posts back
 - `POST /improve/holdout-credential` mints the one-hour, object-read-only credential the score job reads the holdout suite with
 - `POST /backup/credential` mints the credential the off-account backup writes with
+- `POST /bench/tasks`, `POST /bench/start`, `POST /bench/score` the capsid-bench repo registers a task, opens a run and reports its result, signed with the bench key; a run starts only while KV `bench:enabled` reads `on` (docs/bench.md)
 
 Public:
 

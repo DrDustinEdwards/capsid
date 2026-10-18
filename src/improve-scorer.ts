@@ -107,6 +107,14 @@ export async function deriveBackupCredentialKey(rootSecret: string): Promise<str
   return hmacHex(rootSecret, "capsid-backup-credential:v1");
 }
 
+// The capsid-bench repo's key (src/bench.ts): the same root under its own context, so
+// it differs from every namespace score key and the backup key by construction, and no
+// key the improve roster or the backup mirror holds opens the bench endpoints.
+// scripts/improve-derive-key.mjs --bench computes the same value to set the repo secret.
+export async function deriveBenchKey(rootSecret: string): Promise<string> {
+  return hmacHex(rootSecret, "capsid-bench:v1");
+}
+
 export interface ScoreReport {
   namespace: string;
   run_id: string;
@@ -550,6 +558,21 @@ export async function verifyBackupCredentialRequest(
     deriveKey: deriveBackupCredentialKey,
     missingSecret: "backup credentials are not configured: IMPROVE_SCORE_SECRET is unset",
     badSig: "backup credential signature does not verify",
+    ageNoun: "request",
+  });
+}
+
+// The bench endpoints' check, under the same rules as a score report, against the bench
+// key, so a captured improve or backup request opens nothing here.
+export async function verifyBenchRequest(
+  env: Pick<Env, "IMPROVE_SCORE_SECRET">,
+  signed: { timestamp: string; signature: string; body: string },
+  now: Date
+): Promise<{ ok: true } | { ok: false; status: number; refusal: string }> {
+  return verifyHmac(env, signed, now, {
+    deriveKey: deriveBenchKey,
+    missingSecret: "bench reporting is not configured: IMPROVE_SCORE_SECRET is unset",
+    badSig: "bench request signature does not verify",
     ageNoun: "request",
   });
 }
