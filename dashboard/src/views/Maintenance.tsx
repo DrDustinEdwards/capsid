@@ -27,13 +27,17 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
   "branch-stale": { kind: "warn", label: "Old branch", order: 8 },
   "model-drift": { kind: "warn", label: "Model drift", order: 8 },
   "rule-doc": { kind: "warn", label: "Rule doc", order: 8 },
+  "release-backwards": { kind: "warn", label: "Version behind", order: 8 },
+  "release-untagged": { kind: "warn", label: "Untagged", order: 8 },
   "auto-resumed": { kind: "ok", label: "Resumed", order: 9 },
   "branch-pruned": { kind: "ok", label: "Pruned", order: 10 },
+  "release-tagged": { kind: "ok", label: "Tagged", order: 10 },
   "prs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "branches-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "deploys-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "model-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
   "rule-docs-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
+  "releases-not-checked": { kind: "nodata", label: "Not checked", order: 11 },
 };
 
 // Rows shown before "more"; every critical row is shown.

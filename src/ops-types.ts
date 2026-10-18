@@ -367,6 +367,19 @@ export interface SharedCodePackage {
   repo: string;
   latest: string | null;
   tags_error: string | null;
+  // The version in the package repo's root package.json on its default branch; null when
+  // it has none or the file was not read (manifest_error says why).
+  version: string | null;
+  // True when the tags were read and none names that version: the daily maintenance pass
+  // tags it (src/maintenance-releases.ts). False when it is tagged or this is unknown.
+  untagged: boolean;
+  // "private": true in that package.json: never published, so npm is not asked.
+  private: boolean;
+  // npm's latest dist-tag, or null with npm_note saying why (not on npm, unread); both
+  // null for a private package.
+  npm_latest: string | null;
+  npm_note: string | null;
+  manifest_error: string | null;
   users: SharedCodeApp[];
   // Users at least one release behind.
   behind: number;
@@ -1125,7 +1138,13 @@ export type MaintenanceRule =
   | "model-drift"
   | "model-not-checked"
   | "rule-doc"
-  | "rule-docs-not-checked";
+  | "rule-docs-not-checked"
+  // The release-tag rule (src/maintenance-releases.ts): a shared package's version tagged,
+  // left untagged (switched off, over the cap, not found), or below its newest tag.
+  | "release-tagged"
+  | "release-untagged"
+  | "release-backwards"
+  | "releases-not-checked";
 
 export interface OpsMaintenanceItem {
   /** Which rule found it. */

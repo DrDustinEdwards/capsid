@@ -1,8 +1,10 @@
 import type { Env } from "./env";
+import { base64Decode } from "./encoding";
 import { ghFetch } from "./github/client";
 import { readRepoFile, repoBlobPaths } from "./github/contents";
+import { readNpm, type FetchLike } from "./ops-packages";
 import { readSiteConfig } from "./ops-sites";
-import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types";
+import type { PackageSnapshot, SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types";
 
 // SHARED CODE: how far the centralization has got (job_584b4e7f2824; ruling
 // capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration
@@ -18,11 +20,20 @@ import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-typ
 // a Renovate preset ("github>DrDustinEdwards/devkit"), so it is found in the Renovate
 // config, not in a manifest.
 //
+// Release tracking (Capsid improvement list, item 13): each package's own repo is read
+// too, for the version in its root package.json on the default branch, whether that
+// version has a release tag yet (untagged), and, when the package.json is not private,
+// npm's latest dist-tag from the registry's abbreviated document (src/ops-packages.ts,
+// readNpm). So each panel says tagged, on npm, and which apps are behind. The daily
+// maintenance pass tags an untagged version (src/maintenance-releases.ts), using
+// releaseDecision below, so the view and the pass agree on what "untagged" means.
+//
 // Read on demand by the Portal (GET /portal/api/shared-code) and kept for an hour in KV:
 // a few dozen GitHub reads per refresh, not per watcher pass. Read-only: it writes
-// nothing but its own cache.
+// nothing but its own cache. The key's version moves when the view's shape does, so a
+// cached answer without the newer fields is never served.
 
-export const SHARED_CODE_CACHE_KEY = "portal:shared-code:v1";
+export const SHARED_CODE_CACHE_KEY = "portal:shared-code:v2";
 const CACHE_TTL_SECONDS = 3600;
 const MANIFESTS_PER_APP = 8;
 const TAGS_PER_PAGE = 100;
@@ -54,7 +65,7 @@ function jsonList(raw: string | null | undefined): string[] {
   }
 }
 
-async function readSharedConfig(db: D1Database): Promise<SharedConfig[]> {
+export async function readSharedConfig(db: D1Database): Promise<SharedConfig[]> {
   const { results } = await db.prepare("SELECT name, repo, formerly, local_paths FROM shared_packages ORDER BY name LIMIT 50").all<SharedRow>();
   return (results ?? []).map((r) => ({ name: r.name, repo: r.repo, formerly: jsonList(r.formerly), local_paths: jsonList(r.local_paths) }));
 }
@@ -111,6 +122,56 @@ export function behindBy(pinned: string | null, tags: readonly string[]): number
   }).length;
 }
 
+/** What a repo's root package.json says about a release: the name npm knows it by, its
+ *  version, and whether it is private (never published). */
+export interface RootManifest {
+  name: string | null;
+  version: string | null;
+  private: boolean;
+}
+
+/** The release fields of a package.json's text. Throws when it is not a JSON object. */
+export function rootManifest(raw: string): RootManifest {
+  const j: unknown = JSON.parse(raw);
+  if (!j || typeof j !== "object" || Array.isArray(j)) throw new Error("package.json is not a JSON object");
+  const o = j as Record<string, unknown>;
+  return { name: typeof o.name === "string" ? o.name : null, version: typeof o.version === "string" ? o.version : null, private: o.private === true };
+}
+
+/**
+ * What a package's version asks for, given the repo's tags:
+ * - tagged: a tag names this version already (v1.2.3 or 1.2.3);
+ * - tag: no tag names it and it is newer than every release tag, so it is the next release;
+ * - backwards: no tag names it but a newer release tag exists. Never tagged: the tag would
+ *   start bump-consumers on an older version and move the apps backwards. Listed instead;
+ * - not-a-release: no version, or not a plain x.y.z (a pre-release is tagged by hand).
+ */
+export type ReleaseDecision =
+  | { kind: "tagged"; tag: string }
+  | { kind: "tag"; tag: string; newest: string | null }
+  | { kind: "backwards"; tag: string; newest: string }
+  | { kind: "not-a-release"; version: string | null };
+
+export function releaseDecision(version: string | null, tags: readonly string[]): ReleaseDecision {
+  const v = version !== null && /^\d+\.\d+\.\d+$/.test(version) ? semver(version) : null;
+  if (!v) return { kind: "not-a-release", version };
+  const existing = tags.find((t) => {
+    const s = semver(t);
+    return s !== null && cmp(s, v) === 0;
+  });
+  if (existing) return { kind: "tagged", tag: existing };
+  const tag = `v${version}`;
+  const newest = latestTag(tags);
+  if (newest && cmp(v, semver(newest)!) < 0) return { kind: "backwards", tag, newest };
+  return { kind: "tag", tag, newest };
+}
+
+/** What was read of a package's own repo and of npm, or why the repo was not read. */
+export interface ReleaseRead {
+  manifest: RootManifest | string;
+  npm: PackageSnapshot["npm"] | null;
+}
+
 interface AppRead {
   namespace: string;
   name: string;
@@ -122,7 +183,13 @@ interface AppRead {
 }
 
 /** The view, from what was read. Pure, so every rule is tested without GitHub. */
-export function sharedCodeView(config: readonly SharedConfig[], tags: ReadonlyMap<string, string[] | string>, apps: readonly AppRead[], now: Date): SharedCodeView {
+export function sharedCodeView(
+  config: readonly SharedConfig[],
+  tags: ReadonlyMap<string, string[] | string>,
+  apps: readonly AppRead[],
+  now: Date,
+  releases: ReadonlyMap<string, ReleaseRead> = new Map()
+): SharedCodeView {
   const packages: SharedCodePackage[] = config.map((pkg) => {
     const names = new Set([pkg.repo, ...pkg.formerly].map((r) => r.toLowerCase()));
     const t = tags.get(pkg.name);
@@ -154,11 +221,13 @@ export function sharedCodeView(config: readonly SharedConfig[], tags: ReadonlyMa
       const present = blobs ? [...blobs].some((b) => b === path || b.startsWith(`${path}/`)) : null;
       return { namespace, path, present };
     });
+    const release = releaseFields(releases.get(pkg.name), Array.isArray(t) ? list : null);
     return {
       name: pkg.name,
       repo: pkg.repo,
       latest,
       tags_error: typeof t === "string" ? t : null,
+      ...release,
       users,
       behind: users.filter((u) => (u.behind ?? 0) > 0).length,
       local_copies: local,
@@ -175,7 +244,56 @@ export function sharedCodeView(config: readonly SharedConfig[], tags: ReadonlyMa
   };
 }
 
+type ReleaseFields = Pick<SharedCodePackage, "version" | "untagged" | "private" | "npm_latest" | "npm_note" | "manifest_error">;
+
+/** A package's release fields. Untagged only when the tags were read and none names the
+ *  version: without the tags it is unknown, and unknown is not untagged. */
+function releaseFields(read: ReleaseRead | undefined, tags: readonly string[] | null): ReleaseFields {
+  const unread = { version: null, untagged: false, private: false, npm_latest: null, npm_note: null };
+  if (!read) return { ...unread, manifest_error: null };
+  if (typeof read.manifest === "string") return { ...unread, manifest_error: read.manifest };
+  const m = read.manifest;
+  const decision = tags ? releaseDecision(m.version, tags) : null;
+  const untagged = decision?.kind === "tag" || decision?.kind === "backwards";
+  let npm_latest: string | null = null;
+  let npm_note: string | null = null;
+  if (m.private) npm_note = null;
+  else if (!m.name) npm_note = "package.json has no name";
+  else if (!read.npm) npm_note = "npm was not read";
+  else if (read.npm.state === "ok") {
+    npm_latest = read.npm.latest;
+    if (!npm_latest) npm_note = "npm has no latest dist-tag";
+  } else npm_note = read.npm.reason;
+  return { version: m.version, untagged, private: m.private, npm_latest, npm_note, manifest_error: null };
+}
+
 // ---- reading -------------------------------------------------------------------------
+
+/** A repo's root package.json, on its default branch or at `ref`, through the App.
+ *  Uncached: the release-tag rule reads it to decide a write. */
+export async function readRootManifest(env: Env, full: string, ref?: string): Promise<RootManifest> {
+  const [owner, repo] = full.split("/");
+  const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/package.json${query}`);
+  if (!resp.ok) {
+    await resp.body?.cancel();
+    throw new Error(`GitHub answered ${resp.status} for ${full}'s package.json${ref ? ` at ${ref.slice(0, 12)}` : ""}`);
+  }
+  const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
+  if (data.encoding !== "base64" || typeof data.content !== "string") throw new Error(`${full}'s package.json came back without its content`);
+  return rootManifest(base64Decode(data.content));
+}
+
+async function readRelease(env: Env, full: string, fetchImpl: FetchLike): Promise<ReleaseRead> {
+  let manifest: RootManifest;
+  try {
+    manifest = await readRootManifest(env, full);
+  } catch (err) {
+    return { manifest: err instanceof Error ? err.message : String(err), npm: null };
+  }
+  const npm = manifest.private || !manifest.name ? null : await readNpm(fetchImpl, manifest.name);
+  return { manifest, npm };
+}
 
 function depsOf(raw: string): Record<string, string> {
   const j = JSON.parse(raw) as Record<string, unknown>;
@@ -227,7 +345,7 @@ async function readTags(env: Env, full: string): Promise<string[] | string> {
 }
 
 /** The view, from the hour's cache unless `fresh`. A missing table says so. */
-export async function readSharedCode(env: Env, now: Date, fresh = false): Promise<SharedCodeView> {
+export async function readSharedCode(env: Env, now: Date, fresh = false, fetchImpl: FetchLike = (url, init) => fetch(url, init)): Promise<SharedCodeView> {
   if (!fresh) {
     const cached = await env.APP_KV.get(SHARED_CODE_CACHE_KEY);
     if (cached) return JSON.parse(cached) as SharedCodeView;
@@ -245,7 +363,9 @@ export async function readSharedCode(env: Env, now: Date, fresh = false): Promis
   for (const s of sites) apps.push(await readApp(env, s.namespace, s.name));
   const tags = new Map<string, string[] | string>();
   for (const pkg of config) tags.set(pkg.name, await readTags(env, pkg.repo).catch((err: unknown) => (err instanceof Error ? err.message : String(err))));
-  const view = sharedCodeView(config, tags, apps, now);
+  const releases = new Map<string, ReleaseRead>();
+  for (const pkg of config) releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
+  const view = sharedCodeView(config, tags, apps, now, releases);
   await env.APP_KV.put(SHARED_CODE_CACHE_KEY, JSON.stringify(view), { expirationTtl: CACHE_TTL_SECONDS });
   return view;
 }

@@ -197,7 +197,9 @@ export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<s
   return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
 }
 
-async function readNpm(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["npm"]> {
+// Also read by the Shared code view (src/shared-code.ts), for each shared package that is
+// not private, so it can say whether the version in the repo has reached npm.
+export async function readNpm(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["npm"]> {
   const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
   if (!got.ok) return got.status === 404 ? { state: "none", reason: `npm has no package ${name}` } : { state: "error", reason: got.reason };
   const doc = got.json as { "dist-tags"?: Record<string, unknown>; versions?: Record<string, unknown>; modified?: unknown };

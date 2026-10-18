@@ -164,7 +164,8 @@ function seedPackages(): OpsPackageConfig[] {
 // to 2026-06-30, then the current name, a few downloads a day with a weekly rhythm.
 // The Shared code view's answer (src/shared-code.ts), in sample names: one app two
 // releases behind, one current through the repo's old name, a renovate preset, and a
-// local copy still in one app.
+// local copy still in one app; one package on npm at its tagged version, and a private
+// one whose version has no tag yet.
 function sharedCode() {
   const generated = new Date(mockNow() - 20 * 60_000).toISOString();
   return {
@@ -179,6 +180,12 @@ function sharedCode() {
         repo: "example-org/sample-kit",
         latest: "v0.5.0",
         tags_error: null,
+        version: "0.5.0",
+        untagged: false,
+        private: false,
+        npm_latest: "0.5.0",
+        npm_note: null,
+        manifest_error: null,
         users: [
           { namespace: "sample", name: "Sample A", where: "dashboard/package.json", pinned: "v0.5.0", behind: 0, via_old_name: false },
           { namespace: "sample-b", name: "Sample B", where: "package.json", pinned: "v0.3.0", behind: 2, via_old_name: false },
@@ -196,6 +203,12 @@ function sharedCode() {
         repo: "example-org/sample-devkit",
         latest: "v1.2.0",
         tags_error: null,
+        version: "1.3.0",
+        untagged: true,
+        private: true,
+        npm_latest: null,
+        npm_note: null,
+        manifest_error: null,
         users: [{ namespace: "sample", name: "Sample A", where: "renovate", pinned: null, behind: null, via_old_name: false }],
         behind: 0,
         local_copies: [],
@@ -206,6 +219,12 @@ function sharedCode() {
         repo: "example-org/sample-dump",
         latest: null,
         tags_error: "GitHub answered 404 for example-org/sample-dump's tags",
+        version: null,
+        untagged: false,
+        private: false,
+        npm_latest: null,
+        npm_note: null,
+        manifest_error: "GitHub answered 404 for example-org/sample-dump's package.json",
         users: [],
         behind: 0,
         local_copies: [],
