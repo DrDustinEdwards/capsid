@@ -10,7 +10,7 @@ import { readSiteRow, sitesFrom } from "./ops-sites";
 // index status (URL Inspection), and the property's sitemaps.
 //
 // ONE CREDENTIAL, READ-ONLY. A Google service account whose JSON key is the secret
-// GSC_SERVICE_ACCOUNT_KEY, added by Dustin as a Restricted user on each property. It
+// GSC_SERVICE_ACCOUNT_KEY, added by Dustin as a Full user on each property (Restricted hides some data). It
 // asks only for the webmasters.readonly scope (conventions.md rule 4), so nothing here
 // can submit a sitemap, remove a URL or add a user. The access token lives in this
 // isolate's memory only, never in KV or a log.
@@ -202,7 +202,7 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
   const property = pickProperty(site.origin, sites?.siteEntry ?? []);
   if (!property) {
     throw new Error(
-      `The service account (${key.client_email}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.client_email} as a Restricted user.`
+      `The service account (${key.client_email}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.client_email} as a Full user.`
     );
   }
   const base = { namespace, origin: site.origin, property, report };
