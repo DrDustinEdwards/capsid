@@ -5,7 +5,8 @@ import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
 // close-once UPDATE and the triggers of migrations/0047 are only true of real SQLite.
-// The key is derived here the way the Worker derives it, from the root the config binds.
+// The bench key is the BENCH_SECRET the config binds, used as is; ROOT signs the
+// improve-key request the wrong-key test sends.
 
 const ROOT = "integration-root-secret-not-a-real-one";
 
@@ -15,8 +16,7 @@ async function hmacHex(key: string, message: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// The derivation as src/improve-scorer.ts spells it: a contract with the bench repo.
-const benchKey = () => hmacHex(ROOT, "capsid-bench:v1");
+const benchKey = async () => "integration-bench-secret-not-a-real-one";
 
 async function post(path: string, body: Record<string, unknown>, key?: string) {
   const text = JSON.stringify({ jti: crypto.randomUUID(), ...body });

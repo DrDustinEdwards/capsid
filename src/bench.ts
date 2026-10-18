@@ -8,9 +8,9 @@ import { logEvent } from "./log";
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
 //
 // The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid
-// through three endpoints, signed like the improve scorer's (one key derived from
-// IMPROVE_SCORE_SECRET under "capsid-bench:v1", the same timestamp window, the same
-// replay cache under its own scope) and not under /ops/ for the scorer's reason:
+// through three endpoints, signed like the improve scorer's (its own key, the Worker
+// secret BENCH_SECRET, the same timestamp window, the same replay cache under its own
+// scope) and not under /ops/ for the scorer's reason:
 //
 //   /bench/tasks  register a task and its hidden test counts, once
 //   /bench/start  open a run, behind the off switch and the concurrency cap

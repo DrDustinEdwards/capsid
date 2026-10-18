@@ -53,8 +53,7 @@ if (!namespace) {
   die(
     `no namespace given. Usage: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs <namespace>\n` +
       `  namespaces: ${LOOP_ROSTER.join(", ")}\n` +
-      `  or: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs --backup-credential\n` +
-      `  or: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs --bench`
+      `  or: IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs --backup-credential`
   );
 }
 if (!root) {
@@ -75,16 +74,6 @@ if (namespace === "--backup-credential") {
   console.error("improve-derive-key: derived the backup credential key. Set it as the repo secret BACKUP_CREDENTIAL_KEY");
   console.error("improve-derive-key: on DrDustinEdwards/capsid-backups (the mirror) and DrDustinEdwards/capsid (the restore rehearsal).");
   process.stdout.write(`${backupKey}\n`);
-  process.exit(0);
-}
-
-// The capsid-bench repo's key, for the paired comparison's three endpoints
-// (src/bench.ts). Must match deriveBenchKey in src/improve-scorer.ts exactly;
-// test/bench.test.ts runs this branch and compares the key with the Worker's.
-if (namespace === "--bench") {
-  const benchKey = createHmac("sha256", root).update("capsid-bench:v1").digest("hex");
-  console.error("improve-derive-key: derived the bench key. Set it as the repo secret BENCH_KEY on DrDustinEdwards/capsid-bench.");
-  process.stdout.write(`${benchKey}\n`);
   process.exit(0);
 }
 
