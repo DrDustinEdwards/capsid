@@ -115,3 +115,35 @@ test("a broken map keeps the last code document and is reported, and the model i
   assert.equal(doc.maps[0].modules[0].functions[0].crap, 210);
   assert.equal(PUBLIC_DOCS.code.key, PUBLIC_CODE_KEY);
 });
+
+test("later the same day the code maps alone are rebuilt hourly, and the model is left alone", async () => {
+  const kv = fakeKv();
+  let map: unknown = sampleMap();
+  let listed = 0;
+  const readers: PublicBuildReaders = {
+    listRepos: async () => {
+      listed++;
+      return { repos: ALL.map((n): InstalledRepo => ({ full_name: `DrDustinEdwards/${n}`, private: PRIVATE_REPOS.has(n), archived: false, pushed_at: null })) };
+    },
+    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined }),
+    codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? map : null),
+  };
+  const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
+  assert.ok((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), NOW, readers)).ran);
+  const model = kv.store.get(PUBLIC_MODEL_KEY);
+  map = { ...sampleMap(), sha: "c".repeat(40) };
+
+  assert.equal((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(59), readers)).ran, false, "rebuilt within the hour");
+  const later = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(60), readers);
+  assert.ok(later.ran && !("codeFailed" in later), later.note);
+  assert.match(later.note, /^code maps only/);
+  assert.equal(PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha, "c".repeat(40));
+  assert.equal(kv.store.get(PUBLIC_MODEL_KEY), model);
+  assert.equal(listed, 2, "the hourly rebuild must read visibility again, so a repo made private drops out");
+
+  map = { version: 2 };
+  const broken = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(120), readers);
+  assert.ok(broken.ran && "codeFailed" in broken);
+  assert.equal(PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha, "c".repeat(40));
+  assert.equal((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(125), readers)).ran, false, "a broken map retried every tick");
+});

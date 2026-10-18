@@ -182,7 +182,7 @@ export async function tickRuns(env: Env, now: Date): Promise<TickOutcome[]> {
 
   // The public system model (src/public-data.ts): once a UTC day, repo visibility read
   // from GitHub, the model filtered by toPublic and stored for /public/model/v1.json,
-  // and the public repos' code maps for /public/code/v1.json. A
+  // and the public repos' code maps for /public/code/v1.json, rebuilt hourly. A
   // failed read throws before anything is written, so the last good document stays
   // served and the ledger shows the failure. Not due is not a run.
   await runTask(
