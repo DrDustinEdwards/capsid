@@ -44,9 +44,20 @@ export interface CompositeSpec {
 
 const optional = (t: ZodType): boolean => t.safeParse(undefined).success;
 
+// A schema's shape without its descriptions: two actions' `namespace` differ only in wording,
+// while search's and bing's `report` differ in the values they accept.
+function shapeKey(t: ZodType): string {
+  const strip = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(strip) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "description").map(([k, x]) => [k, strip(x)])) : v;
+  return JSON.stringify(strip(z.toJSONSchema(t, { unrepresentable: "any" })));
+}
+
 function mergedShape(ops: Operations, spec: CompositeSpec): Shape {
   const actions = Object.values(spec.actions);
   const first = new Map<string, ZodType>();
+  // Every differently shaped schema a key has across the actions, so the tool's schema
+  // accepts what any action does; each operation still checks its own (Operations.run).
+  const variants = new Map<string, Map<string, ZodType>>();
   const requiredBy = new Map<string, number>();
   for (const a of actions) {
     for (const [key, type] of Object.entries(ops.config(a.op).inputSchema)) {
@@ -54,7 +65,18 @@ function mergedShape(ops: Operations, spec: CompositeSpec): Shape {
       if (a.fields && !a.fields.includes(key)) continue;
       if (key === "action") throw new Error(`${spec.name}: operation ${a.op} takes its own 'action', which the tool's action must fix through inject`);
       if (!first.has(key)) first.set(key, type as ZodType);
+      const seen = variants.get(key) ?? new Map<string, ZodType>();
+      const k = shapeKey(type as ZodType);
+      if (!seen.has(k)) seen.set(k, type as ZodType);
+      variants.set(key, seen);
       if (!optional(type as ZodType)) requiredBy.set(key, (requiredBy.get(key) ?? 0) + 1);
+    }
+  }
+  for (const [key, seen] of variants) {
+    if (seen.size > 1) {
+      const types = [...seen.values()] as [ZodType, ZodType, ...ZodType[]];
+      const union = z.union(types);
+      first.set(key, types.every(optional) ? union.optional() : union);
     }
   }
   const names = Object.keys(spec.actions) as [string, ...string[]];

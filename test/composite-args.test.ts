@@ -62,3 +62,14 @@ test("THE INNOCENT DIRECTION: the arguments an action takes go through to its op
   const r = await call("capsid_close_pr", { action: "merge", namespace: "sample", number: 7, merge_method: "squash" });
   assert.doesNotMatch(r.text, /does not take/);
 });
+
+test("PLANT: two actions that share an argument name with different values each accept their own", async () => {
+  // search's report is performance | inspect | sitemaps; bing's adds queries, traffic and more.
+  // The tool's schema once kept only the first action's, so bing's own reports were refused.
+  const bing = await call("capsid_inspect_repo", { action: "bing", namespace: "sample", report: "traffic" });
+  assert.doesNotMatch(bing.text, /Invalid option|Input validation error/);
+  const wrong = await call("capsid_inspect_repo", { action: "search", namespace: "sample", report: "traffic" });
+  assert.equal(wrong.isError, true);
+  assert.match(wrong.text, /report/);
+  assert.equal(wrong.fetches, 0);
+});
