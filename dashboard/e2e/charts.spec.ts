@@ -44,8 +44,10 @@ test("PLANT: chart 10, the backup slots, counts each period's kept runs", async 
 test("a missing backup slot is a full-height mark, not an underline", async ({ page }) => {
   await visit(page, "health");
   const daily = page.locator('#backup-slots [data-slots="daily"]').getByRole("img", { name: /Daily backups/ });
+  // evaluateAll does not wait, so wait for the 14 marks first: read at once, the chart
+  // can still be unrendered and give none.
+  await expect(daily.locator("rect")).toHaveCount(14);
   const heights = await daily.locator("rect").evaluateAll((rs) => rs.map((r) => r.getBoundingClientRect().height));
-  expect(heights.length).toBe(14);
   expect(Math.min(...heights)).toBeGreaterThan(Math.max(...heights) - 2);
 });
 

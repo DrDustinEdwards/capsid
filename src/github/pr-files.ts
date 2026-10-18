@@ -44,6 +44,9 @@ export interface PrFiles {
   // The existing tests the pull request changes (existingTestEdits below). Auto-merge
   // never merges one unattended (src/merge-class.ts).
   testEdits: string[];
+  // The rows as GitHub listed them, with each file's status and a rename's old name. The
+  // stale canon check reads what was removed or renamed (src/stale-canon.ts).
+  rows: PrFileRow[];
 }
 
 export interface PrFileRow {
@@ -87,5 +90,5 @@ export async function readPrFiles(env: Env, owner: string, repo: string, number:
   const paths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
   const counted = files.items.every((f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions));
   const changedLines = counted ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0) : null;
-  return { paths, problem, changedLines, testEdits: existingTestEdits(files.items) };
+  return { paths, problem, changedLines, testEdits: existingTestEdits(files.items), rows: files.items };
 }
