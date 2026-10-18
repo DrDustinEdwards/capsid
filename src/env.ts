@@ -54,6 +54,8 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   ANTHROPIC_API_KEY?: string;
   // Root secret the per-namespace score-report HMAC keys are derived from.
   IMPROVE_SCORE_SECRET?: string;
+  // The capsid-bench repo's signing key (src/bench.ts), the same value as its BENCH_KEY secret.
+  BENCH_SECRET?: string;
   // Holdout mint only; omitted from AttemptEnv; only improve-scorer.ts may name the token.
   R2_TEMP_CRED_TOKEN?: string;
   R2_TEMP_CRED_PARENT_ACCESS_KEY_ID?: string;

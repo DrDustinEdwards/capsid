@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { join } from "node:path";
 import { test } from "node:test";
 import { parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
-import { deriveBackupCredentialKey, deriveBenchKey, deriveScoreKey } from "../src/improve-scorer.ts";
-import { LOOP_ROSTER } from "../src/improve-schema.ts";
+import { createHmac } from "node:crypto";
+import { verifyBenchRequest } from "../src/improve-scorer.ts";
 
 // The paired comparison's outcome rules (src/bench.ts runOutcome). These decide the
 // paper's primary outcome, the false success claim, so each rule is pinned here; the
@@ -58,15 +56,14 @@ test("a report claiming more passed than ran is refused, not scored", () => {
   assert.equal(parsed.ok, false);
 });
 
-test("the bench key is its own, and scripts/improve-derive-key.mjs --bench derives the Worker's", async () => {
-  const root = "root-secret";
-  const bench = await deriveBenchKey(root);
-  assert.notEqual(bench, await deriveBackupCredentialKey(root));
-  for (const namespace of LOOP_ROSTER) assert.notEqual(bench, await deriveScoreKey(root, namespace));
-  const result = spawnSync(process.execPath, [join(import.meta.dirname, "..", "scripts", "improve-derive-key.mjs"), "--bench"], {
-    encoding: "utf8",
-    env: { ...process.env, IMPROVE_SCORE_SECRET: root },
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, `${bench}\n`);
+test("the bench key is BENCH_SECRET used as is, and an unset secret refuses", async () => {
+  const now = new Date("2026-10-18T12:00:00Z");
+  const timestamp = now.toISOString();
+  const body = "{}";
+  const sign = (key: string) => createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex");
+  assert.deepEqual(await verifyBenchRequest({ BENCH_SECRET: "bench-secret" }, { timestamp, signature: sign("bench-secret"), body }, now), { ok: true });
+  const wrong = await verifyBenchRequest({ BENCH_SECRET: "bench-secret" }, { timestamp, signature: sign("other"), body }, now);
+  assert.equal(wrong.ok, false);
+  const unset = await verifyBenchRequest({}, { timestamp, signature: sign("bench-secret"), body }, now);
+  assert.equal(!unset.ok && unset.status, 503);
 });

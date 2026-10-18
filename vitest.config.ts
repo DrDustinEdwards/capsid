@@ -106,6 +106,8 @@ export default defineConfig({
           // this root exactly as the Worker does, so a signature that verifies here
           // verifies for the right reason rather than because both sides are stubs.
           IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one",
+          // The bench endpoints' own key (src/bench.ts), not derived from the root.
+          BENCH_SECRET: "integration-bench-secret-not-a-real-one",
           // The MCP and Portal logins' Access for SaaS app (src/access-login.ts). A fake team domain;
           // the tests stub its token and JWKS endpoints.
           ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",

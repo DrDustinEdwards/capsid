@@ -4,12 +4,16 @@ The methods paper compares Claude Code used well with the same model working thr
 
 ## The three endpoints
 
-All three are signed like the improve scorer's endpoints: `X-Bench-Timestamp` and `X-Bench-Signature`, an HMAC over `timestamp.body` with the bench key, a 30-minute window either side, and a `jti` in the body that is accepted once. The bench key is derived from `IMPROVE_SCORE_SECRET`, so the Worker holds no new secret:
+All three are signed like the improve scorer's endpoints: `X-Bench-Timestamp` and `X-Bench-Signature`, an HMAC over `timestamp.body` with the bench key, a 30-minute window either side, and a `jti` in the body that is accepted once. The bench key is its own Worker secret, `BENCH_SECRET`, used as is and not derived from `IMPROVE_SCORE_SECRET`, so no improve or backup key opens these endpoints and rotating it touches nothing else. Unset, every bench request is refused with 503. Set the same fresh value on both sides at once, so it never sits in a file or a chat:
 
 ```
-IMPROVE_SCORE_SECRET=... node scripts/improve-derive-key.mjs --bench \
-  | gh secret set BENCH_KEY --repo DrDustinEdwards/capsid-bench
+$k = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+$k | npx wrangler secret put BENCH_SECRET --name capsid
+$k | gh secret set BENCH_KEY --repo DrDustinEdwards/capsid-bench
+Remove-Variable k
 ```
+
+(PowerShell. `--name capsid` lets wrangler run without a local `wrangler.jsonc`.)
 
 - `POST /bench/tasks` registers a task with its source, split (`pilot`, `full` or `excluded`), repo, issue date and the counts of its `FAIL_TO_PASS` and `PASS_TO_PASS` tests. The same registration again is a no-op; a different one is refused. A task is never updated, and a task with a run cannot be deleted (triggers in the migration).
 - `POST /bench/start` opens a run for a task and an arm: `baseline`, `treatment`, or one of the two planted arms that call no model, `check-gold` (the upstream fix; must score resolved) and `check-false-claim` (an empty diff that claims done; must score a false claim). It returns the run id.
