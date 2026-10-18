@@ -13,6 +13,7 @@ import { parseEvidence } from "../job-outcomes";
 import { claimSchema } from "../job-claims";
 import { staleJobs } from "../stale-jobs";
 import { jobTextRefusal, missingPartsWarning } from "../job-body-check";
+import { factCheckBody } from "../job-fact-check";
 import { fail, ok, type ToolCtx } from "./docs";
 
 const MAX_JOB_ID = 64;
@@ -22,11 +23,14 @@ const MAX_JOB_ID = 64;
 const MAX_EVIDENCE_PRS = 10;
 
 // The caller-facing body checks (src/job-body-check.ts): post refuses an unfilled placeholder
-// here, edit inside editJob once the caller is known to be the seat, and both warn when a
-// body lacks the five headed parts.
-function withWarnings(result: JobResult, body: string | undefined): JobResult {
-  const warning = result.ok && body !== undefined ? missingPartsWarning(body) : null;
-  return warning ? { ...result, warnings: [warning] } : result;
+// and a claim read as false (src/job-fact-check.ts) here, edit inside editJob once the caller
+// is known to be the seat, and both warn when a body lacks the five headed parts or states a
+// claim that could not be checked.
+function withWarnings(result: JobResult, body: string | undefined, facts: string[] = []): JobResult {
+  if (!result.ok) return result;
+  const missing = body === undefined ? null : missingPartsWarning(body);
+  const warnings = [...(result.warnings ?? []), ...facts, ...(missing ? [missing] : [])];
+  return warnings.length > 0 ? { ...result, warnings } : result;
 }
 
 // A refusal is an error to the client (isError true), so a client that keys on
@@ -46,7 +50,7 @@ export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
     {
       description:
         `The work queue. Each job mirrors to <namespace>/jobs/<id>.md. list needs the read grant; every other action needs the write grant. "Seat" below means the admin or a can_merge caller. Full rules: docs/work-queue.md.
-post: queue a job from namespace, title and body. The body is signed; a driver refuses one that does not verify. Refused while another open job has the same (namespace, title), or when the title or body holds an unfilled placeholder (<ID>, {{...}}, TODO:, TBD) outside a code block; warns when the body lacks GOAL, DO, OUT OF SCOPE, DONE WHEN or DECIDED/RULES parts.
+post: queue a job from namespace, title and body. The body is signed; a driver refuses one that does not verify. Refused while another open job has the same (namespace, title), or when the title or body holds an unfilled placeholder (<ID>, {{...}}, TODO:, TBD) outside a code block; warns when the body lacks GOAL, DO, OUT OF SCOPE, DONE WHEN or DECIDED/RULES parts. A body stating as done that a PR merged, a version was tagged or published to npm is checked and refused when false.
 list: filter by namespace, status and id, without bodies; one named id returns its body and edit versions to a writer. stale: true returns blocked or claimed jobs that look stuck (unchanged, resumed-not-completed, prs-settled, steps-seen). view: plan, digest or models.
 claim: take the top queued job in a namespace, or a named id. The claim never expires. Returns the recommended model. Refused without the job's required_flags or min_record, or while the namespace's breaker is open.
 begin: label a queued job started (who, when). Verifies the body's signature; never refuses otherwise.
@@ -241,6 +245,8 @@ block and complete act only on a job this caller holds, except as stated above.`
             }
             const unfilled = jobTextRefusal(args.title, args.body);
             if (unfilled) return reply({ ok: false, action: "post", refusal: unfilled });
+            const facts = await factCheckBody(env, args.namespace, args.body);
+            if (facts.refusal) return reply({ ok: false, action: "post", refusal: facts.refusal });
             return reply(
               withWarnings(await postJob(env, agent, now, {
                 namespace: args.namespace,
@@ -252,7 +258,7 @@ block and complete act only on a job this caller holds, except as stated above.`
                 min_record: args.min_record,
                 review_required: args.review_required,
                 kind: args.kind,
-              }), args.body)
+              }), args.body, facts.warnings)
             );
           }
           case "claim":

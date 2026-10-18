@@ -186,7 +186,8 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 
 /** The versions npm has published for `name`, or null when npm has no such package. A
  *  failed read throws, so a caller cannot read it as "not published". For a blocked
- *  job's "check: npm <name>@<version>" line (src/manual-steps.ts). */
+ *  job's "check: npm <name>@<version>" line (src/manual-steps.ts) and the job body fact
+ *  check (src/job-fact-check.ts). */
 export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<string[] | null> {
   const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
   if (!got.ok) {
