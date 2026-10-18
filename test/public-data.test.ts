@@ -37,7 +37,7 @@ function githubSays(names: string[]): PublicBuildReaders {
 }
 const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", ...PRIVATE_REPOS];
 
-test("the build runs once a UTC day and stores the filtered bundled model", async () => {
+test("the model is built once a UTC day and stores the filtered bundled model", async () => {
   const kv = fakeKv();
   const env = fakeEnv({ APP_KV: kv.kv });
   const first = await publicBuildTick(env, NOW, githubSays(ALL));
@@ -58,8 +58,9 @@ test("the build runs once a UTC day and stores the filtered bundled model", asyn
   assert.deepEqual(stats.systems, { public: 12, private: 5 });
   assert.equal(stats.as_of, "2026-10-11");
 
+  // Later that day only the code maps are rebuilt (test/public-code.test.ts).
   const again = await publicBuildTick(env, new Date("2026-10-11T23:55:00Z"), githubSays(ALL));
-  assert.equal(again.ran, false, "it ran twice in one UTC day");
+  assert.match(again.note, /^code maps only/, "the model was built twice in one UTC day");
   assert.equal(kv.puts.filter((p) => p.key === PUBLIC_MODEL_KEY).length, 1);
 });
 
