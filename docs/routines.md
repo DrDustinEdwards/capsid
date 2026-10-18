@@ -13,7 +13,7 @@ One routine serves every namespace Capsid starts work for (job_77b45a741ddc). To
 | name | `Capsid` |
 | repository | every namespace's primary repo. The routine clones them all, and the session works in the one its job's namespace names. |
 | model | Opus. The routine plans, reviews and opens the pull request on Opus and hands the build to a subagent on the job's `model_recommended` (below), so one routine serves every job kind. |
-| environment | `Default`, with the network secret that adds the cloud-driver key to requests for `mcp.dustinedwards.info` on path `/ops/mcp` |
+| environment | `DCE` (Dustin's environment, the project default since 2026-10-13), with the network secret that adds the cloud-driver key to requests for `mcp.dustinedwards.info` on path `/ops/mcp`. Checked 2026-10-18: the key is added and `/ops/mcp` answers. DCE's allowed domains must also carry `dustinedwards.info` and `*.dustinedwards.info`, or a session cannot read the sites or the Portal. |
 | connectors | none. Remove every claude.ai connector the form adds by default. Capsid reaches the session through the repo's committed, keyless `.mcp.json` and the network secret, never as a claude.ai connector, so the session holds no key and no other service. |
 | triggers | API only |
 
@@ -127,6 +127,8 @@ It can read and write every namespace's documents and jobs and open pull request
 4. Each other repo gets the keyless `.mcp.json` in its own pull request first, as a separate job.
 5. The seat fires one real queued job with action `fire` and watches the returned session URL.
 
-## Projects, the likely successor
+## Projects, where most work now runs
 
-Claude Code Projects (code.claude.com/docs/en/claude-projects) are the likely successor to firing a routine per job: a project groups repos and sessions. Nothing is built for it. It would be re-evaluated when it is available on the account.
+Since 2026-10-13 most Capsid work runs in a Claude Code Project (code.claude.com/docs/en/claude-projects), not through a fired routine. The project's coordinator starts one thread session per ask; each thread runs on the project's environment (DCE), works in the project's repos, and reaches Capsid as a claude.ai connector under Dustin's login, so a thread acts as the seat. A thread opens a pull request for every change, names its job on the PR template's first line (`Job:`), and merges once CI is green on the exact head, except a visual change, which waits for Dustin's yes on its screenshots (capsid/conventions.md 4.3). Threads report in the project, not in Capsid.
+
+The routine and action `fire` stay for a job the seat wants run unattended, outside a project thread. Nothing in Capsid tracks project threads; a thread that completes a job does so as Dustin's login (dropped by Dustin 2026-10-17: crediting the exact thread needs a hand-applied column, and the Portal's numbers are already right).
