@@ -51,7 +51,18 @@ import {
 // It refuses a job that is already finished rather than rewriting one, and says so
 // rather than reporting a no-op as success. The mirror and audit row ride in the same
 // guarded batch as every other transition.
-export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
+//
+// `opts.extra` rides in the same guarded batch, so a caller's own write commits only
+// with the fail; `opts.outcome: false` writes no outcome row, for a fail that is not the
+// holder's (the bench score step, src/bench.ts finishRun).
+export async function adminFailJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  reason: string,
+  opts: { extra?: D1PreparedStatement[]; outcome?: boolean } = {}
+): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
     return refuse(
       "admin-fail",
@@ -94,11 +105,11 @@ export async function adminFailJob(env: Env, agent: Agent, now: Date, id: string
   // Only when somebody held it. A queued job the seat cancelled was never worked, and
   // inventing an agent would put a failure on a credential that had not touched the
   // job. No evidence argument either: the seat did not do the work.
-  if (job.claimed_by) {
+  if (job.claimed_by && opts.outcome !== false) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
     statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id))));
   }
-  if (!(await guardedTransition(env, current, statements))) {
+  if (!(await guardedTransition(env, current, [...statements, ...(opts.extra ?? [])]))) {
     const moved = await readJob(env.DB, id);
     return refuse(
       "admin-fail",
@@ -338,12 +349,15 @@ export function workRecorded(job: JobRow): string | null {
   return done.length ? done.join(", ") : null;
 }
 
+// `extra` rides in the same guarded batch, so a caller's own write commits only with the
+// supersede (the bench score step, src/bench.ts finishRun).
 export async function supersedeJob(
   env: Env,
   agent: Agent,
   now: Date,
   id: string,
-  args: { reason: string; replaced_by?: string }
+  args: { reason: string; replaced_by?: string },
+  extra: D1PreparedStatement[] = []
 ): Promise<JobResult> {
   const reason = args.reason?.trim();
   if (!reason) {
@@ -421,6 +435,7 @@ export async function supersedeJob(
       sinceGate: false, // only a queued or claimed job is superseded, so no gate is open
       at: now.toISOString(),
     }),
+    ...extra,
   ]);
   if (!won) {
     const moved = await readJob(env.DB, id);
