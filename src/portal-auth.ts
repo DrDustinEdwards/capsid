@@ -2,7 +2,7 @@ import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin
 import { getCookie, hmacHex, isAdminEmail, timingSafeEqual } from "./auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
-import { isPortalHost, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
+import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 
 // Capsid Portal's own session. The OAuth provider mints tokens for MCP clients, and a
 // browser opening /portal has nothing to present, so the Portal signs in through the
@@ -116,9 +116,10 @@ export function startPortalLogin(request: Request, env: Env, returnTo: string): 
 }
 
 /** /portal itself or a path under /portal/. A bare startsWith("/portal") would also
- *  pass /portalx. */
+ *  pass /portalx, and /portal//host would leave the origin once /portal is cut off. */
 function isPortalPath(path: string): boolean {
-  return path === PORTAL_PATH || path.startsWith(PORTAL_PREFIX);
+  if (path === PORTAL_PATH) return true;
+  return path.startsWith(PORTAL_PREFIX) && isSameOriginPath(path.slice(PORTAL_PATH.length));
 }
 
 export async function handlePortalCallback(request: Request, env: Env, now: Date): Promise<Response> {

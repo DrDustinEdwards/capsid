@@ -44,6 +44,12 @@ export function publicPortalPath(url: URL, internal: string): string {
   return internal.startsWith(PORTAL_PREFIX) ? internal.slice(PORTAL_PATH.length) : internal;
 }
 
+/** A path the browser may be sent to on this origin: one leading slash and no backslash.
+ *  "//host/x" and "/\\host/x" are protocol-relative to a browser and would leave the origin. */
+export function isSameOriginPath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.includes("\\");
+}
+
 /** On the Portal host: a redirect for an old /portal path, or the request rewritten to its
  *  internal /portal path. Anywhere else: the request unchanged. */
 export function portalHostRequest(request: Request): { redirect: Response } | { request: Request } {
@@ -52,7 +58,11 @@ export function portalHostRequest(request: Request): { redirect: Response } | { 
   const path = url.pathname;
   const underPortal = path === PORTAL_PATH || path.startsWith(PORTAL_PREFIX);
   if (underPortal && !path.startsWith(PORTAL_ASSETS_PREFIX)) {
-    const target = new URL(publicPortalPath(url, path) + url.search, url.origin);
+    const publicPath = publicPortalPath(url, path);
+    // /portal//attacker.example would otherwise become a 308 to https://attacker.example/,
+    // carrying an OAuth code or a phishing visitor off the host (Grok audit 2026-10, C1).
+    if (!isSameOriginPath(publicPath)) return { redirect: new Response("Not found", { status: 404 }) };
+    const target = new URL(publicPath + url.search, url.origin);
     // 308 keeps the method and body, so a stray POST to an old address is not turned
     // into a GET.
     return { redirect: new Response(null, { status: 308, headers: { Location: target.toString(), "Cache-Control": "no-store" } }) };
