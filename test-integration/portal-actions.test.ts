@@ -441,6 +441,8 @@ const CASES: Record<string, Case> = {
     // and loading as the Worker's copy. The preview binds the file's hash.
     params: async () => {
       await signedPolicy();
+      // The App's token for the repo, as pr_close seeds it, and the file the repo holds.
+      await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
       repoPolicy = policyText("8");
       return { confirm: "8" };
     },
