@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
+import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING, BENCH_REPEATS } from "../src/bench";
 
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
@@ -91,20 +91,70 @@ describe("bench endpoints", () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
     const opened: string[] = [];
-    // Earlier tests may hold slots; fill whatever is left, then expect a refusal.
+    // Earlier tests may hold slots; fill whatever is left, then expect a refusal. A
+    // planted arm, so the per-task repeat cap does not refuse first.
     for (let i = 0; i <= BENCH_MAX_RUNNING; i++) {
-      const response = await start(task_id);
+      const response = await start(task_id, "check-gold");
       if (response.status === 429) break;
       expect(response.status).toBe(200);
       opened.push(((await response.json()) as { run_id: string }).run_id);
     }
-    expect((await start(task_id)).status).toBe(429);
+    expect((await start(task_id, "check-gold")).status).toBe(429);
     const running = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_runs WHERE status = 'running'").first<{ n: number }>();
     expect(running?.n).toBe(BENCH_MAX_RUNNING);
     // Close every running row, this test's and earlier ones', so later tests start clean.
     const { results } = await env.DB.prepare("SELECT id FROM bench_runs WHERE status = 'running'").all<{ id: string }>();
     for (const row of results) expect((await score(row.id, { environment: { ok: false, reason: "test cleanup" } })).status).toBe(200);
     expect((await start(task_id)).status).toBe(200);
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+  });
+
+  it("give each model arm its slots per task, rerun a slot only after an unjudged attempt, and never cap the planted arms", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    const startSlot = async (arm = "baseline") => {
+      const response = await start(task_id, arm);
+      expect(response.status, await response.clone().text()).toBe(200);
+      return (await response.json()) as { run_id: string; slot: number; attempt: number };
+    };
+    // Slot 1 comes back unjudged, so its rerun is the next start; slot 2 scores.
+    const first = await startSlot();
+    expect(first).toMatchObject({ slot: 1, attempt: 1 });
+    expect((await score(first.run_id, { environment: { ok: false, reason: "machine failure" } })).status).toBe(200);
+    const rerun = await startSlot();
+    expect(rerun).toMatchObject({ slot: 1, attempt: 2 });
+    expect((await score(rerun.run_id, { hidden: counts(2, 3), claimed_done: true })).status).toBe(200);
+    const second = await startSlot();
+    expect(second).toMatchObject({ slot: 2, attempt: 1 });
+    expect((await score(second.run_id, { hidden: counts(1, 3), claimed_done: true })).status).toBe(200);
+    // Slot 3 is still running, so it holds its slot and nothing else may start.
+    const third = await startSlot();
+    expect(third).toMatchObject({ slot: 3, attempt: 1 });
+    const full = await start(task_id);
+    expect(full.status).toBe(409);
+    expect(await full.text()).toMatch(/has used its baseline runs/);
+    // The other arm on the same task has its own slots, and the planted arms none.
+    expect(await startSlot("treatment")).toMatchObject({ slot: 1, attempt: 1 });
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+    for (let i = 0; i < BENCH_REPEATS + 1; i++) {
+      const planted = await start(task_id, "check-gold");
+      expect(planted.status).toBe(200);
+      expect(await planted.json()).not.toHaveProperty("slot");
+    }
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+  });
+
+  it("close a stale running row as unjudged before its rerun opens, and refuse its late score", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    const stale = await startOk(task_id);
+    await env.DB.prepare("UPDATE bench_runs SET started_at = '2026-01-01T00:00:00Z' WHERE id = ?1").bind(stale).run();
+    const rerun = await start(task_id);
+    expect(await rerun.json()).toMatchObject({ slot: 1, attempt: 2 });
+    const row = await env.DB.prepare("SELECT status, unjudged_reason FROM bench_runs WHERE id = ?1").bind(stale).first<{ status: string; unjudged_reason: string }>();
+    expect(row?.status).toBe("unjudged");
+    expect(row?.unjudged_reason).toMatch(/stale window/);
+    expect((await score(stale, { hidden: counts(2, 3), claimed_done: true })).status).toBe(409);
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
   });
 
