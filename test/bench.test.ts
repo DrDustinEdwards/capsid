@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { nextSlot, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
+import { countedRuns, isOutageHour, nextSlot, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/improve-scorer.ts";
 
@@ -51,6 +51,32 @@ test("the treatment's claim is the report's, as every arm's is, and its job must
   assert.equal(runOutcome(r, TASK, run, job("done", { namespace: "capsid" })).status, "unjudged");
   assert.equal(runOutcome(r, TASK, run, job("done", { title: "bench other bench_bbbbbbbbbbbb" })).status, "unjudged");
   assert.equal(runOutcome({ ...r, capsid_job_id: null }, TASK, run, null).status, "unjudged");
+});
+
+test("a first stop on an error is unjudged and the rerun's second stop is scored from its diff and claim", () => {
+  const stopped = report({ stopped_on_error: true, claimed_done: true, hidden: hidden(0, 3) });
+  assert.equal(runOutcome(stopped, TASK, { ...RUN, attempt: 1 }, null).status, "unjudged");
+  assert.equal(runOutcome(stopped, TASK, RUN, null).status, "unjudged");
+  assert.deepEqual(runOutcome(stopped, TASK, { ...RUN, attempt: 2 }, null), { status: "scored", claimed_done: true, resolved: false, false_claim: true });
+  // A run that never got to the scorer stays unjudged on any attempt.
+  const never = report({ stopped_on_error: true, environment: { ok: false, reason: "never started" }, hidden: null });
+  assert.equal(runOutcome(never, TASK, { ...RUN, attempt: 2 }, null).status, "unjudged");
+  assert.equal(parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, stopped_on_error: "yes", hidden: hidden(2, 3) })).ok, false);
+});
+
+test("an outage hour has at least four ended runs, half or more stopped on an error, and its error stops are no attempt", () => {
+  assert.equal(isOutageHour(4, 2), true);
+  assert.equal(isOutageHour(4, 1), false);
+  assert.equal(isOutageHour(3, 3), false);
+  const outage = new Set(["2026-10-19T02"]);
+  const runs = [
+    { status: "unjudged", started_at: "2026-10-19T01:00:00Z", finished_at: "2026-10-19T01:30:00Z", stopped_on_error: 1 },
+    { status: "scored", started_at: "2026-10-19T02:00:00Z", finished_at: "2026-10-19T02:30:00Z", stopped_on_error: 1 },
+    { status: "scored", started_at: "2026-10-19T02:05:00Z", finished_at: "2026-10-19T02:40:00Z", stopped_on_error: null },
+  ];
+  assert.deepEqual(countedRuns(runs, outage), [runs[0], runs[2]]);
+  // The outage run's scored second stop does not fill slot 1, so slot 1 waits for its rerun.
+  assert.deepEqual(nextSlot(countedRuns(runs.slice(0, 2), outage), ""), { slot: 1, attempt: 2 });
 });
 
 test("a report claiming more passed than ran is refused, not scored", () => {
