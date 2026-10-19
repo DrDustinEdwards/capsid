@@ -669,14 +669,6 @@
       "description": "Publishes a repository's code-map.json to its code-map branch for the Capsid explorer."
     },
     {
-      "id": "devkit-improve-score",
-      "system": "devkit",
-      "name": "improve-score workflow",
-      "kind": "package",
-      "technology": "Reusable GitHub Actions workflow",
-      "description": "The shared score job that measures improve attempts."
-    },
-    {
       "id": "devkit-no-bloat-workflow",
       "system": "devkit",
       "name": "no-bloat workflow",
