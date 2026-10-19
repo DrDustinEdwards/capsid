@@ -3,7 +3,8 @@ import { visit } from "./views.ts";
 
 // The frame and words of the Portal UX audit (2026-10): M9, the risky buttons apart from
 // the safe ones; m4, secondary text 13 px at the least on a phone; m5, whole rows as tap
-// targets. Ids are the sample feed's.
+// targets; m10, the deploy timeline reached and scrolled from the keyboard. Ids are the
+// sample feed's.
 
 const BLOCKED = "job_7c1e44b0a912";
 
@@ -39,6 +40,20 @@ test("a CI run is opened by its whole row, not a 20 px link", async ({ page }) =
 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
+
+  test("the deploy timeline, wider than the phone, is reached with Tab and scrolled with the arrow keys", async ({ page }) => {
+    await page.goto("./health?tab=deploys");
+    const scroller = page.getByRole("region", { name: "Timeline, scrolls sideways" });
+    await expect(scroller).toBeVisible();
+    await expect(scroller).toHaveAttribute("tabindex", "0");
+    const wide = await scroller.evaluate((el) => el.scrollWidth > el.clientWidth);
+    expect(wide).toBe(true);
+    await scroller.focus();
+    await expect(scroller).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  });
 
   for (const view of ["needs", "health", "queue", "prs", "activity"] as const) {
     test(`no secondary text on ${view} is under 13 px`, async ({ page }) => {

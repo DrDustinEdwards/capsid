@@ -46,6 +46,15 @@ const MAX_PER_TICK = 3;
 const MAX_DEVICES = 10;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
 
+// Where a tap lands: the item itself on the Portal, not its home page (the UX audit's M2).
+// A pull request's card on Pull requests carries the anchor the dashboard builds
+// (dashboard/src/lib/pr-actions.ts, prAnchor); a job opens in its drawer on Jobs.
+const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
+const prUrl = (repo: string, number: number) => portalPath(`/prs#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
+const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
+const DEPLOYS_URL = portalPath("/health?tab=deploys");
+const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
+
 export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr";
 
 export interface Urgent {
@@ -54,6 +63,8 @@ export interface Urgent {
   namespace: string;
   title: string;
   body: string;
+  /** The Portal page that shows this item. */
+  url: string;
 }
 
 interface PushState {
@@ -96,7 +107,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     typedSeen[id] = since;
     const waited = t - Date.parse(since);
     if (waited > TYPED_WAIT_MS) {
-      out.push({ key: `typed:${id}`, kind: "typed-pr", namespace: a.namespace, title: "Typed approval waiting", body: `${id}, class typed (money path), waiting ${hours(waited)}. Approve it by typing its number.` });
+      out.push({ key: `typed:${id}`, kind: "typed-pr", namespace: a.namespace, title: "Typed approval waiting", body: `${id}, class typed (money path), waiting ${hours(waited)}. Approve it by typing its number.`, url: prUrl(a.repo, a.number) });
     }
   }
   for (const id of Object.keys(typedSeen)) if (!typedNow.has(id)) delete typedSeen[id];
@@ -111,7 +122,8 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
       kind: "visual-pr",
       namespace: a.namespace,
       title: "Visual change to look at",
-      body: `${id} changes what people see. Open the Portal for its preview and screenshots, then approve it there.`,
+      body: `${id} changes what people see. Open it for its preview and screenshots, then approve it there.`,
+      url: prUrl(a.repo, a.number),
     });
   }
 
@@ -131,6 +143,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
       namespace: r.namespace,
       title: failed ? "Rollback failed" : "Deploy rolled back",
       body: `${r.repo} at ${r.head_sha.slice(0, 7)}: ${failed ? "the live gate failed and the rollback did not take effect" : "the live gate failed and the deploy was rolled back"}.`,
+      url: DEPLOYS_URL,
     });
   }
 
@@ -142,9 +155,9 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     const summary = j.result_summary ?? "";
     const age = t - Date.parse(j.updated_at);
     if (summary.startsWith(RETRY_CAP_REASON) && age <= RECENT_MS) {
-      out.push({ key: `cap:${j.id}:${j.updated_at}`, kind: "correction-cap", namespace: j.namespace, title: "Correction cap reached", body: `${j.namespace} job ${j.id}: the reviewer and the driver did not converge. It needs your call.` });
+      out.push({ key: `cap:${j.id}:${j.updated_at}`, kind: "correction-cap", namespace: j.namespace, title: "Correction cap reached", body: `${j.namespace} job ${j.id}: the reviewer and the driver did not converge. It needs your call.`, url: jobUrl(j.id) });
     } else if (summary.startsWith("QUESTION:") && j.priority >= QUESTION_PRIORITY && age > QUESTION_AGE_MS) {
-      out.push({ key: `question:${j.id}:${j.updated_at}`, kind: "question", namespace: j.namespace, title: "Question waiting", body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.` });
+      out.push({ key: `question:${j.id}:${j.updated_at}`, kind: "question", namespace: j.namespace, title: "Question waiting", body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.`, url: jobUrl(j.id) });
     }
   }
 
@@ -152,7 +165,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
   // tick already holds every namespace then (src/auto-merge-tick.ts) and logs it.
   try {
     for (const [namespace, p] of Object.entries(await readPaused(env.APP_KV))) {
-      out.push({ key: `paused:${namespace}:${p.since}`, kind: "automerge-paused", namespace, title: "Auto-merge paused", body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.` });
+      out.push({ key: `paused:${namespace}:${p.since}`, kind: "automerge-paused", namespace, title: "Auto-merge paused", body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.`, url: AUTO_MERGE_URL });
     }
   } catch {
     // See above.
@@ -191,7 +204,7 @@ export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetc
   const gone = new Set<number>();
 
   for (const u of due) {
-    const payload: PushPayload = { title: u.title, body: u.body, url: PORTAL_URL, tag: u.key };
+    const payload: PushPayload = { title: u.title, body: u.body, url: u.url, tag: u.key };
     let delivered = 0;
     for (const d of live) {
       if (gone.has(d.id)) continue;

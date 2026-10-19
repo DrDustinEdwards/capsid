@@ -376,7 +376,9 @@ export function TimelinePanel({ title, days, src, id, section }: { title: string
         <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
       ) : sites.length ? (
         <>
-          <div className="scroll-x tl-pad" ref={ref}>
+          {/* Wider than a phone, so it scrolls: a keyboard reaches it with Tab and scrolls it
+              with the arrow keys (the UX audit's m10). */}
+          <div className="scroll-x tl-pad" ref={ref} tabIndex={0} role="region" aria-label={`${title}, scrolls sideways`}>
             <Timeline sites={sites} days={days} now={now} width={width} />
           </div>
         </>

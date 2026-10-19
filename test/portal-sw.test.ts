@@ -11,12 +11,26 @@ import vm from "node:vm";
 const SCOPE = "https://portal.example.com/";
 const source = readFileSync(join(import.meta.dirname, "..", "dashboard", "public", "sw.js"), "utf8");
 
-async function tap(data: unknown): Promise<string> {
+interface Win {
+  url: string;
+  focused: number;
+  went: string[];
+  focus: () => Promise<Win>;
+  navigate?: (u: string) => Promise<Win>;
+}
+
+function win(url: string, canNavigate = true): Win {
+  const w: Win = { url, focused: 0, went: [], focus: async () => (w.focused++, w) };
+  if (canNavigate) w.navigate = async (u: string) => (w.went.push(u), (w.url = u), w);
+  return w;
+}
+
+async function tap(data: unknown, windows: Win[] = []): Promise<string> {
   const handlers: Record<string, (event: unknown) => void> = {};
   const opened: string[] = [];
   const self = {
     registration: { scope: SCOPE },
-    clients: { matchAll: async () => [], openWindow: async (u: string) => opened.push(u), claim: async () => {} },
+    clients: { matchAll: async () => windows, openWindow: async (u: string) => opened.push(u), claim: async () => {} },
     skipWaiting: () => {},
     addEventListener: (name: string, fn: (event: unknown) => void) => {
       handlers[name] = fn;
@@ -26,8 +40,9 @@ async function tap(data: unknown): Promise<string> {
   let done: Promise<unknown> = Promise.resolve();
   handlers.notificationclick({ notification: { data, close: () => {} }, waitUntil: (p: Promise<unknown>) => (done = p) });
   await done;
-  assert.equal(opened.length, 1);
-  return opened[0];
+  const moved = windows.flatMap((w) => w.went);
+  assert.equal(opened.length + moved.length, 1, "a tap opened or moved more than one page");
+  return opened[0] ?? moved[0]!;
 }
 
 test("an alert's url on the Portal's scope opens as sent", async () => {
@@ -41,4 +56,37 @@ test("PLANT: a url off the Portal's scope, or none, opens the Portal itself", as
   }
   assert.equal(await tap(null), SCOPE);
   assert.equal(await tap({}), SCOPE);
+});
+
+test("an open Portal tab moves to the alert's item and comes forward; no second tab opens", async () => {
+  const other = win("https://elsewhere.example.com/");
+  const portal = win(`${SCOPE}health`);
+  assert.equal(await tap({ url: `${SCOPE}queue/job/job_1` }, [other, portal]), `${SCOPE}queue/job/job_1`);
+  assert.deepEqual(other.went, [], "a tab off the Portal's scope was moved");
+  assert.equal(portal.focused, 1);
+});
+
+test("PLANT: an open Portal tab moves only on the scope; a url off it moves the tab to the Portal", async () => {
+  const portal = win(`${SCOPE}prs`);
+  assert.equal(await tap({ url: "https://evil.example.com/" }, [portal]), SCOPE);
+});
+
+test("a tab that cannot be moved is brought forward as it is", async () => {
+  const portal = win(`${SCOPE}prs`, false);
+  const handlers: Record<string, (event: unknown) => void> = {};
+  const opened: string[] = [];
+  const self = {
+    registration: { scope: SCOPE },
+    clients: { matchAll: async () => [portal], openWindow: async (u: string) => opened.push(u), claim: async () => {} },
+    skipWaiting: () => {},
+    addEventListener: (name: string, fn: (event: unknown) => void) => {
+      handlers[name] = fn;
+    },
+  };
+  vm.runInNewContext(source, { self, URL });
+  let done: Promise<unknown> = Promise.resolve();
+  handlers.notificationclick({ notification: { data: { url: `${SCOPE}prs#auto-merge` }, close: () => {} }, waitUntil: (p: Promise<unknown>) => (done = p) });
+  await done;
+  assert.equal(portal.focused, 1);
+  assert.deepEqual(opened, []);
 });
