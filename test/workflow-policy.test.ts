@@ -162,3 +162,38 @@ test("the checks job runs npm run lint, before the Tests step", () => {
   assert.ok(lint < tests, "the lint step runs after Tests, so its failure no longer stops a merge");
   assert.doesNotMatch(steps[lint].text, /continue-on-error/, "the lint step must fail the job");
 });
+
+// The restore rehearsal (Grok audit 2026-10, P1 and U4). It mints bucket keys and reads
+// a prefix out of the bucket listing, so neither may reach the log or a shell unchecked.
+
+function rehearsalStep(name: string): string {
+  const [job] = jobs().filter((j) => j.workflow === "restore-rehearsal.yml");
+  assert.ok(job, "no job parsed out of restore-rehearsal.yml");
+  const step = stepsOf(job).find((s) => stepName(s) === name);
+  assert.ok(step, `no step named ${name} in restore-rehearsal.yml`);
+  return step.join("\n");
+}
+
+test("PLANT: the rehearsal masks each minted AWS value before it exports them", () => {
+  const pull = rehearsalStep("Mint a credential and pull the newest dump");
+  const exportAt = pull.search(/^\s+export AWS_ACCESS_KEY_ID\b/m);
+  assert.ok(exportAt > -1, "the pull step no longer exports the minted keys; this test is stale");
+  for (const name of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]) {
+    const maskAt = pull.indexOf(`echo "::add-mask::\${${name}}"`);
+    assert.ok(maskAt > -1, `${name} is never masked`);
+    assert.ok(maskAt < exportAt, `${name} is masked only after it is exported`);
+  }
+});
+
+test("PLANT: the rehearsal's run prefix reaches a run block only through env, after a character check", () => {
+  const text = workflowFiles().find((f) => f.name === "restore-rehearsal.yml")?.text ?? "";
+  const runLines = text.split("\n").filter((l) => /^\s+run:/.test(l) || /^\s{10,}\S/.test(l));
+  const interpolated = runLines.filter((l) => /\$\{\{\s*steps\./.test(l) && !/^\s+[A-Z_]+:\s*\$\{\{/.test(l));
+  assert.deepEqual(interpolated, [], "a step output is interpolated into a shell line");
+  const pull = rehearsalStep("Mint a credential and pull the newest dump");
+  const checkAt = pull.indexOf("=~ ^[A-Za-z0-9_./-]+$");
+  const outputAt = pull.indexOf("run_prefix=");
+  assert.ok(checkAt > -1, "the run prefix is not checked against a path character set");
+  assert.ok(checkAt < outputAt, "the run prefix is written to the step output before it is checked");
+  assert.match(rehearsalStep("Check the dump's own invariants"), /RUN_PREFIX: \$\{\{ steps\.pull\.outputs\.run_prefix \}\}/);
+});

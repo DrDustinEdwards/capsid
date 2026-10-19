@@ -83,8 +83,9 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // Workers Builds.
   capsid_admin_read_ops: read({ idempotent: true, openWorld: true }),
   // perform can revoke an agent, fail a job or remove a site, and a confirmed token is
-  // spent, so a repeat is refused rather than repeated. Only this Worker's own stores.
-  capsid_admin_run_controls: destructive({ idempotent: false, openWorld: false }),
+  // spent, so a repeat is refused rather than repeated. Closing a pull request calls
+  // GitHub, and a site repair calls the site's operator API.
+  capsid_admin_run_controls: destructive({ idempotent: false, openWorld: true }),
   // sign_policy overwrites a policy document (snapshotted), breaker_reset and overnight
   // overwrite their switches, and mint_operator_key issues a key each call. Only this
   // Worker's own stores.

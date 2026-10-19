@@ -5,7 +5,8 @@ import { surfaceOf } from "./surface";
 import { sha256Hex } from "../auth";
 import { auditStatement, documentUpsert, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
-import { parseLinks } from "../links";
+import { parseLinks, type LinkEdge } from "../links";
+import { JOB_DOC_PREFIX } from "../jobs-schema";
 import { validateDocStatus, validateDocType } from "../doc-meta";
 import { bounded, MAX_BODY, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_LINKS_JSON, MAX_SHA, MAX_TAGS, MAX_TITLE, nsName, docPath } from "../limits";
 import { assembleBody } from "../write-modes";
@@ -32,8 +33,8 @@ async function requireRegisteredNamespace(db: D1Database, namespace: string): Pr
 // is itself scoped: allow_improve_paths is how a caller writes a signed policy
 // document, and it is the document-side twin of the repo-side protected-path flag, so
 // it asks for the same one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). Then
-// policyWriteRefusal runs on every path the call changes. Returns the first refusal,
-// or null.
+// policyWriteRefusal runs on every path the call changes, and so does the job-mirror
+// check. Returns the first refusal, or null.
 function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
@@ -47,8 +48,40 @@ function policyPathsRefusal(
     if (overrideRefusal) return overrideRefusal;
   }
   for (const path of paths) {
-    const refusal = policyWriteRefusal(namespace, path, allow);
+    const refusal = policyWriteRefusal(namespace, path, allow) ?? jobMirrorRefusal(tool, namespace, path);
     if (refusal) return refusal;
+  }
+  return null;
+}
+
+// A document under jobs/ is a job's mirror (jobDocPath in src/jobs-schema.ts): a
+// projection of the jobs row, written only by the jobs code in the same batch as the
+// row. The brief serves it as a task, so one written here could stand in for a signed job
+// that was never posted (Grok audit 2026-10, M2). No caller and no flag writes one by hand.
+function jobMirrorRefusal(tool: "write" | "restore" | "delete" | "move", namespace: string, path: string): string | null {
+  if (!path.startsWith(JOB_DOC_PREFIX)) return null;
+  return (
+    `${namespace}/${path} is under ${JOB_DOC_PREFIX}, where each document mirrors a job and is written only by capsid_work_jobs. ` +
+    `A ${tool} here is refused for every caller. Nothing changed. Change the job through capsid_work_jobs.`
+  );
+}
+
+// A supersedes or replaces edge makes the daily pass mark its target superseded
+// (src/supersede.ts), so it is a change to the target and asks what a write to the target
+// asks: the write grant on its namespace, through checkScope (CLAUDE.md, one enforcement
+// point rule), and the seat for a canon document (Grok audit 2026-10, M4). Other edge
+// types change nothing and may point anywhere. The refusal, or null.
+function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge[]): string | null {
+  for (const edge of edges) {
+    if (edge.type !== "supersedes" && edge.type !== "replaces") continue;
+    const target = `${edge.to_ns}/${edge.to_path}`;
+    if (edge.to_ns !== namespace) {
+      const refusal = ctx.scope({ ...surfaceOf("write"), grant: "write", namespace: edge.to_ns });
+      if (refusal) return `a ${edge.type} edge to ${target} marks it superseded, so it needs the write grant on ${edge.to_ns}: ${refusal} Nothing was written.`;
+    }
+    if (canonGuarded(ctx.agent, edge.to_ns, edge.to_path)) {
+      return `a ${edge.type} edge to ${target} would mark a canon document superseded, which is the seat's change to make. Nothing was written. Use references, or ask the seat.`;
+    }
   }
   return null;
 }
@@ -92,6 +125,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       if (statusError) return fail(statusError);
       const parsedLinks = links === undefined ? null : parseLinks(links, namespace);
       if (parsedLinks && "error" in parsedLinks) return fail(parsedLinks.error);
+      const edgeRefusal = parsedLinks ? supersedingEdgeRefusal(ctx, namespace, parsedLinks.edges) : null;
+      if (edgeRefusal) return fail(edgeRefusal);
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
 
@@ -256,8 +291,18 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       );
       // links replaces this document's outgoing edges when provided. Left
       // untouched when omitted, so a routine body edit never drops edges.
+      // The edges replaced are recorded before the DELETE in the same batch, as a delete
+      // records the edges it removes, so the audit row is where they survive.
       if (parsedLinks && "edges" in parsedLinks) {
         statements.push(
+          db
+            .prepare(
+              `INSERT INTO audit_log (actor, action, namespace, path, params)
+               SELECT ?1, 'links', ?2, ?3, json_object('edges', ?4, 'edges_replaced', json_group_array(
+                 json_object('type', type, 'to_ns', to_ns, 'to_path', to_path)))
+               FROM document_links WHERE from_ns = ?2 AND from_path = ?3`
+            )
+            .bind(actor, namespace, path, parsedLinks.edges.length),
           db.prepare("DELETE FROM document_links WHERE from_ns = ?1 AND from_path = ?2").bind(namespace, path)
         );
         for (const edge of parsedLinks.edges) {
@@ -269,7 +314,6 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
               .bind(namespace, path, edge.type, edge.to_ns, edge.to_path)
           );
         }
-        statements.push(auditStatement(db, actor, "links", namespace, path, { edges: parsedLinks.edges.length }));
       }
       // The warning is computed from a read taken here, not from the pre-read: this
       // handler may have sat in a 90 second elicitation in between, which is when a

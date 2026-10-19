@@ -247,6 +247,16 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     via: /\bbuildLogs\(/,
     evidence: [{ file: "workers-builds.ts", pattern: /\bcfGet\(/ }],
   },
+  controls: {
+    reason: "perform closes a pull request on GitHub and runs a site repair through the site's operator API",
+    via: /\bperformControl\(/,
+    evidence: [
+      { file: "controls.ts", pattern: /\bmanagePr\(/ },
+      { file: "controls.ts", pattern: /\brunSiteRepair\(/ },
+      { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
+      { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
+    ],
+  },
   set_site_key: {
     reason: "sets a secret on two Workers through the Cloudflare API",
     via: /\bsetSiteKey\(/,

@@ -4,7 +4,7 @@ import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex, timingSafeEqual } from "./auth";
 import { resolveAgent } from "./agents";
-import { runBackup } from "./backup";
+import { backupHttpStatus, runBackup } from "./backup";
 import { checkScope, routeRefusal } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
@@ -298,8 +298,7 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
   const refusal = routeRefusal("/ops/backup", caller.agent);
   if (refusal) return new Response(refusal, { status: 403 });
   const result = await runBackup(env);
-  // 409 when another run holds the lease, so "did nothing" is visible without the body.
-  return Response.json(result, { status: result.ran ? 200 : 409 });
+  return Response.json(result, { status: backupHttpStatus(result) });
 }
 
 // What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip. It is read

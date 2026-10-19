@@ -1,4 +1,10 @@
 import { logEvent } from "./log";
+
+// Best-effort, not exact. Each check reads both KV counters, compares, then writes
+// count + 1, with no compare-and-swap, so concurrent requests can read the same count
+// and a burst can pass somewhat over perHour or perDay. KV is also eventually
+// consistent across locations. A limit here bounds abuse in bulk; nothing may rely on
+// it as an exact ceiling.
 export interface RateLimitPolicy {
   // Distinct per endpoint so one path cannot spend another's budget.
   prefix: string;

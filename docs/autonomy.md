@@ -51,8 +51,9 @@ version, refused unless the blocked command matches one of three classes. A driv
 do the same for a job it blocked itself, but only when every class matched is
 `push_branch` or `open_pr` (ruled 2026-09-16). A migration stays the seat's to approve,
 and a driver cannot approve another agent's job. Outside the policy, a driver cannot
-resume a job it blocked itself: a plain resume by the job's claimant is refused unless
-the caller is the admin or holds `can_merge` (2026-09-25).
+resume a blocked job at all: a plain resume is refused unless the caller is the admin or
+holds `can_merge`, for the job's claimant (2026-09-25) and for any other driver in the
+namespace (Grok audit 2026-10, S1).
 `additive_migration` is a `wrangler d1 execute` naming a `--file` under `migrations/`
 whose every statement is `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN` or
 `CREATE INDEX`. An unrecognized statement form is a refusal, not a pass.

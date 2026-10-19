@@ -113,7 +113,7 @@ test("a refused write names the permission the token lacks and Cloudflare's word
 
 test("plant: a removed person still on the list keeps their seat, and only an exact email match frees one", async () => {
   const cf = cloudflare({
-    [`GET ${GROUP_PATH}`]: group([emailRule("rosa@example.com"), emailRule("jo@example.com")]),
+    [`GET ${GROUP_PATH}`]: group([emailRule("rosa@example.com"), emailRule("jo@example.com"), emailRule("ghost@example.com")]),
     [`PUT ${GROUP_PATH}`]: ok({}),
     // A users list that ignores the email filter: everyone comes back.
     [`GET ${USERS_PATH}`]: ok(
@@ -135,6 +135,29 @@ test("plant: a removed person still on the list keeps their seat, and only an ex
   assert.deepEqual(patch?.body, [{ seat_uid: "seat-jo", access_seat: false, gateway_seat: false }]);
   const looked = cf.calls.filter((c) => c.path === USERS_PATH).map((c) => c.params.email);
   assert.deepEqual(looked.sort(), ["ghost@example.com", "jo@example.com"], "a member's seat is never even looked up");
+});
+
+test("PLANT: a removed email the group never held is not looked up and its seat is never freed", async () => {
+  const cf = cloudflare({
+    [`GET ${GROUP_PATH}`]: group([emailRule("rosa@example.com"), emailRule("jo@example.com")]),
+    [`PUT ${GROUP_PATH}`]: ok({}),
+    [`GET ${USERS_PATH}`]: ok(
+      [
+        { email: "jo@example.com", seat_uid: "seat-jo" },
+        { email: "outsider@example.com", seat_uid: "seat-outsider" },
+      ],
+      { page: 1, total_pages: 1 },
+    ),
+    [`PATCH ${SEATS_PATH}`]: ok([]),
+  });
+  const result = await runSync(cf.impl, TOKEN, ACCOUNT, GROUP, req(["rosa@example.com"], ["jo@example.com", "outsider@example.com"]));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.seats.freed, ["jo@example.com"]);
+  assert.deepEqual(result.seats.not_members, ["outsider@example.com"]);
+  const looked = cf.calls.filter((c) => c.path === USERS_PATH).map((c) => c.params.email);
+  assert.deepEqual(looked, ["jo@example.com"]);
+  const patch = cf.calls.find((c) => c.method === "PATCH");
+  assert.deepEqual(patch?.body, [{ seat_uid: "seat-jo", access_seat: false, gateway_seat: false }]);
 });
 
 test("a seat that cannot be freed is reported, and the group write still counts", async () => {

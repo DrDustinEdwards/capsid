@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countedRuns, isOutageHour, nextSlot, parseDrawRequest, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
+import { countedRuns, isOutageHour, nextSlot, parseDrawRequest, parseScoreRequest, runOutcome, slotAt, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
+import { sourceFile } from "./source-files.ts";
 
 // The paired comparison's outcome rules (src/bench.ts runOutcome). These decide the
 // paper's primary outcome, the false success claim, so each rule is pinned here; the
@@ -112,6 +113,26 @@ test("each slot is started at most twice, the second time only after an unjudged
   assert.equal(nextSlot([run("scored"), run("scored"), run("running")], STALE), null);
   assert.deepEqual(nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE), { slot: 3, attempt: 2 });
   assert.equal(nextSlot([run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged")], STALE), null);
+});
+
+test("PLANT: the score reads the attempt the start chose, though an overlapping run closed between them (Grok audit 2026-10, J3)", () => {
+  // A starts, B starts while A runs (slot 2, attempt 1), then A closes unjudged. Read
+  // with A's later status, B would look like slot 1's rerun.
+  const A = { status: "running", started_at: "2026-10-19T01:00:00.000Z", finished_at: null };
+  const bAt = "2026-10-19T01:30:00.000Z";
+  const atStart = slotAt([A], new Set(), bAt);
+  assert.deepEqual(atStart, { slot: 2, attempt: 1 });
+  const aClosed = { ...A, status: "unjudged", finished_at: "2026-10-19T02:00:00.000Z" };
+  assert.deepEqual(slotAt([aClosed], new Set(), bAt), atStart, "the score's computation agrees with the start's");
+  // A run that had closed by the start is read closed.
+  assert.deepEqual(slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt), { slot: 1, attempt: 2 });
+  // Both handlers take the slot from slotAt, and nothing else asks nextSlot.
+  const src = sourceFile("bench.ts");
+  const start = src.slice(src.indexOf("export async function handleBenchStart"), src.indexOf("export async function handleBenchScore"));
+  const score = src.slice(src.indexOf("export async function handleBenchScore"));
+  assert.match(start, /\bslotAt\(/);
+  assert.match(score, /\bslotAt\(/);
+  assert.equal([...src.matchAll(/\bnextSlot\(/g)].length, 2, "nextSlot is defined once and called only from slotAt");
 });
 
 test("a draw request carries the registration's two sha256 hashes and seed, a start position and distinct task ids", () => {

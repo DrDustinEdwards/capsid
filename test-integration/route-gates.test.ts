@@ -49,8 +49,12 @@ describe("/ops/backup", () => {
   it("admits the legacy write-grant operator key, which is the admin, and the backup runs", async () => {
     const before = await dumpCount();
     const response = await backupAs(env.TEST_OPERATOR_KEYS.write);
-    expect(response.status, await response.clone().text()).toBe(200);
-    expect(((await response.json()) as { ran?: boolean }).ran).toBe(true);
+    // The test store has no documents, so the preflight refuses the prune and the run
+    // answers 503 (backupHttpStatus); admission is what this test is about.
+    expect(response.status, await response.clone().text()).toBe(503);
+    const body = (await response.json()) as { ran?: boolean; prune_refused?: string | null };
+    expect(body.ran).toBe(true);
+    expect(body.prune_refused).toBe("documents-empty");
     expect(await dumpCount()).toBeGreaterThan(before);
   });
 

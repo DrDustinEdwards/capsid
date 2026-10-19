@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { CF_API, cfGet, cloudflareCredentials, CfReadError, type FetchLike } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
+import { externalFence } from "./provenance";
 
 // Cloudflare Workers Builds, read (capsid/rulings/mcp-2026-10-10.md, amendment answer 2:
 // "Cloudflare Workers Builds status and logs in read_ops"), served as
@@ -55,6 +56,11 @@ interface RawBuild {
   build_trigger_metadata?: { branch?: string; commit_hash?: string; commit_message?: string; author?: string; build_trigger_source?: string } | null;
 }
 
+const commitMessage = (b: RawBuild): string | null => {
+  const message = b.build_trigger_metadata?.commit_message;
+  return typeof message === "string" ? externalFence("commit-message", b.build_trigger_metadata?.commit_hash ?? b.build_uuid ?? "none", message, 200) : null;
+};
+
 export async function listBuilds(env: Env, args: { script?: string; namespace?: string; limit?: number }, fetchImpl: FetchLike = fetch) {
   const { token, account } = credentials(env);
   const script = await scriptFor(env, args);
@@ -76,8 +82,8 @@ export async function listBuilds(env: Env, args: { script?: string; namespace?: 
         stopped_on: b.stopped_on ?? null,
         branch: b.build_trigger_metadata?.branch ?? b.trigger?.branch ?? null,
         commit: b.build_trigger_metadata?.commit_hash ?? null,
-        // The commit message is the author's text: data, shown as it is.
-        commit_message: b.build_trigger_metadata?.commit_message?.slice(0, 200) ?? null,
+        // The commit message is the author's text: data, relayed fenced (src/provenance.ts).
+        commit_message: commitMessage(b),
         source: b.build_trigger_metadata?.build_trigger_source ?? null,
       })),
     };

@@ -341,6 +341,8 @@ export function evaluationRows(
     recorded_at: ctx.now.toISOString(),
   });
   const unread = (urls: string[]) => urls.filter((u) => !read(u)).length;
+  // A count passes when GitHub's number does not contradict the driver's.
+  const countLabel = (claimed: number | null, verified: number | null): ScoreLabel => (agreementOf(claimed, verified) === "disagree" ? "fail" : "pass");
 
   // pr_merged: the pull requests the claim says are merged, else the ones evidence
   // named. Verified is how many of them GitHub reads as merged, known only when every
@@ -370,7 +372,7 @@ export function evaluationRows(
     "prs_opened",
     claim.prs_opened,
     openedVerified,
-    "pass",
+    countLabel(claim.prs_opened, openedVerified),
     openedSet.length === 0
       ? "no pull request was named, so there was nothing to check"
       : openedMissing > 0
@@ -383,8 +385,8 @@ export function evaluationRows(
   const sums = "GitHub's sum is known only when every pull request in evidence.prs and result_ref was read";
   const commitsVerified = verdict.github?.commits ?? null;
   const filesVerified = verdict.github?.files_changed ?? null;
-  const commits = row("commits", claim.commits, commitsVerified, "pass", commitsVerified === null ? sums : null);
-  const files = row("files_changed", claim.files_changed, filesVerified, "pass", filesVerified === null ? sums : null);
+  const commits = row("commits", claim.commits, commitsVerified, countLabel(claim.commits, commitsVerified), commitsVerified === null ? sums : null);
+  const files = row("files_changed", claim.files_changed, filesVerified, countLabel(claim.files_changed, filesVerified), filesVerified === null ? sums : null);
 
   // ci_green: no claim field says anything about CI, so the claim is NULL (unclaimed).
   const ciVerified = verdict.github?.ci_green ?? null;

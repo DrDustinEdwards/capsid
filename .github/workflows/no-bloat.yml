@@ -9,7 +9,7 @@ name: no-bloat
 # continue-on-error and so is the job, so it never turns a pull request red. Page weight
 # stays in ci.yml's dashboard build step.
 #
-# The sha is devkit's v0.5.0 commit. A reusable workflow is pinned by full sha like any
+# The sha is devkit's v0.6.0 commit. A reusable workflow is pinned by full sha like any
 # action (test/workflow-policy.test.ts), and it declares its own timeout.
 
 on:

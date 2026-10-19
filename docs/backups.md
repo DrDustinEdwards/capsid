@@ -21,6 +21,8 @@ Run one on demand with the admin credential, a write-grant `OPERATOR_KEY_HASH` k
 curl -X POST https://capsid.<your-subdomain>.workers.dev/ops/backup -H "Authorization: Bearer <key>"
 ```
 
+The status says what happened without the body: 200 for a clean run, 409 when another run holds the lease and this one did nothing, and 503 when the preflight refused the prune (the dumps are written, but nothing is marked, mirrored or pruned; `prune_refused` names the reason).
+
 ## Bucket locks on the dumps
 
 Each bucket that holds d1-dump runs gets one R2 bucket lock rule on `backups/json/` with a 13 day age, so no delete or overwrite (a buggy prune, a leaked R2 token, a Worker gone wrong) can remove a dump in its first 13 days. Older dumps are protected by the off-account mirror, not by the lock. Nothing else in a bucket is locked: in `capsid-media` the rule never covers `backups/markdown/` (the mirror rewrites and prunes it every night) or media, and in `txasm-books` it never covers the generated books.
@@ -38,9 +40,9 @@ Facts from Cloudflare's documentation, read from its source (cloudflare/cloudfla
 
 ### What pruneDumps does with a refusal
 
-In d1-dump v0.4.1 (`src/runs.ts`, the tag every site pins), `pruneDumps` lists the runs, picks the stale ones with `selectStaleRuns`, and passes every key of every stale run to one `deleteInChunks` call, 1000 keys a call. Nothing catches an error. One refused key therefore throws out of `pruneDumps`: no stale run after that chunk is deleted, and the throw reaches the caller's nightly run. In Capsid that is `pruneR2` inside `exportAndPrune` (`src/backup.ts`): the marker and the markdown mirror are already written, but the CSP report prune, the `document_versions` and `audit_log` prune and the `backup:last-ok` stamp are skipped, so the run reports an error and `/health` warns once the stamp is 26 hours old. The same young run is stale again the next night, so the failure repeats every night until that run is older than the lock.
+Before d1-dump v0.4.2, `pruneDumps` listed the runs, picked the stale ones with `selectStaleRuns`, and passed every key of every stale run to one `deleteInChunks` call, 1000 keys a call. Nothing caught an error. One refused key therefore threw out of `pruneDumps`: no stale run after that chunk was deleted, and the throw reached the caller's nightly run. In Capsid that is `pruneR2` inside `exportAndPrune` (`src/backup.ts`): the marker and the markdown mirror are already written, but the CSP report prune, the `document_versions` and `audit_log` prune and the `backup:last-ok` stamp are skipped, so the run reports an error and `/health` warns once the stamp is 26 hours old. The same young run is stale again the next night, so the failure repeats every night until that run is older than the lock. A site still on v0.4.1 or earlier behaves this way.
 
-The fix is in d1-dump pull request #17 (branch `claude/prune-skip-locked`, not yet released): each stale run is deleted on its own, `_complete.json` first and then the rest, so a partly deleted run never looks complete. A refusal with error 10069 skips that run, counts it in the result's new `locked` field (`kept + pruned + locked` is every run), and the prune goes on to the other runs. Any other delete failure still throws. A later prune selects the skipped run again and deletes it once the lock has aged off it.
+v0.4.2 (d1-dump pull request #17, the tag Capsid pins in `package.json`; its README, "Bucket locks") fixes it: each stale run is deleted on its own, `_complete.json` first and then the rest, so a partly deleted run never looks complete. A refusal with error 10069 skips that run, counts it in the result's `locked` field (`kept + pruned + locked` is every run), and the prune goes on to the other runs. Any other delete failure still throws. A later prune selects the skipped run again and deletes it once the lock has aged off it. Capsid reports the count as `json_backups_locked` in its backup summary.
 
 ### Why 13 days
 
@@ -59,9 +61,9 @@ What a refused delete costs, once the fix is in: one run's objects stay up to 13
 
 ### Order
 
-1. Merge d1-dump pull request #17 and tag a release.
-2. Bump every site that calls `pruneDumps` to that tag and deploy it. Capsid's bump should also carry the new `locked` count into its backup summary, beside `json_backups_kept` and `json_backups_pruned`.
-3. Only then add the lock to that site's bucket. A bucket locked while its site still runs v0.4.1 fails its nightly run on any day a same-day duplicate is pruned.
+1. d1-dump v0.4.2 carries the fix (released; Capsid pins it and reports `json_backups_locked`).
+2. Bump every other site that calls `pruneDumps` to v0.4.2 or later and deploy it. Check each site's pinned tag first: this repository cannot see it.
+3. Only then add the lock to that site's bucket. A bucket locked while its site still runs v0.4.1 or earlier fails its nightly run on any day a same-day duplicate is pruned.
 
 Safe to lock first, before any bump: `dustinedwards-backups`, because the dustinedwards site runs no d1-dump today (`src/offaccount.ts`), so nothing prunes there (if its d1-dump job, job_e40ec706c10a, lands first, it must pin the fixed release before this lock); and `carrel-backups` if Carrel's Worker does not call `pruneDumps` (check before locking it). The other five wait for their site's bump.
 

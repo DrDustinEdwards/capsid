@@ -4,6 +4,7 @@ import { ghFetch, parseReposList } from "./github/client";
 import { readAllPages } from "./github/pr-files";
 import { commandFromSummary, isQuestionSummary } from "./jobs-holder";
 import { readSnapshot } from "./ops-snapshot";
+import { externalFence } from "./provenance";
 import { appliedMigrations, blockSettled } from "./inbox";
 import { readStaleCache, staleJobs } from "./stale-jobs";
 
@@ -112,7 +113,8 @@ async function openPrs(env: Env, namespace: string, full: string, notChecked: st
       namespace,
       number: pr.number,
       url: pr.html_url,
-      title: pr.title.slice(0, 200),
+      // The pull request's author wrote its title: relayed fenced, as data (src/provenance.ts).
+      title: externalFence("github-pr", `${full}#${pr.number}`, pr.title, 200),
       author: pr.user?.login ?? null,
       draft: pr.draft === true,
       created_at: pr.created_at,
@@ -140,10 +142,14 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   const applied = await appliedMigrations(env.DB);
   const blocked = (blockedRows ?? []).slice(0, JOBS_LIMIT).filter((j) => !blockSettled(j, staleCache, applied));
   if ((blockedRows ?? []).length > JOBS_LIMIT) notChecked.push(`more than ${JOBS_LIMIT} blocked jobs; the oldest ${JOBS_LIMIT} are listed`);
-  const questions = blocked.filter((j) => isQuestionSummary(j.result_summary)).map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, question: j.result_summary, since: j.updated_at }));
+  // A block's summary is the driver's text: its question and command are relayed fenced.
+  const fenced = (id: string, text: string | null) => (text === null ? null : externalFence("job-summary", id, text));
+  const questions = blocked
+    .filter((j) => isQuestionSummary(j.result_summary))
+    .map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, question: fenced(j.id, j.result_summary), since: j.updated_at }));
   const waiting = blocked
     .filter((j) => !isQuestionSummary(j.result_summary))
-    .map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, command: commandFromSummary(j.result_summary), since: j.updated_at }));
+    .map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, command: fenced(j.id, commandFromSummary(j.result_summary)), since: j.updated_at }));
 
   let stale: unknown[] = [];
   try {

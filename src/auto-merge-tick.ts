@@ -153,8 +153,9 @@ export function declineParams(
   // A policy refusal, "head_moved" when GitHub refused the pinned merge, or
   // "unit_suspended" when a rollback suspended the PR's merge unit (src/merge-units.ts),
   // "namespace_paused" when the safety shutoff paused the namespace (src/merge-safety.ts),
-  // or "changes_existing_test" when the PR edits an existing test (src/merge-class.ts).
-  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test" | "visual_awaits_look"; why: string; passed: PolicyCheck[] },
+  // "changes_existing_test" when the PR edits an existing test (src/merge-class.ts), or
+  // "pr_is_draft" when the PR is still a draft.
+  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test" | "visual_awaits_look" | "pr_is_draft"; why: string; passed: PolicyCheck[] },
   now: Date
 ): Record<string, unknown> {
   return {
@@ -483,13 +484,17 @@ async function judgeOnePr(
   const promotedUnit = pathClass && units.includes(`${namespace} / ${pathClass}`) ? { unit: `${namespace} / ${pathClass}` } : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
-  // Four holds that only narrow, each leaving the PR for Dustin as class approve (his
+  // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for Dustin as class approve (his
   // approval still executes below): a visual change (src/visual-pr.ts), an existing test it changes (src/merge-class.ts), a
   // paused namespace (src/merge-safety.ts), and a unit a rollback suspended
   // (src/merge-units.ts). The policy would merge it, so it is held with the reason.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
-  let hold: { failed: "changes_existing_test" | "namespace_paused" | "unit_suspended" | "visual_awaits_look"; reason: string } | null = null;
-  if (verdict.merge && visual) {
+  let hold: { failed: "pr_is_draft" | "changes_existing_test" | "namespace_paused" | "unit_suspended" | "visual_awaits_look"; reason: string } | null = null;
+  // A draft first, and it keeps its class wait: GitHub refuses to merge a draft with a
+  // 405, so sending it would only fail (Grok audit 2026-10, C2).
+  if (verdict.merge && pr.draft === true) {
+    hold = { failed: "pr_is_draft", reason: "the PR is a draft: it is judged again once it is marked ready for review" };
+  } else if (verdict.merge && visual) {
     hold = { failed: "visual_awaits_look", reason: "a visual change: Dustin looks at its preview or screenshots before it merges" };
   } else if (verdict.merge && facts.existingTestEdits.length > 0) {
     hold = { failed: "changes_existing_test", reason: existingTestReason(facts.existingTestEdits) };
@@ -504,7 +509,7 @@ async function judgeOnePr(
       reason: suspended === "all" ? "the suspended merge units could not be read, so nothing merges unattended this tick" : `the merge unit ${unit} is suspended after a rollback`,
     };
   }
-  if (hold) merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
+  if (hold && hold.failed !== "pr_is_draft") merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
   const held = hold !== null;
   const merges = verdict.merge && !held;
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the

@@ -500,14 +500,16 @@ export function isOutageHour(ended: number, errors: number): boolean {
   return ended >= BENCH_OUTAGE_MIN_ENDED && errors * 2 >= ended;
 }
 
-// The outage hours so far, as the first 13 characters of an ISO time ("2026-10-19T02").
-async function outageHours(db: D1Database): Promise<Set<string>> {
+// The outage hours as of `at`, from the runs that had ended by then, as the first 13
+// characters of an ISO time ("2026-10-19T02").
+async function outageHours(db: D1Database, at: string): Promise<Set<string>> {
   const { results } = await db
     .prepare(
       `SELECT substr(finished_at, 1, 13) AS hour, COUNT(*) AS ended,
          SUM(CASE WHEN json_extract(report, '$.stopped_on_error') = 1 THEN 1 ELSE 0 END) AS errors
-       FROM bench_runs WHERE arm IN ('baseline', 'treatment') AND finished_at IS NOT NULL GROUP BY hour`
+       FROM bench_runs WHERE arm IN ('baseline', 'treatment') AND finished_at IS NOT NULL AND finished_at <= ?1 GROUP BY hour`
     )
+    .bind(at)
     .all<{ hour: string; ended: number; errors: number }>();
   return new Set(results.filter((h) => isOutageHour(h.ended, h.errors)).map((h) => h.hour));
 }
@@ -547,6 +549,15 @@ export function nextSlot(runs: readonly PriorRun[], staleBefore: string, repeats
   }
   if (waiting) return { slot, attempt: 2 };
   return slot < repeats ? { slot: slot + 1, attempt: 1 } : null;
+}
+
+/** The slot and attempt a model start at `at` takes, from the task and arm's runs started
+ *  before it, each read as it stood at `at`: a run that ended later reads as running. The
+ *  start and the score both call this with the run's start time, so a run that closes
+ *  between them cannot change the attempt the score reads. Pure. */
+export function slotAt(runs: readonly PriorRun[], outage: ReadonlySet<string>, at: string): { slot: number; attempt: 1 | 2 } | null {
+  const stood = runs.map((r) => (r.finished_at && r.finished_at <= at ? r : { ...r, status: "running", finished_at: null, stopped_on_error: null }));
+  return nextSlot(countedRuns(stood, outage), new Date(Date.parse(at) - BENCH_STALE_MS).toISOString());
 }
 
 export async function handleBenchStart(request: Request, env: Env): Promise<Response> {
@@ -592,12 +603,12 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
         ).bind(staleId, now.toISOString()),
       ]);
     }
-    const outage = await outageHours(env.DB);
+    const outage = await outageHours(env.DB, now.toISOString());
     if (outage.has(now.toISOString().slice(0, 13))) {
       return textResponse(`no model run starts in an outage hour: at least half of this hour's ended runs stopped with an error during execution; start again next hour`, 409);
     }
     const results = await priorRuns(env.DB, task_id, arm);
-    slot = nextSlot(countedRuns(results, outage), stale);
+    slot = slotAt(results, outage, now.toISOString());
     if (!slot) {
       return textResponse(
         `task ${task_id} has used its ${arm} runs: ${BENCH_REPEATS} slots, each started at most twice and the second time only after an unjudged first attempt`,
@@ -695,12 +706,16 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     run.arm === "treatment" && report.capsid_job_id
       ? await env.DB.prepare("SELECT namespace, title, status FROM jobs WHERE id = ?1").bind(report.capsid_job_id).first<TreatmentJob>()
       : null;
-  // The attempt this run took, from the runs started before it, as /bench/start chose it.
+  // The attempt this run took, from the runs started before it as they stood at its start,
+  // which is what /bench/start chose it from.
   let attempt: 1 | 2 | undefined;
   if (MODEL_ARMS.includes(run.arm)) {
     const results = await priorRuns(env.DB, run.task_id, run.arm);
-    const before = results.slice(0, Math.max(0, results.findIndex((r) => r.id === run.id)));
-    attempt = nextSlot(countedRuns(before, await outageHours(env.DB)), "")?.attempt;
+    const index = results.findIndex((r) => r.id === run.id);
+    if (index >= 0) {
+      const startedAt = results[index].started_at;
+      attempt = slotAt(results.slice(0, index), await outageHours(env.DB, startedAt), startedAt)?.attempt;
+    }
   }
   const outcome = runOutcome(report, run, { ...run, attempt }, job);
   const scored = outcome.status === "scored";

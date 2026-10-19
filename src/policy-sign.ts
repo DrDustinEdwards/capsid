@@ -129,7 +129,15 @@ async function commitSigned(
     ]);
   } catch (err) {
     if (isMissingRowAbort(err)) {
-      return { ok: false, error: `${namespace}/${path} changed or was removed after ${caller} read it. Nothing was signed or written. Read the policy again and sign it again.` };
+      // The pin above already moved, so the message says so: until the next signing the
+      // loaders accept only the body read here, not whatever the document holds now.
+      return {
+        ok: false,
+        error:
+          `${namespace}/${path} changed or was removed after ${caller} read it, so the document was not written. ` +
+          `Its anti-rollback record (${policyPinKey(path)}) already names the body ${caller} read, so the stored policy does not load until it is signed again. ` +
+          `Read the policy again and sign it again.`,
+      };
     }
     throw err;
   }

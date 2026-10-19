@@ -26,6 +26,16 @@ function driver(namespace = "capsid"): Agent {
   return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
 }
 
+// A minted seat: can_merge and nothing else. A plain resume is the seat's act, so the
+// resume checks below are planted with it rather than with a driver.
+function mintedSeat(namespace = "capsid"): Agent {
+  const name = `${namespace}-seat`;
+  const scopes = defaultScopes([namespace]);
+  scopes.grants = ["read", "write"];
+  scopes.flags.can_merge = true;
+  return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
+}
+
 const SEAT_AGENT = legacyAgent("write", SEAT);
 
 // No cast on purpose: a cast would let a misspelled field (the tool's required_flags
@@ -71,39 +81,39 @@ describe("required_scopes on the real queue transitions", () => {
     expect(won.job?.id).toBe(posted.job!.id);
   });
 
-  it("PLANT: a blocked job naming a flag is not RESUMED by a driver without it", async () => {
+  it("PLANT: a blocked job naming a flag is not RESUMED by a caller without it", async () => {
     // Resume is a claim: the caller ends up holding the claim and doing the rest of
-    // the work, so a driver that could not have claimed this job must not acquire it
+    // the work, so a caller that could not have claimed this job must not acquire it
     // by resuming it.
-    const posted = await post({ required_scopes: { flags: ["can_merge"] } });
+    const posted = await post({ required_scopes: { flags: ["can_dispatch"] } });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
     expect(await statusOf(id)).toBe("blocked");
 
-    // take: without it the job goes back to the seat that blocked it, and the driver
+    // take: without it the job goes back to the seat that blocked it, and the resumer
     // acquires nothing.
-    const refused = await resumeJob(jobsEnv(), driver(), NOW, id, "picking it up", { take: true });
+    const refused = await resumeJob(jobsEnv(), mintedSeat(), NOW, id, "picking it up", { take: true });
     expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/can_merge/);
+    expect(refused.refusal).toMatch(/can_dispatch/);
     expect(await statusOf(id)).toBe("blocked");
 
-    // Without take the driver acquires nothing. The seat blocked it as the shared admin
+    // Without take the resumer acquires nothing. The seat blocked it as the shared admin
     // identity, so the job goes to the queue, where the flag is asked again at the claim.
-    const returned = await resumeJob(jobsEnv(), driver(), NOW, id, "the push ran");
+    const returned = await resumeJob(jobsEnv(), mintedSeat(), NOW, id, "the push ran");
     expect(returned.ok, returned.refusal).toBe(true);
     expect(returned.job?.status).toBe("queued");
     expect(returned.job?.claimed_by).toBeNull();
   });
 
-  it("PLANT: another namespace's driver cannot resume a job, even to hand it back", async () => {
+  it("PLANT: another namespace's seat cannot resume a job, even to hand it back", async () => {
     // A resume that returns the job to its claimant acquires nothing, so it skips the
     // flag check. It still moves a job, so the namespace is asked either way.
     const posted = await post({ required_scopes: undefined });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
-    const refused = await resumeJob(jobsEnv(), driver("foxhound"), NOW, id, "not mine");
+    const refused = await resumeJob(jobsEnv(), mintedSeat("foxhound"), NOW, id, "not mine");
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/capsid/);
     expect(await statusOf(id)).toBe("blocked");

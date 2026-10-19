@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { runBackup, TABLES } from "../src/backup.ts";
+import { backupHttpStatus, runBackup, TABLES } from "../src/backup.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
 
@@ -145,6 +145,19 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
+});
+
+// /ops/backup answers with this status. A refused run still has ran: true, so a
+// status keyed on ran alone answered 200 to a curl whose prune did nothing.
+test("PLANT: a refused prune answers /ops/backup with a non-2xx status", async () => {
+  const refused = makeEnv({ documents: [] }, MIRROR);
+  const { result } = await captureErrors(() => runBackup(refused.env));
+  assert.equal(result.ran, true);
+  assert.equal(backupHttpStatus(result), 503);
+
+  const healthy = makeEnv({ documents: DOCS }, MIRROR);
+  assert.equal(backupHttpStatus(await runBackup(healthy.env)), 200);
+  assert.equal(backupHttpStatus({ ran: false, skipped: "lease-held" }), 409);
 });
 
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {
@@ -639,4 +652,30 @@ test("a run whose lease was taken over does not release the new holder's lease",
   // The TTL sits above the 15-minute wall limit on a cron invocation.
   const lease = kv.puts.find((p) => p.key === "backup:lease");
   assert.ok((lease?.ttl ?? 0) > 900, `lease ttl ${lease?.ttl} does not cover a run past the cron wall limit`);
+});
+
+// The lease is get-then-put (no CAS), so two runs can both take it. The one whose lease
+// was overwritten re-reads it after the export and deletes nothing.
+test("PLANT: a run that lost its lease after the export prunes nothing", async () => {
+  const r2 = fakeR2(MIRROR);
+  const kv = fakeKv({});
+  const d1 = fakeD1({ documents: DOCS });
+  const batch = d1.db.batch.bind(d1.db);
+  let first = true;
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+    if (first) {
+      first = false;
+      kv.store.set("backup:lease", "2026-09-25T10:00:00.000Z another-run");
+    }
+    return batch(statements);
+  }) as typeof batch;
+  const env = fakeEnv({ DB: d1.db, MEDIA: r2.bucket, APP_KV: kv.kv });
+  const { result } = await captureErrors(() => runBackup(env));
+  assert.equal(result.ran, true);
+  if (!result.ran) return;
+
+  assert.match(result.prune_refused ?? "", /^lease-lost/);
+  assert.deepEqual(r2.deleted, [], "a run without the lease deleted objects");
+  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false);
+  assert.equal(await kv.kv.get(BACKUP_LAST_OK_KEY), null);
 });

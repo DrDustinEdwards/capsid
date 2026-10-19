@@ -26,7 +26,8 @@ import {
   type OutcomeFact,
 } from "../src/model-routing.ts";
 import { WATCHER_ACTOR } from "../src/watcher.ts";
-import { fakeD1, fakeEnv } from "./fakes.ts";
+import { pullRequestRisk } from "../src/model-routing-pr.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // Automatic model routing (src/model-routing.ts, docs/work-queue.md). The titles below are
 // real ones from the capsid queue, so the kind rules are held to the work they will read.
@@ -104,6 +105,50 @@ test("a pull request's files can raise a job's risk and never lower it", () => {
 test("a job that names its model is routed there, from a line of its own in the body", () => {
   assert.equal(routeJob(job("Tidy", { kind: "docs", body: "Do it.\nmodel: haiku\nThen stop." })).model, "haiku");
   assert.equal(routeJob(job("Tidy", { kind: "docs", body: "We tried model: haiku before and it was too thin." })).model, "sonnet", "prose that mentions a model names none");
+});
+
+test("PLANT: a named model never lowers a high-risk job below the risk rule's model (Grok audit 2026-10, J1)", () => {
+  for (const asked of ["haiku", "sonnet", "opusplan"]) {
+    const risky = routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: `model: ${asked}` }));
+    assert.equal(risky.model, "opus", `a job naming ${asked} with a blast-radius flag`);
+    assert.match(risky.reason, new RegExp(`not the ${asked} the job names`));
+    const viaPr = routeJob(job("Tidy", { kind: "docs", body: `model: ${asked}`, pr_risk: riskOf([{ filename: "src/billing/a.ts" }]) }));
+    assert.equal(viaPr.model, "opus", `a job naming ${asked} whose pull request is risky`);
+  }
+  // Naming the risk rule's model, or naming any model on a routine job, still holds.
+  assert.equal(routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: "model: opus" })).reason, "the job names opus");
+  assert.equal(routeJob(job("Tidy", { kind: "design", body: "model: haiku" })).model, "haiku");
+});
+
+test("PLANT: a pull request's files are read to the last page, and a failed read routes as high risk, not routine (Grok audit 2026-10, J2)", async () => {
+  const env = fakeEnv({
+    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/sample" }]) }) }) }) },
+    APP_KV: fakeKv({ seedToken: true }).kv,
+  });
+  const ref = "https://github.com/owner/sample/pull/7";
+  const page1 = Array.from({ length: 100 }, (_, i) => ({ filename: `docs/page-${i}.md`, status: "modified", additions: 1, deletions: 0 }));
+  const paged = (search: URLSearchParams) =>
+    search.get("page") === "2"
+      ? { body: [{ filename: "src/billing/refunds.ts", status: "modified", additions: 1, deletions: 0 }] }
+      : { body: page1, headers: { Link: '<https://api.github.com/repositories/1/pulls/7/files?page=2>; rel="next"' } };
+  await withFetch({ "GET /repos/owner/sample/pulls/7/files": (_b, search) => paged(search) }, async (calls) => {
+    const { risk, note } = await pullRequestRisk(env, "sample", ref);
+    assert.equal(calls.length, 2, "both pages were read");
+    assert.equal(risk?.level, "high", "the billing file on page 2 counts");
+    assert.equal(risk?.files_read, 101);
+    assert.equal(note, null);
+  });
+  await withFetch({ "GET /repos/owner/sample/pulls/7/files": { status: 502, body: { message: "bad gateway" } } }, async () => {
+    const { risk, note } = await pullRequestRisk(env, "sample", ref);
+    assert.equal(risk?.level, "high", "an unread pull request is not routine");
+    assert.match(note ?? "", /routed as high risk/);
+    assert.equal(routeJob(job("Tidy", { kind: "docs", pr_risk: risk })).model, "opus");
+  });
+  await withFetch({ "GET /repos/owner/sample/pulls/7/files": { body: [{ filename: "docs/x.md", status: "modified", additions: 1, deletions: 0 }] } }, async () => {
+    const { risk, note } = await pullRequestRisk(env, "sample", ref);
+    assert.equal(risk?.level, "routine");
+    assert.equal(note, null);
+  });
 });
 
 test("every kind and the rule list are tied: the last rule is the catch-all, and every rule's model is a known one", () => {
@@ -337,6 +382,26 @@ test("readModelLearning reads the window, states what it read, and proposes noth
   const empty = await readModelLearning({ prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } as unknown as D1Database, new Date());
   assert.deepEqual([empty.outcomes_read, empty.proposals.length], [0, 0]);
   assert.match(empty.note, /No routed outcome/);
+});
+
+test("PLANT: a session's self-reported model never moves an outcome into another model's cell (Grok audit 2026-10, C4)", async () => {
+  // Twelve docs jobs chosen for sonnet whose sessions all say they ran haiku and merged
+  // green: read on the self-report, they would make a haiku cell that proposes a move.
+  const claimedHaiku = many(12, 12, "docs", "sonnet").map((r) => ({ ...r, model_actual: "claude-haiku-5-5" }));
+  const honest = many(12, 10, "docs", "sonnet").map((r) => ({ ...r, model_actual: "claude-sonnet-5-5" }));
+  // opusplan runs as Opus and Sonnet, so either report agrees with it.
+  const planned = many(12, 9, "build", "opusplan").map((r, i) => ({ ...r, model_actual: i % 2 ? "claude-sonnet-5-5" : "claude-opus-5-5" }));
+  const rows = [...claimedHaiku, ...honest, ...planned];
+  let sql = "";
+  const db = { prepare: (text: string) => ((sql = text), { bind: () => ({ all: async () => ({ results: rows }) }) }) } as unknown as D1Database;
+  const out = await readModelLearning(db, new Date("2026-10-06T12:00:00Z"));
+  // The fake serves the rows as given, so the query is held to reading the chosen model
+  // as the cell's model and the reported one beside it.
+  assert.match(sql, /o\.model_chosen AS model,/);
+  assert.doesNotMatch(sql, /COALESCE\(o\.model_actual/);
+  assert.deepEqual(out.cells.map((c) => `${c.kind}/${c.model}/${c.n}`).sort(), ["build/opusplan/12", "docs/sonnet/12"]);
+  assert.equal(out.outcomes_read, 36);
+  assert.match(out.note, /12 outcomes were left out/);
 });
 
 // THE QUEUE: post assigns, claim delivers

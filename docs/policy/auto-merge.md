@@ -10,6 +10,15 @@ edited after signing, merges nothing.
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
 
+Version 7 was amended a third time on 2026-10-19 for the Grok audit of 2026-10
+(finding U2). dustinedwards, carrel and capsomer carry no allowed-path limit, so a green
+pull request there merged install, build and deploy glue that no refused path named:
+scripts outside the check scripts, `.github/` beyond the workflows, a nested
+`package.json`, the pnpm and yarn install configuration, `.npmrc`, a `Dockerfile`, a
+`Makefile`, `.husky/` and `.gitmodules`. Each is now a refused path. Every check is
+unchanged, except that `no_migration_workflow_lockfile` now also names bun's text
+lockfile, `bun.lock`, beside `bun.lockb` (finding U5).
+
 Version 7 was amended again on 2026-10-19, when Dustin removed the improve loop: the
 refused paths that named the loop's scorer, holdout suite and path guard went with
 those files, and the two sources the checks read their answers from are named by their
@@ -192,6 +201,15 @@ list differs from it in either direction.
 - path `(^|\/)vitest\.config\.[cm]?[jt]s$` the integration suite's configuration.
 - path `^scripts\/test-budget\.mjs$` the runner behind npm test.
 - path `^scripts\/verify-live\.mjs$` the live gate, whose rollback is the backstop for an unattended merge.
+- path `(^|\/)scripts\/` a script CI, a build or a deploy runs.
+- path `(^|\/)\.github\/` CI configuration beyond the workflows.
+- path `(^|\/)package\.json$` a nested package manifest, whose scripts and dependencies an install runs.
+- path `(^|\/)(pnpm-workspace\.yaml|\.pnpmfile\.cjs|\.yarnrc[^/]*)$` install configuration or a hook that runs during install.
+- path `(^|\/)\.npmrc$` npm registry and install-script policy.
+- path `(^|\/)Dockerfile[^/]*$` the image a build runs in.
+- path `(^|\/)Makefile$` build glue CI executes.
+- path `(^|\/)\.husky\/` a git hook CI may run.
+- path `(^|\/)\.gitmodules$` submodules the checkout would fetch and run.
 - path `^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$` the job transitions that write result_ref, which pr_recorded_for_job reads.
 - path `^src\/outcome-prs\.ts$` the writer of job_outcome_prs, which pr_recorded_for_job reads.
 

@@ -144,12 +144,12 @@ removed (2026-10-19) it covers only the signed policy documents.
 What the batch deletes: every live document (every path outside `archive/`), each
 snapshotted to `document_versions` first and then removed by the same path helper a
 document delete uses, which takes every edge touching it too; the `ops_sites` row;
-the `namespaces` row. An edge that was already dangling (its end in the namespace
+the `access_sync_groups` pin; the `namespaces` row. An edge that was already dangling (its end in the namespace
 names no document) touches nothing deleted and stays. One audit row, action
 `namespace-delete`, holds the counts, the deleted paths, the removed edges, and
-the `ops_sites` and `namespaces` rows whole.
+the `ops_sites`, `access_sync_groups` and `namespaces` rows whole.
 
-The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
+The whole delete is one D1 batch, and D1 caps a batch at 100 statements: six fixed
 ones plus two per document. So a namespace with more than 47 live documents is
 refused at preview and at perform, never half deleted. Delete or move documents
 with the `capsid_delete_doc` tool first, or ask the seat to rule a set-based helper.

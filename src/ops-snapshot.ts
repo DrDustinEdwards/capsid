@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
 import { parseHealth } from "./health-format";
+import { readCapped } from "./read-capped";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 import { logEvent } from "./log";
@@ -20,6 +21,9 @@ const RING_SLOT_MINUTES = 30;
 export const RING_SLOTS = (7 * 24 * 60) / RING_SLOT_MINUTES;
 
 const PROBE_TIMEOUT_MS = 5000;
+// A health answer is a small JSON object. The read stops here, so a site that streams a
+// huge body cannot hold the watcher pass's memory.
+export const MAX_HEALTH_BYTES = 65_536;
 
 // The shapes live in src/ops-types.ts, the contract the dashboard app reads.
 // ok: the health route answered 2xx. degraded: it did not, but the root did.
@@ -117,9 +121,13 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     const latency_ms = Date.now() - started;
-    const body = withBody ? await res.text() : null;
-    if (!withBody) await res.body?.cancel();
-    return { status: res.status, latency_ms, body, error: null };
+    if (!withBody) {
+      await res.body?.cancel();
+      return { status: res.status, latency_ms, body: null, error: null };
+    }
+    const { text, truncated } = await readCapped(res, MAX_HEALTH_BYTES);
+    // Past the cap the body is not read as health, so no sha is taken from part of it.
+    return { status: res.status, latency_ms, body: truncated ? null : text, error: null };
   } catch (err) {
     // A probe that got no answer is a result (the site is down from here), recorded
     // with its reason, not an error in the watcher.

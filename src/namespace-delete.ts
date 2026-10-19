@@ -24,8 +24,8 @@ import { pathMutation } from "./tools/docs";
 // to document_versions inside the batch before it goes and removed by
 // pathMutation(db, ns, path, null), the one path mutation site (CLAUDE.md, path
 // mutation rule); every edge touching one of those documents, removed by the same
-// helper and recorded whole in the audit row; the ops_sites row,
-// recorded whole in the audit row; and the namespaces row.
+// helper and recorded whole in the audit row; the ops_sites row and the
+// access_sync_groups pin, each recorded whole in the audit row; and the namespaces row.
 //
 // WHAT IS KEPT, because it is history: archived documents (archive/...), every
 // document_versions and audit_log row, finished jobs, job_outcomes, job_claims,
@@ -47,8 +47,9 @@ import { pathMutation } from "./tools/docs";
 // repaired.
 
 // The statements every perform batch carries besides the per-document ones: the plan
-// guard, the snapshot, the audit row, the ops_sites delete and the namespaces delete.
-const FIXED_STATEMENTS = 5;
+// guard, the snapshot, the audit row, the ops_sites delete, the access_sync_groups
+// delete and the namespaces delete.
+const FIXED_STATEMENTS = 6;
 // pathMutation(db, ns, path, null) is two statements: the edges, then the row.
 const STATEMENTS_PER_DOCUMENT = 2;
 /** The most live documents one delete_namespace batch can remove, from D1's batch
@@ -408,6 +409,7 @@ function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string
       `${c.documents_live} live document(s), each snapshotted to document_versions first`,
       `${c.document_links_removed} edge(s) touching those documents, recorded whole in the audit row (an already dangling edge touches none and stays)`,
       plan.ops_site ? `the ops_sites row (revision ${plan.ops_site_revision}), recorded whole in the audit row` : "no ops_sites row (there is none)",
+      "the access_sync_groups pin, if any, recorded whole in the audit row",
       `the namespaces row and its repo mapping, recorded in the audit row`,
     ],
     will_keep: [
@@ -598,7 +600,7 @@ export async function performNamespaceDelete(
         )
         .bind(namespace, pathsJson),
       // The one audit row, read inside the batch before anything is removed: the
-      // edges, the whole ops_sites row and the namespaces row are recorded here and
+      // edges, the whole ops_sites row, the access_sync_groups pin and the namespaces row are recorded here and
       // nowhere else afterwards; the deleted paths ride in the plan. The aggregate
       // always yields a row.
       db
@@ -610,6 +612,8 @@ export async function performNamespaceDelete(
              'ops_site', json((SELECT json_object('namespace', namespace, 'name', name, 'origin', origin, 'health_path', health_path,
                  'platform', platform, 'script', script, 'self_probe', self_probe, 'revision', revision,
                  'created_at', created_at, 'updated_at', updated_at) FROM ops_sites WHERE namespace = ?2)),
+             'access_sync_group', json((SELECT json_object('namespace', namespace, 'group_id', group_id, 'group_name', group_name,
+                 'pinned_by', pinned_by, 'pinned_at', pinned_at) FROM access_sync_groups WHERE namespace = ?2)),
              'namespace_row', json((SELECT json_object('namespace', namespace, 'repos', repos, 'created_at', created_at) FROM namespaces WHERE namespace = ?2)))
            FROM document_links
            WHERE (from_ns = ?2 AND from_path IN (SELECT value FROM json_each(?4)))
@@ -618,6 +622,9 @@ export async function performNamespaceDelete(
         )
         .bind(actor, namespace, recorded, pathsJson),
       db.prepare("DELETE FROM ops_sites WHERE namespace = ?1 RETURNING namespace").bind(namespace),
+      // The Access group pin (migrations/0040), so a later register of the same name
+      // does not inherit the old app's group.
+      db.prepare("DELETE FROM access_sync_groups WHERE namespace = ?1 RETURNING namespace").bind(namespace),
       db.prepare("DELETE FROM namespaces WHERE namespace = ?1 RETURNING namespace").bind(namespace),
       ...deletion,
     ]);

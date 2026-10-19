@@ -6,6 +6,7 @@ import {
   advanceRing,
   buildSnapshot,
   OPS_SNAPSHOT_KEY,
+  MAX_HEALTH_BYTES,
   probeSite,
   readSnapshot,
   RING_SLOTS,
@@ -91,6 +92,14 @@ test("a health body with no sha is ok and reports no sha", async () => {
   const p = await probeSite(site({}), f.impl, NOW, null);
   assert.equal(p.state, "ok");
   assert.equal(p.sha, null);
+});
+
+test("PLANT: a health body past the cap is not read whole and yields no sha", async () => {
+  const huge = JSON.stringify({ status: "ok", sha: "deadbee", pad: "x".repeat(MAX_HEALTH_BYTES) });
+  const impl = async () => new Response(huge, { status: 200 });
+  const p = await probeSite(site({}), impl, NOW, null);
+  assert.equal(p.state, "ok");
+  assert.equal(p.sha, null, "a body past the cap was read whole");
 });
 
 test("a failing health route on a site whose root answers is degraded, not down", async () => {

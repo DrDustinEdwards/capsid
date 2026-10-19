@@ -23,10 +23,10 @@ import { auditStatement } from "./store-guards";
 // - The write is a full PUT: name, the members as one email rule each, and the group's
 //   exclude and require rules carried over unchanged. The list is the app's whole list, so
 //   the group cannot drift from the members page.
-// - `removed` names people the app just removed or expired. For each one no longer in the
-//   list, the Zero Trust user's seat is freed (access_seat and gateway_seat false). Freeing a
-//   seat never grants or blocks anything by itself; the allow list and the app's own check
-//   do that, so a seat failure is reported and the sync still counts as written.
+// - `removed` names people the app just removed or expired. For each one the group held
+//   before the write and no longer in the list, the Zero Trust user's seat is freed
+//   (access_seat and gateway_seat false). Freeing a seat never grants or blocks anything by
+//   itself; the allow list and the app's own check do that, so a seat failure is reported and the sync still counts as written.
 // - Every call writes one audit_log row with Cloudflare's answer, refused or not, and the
 //   response carries the same, so the app can show "Waiting for Cloudflare" and retry.
 // - Admin policies list Dustin's emails directly and never this group, so no sync can add
@@ -93,7 +93,9 @@ export interface SyncResult {
   members: number;
   added: string[];
   dropped: string[];
-  seats: { freed: string[]; not_found: string[]; kept: string[]; failed: string | null };
+  // not_members: removed emails the group did not hold before this sync; their seats are
+  // never touched, so a key cannot free the seat of someone outside its own group.
+  seats: { freed: string[]; not_found: string[]; kept: string[]; not_members: string[]; failed: string | null };
   // Why the group was not written, in words, when ok is false.
   refusal: string | null;
   // The HTTP status Cloudflare answered when it refused, or null.
@@ -225,7 +227,7 @@ export async function runSync(fetchImpl: FetchLike, token: string, account: stri
     members: 0,
     added: [],
     dropped: [],
-    seats: { freed: [], not_found: [], kept: [], failed: null },
+    seats: { freed: [], not_found: [], kept: [], not_members: [], failed: null },
     refusal: null,
     cloudflare_status: null,
     conflict: false,
@@ -268,10 +270,12 @@ export async function runSync(fetchImpl: FetchLike, token: string, account: stri
   result.added = req.members.filter((e) => !before.has(e));
   result.dropped = [...before].filter((e) => !after.has(e)).sort();
 
-  // Seats: only for people the app says it removed and who are not members now. A person
-  // on the list keeps their seat whatever `removed` says.
-  const toFree = req.removed.filter((e) => !after.has(e));
+  // Seats: only for people the app says it removed, who were in this group before the
+  // write and are not members now. A person on the list keeps their seat whatever `removed`
+  // says, and a person the group never held is not this key's to free.
+  const toFree = req.removed.filter((e) => before.has(e) && !after.has(e));
   result.seats.kept = req.removed.filter((e) => after.has(e));
+  result.seats.not_members = req.removed.filter((e) => !before.has(e) && !after.has(e));
   if (toFree.length === 0) return result;
   try {
     const seats = await seatsFor(fetchImpl, token, base, toFree);

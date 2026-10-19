@@ -459,16 +459,17 @@ export async function supersedeJob(
 // session holding local shell and repo credentials, so it re-verifies on the same
 // terms and marks a tampered job failed rather than returning it.
 //
-// Any write-grant caller may resume, which the tool layer has already checked. It is
+// A plain resume is the seat's act (callerIsSeat: the admin or a can_merge caller). It is
 // not restricted to the original claimer, because the point is that a human approved
 // something, and the seat that approves is routinely not the session that blocked. The
 // reason is required and lands in the audit row, so what was approved is recorded
 // rather than implied.
 //
-// Except the claimant itself, on a plain resume. A driver that blocked a job on a
-// deploy, a secret or a force push could otherwise resume it with any reason, and the
-// audit row would read "approved: <reason>" as though a human had said yes. The
-// claimant may still resume its own job as the admin, with can_merge, or through
+// A driver, the claimant or a sibling in the namespace, may not plain-resume. A driver
+// that blocked a job on a deploy, a secret or a force push could otherwise resume it
+// with any reason, or have another driver with the namespace's write grant do it, and
+// the audit row would read "approved: <reason>" as though a human had said yes (Grok
+// audit 2026-10, S1). The claimant may still resume its own job through
 // approved_by_policy for a branch push or a pull request.
 //
 // The claim goes back to the driver that blocked it, not to the caller that resumed
@@ -595,15 +596,17 @@ export async function resumeJob(
     );
   }
 
-  // A plain resume is a record that somebody approved the gate, and the claimant
-  // approving its own gate is no approval. `take` does not change who the claimant is,
-  // so a claimant passing take is refused the same way.
+  // A plain resume is a record that the seat approved the gate, and a driver approving
+  // a gate, its own or a sibling's, is no approval. `take` does not change that, so a
+  // driver passing take is refused the same way.
   const isSeat = callerIsSeat(agent);
-  if (approvedByPolicy === undefined && !isSeat && current.claimed_by === actor) {
+  if (approvedByPolicy === undefined && !isSeat) {
+    const own = current.claimed_by === actor;
     return refuse(
       "resume",
-      `${actor} blocked ${id} and cannot approve its own gate with a plain resume. The seat (admin or can_merge) resumes it once the command is approved, ` +
-        `or, for a branch push or a pull request only, resume with approved_by_policy. It stays blocked.`
+      `${actor} ${own ? `blocked ${id} and cannot approve its own gate` : `cannot approve ${id}'s gate`} with a plain resume: that is the seat's act. ` +
+        `The seat (admin or can_merge) resumes it once the command is approved, ` +
+        `or, for a branch push or a pull request only, the driver that blocked it resumes with approved_by_policy. It stays blocked.`
     );
   }
 
@@ -756,8 +759,9 @@ export async function resumeJob(
     signature: noteSig ? "verified" : "unconfigured",
   };
   // The touch this resume records. A correction sends the work back; an approval clears
-  // the gate, on the signed policy or by the seat (admin or can_merge); anything else is
-  // a plain resume by another write-grant caller. A driver approving its own branch push
+  // the gate, on the signed policy or by the seat (admin or can_merge). "resume" was a
+  // plain resume by another write-grant caller, which is now refused above; older rows
+  // still carry it. A driver approving its own branch push
   // or pull request on the policy is the policy's approval, not a person's. The note, when
   // there is one, is a row of its own, so a count of approvals is not a count of notes.
   const touchKind = correction ? "correction" : policyMatch || isSeat ? "approval" : "resume";

@@ -15,7 +15,7 @@ name: ai-author
 # (scripts/strip-pr-footer.mjs; Dustin, 2026-10-14). Run it by hand to clean every past
 # pull request.
 #
-# The sha is devkit's v0.5.0 commit. A reusable workflow is pinned by full sha like any
+# The sha is devkit's v0.6.0 commit. A reusable workflow is pinned by full sha like any
 # action (test/workflow-policy.test.ts), and it declares its own timeout.
 
 on:

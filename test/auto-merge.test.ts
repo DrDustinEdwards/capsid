@@ -292,6 +292,38 @@ test("paths_not_refused: every path the ruling names refuses on its own", () => 
   }
 });
 
+test("PLANT: install, build and deploy glue is refused in a namespace with no allowed-path limit", () => {
+  // dustinedwards has no allowed paths, so the refused list is all that holds these
+  // (Grok audit 2026-10, U2).
+  const glue = [
+    "scripts/ship.mjs",
+    "scripts/deploy.sh",
+    "mcp/scripts/release.mjs",
+    ".github/dependabot.yml",
+    ".github/actions/setup/action.yml",
+    "mcp/package.json",
+    "pnpm-workspace.yaml",
+    ".yarnrc.yml",
+    ".npmrc",
+    "Dockerfile",
+    "Makefile",
+    ".husky/pre-commit",
+    ".gitmodules",
+  ];
+  const merged = glue.filter((path) => {
+    const verdict = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }));
+    return verdict.merge || verdict.failed !== "paths_not_refused";
+  });
+  assert.deepEqual(merged, [], "these passed paths_not_refused");
+  // Lockfiles, nested too, are the lockfile check's, and bun's text lockfile with them.
+  for (const path of ["bun.lock", "mcp/bun.lock", "mcp/yarn.lock"]) {
+    const verdict = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }));
+    assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile", path);
+  }
+  const plain = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", "docs/notes.md"] }));
+  assert.ok(plain.passed.includes("paths_not_refused"), "the refusal has become a blanket refusal");
+});
+
 test("paths_not_refused: the two auto-merge modules refuse like the file they were split from", () => {
   const modules = ["src/auto-merge-policy.ts", "src/auto-merge-tick.ts"];
   for (const path of modules) {
@@ -305,7 +337,7 @@ test("paths_not_refused: the two auto-merge modules refuse like the file they we
 
 test("paths_not_refused: every pattern in the list matches at least one path above or below", () => {
   // A pattern nothing matches is a refusal nobody has observed. Count stated: the
-  // list has 27 entries today, and each must be exercised.
+  // list has 35 entries today, and each must be exercised.
   const samples = [
     "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/protected-paths.ts",
     "src/scope.ts", "src/signed-docs.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
@@ -314,6 +346,9 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
     // dustinedwards-info's judge files, on the same list.
     ".github/workflows/ci.yml", "scripts/check-all.mjs", "scripts/lib/slop.mjs", ".aislop/allow.txt",
     "workers/og/index.ts", "package-lock.json",
+    // Install, build and deploy glue (Grok audit 2026-10, U2).
+    "scripts/ship.mjs", ".github/dependabot.yml", "mcp/package.json", ".yarnrc.yml", ".npmrc",
+    "Dockerfile", "Makefile", ".husky/pre-commit", ".gitmodules",
     // The writers of the records pr_recorded_for_job reads.
     "src/jobs.ts", "src/outcome-prs.ts",
   ];
@@ -349,7 +384,7 @@ test("paths_not_refused: the sources the checks read their answers from refuse o
 test("paths_not_refused: similar-looking paths that are ordinary code are not refused", () => {
   for (const path of [
     "src/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
-    "scripts/mint-agents.mjs", "src/environment.ts",
+    "src/environment.ts",
     // Near-misses of the refused patterns, each a real file this repo carries.
     "src/github/refs.ts", "src/signed-requests.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
     "test/jobs.test.ts",
@@ -399,7 +434,7 @@ test("paths_allowed_for_namespace: a capsid dashboard CSS-only PR is eligible", 
 });
 
 test("paths_allowed_for_namespace: a capsid dashboard .tsx, script or test PR is declined", () => {
-  for (const path of ["dashboard/src/App.tsx", "dashboard/src/api.ts", "dashboard/package.json", "test/limits.test.ts", "dashboard/src/styles.css.ts", "CLAUDE.md"]) {
+  for (const path of ["dashboard/src/App.tsx", "dashboard/src/api.ts", "dashboard/index.html", "test/limits.test.ts", "dashboard/src/styles.css.ts", "CLAUDE.md"]) {
     const verdict = evaluate(greenPr({ changedPaths: ["dashboard/src/styles.css", path] }));
     assert.equal(verdict.merge === false && verdict.failed, "paths_allowed_for_namespace", path);
   }
@@ -1932,6 +1967,19 @@ test("PLANT: a visual PR the policy would merge is held for Dustin's look, with 
   assert.equal(outcome.failed, "visual_awaits_look");
   assert.equal(outcome.merge_class?.class, "approve");
   assert.deepEqual(outcome.visual, { title: "New header", preview: "https://pr-23.sample.workers.dev/", shots: ["https://example.com/after.png"] });
+});
+
+test("PLANT: a draft PR the policy would merge is held as class wait and never sent to the merge API", async () => {
+  // GitHub answers 405 to a draft merge (Grok audit 2026-10, C2).
+  const routes = tickRoutes(["docs/autonomy.md"]);
+  const [pr] = routes[`GET ${OWNER}/pulls`].body;
+  const drafted = { ...routes, [`GET ${OWNER}/pulls`]: { body: [{ ...pr, draft: true }] } };
+  const { outcome, merges } = await tickWith(await enabledEnv(), drafted);
+  assert.equal(merges, 0, "a draft PR was sent to the merge API");
+  assert.equal(outcome.failed, "pr_is_draft");
+  assert.equal(outcome.merge_class?.class, "wait");
+  const { outcome: ready, merges: readyMerges } = await tickWith(await enabledEnv(), routes);
+  assert.equal(readyMerges, 1, ready.why ?? "");
 });
 
 test("a visual PR whose body names no job is still judged and waits for Dustin as class approve", async () => {

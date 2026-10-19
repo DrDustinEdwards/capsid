@@ -22,6 +22,7 @@ on:
       - "src/public-code-schema.ts"
       - "src/limits.ts"
       - "src/ops-snapshot.ts"
+      - "src/read-capped.ts"
       - "src/health-format.ts"
       - "src/log.ts"
       - "src/html.ts"

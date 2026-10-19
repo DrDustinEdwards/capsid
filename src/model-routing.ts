@@ -271,16 +271,19 @@ export function routeJob(job: {
   const k = deriveKind(job);
   const fromJob = riskFromJob(job);
   const risk: Risk = job.pr_risk && job.pr_risk.level === "high" ? job.pr_risk : fromJob;
-  const named = job.body ? NAMED_MODEL.exec(job.body)?.[1]?.toLowerCase() : undefined;
   const rule = ROUTING_RULES.find((r) => (r.when.risk ? risk.level === r.when.risk : r.when.kind ? r.when.kind === k.kind : true))!;
+  // A named model may raise a risky job's model, never lower it below the risk rule's.
+  const asked = job.body ? (NAMED_MODEL.exec(job.body)?.[1]?.toLowerCase() as RoutedModel | undefined) : undefined;
+  const overruled = asked !== undefined && rule.when.risk !== undefined && MODELS.indexOf(asked) < MODELS.indexOf(rule.model);
+  const named = overruled ? undefined : asked;
   // The risk rule comes first, so a rule matched by kind means the job is routine.
   const arm = !named && rule.when.kind && job.id ? TRIAL_ARMS.find((a) => a.kind === k.kind && a.model !== rule.model) : undefined;
   const trial = arm && job.id && trialBucket(job.id) < arm.percent ? arm.model : null;
-  const model = (named as RoutedModel | undefined) ?? trial ?? rule.model;
+  const model = named ?? trial ?? rule.model;
   const why = named
     ? `the job names ${named}`
     : risk.level === "high" && rule.when.risk
-      ? `${rule.why}: ${risk.reasons.join("; ")}`
+      ? `${rule.why}${overruled ? `, not the ${asked} the job names` : ""}: ${risk.reasons.join("; ")}`
       : trial
         ? `trial arm: ${trial} on ${arm!.percent} percent of routine ${k.kind} jobs, measured against ${rule.model} (kind ${k.kind}, ${k.source})`
         : `${rule.why} (kind ${k.kind}, ${k.source})`;
@@ -309,8 +312,8 @@ export const RATE_GAIN = 0.1;
 
 export interface OutcomeFact {
   kind: string | null;
-  // The model that did the work (the claim's model_id, reduced to an alias) or, where the
-  // session reported none, the one chosen.
+  // The model Capsid chose (job_outcomes.model_chosen). The session's own model_id only
+  // leaves an outcome out when it names another model (src/model-learning.ts).
   model: string | null;
   prs_merged: number | null;
   ci_green: number | null;

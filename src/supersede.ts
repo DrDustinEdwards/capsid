@@ -1,3 +1,4 @@
+import { isCanonPath } from "./canon";
 import type { Env } from "./env";
 import { auditStatement, snapshotLive } from "./store-guards";
 
@@ -8,10 +9,19 @@ import { auditStatement, snapshotLive } from "./store-guards";
 // and an audit row names the edge (CLAUDE.md, snapshot rule). It never deletes and
 // never reverses itself. To un-supersede a document, remove the edge as well as editing
 // the status, or the next pass sets it again.
+//
+// Canon (src/canon.ts) is never marked: a driver may write an edge in its own namespace
+// but may not change that namespace's core.md or decisions.md, so an edge to one must
+// not do it on the driver's behalf (Grok audit 2026-10, M4). The seat changes a canon
+// document's status itself. The write path refuses such an edge, and a cross-namespace
+// one the writer cannot write, before it is stored (src/tools/docs-write.ts).
 
 export const SUPERSEDE_ACTOR = "system:supersede-pass";
 // Documents changed per pass, so a bad edge set changes a bounded number.
 export const SUPERSEDE_MAX = 50;
+// Rows read per pass. Canon targets are read and skipped, and are never marked, so they
+// would hold the window forever if it were only SUPERSEDE_MAX + 1 wide.
+const SUPERSEDE_READ = SUPERSEDE_MAX * 4;
 
 const LIVE_SOURCE = ["draft", "superseded", "closed"];
 
@@ -26,6 +36,8 @@ interface Target {
 
 export interface SupersedeReport {
   marked: Array<{ document: string; by: string }>;
+  // Canon targets an edge names, left as they are.
+  skipped_canon: string[];
   more: boolean;
 }
 
@@ -41,11 +53,17 @@ export async function supersedePass(env: Env): Promise<SupersedeReport> {
      ORDER BY d.namespace, d.path
      LIMIT ?2`
   )
-    .bind(JSON.stringify(LIVE_SOURCE), SUPERSEDE_MAX + 1)
+    .bind(JSON.stringify(LIVE_SOURCE), SUPERSEDE_READ)
     .all<Target>();
+  const skipped = new Set<string>();
+  const targets = results.filter((t) => {
+    if (!isCanonPath(t.namespace, t.path)) return true;
+    skipped.add(`${t.namespace}/${t.path}`);
+    return false;
+  });
   const marked: SupersedeReport["marked"] = [];
   const seen = new Set<string>();
-  for (const t of results.slice(0, SUPERSEDE_MAX)) {
+  for (const t of targets.slice(0, SUPERSEDE_MAX)) {
     const document = `${t.namespace}/${t.path}`;
     if (seen.has(document)) continue;
     seen.add(document);
@@ -60,5 +78,5 @@ export async function supersedePass(env: Env): Promise<SupersedeReport> {
     ]);
     marked.push({ document, by });
   }
-  return { marked, more: results.length > SUPERSEDE_MAX };
+  return { marked, skipped_canon: [...skipped], more: targets.length > SUPERSEDE_MAX || results.length === SUPERSEDE_READ };
 }

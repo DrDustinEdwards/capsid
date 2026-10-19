@@ -175,6 +175,33 @@ test("readReviewComments asks the ISSUE comments endpoint, which is where the re
   }
 });
 
+test("PLANT: readReviewComments reads every page, so a newer BLOCK past the first 100 comments is seen (Grok audit 2026-10, R1)", async () => {
+  // GitHub lists issue comments oldest first, with no direction parameter: the newest
+  // review is on the last page.
+  const env = fakeEnv({ APP_KV: fakeKv({ seedToken: true }).kv, GITHUB_APP_CLIENT_ID: "x", GITHUB_APP_PRIVATE_KEY: "x" });
+  const asked: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    asked.push(String(url));
+    const page = new URL(url).searchParams.get("page") ?? "1";
+    const rows =
+      page === "1"
+        ? Array.from({ length: 100 }, (_, i) => ({ id: i + 1, user: { login: "reviewer" }, body: i === 0 ? "REVIEW: fine at abcdef1. APPROVE" : "chatter", created_at: "2026-09-12T10:00:00Z" }))
+        : [{ id: 101, user: { login: "reviewer" }, body: "REVIEW: the new push breaks the guard. BLOCK", created_at: "2026-09-13T10:00:00Z" }];
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (page === "1") headers.Link = '<https://api.github.com/repositories/1/issues/27/comments?per_page=100&page=2>; rel="next"';
+    return new Response(JSON.stringify(rows), { status: 200, headers });
+  }) as never;
+  try {
+    const comments = await readReviewComments(env, { owner: "o", repo: "r", number: 27 });
+    assert.equal(comments.length, 101);
+    assert.equal(asked.length, 2, "both pages were read");
+    assert.equal(decidingReview(comments)?.verdict, "BLOCK");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("a comment with no author or no body does not crash the parser", async () => {
   // GitHub omits `user` on a comment from a deleted account. A gate that threw there
   // would hold every job on that pull request forever.
