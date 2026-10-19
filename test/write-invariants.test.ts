@@ -107,6 +107,12 @@ const shaOf = async (s: string) => (await import("node:crypto")).createHash("sha
 
 const sqlFor = (recorded: Recorded[]) => recorded.map((r) => r.sql.replace(/\s+/g, " ")).join("\n");
 
+// The snapshot itself: the statement that copies the live title and body into a version
+// row. A bare /INSERT INTO document_versions/ is not enough, because the requireExists and
+// requireBodyUnchanged guards insert there too (columns document_id, namespace, path only),
+// so a batch that lost its snapshot still matched.
+const SNAPSHOT_COPY = /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/;
+
 // The tools and actions that overwrite, remove or rename a document, and what each must
 // issue. `label` names the tool and action in a failure. Adding a mutating tool or
 // action without adding it here is the gap the source guard in invariants.test.ts
@@ -116,19 +122,19 @@ const MUTATORS: Array<{ label: string; tool: string; args: Record<string, unknow
     label: "capsid_write_doc.write",
     tool: "capsid_write_doc",
     args: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
-    requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
+    requires: [SNAPSHOT_COPY, /INSERT INTO audit_log/],
   },
   {
     label: "capsid_delete_doc",
     tool: "capsid_delete_doc",
     args: { namespace: "capsid", path: "doc.md", confirm: true },
-    requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
+    requires: [SNAPSHOT_COPY, /INSERT INTO audit_log/],
   },
   {
     label: "capsid_write_doc.restore",
     tool: "capsid_write_doc",
     args: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
-    requires: [/INSERT INTO document_versions/, /INSERT INTO audit_log/],
+    requires: [SNAPSHOT_COPY, /INSERT INTO audit_log/],
   },
   {
     label: "capsid_write_doc.move",
@@ -178,6 +184,19 @@ for (const { label, tool, args, requires } of MUTATORS) {
     );
   });
 }
+
+test("PLANT: capsid_delete_doc copies title and body to document_versions before the DELETE", async () => {
+  const { client, recorded, close } = await connect("write");
+  const result = await call(client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
+  await close();
+  assert.ok(!result.isError, `delete returned an error: ${result.content?.[0]?.text}`);
+  const statements = recorded.map((r) => r.sql.replace(/\s+/g, " "));
+  const snapshot = statements.findIndex((q) => SNAPSHOT_COPY.test(q));
+  const removal = statements.findIndex((q) => /DELETE FROM documents WHERE/.test(q));
+  assert.ok(removal >= 0, `delete issued no DELETE FROM documents:\n${statements.join("\n")}`);
+  assert.ok(snapshot >= 0, `delete issued no title-and-body snapshot:\n${statements.join("\n")}`);
+  assert.ok(snapshot < removal, "the snapshot must come before the DELETE in the batch");
+});
 
 test("a read-only key cannot reach any mutating tool, and writes nothing", async () => {
   for (const { label, tool, args } of MUTATORS) {

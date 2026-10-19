@@ -18,7 +18,16 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || self.registration.scope;
+  // A tap opens only a page on the Portal's own scope; any other url opens the Portal itself.
+  const scope = self.registration.scope;
+  let url = scope;
+  const raw = event.notification.data && event.notification.data.url;
+  try {
+    const asked = typeof raw === "string" ? new URL(raw, scope).href : scope;
+    if (asked.startsWith(scope)) url = asked;
+  } catch {
+    // A url that does not parse opens the Portal.
+  }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const w of windows) {
