@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
+import { nextSlot, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/improve-scorer.ts";
 
@@ -66,4 +66,22 @@ test("the bench key is BENCH_SECRET used as is, and an unset secret refuses", as
   assert.equal(wrong.ok, false);
   const unset = await verifyBenchRequest({}, { timestamp, signature: sign("bench-secret"), body }, now);
   assert.equal(!unset.ok && unset.status, 503);
+});
+
+test("each slot is started at most twice, the second time only after an unjudged attempt", () => {
+  const STALE = "2026-10-19T00:00:00Z";
+  const run = (status: string, started_at = "2026-10-19T01:00:00Z") => ({ status, started_at });
+  assert.deepEqual(nextSlot([], STALE), { slot: 1, attempt: 1 });
+  assert.deepEqual(nextSlot([run("unjudged")], STALE), { slot: 1, attempt: 2 });
+  assert.deepEqual(nextSlot([run("unjudged"), run("unjudged")], STALE), { slot: 2, attempt: 1 });
+  assert.deepEqual(nextSlot([run("scored"), run("scored")], STALE), { slot: 3, attempt: 1 });
+  // Three unjudged runs: slot 1 used both tries, slot 2 waits for its rerun.
+  assert.deepEqual(nextSlot([run("unjudged"), run("unjudged"), run("unjudged")], STALE), { slot: 2, attempt: 2 });
+  // Two scored and an unjudged third: slot 3 still has its rerun.
+  assert.deepEqual(nextSlot([run("scored"), run("scored"), run("unjudged")], STALE), { slot: 3, attempt: 2 });
+  assert.equal(nextSlot([run("scored"), run("scored"), run("unjudged"), run("scored")], STALE), null);
+  // A running attempt holds its slot; a stale one counts as unjudged.
+  assert.equal(nextSlot([run("scored"), run("scored"), run("running")], STALE), null);
+  assert.deepEqual(nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE), { slot: 3, attempt: 2 });
+  assert.equal(nextSlot([run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged")], STALE), null);
 });

@@ -33,10 +33,11 @@ export const BENCH_MAX_RUNNING = 4;
 // A running row older than this no longer holds a slot: its job hit GitHub's own
 // timeout without reporting. The row stays 'running' as the record of that.
 const BENCH_STALE_MS = 3 * 60 * 60 * 1000;
-// How many scored runs each model arm gets per task (the design's D17), and so how many
-// unjudged ones it may have: each repeat is rerun at most once, and only after a machine
-// failure. Enforced here, not in the hand-dispatched workflow, so a run whose outcome
-// was seen cannot be replaced by another start. A stale running row counts as unjudged.
+// The design's k=3 repeats (D17): each model arm gets this many slots per task. A slot
+// may be started twice, and the second start only when the first came back unjudged (a
+// machine failure); a scored or running attempt holds its slot. Enforced here, not in the
+// hand-dispatched workflow, so a run whose outcome was seen cannot be replaced by another
+// start. A running row past BENCH_STALE_MS counts as unjudged.
 export const BENCH_REPEATS = 3;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The namespace the treatment's jobs live in, whose breaker gates a treatment start.
@@ -354,6 +355,31 @@ export async function handleBenchTasks(request: Request, env: Env): Promise<Resp
   return textResponse(`task ${t.task_id} is already registered with a different ${differs.join(", ")}; a registered task never changes`, 409);
 }
 
+export interface PriorRun {
+  status: string;
+  started_at: string;
+}
+
+// Which slot and attempt the next start of a model arm on a task takes, from that task
+// and arm's earlier runs in start order, or null when every slot is used. Slots fill in
+// order, so a slot is identified by position: an unjudged first attempt leaves its slot
+// waiting for its one rerun, and the next start fills that slot before opening another.
+export function nextSlot(runs: readonly PriorRun[], staleBefore: string, repeats = BENCH_REPEATS): { slot: number; attempt: 1 | 2 } | null {
+  let slot = 0;
+  let waiting = false;
+  for (const run of runs) {
+    const unjudged = run.status === "unjudged" || (run.status === "running" && run.started_at <= staleBefore);
+    if (waiting) {
+      waiting = false;
+      continue;
+    }
+    slot++;
+    waiting = unjudged;
+  }
+  if (waiting) return { slot, attempt: 2 };
+  return slot < repeats ? { slot: slot + 1, attempt: 1 } : null;
+}
+
 export async function handleBenchStart(request: Request, env: Env): Promise<Response> {
   const front = await signedBody(request, env, "BENCH_START_REJECTED", parseStartRequest);
   if (!front.ok) return front.response;
@@ -375,32 +401,43 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   }
   const id = `bench_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
   const stale = new Date(now.getTime() - BENCH_STALE_MS).toISOString();
-  const capped = MODEL_ARMS.includes(arm) ? 1 : 0;
-  // One statement, so two starts racing for the last slot, or for a task's last repeat,
-  // cannot both take it. The planted arms call no model and are not capped per task.
+  let slot: { slot: number; attempt: 1 | 2 } | null = null;
+  let prior = -1;
+  if (MODEL_ARMS.includes(arm)) {
+    const { results } = await env.DB.prepare("SELECT status, started_at FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid")
+      .bind(task_id, arm)
+      .all<PriorRun>();
+    slot = nextSlot(results, stale);
+    if (!slot) {
+      return textResponse(
+        `task ${task_id} has used its ${arm} runs: ${BENCH_REPEATS} slots, each started at most twice and the second time only after an unjudged first attempt`,
+        409
+      );
+    }
+    prior = results.length;
+  }
+  // One statement, so two starts racing for the last running slot cannot both take it,
+  // and a model start counted against the rows read above fails if another start landed
+  // since. The planted arms call no model and have no per-task slots.
   const opened = await env.DB.prepare(
     `INSERT INTO bench_runs (id, task_id, arm, gh_run, status, started_at)
      SELECT ?1, ?2, ?3, ?4, 'running', ?5
      WHERE (SELECT COUNT(*) FROM bench_runs WHERE status = 'running' AND started_at > ?6) < ?7
-       AND (?8 = 0 OR (
-         (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3
-            AND (status = 'scored' OR (status = 'running' AND started_at > ?6))) < ?9
-         AND (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3
-            AND (status = 'unjudged' OR (status = 'running' AND started_at <= ?6))) < ?9))
+       AND (?8 < 0 OR (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3) = ?8)
      RETURNING id`
   )
-    .bind(id, task_id, arm, gh_run, now.toISOString(), stale, BENCH_MAX_RUNNING, capped, BENCH_REPEATS)
+    .bind(id, task_id, arm, gh_run, now.toISOString(), stale, BENCH_MAX_RUNNING, prior)
     .all<{ id: string }>();
   if (opened.results.length !== 1) {
-    const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_runs WHERE status = 'running' AND started_at > ?1").bind(stale).first<{ n: number }>();
-    if ((live?.n ?? 0) >= BENCH_MAX_RUNNING) return textResponse(`${BENCH_MAX_RUNNING} bench runs are already running; try again when one finishes`, 429);
-    return textResponse(
-      `task ${task_id} has used its ${arm} runs: at most ${BENCH_REPEATS} scored or running, and at most ${BENCH_REPEATS} unjudged (one rerun per repeat)`,
-      409
-    );
+    if (prior >= 0) {
+      const now2 = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_runs WHERE task_id = ?1 AND arm = ?2").bind(task_id, arm).first<{ n: number }>();
+      if ((now2?.n ?? prior) !== prior) return textResponse(`another ${arm} start for task ${task_id} landed at the same time; start again`, 409);
+    }
+    return textResponse(`${BENCH_MAX_RUNNING} bench runs are already running; try again when one finishes`, 429);
   }
-  logEvent("log", "BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}` });
-  return Response.json({ ok: true, run_id: id });
+  const at = slot ? ` slot=${slot.slot} attempt=${slot.attempt}` : "";
+  logEvent("log", "BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}${at}` });
+  return Response.json({ ok: true, run_id: id, ...(slot ? { slot: slot.slot, attempt: slot.attempt } : {}) });
 }
 
 export async function handleBenchScore(request: Request, env: Env): Promise<Response> {

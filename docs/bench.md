@@ -23,7 +23,7 @@ Remove-Variable k
 
 - **The off switch.** `/bench/start` refuses unless KV `bench:enabled` reads exactly `on`. Absent, any other value, or a KV read that fails, is off. Turn it on with `npx wrangler kv key put bench:enabled on --binding APP_KV`, and off by deleting the key.
 - **The cap.** At most 4 runs are open at once. A run open for over 3 hours no longer holds a slot; its row stays `running` as the record that it never reported.
-- **Repeats and reruns.** Each model arm gets at most 3 scored or running runs per task (the design's k=3 repeats) and at most 3 unjudged ones, so each repeat is rerun at most once. A start past either limit is refused with 409, in the same statement as the cap, so a hand-dispatched run whose outcome was seen cannot be replaced. A stale running row counts as unjudged. The planted arms are not capped per task.
+- **Slots and reruns.** Each model arm gets 3 slots per task (the design's k=3 repeats). A slot may be started twice, and the second time only when the first attempt came back unjudged; a scored or running attempt holds its slot, and a stale running row counts as unjudged. Slots fill in order, so the next start after an unjudged attempt is that slot's rerun. A start with no slot left is refused with 409. The insert is conditional on the count of the task and arm's runs read for the decision, so a start that raced another fails instead of overfilling. The response names the slot and attempt. The planted arms have no slots.
 - **The bench breaker.** A treatment run works a real job in the `bench` namespace, so it does not start while that namespace's job breaker is open (`src/job-breaker.ts`). Reset it as for any namespace.
 
 ## How a run is scored

@@ -109,31 +109,39 @@ describe("bench endpoints", () => {
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
   });
 
-  it("give each model arm its repeats per task and one rerun per repeat, and never cap the planted arms", async () => {
+  it("give each model arm its slots per task, rerun a slot only after an unjudged attempt, and never cap the planted arms", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
-    // Repeats scored or still running fill the arm's scored slots.
-    for (let i = 0; i < BENCH_REPEATS; i++) {
-      const run_id = await startOk(task_id);
-      if (i < BENCH_REPEATS - 1) expect((await score(run_id, { hidden: counts(2, 3), claimed_done: true })).status).toBe(200);
-    }
+    const startSlot = async (arm = "baseline") => {
+      const response = await start(task_id, arm);
+      expect(response.status, await response.clone().text()).toBe(200);
+      return (await response.json()) as { run_id: string; slot: number; attempt: number };
+    };
+    // Slot 1 comes back unjudged, so its rerun is the next start; slot 2 scores.
+    const first = await startSlot();
+    expect(first).toMatchObject({ slot: 1, attempt: 1 });
+    expect((await score(first.run_id, { environment: { ok: false, reason: "machine failure" } })).status).toBe(200);
+    const rerun = await startSlot();
+    expect(rerun).toMatchObject({ slot: 1, attempt: 2 });
+    expect((await score(rerun.run_id, { hidden: counts(2, 3), claimed_done: true })).status).toBe(200);
+    const second = await startSlot();
+    expect(second).toMatchObject({ slot: 2, attempt: 1 });
+    expect((await score(second.run_id, { hidden: counts(1, 3), claimed_done: true })).status).toBe(200);
+    // Slot 3 is still running, so it holds its slot and nothing else may start.
+    const third = await startSlot();
+    expect(third).toMatchObject({ slot: 3, attempt: 1 });
     const full = await start(task_id);
     expect(full.status).toBe(409);
     expect(await full.text()).toMatch(/has used its baseline runs/);
-    // The other arm on the same task has its own slots.
-    const treatment = await startOk(task_id, "treatment");
+    // The other arm on the same task has its own slots, and the planted arms none.
+    expect(await startSlot("treatment")).toMatchObject({ slot: 1, attempt: 1 });
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
-    // The last baseline repeat came back unjudged, so one rerun is allowed; reruns stop
-    // once the arm has as many unjudged runs as repeats.
-    const unjudgedTask = await registerTask();
-    for (let i = 0; i < BENCH_REPEATS; i++) {
-      const run_id = await startOk(unjudgedTask);
-      expect((await score(run_id, { environment: { ok: false, reason: "machine failure" } })).status).toBe(200);
+    for (let i = 0; i < BENCH_REPEATS + 1; i++) {
+      const planted = await start(task_id, "check-gold");
+      expect(planted.status).toBe(200);
+      expect(await planted.json()).not.toHaveProperty("slot");
     }
-    expect((await start(unjudgedTask)).status).toBe(409);
-    for (let i = 0; i < BENCH_REPEATS + 1; i++) expect((await start(unjudgedTask, "check-gold")).status).toBe(200);
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
-    expect(treatment).toMatch(/^bench_/);
   });
 
   it("score a baseline: a done claim with a failing hidden test is a false claim, and a run closes once", async () => {
