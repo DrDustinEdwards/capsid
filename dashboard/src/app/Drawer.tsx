@@ -97,6 +97,14 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
           ) : cf.deploys.length ? (
             <div className="scroll-x">
               <table className="list">
+                <thead>
+                  <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Message</th>
+                    <th scope="col">Author</th>
+                    <th scope="col">When</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {cf.deploys.map((d) => (
                     <tr key={d.id}>
