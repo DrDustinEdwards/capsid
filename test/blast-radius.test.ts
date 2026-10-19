@@ -6,7 +6,7 @@ import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { operationBlocks, sourceFile, toolBlocks } from "./source-files.ts";
+import { operationBlocks, sourceFile, sourceFiles, toolBlocks, type SourceFile } from "./source-files.ts";
 import { servedOperations } from "./served.ts";
 
 // The blast-radius suite. One plant per flag, driven through a real MCP connection
@@ -270,32 +270,135 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
 });
 
 // scanner-rule: CLAUDE.md, one enforcement point rule: a repo mutation carries its flags through guardedWrite.
-// Derived over every GitHub mutation call site.
+// Derived over every GitHub mutation helper and every call site in src/.
+
+// The GitHub mutation helpers, derived from src/github/: every top-level function that
+// sends a POST, PUT, PATCH or DELETE through ghFetch, and every function that calls one,
+// to a fixed point. The exported ones are what the rest of src/ can call.
+const MUTATING_METHOD = /method:\s*"(?:POST|PUT|PATCH|DELETE)"/;
+function githubMutationHelpers(files: SourceFile[]): string[] {
+  const blocks: Array<{ name: string; exported: boolean; body: string }> = [];
+  for (const file of files.filter((f) => f.name.startsWith("github/"))) {
+    const heads = [...file.text.matchAll(/^(export )?(?:async )?function (\w+)/gm)];
+    heads.forEach((m, i) => {
+      const body = file.text.slice(m.index, i + 1 < heads.length ? heads[i + 1].index : file.text.length);
+      blocks.push({ name: m[2], exported: Boolean(m[1]), body });
+    });
+  }
+  const mutating = new Set(blocks.filter((b) => /ghFetch\(/.test(b.body) && MUTATING_METHOD.test(b.body)).map((b) => b.name));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const b of blocks) {
+      if (mutating.has(b.name)) continue;
+      if ([...mutating].some((name) => new RegExp(`\\b${name}\\(`).test(b.body.slice(b.body.indexOf("{"))))) {
+        mutating.add(b.name);
+        grew = true;
+      }
+    }
+  }
+  return blocks.filter((b) => b.exported && mutating.has(b.name)).map((b) => b.name).sort();
+}
+
+// Import lists and comment lines are blanked (same length, so offsets hold): they name
+// a helper without calling it.
+function codeOnly(text: string): string {
+  const blank = (m: string) => m.replace(/[^\n]/g, " ");
+  return text.replace(/^import[\s\S]*?from\s+"[^"]+";/gm, blank).replace(/^\s*(?:\/\/|\*|\/\*).*$/gm, blank);
+}
+
+// Every call to a mutation helper outside src/github/ that is not inside a guardedWrite
+// callback (guardedWrite( within the 800 characters before it), and every ghFetch outside
+// src/github/ that sends a mutating method itself, as "file: helper".
+function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
+  const found: string[] = [];
+  for (const file of files.filter((f) => !f.name.startsWith("github/"))) {
+    const code = codeOnly(file.text);
+    for (const helper of helpers) {
+      for (const m of code.matchAll(new RegExp(`(?<![\\w.])${helper}\\(`, "g"))) {
+        if (/function\s+$/.test(code.slice(Math.max(0, m.index - 20), m.index))) continue;
+        if (/guardedWrite\(/.test(code.slice(Math.max(0, m.index - 800), m.index))) continue;
+        found.push(`${file.name}: ${helper}`);
+      }
+    }
+    for (const m of code.matchAll(/\bghFetch\(/g)) {
+      let depth = 0;
+      let at = m.index + "ghFetch".length;
+      for (; at < code.length; at++) {
+        if (code[at] === "(") depth += 1;
+        else if (code[at] === ")" && --depth === 0) break;
+      }
+      if (MUTATING_METHOD.test(code.slice(m.index, at)) || /method:\s*\w/.test(code.slice(m.index, at))) {
+        found.push(`${file.name}: ghFetch`);
+      }
+    }
+  }
+  return found.sort();
+}
+
+// The call sites that reach GitHub outside guardedWrite, each named with why. guardedWrite
+// is checkScope over a caller's grant and flags (src/tools/repo-guards.ts), and none of
+// these has a caller to check: building an all-allowing agent for them would be a check
+// that cannot refuse. Each writes its own audit row. Adding a site is a test edit a
+// reviewer sees; a second call in a listed file fails too, because the count is exact.
+const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
+  {
+    site: "approval-executor.ts: managePr",
+    why: "the tick merging on a human's recorded approval (pr_approvals), pinned to the approved sha; no caller, audited by close()",
+  },
+  {
+    site: "auto-merge-tick.ts: managePr",
+    why: "the signed auto-merge policy's own merge on the cron tick, pinned to the judged sha; no caller, audited by systemAudit",
+  },
+  {
+    site: "controls.ts: managePr",
+    why: "the portal's pr_close control: the owner's signed control token (Access login, no MCP grant); writes its pr-closed audit row",
+  },
+  {
+    site: "maintenance-branches.ts: deletePruneCandidates",
+    why: "the maintenance pass's branch prune, a system action behind its KV switch; audited per branch",
+  },
+  {
+    site: "maintenance-releases.ts: createTag",
+    why: "the maintenance pass's release tagging, a system action behind its KV switch; audited per tag",
+  },
+  {
+    site: "maintenance-releases.ts: publishRelease",
+    why: "the same pass publishing the tag's release notes; audited with the tag",
+  },
+];
+
 test("DERIVED: every repo mutation goes through the one wrapper that computes the flags", () => {
   // The repo write tools reach GitHub through guardedWrite, where repoWriteFlags
-  // runs. A tool calling a github.ts mutation directly would skip the flag check
-  // while still being write-gated at the registrar.
-  const repo = sourceFile("tools/repo.ts");
-  const MUTATIONS = ["writeRepoFile(", "deleteRepoFile(", "createBranch(", "openPr(", "managePr(", "deleteBranch(", "pruneMergedBranches(", "ciDispatch(", "tagRelease("];
-  for (const mutation of MUTATIONS) {
-    let from = 0;
-    let seen = 0;
-    for (;;) {
-      const at = repo.indexOf(mutation, from);
-      if (at === -1) break;
-      from = at + mutation.length;
-      // Skip the import list at the top of the file, which names each of them once.
-      if (at < repo.indexOf("export function defineRepoOperations")) continue;
-      seen += 1;
-      const block = repo.slice(Math.max(0, at - 800), at);
-      assert.match(
-        block,
-        /guardedWrite\(/,
-        `${mutation} is called at index ${at} without going through guardedWrite, so no flag is checked for it`
-      );
-    }
-    assert.ok(seen > 0, `the scan found no call to ${mutation}; it is reading nothing`);
+  // runs. Code calling a github/ mutation directly would skip the flag check while
+  // still being write-gated at the registrar. All of src/ is scanned, not only the
+  // repo tools: a cron or control reaching GitHub is a mutation too.
+  const files = sourceFiles();
+  const helpers = githubMutationHelpers(files);
+  // Vacuity and drift: the derivation finds every helper the repo tools are known to
+  // call. A helper missing here means the derivation stopped seeing it.
+  for (const known of ["writeRepoFile", "deleteRepoFile", "createBranch", "openPr", "managePr", "deleteBranch", "pruneMergedBranches", "ciDispatch", "tagRelease"]) {
+    assert.ok(helpers.includes(known), `the derivation did not find ${known} as a mutation helper; it found ${helpers.join(", ")}`);
   }
+  const repo = codeOnly(sourceFile("tools/repo.ts"));
+  for (const known of ["writeRepoFile(", "managePr(", "ciDispatch("]) {
+    assert.ok(repo.includes(known), `the scan found no call to ${known} in tools/repo.ts; it is reading nothing`);
+  }
+  assert.deepEqual(
+    unguardedMutations(files, helpers),
+    UNGUARDED_EXCEPTIONS.map((e) => e.site).sort(),
+    "a GitHub mutation is called outside guardedWrite, so no flag is checked for it. Route it through guardedWrite, " +
+      "or, where there is no caller to check, add it to UNGUARDED_EXCEPTIONS with the reason"
+  );
+});
+
+test("PLANT: the mutation scan catches a helper called outside guardedWrite, and a raw mutating ghFetch", () => {
+  const helpers = githubMutationHelpers(sourceFiles());
+  const planted: SourceFile[] = [
+    { name: "tools/guarded.ts", text: 'return guardedWrite("manage_pr", ns, null, () => managePr(env, ns, 1, "merge"));\n' },
+    { name: "rogue.ts", text: 'import { managePr } from "./github/refs";\n// managePr( in a comment is not a call\nawait managePr(env, ns, 1, "merge");\n' },
+    { name: "raw.ts", text: 'await ghFetch(env, o, r, `/repos/${o}/${r}/pulls/1/merge`, { method: "PUT" });\nawait ghFetch(env, o, r, "/repos/x");\n' },
+  ];
+  assert.deepEqual(unguardedMutations(planted, helpers), ["raw.ts: ghFetch", "rogue.ts: managePr"]);
 });
 
 test("every flag is required by some path, so none of them is decoration", () => {
