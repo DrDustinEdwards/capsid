@@ -3,7 +3,8 @@ import { expectNoSideways, measure, visit } from "./views.ts";
 
 // Pull requests (the UX audit of 2026-10-19, B2 and m6): what waits for you comes first, on
 // a phone each pull request is a card with full-width Approve and Close on the first screen,
-// and the chart is last.
+// Auto-merge (the signed policy and the safety meter) is one section after it, and the chart
+// is last.
 
 test("PLANT: Waiting for you is the first panel, and the merges chart is the last", async ({ page }) => {
   await visit(page, "prs");
@@ -13,6 +14,22 @@ test("PLANT: Waiting for you is the first panel, and the merges chart is the las
   const order = await page.evaluate(() => ["#waiting-prs", "#auto-merge", "#merge-trend"].map((s) => document.querySelector(s)!.getBoundingClientRect().top));
   expect(order[0]).toBeLessThan(order[1]!);
   expect(order[1]).toBeLessThan(order[2]!);
+});
+
+test("Auto-merge holds the policy panel, then the meter; Load from repo and sign asks for the version and shows the lines", async ({ page }) => {
+  await visit(page, "prs");
+  const section = page.locator("main #auto-merge");
+  const titles = await section.locator(".cap-panel > .cap-panel-head h2, .cap-panel > header h2").allInnerTexts();
+  expect(titles).toEqual(["Auto-merge policy", "Auto-merge, last 7 days"]);
+  await section.getByRole("button", { name: "Load from repo and sign" }).click();
+  const dialog = page.locator("dialog[open]");
+  await expect(dialog.getByRole("heading", { name: "Load the auto-merge policy from the repo and sign it" })).toBeVisible();
+  await dialog.getByLabel("Version to sign (required)").fill("8");
+  await dialog.getByRole("button", { name: "Preview" }).click();
+  await expect(dialog.locator("[data-summary]")).toContainText("Write the auto-merge policy from docs/policy/auto-merge.md");
+  // The lines that change are what is being signed, so Details starts open.
+  await expect(dialog.locator("details.confirm-details")).toHaveAttribute("open", "");
+  await expect(dialog).toContainText("+ - version: 8");
 });
 
 test("PLANT: on a phone each pull request is a card whose Approve and Close are full width, 44 px tall, on the first screen", async ({ page }) => {

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
-import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type BatchItem, type ConfirmRequest } from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, TYPED_CONFIRM, performLabel, type BatchItem, type ConfirmRequest } from "./ctx";
 
-// The actions whose Details start open: a rule change's added and removed lines are what
-// the person is deciding.
-const OPEN_DETAILS: ReadonlySet<string> = new Set(["canon_approve", "canon_approve_all", "canon_reject"]);
+// The actions whose Details start open: a rule change's or a policy's added and removed
+// lines are what the person is deciding.
+const OPEN_DETAILS: ReadonlySet<string> = new Set(["canon_approve", "canon_approve_all", "canon_reject", "sign_policy_from_repo"]);
 
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
@@ -31,6 +31,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
   const opener = useRef<Element | null>(null);
   const started = useRef(false);
   const finished = useRef(false);
@@ -43,6 +44,10 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const [reason, setReason] = useState("");
   const takesNote = TAKES_NOTE.has(req.action);
   const [note, setNote] = useState("");
+  // The actions that widen autonomy ask for the version number typed before the preview, so
+  // the token carries it; a wrong number is refused with the right one.
+  const typesConfirm = TYPED_CONFIRM.has(req.action);
+  const [typedVersion, setTypedVersion] = useState("");
   const [preview, setPreview] = useState<PortalPreview | null>(null);
   const [pending, setPending] = useState<null | "preview" | "perform">(null);
   // field: the error is about the reason field itself, so the field is marked invalid.
@@ -88,7 +93,13 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
       return;
     }
     const typedNote = takesNote ? (noteRef.current?.value ?? (note || req.params.note || "")).trim() : "";
-    const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}) };
+    const version = typesConfirm ? (confirmRef.current?.value ?? typedVersion).trim() : "";
+    if (typesConfirm && !version) {
+      setError({ text: "Type the version number of the policy to be signed, then preview. The preview names it if you do not know it.", expired: false, field: true });
+      confirmRef.current?.focus();
+      return;
+    }
+    const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}), ...(typesConfirm ? { confirm: version } : {}) };
     setPending("preview");
     setError(null);
     setPreview(null);
@@ -136,7 +147,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     // previews as soon as the dialog opens.
     if (!started.current) {
       started.current = true;
-      if (!askReason) void runPreview("");
+      if (!askReason && !typesConfirm) void runPreview("");
     }
     return () => {
       alive.current = false;
@@ -156,7 +167,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         {pending === "perform" ? "Working..." : label}
       </button>
     );
-  } else if (askReason || error) {
+  } else if (askReason || typesConfirm || error) {
     primary = (
       // A plain button with its own handler: Preview never depends on the form's submit
       // event, and it is disabled only while a request is in flight, never silently
@@ -195,6 +206,34 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               {given}
             </p>
           </div>
+        )}
+        {typesConfirm && !askReason && !preview && (
+          <form
+            id="confirmForm"
+            className="stack-gap"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void runPreview("");
+            }}
+          >
+            <label htmlFor="confirmVersion" className="section-title">
+              Version to sign (required)
+            </label>
+            <input
+              ref={confirmRef}
+              id="confirmVersion"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              autoFocus
+              value={typedVersion}
+              disabled={busy}
+              aria-invalid={error?.field ? true : undefined}
+              aria-describedby={error?.field ? "confirmError" : undefined}
+              onChange={(e) => setTypedVersion(e.target.value)}
+            />
+            <p className="faint note">The version number in the policy file. It decides what merges with no human, so it is typed, not clicked.</p>
+          </form>
         )}
         {askReason && !preview && (
           <form

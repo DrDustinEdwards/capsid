@@ -6,9 +6,11 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as a signed job body. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 7
+- version: 8
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 8 is version 7 as amended on 2026-10-19 (Grok audit U2 and U5, improve loop removal).
 
 Version 7 was amended a third time on 2026-10-19 for the Grok audit of 2026-10
 (finding U2). dustinedwards, carrel and capsomer carry no allowed-path limit, so a green

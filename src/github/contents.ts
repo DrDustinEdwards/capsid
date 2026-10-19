@@ -35,12 +35,15 @@ export async function listRepoTree(env: Env, namespace: string, path = "", ref?:
   };
 }
 
-export async function readRepoFile(env: Env, namespace: string, path: string, ref?: string, repoSelector?: string) {
+// fresh: skip the KV read cache, for a caller that compares two reads (the second must be
+// GitHub's answer now, not the first one served back).
+export async function readRepoFile(env: Env, namespace: string, path: string, ref?: string, repoSelector?: string, fresh = false) {
   assertRepoArg("path", path);
   if (ref) assertRepoArg("ref", ref);
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-  const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${encodePath(path)}${query}`);
+  const api = `/repos/${owner}/${repo}/contents/${encodePath(path)}${query}`;
+  const resp = fresh ? await ghFetch(env, owner, repo, api) : await cachedGet(env, owner, repo, api);
   if (!resp.ok) throw new Error(`read_repo_file failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as
     | { type: string; content?: string; encoding?: string; size: number; sha: string }

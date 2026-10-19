@@ -32,10 +32,10 @@ test("the promotable path classes are merge-class's own, less money, migration a
   assert.deepEqual([...PROMOTABLE_PATH_CLASSES].sort(), PATH_CLASSES.filter((c) => c !== "money" && c !== "migration" && c !== "workflow").sort());
 });
 
-test("the shipped version 7 lists no unit, and a unit under ## Auto units is read", () => {
-  const v7 = parseMergePolicy(SHIPPED);
-  assert.ok("policy" in v7);
-  assert.deepEqual(v7.policy.units, []);
+test("the shipped version 8 lists no unit, and a unit under ## Auto units is read", () => {
+  const v8 = parseMergePolicy(SHIPPED);
+  assert.ok("policy" in v8);
+  assert.deepEqual(v8.policy.units, []);
   const listed = parseMergePolicy(withUnits(["- unit `capsid / tests`", "- unit `carrel/src-routine`"]));
   assert.ok("policy" in listed, "error" in listed ? listed.error : "");
   assert.deepEqual(listed.policy.units, ["capsid / tests", "carrel / src-routine"]);
@@ -107,40 +107,40 @@ test("PLANT: a missing typed version is refused, and nothing is signed or writte
   const before = storedBody(w.rows);
   const refused = await performPolicyChange(w.env, "access:admin@example.com", "promote", "capsid/tests", undefined);
   assert.equal(refused.ok, false);
-  assert.match(!refused.ok ? refused.error : "", /needs the new version number typed as confirm: 8/);
-  const wrong = await performPolicyChange(w.env, "access:admin@example.com", "promote", "capsid/tests", "7");
-  assert.match(!wrong.ok ? wrong.error : "", /confirm is '7', but the new version is 8/);
+  assert.match(!refused.ok ? refused.error : "", /needs the new version number typed as confirm: 9/);
+  const wrong = await performPolicyChange(w.env, "access:admin@example.com", "promote", "capsid/tests", "8");
+  assert.match(!wrong.ok ? wrong.error : "", /confirm is '8', but the new version is 9/);
   assert.equal(storedBody(w.rows), before, "the policy changed on a refusal");
   assert.equal(w.kv.puts.length, 0, "the pin moved on a refusal");
 });
 
-test("typing the new version signs version 8 with the unit, and the Worker loads it", async () => {
+test("typing the new version signs version 9 with the unit, and the Worker loads it", async () => {
   const w = await world();
   const plan = await planPolicyChange(w.env, "promote", "capsid/tests");
   assert.ok(plan.ok, plan.ok ? "" : plan.error);
-  assert.deepEqual([plan.from, plan.to, plan.unit], ["7", "8", "capsid / tests"]);
-  const done = await performPolicyChange(w.env, "access:admin@example.com", "promote", "capsid/tests", "8");
+  assert.deepEqual([plan.from, plan.to, plan.unit], ["8", "9", "capsid / tests"]);
+  const done = await performPolicyChange(w.env, "access:admin@example.com", "promote", "capsid/tests", "9");
   assert.ok(done.ok, done.ok ? "" : done.error);
   const { signature, body } = splitSignedTask(storedBody(w.rows));
   assert.ok(signature, "the new version is not signed");
-  assert.match(body, /^- version: 8$/m);
+  assert.match(body, /^- version: 9$/m);
   assert.match(body, /## Auto units[\s\S]*- unit `capsid \/ tests`/);
   const loaded = await loadMergePolicy(w.env);
   assert.ok("policy" in loaded, "error" in loaded ? loaded.error : "");
-  assert.equal(loaded.policy.version, "8");
+  assert.equal(loaded.policy.version, "9");
   assert.deepEqual(loaded.policy.units, ["capsid / tests"]);
-  assert.ok(w.rows.versions.length >= 1, "version 7 was not snapshotted");
+  assert.ok(w.rows.versions.length >= 1, "version 8 was not snapshotted");
   // Removing it is the same control, the next version, the same typed confirm.
-  assert.equal((await performPolicyChange(w.env, "access:admin@example.com", "demote", "capsid/tests", "9")).ok, true);
-  const v9 = await loadMergePolicy(w.env);
-  assert.ok("policy" in v9);
-  assert.deepEqual([v9.policy.version, v9.policy.units], ["9", []]);
+  assert.equal((await performPolicyChange(w.env, "access:admin@example.com", "demote", "capsid/tests", "10")).ok, true);
+  const v10 = await loadMergePolicy(w.env);
+  assert.ok("policy" in v10);
+  assert.deepEqual([v10.policy.version, v10.policy.units], ["10", []]);
 });
 
 test("a change that would not load, or changes nothing, is refused at the preview", async () => {
   const w = await world();
   assert.match(((await planPolicyChange(w.env, "promote", "capsid/money")) as { error: string }).error, /never promoted to auto/);
-  assert.match(((await planPolicyChange(w.env, "demote", "capsid/tests")) as { error: string }).error, /not promoted to auto in version 7/);
+  assert.match(((await planPolicyChange(w.env, "demote", "capsid/tests")) as { error: string }).error, /not promoted to auto in version 8/);
   assert.match(((await planPolicyChange(w.env, "widen", "capsid/tests")) as { error: string }).error, /promote or demote/);
   assert.match(((await planPolicyChange(w.env, "promote", "capsid")) as { error: string }).error, /<namespace>\/<path class>/);
 });

@@ -868,8 +868,9 @@ test("the shipped policy document names exactly the checks the code enforces", (
   // capsid is covered for docs and dashboard CSS only (D6 of 2026-10-03, version 6).
   assert.deepEqual(parsed.policy.namespaces, ["dustinedwards", "carrel", "capsomer", "capsid"]);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
-  // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4).
-  assert.equal(parsed.policy.version, "7");
+  // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4); version 8 is
+  // version 7 as amended on 2026-10-19.
+  assert.equal(parsed.policy.version, "8");
   // The cap is a number in the code; the document states the same one in its check.
   const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
   assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));

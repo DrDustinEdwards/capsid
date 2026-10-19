@@ -83,10 +83,11 @@ export function DefaultBranches() {
 
 // Pull requests (design section 2; the UX audit of 2026-10-19, B2 and m6): what waits for
 // you first, each pull request a row on a wide screen and a card with full-width Approve and
-// Close on a phone; then the pull requests recorded in the last 7 days, the auto-merge meter,
-// and the chart last. The default-branch table is on Health.
+// Close on a phone; then Auto-merge (the signed policy and its Load from repo and sign, and
+// the safety meter), the pull requests recorded in the last 7 days, and the chart
+// last. The default-branch table is on Health.
 export function PullRequests() {
-  const { feed, now } = useApp();
+  const { feed, now, confirm } = useApp();
   const live = feed.live;
   return (
     <div className="page">
@@ -102,6 +103,79 @@ export function PullRequests() {
           <Empty kind="all-clear" title="No pull request is waiting for you." />
         )}
       </Panel>
+      {/* Auto-merge, one section: whether the signed policy loads, then the safety meter.
+          A pause alert opens it (src/push.ts, /prs#auto-merge). */}
+      <div className="embedded" id="auto-merge">
+        {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
+            and the control that writes it from docs/policy/auto-merge.md and signs it
+            (sign_policy_from_repo). The version is typed in the dialog. */}
+        <Panel title="Auto-merge policy" src="signed policy · loadMergePolicy">
+          <div className="stack-gap">
+            {live.merge_policy.loads ? (
+              <p>
+                <St kind="ok">Loads</St> version {live.merge_policy.version}, {live.merge_policy.enabled ? "enabled" : "disabled"}.
+              </p>
+            ) : (
+              <>
+                <p>
+                  <St kind="crit">Does not load</St> Nothing is auto-merged until it does.
+                </p>
+                <p className="muted prewrap">{live.merge_policy.reason}</p>
+              </>
+            )}
+            <div className="toolbar">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => confirm({ action: "sign_policy_from_repo", params: {}, title: "Load the auto-merge policy from the repo and sign it" })}
+              >
+                Load from repo and sign
+              </button>
+            </div>
+          </div>
+        </Panel>
+        {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
+            project, and the shutoff. Resuming is the automerge_resume control. */}
+        {live.merge_safety && (
+          <Panel flush title="Auto-merge, last 7 days" id="merge-safety" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
+            <div className="scroll-x reflow">
+              <table className="list cards-below-1100">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Auto</th>
+                    <th>Approved</th>
+                    <th>Verified</th>
+                    <th>Rolled back</th>
+                    <th>Rollback failed</th>
+                    <th>Reverts</th>
+                    <th>State</th>
+                    <th>Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {live.merge_safety.namespaces.map((n) => (
+                    <tr key={n.namespace}>
+                      <td className="nowrap">
+                        <b>{n.namespace}</b>
+                      </td>
+                      <td className="num" data-label="Auto">{n.auto_merged}</td>
+                      <td className="num" data-label="Approved">{n.approved}</td>
+                      <td className="num" data-label="Verified">{n.deploys_verified}</td>
+                      <td className="num" data-label="Rolled back">{n.rolled_back}</td>
+                      <td className="num" data-label="Rollback failed">{n.rollback_failed}</td>
+                      <td className="num" data-label="Reverts">{n.reverts}</td>
+                      <td data-label="State">{n.paused ? <St kind="warn">Paused</St> : <span className="faint">running</span>}</td>
+                      {/* The reason wraps in its own cell: a status chip does not wrap. */}
+                      <td className="muted" data-label="Why">{n.paused?.reason ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        )}
+      </div>
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x reflow">
           <table className="list cards-below-1100">
@@ -142,47 +216,6 @@ export function PullRequests() {
           </table>
         </div>
       </Panel>
-      {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
-          project, and the shutoff. Resuming is the automerge_resume control. */}
-      {live.merge_safety && (
-        <Panel flush title="Auto-merge, last 7 days" id="auto-merge" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
-          <div className="scroll-x reflow">
-            <table className="list cards-below-1100">
-              <thead>
-                <tr>
-                  <th>Project</th>
-                  <th>Auto</th>
-                  <th>Approved</th>
-                  <th>Verified</th>
-                  <th>Rolled back</th>
-                  <th>Rollback failed</th>
-                  <th>Reverts</th>
-                  <th>State</th>
-                  <th>Why</th>
-                </tr>
-              </thead>
-              <tbody>
-                {live.merge_safety.namespaces.map((n) => (
-                  <tr key={n.namespace}>
-                    <td className="nowrap">
-                      <b>{n.namespace}</b>
-                    </td>
-                    <td className="num" data-label="Auto">{n.auto_merged}</td>
-                    <td className="num" data-label="Approved">{n.approved}</td>
-                    <td className="num" data-label="Verified">{n.deploys_verified}</td>
-                    <td className="num" data-label="Rolled back">{n.rolled_back}</td>
-                    <td className="num" data-label="Rollback failed">{n.rollback_failed}</td>
-                    <td className="num" data-label="Reverts">{n.reverts}</td>
-                    <td data-label="State">{n.paused ? <St kind="warn">Paused</St> : <span className="faint">running</span>}</td>
-                    {/* The reason wraps in its own cell: a status chip does not wrap. */}
-                    <td className="muted" data-label="Why">{n.paused?.reason ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      )}
       <ChartSlot>
         <MergesChart />
       </ChartSlot>
